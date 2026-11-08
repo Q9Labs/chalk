@@ -30,7 +30,7 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 	if r.chalk == nil || r.recovery == nil || binding.Provider != string(mediaplane.ProviderChalkSFU) || binding.Node == "" {
 		return binding, nil
 	}
-	reason, lost := r.chalk.Lost(binding.Current())
+	reason, lost := r.chalk.Confirm(ctx, binding.Current())
 	if !lost {
 		return binding, nil
 	}

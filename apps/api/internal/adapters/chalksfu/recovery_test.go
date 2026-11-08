@@ -189,6 +189,27 @@ func TestRecoveryMovesAnEpisodeOffALostPrimaryToTheStandby(t *testing.T) {
 
 // One node that restarts is restart recovery: the Episode rejoins the same node under its new
 // incarnation, and it never goes to Cloudflare, even with overflow on.
+// A replica whose last probe predates a restart sees the binding carry the newer incarnation,
+// because another replica already recovered onto it. Asking the node settles it: the binding is
+// current, so the Episode is not recovered a second time.
+func TestAReplicaWithAnOlderProbeDoesNotRecoverAHealthyAllocationAgain(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	box := startSFUUnder(t, ca, roomy)
+	nodes := runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: box.controlURL}
+	older := box.fleetWithOverflow(t, ca, clientIdentity, true, nodes)
+	older.Probe(context.Background())
+	restart(t, box)
+	newer := box.fleetWithOverflow(t, ca, clientIdentity, true, nodes)
+	bound := placedBinding(t, newer)
+	store := newRecoveryStore(bound, 2)
+	if err := resolve(recoveryRegistry(older, store)); err != nil {
+		t.Fatal(err)
+	}
+	if after, moves := store.current(); moves != 0 || after.Generation != 0 {
+		t.Fatalf("a healthy allocation was recovered again: %+v (%d moves)", after, moves)
+	}
+}
+
 func TestRecoveryAfterARestartStaysOnTheSameNode(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	box := startSFUUnder(t, ca, roomy)

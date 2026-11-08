@@ -269,17 +269,17 @@ func TestRecoveryCandidatesFollowPlacementOrderAndSkipOnlySilentOrDrainingNodes(
 
 func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
 	node, episode := strings.Repeat("n", 64), "0198f3a2-7b1c-7d4e-9a10-3c5b8e2f6a71"
-	id := recoveryOperationID(episode, 1, node, 2, 7)
+	id := recoveryOperationID(episode, 1, node, 2, 0, 7)
 	if len(id) > 128 {
 		t.Fatalf("operation ID has %d characters, the SFU accepts 128", len(id))
 	}
-	if id != recoveryOperationID(episode, 1, node, 2, 7) {
+	if id != recoveryOperationID(episode, 1, node, 2, 0, 7) {
 		t.Fatal("the same tuple gave two operation IDs")
 	}
 	for name, other := range map[string]string{
-		"generation": recoveryOperationID(episode, 2, node, 2, 7), "participants": recoveryOperationID(episode, 1, node, 3, 7),
-		"window": recoveryOperationID(episode, 1, node, 2, 8),
-		"node":   recoveryOperationID(episode, 1, node+"x", 2, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, 7),
+		"generation": recoveryOperationID(episode, 2, node, 2, 0, 7), "participants": recoveryOperationID(episode, 1, node, 3, 0, 7),
+		"window": recoveryOperationID(episode, 1, node, 2, 0, 8), "packet ceiling": recoveryOperationID(episode, 1, node, 2, 16000, 7),
+		"node": recoveryOperationID(episode, 1, node+"x", 2, 0, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, 0, 7),
 	} {
 		if other == id {
 			t.Errorf("a different %s gave the same operation ID", name)

@@ -261,34 +261,7 @@ func (f *Fleet) Health(node string) (NodeHealth, bool) {
 func (f *Fleet) Probe(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, node := range f.nodes {
-		wg.Go(func() {
-			probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-			defer cancel()
-			ready, err := node.ready(probeCtx)
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			before, known := f.loads[node.node]
-			if err != nil {
-				switch {
-				case known && before.Draining:
-					f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
-				case known:
-					f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
-				}
-				delete(f.loads, node.node)
-				return
-			}
-			switch {
-			case ready.Draining && !(known && before.Draining):
-				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
-			case !ready.Draining && known && before.Draining:
-				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
-			}
-			now := time.Now()
-			load := f.loadOf(node.node, ready, now)
-			f.loads[node.node] = load
-			f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
-		})
+		wg.Go(func() { f.probeNode(ctx, node) })
 	}
 	wg.Wait()
 	f.mu.Lock()
@@ -297,6 +270,36 @@ func (f *Fleet) Probe(ctx context.Context) {
 	}
 	f.probed = true
 	f.mu.Unlock()
+}
+
+// probeNode asks one node for its readiness and records the answer.
+func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	ready, err := node.ready(probeCtx)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before, known := f.loads[node.node]
+	if err != nil {
+		switch {
+		case known && before.Draining:
+			f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
+		case known:
+			f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
+		}
+		delete(f.loads, node.node)
+		return
+	}
+	switch {
+	case ready.Draining && !(known && before.Draining):
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
+	case !ready.Draining && known && before.Draining:
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
+	}
+	now := time.Now()
+	load := f.loadOf(node.node, ready, now)
+	f.loads[node.node] = load
+	f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
 }
 
 // loadOf turns a node's ready answer into its load record, with no placed

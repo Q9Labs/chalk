@@ -108,6 +108,21 @@ func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
 	return "", false
 }
 
+// Confirm is Lost with one fresh probe before it reports a restart. A replica's last probe can
+// predate a restart that another replica already recovered from, and then the binding's
+// incarnation is the newer one; asking the node settles which side is stale, so a healthy
+// allocation is never recovered a second time.
+func (f *Fleet) Confirm(ctx context.Context, allocation mediaplane.Allocation) (LossReason, bool) {
+	reason, lost := f.Lost(allocation)
+	if !lost || reason != LossRestarted {
+		return reason, lost
+	}
+	if node, err := f.Node(allocation.Node); err == nil {
+		f.probeNode(ctx, node)
+	}
+	return f.Lost(allocation)
+}
+
 // candidate is a node a recovery may reserve on.
 type candidate struct {
 	adapter *Adapter
@@ -167,18 +182,20 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	window := time.Now().Unix() / int64(hold)
 	refusals, failures := 0, 0
 	for _, node := range candidates {
+		ceiling := 0
+		if node.standby && f.standbyBudget > 0 {
+			ceiling = f.standbyBudget
+		}
 		request := wireReserveRequest{
-			OperationID: recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, window),
-			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
+			OperationID:   recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, ceiling, window),
+			PacketCeiling: ceiling,
+			TenantID:      tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
 			// A recovered Episode may have a screen share live, and a share the node cannot carry
 			// would be refused after its Participants rejoined, so the reserve always holds room for
 			// one. A node that cannot carry the Episode with a share refuses, and that is the
 			// capacity outcome.
 			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
 			TTLSeconds: hold,
-		}
-		if node.standby && f.standbyBudget > 0 {
-			request.PacketCeiling = f.standbyBudget
 		}
 		reply, err := node.adapter.reserve(ctx, request)
 		switch {
@@ -213,10 +230,12 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 }
 
 // recoveryOperationID names one reserve by the Episode, the generation the move would commit, the
-// node, the participant count and the hold window. The tuple is hashed, because a long node ID and an Episode
+// node, the participant count, the packet ceiling and the hold window. The node compares a replayed
+// operation's whole body, so replicas that send another ceiling (a rolling change to the standby
+// budget) must not share an ID. The tuple is hashed, because a long node ID and an Episode
 // ID together exceed the 128 characters the SFU accepts.
-func recoveryOperationID(episodeID string, generation int64, node string, participants int, window int64) string {
-	digest := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%d\x00%d", episodeID, generation, node, participants, window))
+func recoveryOperationID(episodeID string, generation int64, node string, participants, packetCeiling int, window int64) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%d\x00%d\x00%d", episodeID, generation, node, participants, packetCeiling, window))
 	return "recover-" + hex.EncodeToString(digest[:16])
 }
 
