@@ -1,4 +1,6 @@
-package sfu
+// Package turn mints Cloudflare TURN credentials. It is independent of the
+// Cloudflare SFU adapter so retiring that adapter leaves TURN in place.
+package turn
 
 import (
 	"bytes"
@@ -7,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,6 +19,13 @@ import (
 )
 
 const (
+	// defaultEndpoint is the Cloudflare Realtime API base the TURN key lives on.
+	defaultEndpoint = "https://rtc.live.cloudflare.com/v1"
+
+	sfuHTTP2SendPingTimeout = 5 * time.Second
+	sfuHTTP2PingTimeout     = 5 * time.Second
+	sfuIdleConnTimeout      = 90 * time.Second
+
 	// A relayed call stops refreshing its allocation once its credential
 	// expires (measured with a 60 second credential), so the TTL must outlast
 	// the longest call.
@@ -29,12 +37,17 @@ const (
 	turnMintBackoff     = 30 * time.Second
 )
 
-// TurnCredentials mints and caches Cloudflare TURN credentials for the
-// deployment's TURN key. The key is global, so one TurnCredentials serves every
+// HTTPClient is the request sender a mint uses.
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Credentials mints and caches Cloudflare TURN credentials for the
+// deployment's TURN key. The key is global, so one Credentials serves every
 // adapter built for the deployment and its cache and failure backoff outlive a
 // single media-plane resolution. A mint failure never fails a join: clients
 // fall back to STUN, and a join waits at most turnMintTimeout for a mint.
-type TurnCredentials struct {
+type Credentials struct {
 	keyID    string
 	apiToken string
 
@@ -46,47 +59,37 @@ type TurnCredentials struct {
 	inflight chan struct{}
 }
 
-// NewTurnCredentials returns nil when the key or token is blank.
-func NewTurnCredentials(keyID, apiToken string) *TurnCredentials {
+// New returns nil when the key or token is blank.
+func New(keyID, apiToken string) *Credentials {
 	keyID, apiToken = strings.TrimSpace(keyID), strings.TrimSpace(apiToken)
 	if keyID == "" || apiToken == "" {
 		return nil
 	}
-	return &TurnCredentials{keyID: keyID, apiToken: apiToken}
-}
-
-// WithTurnCredentials returns the adapter using a shared TURN minter.
-func (a Adapter) WithTurnCredentials(turn *TurnCredentials) Adapter {
-	a.turn = turn
-	return a
-}
-
-// iceServers returns the ICE servers a client should use: Cloudflare STUN and,
-// when the caller allows relay and a TURN key is configured and reachable,
-// Cloudflare TURN. Everyone else gets STUN alone.
-func (a Adapter) iceServers(ctx context.Context, allowRelay bool) []mediaplane.ICEServer {
-	fallback := []mediaplane.ICEServer{{URLs: []string{stunServer}}}
-	if !allowRelay || a.turn == nil {
-		return fallback
-	}
-	servers, err := a.turn.get(ctx, a.client, a.endpoint)
-	if err != nil {
-		slog.WarnContext(ctx, "Cloudflare TURN credentials unavailable; clients use STUN only",
-			"event", "cloudflare_turn.credentials_failed",
-			"error", err.Error(),
-		)
-		return fallback
-	}
-	return servers
+	return &Credentials{keyID: keyID, apiToken: apiToken}
 }
 
 // RelayServers returns Cloudflare TURN for a media plane that is not
 // Cloudflare's, such as Chalk's own SFU, from the same cache and backoff.
-func (t *TurnCredentials) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
-	return t.get(ctx, &http.Client{Transport: sharedSFUTransport()}, defaultEndpoint)
+func (t *Credentials) RelayServers(ctx context.Context) ([]mediaplane.ICEServer, error) {
+	return t.Servers(ctx, &http.Client{Transport: sharedTransport()}, defaultEndpoint)
 }
 
-func (t *TurnCredentials) get(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
+var sharedTransport = sync.OnceValue(newTransport)
+
+func newTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.IdleConnTimeout = sfuIdleConnTimeout
+	transport.HTTP2 = &http.HTTP2Config{
+		SendPingTimeout: sfuHTTP2SendPingTimeout,
+		PingTimeout:     sfuHTTP2PingTimeout,
+	}
+	return transport
+}
+
+// Servers returns the cached TURN ICE servers, minting them through client at
+// endpoint when the cache is stale. The Cloudflare SFU adapter passes its own
+// client and endpoint so its joins keep their configured timeout and base URL.
+func (t *Credentials) Servers(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	for {
 		t.mu.Lock()
 		now := time.Now()
@@ -115,7 +118,7 @@ func (t *TurnCredentials) get(ctx context.Context, client httpClient, endpoint s
 	}
 }
 
-func (t *TurnCredentials) mintAndStore(ctx context.Context, client httpClient, endpoint string, done chan struct{}) {
+func (t *Credentials) mintAndStore(ctx context.Context, client HTTPClient, endpoint string, done chan struct{}) {
 	servers, err := t.mint(ctx, client, endpoint)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -128,7 +131,7 @@ func (t *TurnCredentials) mintAndStore(ctx context.Context, client httpClient, e
 	close(done)
 }
 
-func (t *TurnCredentials) mint(ctx context.Context, client httpClient, endpoint string) ([]mediaplane.ICEServer, error) {
+func (t *Credentials) mint(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	ctx, cancel := context.WithTimeout(ctx, turnMintTimeout)
 	defer cancel()
 

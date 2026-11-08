@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/turn"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -144,7 +145,7 @@ type Adapter struct {
 	forcedCloseClient httpClient
 	captureReplay     *captureplane.ReplayCache
 	sessions          *sessionRegistry
-	turn              *TurnCredentials
+	turn              *turn.Credentials
 }
 
 type ConnectionMetadata struct {

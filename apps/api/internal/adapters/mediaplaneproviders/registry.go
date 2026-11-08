@@ -11,6 +11,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/turn"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -46,7 +47,7 @@ type Registry struct {
 	episodes        EpisodeReader
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
-	turn *sfuadapter.TurnCredentials
+	turn *turn.Credentials
 }
 
 type providerConfig struct {
@@ -75,7 +76,7 @@ func NewRegistry(config Config) Registry {
 		chalk:           config.ChalkSFU,
 		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
-		turn:            sfuadapter.NewTurnCredentials(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
+		turn:            turn.New(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
 
