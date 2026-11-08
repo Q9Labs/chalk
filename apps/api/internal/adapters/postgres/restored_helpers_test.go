@@ -12,7 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
+
+type admissionProofAccounts struct{ publicinvites.Accounts }
+
+func mustExec(t *testing.T, db sqlc.DBTX, statement string, arguments ...any) {
+	t.Helper()
+	if _, err := db.Exec(context.Background(), statement, arguments...); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func mcpText(result *mcp.CallToolResult) string {
 	var text strings.Builder
@@ -24,20 +38,38 @@ func mcpText(result *mcp.CallToolResult) string {
 	return text.String()
 }
 
-func callMCP(t *testing.T, session *mcp.ClientSession, name, args string) *mcp.CallToolResult {
+func accountTenantIntegrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_" + name, Arguments: json.RawMessage(args)})
-	if err != nil {
-		t.Fatalf("MCP %s protocol failure: %v", name, err)
+	databaseURL := os.Getenv("CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL is not set")
 	}
-	return result
-}
-
-func mustExec(t *testing.T, db sqlc.DBTX, statement string, arguments ...any) {
-	t.Helper()
-	if _, err := db.Exec(context.Background(), statement, arguments...); err != nil {
+	pool, err := pgxpool.New(context.Background(), databaseURL)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+type directAdmissionMedia struct {
+	service mediaplane.Service
+	binding mediaplane.Binding
+}
+
+func (m directAdmissionMedia) ResolveEpisode(context.Context, tenants.Tenant, spaces.Space, utilities.ID) (*mediaplane.Service, error) {
+	return &m.service, nil
+}
+
+func (m directAdmissionMedia) ResolveBinding(tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	return &m.binding, nil
+}
+
+// mcpInviteLinks gives the invite view a canonical URL; the shared proof stub has no links.
+type mcpInviteLinks struct{ publicinvites.Links }
+
+func (mcpInviteLinks) InviteURL(code string) (string, error) {
+	return "https://invite.example/" + code, nil
 }
 
 func connectMCP(t *testing.T, server *httptest.Server, token, version string) *mcp.ClientSession {
@@ -59,18 +91,28 @@ func connectMCP(t *testing.T, server *httptest.Server, token, version string) *m
 	return session
 }
 
-func accountTenantIntegrationPool(t *testing.T) *pgxpool.Pool {
+type terminalAdmissionAccess struct {
+	publicinvites.Access
+	grant     func(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error)
+	discarded int
+}
+
+func (a *terminalAdmissionAccess) GrantPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+	return a.grant(ctx, input)
+}
+
+func (a *terminalAdmissionAccess) DiscardPublicAccess(context.Context, publicinvites.PublicAccessGrant) error {
+	a.discarded++
+	return nil
+}
+
+func callMCP(t *testing.T, session *mcp.ClientSession, name, args string) *mcp.CallToolResult {
 	t.Helper()
-	databaseURL := os.Getenv("CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("CHALK_TENANT_ONBOARDING_TEST_DATABASE_URL is not set")
-	}
-	pool, err := pgxpool.New(context.Background(), databaseURL)
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "chalk_" + name, Arguments: json.RawMessage(args)})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("MCP %s protocol failure: %v", name, err)
 	}
-	t.Cleanup(pool.Close)
-	return pool
+	return result
 }
 
 type mcpHeaderTransport struct {
