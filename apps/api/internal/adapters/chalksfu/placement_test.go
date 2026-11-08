@@ -248,7 +248,7 @@ var withCloudflare = runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "depl
 
 func registryOn(fleet *chalksfu.Fleet, process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding, telemetry providercontracts.Telemetry) mediaplaneproviders.Registry {
 	return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-		ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Telemetry: telemetry, ChalkSFU: fleet, Episodes: episodeBindings{live},
+		ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, Telemetry: telemetry, ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
 	})
 }
 

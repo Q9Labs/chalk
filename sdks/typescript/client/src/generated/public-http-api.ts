@@ -21,6 +21,7 @@ export const arriveBySpacePublicInviteEndpoint = HttpApiEndpoint.post("arriveByS
     S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
     S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
     S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+    S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
     S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
   ],
 });
@@ -43,6 +44,7 @@ export const createPublicSpaceEndpoint = HttpApiEndpoint.post("createPublicSpace
     S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
     S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
     S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+    S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
     S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
   ],
 });
@@ -63,6 +65,7 @@ export const getSpacePublicInviteArrivalEndpoint = HttpApiEndpoint.get("getSpace
     S.TenantLiveEpisodeLimitReachedErrorSchema.pipe(HttpApiSchema.status(409)),
     S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
     S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+    S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
     S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
   ],
 });
@@ -83,6 +86,7 @@ export const leaveSpacePublicInviteArrivalEndpoint = HttpApiEndpoint.delete("lea
     S.TenantLiveEpisodeLimitReachedErrorSchema.pipe(HttpApiSchema.status(409)),
     S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
     S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+    S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
     S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
   ],
 });
@@ -121,6 +125,7 @@ export const refreshSpacePublicInviteAccessEndpoint = HttpApiEndpoint.post("refr
     S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
     S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
     S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+    S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
     S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
   ],
 });
