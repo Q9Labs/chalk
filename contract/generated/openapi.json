@@ -4379,6 +4379,94 @@
         "summary": "Get problem report availability"
       }
     },
+    "/v1/tenants/{tenant_id}/recording-capture-pool": {
+      "get": {
+        "operationId": "getRecordingCapturePool",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingCapturePool"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "sessionOrBearer": []
+          }
+        ],
+        "summary": "Get recording capture pool"
+      }
+    },
     "/v1/tenants/{tenant_id}/recordings": {
       "get": {
         "operationId": "listRecordings",
@@ -16081,6 +16169,57 @@
           }
         },
         "required": ["created_at", "episode_id", "export", "id", "metadata", "source", "space_id", "status", "storage_key", "storage_provider", "tenant_id", "transcription_policy", "transcription_preparation", "updated_at"],
+        "type": "object"
+      },
+      "RecordingCapturePool": {
+        "additionalProperties": false,
+        "properties": {
+          "held": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "claimed_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "episode_id": {
+                  "$ref": "#/components/schemas/EpisodeId"
+                },
+                "job_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "lease_expires_at": {
+                  "$ref": "#/components/schemas/DateTimeString"
+                },
+                "recording_id": {
+                  "$ref": "#/components/schemas/RecordingId"
+                }
+              },
+              "required": ["claimed_at", "episode_id", "job_id", "lease_expires_at", "recording_id"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "held_by_other_tenants": {
+            "type": "integer"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateTimeString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "slots_total": {
+            "type": "integer"
+          },
+          "slots_used": {
+            "type": "integer"
+          }
+        },
+        "required": ["held", "held_by_other_tenants", "slots_total", "slots_used"],
         "type": "object"
       },
       "RecordingDownloadURL": {

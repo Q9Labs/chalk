@@ -1128,6 +1128,19 @@ const recordingsGroup = HttpApiGroup.make("recordings")
     }),
   )
   .add(
+    HttpApiEndpoint.get("getRecordingCapturePool", "/v1/tenants/:tenant_id/recording-capture-pool", {
+      params: S.GetRecordingCapturePoolPathParamsSchema,
+      success: S.GetRecordingCapturePoolResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("listRecordings", "/v1/tenants/:tenant_id/recordings", {
       params: S.ListRecordingsPathParamsSchema,
       query: S.ListRecordingsQueryParamsSchema,

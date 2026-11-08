@@ -454,6 +454,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/recording-capture-pool": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get recording capture pool */
+    get: operations["getRecordingCapturePool"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/recordings": {
     parameters: {
       query?: never;
@@ -2148,6 +2165,19 @@ export interface components {
       transcription_policy: string;
       transcription_preparation: components["schemas"]["RecordingTranscriptionPreparation"];
       updated_at: components["schemas"]["DateTimeString"];
+    };
+    RecordingCapturePool: {
+      held: {
+        claimed_at: components["schemas"]["DateTimeString"];
+        episode_id: components["schemas"]["EpisodeId"];
+        job_id: components["schemas"]["UUID"];
+        lease_expires_at: components["schemas"]["DateTimeString"];
+        recording_id: components["schemas"]["RecordingId"];
+      }[];
+      held_by_other_tenants: number;
+      observed_at?: components["schemas"]["DateTimeString"] | null;
+      slots_total: number;
+      slots_used: number;
     };
     RecordingDownloadURL: {
       expires_at: components["schemas"]["DateTimeString"];
@@ -6008,6 +6038,73 @@ export interface operations {
       };
       /** @description Bad Request */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  getRecordingCapturePool: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecordingCapturePool"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
         headers: {
           [name: string]: unknown;
         };

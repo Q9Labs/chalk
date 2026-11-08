@@ -75,6 +75,7 @@ type Options struct {
 
 	RecordingDownloads    RecordingDownloadService
 	RecordingExports      RecordingExportService
+	RecordingCapturePool  RecordingCapturePoolService
 	RecordingObjects      RecordingObjectService
 	Recordings            RecordingService
 	RecordingPreparations RecordingPreparationService
