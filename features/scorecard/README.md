@@ -10,7 +10,7 @@ Every iteration should show what improved and what regressed. A run writes one s
 - `callRun`: the settings the web call performance check uses (devices, repeats, leak budgets).
 - `budgets`: one entry per metric id, `{ max_p50?, max_p95?, tolerancePct, gate }`. An entry needs at least one limit.
 
-`gate: true` means a result over the limit fails the check. `gate: false` only warns. A metric starts with `gate: false` when it comes from a real node, and flips to true in its own pull request once it has seven nightly values and its run-to-run spread is below its `tolerancePct`. Deterministic pull request metrics, such as bundle sizes, start with `gate: true`.
+`gate: true` means a result over the limit fails the check. `gate: false` only warns. A metric starts with `gate: false` when it comes from a real node, and flips to true in its own pull request once seven nightly values from at least three different nights have a run-to-run spread below its `tolerancePct`. Deterministic pull request metrics, such as bundle sizes, start with `gate: true`. The `chalk_sfu.action.*` entries are the exception: they gate with a loose ceiling of twice the worst p95 in the earliest evidence, and the same rule later tightens them. [The budget doc](../../docs/performance-budget.md#changing-a-budget) has the details.
 
 The web call check bounds the median of its repeated runs, so its entries use `max_p50`. `web.<device>.<scenario>.<metric>` is one scenario on one device, and `web.route.*` is the pre-join route bundle.
 
@@ -69,4 +69,18 @@ The device lane writes one file per run, with one entry per scenario and one run
 
 ## The pull request tier
 
-`pr-tier.sh` runs inside the existing Gate jobs and adds no job of its own. The `build` group scores the call bundle sizes and the `checks` group scores the SFU loopback and impairment tests, the latter only when the SFU gate lane ran. Each compares with the scorecard of the latest landed master change, which is the latest successful merge queue Gate run that has one (the `scorecard-web` and `scorecard-sfu` artifacts; master pushes run no Gate), writes the table to the run summary and updates its own sticky pull request comment (one per section, so two jobs never overwrite each other).
+`pr-tier.sh` runs inside the existing Gate jobs and adds no job of its own. The `build` group scores the call bundle sizes and the `checks` group scores the SFU loopback and impairment tests, the latter only when the SFU gate lane ran. Each compares with the scorecard of the latest successful master push run (the `scorecard-web` and `scorecard-sfu` artifacts), writes the table to the run summary and updates its section of one sticky pull request comment.
+
+## The nightly tier
+
+`nightly.sh` runs at the end of the `Cut nightly` workflow, in its own `scorecard` job, which runs even when the cut fails or is held. It compares the Leave proof scorecard of the run with the median of the last seven nightly runs, appends it to `history.jsonl` on the `scorecard-history` branch, regenerates the trends file (the last 14 nightly values of every metric) and keeps one open `Scorecard regression` issue while a gated metric is over its budget. The nightly run measures staging only and never the production node.
+
+## The Promote tier
+
+After the production proof passes, the Promote workflow scores the Leave run of that Promote against the nightly median. These jobs run only after `proof`, and no other job needs them or reads their result, so a failure cannot start `rollback`; it only turns the Promote run red.
+
+1. `scorecard` scores the first proof. A gated metric over its budget starts one rerun of the Leave proof.
+2. `scorecard-rerun` runs the Leave proof once more.
+3. `scorecard-final` fails the run only when a gated metric is still over its budget in the rerun, and opens or updates the `Scorecard regression` issue. An issue left open from an earlier run never blocks.
+
+The `scorecard_override` input of the Promote workflow takes a reason. With a reason, the gate still shows the table, records the reason in the run summary and as a comment on the open regression issue, and does not fail. Real-node metrics start with `gate: false`, so today the gate has nothing to block on. To remove the gate, revert the commit that added these jobs; the input is optional and does nothing without them.

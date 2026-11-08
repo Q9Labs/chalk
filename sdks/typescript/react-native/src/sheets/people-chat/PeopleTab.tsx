@@ -13,7 +13,7 @@ import { Menu, MenuItem } from "../../primitives/Menu";
 import { PillButton } from "../../primitives/PillButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
-import { fixed } from "../../theme/tokens";
+import { fixed, space, corners } from "../../theme/tokens";
 import { nextHandOrder, peopleRows, type PeopleRow } from "./people-model";
 import { TextField } from "./TextField";
 
@@ -306,21 +306,22 @@ const PersonRow = memo(function PersonRow({ participant, isSelf, handNumber, can
 
 const styles = StyleSheet.create({
   list: { flex: 1 },
-  content: { padding: 8, paddingBottom: 16 },
-  controls: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginHorizontal: 2, marginTop: 2, marginBottom: 8 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, height: 36, paddingLeft: 10, paddingRight: 12, borderRadius: 999 },
+  content: { padding: space[2], paddingBottom: space[4] },
+  controls: { flexDirection: "row", flexWrap: "wrap", gap: space["1-5"], marginHorizontal: space["0-5"], marginTop: space["0-5"], marginBottom: space[2] },
+  chip: { flexDirection: "row", alignItems: "center", gap: space["1-5"], height: 36, paddingLeft: space["2-5"], paddingRight: space[3], borderRadius: corners.pill },
   disabled: { opacity: 0.45 },
-  search: { flexDirection: "row", alignItems: "center", gap: 8, height: 40, marginHorizontal: 2, marginTop: 2, marginBottom: 8, paddingHorizontal: 14, borderRadius: 999 },
-  section: { paddingTop: 10, paddingHorizontal: 8, paddingBottom: 6 },
-  none: { paddingVertical: 16, paddingHorizontal: 8 },
-  row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingLeft: 8, paddingRight: 4, borderRadius: 12 },
-  handRow: { gap: 8 },
+  search: { flexDirection: "row", alignItems: "center", gap: space[2], height: 40, marginHorizontal: space["0-5"], marginTop: space["0-5"], marginBottom: space[2], paddingHorizontal: space[3], borderRadius: corners.pill },
+  section: { paddingTop: space["2-5"], paddingHorizontal: space[2], paddingBottom: space["1-5"] },
+  none: { paddingVertical: space[4], paddingHorizontal: space[2] },
+  row: { flexDirection: "row", alignItems: "center", gap: space["2-5"], minHeight: 52, paddingLeft: space[2], paddingRight: space[1], borderRadius: corners.xl },
+  handRow: { gap: space[2] },
   name: { flex: 1 },
-  handNumber: { width: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: fixed.hand },
+  handNumber: { width: 20, height: 20, borderRadius: corners.pill, alignItems: "center", justifyContent: "center", backgroundColor: fixed.hand },
   status: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
   statusNumber: { marginLeft: 1, fontWeight: "700" },
-  rename: { flex: 1, flexDirection: "row", alignItems: "center", height: 36, paddingHorizontal: 12, borderRadius: 999 },
-  confirm: { paddingTop: 8, paddingHorizontal: 8, paddingBottom: 4 },
-  confirmText: { marginTop: 4, marginBottom: 10 },
-  confirmButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4, marginHorizontal: 6 },
+  rename: { flex: 1, flexDirection: "row", alignItems: "center", height: 36, paddingHorizontal: space[3], borderRadius: corners.pill },
+  confirm: { paddingTop: space[2], paddingHorizontal: space[2], paddingBottom: space[1] },
+  confirmText: { marginTop: space[1], marginBottom: space["2-5"] },
+  confirmButtons: { flexDirection: "row", justifyContent: "flex-end", gap: space[2], marginTop: space[1], marginHorizontal: space["1-5"] },
 });

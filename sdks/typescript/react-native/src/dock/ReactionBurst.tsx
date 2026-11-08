@@ -3,7 +3,7 @@ import { memo, useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { useReactions } from "../hooks/space-hooks";
-import { easings } from "../theme/tokens";
+import { easings, fontSizes } from "../theme/tokens";
 
 /** The mockup's `@keyframes rx`: 2 s ease-out, fading in over the first 15 % while rising 82 pt. */
 const DURATION = 2000;
@@ -52,5 +52,5 @@ const styles = StyleSheet.create({
   layer: { ...StyleSheet.absoluteFillObject, zIndex: 6 },
   // `.rx`: centred, its bottom 28 % up the tile.
   emoji: { position: "absolute", left: 0, right: 0, bottom: "28%", alignItems: "center" },
-  text: { fontSize: 44 },
+  text: { fontSize: fontSizes.display },
 });

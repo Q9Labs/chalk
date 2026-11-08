@@ -9,7 +9,7 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
-import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
+import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
@@ -117,7 +117,7 @@ export function HomePage() {
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
-      const { call } = await act("home", { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey: startKey.current });
+      const { call } = await act("home", createCallAction(startKey.current, language));
       startKey.current = intentKey();
       // The empty-state opener disappears when the first row is added.
       startButton.current?.focus();
@@ -342,13 +342,13 @@ function CallReadyDialog({ link, onJoin, onClose }: { readonly link: string; rea
         </button>
       }
     >
-      <div className="linkrow" style={{ marginTop: 18 }}>
+      <div className="linkrow" style={{ marginTop: "var(--space-4)" }}>
         <div className="linkbox">
           <span>{displayLink(link)}</span>
         </div>
         <CopyAction text={link} pill />
       </div>
-      <p className="help" style={{ marginTop: 12 }}>
+      <p className="help" style={{ marginTop: "var(--space-3)" }}>
         People ask to join, and you let them in. Change this on the call’s page.
       </p>
     </Dialog>
@@ -399,7 +399,7 @@ function JoinLinkDialog({ onClose }: { readonly onClose: () => void }) {
         </>
       }
     >
-      <div className="field" style={{ marginTop: 16 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="join-link">
           Call link
         </label>
@@ -470,7 +470,7 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
         </>
       }
     >
-      <div className="field" style={{ marginTop: 16 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="rename-input">
           Name
         </label>

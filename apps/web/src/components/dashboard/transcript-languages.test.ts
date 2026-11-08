@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { whisperLanguageCodes } from "@chalk/transcript-language";
 import { beforeEach, expect, it } from "vitest";
-import { languageOptions, languageName, readNewCallLanguage, readRecentLanguages, rememberLanguage, saveNewCallLanguage, searchLanguages, splitMatch, suggestedLanguages } from "./transcript-languages";
+import { createCallAction, languageOptions, languageName, readNewCallLanguage, readRecentLanguages, rememberLanguage, saveNewCallLanguage, searchLanguages, splitMatch, suggestedLanguages } from "./transcript-languages";
 
 beforeEach(() => window.localStorage.clear());
 
@@ -64,6 +64,12 @@ it("keeps the language for new calls and falls back to the account default", () 
   expect(readNewCallLanguage()).toBeNull();
   window.localStorage.setItem("chalk.transcript-language.new-call", "klingon");
   expect(readNewCallLanguage()).toBeNull();
+});
+
+it("starts a call in the chosen language, and leaves it out for the account default", () => {
+  expect(createCallAction("key-1", "ur")).toEqual({ action: "create-call", admission: "knock", transcriptLanguage: "ur", idempotencyKey: "key-1" });
+  expect(createCallAction("key-2", "auto")).toHaveProperty("transcriptLanguage", "auto");
+  expect(createCallAction("key-3", null)).toEqual({ action: "create-call", admission: "knock", idempotencyKey: "key-3" });
 });
 
 it("suggests the browser's supported languages first, then common ones, without repeats", () => {

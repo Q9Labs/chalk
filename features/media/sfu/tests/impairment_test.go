@@ -217,9 +217,17 @@ func sendMic(ctx context.Context, track *webrtc.TrackLocalStaticRTP, sent *atomi
 // pull subscribes the participant to the given remote tracks and answers the SFU's offer.
 func (p *participant) pull(t *testing.T, svc *service, tracks []protocol.Track) {
 	t.Helper()
+	if pulled := p.pullSome(t, svc, tracks); len(pulled.TrackErrors) != 0 {
+		t.Fatalf("%s pull response: %+v", p.name, pulled)
+	}
+}
+
+// pullSome pulls tracks and negotiates the ones the node accepted; the caller reads the refusals.
+func (p *participant) pullSome(t *testing.T, svc *service, tracks []protocol.Track) protocol.TracksResponse {
+	t.Helper()
 	var pulled protocol.TracksResponse
 	svc.mustCall(t, "/v1/sessions/"+p.conn+"/tracks", protocol.TracksRequest{OperationID: op(), Scope: p.scope, Tracks: tracks}, &pulled)
-	if pulled.SessionDescription == nil || len(pulled.TrackErrors) != 0 {
+	if pulled.SessionDescription == nil {
 		t.Fatalf("%s pull response: %+v", p.name, pulled)
 	}
 	if err := p.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
@@ -231,6 +239,7 @@ func (p *participant) pull(t *testing.T, svc *service, tracks []protocol.Track) 
 	}
 	answerSDP := p.peer.complete(t, answer)
 	svc.mustCall(t, "/v1/sessions/"+p.conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: p.scope, SessionDescription: answerSDP}, nil)
+	return pulled
 }
 
 func remote(publisher *participant, name string) protocol.Track {
@@ -288,6 +297,9 @@ func receiveMedia(p *peer, keepVideo bool) *mediaReceiver {
 				if err != nil {
 					return
 				}
+				if len(packet.Payload) == 0 {
+					continue
+				} // Exclude bandwidth-probe padding from the ceiling proof.
 				r.packets.Add(1)
 				r.mu.Lock()
 				if track.Kind() == webrtc.RTPCodecTypeAudio {

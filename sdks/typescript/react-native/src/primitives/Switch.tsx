@@ -3,7 +3,7 @@ import { Pressable, StyleSheet } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
-import { fixed } from "../theme/tokens";
+import { fixed, corners } from "../theme/tokens";
 
 export type SwitchProps = {
   readonly value: boolean;
@@ -35,6 +35,6 @@ export const Switch = memo(function Switch({ value, onValueChange, accessibility
 });
 
 const styles = StyleSheet.create({
-  track: { width: 36, height: 22, borderRadius: 999 },
-  knob: { position: "absolute", left: 3, top: 3, width: 16, height: 16, borderRadius: 8, backgroundColor: fixed.switchKnob },
+  track: { width: 36, height: 22, borderRadius: corners.pill },
+  knob: { position: "absolute", left: 3, top: 3, width: 16, height: 16, borderRadius: corners.pill, backgroundColor: fixed.switchKnob },
 });

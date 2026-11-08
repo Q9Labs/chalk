@@ -532,7 +532,7 @@ func TestAdmissionNeverEvictsASourceTheBatchNames(t *testing.T) {
 	if _, err := n.ControlSources(batch(aliceGrant, bobGrant, carolGrant)); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a batch with no room besides its own sources was admitted: %v", err)
 	}
-	if len(n.sources) != 2 || n.sources[sourceKey{participantKey{"tenant-1", "episode-1", "alice"}, "camera"}] == nil {
+	if len(n.sources) != 2 || n.sources[sourceKey{participantKey{tenant: "tenant-1", episode: "episode-1", participant: "alice"}, "camera"}] == nil {
 		t.Fatal("a refused batch changed the table")
 	}
 }

@@ -8,13 +8,13 @@
 .site .dash .errp {
   display: grid;
   grid-template-columns: 20px 1fr auto;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
-  padding: 12px 12px 12px 16px;
-  border-radius: 12px;
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--corner-xl);
   background: var(--chalk-surface);
   border: 1px solid var(--chalk-line-strong);
-  font-size: 14px;
+  font-size: var(--type-body);
 }
 
 .site .dash .errp svg.site-icon {
@@ -28,7 +28,7 @@
 
 .site .dash .errp span {
   color: var(--chalk-soft-text);
-  font-size: 13.5px;
+  font-size: var(--type-body-sm);
 }
 
 @media (max-width: 640px) {

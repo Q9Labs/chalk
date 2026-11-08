@@ -5,7 +5,7 @@ import { Icon } from "../icons/Icon";
 import { timings } from "../motion/motion";
 import { usePressAnimation } from "../motion/press";
 import { useTheme } from "../theme/theme";
-import { durations, fixed } from "../theme/tokens";
+import { durations, fixed, corners } from "../theme/tokens";
 import { announce } from "./announce";
 
 export type CopyButtonProps = {
@@ -75,6 +75,6 @@ function clearReset(reset: { current: ReturnType<typeof setTimeout> | null }): v
 }
 
 const styles = StyleSheet.create({
-  button: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  button: { width: 36, height: 36, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
   icon: { position: "absolute" },
 });

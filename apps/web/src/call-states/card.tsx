@@ -4,6 +4,7 @@ import type { ChatAttachment, ChatUploadFile } from "@q9labsai/chalk-client";
 import type { CallState } from "./states";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot } from "./fixtures";
 
+// token-ratchet-ignore: placeholder photo painted for the fixture gallery, not UI chrome
 const photo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300"><rect width="480" height="300" fill="#315f72"/><circle cx="240" cy="210" r="120" fill="#80b879"/><path d="M0 480L240 240L480 480" fill="#d9b641"/></svg>')}`;
 
 function CardState({

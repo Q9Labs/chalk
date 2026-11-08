@@ -60,9 +60,27 @@ type Track struct {
 	Paused bool `json:"paused,omitempty"`
 }
 
+// Session kinds. A participant session, the default, publishes and subscribes and
+// counts as a Participant of its Episode. A capture session only pulls: it is the
+// recorder's receive-only connection, holds no Participant slot, and reserves its own
+// packets. Scope.ParticipantID names the capture and Scope.Generation is its capture
+// epoch, so a newer epoch fences an older one.
+//
+// Compatibility: the kind is an additive field that is omitted for a participant
+// session, so a request from an API that predates it is unchanged. The node decodes
+// requests strictly, so a node that predates the kind refuses a capture create with
+// 400 invalid_request and creates nothing. A node that knows the kind lists it in
+// ReadyResponse.SessionKinds, which a caller reads before it sends one.
+const (
+	SessionKindParticipant = ""
+	SessionKindCapture     = "capture"
+)
+
 type CreateSessionRequest struct {
 	OperationID string `json:"operationId"`
 	Scope       Scope  `json:"scope"`
+	// Kind is SessionKindCapture for a capture session and absent for a participant.
+	Kind string `json:"kind,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -323,6 +341,9 @@ type ReadyResponse struct {
 	// places a new Episode only on a node with at least this much budget left.
 	NewEpisodePackets int       `json:"newEpisodePackets"`
 	Host              HostState `json:"host"`
+	// SessionKinds lists the non-default session kinds this node creates, such as
+	// "capture". A node that predates session kinds omits it.
+	SessionKinds []string `json:"sessionKinds,omitempty"`
 }
 
 // HostState is the host-health guard's view over its window.

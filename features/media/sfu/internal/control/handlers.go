@@ -50,7 +50,7 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 		return media.ErrDraining
 	}
 	budget, reserved := s.node.Budget()
-	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host()})
+	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host(), SessionKinds: s.node.SessionKinds()})
 	return nil
 }
 
@@ -108,7 +108,15 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
-	response, err := s.node.CreateSession(request.OperationID, request.Scope)
+	create := s.node.CreateSession
+	switch request.Kind {
+	case protocol.SessionKindParticipant:
+	case protocol.SessionKindCapture:
+		create = s.node.CreateCaptureSession
+	default:
+		return errors.Join(media.ErrInvalidRequest, errors.New("unknown session kind"))
+	}
+	response, err := create(request.OperationID, request.Scope)
 	if err != nil {
 		return err
 	}

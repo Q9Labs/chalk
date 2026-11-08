@@ -7,7 +7,7 @@ import { useChat, useSelf } from "../../hooks/space-hooks";
 import { Icon } from "../../icons/Icon";
 import { ChalkText } from "../../primitives/ChalkText";
 import { useTheme } from "../../theme/theme";
-import { fontFamilies } from "../../theme/tokens";
+import { fontFamilies, space, corners } from "../../theme/tokens";
 import { FileCard, Thumbnails } from "./attachments";
 import { fileKind, groupMessages, messageSummary, type ChatEntry, type MessageGroup } from "./chat-model";
 import { Composer } from "./Composer";
@@ -164,23 +164,24 @@ function Message({ entry, from, mine, onRetry, onOpenPhotos }: MessageProps): Re
 const styles = StyleSheet.create({
   list: { flex: 1 },
   // `.cbody`: 8 pt around the messages.
-  content: { padding: 8 },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4, padding: 24 },
-  group: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 12, marginHorizontal: 4 },
+  content: { padding: space[2] },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: space[1], padding: space[6] },
+  group: { flexDirection: "row", alignItems: "flex-start", gap: space[2], marginTop: space[3], marginHorizontal: space[1] },
   groupMine: { flexDirection: "row-reverse" },
-  column: { flexShrink: 1, minWidth: 0, maxWidth: 240, alignItems: "flex-start", gap: 3 },
+  column: { flexShrink: 1, minWidth: 0, maxWidth: 240, alignItems: "flex-start", gap: space[1] },
   columnMine: { alignItems: "flex-end" },
-  header: { flexDirection: "row", alignItems: "baseline", marginHorizontal: 4, marginBottom: 1 },
-  name: { fontFamily: fontFamilies[600], marginRight: 6, flexShrink: 1 },
+  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
+  header: { flexDirection: "row", alignItems: "baseline", marginHorizontal: space[1], marginBottom: 1 },
+  name: { fontFamily: fontFamilies[600], marginRight: space["1-5"], flexShrink: 1 },
   time: { fontFamily: fontFamilies[400] },
-  message: { maxWidth: "100%", alignItems: "flex-start", gap: 4 },
+  message: { maxWidth: "100%", alignItems: "flex-start", gap: space[1] },
   messageMine: { alignItems: "flex-end" },
-  body: { maxWidth: "100%", alignItems: "flex-start", gap: 4 },
+  body: { maxWidth: "100%", alignItems: "flex-start", gap: space[1] },
   pending: { opacity: 0.55 },
-  bubble: { borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12 },
-  status: { fontFamily: fontFamilies[400], marginHorizontal: 6 },
-  failed: { flexDirection: "row", alignItems: "center", gap: 4, marginHorizontal: 6 },
+  bubble: { borderRadius: corners["2xl"], paddingVertical: space[2], paddingHorizontal: space[3] },
+  status: { fontFamily: fontFamilies[400], marginHorizontal: space["1-5"] },
+  failed: { flexDirection: "row", alignItems: "center", gap: space[1], marginHorizontal: space["1-5"] },
   failedText: { fontFamily: fontFamilies[400] },
   // `.lnk`: the text colour, underlined, 2 pt by 4 pt of padding.
-  retry: { fontFamily: fontFamilies[600], textDecorationLine: "underline", paddingVertical: 2, paddingHorizontal: 4 },
+  retry: { fontFamily: fontFamilies[600], textDecorationLine: "underline", paddingVertical: space["0-5"], paddingHorizontal: space[1] },
 });

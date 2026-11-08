@@ -222,6 +222,11 @@ export function readNewCallLanguage(): NewCallLanguage {
   return raw ? asWhisper(raw) : null;
 }
 
+/** The request that starts a call: the account default when no language is chosen, else the chosen one. */
+export function createCallAction(idempotencyKey: string, language: NewCallLanguage) {
+  return { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey } as const;
+}
+
 export function saveNewCallLanguage(value: NewCallLanguage) {
   writeStored(NEW_CALL_SLOT, value ?? "default");
 }

@@ -52,9 +52,27 @@ type clientMetadata struct {
 	ClientName              string   `json:"client_name"`
 	RedirectURIs            []string `json:"redirect_uris"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	GrantTypes              []string `json:"grant_types"`
-	ResponseTypes           []string `json:"response_types"`
-	ClientSecret            *string  `json:"client_secret"`
+	// TokenEndpointAuthMethods is the client's full list; the singular field is its legacy preference.
+	TokenEndpointAuthMethods []string `json:"token_endpoint_auth_methods_supported"`
+	GrantTypes               []string `json:"grant_types"`
+	ResponseTypes            []string `json:"response_types"`
+	ClientSecret             *string  `json:"client_secret"`
+}
+
+// canAuthenticateAsPublicClient says whether the client can use the one method
+// Chalk advertises, "none". A client may list several methods and prefer another
+// one (ChatGPT prefers private_key_jwt and also lists none); it then uses a method
+// the server advertises. A document with no method at all means none, per RFC 7591.
+// Shared-secret methods never qualify: the CIMD draft forbids them.
+func (d clientMetadata) canAuthenticateAsPublicClient() bool {
+	methods := slices.Concat(d.TokenEndpointAuthMethods, []string{d.TokenEndpointAuthMethod})
+	if slices.ContainsFunc(methods, func(m string) bool { return strings.HasPrefix(m, "client_secret") }) {
+		return false
+	}
+	if len(d.TokenEndpointAuthMethods) > 0 {
+		return slices.Contains(d.TokenEndpointAuthMethods, "none")
+	}
+	return d.TokenEndpointAuthMethod == "" || d.TokenEndpointAuthMethod == "none"
 }
 
 // metadataClient fetches and validates the document for clientID and makes sure
@@ -79,8 +97,8 @@ func (s Service) metadataClient(ctx context.Context, clientID string) (Client, *
 	switch {
 	case doc.ClientID != clientID:
 		return invalid("client_id does not match its URL")
-	case doc.ClientSecret != nil || doc.TokenEndpointAuthMethod != "" && doc.TokenEndpointAuthMethod != "none":
-		return invalid("only public clients (token_endpoint_auth_method=none) are supported")
+	case doc.ClientSecret != nil || !doc.canAuthenticateAsPublicClient():
+		return invalid("the client must support token_endpoint_auth_method=none: Chalk only issues tokens to public clients")
 	case len(doc.GrantTypes) > 0 && !slices.Contains(doc.GrantTypes, "authorization_code"):
 		return invalid("grant_types must include authorization_code")
 	case len(doc.ResponseTypes) > 0 && !slices.Contains(doc.ResponseTypes, "code"):

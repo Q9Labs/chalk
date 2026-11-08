@@ -7,7 +7,7 @@ import { ChalkText } from "../../primitives/ChalkText";
 import { IconButton } from "../../primitives/IconButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
-import { chatOverlays, fileKindColors, fixed, fontFamilies } from "../../theme/tokens";
+import { chatOverlays, fileKindColors, fixed, fontFamilies, corners, space, fontSizes } from "../../theme/tokens";
 import { FILE_BADGE, fileKind, formatSize, thumbnailLayout } from "./chat-model";
 
 /** Download links for this session, so a photo scrolled back into view doesn't ask the server again. */
@@ -165,20 +165,21 @@ export const FileCard = memo(function FileCard({ attachment, sent }: { readonly 
 });
 
 const styles = StyleSheet.create({
-  grid: { width: 240, maxWidth: "100%", borderRadius: 14, overflow: "hidden" },
-  gridMany: { flexDirection: "row", flexWrap: "wrap", gap: 2 },
+  grid: { width: 240, maxWidth: "100%", borderRadius: corners.xl, overflow: "hidden" },
+  gridMany: { flexDirection: "row", flexWrap: "wrap", gap: space["0-5"] },
   thumb: { overflow: "hidden" },
-  thumbOne: { width: "100%", borderRadius: 14 },
-  thumbSquare: { width: 119, borderRadius: 3 },
-  thumbWide: { width: "100%", borderRadius: 3 },
+  thumbOne: { width: "100%", borderRadius: corners.xl },
+  thumbSquare: { width: 119, borderRadius: corners.xs },
+  thumbWide: { width: "100%", borderRadius: corners.xs },
   centered: { alignItems: "center", justifyContent: "center" },
   moreShade: { backgroundColor: chatOverlays.photoMore },
-  moreText: { fontSize: 20, lineHeight: 28 },
+  moreText: { fontSize: fontSizes["title-sm"], lineHeight: 28 },
   badge: { alignItems: "center", justifyContent: "center" },
   // `.fi`: 10 pt bold capitals with 0.04 em tracking.
-  badgeText: { fontFamily: fontFamilies[700], fontSize: 10, lineHeight: 10, letterSpacing: 0.4 },
-  badgeTextSmall: { fontSize: 9, lineHeight: 9, letterSpacing: 0.36 },
-  file: { flexDirection: "row", alignItems: "center", gap: 10, width: 240, maxWidth: "100%", minHeight: 56, paddingTop: 8, paddingRight: 6, paddingBottom: 8, paddingLeft: 10, borderRadius: 14, borderWidth: 1 },
+  badgeText: { fontFamily: fontFamilies[700], fontSize: fontSizes.micro, lineHeight: 10, letterSpacing: 0.4 },
+  badgeTextSmall: { fontSize: fontSizes.micro, lineHeight: 9, letterSpacing: 0.36 },
+  file: { flexDirection: "row", alignItems: "center", gap: space["2-5"], width: 240, maxWidth: "100%", minHeight: 56, paddingTop: space[2], paddingRight: space["1-5"], paddingBottom: space[2], paddingLeft: space["2-5"], borderRadius: corners.xl, borderWidth: 1 },
+  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
   fileText: { flex: 1, minWidth: 0, gap: 1 },
   fileSize: { fontFamily: fontFamilies[400], lineHeight: 15 },
 });

@@ -5,6 +5,7 @@ import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { shareLink } from "../lib/share";
 import { displayLink } from "../lib/spaces";
+import { space, corners } from "@q9labsai/chalk-react-native";
 
 type ReadySheetProps = {
   readonly open: boolean;
@@ -53,12 +54,12 @@ export function ReadySheet({ open, onClose, link }: ReadySheetProps): React.JSX.
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -6, marginBottom: 2 },
-  lead: { marginRight: 4 },
-  linkRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 12, height: 44, paddingLeft: 14, paddingRight: 4, borderRadius: 999 },
+  head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -space["1-5"], marginBottom: space["0-5"] },
+  lead: { marginRight: space[1] },
+  linkRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2], marginTop: space[3], height: 44, paddingLeft: space[3], paddingRight: space[1], borderRadius: corners.pill },
   link: { flex: 1, minWidth: 0 },
-  linkButtons: { flexDirection: "row", gap: 2 },
-  qr: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 12 },
+  linkButtons: { flexDirection: "row", gap: space["0-5"] },
+  qr: { flexDirection: "row", alignItems: "center", gap: space[3], marginTop: space[3] },
   qrText: { flex: 1 },
-  share: { marginTop: 12 },
+  share: { marginTop: space[3] },
 });

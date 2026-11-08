@@ -154,6 +154,10 @@ func (n *Node) allocate() {
 	episodes := map[episodeKey]*episodeTick{}
 	stats := &mediaStats{episodes: make(map[episodeKey]protocol.EpisodeState, len(sessions))}
 	for _, session := range sessions {
+		if session.kind == kindCapture {
+			n.tallyCapture(session, stats, now)
+			continue
+		}
 		key := episodeOf(session.scope)
 		episode := episodes[key]
 		if episode == nil {
@@ -222,6 +226,19 @@ func (n *Node) allocate() {
 	maps.DeleteFunc(n.plans, func(key episodeKey, _ int64) bool { return episodes[key] == nil })
 	stats.totals = n.totals
 	n.stats.Store(stats)
+}
+
+// tallyCapture counts a capture session's egress in the node's totals and leaves it out of its
+// Episode. The Episode's plan, packet ceiling and probes serve the call, so a recording neither
+// lowers a camera for the Participants nor gets lowered itself: its subscriptions keep the layer
+// they asked for. Its packets still count against the node, which reserves them at admission.
+func (n *Node) tallyCapture(session *Session, stats *mediaStats, now int64) {
+	n.tallyEgress(session.transport.tick(now))
+	for class := range packetClasses {
+		pps, bps := session.transport.meters[class].rates()
+		stats.out[class].add(pps, bps)
+		stats.packets += pps
+	}
 }
 
 // shareHostState tells every transport whether the node is under pressure, before

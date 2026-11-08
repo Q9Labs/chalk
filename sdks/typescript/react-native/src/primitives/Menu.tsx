@@ -8,7 +8,7 @@ import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
 import { timings } from "../motion/motion";
 import { useTheme } from "../theme/theme";
-import { radii, sizes } from "../theme/tokens";
+import { radii, sizes, space } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 import { placeMenu, type MenuPlacement, type Rect } from "./menu-placement";
 
@@ -207,11 +207,11 @@ function useKeyboardHeight(): number {
 }
 
 const styles = StyleSheet.create({
-  surface: { position: "absolute", padding: 6, borderWidth: 1, borderRadius: radii.menu },
+  surface: { position: "absolute", padding: space["1-5"], borderWidth: 1, borderRadius: radii.menu },
   measuring: { left: 0, top: 0, opacity: 0 },
-  item: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 10, borderRadius: radii.menuRow },
+  item: { flexDirection: "row", alignItems: "center", gap: space["2-5"], paddingHorizontal: space["2-5"], borderRadius: radii.menuRow },
   check: { width: 18, alignItems: "center" },
-  labels: { flex: 1, minWidth: 0, gap: 2 },
-  section: { paddingTop: 8, paddingHorizontal: 10, paddingBottom: 4 },
-  separator: { height: 1, marginVertical: 6, marginHorizontal: 4 },
+  labels: { flex: 1, minWidth: 0, gap: space["0-5"] },
+  section: { paddingTop: space[2], paddingHorizontal: space["2-5"], paddingBottom: space[1] },
+  separator: { height: 1, marginVertical: space["1-5"], marginHorizontal: space[1] },
 });

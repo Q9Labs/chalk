@@ -9,6 +9,7 @@ import { IconButton } from "../primitives/IconButton";
 import { useToasts } from "../primitives/toast/ToastStack";
 import { routeIcons, routeName, useAudioOutput, type AudioOutput } from "./audio-route";
 import { RoutePicker } from "./RoutePicker";
+import { space } from "../theme/tokens";
 
 export type DockProps = {
   readonly arrangement: Arrangement;
@@ -102,8 +103,8 @@ function AudioOutputButton({ output, size, captioned }: { readonly output: Audio
 
 const styles = StyleSheet.create({
   dock: { flex: 1, flexDirection: "row", alignItems: "center" },
-  portrait: { justifyContent: "space-between", paddingHorizontal: 20 },
-  landscape: { justifyContent: "center", gap: 14 },
-  pad: { justifyContent: "center", gap: 8 },
+  portrait: { justifyContent: "space-between", paddingHorizontal: space[5] },
+  landscape: { justifyContent: "center", gap: space[3] },
+  pad: { justifyContent: "center", gap: space[2] },
   gap: { width: 8 },
 });
