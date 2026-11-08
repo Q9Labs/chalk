@@ -1,7 +1,11 @@
 package chalksfu_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,5 +150,79 @@ func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	live, err := registry(withCloudflare, bound).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{})
 	if err != nil || live.Provider() != mediaplane.ProviderChalkSFU {
 		t.Fatalf("Episode bound before the pool filled: %v, %v, want chalk_sfu", live, err)
+	}
+}
+
+// A draining primary leaves placement and is reported as draining, not as silent. Its live
+// Episode keeps taking joins, and an undrain puts it back.
+func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	primary := startSFUUnder(t, ca, nil)
+	standby := startSFUUnder(t, ca, nil)
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL}}
+	logs := &bytes.Buffer{}
+	fleet := primary.loggedFleetOf(t, slog.New(slog.NewTextHandler(logs, nil)), ca, clientIdentity, nodes...)
+	ctx := context.Background()
+	control := primary.httpClient(t, ca, clientIdentity)
+	post := func(path string) {
+		t.Helper()
+		reply, err := control.Post(primary.controlURL+path, "application/json", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reply.Body.Close()
+		if reply.StatusCode != http.StatusOK {
+			t.Fatalf("POST %s: status %d", path, reply.StatusCode)
+		}
+	}
+
+	node, err := fleet.Node("sfu-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	onPrimary := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node)
+	join(t, onPrimary, scopeOf("ep-live", "alice"))
+	fleet.Probe(ctx)
+	if placed, _ := fleet.Place(); placed != "sfu-primary" {
+		t.Fatalf("serving primary: placed on %q, want the primary", placed)
+	}
+	if health, known := fleet.Health("sfu-primary"); !known || health.Draining || health.Allocations != 1 {
+		t.Fatalf("serving primary health %+v known %t, want not draining with 1 allocation", health, known)
+	}
+
+	post("/v1/drain")
+	for range 3 {
+		fleet.Probe(ctx)
+	}
+	if placed, room := fleet.Place(); placed != "sfu-standby" || !room {
+		t.Fatalf("draining primary: placed on %q with room %t, want the standby", placed, room)
+	}
+	if health, known := fleet.Health("sfu-primary"); !known || !health.Draining || health.Allocations != 1 || health.CleanupDebt != 0 {
+		t.Fatalf("draining primary health %+v known %t, want draining with 1 allocation", health, known)
+	}
+	if health, known := fleet.Health("sfu-standby"); !known || health.Draining {
+		t.Fatalf("serving standby health %+v known %t, want not draining", health, known)
+	}
+	if got := strings.Count(logs.String(), "chalk sfu node draining"); got != 1 || strings.Contains(logs.String(), "left placement") {
+		t.Fatalf("three probes of a draining node logged:\n%s\nwant one draining line and no left-placement line", logs)
+	}
+
+	// The live Episode takes a join, a new Episode does not.
+	join(t, onPrimary, scopeOf("ep-live", "bob"))
+	if _, err := onPrimary.CreateJoin(ctx, mediaplane.CreateJoinInput{
+		Provider: mediaplane.ProviderChalkSFU, Scope: scopeOf("ep-new", "carol"),
+		Episode:         mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: "ep-new"},
+		ParticipantName: "carol", ExternalParticipantID: "carol", ParticipantPreset: "contributor",
+	}); err == nil {
+		t.Fatal("a new Episode joined a draining node")
+	}
+
+	post("/v1/undrain")
+	fleet.Probe(ctx)
+	if placed, _ := fleet.Place(); placed != "sfu-primary" {
+		t.Fatalf("undrained primary: placed on %q, want the primary", placed)
+	}
+	if health, _ := fleet.Health("sfu-primary"); health.Draining || !strings.Contains(logs.String(), "chalk sfu node no longer draining") {
+		t.Fatalf("undrained primary health %+v, logs:\n%s", health, logs)
 	}
 }

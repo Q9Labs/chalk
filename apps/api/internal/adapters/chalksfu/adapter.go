@@ -205,7 +205,8 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 }
 
 // ready reads the node's readiness: its packet budget and the part live Episodes
-// reserve. Any reply but 200, a draining node's 503 included, is not ready.
+// reserve. A draining node answers 503 with its state, which is a ready result
+// with Draining set. Any other reply but 200 is not ready.
 func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath("/readyz").String(), nil)
 	if err != nil {
@@ -217,12 +218,15 @@ func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
 		return wireReady{}, err
 	}
 	defer reply.Body.Close()
-	if reply.StatusCode != http.StatusOK {
+	if reply.StatusCode != http.StatusOK && reply.StatusCode != http.StatusServiceUnavailable {
 		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
 	var ready wireReady
 	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&ready); err != nil {
-		return wireReady{}, fmt.Errorf("decode readiness: %w", err)
+		return wireReady{}, fmt.Errorf("decode readiness (status %d): %w", reply.StatusCode, err)
+	}
+	if reply.StatusCode == http.StatusServiceUnavailable && !ready.Draining {
+		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
 	return ready, nil
 }

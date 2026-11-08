@@ -11,8 +11,10 @@
 # certificates as Podman secrets, the settings and the Quadlet unit, drains the
 # running node, restarts it and checks readiness through an SSH tunnel with an
 # operator certificate. Running it twice converges on the same state. Without
-# --force it waits up to SFU_DRAIN_TIMEOUT seconds (default 3600) for live
-# calls to end. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
+# --force it sends the node a drain request and waits up to SFU_DRAIN_TIMEOUT
+# seconds (default 3600) until the node reports zero allocations and zero cleanup
+# debt. If that does not happen it reopens the node and exits: a restart then
+# would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
 # turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
 # which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
 set -euo pipefail
@@ -176,33 +178,70 @@ sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s
   as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
 remote systemctl --user -M chalk-sfu@ daemon-reload
 
+port=$((20000 + RANDOM % 20000))
+tunnel=""
+draining=false
+# sfu_curl calls the node's control API through the SSH tunnel with the operator certificate.
+sfu_curl() {
+  curl --silent --max-time 10 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
+    --resolve "chalk-sfu:${port}:127.0.0.1" "$@"
+}
+open_tunnel() {
+  "${deploy_dir}/certs" "$environment" operator >/dev/null
+  ssh "${ssh_options[@]}" -o ExitOnForwardFailure=yes -N -L "${port}:127.0.0.1:8443" "root@${host}" &
+  tunnel=$!
+}
+# An aborted deploy reopens the node it drained, so it takes new Episodes again.
+cleanup() {
+  if $draining; then
+    sfu_curl --output /dev/null -X POST "https://chalk-sfu:${port}/v1/undrain" || true
+  fi
+  [[ -z "$tunnel" ]] || kill "$tunnel" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
   if [[ "$mode" == --force ]]; then
     echo "==> restarting without waiting for live calls"
   else
-    echo "==> draining: no new sessions; waiting up to ${drain_timeout}s for live calls to end"
-    since="$(remote date -u +%Y-%m-%dT%H:%M:%SZ)"
-    as_sfu podman kill --signal USR1 chalk-sfu >/dev/null
+    echo "==> draining: no new Episodes; waiting up to ${drain_timeout}s for zero allocations and cleanup debt"
+    open_tunnel
     deadline=$((SECONDS + drain_timeout))
-    until as_sfu podman logs --since "$since" chalk-sfu 2>&1 | grep -q '"msg":"sfu drained"'; do
-      ((SECONDS < deadline)) || { echo "live calls remain after ${drain_timeout}s; rerun with --force to cut them" >&2; exit 1; }
-      sleep 5
+    status=000
+    for _ in $(seq 10); do # the tunnel needs a moment
+      status="$(sfu_curl --output /dev/null --write-out '%{http_code}' -X POST "https://chalk-sfu:${port}/v1/drain")" && break
+      sleep 1
     done
+    if [[ "$status" == 404 ]]; then
+      # The running node predates the drain request; remove this branch once no node does.
+      since="$(remote date -u +%Y-%m-%dT%H:%M:%SZ)"
+      as_sfu podman kill --signal USR1 chalk-sfu >/dev/null
+      until as_sfu podman logs --since "$since" chalk-sfu 2>&1 | grep -q '"msg":"sfu drained"'; do
+        ((SECONDS < deadline)) || { echo "live calls remain after ${drain_timeout}s; restarting would be a disruptive replacement; rerun with --force to cut them" >&2; exit 1; }
+        sleep 5
+      done
+    else
+      [[ "$status" == 200 ]] || { echo "the drain request answered ${status}" >&2; exit 1; }
+      draining=true
+      last=""
+      until state="$(sfu_curl --max-time 5 "https://chalk-sfu:${port}/readyz")" && [[ "$(jq -r '.allocations == 0 and .cleanupDebt == 0' <<<"$state" 2>/dev/null)" == true ]]; do
+        counts="$(jq -r '"allocations \(.allocations), cleanup debt \(.cleanupDebt)"' <<<"$state" 2>/dev/null || echo unknown)"
+        [[ "$counts" == "$last" ]] || { echo "    draining: ${counts}"; last="$counts"; }
+        ((SECONDS < deadline)) || { echo "${counts} remain after ${drain_timeout}s; restarting now would be a disruptive replacement that cuts live calls; the node is reopened. Rerun with --force to accept it" >&2; exit 1; }
+        sleep 5
+      done
+      draining=false # the restart replaces the node, so there is nothing to reopen
+    fi
   fi
 fi
 remote systemctl --user -M chalk-sfu@ restart chalk-sfu
 as_sfu podman image prune --force >/dev/null
 
 echo "==> checking readiness"
-"${deploy_dir}/certs" "$environment" operator >/dev/null
-port=$((20000 + RANDOM % 20000))
-ssh "${ssh_options[@]}" -o ExitOnForwardFailure=yes -N -L "${port}:127.0.0.1:8443" "root@${host}" &
-tunnel=$!
-trap 'kill "$tunnel" 2>/dev/null || true' EXIT
+[[ -n "$tunnel" ]] || open_tunnel
 ready=""
 for _ in $(seq 30); do
-  if ready="$(curl --silent --fail --max-time 3 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
-    --resolve "chalk-sfu:${port}:127.0.0.1" "https://chalk-sfu:${port}/readyz")"; then
+  if ready="$(sfu_curl --fail --max-time 3 "https://chalk-sfu:${port}/readyz")"; then
     break
   fi
   sleep 2
