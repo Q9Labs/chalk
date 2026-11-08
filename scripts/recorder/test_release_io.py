@@ -20,6 +20,8 @@ class TofuErrors(unittest.TestCase):
             for diagnostic, label in [('Error acquiring the state lock', 'state-lock'),
                                       ('ExpiredToken', 'authentication'), ('AccessDenied', 'authorization'),
                                       ('Unsupported argument', 'configuration'), ('no such host', 'network'),
+                                      ('Error: Failed to install provider', 'provider-download'),
+                                      ('Error: Failed to query available provider packages', 'provider-download'),
                                       ('unexpected failure', 'unclassified')]:
                 with self.subTest(label=label), patch.dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'], TOFU_DIAGNOSTIC=diagnostic):
                     stdout, stderr = io.StringIO(), io.StringIO()

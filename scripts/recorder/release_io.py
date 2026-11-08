@@ -33,6 +33,8 @@ def tofu_error_class(stderr):
         ("authentication", ("no valid credential sources", "expiredtoken", "invalidclienttokenid")),
         ("authorization", ("accessdenied", "access denied", "not authorized")),
         ("configuration", ("unsupported argument", "missing required argument", "invalid value for")),
+        ("provider-download", ("failed to install provider", "failed to query available provider packages",
+                               "could not query provider registry", "could not retrieve the list of available versions")),
         ("network", ("connection refused", "no such host", "tls handshake timeout", "i/o timeout")),
     ):
         if any(marker in text for marker in markers):

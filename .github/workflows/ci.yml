@@ -780,6 +780,10 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-opentofu
 
+      - name: Restore the OpenTofu provider cache
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
+        uses: ./.github/actions/cache-tofu-providers
+
       - name: Install doctl for read-only snapshot validation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-doctl

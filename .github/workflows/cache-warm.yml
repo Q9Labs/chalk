@@ -87,6 +87,15 @@ jobs:
       - name: Save the pinned doctl download for deploys and rollbacks
         uses: ./.github/actions/setup-doctl
 
+      # The managed deploy restores this cache. The step saves it when the job ends and no entry matches the lock files.
+      - name: Warm the managed deploy provider cache
+        uses: ./.github/actions/cache-tofu-providers
+
+      - name: Download the managed deploy providers
+        run: |
+          bash scripts/recorder/tofu-init.sh infrastructure/nightly/transcription
+          bash scripts/recorder/tofu-init.sh infrastructure/opentofu/modules/aws-transcription-dispatcher
+
       - name: Check for a saved provider cache
         id: saved
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
