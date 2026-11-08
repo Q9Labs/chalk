@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -22,35 +23,40 @@ func enqueueExpiredParticipantPresence(ctx context.Context, queries *sqlc.Querie
 	if err != nil {
 		return 0, fmt.Errorf("lock participant presence recovery floor: %w", err)
 	}
-	rooms, err := queries.ClaimExpiredParticipantPresence(ctx, sqlc.ClaimExpiredParticipantPresenceParams{PresenceRecoverAfter: floor, BatchSize: batch})
-	if err != nil {
-		return 0, fmt.Errorf("claim expired participant presence: %w", err)
-	}
-	// The API is now an entry-aware Leave writer too. The rollout barrier
-	// rejects legacy writers once confirmed entry generations are in use.
-	if len(rooms) > 0 {
-		if _, err := tx.Exec(ctx, "select set_config('chalk.entry_writer', '1', true)"); err != nil {
-			return 0, fmt.Errorf("authorize participant presence leave writer: %w", err)
-		}
-	}
 	count := 0
-	for _, room := range rooms {
-		tenantID, episodeID := utilities.IDFromBytes(room.TenantID.Bytes), utilities.IDFromBytes(room.EpisodeID.Bytes)
-		departures := 0
-		done, err := cycle.step(ctx, tx, presenceExpiryPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
-			var err error
-			departures, err = expireEpisodePresence(ctx, queries, tx, room, batch-int32(count))
+	authorized := false
+	err = claimInPages(func() int32 { return batch - int32(count) },
+		func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimExpiredParticipantPresenceRow, error) {
+			rooms, err := queries.ClaimExpiredParticipantPresence(ctx, sqlc.ClaimExpiredParticipantPresenceParams{PresenceRecoverAfter: floor, ExcludedEpisodeIds: excluded, BatchSize: limit})
+			if err != nil {
+				return nil, fmt.Errorf("claim expired participant presence: %w", err)
+			}
+			return rooms, nil
+		},
+		func(room sqlc.ClaimExpiredParticipantPresenceRow) pgtype.UUID { return room.EpisodeID },
+		func(room sqlc.ClaimExpiredParticipantPresenceRow) error {
+			// The API is now an entry-aware Leave writer too. The rollout barrier
+			// rejects legacy writers once confirmed entry generations are in use.
+			if !authorized {
+				if _, err := tx.Exec(ctx, "select set_config('chalk.entry_writer', '1', true)"); err != nil {
+					return fmt.Errorf("authorize participant presence leave writer: %w", err)
+				}
+				authorized = true
+			}
+			tenantID, episodeID := utilities.IDFromBytes(room.TenantID.Bytes), utilities.IDFromBytes(room.EpisodeID.Bytes)
+			departures := 0
+			done, err := cycle.step(ctx, tx, presenceExpiryPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+				var err error
+				departures, err = expireEpisodePresence(ctx, queries, tx, room, batch-int32(count))
+				return err
+			})
+			if done && departures > 0 {
+				count += departures
+				cycle.fenced[episodeID] = struct{}{}
+			}
 			return err
 		})
-		if err != nil {
-			return 0, err
-		}
-		if done && departures > 0 {
-			count += departures
-			cycle.fenced[episodeID] = struct{}{}
-		}
-	}
-	return count, nil
+	return count, err
 }
 
 // expireEpisodePresence removes one Episode's participants whose presence

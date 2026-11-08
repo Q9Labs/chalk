@@ -7,35 +7,58 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
 	var logs bytes.Buffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &logs
+}
 
-	stuck, other := newTestID(t), newTestID(t)
-	tenant := newTestID(t)
-	scheduler := NewDeadlineScheduler(nil, 0, 0)
-	busy := SkippedEpisode{TenantID: tenant, EpisodeID: stuck, Phase: "deadline", Err: ErrEpisodeControlBusy}
-	broken := SkippedEpisode{TenantID: tenant, EpisodeID: other, Phase: "empty_linger", Err: errors.New("boom")}
-
-	scheduler.logSkipped(context.Background(), []SkippedEpisode{busy, broken})
-	scheduler.logSkipped(context.Background(), []SkippedEpisode{busy, {TenantID: tenant, EpisodeID: stuck, Phase: "empty_linger", Err: ErrEpisodeControlBusy}})
-	scheduler.logSkipped(context.Background(), nil)
-	scheduler.logSkipped(context.Background(), []SkippedEpisode{busy})
-
+func logRecords(t *testing.T, logs *bytes.Buffer) []map[string]any {
+	t.Helper()
 	var records []map[string]any
 	for _, line := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
 		var record map[string]any
 		if err := json.Unmarshal(line, &record); err != nil {
 			t.Fatal(err)
 		}
 		records = append(records, record)
 	}
+	return records
+}
+
+func newTestID(t *testing.T) utilities.ID {
+	t.Helper()
+	id, err := utilities.NewID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
+	logs := captureLogs(t)
+	stuck, other, tenant := newTestID(t), newTestID(t), newTestID(t)
+	scheduler := NewDeadlineScheduler(nil, 0, 0)
+	busy := SkippedEpisode{TenantID: tenant, EpisodeID: stuck, Phase: "deadline", Err: ErrEpisodeControlBusy}
+	broken := SkippedEpisode{TenantID: tenant, EpisodeID: other, Phase: "empty_linger", Err: errors.New("boom")}
+	ctx := context.Background()
+
+	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy, broken}})
+	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy, {TenantID: tenant, EpisodeID: stuck, Phase: "empty_linger", Err: ErrEpisodeControlBusy}}})
+	scheduler.observe(ctx, DeadlineCycle{Completed: []EpisodeRef{{TenantID: tenant, EpisodeID: stuck}}})
+	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy}})
+
 	want := []struct {
 		episode, level, reason string
 		streak                 float64
@@ -46,6 +69,7 @@ func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
 		{stuck.String(), "WARN", "control_busy", 2},
 		{stuck.String(), "WARN", "control_busy", 1},
 	}
+	records := logRecords(t, logs)
 	if len(records) != len(want) {
 		t.Fatalf("logged %d records, want %d: %s", len(records), len(want), logs.String())
 	}
@@ -58,11 +82,41 @@ func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
 	}
 }
 
-func newTestID(t *testing.T) utilities.ID {
-	t.Helper()
-	id, err := utilities.NewID()
-	if err != nil {
+type scriptedRepository struct {
+	passes []DeadlineCycle
+	calls  int
+	done   context.CancelFunc
+}
+
+func (r *scriptedRepository) EnqueueDueEpisodeDeadlines(context.Context, int32) (DeadlineCycle, error) {
+	r.calls++
+	if r.calls >= len(r.passes) {
+		r.done()
+	}
+	return r.passes[r.calls-1], nil
+}
+
+// Another replica can hold an Episode's row, so a pass may not attempt it. That
+// pass says nothing about the failure and must not reset the streak.
+func TestDeadlineSchedulerRunKeepsStreakAcrossUnattemptedPasses(t *testing.T) {
+	logs := captureLogs(t)
+	episode, tenant := newTestID(t), newTestID(t)
+	failed := DeadlineCycle{Skipped: []SkippedEpisode{{TenantID: tenant, EpisodeID: episode, Phase: "deadline", Err: errors.New("boom")}}}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repository := &scriptedRepository{done: cancel, passes: []DeadlineCycle{failed, {}, failed, {}, failed, {}, failed}}
+
+	if err := NewDeadlineScheduler(repository, time.Millisecond, 0).Run(ctx); err != nil {
 		t.Fatal(err)
 	}
-	return id
+
+	var streaks []float64
+	for _, record := range logRecords(t, logs) {
+		if record["event"] == "episode.deadline_scheduler.failed" {
+			streaks = append(streaks, record["consecutive_failures"].(float64))
+		}
+	}
+	if len(streaks) != 4 || streaks[0] != 1 || streaks[1] != 2 || streaks[2] != 3 || streaks[3] != 4 {
+		t.Fatalf("consecutive_failures across alternating failed and unattempted passes = %v, want [1 2 3 4]", streaks)
+	}
 }

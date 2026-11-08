@@ -118,6 +118,15 @@ type DeadlineSchedulerRepository interface {
 type DeadlineCycle struct {
 	Enqueued int
 	Skipped  []SkippedEpisode
+	// Completed lists the Episodes whose work finished without error. An Episode
+	// in neither list was not attempted this pass, for example because another
+	// replica held its row.
+	Completed []EpisodeRef
+}
+
+type EpisodeRef struct {
+	TenantID  utilities.ID
+	EpisodeID utilities.ID
 }
 
 type SkippedEpisode struct {

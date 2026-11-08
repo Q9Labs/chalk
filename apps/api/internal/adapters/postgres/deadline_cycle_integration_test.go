@@ -129,6 +129,19 @@ func (f schedulerFixture) leftParticipants(e schedulerEpisode, count int) {
 	}
 }
 
+// blockedEpisode seeds an Episode past its deadline whose participant has an
+// unexpired publication fence owned by another operation.
+func (f schedulerFixture) blockedEpisode(deadline string) (schedulerEpisode, utilities.ID) {
+	f.t.Helper()
+	blocked := f.episode(deadline, 1, false)
+	foreignOperationID := accountTenantIntegrationID(f.t)
+	f.exec(`insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, target_participant_id, target_participant_generation, payload) values($1, $2, $3, $4, 'foreign_leave_request', $5, 'participant_leave', $6, 1, '{}'::jsonb)`,
+		blocked.tenantID.Bytes(), blocked.spaceID.Bytes(), blocked.episodeID.Bytes(), foreignOperationID.Bytes(), make([]byte, 32), blocked.participants[0].Bytes())
+	f.exec(`insert into sync_publication_fences(tenant_id, space_id, episode_id, participant_id, participant_generation, source, external_operation_id, expires_at) values($1, $2, $3, $4, 1, 'microphone', $5, now() + interval '5 minutes')`,
+		blocked.tenantID.Bytes(), blocked.spaceID.Bytes(), blocked.episodeID.Bytes(), blocked.participants[0].Bytes(), foreignOperationID.Bytes())
+	return blocked, foreignOperationID
+}
+
 func (f schedulerFixture) operations(e schedulerEpisode, operationName string) int {
 	f.t.Helper()
 	return f.count(`select count(*) from sync_external_operations where tenant_id=$1 and episode_id=$2 and operation_name=$3`, e.tenantID.Bytes(), e.episodeID.Bytes(), operationName)
@@ -136,8 +149,13 @@ func (f schedulerFixture) operations(e schedulerEpisode, operationName string) i
 
 func (f schedulerFixture) run() episodes.DeadlineCycle {
 	f.t.Helper()
+	return f.runWithBatch(500)
+}
+
+func (f schedulerFixture) runWithBatch(batch int32) episodes.DeadlineCycle {
+	f.t.Helper()
 	repository := NewEpisodeLifecycleRepository(savepointTransactor{outer: f.tx})
-	cycle, err := repository.EnqueueDueEpisodeDeadlines(f.ctx, 500)
+	cycle, err := repository.EnqueueDueEpisodeDeadlines(f.ctx, batch)
 	if err != nil {
 		f.t.Fatalf("deadline scheduler cycle: %v", err)
 	}
@@ -201,13 +219,8 @@ func TestDeadlineCycleExpiredPresenceDoesNotRollBackOtherEpisodes(t *testing.T) 
 // the Episode that owns it.
 func TestDeadlineCycleForeignFenceSkipsOnlyThatEpisode(t *testing.T) {
 	f := newSchedulerFixture(t)
-	blocked := f.episode(`now() - interval '2 seconds'`, 1, false)
+	blocked, foreignOperationID := f.blockedEpisode(`now() - interval '2 seconds'`)
 	due := f.episode(`now() - interval '1 second'`, 1, false)
-	foreignOperationID := accountTenantIntegrationID(t)
-	f.exec(`insert into sync_external_operations(tenant_id, space_id, episode_id, external_operation_id, request_key, request_fingerprint, operation_name, target_participant_id, target_participant_generation, payload) values($1, $2, $3, $4, 'foreign_leave_request', $5, 'participant_leave', $6, 1, '{}'::jsonb)`,
-		blocked.tenantID.Bytes(), blocked.spaceID.Bytes(), blocked.episodeID.Bytes(), foreignOperationID.Bytes(), make([]byte, 32), blocked.participants[0].Bytes())
-	f.exec(`insert into sync_publication_fences(tenant_id, space_id, episode_id, participant_id, participant_generation, source, external_operation_id, expires_at) values($1, $2, $3, $4, 1, 'microphone', $5, now() + interval '5 minutes')`,
-		blocked.tenantID.Bytes(), blocked.spaceID.Bytes(), blocked.episodeID.Bytes(), blocked.participants[0].Bytes(), foreignOperationID.Bytes())
 
 	cycle := f.run()
 
@@ -238,5 +251,32 @@ func TestDeadlineCycleForeignFenceSkipsOnlyThatEpisode(t *testing.T) {
 	}
 	if got := f.count(`select count(*) from episodes where id=$1 and status='ending'`, due.episodeID.Bytes()); got != 1 {
 		t.Fatalf("other Episode ending = %d, want 1", got)
+	}
+}
+
+// Skipped Episodes stay eligible, and claims return the oldest first. A batch
+// worth of busy Episodes must not hide the healthy overdue Episode behind them.
+func TestDeadlineCycleBusyBatchDoesNotStarveHealthyEpisode(t *testing.T) {
+	f := newSchedulerFixture(t)
+	const batch = 3
+	var blocked []schedulerEpisode
+	for range batch + 1 {
+		episode, _ := f.blockedEpisode(`now() - interval '40 days'`)
+		blocked = append(blocked, episode)
+	}
+	healthy := f.episode(`now() - interval '30 days'`, 1, false)
+
+	cycle := f.runWithBatch(batch)
+
+	if got := f.operations(healthy, "maximum_episode_duration_expired"); got != 1 {
+		t.Fatalf("healthy overdue Episode behind %d busy Episodes got %d deadline operations, want 1", len(blocked), got)
+	}
+	for _, episode := range blocked {
+		if skipped := f.skippedFor(cycle, episode); len(skipped) == 0 {
+			t.Fatalf("busy Episode %s was not reported as skipped", episode.episodeID)
+		}
+		if got := f.operations(episode, "maximum_episode_duration_expired"); got != 0 {
+			t.Fatalf("busy Episode kept %d deadline operations", got)
+		}
 	}
 }

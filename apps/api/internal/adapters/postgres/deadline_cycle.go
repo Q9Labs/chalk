@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -15,6 +16,44 @@ const (
 	presenceExpiryPhase = "presence_expiry"
 	emptyLingerPhase    = "empty_linger"
 )
+
+// maxAttemptedPerPhase keeps a pass inside its transaction timeout when many
+// Episodes fail: a phase stops paging after this many attempts.
+const maxAttemptedPerPhase = 500
+
+// claimInPages claims Episodes one page at a time and keeps every Episode it
+// already handled out of the next claim. Claims return the oldest Episodes
+// first, so Episodes that fail and stay eligible would otherwise fill every
+// page and starve the healthy ones behind them. Paging stops when the budget is
+// spent, the candidates run out or the phase hit maxAttemptedPerPhase.
+func claimInPages[Row any](
+	budget func() int32,
+	claim func(excluded []pgtype.UUID, limit int32) ([]Row, error),
+	episodeOf func(Row) pgtype.UUID,
+	handle func(Row) error,
+) error {
+	handled := []pgtype.UUID{}
+	for len(handled) < maxAttemptedPerPhase {
+		limit := budget()
+		if limit <= 0 {
+			return nil
+		}
+		rows, err := claim(handled, limit)
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		for _, row := range rows {
+			handled = append(handled, episodeOf(row))
+			if err := handle(row); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
 
 // deadlineCycle runs each Episode's scheduler work in its own savepoint. A
 // failure rolls back only that Episode's writes and lists it as skipped, so one
@@ -50,6 +89,7 @@ func (c *deadlineCycle) step(ctx context.Context, tx pgx.Tx, phase string, tenan
 		if err := savepoint.Commit(ctx); err != nil {
 			return false, fmt.Errorf("release %s savepoint: %w", phase, err)
 		}
+		c.result.Completed = append(c.result.Completed, episodes.EpisodeRef{TenantID: tenantID, EpisodeID: episodeID})
 		return true, nil
 	}
 	if err := ctx.Err(); err != nil {
