@@ -35,7 +35,7 @@ for candidate in "$@"; do
   split "${candidate}"
   partial="${file}.partial"
   rm -f "${partial}"
-  if curl --fail --silent --show-error --location --retry 3 --retry-all-errors --max-time 300 "${url}" --output "${partial}" \
+  if curl --fail --silent --show-error --location --retry 2 --retry-all-errors --max-time 90"${url}" --output "${partial}" \
     && matches "${partial}" "${sha}"; then
     cp "${partial}" "${file}"
     rm -f "${partial}"
