@@ -75,7 +75,8 @@ func RecordMoved(ctx context.Context, reason LossReason) { RecordRecovery(ctx, r
 var errStaleIncarnation = errors.New("chalk sfu answered for a replaced node incarnation")
 
 // Lost reports whether the allocation an Episode is bound to is gone, from the last probes
-// and without I/O. A node that has not answered within the freshness window is silent. A
+// and without I/O. A node that has not answered within the freshness window is silent; one
+// failed probe is not enough, because the window runs from the last answer. A
 // node that answers with another boot incarnation than the binding's has restarted, and a
 // restarted node holds nothing of the Episode. A draining node is not lost: it keeps its
 // live Episodes. Before the first probe round nothing is known, and a binding or probe
@@ -86,11 +87,17 @@ func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
 	if !f.probed {
 		return "", false
 	}
-	load, probed := f.loads[allocation.Node]
+	// A node that never answered counts from the end of the first probe round, so a freshly
+	// started API does not call every node silent before it has asked.
+	seen, answered := f.seen[allocation.Node]
+	last := seen.at
+	if !answered {
+		last = f.firstRound
+	}
 	switch {
-	case !probed || time.Since(load.at) > probeFreshness:
+	case time.Since(last) > probeFreshness:
 		return LossSilent, true
-	case allocation.Incarnation != "" && load.incarnation != "" && load.incarnation != allocation.Incarnation:
+	case allocation.Incarnation != "" && seen.incarnation != "" && seen.incarnation != allocation.Incarnation:
 		return LossRestarted, true
 	}
 	return "", false
@@ -98,8 +105,9 @@ func (f *Fleet) Lost(allocation mediaplane.Allocation) (LossReason, bool) {
 
 // candidate is a node a recovery may reserve on.
 type candidate struct {
-	adapter *Adapter
-	standby bool
+	adapter     *Adapter
+	standby     bool
+	incarnation string // the boot the last probe saw
 }
 
 // recoveryCandidates lists the nodes that may take a recovering Episode, in the order Place
@@ -120,7 +128,7 @@ func (f *Fleet) recoveryCandidates() []candidate {
 			if !probed || time.Since(load.at) > probeFreshness || load.Draining || load.hostGuard || !load.fits(0) {
 				continue
 			}
-			candidates = append(candidates, candidate{adapter: node, standby: standby})
+			candidates = append(candidates, candidate{adapter: node, standby: standby, incarnation: load.incarnation})
 		}
 	}
 	return candidates
@@ -131,22 +139,39 @@ func (f *Fleet) recoveryCandidates() []candidate {
 // atomic reserve accepts the Episode's whole shape; a refusal or an unreachable node moves on
 // to the next. When none accepts it returns mediaplane.ErrRecoveryRefused with a bounded
 // reason and the binding stays as it was. Nothing here commits: the caller commits the
-// binding move after this returns, and a reserve nobody commits expires by its TTL. The
-// operation ID names the Episode, the generation the move would commit and the node, so a
-// retry after a crash asks the node the same question and gets the same answer.
+// binding move after this returns, and a reserve nobody commits expires by its TTL.
+//
+// The operation ID names the Episode, the generation the move would commit, the node and the
+// current hold window. Calls in one window repeat the same operation, so replicas and a retry
+// after a crash get one hold. The node replays a finished operation without checking that its
+// hold is still alive, so a retry after the hold expired must not repeat it: the window moves
+// on every hold lifetime, which gives that retry a new operation and a new hold.
+//
+// A candidate that the Episode left earlier and that still runs the same boot may hold the
+// Episode's old sessions, at Participant generations the fixed hold generation would not
+// outrank. Those sessions belong to a replaced allocation, so the Episode is ended there first.
 func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.Binding, tenantID, episodeID string, participants int) (mediaplane.Placement, error) {
 	candidates := f.recoveryCandidates()
 	if len(candidates) == 0 {
 		RecordRecovery(ctx, reason, outcomeNoNode)
 		return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcomeNoNode)
 	}
-	outcome := outcomeUnreachable
+	hold := f.recoveryHoldSeconds()
+	window := time.Now().Unix() / int64(hold)
+	refusals, failures := 0, 0
 	for _, node := range candidates {
+		if returning(from, node) {
+			if err := node.adapter.call(ctx, "/v1/episodes/end", wireEndRequest{TenantID: tenantID, EpisodeID: episodeID}, nil); err != nil {
+				failures++
+				f.logRecovery(ctx, "chalk sfu node could not drop the episode's old sessions", node.adapter.node, err)
+				continue
+			}
+		}
 		reply, err := node.adapter.reserve(ctx, wireReserveRequest{
-			OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d", episodeID, from.Generation+1, node.adapter.node, participants),
+			OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-w%d", episodeID, from.Generation+1, node.adapter.node, participants, window),
 			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
 			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras},
-			TTLSeconds: recoveryHoldSeconds,
+			TTLSeconds: hold,
 		})
 		switch {
 		case err == nil && mediaplane.ValidIncarnation(reply.NodeIncarnation):
@@ -154,27 +179,56 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 			if node.standby {
 				reason = mediaplane.PlacementStandby
 			}
-			f.countInflight(node.adapter.node)
 			return mediaplane.Placement{Node: node.adapter.node, Incarnation: reply.NodeIncarnation, Reason: reason}, nil
 		case err == nil:
+			failures++
 			f.logRecovery(ctx, "chalk sfu reserve answered without an incarnation", node.adapter.node, nil)
 		case errors.Is(err, mediaplane.ErrProviderRateLimited):
-			outcome = outcomeNoRoom
+			refusals++
 			f.logRecovery(ctx, "chalk sfu node refused the recovering episode", node.adapter.node, err)
 		default:
+			failures++
 			f.logRecovery(ctx, "chalk sfu node could not reserve the recovering episode", node.adapter.node, err)
 		}
 		if ctx.Err() != nil {
 			break
 		}
 	}
+	// Only a pool where every node answered and said no is out of room; any other mix may
+	// clear on its own, and the metric must not call it capacity.
+	outcome := outcomeUnreachable
+	if refusals > 0 && failures == 0 {
+		outcome = outcomeNoRoom
+	}
 	RecordRecovery(ctx, reason, outcome)
 	return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcome)
 }
 
-// countInflight charges a recovered Episode to the node until the next probe shows its hold,
-// as Place does for a new Episode.
-func (f *Fleet) countInflight(node string) {
+// returning reports whether the candidate is a node the Episode left earlier and that still
+// runs the boot it left.
+func returning(from mediaplane.Binding, node candidate) bool {
+	if node.incarnation == "" {
+		return false
+	}
+	for _, old := range from.PreviousAllocations {
+		if old.Node == node.adapter.node && old.Incarnation == node.incarnation {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *Fleet) recoveryHoldSeconds() int {
+	if f.holdSeconds > 0 {
+		return f.holdSeconds
+	}
+	return recoveryHoldSeconds
+}
+
+// ChargeRecovered counts a recovered Episode against the node until the next probe shows its
+// hold, as Place does for a new Episode. Only the caller whose binding commit won charges it,
+// so replicas and racing requests that reserved the same Episode charge it once.
+func (f *Fleet) ChargeRecovered(node string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.inflight[node] = append(f.inflight[node], time.Now())

@@ -42,10 +42,21 @@ type Fleet struct {
 	standbyBudget int             // packets/s a standby admits for new Episodes
 	log           *slog.Logger
 
-	mu       sync.Mutex
-	loads    map[string]nodeLoad
-	inflight map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
-	probed   bool                   // a probe round has finished, so a node without a load record has none
+	mu          sync.Mutex
+	loads       map[string]nodeLoad
+	seen        map[string]sighting    // when each node last answered a probe; a failed probe leaves it alone
+	inflight    map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
+	probed      bool                   // a probe round has finished, so a node without a load record has none
+	firstRound  time.Time              // when the first probe round finished
+	holdSeconds int                    // how long a recovery's reservation waits for rejoins; zero means recoveryHoldSeconds
+}
+
+// sighting is a node's last answered probe. Unlike its load record, which a failed probe
+// deletes so placement skips the node, it survives a failed probe, so one lost probe does not
+// make a live node look lost.
+type sighting struct {
+	at          time.Time
+	incarnation string
 }
 
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
@@ -92,6 +103,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 		standbyBudget: config.StandbyPacketBudget,
 		log:           log,
 		loads:         map[string]nodeLoad{},
+		seen:          map[string]sighting{},
 		inflight:      map[string][]time.Time{},
 	}
 	for _, node := range config.Nodes {
@@ -272,11 +284,17 @@ func (f *Fleet) Probe(ctx context.Context) {
 			case !ready.Draining && known && before.Draining:
 				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
 			}
-			f.loads[node.node] = f.loadOf(node.node, ready, time.Now())
+			now := time.Now()
+			load := f.loadOf(node.node, ready, now)
+			f.loads[node.node] = load
+			f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
 		})
 	}
 	wg.Wait()
 	f.mu.Lock()
+	if !f.probed {
+		f.firstRound = time.Now()
+	}
 	f.probed = true
 	f.mu.Unlock()
 }

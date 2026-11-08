@@ -67,9 +67,16 @@ func recoveringEpisode(t *testing.T) (context.Context, *pgxpool.Pool, EpisodeRec
 		// The test's own cleanup must outlive its context.
 		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 		defer stop()
-		for _, query := range []string{`delete from episodes where id = $1`, `delete from spaces where id = $2`, `delete from tenants where id = $3`} {
-			if _, err := pool.Exec(cleanup, query, episodeID.Bytes(), spaceID.Bytes(), tenantID.Bytes()); err != nil {
-				t.Logf("remove seeded Episode rows: %v", err)
+		for _, remove := range []struct {
+			query string
+			id    utilities.ID
+		}{
+			{`delete from episodes where id = $1`, episodeID},
+			{`delete from spaces where id = $1`, spaceID},
+			{`delete from tenants where id = $1`, tenantID},
+		} {
+			if _, err := pool.Exec(cleanup, remove.query, remove.id.Bytes()); err != nil {
+				t.Errorf("remove seeded Episode rows: %v", err)
 				return
 			}
 		}

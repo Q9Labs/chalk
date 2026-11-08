@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
@@ -164,6 +165,7 @@ func TestRecoveryMovesAnEpisodeOffALostPrimaryToTheStandby(t *testing.T) {
 
 	primary.stop()
 	fleet.Probe(context.Background())
+	chalksfu.AgeSighting(fleet, "sfu-primary")
 	if err := resolve(registry); err != nil {
 		t.Fatalf("recovery: %v", err)
 	}
@@ -228,6 +230,7 @@ func TestRecoveryRefusedLeavesTheBindingAndSaysCapacity(t *testing.T) {
 		store := newRecoveryStore(bound, 2)
 		box.stop()
 		fleet.Probe(context.Background())
+		chalksfu.AgeSighting(fleet, "sfu-a")
 		err := resolve(recoveryRegistry(fleet, store))
 		if !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) || !errors.Is(err, mediaplane.ErrRecoveryRefused) {
 			t.Fatalf("recovery with no node: %v, want the capacity error", err)
@@ -271,6 +274,8 @@ func TestConcurrentRecoveriesHaveOneWinner(t *testing.T) {
 	primary.stop()
 	first.Probe(context.Background())
 	second.Probe(context.Background())
+	chalksfu.AgeSighting(first, "sfu-primary")
+	chalksfu.AgeSighting(second, "sfu-primary")
 
 	var wg sync.WaitGroup
 	errs := make([]error, 8)
@@ -286,6 +291,10 @@ func TestConcurrentRecoveriesHaveOneWinner(t *testing.T) {
 	final, moves := store.current()
 	if moves != 1 || final.Generation != 1 || final.Node != "sfu-standby" {
 		t.Fatalf("final binding %+v after %d commits, want exactly one", final, moves)
+	}
+	// The move is charged against the standby once, by the replica that committed it.
+	if charged := chalksfu.Charged(first, "sfu-standby") + chalksfu.Charged(second, "sfu-standby"); charged != 1 {
+		t.Fatalf("the recovery was charged %d times, want once", charged)
 	}
 	// Every replica asked for the same operation, so the standby holds the Episode once.
 	one := stateOf(t, standby).ReservedPackets
@@ -444,5 +453,91 @@ func TestAnEndingEpisodeIsNotRecovered(t *testing.T) {
 	}
 	if reserved := stateOf(t, box).ReservedPackets; reserved != 0 {
 		t.Fatalf("an ending Episode reserved %d packets/s", reserved)
+	}
+}
+
+// One missed probe is not a lost node: the freshness window runs from the node's last answer.
+func TestOneMissedProbeDoesNotMoveALiveEpisode(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	box := startSFUUnder(t, ca, roomy)
+	fleet := box.fleetOf(t, ca, clientIdentity, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: box.controlURL})
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 2)
+	box.stop()
+	fleet.Probe(context.Background()) // fails, and drops the node from placement
+	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
+		t.Fatalf("resolve after one missed probe: %v", err)
+	}
+	if after, moves := store.current(); moves != 0 || after.Generation != 0 {
+		t.Fatalf("one missed probe moved the Episode: %+v", after)
+	}
+}
+
+// The node replays a finished reserve without checking that its hold is alive. A retry that
+// comes after the hold expired must reserve again, or the Episode would move with no room held.
+func TestARetryAfterTheHoldExpiredReservesAgain(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	box := startSFUUnder(t, ca, roomy)
+	fleet := box.fleetOf(t, ca, clientIdentity, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: box.controlURL})
+	chalksfu.SetRecoveryHold(fleet, 2)
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 2)
+	registry := recoveryRegistry(fleet, store)
+	restart(t, box)
+	fleet.Probe(context.Background())
+
+	store.crashBefore = errors.New("api crashed before the commit")
+	if err := resolve(registry); !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
+		t.Fatalf("crash before the commit: %v", err)
+	}
+	time.Sleep(2500 * time.Millisecond)
+	if held := stateOf(t, box).ReservedPackets; held != 0 {
+		t.Fatalf("the hold is still alive after its lifetime: %d packets/s", held)
+	}
+	if err := resolve(registry); err != nil {
+		t.Fatalf("retry after the hold expired: %v", err)
+	}
+	if moved, moves := store.current(); moves != 1 || moved.Generation != 1 || stateOf(t, box).ReservedPackets == 0 {
+		t.Fatalf("the move committed without a hold: %+v (%d moves), reserved %d", moved, moves, stateOf(t, box).ReservedPackets)
+	}
+}
+
+// A node the Episode left can come back alive, still holding the Episode's old sessions at a
+// Participant generation above the recovery's. When it is the only node left, the Episode ends
+// those sessions there first and then reserves, instead of being refused as stale.
+func TestRecoveryOntoANodeTheEpisodeLeftDropsItsOldSessionsFirst(t *testing.T) {
+	ca, primary, standby, nodes := twoNodes(t, roomy)
+	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, fleet)
+	onPrimary, err := fleet.Node("sfu-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := recoveringScope("alice")
+	old.Generation = 3
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, onPrimary), old)
+
+	// The Episode moved to the standby while the primary was out of reach, and the primary
+	// came back with the boot it left.
+	onStandby, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newRecoveryStore(onStandby, 2)
+	standby.stop()
+	fleet.Probe(context.Background())
+	chalksfu.AgeSighting(fleet, "sfu-standby")
+	if before := stateOf(t, primary); before.Sessions != 1 {
+		t.Fatalf("primary holds %d sessions, want the old one", before.Sessions)
+	}
+	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
+		t.Fatalf("recovery back onto the primary: %v", err)
+	}
+	moved, moves := store.current()
+	if moves != 1 || moved.Generation != 2 || moved.Node != "sfu-primary" || moved.PlacementReason != mediaplane.PlacementPrimary {
+		t.Fatalf("after the standby was lost: %+v (%d moves), want the primary at generation 2", moved, moves)
+	}
+	if after := stateOf(t, primary); after.Sessions != 0 || after.ReservedPackets == 0 {
+		t.Fatalf("primary holds %+v, want the old session gone and the new hold in place", after)
 	}
 }
