@@ -1,6 +1,7 @@
 package mediaplaneproviders
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -14,7 +15,7 @@ import (
 // A Space outside the own-SFU allowlist and an SDK that cannot run the own SFU
 // get Cloudflare, so only allowlisted Spaces move and old SDK cohorts stay on
 // Cloudflare when their Space selects the own SFU.
-func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	selected, err := selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
@@ -37,16 +38,26 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clie
 		return nil, nil
 	}
 	// The own SFU runs several nodes: the Episode stays on the one placed here.
-	node := ""
+	var placement mediaplane.Placement
 	if resolved.provider == mediaplane.ProviderChalkSFU {
 		var room bool
-		node, room = r.chalk.Place()
-		// Every node would refuse a new Episode, so it starts on Cloudflare when
-		// the Tenant can run it there. Otherwise it stays on the node placed,
-		// whose admission refuses the join with a retryable capacity error.
+		placement, room = r.chalk.Place()
 		if !room {
-			if fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU); err == nil && fallback != nil {
-				resolved, resolution, node = fallback, fallbackResolution, ""
+			// Every node would refuse a new Episode. It starts on Cloudflare when
+			// the Tenant can run it there and overflow is on. With overflow off it
+			// is refused with the capacity error a full node gives a join. Without a
+			// Cloudflare application it stays on the node placed, whose admission
+			// refuses the join.
+			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU)
+			switch {
+			case err != nil || fallback == nil:
+				placement.Reason = mediaplane.PlacementNoCapacity
+			case !r.chalk.CloudflareOverflow():
+				r.recordPlacement(ctx, resolution.Provider, providercontracts.PlacementRefused)
+				return nil, fmt.Errorf("%w: %w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused)
+			default:
+				resolved, resolution = fallback, fallbackResolution
+				placement.Node, placement.Incarnation = "", ""
 			}
 		}
 	}
@@ -54,12 +65,19 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clie
 	if err != nil {
 		return nil, err
 	}
-	if node != "" {
-		if binding, err = binding.OnNode(node); err != nil {
+	if placement.Reason != "" {
+		if binding, err = binding.Placed(placement); err != nil {
 			return nil, err
 		}
+		r.recordPlacement(ctx, resolution.Provider, placement.Reason)
 	}
 	return &binding, nil
+}
+
+func (r Registry) recordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+	if r.telemetry != nil {
+		r.telemetry.RecordPlacement(ctx, provider, reason)
+	}
 }
 
 // resolveApplication resolves the provider configuration a new Episode binds to.

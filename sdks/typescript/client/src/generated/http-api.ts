@@ -840,6 +840,7 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),

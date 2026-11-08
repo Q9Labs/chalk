@@ -633,7 +633,7 @@ func publicInviteManagementErrors() []APIError {
 }
 
 func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorMediaPlaneUnavailable, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
 func publicInviteRefreshErrors() []APIError {
@@ -658,6 +658,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorArrivalUnavailable, true
 	case errors.Is(err, mediaplane.ErrClientUnsupported):
 		return apiErrorMediaClientUnsupported, true
+	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
+		return apiErrorMediaPlaneUnavailable, true
 	case errors.Is(err, publicinvites.ErrMediaProofExpired):
 		return apiErrorMediaProofExpired, true
 	case errors.Is(err, publicinvites.ErrMediaProofRejected):

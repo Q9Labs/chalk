@@ -23,7 +23,7 @@ func (m directAdmissionMedia) ResolveEpisode(context.Context, tenants.Tenant, sp
 	return &m.service, nil
 }
 
-func (m directAdmissionMedia) ResolveBinding(tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+func (m directAdmissionMedia) ResolveBinding(context.Context, tenants.Tenant, spaces.Space, mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	return &m.binding, nil
 }
 
