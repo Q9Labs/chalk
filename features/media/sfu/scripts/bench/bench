@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+# Creates, inspects and destroys the short-lived two-node fleet for M11 multi-node proofs.
+#
+#   bench up                         create the primary and the standby, deploy the SFU, wait for /readyz
+#   bench status                     list tagged Droplets with size, age and estimated cost so far
+#   bench down [--all]               delete the fleet and its firewall, then fail if a paid node remains
+#   bench reap [hours] [--dry-run]   delete tagged Droplets older than the age (default 4 hours)
+#
+# Every Droplet carries the tag chalk-sfu-bench and lives in sgp1. Nothing else is ever listed
+# for deletion, so the production and staging nodes and every other Droplet are out of reach.
+# `down` deletes the fleet's own Droplets (names chalk-sfu-bench-fleet-*); another run that
+# also wears the tag, such as a load generator, is reported and left alone unless you pass
+# --all. `reap` is the age-based janitor for anything wearing the tag. It trusts the Droplet's
+# creation time from DigitalOcean, not a local file, so it works from any machine.
+#
+# The nodes come from the production path: the cloud-init template in ../../infra, `certs` and
+# `deploy` with the bench environment, so the image is the one production runs. Certificates are a
+# throwaway CA issued per run into $CHALK_SFU_PRIVATE_DIR/bench and deleted by `down`.
+#
+# Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
+# for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
+# control. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
+set -euo pipefail
+
+tag=chalk-sfu-bench
+region=sgp1
+name_prefix=chalk-sfu-bench-fleet
+firewall=chalk-sfu-bench # `deploy` looks for chalk-sfu-<environment>
+control_port=8443
+media_port=50000
+default_reap_hours=4
+# role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first.
+nodes=(
+  "primary sgp1-a s-2vcpu-2gb 32000"
+  "standby sgp1-b s-1vcpu-1gb 16000"
+)
+
+bench_dir="$(cd "$(dirname "$0")" && pwd)"
+sfu_root="$(cd "${bench_dir}/../.." && pwd)"
+export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
+export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
+dir="${CHALK_SFU_PRIVATE_DIR}/bench"
+
+die() {
+  echo "bench: $*" >&2
+  exit 1
+}
+
+# Tagged Droplets. The tag filter is the only way a Droplet enters this script.
+tagged() {
+  doctl compute droplet list --tag-name "$tag" --output json |
+    jq --arg tag "$tag" '[.[] | select(.tags | index($tag))]'
+}
+
+# The fleet's own Droplets among the tagged ones.
+fleet_of() {
+  jq --arg prefix "$name_prefix" --arg region "$region" '[.[] | select(.region.slug == $region and (.name | startswith($prefix)))]'
+}
+
+delete_droplets() {
+  local id name
+  while read -r id name; do
+    echo "deleting Droplet ${name} (${id})"
+    doctl compute droplet delete "$id" --force
+  done < <(jq -r '.[] | "\(.id) \(.name)"')
+}
+
+delete_firewall() {
+  local id
+  while read -r id; do
+    echo "deleting firewall ${firewall} (${id})"
+    doctl compute firewall delete "$id" --force
+  done < <(doctl compute firewall list --output json | jq -r --arg name "$firewall" '.[] | select(.name == $name) | .id')
+}
+
+# One IPv4 address becomes a /32. Anything wider is refused: control is for named sources only.
+host_cidr() {
+  local address="${1%/32}"
+  [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || die "want one IPv4 address, got: $1"
+  echo "${address}/32"
+}
+
+# render_cloud_init renders ../../infra/cloud-init.yaml.tftpl the way OpenTofu does, for the two
+# loops it has: one rule line per address in control_addresses and ssh_addresses.
+render_cloud_init() {
+  awk -v control="$1" -v ssh="$2" -v media_port="$media_port" '
+    /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
+    /^%\{ endfor ~\}$/ {
+      count = split(list, addresses, ",")
+      for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
+      looping = 0; next
+    }
+    { gsub(/\$\{media_port\}/, media_port); if (looping) body = body $0 "\n"; else print }
+  ' "${sfu_root}/infra/cloud-init.yaml.tftpl"
+}
+
+read_ready() {
+  curl --silent --fail --max-time 5 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
+    --resolve "chalk-sfu:${control_port}:$1" "https://chalk-sfu:${control_port}/readyz"
+}
+
+create_node() {
+  local role="$1" slug="$2" key_id="$3" user_data="$4"
+  doctl compute droplet create "${name_prefix}-${role}" --region "$region" --size "$slug" --image ubuntu-24-04-x64 \
+    --ssh-keys "$key_id" --tag-name "$tag" --user-data-file "$user_data" --wait --output json >"${dir}/${role}.json"
+}
+
+abandon_up() {
+  local code=$?
+  trap - EXIT
+  echo "bench: up failed; deleting the fleet" >&2
+  down || true
+  exit "$code"
+}
+
+up() {
+  local command
+  for command in doctl jq openssl curl ssh docker awk; do
+    command -v "$command" >/dev/null || die "${command} is not installed"
+  done
+  doctl account get >/dev/null || die "doctl is not signed in"
+  [[ -f "$SFU_SSH_KEY" ]] || die "no SSH key at ${SFU_SSH_KEY}; set SFU_SSH_KEY"
+  [[ "$(tagged | fleet_of | jq length)" == 0 ]] || die "a fleet already exists; run: bench down"
+  [[ "$(doctl compute firewall list --output json | jq --arg name "$firewall" '[.[] | select(.name == $name)] | length')" == 0 ]] ||
+    die "firewall ${firewall} exists; run: bench down"
+  local key_id
+  key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
+  [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
+
+  local operator control_addresses
+  operator="$(host_cidr "${BENCH_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}")"
+  control_addresses="$operator"
+  local extra
+  for extra in $(tr ',' ' ' <<<"${BENCH_CONTROL_ADDRESSES:-}"); do
+    control_addresses+=",$(host_cidr "$extra")"
+  done
+
+  # From here a Droplet may exist, so any failure deletes the fleet rather than leave it billing.
+  trap abandon_up EXIT
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+
+  echo "==> issuing a throwaway CA, server and client identity"
+  "${sfu_root}/deploy/certs" bench ca
+  "${sfu_root}/deploy/certs" bench server
+  "${sfu_root}/deploy/certs" bench operator >/dev/null
+
+  echo "==> creating Droplets in ${region}"
+  render_cloud_init "$control_addresses" "$operator" >"${dir}/cloud-init.yaml"
+  local spec role slug pids=() failed=0 pid
+  for spec in "${nodes[@]}"; do
+    read -r role _ slug _ <<<"$spec"
+    create_node "$role" "$slug" "$key_id" "${dir}/cloud-init.yaml" &
+    pids+=($!)
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid" || failed=1
+  done
+  ((failed == 0)) || die "creating a Droplet failed"
+
+  local droplet_ids
+  droplet_ids="$(jq -rs '[.[][0].id] | join(",")' "${dir}"/*.json)"
+  local inbound="protocol:tcp,ports:22,address:${operator} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
+  local control_rule="protocol:tcp,ports:${control_port}"
+  for extra in ${control_addresses//,/ }; do
+    control_rule+=",address:${extra}"
+  done
+  doctl compute firewall create --name "$firewall" --droplet-ids "$droplet_ids" --inbound-rules "${inbound} ${control_rule}" \
+    --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" >/dev/null
+
+  local id budget address nodes_value="" incarnations=()
+  for spec in "${nodes[@]}"; do
+    read -r role id slug budget <<<"$spec"
+    address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
+    echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
+    SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
+    nodes_value+="${nodes_value:+,}${id}=https://${address}:${control_port}"
+  done
+
+  echo "==> checking /readyz over mutual TLS from this machine"
+  local ready
+  for spec in "${nodes[@]}"; do
+    read -r role id _ budget <<<"$spec"
+    address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
+    ready=""
+    for _ in $(seq 30); do
+      ready="$(read_ready "$address")" && break
+      sleep 2
+    done
+    [[ -n "$ready" ]] || die "the ${role} did not answer /readyz"
+    [[ "$(jq -r .packetBudget <<<"$ready")" == "$budget" ]] || die "the ${role} runs packet budget $(jq -r .packetBudget <<<"$ready"), want ${budget}"
+    incarnations+=("$(jq -r .nodeIncarnation <<<"$ready")")
+    echo "${role}: /readyz 200, incarnation ${incarnations[-1]}, packet budget ${budget}"
+  done
+  [[ "${incarnations[0]}" != "${incarnations[1]}" ]] || die "both nodes report one incarnation"
+
+  jq -n --arg nodes "$nodes_value" --argjson ttl "$default_reap_hours" \
+    '{created_at: (now | todate), reap_after_hours: $ttl, nodes: $nodes}' >"${dir}/fleet.json"
+  trap - EXIT
+  echo
+  echo "up in ${SECONDS}s. Delete it today: bench down. Anything forgotten: bench reap ${default_reap_hours}"
+  echo "CHALK_SFU_NODES=${nodes_value}"
+  echo "CHALK_SFU_SERVER_NAME=chalk-sfu"
+  echo "CHALK_SFU_CA_FILE=${dir}/ca.crt"
+  echo "CHALK_SFU_CLIENT_CERT_FILE=${dir}/operator.crt (valid one day)"
+  echo "CHALK_SFU_CLIENT_KEY_FILE=${dir}/operator.key"
+}
+
+status() {
+  tagged | jq -r --arg prefix "$name_prefix" '
+    def hours: (now - (.created_at | fromdateiso8601)) / 3600;
+    (["ID", "NAME", "SIZE", "OWNER", "AGE_H", "EST_USD"] | @tsv),
+    (.[] | [.id, .name, .size_slug, (if (.name | startswith($prefix)) then "fleet" else "other" end),
+            (hours * 100 | round / 100), (hours * .size.price_hourly * 10000 | round / 10000)] | @tsv),
+    ("TOTAL\t\t\t\t\t" + ([.[] | (now - (.created_at | fromdateiso8601)) / 3600 * .size.price_hourly] | add // 0 | . * 10000 | round / 10000 | tostring))' |
+    column -t -s "$(printf '\t')"
+  echo "Estimate: hours since creation times the list hourly price. It leaves out bandwidth and the billing minimum."
+  [[ ! -f "${dir}/fleet.json" ]] || echo "Record: $(jq -c . "${dir}/fleet.json")"
+}
+
+down() {
+  local scope=fleet
+  [[ "${1:-}" != --all ]] || scope=all
+  if [[ "$scope" == all ]]; then tagged | delete_droplets; else tagged | fleet_of | delete_droplets; fi
+  delete_firewall
+  local remaining
+  for _ in $(seq 24); do
+    if [[ "$scope" == all ]]; then remaining="$(tagged | jq length)"; else remaining="$(tagged | fleet_of | jq length)"; fi
+    [[ "$remaining" != 0 ]] || break
+    sleep 5
+  done
+  echo "==> doctl compute droplet list --tag-name ${tag}"
+  doctl compute droplet list --tag-name "$tag" --format ID,Name,Region,Memory,VCPUs,Created
+  [[ "$remaining" == 0 ]] || die "FAILED: ${remaining} paid Droplet(s) tagged ${tag} remain"
+  rm -rf "$dir"
+  local others
+  others="$(tagged | jq length)"
+  if [[ "$others" != 0 ]]; then
+    echo "bench: ${others} other Droplet(s) tagged ${tag} still bill; they are not this fleet's. Rerun with --all to delete them." >&2
+    return 3
+  fi
+  echo "no Droplet tagged ${tag} remains"
+}
+
+reap() {
+  local hours="$default_reap_hours" dry_run=false argument
+  for argument in "$@"; do
+    case "$argument" in
+      --dry-run) dry_run=true ;;
+      *) [[ "$argument" =~ ^[0-9]+([.][0-9]+)?$ ]] || die "usage: bench reap [hours] [--dry-run]"; hours="$argument" ;;
+    esac
+  done
+  local old
+  old="$(tagged | jq --argjson hours "$hours" '[.[] | select((now - (.created_at | fromdateiso8601)) / 3600 > $hours)]')"
+  if [[ "$dry_run" == true ]]; then
+    jq -r --argjson hours "$hours" '.[] | "would delete \(.name) (\(.id)), older than \($hours) hours"' <<<"$old"
+    return
+  fi
+  delete_droplets <<<"$old"
+  if [[ "$(jq length <<<"$old")" != 0 && "$(tagged | fleet_of | jq length)" == 0 ]]; then
+    delete_firewall
+    rm -rf "$dir"
+  fi
+  echo "Droplets still tagged ${tag}: $(tagged | jq length)"
+}
+
+case "${1:-}" in
+  up) up ;;
+  status) status ;;
+  down) down "${2:-}" ;;
+  reap) shift && reap "$@" ;;
+  *) echo "usage: bench <up|status|down [--all]|reap [hours] [--dry-run]>" >&2; exit 2 ;;
+esac
