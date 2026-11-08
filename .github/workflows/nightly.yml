@@ -106,6 +106,7 @@ jobs:
           DEPLOY_RESULT: ${{ needs.release.result }}
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
+          # The shared job includes proof and latency: a failed latency measurement intentionally blocks promotion.
           OWN_SFU_RESULT: ${{ needs.own-sfu.result == 'skipped' && 'skipped' || needs.own-sfu.result == 'success' && needs.own-sfu.outputs.result || 'failed' }}
           SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |

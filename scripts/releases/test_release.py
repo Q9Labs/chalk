@@ -56,6 +56,19 @@ class OwnSfuPromotionTests(unittest.TestCase):
                          f'cannot promote SHA {SHA} from nightly run {RUN}: '
                          f'own_sfu_proof_result={result or "missing"}; a passed own-SFU proof for this SHA is required')
 
+    def retain_override(self, audit):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = json.dumps(dict(release_id='release', source_revision=SHA)).encode()
+            (Path(directory) / 'release.json').write_bytes(manifest)
+            api = Mock(spec=GitHub)
+            api.request.return_value = dict(id=2)
+            with patch.dict(os.environ, RELEASE_ID='release', TARGET_SHA=SHA, GITHUB_RUN_ID='456',
+                            MANIFEST_SHA256=digest(manifest), MANIFEST_ARTIFACT_ID='10', PROMOTION_AUDIT=json.dumps(audit)):
+                release.retain_production(api, SimpleNamespace(directory=Path(directory)))
+            record = api.request.call_args.args[1]
+            self.assertEqual(record['task'], 'production-release')
+            return record['payload']['scorecard_override']
+
     def test_select_and_recheck_require_passed_proof_even_without_optional_inputs(self):
         for result in ('passed', 'failed', None, 'skipped'):
             for operation in ('select', 'recheck'):
@@ -98,7 +111,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
             audit = selection['scorecard_override']
             self.assertEqual(audit, dict(reason=reason, target_sha=SHA, nightly_run_id=RUN, actor='release-operator',
                                         proof_results=dict(own_sfu_proof_result='failed', scorecard_result='gated-breach'),
-                                        gated_metrics=metrics))
+                                        gated_metrics=metrics, missing_items=[]))
             self.assertNotIn('scorecard_override', item['payload'])
             with patch.dict(os.environ, SELECTION=json.dumps(selection)):
                 release.recheck(api, None)
@@ -106,17 +119,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.assertIn('## Scorecard override', summary)
         for value in (reason, 'own_sfu_proof_result', 'failed', 'gated-breach', *metrics):
             self.assertIn(value, summary)
-        with tempfile.TemporaryDirectory() as directory:
-            manifest = json.dumps(dict(release_id='release', source_revision=SHA)).encode()
-            (Path(directory) / 'release.json').write_bytes(manifest)
-            api.request.side_effect = None
-            api.request.return_value = dict(id=2)
-            with patch.dict(os.environ, RELEASE_ID='release', TARGET_SHA=SHA, GITHUB_RUN_ID='456',
-                            MANIFEST_SHA256=digest(manifest), MANIFEST_ARTIFACT_ID='10', PROMOTION_AUDIT=json.dumps(audit)):
-                release.retain_production(api, SimpleNamespace(directory=Path(directory)))
-            record = api.request.call_args.args[1]
-            self.assertEqual(record['task'], 'production-release')
-            self.assertEqual(record['payload']['scorecard_override'], audit)
+        self.assertEqual(self.retain_override(audit), audit)
 
     def test_blank_override_reasons_keep_the_existing_failure_messages(self):
         for reason in ('', ' \t\n '):
@@ -138,7 +141,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
                                                  f'cannot promote SHA {SHA} from nightly run {RUN}: '
                                                  'scorecard_result=gated-breach; gated metrics: chalk_sfu.action.leave_ms')
 
-    def test_override_accepts_missing_and_skipped_proof_but_not_sha_or_missing_scorecard(self):
+    def test_override_accepts_missing_and_skipped_proof_but_not_sha(self):
         with patch.dict(os.environ, SCORECARD_OVERRIDE='Accept the proof gap.'):
             for result in (None, 'skipped'):
                 with self.subTest(result=result):
@@ -150,8 +153,10 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 release.select(self.github(held('failed', OTHER_SHA)), None)
             item = held('failed')
             del item['payload']['scorecard_result']
-            with self.assertRaisesRegex(ValueError, 'scorecard_result=missing'):
-                release.select(self.github(item), None)
+            self.output.write_text('')
+            release.select(self.github(item), None)
+            selection = json.loads(self.output.read_text().split('selection=', 1)[1])
+            self.assertEqual(selection['scorecard_override']['missing_items'], ['nightly scorecard result'])
 
     def test_override_cannot_change_between_selection_and_approval(self):
         api = self.github(held('failed'))
@@ -273,14 +278,99 @@ class OwnSfuPromotionTests(unittest.TestCase):
 
     def test_warn_only_breaches_do_not_block(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
-        fixture['mediaPlane'] = 'cf_sfu'
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'card.json'
-            path.write_text(json.dumps(fixture))
-            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
+            cf = copy.deepcopy(fixture)
+            cf['mediaPlane'] = 'cf_sfu'
+            path.write_text(json.dumps(cf))
+            own = Path(directory) / 'own.json'
+            for metric in fixture['metrics']:
+                metric['p95'] = 100
+            own.write_text(json.dumps(fixture))
+            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path), str(own)], cwd=release.ROOT,
                                     capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)['gated_metrics'], [])
+
+    def test_missing_own_card_cannot_be_replaced_by_cf_card_and_override_names_it(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        fixture['mediaPlane'] = 'cf_sfu'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'cf.json'
+            path.write_text(json.dumps(fixture))
+            for cards in ([], [str(path)]):
+                with self.subTest(cards=cards):
+                    result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, *cards],
+                                            cwd=release.ROOT, capture_output=True, text=True,
+                                            env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    verdict = json.loads(result.stdout)
+                    self.assertEqual(verdict['result'], 'missing')
+                    self.assertEqual(verdict['missing_items'], ['chalk_sfu scorecard'])
+            item = held()
+            api = self.github(item)
+            api.deployments.return_value = [dict(id=1, created_at=item['created_at'],
+                                                payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))]
+            api.record.return_value = 2
+            with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release', applied_release_id='release')),
+                            TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, OWN_SFU_RESULT='passed', DEPLOY_RESULT='success',
+                            PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SCORECARD_RESULT=json.dumps(verdict)):
+                release.record(api, None)
+            item['payload'] = api.record.call_args.args[1]
+            self.assertEqual(item['payload']['scorecard_result'], 'missing')
+            self.assertEqual(item['payload']['scorecard_missing_items'], ['chalk_sfu scorecard'])
+            api.deployments.return_value = [item]
+            selection = dict(deployment_id=item['id'], selection=item['payload'], previous=self.previous)
+            for reason in ('', ' \t\n'):
+                with patch.dict(os.environ, SELECTION=json.dumps(selection), SCORECARD_OVERRIDE=reason):
+                    for operation in ('select', 'recheck'):
+                        with self.assertRaisesRegex(ValueError, 'scorecard_result=missing;.*missing evidence: chalk_sfu scorecard'):
+                            getattr(release, operation)(api, None)
+            self.output.write_text('')
+            reason = 'Accept missing own-SFU upload for this rollout.'
+            with patch.dict(os.environ, SCORECARD_OVERRIDE=reason):
+                release.select(api, None)
+                selection = json.loads(self.output.read_text().split('selection=', 1)[1])
+                with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                    release.recheck(api, None)
+            audit = selection['scorecard_override']
+            self.assertEqual(audit['missing_items'], ['chalk_sfu scorecard'])
+            self.assertEqual(audit['proof_results']['scorecard_result'], 'missing')
+            self.assertEqual(self.retain_override(audit), audit)
+            summary = Path(os.environ['GITHUB_STEP_SUMMARY']).read_text()
+            self.assertIn('## Scorecard override', summary)
+            self.assertIn('chalk_sfu scorecard', summary)
+            self.assertIn(reason, summary)
+
+    def test_budget_limits_come_from_scored_commit_not_newer_checkout(self):
+        script = release.ROOT / 'features/scorecard/evaluate.mjs'
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        budgets = json.loads((release.ROOT / 'perf/budgets.json').read_text())
+        fixture['metrics'] = [dict(id='action.join.first_audio_ms', unit='ms', n=20, p50=100, p95=300, source='latency-kit')]
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GITHUB_OUTPUT': os.devnull}
+            subprocess.run(['git', 'init', '--quiet', str(directory)], check=True, env=environment)
+            (directory / 'perf').mkdir()
+            revisions = []
+            for limit in (200, 1000):
+                budgets['budgets']['chalk_sfu.action.join.first_audio_ms']['max_p95'] = limit
+                (directory / 'perf/budgets.json').write_text(json.dumps(budgets))
+                subprocess.run(['git', 'add', 'perf/budgets.json'], cwd=directory, env=environment, check=True)
+                subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'budgets'],
+                               cwd=directory, env=environment, check=True)
+                revisions.append(subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=directory, env=environment, text=True).strip())
+            for revision, expected in zip(revisions, ('gated-breach', 'passed')):
+                with self.subTest(revision=revision):
+                    fixture['run']['commit'] = revision
+                    path = directory / 'card.json'
+                    path.write_text(json.dumps(fixture))
+                    result = subprocess.run(['node', str(script), revision, RUN, str(path)], cwd=directory,
+                                            env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1 if expected == 'gated-breach' else 0, result.stderr)
+                    verdict = json.loads(result.stdout)
+                    self.assertEqual(verdict['result'], expected)
+                    self.assertEqual(verdict['budgets_revision'], revision)
 
     def test_scorecard_must_exist_and_match_cut_identity(self):
         item = held()

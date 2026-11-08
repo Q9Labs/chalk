@@ -256,14 +256,17 @@ def require_own_sfu_proof(info):
 def require_scorecard(info):
     result = info.get('scorecard_result', 'missing')
     metrics = ', '.join(info.get('scorecard_gated_metrics', [])) or 'none recorded'
-    require(result == 'passed' and not info.get('scorecard_gated_metrics'),
+    missing = info.get('scorecard_missing_items', [])
+    missing_message = f'; missing evidence: {", ".join(missing)}' if missing else ''
+    require(result == 'passed' and not info.get('scorecard_gated_metrics') and not missing,
             f"cannot promote SHA {info['target_sha']} from nightly run {info.get('proof_run_id') or info['run_id']}: "
-            f'scorecard_result={result}; gated metrics: {metrics}')
+            f'scorecard_result={result}; gated metrics: {metrics}{missing_message}')
 
 
 def promotion_override(info):
     reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
-    if not reason or info.get('scorecard_result') != 'gated-breach':
+    scorecard_result = info.get('scorecard_result', 'missing')
+    if not reason or scorecard_result not in ('gated-breach', 'missing'):
         require_scorecard(info)
     if not reason:
         require_own_sfu_proof(info)
@@ -271,11 +274,12 @@ def promotion_override(info):
     proof_results = {}
     if info.get('own_sfu_proof_result') != 'passed':
         proof_results['own_sfu_proof_result'] = info.get('own_sfu_proof_result', 'missing')
-    if info.get('scorecard_result') == 'gated-breach':
-        proof_results['scorecard_result'] = 'gated-breach'
+    if scorecard_result != 'passed':
+        proof_results['scorecard_result'] = scorecard_result
     return dict(reason=reason, target_sha=info['target_sha'], nightly_run_id=info.get('proof_run_id') or info['run_id'],
                 actor=os.environ.get('GITHUB_ACTOR', ''), proof_results=proof_results,
-                gated_metrics=info.get('scorecard_gated_metrics', []))
+                gated_metrics=info.get('scorecard_gated_metrics', []),
+                missing_items=info.get('scorecard_missing_items', ['nightly scorecard result'] if scorecard_result == 'missing' else []))
 
 
 def summarize_override(audit):
@@ -413,7 +417,9 @@ def record(github, args):
     info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
                 real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
                 proof_run_id=env('GITHUB_RUN_ID'))
-    info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []))
+    info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
+                scorecard_missing_items=scorecard.get('missing_items', ['nightly scorecard result'] if not scorecard else []),
+                scorecard_budgets_revision=scorecard.get('budgets_revision', ''))
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         require_current_write(github.deployments('nightly', 'nightly-write'), info)

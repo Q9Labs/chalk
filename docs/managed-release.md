@@ -122,17 +122,22 @@ promotion with an error naming the SHA and nightly run unless the existing
 `scorecard_override` input supplies a written reason. The existing Cloudflare
 proof and held-cut rules are unchanged.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
-It saves `scorecard_result` (`passed` or `gated-breach`) and
-`scorecard_gated_metrics` against the same SHA and nightly run. Selection and
+It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
+newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
+It saves `scorecard_result` (`passed`, `gated-breach` or `missing`),
+`scorecard_gated_metrics` and `scorecard_missing_items` against the same SHA and nightly run.
+A missing own-SFU card is missing evidence, even when a Cloudflare card exists.
+Selection and
 recheck reject gated breaches with the metric names unless `scorecard_override`
-supplies a written reason, and always reject missing scorecard results.
+supplies a written reason. Missing scorecard evidence also blocks unless a
+written override names the accepted missing items in the audit record.
 Budgets with `gate: false` remain warnings. History or issue publication cannot
 erase the saved verdict. Contended measurements are not performance evidence;
 their failed own-SFU result requires an override to promote.
 Empty and whitespace-only reasons do not override either check. A reason has no
 other length, format or user-role rule; dispatch permissions and production
 approval remain unchanged. The accepted proof results, gated metric names,
-reason and actor are labelled as a scorecard override in the run summary and
+missing evidence, reason and actor are labelled as a scorecard override in the run summary and
 retained production release record. Approval rechecks the same override; it
 cannot bypass SHA, artifact, Gate or rollback-source validation.
 
