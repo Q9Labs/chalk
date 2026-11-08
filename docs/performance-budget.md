@@ -126,10 +126,26 @@ production code against the pinned baseline commit in the data file; do not
 silently replace it with whichever revision happens to pass today.
 
 A budget with `gate: false` only warns. Real-node budgets (`sfu.*`, nightly
-`action.*`, `proof.*` and `device.*`) start there and flip to `gate: true` in
-their own budgets pull request, after seven nightly values whose run-to-run
-spread stays below `tolerancePct`. Rollback wiring (B) revisited when the first
-real-node metric is gated (after 7 nightly values).
+`action.*`, `proof.*` and `device.*`) start there. One flips to `gate: true` in
+its own budgets pull request, once seven nightly values from at least three
+different nights have a run-to-run spread below `tolerancePct`; the pull request
+cites those values. Deterministic metrics (bundle sizes, the SFU loopback and
+impairment tests) gate from the start.
+
+The own SFU has one exception, so it has a blocking latency budget before any
+nightly values exist: the 18 `chalk_sfu.action.*` entries gate with a loose
+ceiling, twice the worst p95 in the earliest evidence (the 7 Nov 2026 staging
+runs, listed in `_comment`). The seven-night rule then tightens each ceiling to
+its real budget in its own pull request. The `cf_sfu.action.*` entries, the
+`sfu.loss_pct`, `sfu.stalls_per_class_hour` and `sfu.admission_refusals`
+entries, `proof.join_startup.*` and `proof.leave_median_ms` stay warn-only for
+now: they have too few kept runs, or no workflow scores them yet.
+
+A gated entry blocks only where something scores it. `scorecard diff
+--fail-on-gate` fails on a gated metric over its budget, and `pnpm prod:latency`
+fails on a gated action p95 over its limit. Today the PR tier, the nightly
+Leave proof and the Promote tier score no `chalk_sfu.action.*` values, so run
+`prod:latency` for them.
 
 `--self-test` installs a temporary busy loop of at least 250 ms in trusted click
 handling, sized above the configured interaction/blocking budgets. It feeds the
