@@ -22,6 +22,7 @@ vi.mock("../../../react-native/src/primitives/ChalkText", () => ({ ChalkText: ({
 vi.mock("../../../react-native/src/limbo/Limbo", () => ({ Limbo: () => <div data-limbo /> }));
 vi.mock("../../../react-native/src/limbo/Veil", () => ({ Veil: ({ level }: { level: string }) => <div data-veil={level} /> }));
 vi.mock("../../../react-native/src/primitives/toast/ToastStack", () => ({ useToasts: () => ({ clear: () => {} }) }));
+vi.mock("../../../react-native/src/theme/tokens", () => ({ corners: { xl: 12 }, space: { "1-5": 6, 3: 12 } }));
 vi.mock("../../../react-native/src/theme/theme", () => ({ useTheme: () => ({ colors: { surface: "white" } }) }));
 vi.mock("../../../react-native/src/status/StatusPage", () => ({ StatusPage: () => null }));
 
