@@ -189,13 +189,15 @@ up() {
   doctl compute firewall create --name "$firewall" --droplet-ids "$droplet_ids" --inbound-rules "${inbound} ${control_rule}" \
     --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" >/dev/null
 
-  local id budget address nodes_value="" incarnations=()
+  local id budget address prefix nodes_value="" incarnations=()
   for spec in "${nodes[@]}"; do
     read -r role id slug budget <<<"$spec"
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
     SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
-    nodes_value+="${nodes_value:+,}${id}=https://${address}:${control_port}"
+    prefix=""
+    if [[ "$role" == standby ]]; then prefix="standby:"; fi
+    nodes_value+="${nodes_value:+,}${prefix}${id}=https://${address}:${control_port}"
   done
 
   echo "==> checking /readyz over mutual TLS from this machine"

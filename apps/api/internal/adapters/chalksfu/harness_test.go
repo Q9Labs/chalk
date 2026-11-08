@@ -313,7 +313,7 @@ func (s *sfu) buildFleet(t *testing.T, log *slog.Logger, clientCA *authority, id
 	fleet, err := chalksfu.NewFleet(runtimeconfig.ChalkSFUConfig{
 		Enabled: true, ApplicationID: "conformance-pool", CloudflareOverflow: overflow, Nodes: nodes, ServerName: "localhost", STUNURLs: []string{"stun:stun.example:3478"},
 		CAFile: write(t, s.dir, "trust.pem", s.ca.pem), ClientCertFile: write(t, s.dir, fmt.Sprintf("client-%d.pem", serial.Add(1)), certPEM),
-		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second,
+		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second, StandbyPacketBudget: 16000,
 	}, log)
 	if err != nil {
 		t.Fatalf("new fleet: %v", err)

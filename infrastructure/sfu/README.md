@@ -63,6 +63,11 @@ CHALK_SFU_CLIENT_KEY_FILE=/run/chalk/provider-bridge/server.key
 CHALK_SFU_STUN_URLS=stun:stun.cloudflare.com:3478
 ```
 
+`CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` entry is a primary;
+`standby:id=url` marks a standby, which takes a new Episode only when every primary is
+silent, draining, host-guard closed or full, and admits at most
+`CHALK_SFU_STANDBY_PACKET_BUDGET` packets/s (default 16000) for it. At least one node must be a primary.
+
 `CHALK_SFU_CLOUDFLARE_OVERFLOW` defaults to `true`: a new Episode that no node can
 take starts on Cloudflare when its Tenant has a Cloudflare application. Set it to
 `false` to refuse that Episode with a retryable `503 media.unavailable` instead.

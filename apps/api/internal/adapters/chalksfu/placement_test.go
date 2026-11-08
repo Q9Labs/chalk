@@ -34,15 +34,21 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	// Participants in two Episodes fill the primary's 2,400.
 	primary := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "2400"})
 	standby := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
-	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL}}
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	ctx := context.Background()
+	// Each question gets a fresh pool, because Place charges the Episode it answers with
+	// against the node, and this test only asks where the next one would go.
+	placeNow := func() (string, bool) {
+		asked := primary.fleetOf(t, ca, clientIdentity, nodes...)
+		asked.Probe(ctx)
+		return place(asked)
+	}
 
 	if placed, room := place(fleet); placed != "sfu-primary" || !room {
 		t.Fatalf("before any probe: placed on %q with room %t, want the primary", placed, room)
 	}
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-primary" {
+	if placed, _ := placeNow(); placed != "sfu-primary" {
 		t.Fatalf("two nodes with room: placed on %q, want the primary", placed)
 	}
 
@@ -52,13 +58,11 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	}
 	onPrimary := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first)
 	join(t, onPrimary, scopeOf("ep-1", "alice"))
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-primary" {
+	if placed, _ := placeNow(); placed != "sfu-primary" {
 		t.Fatalf("primary with room for one more Episode: placed on %q, want the primary", placed)
 	}
 	join(t, onPrimary, scopeOf("ep-2", "bob"))
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-standby" {
+	if placed, _ := placeNow(); placed != "sfu-standby" {
 		t.Fatalf("full primary: placed on %q, want the standby", placed)
 	}
 
@@ -72,8 +76,7 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	if err != nil || found.Found {
 		t.Fatalf("the standby's session on the primary: %+v, %v, want not found", found, err)
 	}
-	fleet.Probe(ctx)
-	if placed, room := place(fleet); placed != "sfu-primary" || room {
+	if placed, room := placeNow(); placed != "sfu-primary" || room {
 		t.Fatalf("no node with room: placed on %q with room %t, want the primary without room", placed, room)
 	}
 
@@ -86,7 +89,7 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 func TestConformancePlacementSkipsASilentNode(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	primary := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
-	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-silent", ControlURL: "https://127.0.0.1:" + freePort(t)}}
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-silent", ControlURL: "https://127.0.0.1:" + freePort(t), Role: runtimeconfig.ChalkSFURoleStandby}}
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	first, err := fleet.Node("sfu-primary")
 	if err != nil {
@@ -165,7 +168,7 @@ func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T)
 	ca := newAuthority(t, "pool CA")
 	primary := startSFUUnder(t, ca, nil)
 	standby := startSFUUnder(t, ca, nil)
-	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL}}
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
 	logs := &bytes.Buffer{}
 	fleet := primary.loggedFleetOf(t, slog.New(slog.NewTextHandler(logs, nil)), ca, clientIdentity, nodes...)
 	ctx := context.Background()
@@ -263,7 +266,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	primary := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
 	standby := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
-	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL}}
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	telemetry := &placements{}
 	registry := registryOn(fleet, withCloudflare, nil, telemetry)
@@ -361,7 +364,7 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	if refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("draining pool, overflow off: %+v, %v, want the placement refusal", refused, err)
 	}
-	if want := []string{"cf_sfu/overflow_draining", "chalk_sfu/capacity_refused"}; !slices.Equal(telemetry.got, want) {
+	if want := []string{"cf_sfu/overflow_draining", "chalk_sfu/overflow_draining"}; !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}
 
@@ -414,10 +417,10 @@ func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
 	}
 	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, guardedNode)
 	refusing.Probe(ctx)
-	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowHostGuard)) {
 		t.Fatalf("guarded pool, overflow off: %+v, %v, want the placement refusal", refused, err)
 	}
-	if want := []string{"cf_sfu/overflow_host_guard", "chalk_sfu/capacity_refused"}; !slices.Equal(telemetry.got, want) {
+	if want := []string{"cf_sfu/overflow_host_guard", "chalk_sfu/overflow_host_guard"}; !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}
 
@@ -469,7 +472,7 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	if err != nil || stays.Provider != string(spaces.MediaPlaneProviderChalkSFU) || stays.Node != "sfu-a" || stays.PlacementReason != mediaplane.PlacementNoCapacity {
 		t.Fatalf("full pool without a Cloudflare application: %+v, %v, want chalk_sfu on sfu-a", stays, err)
 	}
-	if want := []string{"chalk_sfu/primary", "chalk_sfu/capacity_refused", "chalk_sfu/no_capacity"}; !slices.Equal(telemetry.got, want) {
+	if want := []string{"chalk_sfu/primary", "chalk_sfu/overflow_no_room", "chalk_sfu/no_capacity"}; !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}
 
