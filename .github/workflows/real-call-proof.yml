@@ -21,6 +21,10 @@ on:
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
+      latency:
+        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
+        type: boolean
+        default: false
       release_sha:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
@@ -47,6 +51,10 @@ on:
         description: Media provider of the proof Space; chalk_sfu runs only camera-share
         type: string
         default: cf_sfu
+      latency:
+        description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
+        type: boolean
+        default: false
       release_sha:
         description: Exact deployed revision to prove
         type: string
@@ -196,6 +204,42 @@ jobs:
             CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
             echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
           done
+      - name: Measure action latency
+        if: ${{ !cancelled() && inputs.latency }}
+        # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
+        timeout-minutes: 25
+        env:
+          CHALK_PROOF_CONFIG_SOURCE: env
+          CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
+          RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
+          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
+          CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
+          CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
+          CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
+          CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
+          SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'manual' }}
+          SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
+        run: |
+          # A revision from before the own-SFU nightly has no latency kit scorecard code to run.
+          if [ ! -f features/scorecard/own-sfu.mjs ]; then
+            echo "The selected revision predates the own-SFU nightly, so no latency was measured." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mkdir -p .private
+          run_id="${RUN_PREFIX}-latency"
+          echo "$run_id" >> .private/proof-run-ids
+          CHALK_PROOF_RUN_ID="$run_id" pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04
+      - name: Collect the latency scorecard
+        if: ${{ !cancelled() && inputs.latency }}
+        env:
+          CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+        run: |
+          if [ ! -f features/scorecard/own-sfu.mjs ]; then
+            exit 0
+          fi
+          node features/scorecard/own-sfu.mjs .private/prod-proof "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
       - name: Clean proof runs
         if: always()
         env:
@@ -241,7 +285,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scorecard-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}
-          path: artifacts/scorecard-proof.json
+          path: artifacts/scorecard-*.json
           if-no-files-found: ignore
           retention-days: 3
       - name: Encrypt private proof evidence
