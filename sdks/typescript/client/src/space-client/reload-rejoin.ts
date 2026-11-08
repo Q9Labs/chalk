@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { parseParsedAccessGrant, requireAccessGrant, type AccessGrant } from "../access/grant";
+import { currentTabId } from "../session";
 
 /** A tab-scoped, two-minute recovery hint, never an admission credential by itself. */
 export type ReloadRejoinMarker = {
@@ -18,6 +19,7 @@ export type ReloadRejoinMarker = {
 };
 
 const reloadMarkerSchema = Schema.Struct({
+  ownerTabId: Schema.String,
   version: Schema.Literal(1),
   expiresAt: Schema.Number,
   space: Schema.String,
@@ -43,6 +45,7 @@ export function readReloadRejoin(storage: Pick<Storage, "getItem" | "removeItem"
   try {
     const value = Schema.decodeUnknownSync(reloadMarkerSchema)(JSON.parse(encoded));
     if (
+      value.ownerTabId !== currentTabId() ||
       value.expiresAt <= now ||
       value.expiresAt > now + reloadRejoinLifetimeMs ||
       value.space !== space ||
@@ -61,7 +64,9 @@ export function readReloadRejoin(storage: Pick<Storage, "getItem" | "removeItem"
 }
 
 export function writeReloadRejoin(storage: Pick<Storage, "setItem">, marker: Omit<ReloadRejoinMarker, "version" | "expiresAt">, now = Date.now()): void {
-  storage.setItem(reloadRejoinStorageKey, JSON.stringify({ ...marker, version: 1, expiresAt: now + reloadRejoinLifetimeMs }));
+  const ownerTabId = currentTabId();
+  if (!ownerTabId) throw new Error("Reload recovery requires a tab identity.");
+  storage.setItem(reloadRejoinStorageKey, JSON.stringify({ ...marker, ownerTabId, version: 1, expiresAt: now + reloadRejoinLifetimeMs }));
 }
 
 /** Refuse a fresh Episode or Participant even if an integration returns a new grant. */

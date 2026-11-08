@@ -1,7 +1,7 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import type { ThemeMode } from "../../lib/theme";
-import { readReloadRejoin, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
@@ -13,7 +13,7 @@ import { reportCredentialExpiredReason, useProblemReports, useReportCredentialEx
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-type EntryFailure = { readonly message: string; readonly retryable: boolean };
+type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
@@ -134,8 +134,13 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     const recovery = resumePublicSpace(client, marker, slug).then((prepared) => ({ prepared, spaceName: prepared.arrival.space?.name }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
-      .catch(() => {
-        if (active.current) setError({ message: "Could not return to the Episode. Check your access before joining again.", retryable: true });
+      .catch((cause: unknown) => {
+        if (active.current)
+          setError(
+            cause instanceof AccessMediaProofRejectedError
+              ? { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" }
+              : { message: "Could not return to the Episode. Check your access before joining again.", retryable: true },
+          );
       })
       .finally(() => {
         if (active.current) setPreparing(false);
@@ -419,7 +424,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           ) : preparing || (spaceAccess && !error) || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
             <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: askAgain } : undefined} />
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
           ) : (
             <NameNeeded
               spaceName={callName}
