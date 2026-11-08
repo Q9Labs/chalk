@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `CHALK_SFU_CLIENT_SUNSET`. After that instant a client that does not declare the own SFU can no longer start an Episode in a Space that uses it: the request fails with `409 media.client_unsupported`, whose message now tells the user to update the app. Before the instant, and while the variable is empty, such a client still gets Cloudflare. `createEpisode` now lists `media.client_unsupported` among its errors.
+
 ## 5.5.0
 
 - Add a hosted `/mcp` endpoint with 33 curated tenant-scoped tools for Claude Code, Codex, and other Streamable HTTP clients. Authenticate with existing tenant API keys and enforce the same scopes, tenant policy, and operation budgets as the API. See [MCP setup](docs/mcp.md). Sign in to the hosted server with OAuth as well as an API key.

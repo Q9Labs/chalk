@@ -12,17 +12,25 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-// A Space outside the own-SFU allowlist and an SDK that cannot run the own SFU
-// get Cloudflare, so only allowlisted Spaces move and old SDK cohorts stay on
-// Cloudflare when their Space selects the own SFU.
+// A Space outside the own-SFU allowlist gets Cloudflare, so only allowlisted
+// Spaces move. An SDK that cannot run the own SFU gets Cloudflare in an
+// allowlisted Space too, until the client sunset passes. After it the request
+// fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
+// Cloudflare for good.
 func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	selected, err := selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
 	var pin spaces.MediaPlaneProvider
-	if selected == spaces.MediaPlaneProviderChalkSFU && (!r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU)) {
-		pin = spaces.MediaPlaneProviderCloudflareSFU
+	if selected == spaces.MediaPlaneProviderChalkSFU {
+		allowed, runs := r.chalkSpaces.Allows(space.ID), clients.Runs(mediaplane.ProviderChalkSFU)
+		if allowed && !runs && r.afterClientSunset() {
+			return nil, mediaplane.ErrClientUnsupported
+		}
+		if !allowed || !runs {
+			pin = spaces.MediaPlaneProviderCloudflareSFU
+		}
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
 	if err != nil {
@@ -103,4 +111,8 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 		return nil, resolution, nil
 	}
 	return resolved, resolution, nil
+}
+
+func (r Registry) afterClientSunset() bool {
+	return !r.clientSunset.IsZero() && !r.now().Before(r.clientSunset)
 }

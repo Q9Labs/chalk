@@ -94,6 +94,7 @@ const (
 	ChalkSFUCloudflareOverflow = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
 	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
 	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
+	ChalkSFUClientSunset       = "CHALK_SFU_CLIENT_SUNSET"
 	DefaultMediaPlane          = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
@@ -249,6 +250,12 @@ type ChalkSFUConfig struct {
 	// rest of the deployment stays on Cloudflare. It is empty by default, even when
 	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
 	AllowedSpaces spaces.ChalkSFUAllowlist
+
+	// ClientSunset is the instant after which a client that does not declare the own
+	// SFU can no longer start an Episode in a Space on the allowlist: it gets
+	// media.client_unsupported instead of Cloudflare. The zero value means never.
+	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
+	ClientSunset time.Time
 
 	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
 	// room. It is on by default. When it is off, creating that Episode fails with
@@ -727,6 +734,11 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	config.Nodes = nodes
 	if config.AllowedSpaces, err = spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces)); err != nil {
 		return ChalkSFUConfig{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
+	}
+	if sunset := strings.TrimSpace(envOrDefault(ChalkSFUClientSunset, "")); sunset != "" {
+		if config.ClientSunset, err = time.Parse(time.RFC3339, sunset); err != nil {
+			return ChalkSFUConfig{}, fmt.Errorf("%s must be an RFC 3339 instant: %w", ChalkSFUClientSunset, err)
+		}
 	}
 	return config, nil
 }

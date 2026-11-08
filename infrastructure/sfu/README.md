@@ -89,6 +89,36 @@ Episodes: a live Episode keeps the provider its binding pinned. Keep the real
 list in the private API settings, not in Git. Production keeps the switch off
 until the M7 canary.
 
+## Client sunset
+
+An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is
+Cloudflare-only. Until the sunset, a new Episode in an allowlisted Space starts on
+Cloudflare for such a client. `CHALK_SFU_CLIENT_SUNSET` sets the end of that:
+
+```sh
+CHALK_SFU_CLIENT_SUNSET=2027-01-15T00:00:00Z
+```
+
+The value is an RFC 3339 instant, and an invalid value stops the API at startup.
+Empty or missing means never, which is the default. At and after the instant, a
+client that does not declare `chalk_sfu` gets `409 media.client_unsupported` with
+the message "This call needs a newer version of Chalk. Update the app and try
+again." when it starts an Episode in a Space on the allowlist, the same answer it
+already gets when it joins a live Episode on the own SFU. A Space off the
+allowlist still starts on Cloudflare. A live Episode keeps its provider, so a
+client that cannot run it is refused at join, and a client joining a Cloudflare
+Episode is unaffected.
+
+Run the sunset in this order, with no permanent Cloudflare cohort:
+
+1. Release first-party apps and SDKs that declare `chalk_sfu`, and announce the date.
+2. Wait until those builds are in both app stores, then set the date at least 30 days later.
+3. Set `CHALK_SFU_CLIENT_SUNSET` in the private API settings and redeploy. From the date on, old clients get the 409.
+4. To roll back, unset the variable and redeploy. New Episodes of old clients return to Cloudflare at once.
+
+After the date passes, check that the npm release `@q9labsai/chalk-client@5.4.1`, which does not declare `chalk_sfu`, gets the 409
+when it creates an Episode in an allowlisted Space, and that its `ChalkAPIError.code` is `media.client_unsupported`.
+
 ## Run the canary
 
 Move internal Spaces one at a time: add the Space ID to

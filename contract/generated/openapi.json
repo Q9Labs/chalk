@@ -6440,7 +6440,7 @@
               }
             },
             "description": "Conflict",
-            "x-chalk-error-codes": ["episode.capacity_exceeded", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
+            "x-chalk-error-codes": ["episode.capacity_exceeded", "media.client_unsupported", "request.idempotency_conflict", "tenant.live_episode_limit_reached"]
           },
           "413": {
             "content": {
