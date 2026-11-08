@@ -431,7 +431,7 @@ Episode is the record of what was kept.
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
 no node can take is then refused with `503 media.unavailable` and counted as
 `capacity_refused`, and the refusal is logged by `http.failure` with the bounded reason
-`own sfu pool full and cloudflare overflow disabled`.
+`no own sfu node with room (full, draining or not answering) and cloudflare overflow disabled`.
 The same reason and the node's boot incarnation are frozen in the Episode binding
 (`placement_reason`, `node_incarnation`), so a past overflow stays findable.
 
