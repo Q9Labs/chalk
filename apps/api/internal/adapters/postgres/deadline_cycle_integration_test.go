@@ -172,7 +172,7 @@ func (c schedulerFixture) skippedFor(cycle episodes.DeadlineCycle, e schedulerEp
 	return skipped
 }
 
-// Shape of the nightly Episode db0c32bd that stopped every deadline: a 24 hour
+// Shape of a nightly Episode (observed 2026-11-08) that stopped every deadline: a 24 hour
 // Episode with two participants already left and two still active, their
 // presence leases and the Episode lease expired, linger window 0, and the
 // control row holding reserved events and intents.
