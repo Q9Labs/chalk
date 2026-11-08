@@ -85,10 +85,9 @@ The committed k=3 JSON files hold the run configuration, the summary and one sli
 1. Add synthetic rows to `fixture.py` if needed. Keep facts and IDs stable across arms and keep external services out of the fixture.
 2. Add a `Task` in `tasks.py` with a precise JSON answer shape and an independent expected value. For writes, add a tenant-scoped SQL state query. For unsupported capabilities, set `capability_gap=True` without changing the expected factual answer into a refusal.
 3. Extend preflight when changing a fixture projection, then run the task through the real API. Do not update an oracle merely to agree with an agent answer.
-4. Run the harness checks and a focused paid trial:
+4. Run a focused paid trial:
 
 ```sh
-python3 -m unittest discover -s scripts/evals/mcp -p 'test_*.py' -v
 python3 scripts/evals/mcp/run.py run --arm tools --k 1 --task your-task-id --output .private/mcp-evals/diagnostic.json
 ```
 
