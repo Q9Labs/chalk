@@ -607,6 +607,7 @@
 }
 
 .site .dash .alogo .initial {
+  /* token-ratchet-ignore: the initial scales with the logo tile it sits in, so it stays in em */
   font-size: 1.1em;
   font-weight: 600;
 }
@@ -849,7 +850,7 @@
 .site .dash .ctile .alogo {
   width: 40px;
   height: 40px;
-  border-radius: 11px;
+  border-radius: var(--corner-xl);
   background: var(--chalk-raised);
   border-color: var(--chalk-line);
 }
