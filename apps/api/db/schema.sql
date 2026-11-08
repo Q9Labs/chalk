@@ -521,9 +521,23 @@ create function protect_immutable_episode_policy()
 returns trigger
 language plpgsql
 as $$
+declare
+    old_binding jsonb := old.config_snapshot -> 'media_plane_binding';
+    new_binding jsonb := new.config_snapshot -> 'media_plane_binding';
+    placement constant text[] := array['node', 'node_incarnation', 'placement_reason', 'generation', 'previous_allocations'];
 begin
     if new.config_snapshot is distinct from old.config_snapshot then
-        raise exception 'Episode config_snapshot is immutable';
+        if not coalesce(
+            (new.config_snapshot - 'media_plane_binding') = (old.config_snapshot - 'media_plane_binding')
+            and jsonb_typeof(old_binding) = 'object'
+            and jsonb_typeof(new_binding) = 'object'
+            and old_binding ->> 'provider' = 'chalk_sfu'
+            and (new_binding - placement) = (old_binding - placement)
+            and coalesce((new_binding ->> 'generation')::bigint, 0) = coalesce((old_binding ->> 'generation')::bigint, 0) + 1,
+            false
+        ) then
+            raise exception 'Episode config_snapshot is immutable';
+        end if;
     end if;
 
     if new.deadline_at is distinct from old.deadline_at

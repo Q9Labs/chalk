@@ -42,10 +42,21 @@ type Fleet struct {
 	standbyBudget int             // packets/s a standby admits for new Episodes
 	log           *slog.Logger
 
-	mu       sync.Mutex
-	loads    map[string]nodeLoad
-	inflight map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
-	probed   bool                   // a probe round has finished, so a node without a load record has none
+	mu          sync.Mutex
+	loads       map[string]nodeLoad
+	seen        map[string]sighting    // when each node last answered a probe; a failed probe leaves it alone
+	inflight    map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
+	probed      bool                   // a probe round has finished, so a node without a load record has none
+	firstRound  time.Time              // when the first probe round finished
+	holdSeconds int                    // how long a recovery's reservation waits for rejoins; zero means recoveryHoldSeconds
+}
+
+// sighting is a node's last answered probe. Unlike its load record, which a failed probe
+// deletes so placement skips the node, it survives a failed probe, so one lost probe does not
+// make a live node look lost.
+type sighting struct {
+	at          time.Time
+	incarnation string
 }
 
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
@@ -92,6 +103,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 		standbyBudget: config.StandbyPacketBudget,
 		log:           log,
 		loads:         map[string]nodeLoad{},
+		seen:          map[string]sighting{},
 		inflight:      map[string][]time.Time{},
 	}
 	for _, node := range config.Nodes {
@@ -125,13 +137,24 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
 }
 
-// CapturePlane returns the recorder-facing plane of the node an Episode is bound to.
-func (f *Fleet) CapturePlane(id string) (captureplane.CapturePlane, error) {
+// Allocation returns the adapter of the node an Episode is bound to, issued under the binding's
+// boot incarnation (empty when the caller has none) and generation. Every create, source control
+// and capture it sends names that generation, so the node refuses it once the Episode is retired
+// above it. Production code reaches a node through here and not through Node, so no caller omits
+// the generation.
+func (f *Fleet) Allocation(id, incarnation string, generation int64) (*Adapter, error) {
 	node, err := f.Node(id)
 	if err != nil {
 		return nil, err
 	}
-	return node, nil
+	return node.Bound(incarnation, generation), nil
+}
+
+// CapturePlane returns the recorder-facing plane of the allocation an Episode is bound to. The
+// node refuses a capture once the Episode is retired above the generation, and the plane refuses
+// an answer from another boot than the incarnation.
+func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (captureplane.CapturePlane, error) {
+	return f.Allocation(id, incarnation, generation)
 }
 
 // Place picks the node for a new Episode. Primaries are tried first, in
@@ -249,36 +272,45 @@ func (f *Fleet) Health(node string) (NodeHealth, bool) {
 func (f *Fleet) Probe(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, node := range f.nodes {
-		wg.Go(func() {
-			probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-			defer cancel()
-			ready, err := node.ready(probeCtx)
-			f.mu.Lock()
-			defer f.mu.Unlock()
-			before, known := f.loads[node.node]
-			if err != nil {
-				switch {
-				case known && before.Draining:
-					f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
-				case known:
-					f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
-				}
-				delete(f.loads, node.node)
-				return
-			}
-			switch {
-			case ready.Draining && !(known && before.Draining):
-				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
-			case !ready.Draining && known && before.Draining:
-				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
-			}
-			f.loads[node.node] = f.loadOf(node.node, ready, time.Now())
-		})
+		wg.Go(func() { f.probeNode(ctx, node) })
 	}
 	wg.Wait()
 	f.mu.Lock()
+	if !f.probed {
+		f.firstRound = time.Now()
+	}
 	f.probed = true
 	f.mu.Unlock()
+}
+
+// probeNode asks one node for its readiness and records the answer.
+func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
+	probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
+	ready, err := node.ready(probeCtx)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	before, known := f.loads[node.node]
+	if err != nil {
+		switch {
+		case known && before.Draining:
+			f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
+		case known:
+			f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
+		}
+		delete(f.loads, node.node)
+		return
+	}
+	switch {
+	case ready.Draining && !(known && before.Draining):
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
+	case !ready.Draining && known && before.Draining:
+		f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
+	}
+	now := time.Now()
+	load := f.loadOf(node.node, ready, now)
+	f.loads[node.node] = load
+	f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
 }
 
 // loadOf turns a node's ready answer into its load record, with no placed

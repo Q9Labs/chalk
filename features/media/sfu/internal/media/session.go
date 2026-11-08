@@ -28,6 +28,9 @@ type Session struct {
 	createOperation string
 	scope           protocol.Scope
 	kind            sessionKind
+	// allocation is the binding generation the create was issued under, or 0 for a caller that
+	// named none. RetireEpisode ends sessions below its floor.
+	allocation int64
 	// captureReserved is the packets/s the capture's subscriptions reserve, and captureLeases are
 	// the subscriptions' leases, which a re-reserve of the Episode moves to its new hold. n.mu
 	// guards both.

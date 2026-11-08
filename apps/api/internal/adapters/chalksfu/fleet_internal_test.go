@@ -1,6 +1,7 @@
 package chalksfu
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func ready(budget, reserved int) *answer { return &answer{budget: budget, reserv
 // poolOf builds a Fleet whose last probes are the given answers, in configuration order.
 // Place reads only those records, so no node is dialled.
 func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[string]*answer) *Fleet {
-	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, inflight: map[string][]time.Time{}, probed: true}
+	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, seen: map[string]sighting{}, inflight: map[string][]time.Time{}, probed: true, firstRound: time.Now().Add(-2 * probeFreshness)}
 	for _, node := range nodes {
 		fleet.nodes = append(fleet.nodes, &Adapter{node: node.ID})
 		if node.Role == runtimeconfig.ChalkSFURoleStandby {
@@ -46,6 +47,7 @@ func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[s
 			at = at.Add(-2 * probeFreshness)
 		}
 		fleet.loads[id] = fleet.loadOf(id, reply, at)
+		fleet.seen[id] = sighting{at: at, incarnation: reply.NodeIncarnation}
 	}
 	return fleet
 }
@@ -205,5 +207,82 @@ func TestNewFleetNeedsAPrimary(t *testing.T) {
 	_, err := NewFleet(runtimeconfig.ChalkSFUConfig{Nodes: []runtimeconfig.ChalkSFUNode{standby("s")}}, nil)
 	if err == nil {
 		t.Fatal("a pool of standbys alone was accepted")
+	}
+}
+
+func TestLostReadsOnlyTheLastProbes(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{primary("p"), primary("quiet"), standby("s")}
+	answers := map[string]*answer{"p": ready(testPrimaryBudget, 0), "quiet": {budget: testPrimaryBudget, stale: true}, "s": {budget: testStandbyBudget, draining: true}}
+	cases := []struct {
+		name       string
+		allocation mediaplane.Allocation
+		want       LossReason
+	}{
+		{"a node that answers under the bound incarnation", mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}, ""},
+		{"a node that answers under another incarnation restarted", mediaplane.Allocation{Node: "p", Incarnation: "boot-old"}, LossRestarted},
+		{"a binding that never recorded an incarnation cannot see a restart", mediaplane.Allocation{Node: "p"}, ""},
+		{"a node whose last probe is past the freshness window is silent", mediaplane.Allocation{Node: "quiet", Incarnation: "boot-quiet"}, LossSilent},
+		{"a node that never answered is silent once the first round is old", mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}, LossSilent},
+		{"a draining node still answers, so it is not lost", mediaplane.Allocation{Node: "s", Incarnation: "boot-s"}, ""},
+	}
+	fleet := poolOf(testStandbyBudget, nodes, answers)
+	for _, c := range cases {
+		got, lost := fleet.Lost(c.allocation)
+		if got != c.want || lost != (c.want != "") {
+			t.Errorf("%s: got %q, %v", c.name, got, lost)
+		}
+	}
+	// One failed probe deletes the node's load record but not its last answer, so a node that
+	// answered a moment ago is not lost yet.
+	delete(fleet.loads, "p")
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}); lost {
+		t.Errorf("after one failed probe: lost as %q", got)
+	}
+	// A node that never answered is not silent while the first round is still young.
+	fleet.firstRound = time.Now()
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}); lost {
+		t.Errorf("a node the first round just failed to reach: lost as %q", got)
+	}
+	// Before the first probe nothing is known, so nothing is lost.
+	fleet.probed = false
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}); lost {
+		t.Errorf("before the first probe: lost as %q", got)
+	}
+}
+
+func TestRecoveryCandidatesFollowPlacementOrderAndSkipOnlySilentOrDrainingNodes(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), standby("sfull"), primary("full"), primary("down"), primary("drain"), primary("ok")}
+	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{
+		"s": ready(testStandbyBudget, 0), "sfull": ready(testStandbyBudget, testStandbyBudget), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
+		"drain": {budget: testPrimaryBudget, draining: true}, "ok": ready(testPrimaryBudget, 0),
+	})
+	var got []string
+	for _, c := range fleet.recoveryCandidates() {
+		got = append(got, c.adapter.node)
+	}
+	// A full node stays, standbys included: its reserve may hold this very Episode, which the
+	// probe cannot show, and the node's own answer decides whether the shape fits.
+	if want := []string{"full", "ok", "s", "sfull"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
+		t.Fatalf("candidates %v, want %v: primaries first, then the standbys", got, want)
+	}
+}
+
+func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
+	node, episode := strings.Repeat("n", 64), "0198f3a2-7b1c-7d4e-9a10-3c5b8e2f6a71"
+	id := recoveryOperationID(episode, 1, node, 2, 0, 7)
+	if len(id) > 128 {
+		t.Fatalf("operation ID has %d characters, the SFU accepts 128", len(id))
+	}
+	if id != recoveryOperationID(episode, 1, node, 2, 0, 7) {
+		t.Fatal("the same tuple gave two operation IDs")
+	}
+	for name, other := range map[string]string{
+		"generation": recoveryOperationID(episode, 2, node, 2, 0, 7), "participants": recoveryOperationID(episode, 1, node, 3, 0, 7),
+		"window": recoveryOperationID(episode, 1, node, 2, 0, 8), "packet ceiling": recoveryOperationID(episode, 1, node, 2, 16000, 7),
+		"node": recoveryOperationID(episode, 1, node+"x", 2, 0, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, 0, 7),
+	} {
+		if other == id {
+			t.Errorf("a different %s gave the same operation ID", name)
+		}
 	}
 }

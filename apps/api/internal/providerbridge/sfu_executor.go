@@ -39,7 +39,7 @@ const (
 // It returns an empty provider for an Episode that predates the binding, which ran
 // on Cloudflare, and an empty node for a provider with one endpoint.
 type EpisodeProviders interface {
-	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, err error)
+	BindingOf(ctx context.Context, tenantID, episodeID utilities.ID) (provider, node string, generation int64, err error)
 }
 
 // ChalkNode is the own SFU node's control surface: it grants and revokes sources,
@@ -50,8 +50,22 @@ type ChalkNode interface {
 	ControlSources(context.Context, mediaplane.ControlSourcesInput) ([]mediaplane.SourceControlResult, error)
 }
 
-// ChalkNodes returns the control surface of the SFU node an Episode is bound to.
-type ChalkNodes func(node string) (ChalkNode, error)
+// ChalkNodes returns the control surface of the SFU node an Episode is bound to, issued under the
+// binding's generation, so the node refuses it once the Episode is retired above that generation.
+type ChalkNodes func(node string, generation int64) (ChalkNode, error)
+
+// ChalkNodesOf adapts a fleet's per-allocation constructor. It is the one place production builds
+// ChalkNodes, so every control and lease renewal names the binding's generation. A failed lookup
+// returns a nil ChalkNode, not a typed nil inside the interface.
+func ChalkNodesOf[A ChalkNode](allocation func(node string, generation int64) (A, error)) ChalkNodes {
+	return func(node string, generation int64) (ChalkNode, error) {
+		adapter, err := allocation(node, generation)
+		if err != nil {
+			return nil, err
+		}
+		return adapter, nil
+	}
+}
 
 type SFUExecutor struct {
 	publications mediapublications.Registry
@@ -60,6 +74,15 @@ type SFUExecutor struct {
 	episodes     EpisodeProviders
 	chalk        ChalkNodes
 	closeBudget  time.Duration
+	// retired ends an Episode on the allocations it moved away from.
+	retired func(ctx context.Context, tenantID, episodeID utilities.ID) error
+}
+
+// WithRetiredAllocations makes the end of an Episode also clean up the allocations that
+// whole-Episode recovery left, which the Episode's current binding no longer names.
+func (e SFUExecutor) WithRetiredAllocations(retired func(ctx context.Context, tenantID, episodeID utilities.ID) error) SFUExecutor {
+	e.retired = retired
+	return e
 }
 
 // WithChalkSFU makes grants and cleanup follow the Episode's binding. Without it
@@ -134,6 +157,11 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
 		if err := chalk.EndEpisode(ctx, ended); err != nil {
 			return providerExecutionFailure(err)
+		}
+		if e.retired != nil {
+			if err := e.retired(ctx, input.TenantID, input.EpisodeID); err != nil {
+				return providerExecutionFailure(err)
+			}
 		}
 	}
 	if chalk != nil && input.Effect != provideroperations.EffectEndEpisode && input.ControlRevision > 0 {
@@ -313,15 +341,15 @@ func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input 
 // as a terminal failure; it never falls back to Cloudflare, which would close
 // another provider's tracks by the wrong rules.
 func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, ChalkNode, *ExecutionResult) {
-	name, node := string(spaces.MediaPlaneProviderCloudflareSFU), ""
+	name, node, generation := string(spaces.MediaPlaneProviderCloudflareSFU), "", int64(0)
 	if e.episodes != nil {
-		found, foundNode, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
+		found, foundNode, foundGeneration, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
 			result := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "observation_unavailable"}
 			return "", nil, nil, &result
 		}
 		if found != "" {
-			name, node = found, foundNode
+			name, node, generation = found, foundNode, foundGeneration
 		}
 	}
 	switch spaces.MediaPlaneProvider(name) {
@@ -337,7 +365,7 @@ func (e SFUExecutor) bound(ctx context.Context, input provideroperations.Operati
 		}
 		// A node missing from this process's configuration may come back with the
 		// next deploy, so the operation retries instead of failing for good.
-		chalk, err := e.chalk(node)
+		chalk, err := e.chalk(node, generation)
 		if err != nil {
 			return "", nil, nil, &unavailable
 		}

@@ -333,6 +333,7 @@ func run() error {
 		Telemetry:       mediaPlaneTelemetry,
 		ChalkSFU:        chalkSFU,
 		Episodes:        episodeService,
+		Recovery:        postgres.NewEpisodeRecovery(pool),
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
@@ -577,8 +578,12 @@ func run() error {
 		LocalSystemToken: cfg.API.LocalSystemToken,
 		ServicePrincipal: cfg.API.ServicePrincipal,
 
-		RateLimit:            rateLimitOptions,
-		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RateLimit: rateLimitOptions,
+		Readiness: postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RetirementBacklog: func() (int, time.Duration, bool) {
+			backlog, observed := mediaPlaneRegistry.RetirementBacklog()
+			return backlog.Count, backlog.Oldest, observed
+		},
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
 
@@ -650,18 +655,14 @@ func run() error {
 	// nil interface.
 	var chalkNodes providerbridge.ChalkNodes
 	if chalkSFU != nil {
-		chalkNodes = func(node string) (providerbridge.ChalkNode, error) {
-			adapter, err := chalkSFU.Node(node)
-			if err != nil {
-				return nil, err
-			}
-			return adapter, nil
-		}
+		chalkNodes = providerbridge.ChalkNodesOf(func(node string, generation int64) (*chalksfu.Adapter, error) {
+			return chalkSFU.Allocation(node, "", generation)
+		})
 	}
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
-		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
@@ -698,6 +699,8 @@ func run() error {
 		go chalkSFU.Watch(signalCtx)
 		// Own SFU nodes forward a source only while the API renews its grant.
 		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
+		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
+		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	receiveHealthDone := make(chan struct{})
 	go func() {

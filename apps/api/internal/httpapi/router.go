@@ -42,10 +42,13 @@ type Options struct {
 	LocalSystemToken     string
 	ServicePrincipal     authentication.ServiceCredential
 
-	Middleware                 []func(http.Handler) http.Handler
-	Profiler                   http.Handler
-	RateLimit                  RateLimitOptions
-	Readiness                  ReadinessChecker
+	Middleware []func(http.Handler) http.Handler
+	Profiler   http.Handler
+	RateLimit  RateLimitOptions
+	Readiness  ReadinessChecker
+	// RetirementBacklog reports the own-SFU retirement debt for /readyz. It never fails readiness:
+	// a node that stays silent must not take the API out of service. It is nil without the own SFU.
+	RetirementBacklog          func() (count int, oldest time.Duration, observed bool)
 	RecorderHealth             RecorderHealthChecker
 	RecorderWorker             RecorderWorkerService
 	RecorderCapturePlans       RecorderCapturePlanService
@@ -144,7 +147,7 @@ func NewRouter(options Options) http.Handler {
 	r.Get("/healthz", handleHealth)
 	r.Get("/healthz/recorder/capture", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleCapture))
 	r.Get("/healthz/recorder/render", handleRecorderHealth(options.RecorderHealth, workeridentity.RoleRender))
-	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities))
+	r.Get("/readyz", handleReady(options.Readiness, options.Capabilities, options.RetirementBacklog))
 	if options.Profiler != nil {
 		r.Mount("/debug", options.Profiler)
 	}
@@ -176,7 +179,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.HandlerFunc {
+func handleReady(checker ReadinessChecker, capabilities CapabilityStatus, backlog func() (int, time.Duration, bool)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if checker == nil {
 			writeReadinessError(w, capabilities, "postgres")
@@ -190,13 +193,19 @@ func handleReady(checker ReadinessChecker, capabilities CapabilityStatus) http.H
 			writeReadinessError(w, capabilities, "postgres")
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		body := map[string]any{
 			"status": "ok",
 			"dependencies": map[string]string{
 				"postgres": "ok",
 			},
 			"capabilities": capabilityReadiness(capabilities),
-		})
+		}
+		if backlog != nil {
+			if count, oldest, observed := backlog(); observed {
+				body["sfu_retirement_debts"] = map[string]int64{"count": int64(count), "oldest_age_seconds": int64(oldest.Seconds())}
+			}
+		}
+		writeJSON(w, http.StatusOK, body)
 	}
 }
 

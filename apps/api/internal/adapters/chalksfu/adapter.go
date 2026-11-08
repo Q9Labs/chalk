@@ -58,6 +58,15 @@ type Adapter struct {
 	relay         RelaySource
 	backoff       time.Duration
 	captureReplay *captureplane.ReplayCache
+	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
+	// join the node answers for another incarnation is refused as stale.
+	incarnation string
+	// allocation is the binding generation the adapter was issued under, set by Bound. Sent with
+	// creates and source controls, it lets the node refuse a retired allocation.
+	allocation *int64
+	// fence, when set, re-reads the Episode's durable binding after a join and fails when it is
+	// no longer the one the join was issued under. See WithFence.
+	fence func(context.Context) error
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -327,15 +336,51 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		return mediaplane.Join{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
 	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope)}
+	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
-		return mediaplane.Join{}, err
+		return mediaplane.Join{}, a.explainStale(ctx, err)
+	}
+	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
+		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
+	}
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
+		}
 	}
 	participantRef := input.ExternalParticipantID
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
 	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
+}
+
+// explainStale turns a node's stale-generation refusal of a create into the binding's retry error
+// when the Episode has moved: the node refuses the join because it retired the allocation the join
+// was issued under, and the caller should retry under the current binding. The same refusal for an
+// Episode that has not moved is a stale Participant generation, which stays as it is.
+func (a *Adapter) explainStale(ctx context.Context, err error) error {
+	if a.fence == nil || !errors.Is(err, errStaleGeneration) {
+		return err
+	}
+	if fenceErr := a.fence(ctx); fenceErr != nil {
+		return errors.Join(fenceErr, err)
+	}
+	return err
+}
+
+// discardStaleSession closes a session a join or capture created and then refused, and returns its error. A close
+// that fails is joined to it, so the caller sees that the session may still be live; the
+// Participant's next join replaces it and the Episode's end cleans the retired allocation.
+func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope wireScope, cause error) error {
+	path, err := sessionPath(connectionID, "remove")
+	if err == nil {
+		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: scope}, nil)
+	}
+	if err != nil {
+		return errors.Join(cause, fmt.Errorf("close the session on node %q: %w", a.node, err))
+	}
+	return cause
 }
 
 // ResumeJoin hands back the same connection when the SFU still holds it. The SFU
@@ -350,6 +395,13 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 	}
 	if !state.Found {
 		return mediaplane.Join{}, mediaplane.ErrConnectionNotFound
+	}
+	// The session lives on the node this adapter was issued for. When the Episode has moved, that
+	// is a retired allocation, so it is not handed out again.
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, err
+		}
 	}
 	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }
@@ -550,7 +602,7 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
 	for start := 0; start < len(input.Controls); start += maxSourceControls {
 		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
-		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Controls: make([]wireSourceControl, len(batch))}
+		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]wireSourceControl, len(batch))}
 		for index, control := range batch {
 			request.Controls[index] = wireSourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
 		}

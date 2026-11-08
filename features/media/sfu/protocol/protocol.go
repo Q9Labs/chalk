@@ -83,6 +83,10 @@ type CreateSessionRequest struct {
 	Scope       Scope  `json:"scope"`
 	// Kind is SessionKindCapture for a capture session and absent for a participant.
 	Kind string `json:"kind,omitempty"`
+	// AllocationGeneration is the binding generation the caller was issued the node under. A
+	// create below the Episode's retirement floor (see RetireEpisodeRequest) is refused as stale;
+	// absent, no floor applies.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -175,6 +179,25 @@ type EndEpisodeResponse struct {
 	Closed int `json:"closed"`
 }
 
+// RetireEpisodeRequest retires every allocation of one Tenant's Episode below a binding
+// generation. The node closes the sessions created under a lower generation (a session that named
+// none counts as generation 0) and refuses any later create, source control or capture below it
+// with the stale-generation error, until the retirement expires or the node restarts. Retiring
+// again, at the same or a lower generation, changes nothing. Generation is the floor: it must be
+// at least 1.
+type RetireEpisodeRequest struct {
+	TenantID   string `json:"tenantId"`
+	EpisodeID  string `json:"episodeId"`
+	Generation int64  `json:"generation"`
+}
+
+type RetireEpisodeResponse struct {
+	// Closed counts the sessions this call closed; a repeat reports 0.
+	Closed int `json:"closed"`
+	// Floor is the Episode's retirement floor on the node after the call.
+	Floor int64 `json:"floor"`
+}
+
 // Reservation hold times in seconds. A request without a TTL gets the default.
 const (
 	DefaultReservationTTLSeconds = 30
@@ -196,7 +219,10 @@ type EpisodeShape struct {
 // Generation fences it: a reserve older than the Episode's hold or its live sessions is refused as
 // stale. TTLSeconds bounds how long the reservation stays; the Participants' joins replace it, and
 // an expired or ended Episode releases what is left. The same OperationID with the same body
-// returns the first result.
+// returns the first result. PacketCeiling, when set, caps the node's whole reservation, this hold
+// included, below the node's own packet budget, so a caller that runs the node under a lower
+// operating limit (a standby's degraded budget) gets it enforced atomically with the reserve.
+// Callers that omit it get the node's budget alone.
 type ReserveEpisodeRequest struct {
 	OperationID string       `json:"operationId"`
 	TenantID    string       `json:"tenantId"`
@@ -204,6 +230,13 @@ type ReserveEpisodeRequest struct {
 	Generation  int64        `json:"generation"`
 	Shape       EpisodeShape `json:"shape"`
 	TTLSeconds  int          `json:"ttlSeconds,omitempty"`
+	// PacketCeiling is the most packets/s the node's reservations may total with this hold; zero
+	// means the node's packet budget.
+	PacketCeiling int `json:"packetCeiling,omitempty"`
+	// AllocationGeneration is the binding generation the move commits. The node installs it as the
+	// Episode's retirement floor once it accepts the reserve, so a node that restarted and lost its
+	// floors refuses the generations the Episode left, and refuses a reserve below a floor it holds.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 // ReserveEpisodeResponse reports the reservation. A refusal uses the capacity-exceeded or
@@ -236,6 +269,9 @@ type SourceControlRequest struct {
 	TenantID  string          `json:"tenantId"`
 	EpisodeID string          `json:"episodeId"`
 	Controls  []SourceControl `json:"controls"`
+	// AllocationGeneration is as in CreateSessionRequest: a control below the Episode's retirement
+	// floor is refused as stale.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type SourceControl struct {
