@@ -457,7 +457,7 @@ func TestCaptureSlotsKeepRoomUntilACaptureTakesIt(t *testing.T) {
 		delete(f.node.sessions, "capture")
 		f.node.mu.Unlock()
 	})
-	if err := f.node.reserveCapture(session, 300); err != nil {
+	if _, err := f.node.reserveCapture(session, 300); err != nil {
 		t.Fatal(err)
 	}
 	if want := threePerson + capture; f.reserved() != want {
@@ -570,26 +570,28 @@ func TestACaptureReturnsHeldPacketsWhenItsSubscriptionRollsBack(t *testing.T) {
 		return f.node.holds[episodeKey{"tenant", "one"}].capture
 	}
 	full := heldCapture()
-	if err := f.node.reserveCapture(session, 300); err != nil {
+	lease, err := f.node.reserveCapture(session, 300)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if heldCapture() != full-300 {
 		t.Fatalf("the hold keeps %d, want %d", heldCapture(), full-300)
 	}
-	f.node.releaseCapture(session, 300)
+	f.node.releaseCapture(session, lease)
 	if heldCapture() != full || f.reserved() != before {
 		t.Fatalf("after a rollback the hold keeps %d (want %d) and %d is reserved (want %d)", heldCapture(), full, f.reserved(), before)
 	}
 
 	// Once the Episode ends, a late release must not bring the hold back.
-	if err := f.node.reserveCapture(session, 300); err != nil {
+	lease, err = f.node.reserveCapture(session, 300)
+	if err != nil {
 		t.Fatal(err)
 	}
 	f.node.mu.Lock()
 	delete(f.node.sessions, "capture") // the fake has no peer connection for EndEpisode to close
 	f.node.mu.Unlock()
 	f.node.EndEpisode("tenant", "one")
-	f.node.releaseCapture(session, 300)
+	f.node.releaseCapture(session, lease)
 	if f.reserved() != 0 {
 		t.Fatalf("a release after the Episode ended left %d reserved", f.reserved())
 	}
@@ -614,5 +616,80 @@ func TestReserveChecksMandatoryMediaAtEveryRejoinCount(t *testing.T) {
 	}
 	if _, err := newReserveNodeErr(func(cfg *config.Config) { cfg.EpisodePacketCeiling = 2000 }); err == nil {
 		t.Fatal("NewNode accepted a ceiling below the large-call threshold's mandatory media")
+	}
+}
+
+// addCaptureSession registers a capture session without a peer connection, as the tests above do.
+func (f *reserveFixture) addCaptureSession(t *testing.T, episode string) *Session {
+	t.Helper()
+	session := &Session{kind: kindCapture, scope: protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: "recorder", Generation: 1}}
+	f.node.mu.Lock()
+	f.node.sessions["capture-"+episode] = session
+	f.node.mu.Unlock()
+	t.Cleanup(func() { // the fake has no peer connection for Close to shut down
+		f.node.mu.Lock()
+		delete(f.node.sessions, "capture-"+episode)
+		f.node.mu.Unlock()
+	})
+	return session
+}
+
+func (f *reserveFixture) heldCapture(episode string) int {
+	f.node.mu.Lock()
+	defer f.node.mu.Unlock()
+	return f.node.holds[episodeKey{"tenant", episode}].capture
+}
+
+func TestReleasingOneSubscriptionReturnsOnlyWhatItBorrowed(t *testing.T) {
+	f := newReserveNode(t)
+	request := reserveRequest("one", 3)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	session := f.addCaptureSession(t, "one")
+	// The first subscription takes the hold's whole capture room, so the second borrows nothing
+	// and adds its cost to the node total.
+	whole := f.heldCapture("one")
+	first, err := f.node.reserveCapture(session, whole)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := f.node.reserveCapture(session, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withBoth := f.reserved()
+	f.node.releaseCapture(session, second)
+	if f.heldCapture("one") != 0 || f.reserved() != withBoth-300 {
+		t.Fatalf("ending a subscription that borrowed nothing left the hold at %d (want 0) and %d reserved (want %d)", f.heldCapture("one"), f.reserved(), withBoth-300)
+	}
+	f.node.releaseCapture(session, first)
+	if f.heldCapture("one") != whole {
+		t.Fatalf("the first subscription returned %d to the hold, want %d", f.heldCapture("one"), whole)
+	}
+}
+
+func TestReReservingAfterACaptureSubscribedDoesNotCountItTwice(t *testing.T) {
+	capture := 3 * (2*300 + 50)
+	// The budget fits the Episode and its capture bound exactly, with no room to count it twice.
+	f := newReserveNode(t, func(cfg *config.Config) { cfg.PacketBudget = threePerson + capture })
+	request := reserveRequest("one", 3)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	session := f.addCaptureSession(t, "one")
+	if _, err := f.node.reserveCapture(session, 300); err != nil {
+		t.Fatal(err)
+	}
+	again := reserveRequest("one", 3)
+	again.Shape.CaptureSlots = 1
+	response, err := f.node.ReserveEpisode(again)
+	if err != nil {
+		t.Fatalf("an unchanged shape was refused after its capture subscribed: %v", err)
+	}
+	if want := threePerson + capture; response.ReservedPackets != want || f.reserved() != want {
+		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), want)
 	}
 }

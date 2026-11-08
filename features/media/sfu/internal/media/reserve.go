@@ -211,16 +211,20 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedSessions, ErrCapacityExceeded)
 	}
 	// The new hold replaces the Episode's current reservation, its old hold included.
-	current := n.episodeReservation(max(live, n.heldParticipants(key)))
+	// Live capture subscriptions already reserve part of the shape's capture bound, so the new
+	// hold keeps only the rest and the Episode is not counted twice for them.
+	liveCapture := n.capturePackets(key)
+	current := n.episodeReservation(max(live, n.heldParticipants(key))) + liveCapture
 	if existing != nil {
 		current += existing.capture
 	}
-	reserved := n.episodeReservation(participants) + n.captureBound(shape)
+	captureHold := max(0, n.captureBound(shape)-liveCapture)
+	reserved := n.episodeReservation(participants) + liveCapture + captureHold
 	if total-current+reserved > n.cfg.PacketBudget {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	expires := n.now().Add(ttl)
-	n.holds[key] = &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: n.captureBound(shape), expires: expires}
+	n.holds[key] = &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: captureHold, expires: expires}
 	n.settleHold(key, nil)
 	response := protocol.ReserveEpisodeResponse{NodeIncarnation: n.incarnation, ReservedPackets: reserved, ExpiresAt: expires}
 	n.reserves[request.OperationID] = reserveRecord{digest: digest, response: response}
