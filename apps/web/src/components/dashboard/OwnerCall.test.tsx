@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "../../../../../sdks/typescript/client/src/space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../../../../../sdks/typescript/client/src/space-client/space-client";
-import { terminalTestPlatform } from "../../../../../sdks/typescript/client/src/space-client/terminal.test.helpers";
+import { control, terminalTestPlatform } from "../../../../../sdks/typescript/client/src/space-client/terminal.test.helpers";
 import { OwnerCall } from "./OwnerCall";
 import { DashboardRequestError } from "../../lib/dashboard/client";
 import { requireParsedAccessGrant } from "../../../../../sdks/typescript/client/src/access/grant";
@@ -92,8 +92,7 @@ it("starts the new call from the time-limit screen in the language chosen for ne
           ...platform.sync,
           stop: platform.syncStopped,
           start: async () => {
-            const snapshot = platform.sync.getSnapshot();
-            platform.emitSync({ ...snapshot, control: { ...snapshot.control, status: "ended", endReason: "maximum_duration" }, connection: { phase: "terminal", terminalReason: "episode_ended" } });
+            platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", endReason: "maximum_duration", participants: [] }, connection: { phase: "terminal", terminalReason: "episode_ended" } });
           },
         }),
       },
