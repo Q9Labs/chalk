@@ -1,0 +1,30 @@
+name: Restore OpenTofu providers
+description: Restore the AWS provider that the managed deploy needs from a shared plugin cache, keyed by the dependency lock files, so tofu init does not download it from GitHub on every deploy. Only the cache-warm job saves the cache.
+
+outputs:
+  cache-hit:
+    description: "true when an entry exists for the current lock files"
+    value: ${{ steps.restore.outputs.cache-hit }}
+  key:
+    description: The cache key for the current lock files
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+
+runs:
+  using: composite
+  steps:
+    # OpenTofu checks a cached provider against the hashes in the lock file, so a changed or corrupt cache entry
+    # fails the init instead of being trusted. The key changes whenever a lock file changes. A deploy never saves:
+    # a deploy that runs no OpenTofu would otherwise save an empty directory under a key that cannot be replaced.
+    - name: Restore the provider cache
+      id: restore
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.terraform.d/plugin-cache
+        key: tofu-providers-deploy-${{ runner.os }}-${{ hashFiles('infrastructure/nightly/transcription/.terraform.lock.hcl', 'infrastructure/opentofu/modules/aws-transcription-dispatcher/.terraform.lock.hcl') }}
+
+    - name: Point OpenTofu at the provider cache
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "${HOME}/.terraform.d/plugin-cache"
+        echo "TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache" >> "${GITHUB_ENV}"
