@@ -5,17 +5,22 @@ const instruments = { stealPercent: "chalk.sfu.host.cpu.steal", draining: "chalk
 // MPL publishes no point limit. Apply the log collector's conservative cap to both axes.
 const limit = 1000;
 
-export async function readNodeMetrics(startTime, endTime, { env = process.env, fetchImpl = fetch } = {}) {
+export async function readNodeMetrics(startTime, endTime, { env = process.env, fetchImpl = fetch, refreshSessions = false } = {}) {
   const { metrics, metricsBaseUrl } = datasets(env);
   if (!/^[A-Za-z0-9_-]+$/.test(metrics ?? "") || !env.CHALK_AXIOM_METRICS_QUERY_TOKEN) throw new Error("staging_metrics_configuration_missing");
   const url = new URL("/v1/query/_mpl?format=metrics-v2", metricsBaseUrl);
   if (url.protocol !== "https:" || !["us-east-1.aws.edge.axiom.co", "eu-central-1.aws.edge.axiom.co"].includes(url.host)) throw new Error("staging_metrics_endpoint_invalid");
   const readouts = new Map();
-  for (const [field, metric] of Object.entries(instruments)) {
+  const queries = Object.entries(instruments).map(([field, metric]) => ({ field, metric, endTime }));
+  // Timestamp this final sessions read only after all three historical queries finish.
+  if (refreshSessions) queries.push({ field: "sessions", metric: instruments.sessions });
+  for (const { field, metric, endTime: queryEnd } of queries) {
+    const end = queryEnd ?? new Date(Date.now()).toISOString();
+    const start = queryEnd ? startTime : new Date(Date.parse(end) - 30_000).toISOString();
     const response = await fetchImpl(url.href, {
       method: "POST",
       headers: { authorization: `Bearer ${env.CHALK_AXIOM_METRICS_QUERY_TOKEN}`, "content-type": "application/json", accept: "application/vnd.metrics.v2+json" },
-      body: JSON.stringify({ startTime, endTime, mpl: `\`${metrics}\`:\`${metric}\` | where \`service.name\` == "chalk-sfu" and \`deployment.environment.name\` == "staging" | align using max` }),
+      body: JSON.stringify({ startTime: start, endTime: end, mpl: `\`${metrics}\`:\`${metric}\` | where \`service.name\` == "chalk-sfu" and \`deployment.environment.name\` == "staging" | align using max` }),
       signal: AbortSignal.timeout(30_000),
     });
     if (response.status !== 200) throw new Error("staging_metrics_query_failed");

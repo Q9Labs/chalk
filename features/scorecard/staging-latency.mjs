@@ -49,9 +49,9 @@ async function logs(start, end) {
   }
 }
 
-async function nodeMetrics(start, end) {
+async function nodeMetrics(start, end, options) {
   try {
-    return await readNodeMetrics(new Date(start).toISOString(), new Date(end).toISOString());
+    return await readNodeMetrics(new Date(start).toISOString(), new Date(end).toISOString(), options);
   } catch (error) {
     const reason = /^staging_metrics_(configuration_missing|endpoint_invalid|query_(empty|failed|incomplete|malformed))$/.test(error?.message) ? error.message : "staging_metrics_query_unavailable";
     console.error(`Staging node metrics unavailable: ${reason}.`);
@@ -86,7 +86,7 @@ async function measure() {
       }
     }
     const boundary = before.end;
-    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary);
+    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);

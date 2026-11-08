@@ -122,6 +122,9 @@ is a ratio and becomes `steal_max` in percent. Distinct `service.instance.id`
 tags supply incarnation changes; `chalk.sfu.draining` supplies drain state.
 Only boundary `chalk.sfu.sessions` readings count as foreign sessions, because
 in-window sessions include the kit's own. Incarnation IDs never enter a card.
+Before starting the kit, the collector refreshes sessions over the latest
+30-second window after the three historical gauge queries finish. A positive,
+empty or failed refresh prevents the workload from starting.
 
 Missing tokens, failed queries, empty readings and incomplete responses leave
 node signals **unavailable**, never zero. Node coverage in all three phases is
