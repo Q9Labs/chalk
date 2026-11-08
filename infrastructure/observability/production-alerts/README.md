@@ -9,17 +9,20 @@ Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at t
 current monitor allowance. Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
-| Rule                         | Production source                        | Evaluation                                                                                                         |
-| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Recording Capture failed     | `recording_jobs`                         | Terminal failure in the last 15 minutes                                                                            |
-| Recording stop stranded      | `sync_recordings`, `recording_pipelines` | Sync still `stopping` more than 2 minutes after capture completed                                                  |
-| Export failed or overdue     | `recording_jobs`, Render kind            | Terminal failure in 15 minutes, or active for over 14 hours                                                        |
-| Transcript failed or overdue | `transcriptions`                         | Terminal failure in 15 minutes, or active for over 30 minutes                                                      |
-| Webhook retries exhausted    | `webhook_deliveries`                     | Exhausted in the last 15 minutes                                                                                   |
-| API 5xx rate                 | Axiom API request logs                   | More than 15 server errors in 5 minutes, sustained for 5 evaluations                                               |
-| Sync connection failures     | Axiom Sync event spans                   | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations                        |
-| Sync stays unready           | Collector HTTP `/readyz` sample          | At least 4 distinct unready minute samples in 5 minutes; latest sample still unready and newer than 90 seconds     |
-| Own SFU stays unhealthy      | Collector mutual-TLS `/readyz` sample    | At least 4 distinct unhealthy minute samples in 5 minutes; latest sample still unhealthy and newer than 90 seconds |
+| Rule                          | Production source                        | Evaluation                                                                                                                                                       |
+| ----------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recording Capture failed      | `recording_jobs`                         | Terminal failure in the last 15 minutes                                                                                                                          |
+| Recording stop stranded       | `sync_recordings`, `recording_pipelines` | Sync still `stopping` more than 2 minutes after capture completed                                                                                                |
+| Export failed or overdue      | `recording_jobs`, Render kind            | Terminal failure in 15 minutes, or active for over 14 hours                                                                                                      |
+| Transcript failed or overdue  | `transcriptions`                         | Terminal failure in 15 minutes, or active for over 30 minutes                                                                                                    |
+| Webhook retries exhausted     | `webhook_deliveries`                     | Exhausted in the last 15 minutes                                                                                                                                 |
+| API 5xx rate                  | Axiom API request logs                   | More than 15 server errors in 5 minutes, sustained for 5 evaluations                                                                                             |
+| Sync connection failures      | Axiom Sync event spans                   | More than 10 upgrade rejections/abnormal closures in 5 minutes, sustained for 5 evaluations                                                                      |
+| Sync stays unready            | Collector HTTP `/readyz` sample          | At least 4 distinct unready minute samples in 5 minutes; latest sample still unready and newer than 90 seconds                                                   |
+| Own SFU stays unhealthy       | Collector mutual-TLS `/readyz` samples   | At least 4 distinct unhealthy minute samples in 5 minutes, where a sample is unhealthy when any node is; latest sample still unhealthy and newer than 90 seconds |
+| Own SFU retirement debt stuck | Collector read of `sfu_retirement_debts` | Oldest unpaid debt above 15 minutes in at least 4 distinct minute samples in 5 minutes; latest sample still above and newer than 90 seconds                      |
+| TURN credentials fail         | Axiom API logs                           | At least 3 `cloudflare_turn.credentials_failed` or `chalk_sfu.turn_credentials_failed` events in 5 minutes                                                       |
+| Own SFU recovery refused      | Axiom API logs                           | `chalk_sfu.recovery_refused` logged in at least 3 distinct minutes of the last 5                                                                                 |
 
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
@@ -34,14 +37,14 @@ can run locally. Use Go 1.26.10 and target the production host's architecture:
 `uname -m` on the host reports `aarch64`, which Go calls `arm64`.
 
 ```sh
-GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/discord_test.go
+GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go
 GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
 file collector
 shasum -a 256 collector
 ```
 
 The collector uses one connection, a read-only transaction and a five-second SQL
-timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. The global Sync readiness row brings coverage to six rules. When the own SFU probe is enabled, one more global row is emitted (see below), but the freshness monitor does not count it. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
+timeout. It emits five counts per Tenant plus five empty-Tenant heartbeat rows, including zero values to clear earlier failures. The global Sync readiness row brings coverage to six rules. The global `sfu-retirement-debt` row reads the table `sfu_retirement_debts` in the same read-only transaction, so install the collector only after the API release that runs that migration; a failed debt read keeps the other rows but fails the service. When the own SFU probe is enabled, one more global row is emitted (see below), but the freshness monitor does not count it either. Tenant display names and stable Tenant IDs are read at run time and exported to the private Axiom dataset; only names appear in Discord. No job IDs, connection strings, error details or customer payloads are exported. This deliberately reverses the former no-Tenant-data policy; keep attribution in its separate commit for privacy review. A rejected or
 partial ingest fails the service. The freshness monitor detects missing snapshots
 within five minutes. Latest values, not sums of repeated snapshots, drive alerts. Only snapshots newer than five minutes drive state alerts. The `recording-stop` rule counts completed captures even when the capture job succeeded. It clears when Sync no longer reports `stopping`.
 
@@ -69,21 +72,29 @@ uptime Worker remains separate and may report individual failed checks.
 
 ### Own SFU readiness
 
-When `CHALK_ALERT_SFU_READY_URL` is set, the collector also emits one global
-`sfu-readiness` row per run. When it is unset, the collector emits no SFU row,
-so a host that has no SFU node behaves exactly as before. The SFU's `/readyz`
+When `CHALK_ALERT_SFU_READY_URL` (one node) or `CHALK_ALERT_SFU_READY_URLS` (a
+comma-separated list of nodes) is set, the collector also emits one global
+`sfu-readiness` row per run. When both are unset, the collector emits no SFU row,
+so a host that has no SFU node behaves exactly as before. The collector probes
+every node at once and folds them into that one row: it is unhealthy when any
+node is, with the reason of the first unhealthy node in list order. A fleet
+therefore pages for a down, draining or admission-closed standby as well as a
+primary. Blank entries and a node named in both variables count once; one node
+gives exactly the row it gave before the list existed. All nodes share the
+certificate, key, CA and server name below. The SFU's `/readyz`
 sits on a mutual-TLS (TLS 1.3) listener and answers only to a client certificate
 that names the API's service identity. The collector reads that certificate, its
 key and the CA from files, so the operator reuses the API's SFU client
 certificate on the same host:
 
-| Variable                      | Meaning                                                                             |
-| ----------------------------- | ----------------------------------------------------------------------------------- |
-| `CHALK_ALERT_SFU_READY_URL`   | Full `https://` URL of the node's `/readyz`; leave unset to disable.                |
-| `CHALK_ALERT_SFU_CLIENT_CERT` | PEM file with the API's SFU client certificate.                                     |
-| `CHALK_ALERT_SFU_CLIENT_KEY`  | PEM file with its private key.                                                      |
-| `CHALK_ALERT_SFU_CA`          | PEM file with the CA that signed the SFU's server certificate.                      |
-| `CHALK_ALERT_SFU_SERVER_NAME` | Name in the SFU's certificate, `chalk-sfu`, as `CHALK_SFU_SERVER_NAME` for the API. |
+| Variable                      | Meaning                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| `CHALK_ALERT_SFU_READY_URL`   | Full `https://` URL of one node's `/readyz`; leave unset to disable.                          |
+| `CHALK_ALERT_SFU_READY_URLS`  | Comma-separated `https://` URLs, one per node. Use it for a fleet; it adds to the single URL. |
+| `CHALK_ALERT_SFU_CLIENT_CERT` | PEM file with the API's SFU client certificate.                                               |
+| `CHALK_ALERT_SFU_CLIENT_KEY`  | PEM file with its private key.                                                                |
+| `CHALK_ALERT_SFU_CA`          | PEM file with the CA that signed the SFU's server certificate.                                |
+| `CHALK_ALERT_SFU_SERVER_NAME` | Name in the SFU's certificate, `chalk-sfu`, as `CHALK_SFU_SERVER_NAME` for the API.           |
 
 The probe has the same five-second bound as the Sync probe and does not follow
 redirects. HTTP 200 with admission open and spare budget emits zero with reason
@@ -107,6 +118,27 @@ is the intent of alerting when admission has been closed for more than five
 minutes, or when a node sits above 90% of its packet budget. Live calls continue
 while only admission is closed, so the message says new calls may fail to start.
 
+`sfu-retirement-debt.apl` has the same shape. The collector emits the age in
+seconds of the oldest unpaid retirement debt (0 when none is owed), so a debt
+the API pays within seconds never rises near the limit. The API `/readyz` body
+carries the same number as `sfu_retirement_debts.oldest_age_seconds`, per replica.
+
+`turn-credentials.apl` and `recovery-refused.apl` read the API log, like the
+deadline scheduler rule, and join the first grouped monitor. The first counts
+`cloudflare_turn.credentials_failed` and `chalk_sfu.turn_credentials_failed`
+together (after the Cloudflare SFU is retired only the second remains), because
+either one means a join fell back to STUN only. The second counts distinct
+minutes with `chalk_sfu.recovery_refused`, because each retrying caller logs
+one refusal and a sustained outage matters more than one burst. Their alert text
+names no Tenant, Episode, node or address. The own SFU's placement outcomes
+(`no_capacity`, `overflow_*`) are a metric only and have no rule here: no log line
+records them, so a log twin is a separate change.
+
+All thresholds of the SFU rules beyond the readiness shape live in `THRESHOLDS`
+in `provision.py`, each with the documented number it comes from. The APL files
+read them as placeholders, and `provision.py` refuses a query with an unresolved
+placeholder.
+
 `deadline-scheduler.apl` reads the API log, not the collector. Each skipped
 Episode logs `episode.deadline_scheduler.failed` with `tenant_id`, `episode_id`,
 `phase`, `reason` and `consecutive_failures`, and the rule joins the first grouped
@@ -120,8 +152,9 @@ exist only once the API that logs them is deployed, so the query reads those two
 through `column_ifexists` with defaults that never alert.
 
 The freshness monitor still expects six rules and does not list
-`sfu-readiness`. The SFU row exists only on hosts that enable the probe, so
-counting it would page every host without an SFU. Once enabled, the probe always
+`sfu-readiness` or `sfu-retirement-debt`. The SFU readiness row exists only on hosts that enable the
+probe, so counting it would page every host without an SFU; the debt row is written by the same
+database read as the other rows, so a stopped collector is already caught. Once enabled, the probe always
 emits a row (a failure is a value of one, never a missing row), so a stopped
 collector is still caught by the six existing rules and the SFU needs no
 freshness entry of its own.
@@ -131,15 +164,17 @@ To enable it on the collector host:
 1. Copy or reference the API's SFU client certificate, key and CA at paths the
    collector's User can read, with the key mode `0600`. Do not commit them or put
    them in SSM command bodies.
-2. Add the four variables to the private `/etc/chalk-alerts/collector.env`.
+2. Add the variables to the private `/etc/chalk-alerts/collector.env`: the URL of
+   the node (`CHALK_ALERT_SFU_READY_URL`) or of every node
+   (`CHALK_ALERT_SFU_READY_URLS`), plus the certificate, key, CA and server name.
 3. Run `collector --check` and confirm one `sfu-readiness` row with value 0 and
-   reason `ready`.
+   reason `ready`, however many nodes are listed.
 4. Run `provision.py --apply` to reconcile the monitor, which already contains the
    SFU branch. Until a row exists, the branch matches nothing and cannot alert.
 
 Roll out the collector before the SFU carries production traffic, and set the
 variables when the first production node is deployed. To disable the alert, remove
-`CHALK_ALERT_SFU_READY_URL` and restart the timer: the rows stop and the branch
+`CHALK_ALERT_SFU_READY_URL` and `CHALK_ALERT_SFU_READY_URLS` and restart the timer: the rows stop and the branch
 stays idle. For engineers, the alert message points at `/readyz` through the SFU
 deploy tunnel and the node's `media telemetry` journal lines.
 

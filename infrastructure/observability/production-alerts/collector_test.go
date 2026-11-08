@@ -1,0 +1,221 @@
+package main
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+)
+
+// newSFUFleet is a throwaway CA, one server per handler that requires a client
+// certificate signed by it over TLS 1.3, and the files the collector reads. Every
+// returned probe shares the one certificate, like the production nodes.
+func newSFUFleet(t *testing.T, handlers ...http.HandlerFunc) ([]sfuProbe, []*httptest.Server) {
+	t.Helper()
+	dir := t.TempDir()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test ca"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := func(serial int64, usage x509.ExtKeyUsage) tls.Certificate {
+		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		template := &x509.Certificate{SerialNumber: big.NewInt(serial), Subject: pkix.Name{CommonName: "test"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{usage}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu"}}
+		der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+	}
+	write := func(name, kind string, der []byte) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: kind, Bytes: der}), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	client := issue(2, x509.ExtKeyUsageClientAuth)
+	clientKey, err := x509.MarshalPKCS8PrivateKey(client.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(caCert)
+	clientCertFile := write("client.pem", "CERTIFICATE", client.Certificate[0])
+	clientKeyFile := write("client-key.pem", "PRIVATE KEY", clientKey)
+	caFile := write("ca.pem", "CERTIFICATE", caDER)
+	serverCert := issue(3, x509.ExtKeyUsageServerAuth)
+	var probes []sfuProbe
+	var servers []*httptest.Server
+	for _, handler := range handlers {
+		server := httptest.NewUnstartedServer(handler)
+		server.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, ClientCAs: roots, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS13}
+		server.StartTLS()
+		t.Cleanup(server.Close)
+		servers = append(servers, server)
+		probes = append(probes, sfuProbe{URL: server.URL + "/readyz", ServerName: "chalk-sfu", ClientCertFile: clientCertFile, ClientKeyFile: clientKeyFile, CAFile: caFile})
+	}
+	return probes, servers
+}
+
+func ready(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		fmt.Fprint(w, body)
+	}
+}
+
+func sfuBody(reserved int, admission string) string {
+	reason := ""
+	if admission != "" {
+		reason = `"admissionReason":"` + admission + `",`
+	}
+	return fmt.Sprintf(`{"nodeIncarnation":"incarnation-private-test","packetBudget":16000,"reservedPackets":%d,"host":{%s"queueDelayP95Ms":1.5}}`, reserved, reason)
+}
+
+func TestSFUFleetReadinessIsOneRowThatFollowsAnyUnhealthyNode(t *testing.T) {
+	healthy, draining, closed := ready(200, sfuBody(100, "")), ready(503, sfuBody(0, "")), ready(200, sfuBody(100, "cpu_steal"))
+	for _, fixture := range []struct {
+		name     string
+		handlers []http.HandlerFunc
+		reason   string
+		value    int64
+	}{
+		{"one healthy node", []http.HandlerFunc{healthy}, "ready", 0},
+		{"one draining node", []http.HandlerFunc{draining}, "draining", 1},
+		{"all nodes healthy", []http.HandlerFunc{healthy, healthy, healthy}, "ready", 0},
+		{"a draining standby", []http.HandlerFunc{healthy, draining}, "draining", 1},
+		{"a node with admission closed", []http.HandlerFunc{healthy, closed, healthy}, "admission_cpu_steal", 1},
+		{"the first unhealthy node names the reason", []http.HandlerFunc{healthy, closed, draining}, "admission_cpu_steal", 1},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			probes, servers := newSFUFleet(t, fixture.handlers...)
+			item := collectSFUFleetReadiness(context.Background(), probes)
+			if item.Rule != "sfu-readiness" || item.Reason != fixture.reason || item.Value != fixture.value || item.Time == "" {
+				t.Fatalf("unexpected snapshot: %+v", item)
+			}
+			formatMessage(&item)
+			encoded, err := json.Marshal(item)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, server := range servers {
+				if strings.Contains(string(encoded), server.URL) || strings.Contains(string(encoded), "private-test") {
+					t.Fatal(string(encoded))
+				}
+			}
+		})
+	}
+}
+
+func TestSFUFleetReadinessCatchesANodeThatIsDown(t *testing.T) {
+	probes, servers := newSFUFleet(t, ready(200, sfuBody(100, "")), ready(200, sfuBody(100, "")))
+	servers[1].Close()
+	if item := collectSFUFleetReadiness(context.Background(), probes); item.Value != 1 || item.Reason != "unreachable" {
+		t.Fatalf("a node that does not answer must page: %+v", item)
+	}
+}
+
+func TestSFUReadinessRowOnlyWhenConfigured(t *testing.T) {
+	sync := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer sync.Close()
+	items, _ := collectState(context.Background(), sync.Client(), "", sync.URL, nil)
+	if len(items) != 1 || items[0].Rule != "sync-readiness" {
+		t.Fatalf("an unconfigured SFU must emit no row: %+v", items)
+	}
+	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")), ready(200, sfuBody(0, "")))
+	items, _ = collectState(context.Background(), sync.Client(), "", sync.URL, probes)
+	if len(items) != 2 || items[0].Rule != "sync-readiness" || items[1].Rule != "sfu-readiness" || items[1].Value != 0 {
+		t.Fatalf("a configured fleet emits one global row: %+v", items)
+	}
+}
+
+func TestSFUProbesFromEnv(t *testing.T) {
+	t.Setenv("CHALK_ALERT_SFU_SERVER_NAME", "chalk-sfu")
+	urls := func() []string {
+		var got []string
+		for _, probe := range sfuProbesFromEnv() {
+			if probe.ServerName != "chalk-sfu" {
+				t.Fatalf("every node shares the server name: %+v", probe)
+			}
+			got = append(got, probe.URL)
+		}
+		return got
+	}
+	if got := urls(); got != nil {
+		t.Fatalf("no URL must disable the probe: %v", got)
+	}
+	t.Setenv("CHALK_ALERT_SFU_READY_URL", "https://a/readyz")
+	if got, want := urls(), []string{"https://a/readyz"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("the single-node variable must keep working: %v", got)
+	}
+	t.Setenv("CHALK_ALERT_SFU_READY_URLS", " https://b/readyz, ,https://a/readyz,https://c/readyz ")
+	if got, want := urls(), []string{"https://b/readyz", "https://a/readyz", "https://c/readyz"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("the list keeps its order and drops blanks and duplicates: %v", got)
+	}
+}
+
+func TestRetirementDebtSQLAgesTheOldestDebt(t *testing.T) {
+	databaseURL := os.Getenv("CHALK_ALERT_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("requires an isolated CHALK_ALERT_TEST_DATABASE_URL")
+	}
+	ctx := context.Background()
+	conn, err := pgx.Connect(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(ctx)
+	ident := pgx.Identifier{fmt.Sprintf("alert_fixture_%d", time.Now().UnixNano())}.Sanitize()
+	if _, err := conn.Exec(ctx, "CREATE SCHEMA "+ident); err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Exec(ctx, "DROP SCHEMA "+ident+" CASCADE")
+	if _, err := conn.Exec(ctx, "SET search_path TO "+ident+"; CREATE TABLE sfu_retirement_debts(created_at timestamptz NOT NULL DEFAULT now())"); err != nil {
+		t.Fatal(err)
+	}
+	age := func() int64 {
+		var seconds int64
+		if err := conn.QueryRow(ctx, sfuRetirementDebtSQL).Scan(&seconds); err != nil {
+			t.Fatal(err)
+		}
+		return seconds
+	}
+	if got := age(); got != 0 {
+		t.Fatalf("no debt must read as zero: %d", got)
+	}
+	if _, err := conn.Exec(ctx, "INSERT INTO sfu_retirement_debts(created_at) VALUES (now() - interval '20 minutes'), (now() - interval '1 minute')"); err != nil {
+		t.Fatal(err)
+	}
+	if got := age(); got < 1200 || got > 1230 {
+		t.Fatalf("the oldest debt is 20 minutes old: %d", got)
+	}
+}
