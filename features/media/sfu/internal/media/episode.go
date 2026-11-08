@@ -268,10 +268,13 @@ func (n *Node) logCongestionPause(s *subscription, paused bool, now int64) {
 	s.pauseLogged = paused
 	reading := s.transport.reading(now)
 	message := "subscription resumed after a congestion pause"
+	reason := "bandwidth_recovered"
 	if paused {
 		message = "subscription paused for congestion"
+		reason = "insufficient_bandwidth"
 	}
-	n.log.Info(message, "estimateBps", math.Round(reading.current), "provenBps", math.Round(reading.proven),
+	n.log.Info(message, "connectionId", s.owner.id, "mid", s.mid, "rid", s.alloc.rid, "reason", reason,
+		"estimateBps", math.Round(reading.current), "provenBps", math.Round(reading.proven),
 		"deliveredShare", round2(reading.delivered), "probing", reading.probing, "hostPressure", reading.pressured)
 }
 
