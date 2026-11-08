@@ -4,13 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"go.opentelemetry.io/otel/trace"
@@ -188,88 +186,10 @@ type captureTrackKey struct {
 	track string
 }
 
-type captureReplayEntry struct {
-	payloadDigest [32]byte
-	result        any
-}
-
-type captureReplayRegistry struct {
-	mu       sync.Mutex
-	entries  map[string]captureReplayEntry
-	order    []string
-	capacity int
-}
-
 const (
 	captureReplayCapacity   = 1024
 	providerConnectionsPath = "/sessions"
 )
-
-// The adapter replay cache only covers an in-process retry. The durable
-// capturesignaling queue remains the source of truth across restarts and for
-// exact production replay.
-func newCaptureReplayRegistry() *captureReplayRegistry {
-	return &captureReplayRegistry{entries: make(map[string]captureReplayEntry), capacity: captureReplayCapacity}
-}
-
-func captureReplayIdentity(a Adapter, metadata captureplane.OperationMetadata, operation captureplane.OperationKind, input any) (string, [32]byte, error) {
-	scope, err := metadata.IdempotencyScope(operation)
-	if err != nil {
-		return "", [32]byte{}, err
-	}
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return "", [32]byte{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_request", Retryable: false}
-	}
-	return hex.EncodeToString(scope[:]), sha256.Sum256(payload), nil
-}
-
-func captureReplayLookup[T any](a Adapter, metadata captureplane.OperationMetadata, operation captureplane.OperationKind, input any) (T, bool, error) {
-	var zero T
-	key, digest, err := captureReplayIdentity(a, metadata, operation, input)
-	if err != nil {
-		return zero, false, err
-	}
-	if a.captureReplay == nil {
-		return zero, false, nil
-	}
-	a.captureReplay.mu.Lock()
-	entry, ok := a.captureReplay.entries[key]
-	a.captureReplay.mu.Unlock()
-	if !ok {
-		return zero, false, nil
-	}
-	if entry.payloadDigest != digest {
-		return zero, false, captureplane.IdempotencyConflictError{Operation: operation}
-	}
-	result, ok := entry.result.(T)
-	if !ok {
-		return zero, false, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "replay_type_mismatch", Retryable: false}
-	}
-	return result, true, nil
-}
-
-func captureReplayStore[T any](a Adapter, metadata captureplane.OperationMetadata, operation captureplane.OperationKind, input any, result T) error {
-	key, digest, err := captureReplayIdentity(a, metadata, operation, input)
-	if err != nil {
-		return err
-	}
-	if a.captureReplay == nil {
-		return nil
-	}
-	a.captureReplay.mu.Lock()
-	defer a.captureReplay.mu.Unlock()
-	if _, exists := a.captureReplay.entries[key]; !exists {
-		if len(a.captureReplay.order) >= a.captureReplay.capacity {
-			oldest := a.captureReplay.order[0]
-			delete(a.captureReplay.entries, oldest)
-			a.captureReplay.order = a.captureReplay.order[1:]
-		}
-		a.captureReplay.order = append(a.captureReplay.order, key)
-	}
-	a.captureReplay.entries[key] = captureReplayEntry{payloadDigest: digest, result: result}
-	return nil
-}
 
 func captureTrackFailureCount(tracks []captureTrackResult) int {
 	count := 0
@@ -489,7 +409,7 @@ func (a Adapter) CreateCaptureConnection(ctx context.Context, input captureplane
 	if err := input.Validate(); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, err
 	}
-	if result, replayed, err := captureReplayLookup[captureplane.CreateCaptureConnectionResult](a, input.Metadata, captureplane.OperationCreateCaptureConnection, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.CreateCaptureConnectionResult](a.captureReplay, input.Metadata, captureplane.OperationCreateCaptureConnection, input); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, err
 	} else if replayed {
 		return result, nil
@@ -508,7 +428,7 @@ func (a Adapter) CreateCaptureConnection(ctx context.Context, input captureplane
 		return captureplane.CreateCaptureConnectionResult{}, err
 	}
 	result := captureplane.CreateCaptureConnectionResult{Connection: connection, Negotiation: negotiation}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationCreateCaptureConnection, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationCreateCaptureConnection, input, result); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, err
 	}
 	return result, nil
@@ -523,7 +443,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 		return captureplane.PullCaptureTracksResult{}, err
 	}
 	input.Tracks = tracks
-	if result, replayed, err := captureReplayLookup[captureplane.PullCaptureTracksResult](a, input.Metadata, captureplane.OperationPullCaptureTracks, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.PullCaptureTracksResult](a.captureReplay, input.Metadata, captureplane.OperationPullCaptureTracks, input); err != nil {
 		return captureplane.PullCaptureTracksResult{}, err
 	} else if replayed {
 		return result, nil
@@ -553,7 +473,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 			if unavailableErr != nil {
 				return captureplane.PullCaptureTracksResult{}, unavailableErr
 			}
-			if err := captureReplayStore(a, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
+			if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
 				return captureplane.PullCaptureTracksResult{}, err
 			}
 			return result, nil
@@ -583,7 +503,7 @@ func (a Adapter) PullCaptureTracks(ctx context.Context, input captureplane.PullC
 		return captureplane.PullCaptureTracksResult{}, err
 	}
 	result := captureplane.PullCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Tracks: pulled, Negotiation: negotiation}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationPullCaptureTracks, input, result); err != nil {
 		return captureplane.PullCaptureTracksResult{}, err
 	}
 	return result, nil
@@ -726,7 +646,7 @@ func (a Adapter) RenegotiateCaptureConnection(ctx context.Context, input capture
 	if err := input.Validate(); err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, err
 	}
-	if result, replayed, err := captureReplayLookup[captureplane.RenegotiateCaptureConnectionResult](a, input.Metadata, captureplane.OperationRenegotiateCaptureConnection, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.RenegotiateCaptureConnectionResult](a.captureReplay, input.Metadata, captureplane.OperationRenegotiateCaptureConnection, input); err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, err
 	} else if replayed {
 		return result, nil
@@ -742,7 +662,7 @@ func (a Adapter) RenegotiateCaptureConnection(ctx context.Context, input capture
 		return captureplane.RenegotiateCaptureConnectionResult{}, err
 	}
 	result := captureplane.RenegotiateCaptureConnectionResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Negotiation: negotiation}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationRenegotiateCaptureConnection, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationRenegotiateCaptureConnection, input, result); err != nil {
 		return captureplane.RenegotiateCaptureConnectionResult{}, err
 	}
 	return result, nil
@@ -757,7 +677,7 @@ func (a Adapter) InspectCaptureConnection(ctx context.Context, input captureplan
 		return captureplane.InspectCaptureConnectionResult{}, err
 	}
 	input = canonical
-	if result, replayed, err := captureReplayLookup[captureplane.InspectCaptureConnectionResult](a, input.Metadata, captureplane.OperationInspectCaptureConnection, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.InspectCaptureConnectionResult](a.captureReplay, input.Metadata, captureplane.OperationInspectCaptureConnection, input); err != nil {
 		return captureplane.InspectCaptureConnectionResult{}, err
 	} else if replayed {
 		return result, nil
@@ -817,7 +737,7 @@ func (a Adapter) InspectCaptureConnection(ctx context.Context, input captureplan
 		state = captureplane.CaptureConnectionDisconnected
 	}
 	result := captureplane.InspectCaptureConnectionResult{Connection: captureConnection(input.Metadata, input.Connection.String()), State: state, Tracks: observed, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationInspectCaptureConnection, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationInspectCaptureConnection, input, result); err != nil {
 		return captureplane.InspectCaptureConnectionResult{}, err
 	}
 	return result, nil
@@ -854,7 +774,7 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 		return captureplane.CloseCaptureTracksResult{}, err
 	}
 	input.Tracks = tracks
-	if result, replayed, err := captureReplayLookup[captureplane.CloseCaptureTracksResult](a, input.Metadata, captureplane.OperationCloseCaptureTracks, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.CloseCaptureTracksResult](a.captureReplay, input.Metadata, captureplane.OperationCloseCaptureTracks, input); err != nil {
 		return captureplane.CloseCaptureTracksResult{}, err
 	} else if replayed {
 		return result, nil
@@ -880,7 +800,7 @@ func (a Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clos
 		return captureplane.CloseCaptureTracksResult{}, err
 	}
 	result := captureplane.CloseCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Tracks: append([]captureplane.PulledCaptureTrack(nil), input.Tracks...), Negotiation: negotiation}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationCloseCaptureTracks, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationCloseCaptureTracks, input, result); err != nil {
 		return captureplane.CloseCaptureTracksResult{}, err
 	}
 	return result, nil
@@ -922,7 +842,7 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 		return captureplane.CloseCaptureConnectionResult{}, err
 	}
 	input = canonical
-	if result, replayed, err := captureReplayLookup[captureplane.CloseCaptureConnectionResult](a, input.Metadata, captureplane.OperationCloseCaptureConnection, input); err != nil {
+	if result, replayed, err := captureplane.ReplayLookup[captureplane.CloseCaptureConnectionResult](a.captureReplay, input.Metadata, captureplane.OperationCloseCaptureConnection, input); err != nil {
 		return captureplane.CloseCaptureConnectionResult{}, err
 	} else if replayed {
 		return result, nil
@@ -979,7 +899,7 @@ func (a Adapter) CloseCaptureConnection(ctx context.Context, input captureplane.
 		}
 	}
 	result := captureplane.CloseCaptureConnectionResult{Connection: captureConnection(input.Metadata, input.Connection.String()), Closed: true}
-	if err := captureReplayStore(a, input.Metadata, captureplane.OperationCloseCaptureConnection, input, result); err != nil {
+	if err := captureplane.ReplayStore(a.captureReplay, input.Metadata, captureplane.OperationCloseCaptureConnection, input, result); err != nil {
 		return captureplane.CloseCaptureConnectionResult{}, err
 	}
 	return result, nil
