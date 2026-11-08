@@ -3,17 +3,16 @@ import test from "node:test";
 import { checkCaptureSlotFree, slotBlockage, waitForCapture } from "./capture-pool.mjs";
 
 const ours = "recording-ours";
-// The 2026-11-08 nightly case: Capture job e8d1e497 of the 1 h Episode fdea4ab9 was healthy and renewed
-// its lease until the recorder's duration_limit, so it held the only slot for an hour (REPORT.md in the
-// nightly-capture-slot investigation). Ids and the single slot come from that report; the response keys are
-// the ones apps/api/internal/httpapi/recording_capture_pool.go returns.
-// Not recorded there, so these two values are placeholders: the job's last claim time (the job row was
-// created 16:25:26.431829Z and re-leased once; this is its creation time) and its lease expiry (cleared
-// when the job succeeded at 17:25:27.5Z). The optional observed_at is left out.
+// Shape observed on nightly 2026-11-08: a healthy Capture for a 1 h Episode kept renewing its lease until
+// the recorder's duration_limit, so it held the only slot for an hour. The keys are the ones
+// apps/api/internal/httpapi/recording_capture_pool.go returns; the ids are synthetic.
+// The observed response did not record two values, so they are placeholders: claimed_at is the job's
+// creation time (it was re-leased once, so the last claim is unknown) and lease_expires_at is a time inside
+// the hold (the lease was cleared when the job succeeded). The optional observed_at is left out.
 const nightlyHold = {
-  job_id: "e8d1e497-54ae-420e-be02-7ef77059cc82",
-  recording_id: "2a6bacc0-04af-53ed-bfcd-a16c310bcfcb",
-  episode_id: "fdea4ab9-1c5f-417e-a8d5-31f2286f1b40",
+  job_id: "00000000-0000-4000-8000-000000000001",
+  recording_id: "00000000-0000-4000-8000-000000000002",
+  episode_id: "00000000-0000-4000-8000-000000000003",
   claimed_at: "2026-11-08T16:25:26.431829Z",
   lease_expires_at: "2026-11-08T17:00:00Z",
 };
@@ -45,7 +44,7 @@ test("a slot held by another job fails at the early check with that job's detail
   const { result, reads, time } = run({ pool: pool({ held: [nightlyHold] }) });
   await assert.rejects(result, (error) => {
     assert.equal(error.reason, "capture-slot-held");
-    assert.equal(error.message, "capture slot held by job e8d1e497-54ae-420e-be02-7ef77059cc82 since 2026-11-08T16:25:26.431829Z (recording 2a6bacc0-04af-53ed-bfcd-a16c310bcfcb, Episode fdea4ab9-1c5f-417e-a8d5-31f2286f1b40, lease expires 2026-11-08T17:00:00Z)");
+    assert.equal(error.message, "capture slot held by job 00000000-0000-4000-8000-000000000001 since 2026-11-08T16:25:26.431829Z (recording 00000000-0000-4000-8000-000000000002, Episode 00000000-0000-4000-8000-000000000003, lease expires 2026-11-08T17:00:00Z)");
     return true;
   });
   assert.deepEqual(reads, [27_000]);
@@ -100,7 +99,7 @@ test("a pool with free slots or no slots is not a blockage", () => {
 
 test("the oldest foreign hold is named and the rest are counted", () => {
   const second = { ...nightlyHold, job_id: "job-second" };
-  assert.match(slotBlockage(pool({ slots_total: 2, slots_used: 2, held: [nightlyHold, second] }), ours), /^capture slot held by job e8d1e497-54ae-420e-be02-7ef77059cc82 .*\(\+1 more\)$/);
+  assert.match(slotBlockage(pool({ slots_total: 2, slots_used: 2, held: [nightlyHold, second] }), ours), /^capture slot held by job 00000000-0000-4000-8000-000000000001 .*\(\+1 more\)$/);
 });
 
 // The call-artifacts proof uses an automatic Recording, so its id is only known once Capture starts.
@@ -115,7 +114,7 @@ const apiRun = (response) => ({
 test("call-artifacts preflight fails before the call when another job holds the last slot", async () => {
   await assert.rejects(checkCaptureSlotFree(apiRun(pool({ held: [nightlyHold] }))), (error) => {
     assert.equal(error.reason, "capture-slot-held");
-    assert.match(error.message, /^capture slot held by job e8d1e497-54ae-420e-be02-7ef77059cc82 since 2026-11-08T16:25:26.431829Z \(recording 2a6bacc0-04af-53ed-bfcd-a16c310bcfcb, Episode fdea4ab9-/);
+    assert.match(error.message, /^capture slot held by job 00000000-0000-4000-8000-000000000001 since 2026-11-08T16:25:26.431829Z \(recording 00000000-0000-4000-8000-000000000002, Episode 00000000-0000-4000-8000-000000000003,/);
     return true;
   });
 });
@@ -132,5 +131,5 @@ test("an automatic Recording's own hold is not a blockage once its id is known",
   recordingId = nightlyHold.recording_id;
   await assert.rejects(early.result, /Capture ready timed out after 180s/);
   const foreign = run(nightlyPool, { recordingId: () => ours });
-  await assert.rejects(foreign.result, /capture slot held by job e8d1e497-54ae-420e-be02-7ef77059cc82/);
+  await assert.rejects(foreign.result, /capture slot held by job 00000000-0000-4000-8000-000000000001/);
 });
