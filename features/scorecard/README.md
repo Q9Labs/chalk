@@ -88,6 +88,10 @@ their existing permissions. A direct staging dispatch without write access
 fails closed at lease acquisition. The first lease attempt is immediate, then
 retries once with a bounded 10-minute wait.
 
+Cleanup by run ID always runs without taking the lease, even when another lane
+holds it. The cleanup only ends that proof's Episodes and archives its Spaces;
+any deletion failure fails the job. A busy lease must never strand resources.
+
 The measurement reads API-log windows before and after the latency kit and
 queries its complete measurement window after a 30-second ingestion allowance.
 `staging-logs.mjs` owns dataset configuration in one place:

@@ -262,10 +262,8 @@ jobs:
           node features/scorecard/own-sfu.mjs "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
       - name: Clean proof runs
         if: always()
+        # Deleting this run's resources must never wait on another lane's measurement lease.
         env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
-          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
@@ -278,11 +276,7 @@ jobs:
           status=0
           if [ -f .private/proof-run-ids ]; then
             while IFS= read -r run_id; do
-              if [[ "$STAGING_SFU_PROOF" == true ]]; then
-                scripts/staging-sfu/staging-lock --holder nightly-cleanup --purpose cleanup --run-id "$RUN_PREFIX" --wait 60 -- pnpm prod:proof cleanup "$run_id" || status=1
-              else
-                pnpm prod:proof cleanup "$run_id" || status=1
-              fi
+              pnpm prod:proof cleanup "$run_id" || status=1
             done < .private/proof-run-ids
           fi
           exit "$status"

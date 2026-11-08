@@ -150,6 +150,10 @@ Set `net.core.rmem_max`, `net.core.rmem_default`, `net.core.wmem_max` and `net.c
 
 Every lane that drives the staging SFU must run its entire test, rerun, fault test or soak through `scripts/staging-sfu/staging-lock` before touching the node; workflows also use Actions concurrency group `chalk-staging-sfu` with cancellation disabled.
 
+Cleanup of a proof's own resources by run ID is exempt: always end its Episodes
+and archive its Spaces, without waiting for another lane's lease. Cleanup
+failures must fail the job, not silently leave load for later measurements.
+
 From the repository root:
 
 ```sh
