@@ -194,11 +194,12 @@ The `export` proof downloads the Recording MP4. The `call-artifacts` proof then 
 - `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the call;
 - `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
 - each guest's camera colour is visible and moving in all three sampled frames of the composite;
+- each guest's own tile is live in a clear majority of the whole Recording. The proof decodes the composite at two frames per second and, for every sampled interval, checks that the guest's camera colour fills at least 3% of the frame (so a black tile never counts) and that the picture inside moved since the previous sample (so a frozen tile never counts). A tile with no live interval fails, and so does one live in fewer than 60% of the intervals, so "3/3 guests on camera" proves each guest's video and not the total;
 - the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
 
 The private run folder `.private/prod-proof/<run>/` has the Recording evidence file (duration, bytes, codecs,
 decoded frames, audio samples and levels, black, freeze and silence intervals, per-guest camera
-checks), the Transcript evidence file (first 300 characters, word count, speaker names, matched
+checks, and per-guest tile counts: sampled intervals, visible frames, live frames and live share), the Transcript evidence file (first 300 characters, word count, speaker names, matched
 words per guest), the export contact sheet, and the console prints the same summary lines.
 Speaker names in the Transcript are reported but not required to match the guests.
 

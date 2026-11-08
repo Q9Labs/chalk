@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { cameraEvidence, frameSize } from "./recording-rejoin.mjs";
 import { check } from "./runtime.mjs";
+import { decodeFrames, tileEvidence, tileFailure } from "./tile-frames.mjs";
 
 const execute = promisify(execFile);
 const analyzer = new URL("../recorder/analyze-media.mjs", import.meta.url).pathname;
@@ -42,7 +43,7 @@ async function sampleFrames(file, times) {
 }
 
 // The Recording is one composite MP4, so per-guest presence comes from each guest's camera
-// colour in three frames; the mixed audio is checked for sound, and the Transcript attributes speech.
+// colour in three frames and in a frame sampled every half second for the live-tile counts; the mixed audio is checked for sound, and the Transcript attributes speech.
 export async function recordingEvidence(file, guestCount) {
   const analysis = JSON.parse((await tool("node", [analyzer, "--input", file, "--scan-anomalies"], { acceptExit1: true })).stdout);
   const probe = JSON.parse((await tool("ffprobe", ["-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "json", file])).stdout);
@@ -56,6 +57,7 @@ export async function recordingEvidence(file, guestCount) {
           file,
           [0.25, 0.5, 0.75].map((fraction) => durationSeconds * fraction),
         );
+  const tiles = frames.length === 0 ? [] : await tileEvidence(decodeFrames(file), guestCount);
   return {
     bytes: analysis.input.bytes,
     durationSeconds,
@@ -64,7 +66,7 @@ export async function recordingEvidence(file, guestCount) {
     anomalies: analysis.anomalies,
     analyzerFailures: analysis.assertions.filter((assertion) => !assertion.passed).map(({ name, actual, expected }) => ({ name, actual, expected })),
     frameMeans: frames.map(meanChannel),
-    guests: Array.from({ length: guestCount }, (_, guest) => ({ guest: guest + 1, camera: frames.length === 3 ? cameraEvidence(frames, "before", guest) : null })),
+    guests: Array.from({ length: guestCount }, (_, guest) => ({ guest: guest + 1, camera: frames.length === 3 ? cameraEvidence(frames, "before", guest) : null, tile: tiles[guest] ?? null })),
   };
 }
 
@@ -76,9 +78,11 @@ export function recordingFailures(evidence, minimumSeconds) {
   else if (evidence.audio.samples === 0 || !(evidence.audio.maxDb > -50)) failures.push("Recording audio is silent");
   if (evidence.durationSeconds < minimumSeconds) failures.push(`Recording is ${evidence.durationSeconds.toFixed(1)}s, shorter than the ${minimumSeconds}s call`);
   if (evidence.video && evidence.frameMeans.some((mean) => mean < 4)) failures.push("Recording has a black frame");
-  for (const { guest, camera } of evidence.guests) {
+  for (const { guest, camera, tile } of evidence.guests) {
+    const tileProblem = tile && tileFailure(tile);
     if (evidence.video && !camera?.visible) failures.push(`Recording does not show guest ${guest}'s camera`);
     else if (camera && !camera.moving) failures.push(`Recording shows guest ${guest}'s camera frozen`);
+    else if (evidence.video && tileProblem) failures.push(tileProblem);
   }
   return failures;
 }

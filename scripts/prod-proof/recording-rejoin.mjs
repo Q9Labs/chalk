@@ -1,7 +1,7 @@
 import { contactSheetFont } from "./contact-sheet.mjs";
 import { command, check, save } from "./runtime.mjs";
 
-const colors = {
+export const colors = {
   before: [
     [27, 54, 93],
     [97, 60, 105],
@@ -34,16 +34,16 @@ export async function recordingRejoinWindow(run, { pages, rejoin, participants }
   await save(`${run.directory}/rejoin-timeline.json`, timeline);
 }
 
-function near(pixel, color) {
-  return color.every((channel, index) => Math.abs(channel - pixel[index]) <= 22);
+function near(frame, offset, color) {
+  return Math.abs(color[0] - frame[offset]) <= 22 && Math.abs(color[1] - frame[offset + 1]) <= 22 && Math.abs(color[2] - frame[offset + 2]) <= 22;
 }
 
 // Check the exported pixels, not live browser counters. Phase-specific backgrounds
 // also reject a mistaken export-clock alignment or a frozen pre-rejoin picture.
-function cameraRegion(frame, color) {
+export function cameraRegion(frame, color) {
   const region = { count: 0, left: width, right: -1, top: height, bottom: -1 };
   for (let pixel = 0; pixel < width * height; pixel++) {
-    if (!near(frame.subarray(pixel * 3, pixel * 3 + 3), color)) continue;
+    if (!near(frame, pixel * 3, color)) continue;
     const x = pixel % width;
     const y = Math.floor(pixel / width);
     region.count++;
@@ -59,7 +59,7 @@ function* regionPixels(region) {
     for (let x = region.left; x <= region.right; x++) yield (y * width + x) * 3;
   }
 }
-function changedFraction(before, after, region) {
+export function changedFraction(before, after, region) {
   let changed = 0;
   let pixels = 0;
   for (const offset of regionPixels(region)) {
