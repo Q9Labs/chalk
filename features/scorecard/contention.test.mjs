@@ -93,6 +93,39 @@ test("contention schema rejects resource identifiers, extra fields, and fabricat
   assert.throws(() => card({ ...value, steal_max: { value: 0, source: "unavailable" } }), /needs a source/);
 });
 
+test("the cut-scoped promotion evaluator fails closed on valid contended cards", (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "contention-verdict-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const root = resolve(import.meta.dirname, "../..");
+  const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
+  const path = join(directory, "card.json");
+  const output = join(directory, "output");
+  for (const [value, isolation, expected] of [
+    [300, contention(input()), "passed"],
+    [10000, contention(input()), "gated-breach"],
+    [300, contention({ ...input(), lease: { ...lease, lost: true } }), "contended"],
+  ]) {
+    const current = card(isolation, value);
+    current.run.commit = revision;
+    writeFileSync(path, JSON.stringify(current));
+    writeFileSync(output, "");
+    const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "evaluate.mjs"), revision, "123", path], { cwd: root, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: output } });
+    assert.equal(result.status, expected === "passed" ? 0 : 1, result.stderr);
+    if (expected === "contended") {
+      assert.match(result.stderr, /contended measurement is not promotion evidence/);
+      assert.equal(result.stdout, "");
+      assert.equal(readFileSync(output, "utf8"), "");
+    } else {
+      const verdict = JSON.parse(result.stdout);
+      assert.equal(verdict.result, expected);
+      assert.equal(verdict.target_sha, revision);
+      assert.equal(verdict.budgets_revision, revision);
+      assert.equal(verdict.run_id, "123");
+      assert.ok(readFileSync(output, "utf8").includes(`result=${JSON.stringify(verdict)}`));
+    }
+  }
+});
+
 test("Axiom reads are read-only, configured once, and reject partial or malformed windows", async () => {
   const env = { CHALK_AXIOM_STAGING_LOG_DATASET: "test-api", CHALK_AXIOM_QUERY_TOKEN: "test-token" };
   const body = { status: {}, tables: [{ fields: [{ name: "episode_id" }, { name: "session_id" }], columns: [["own-episode"], ["own-session"]] }] };
