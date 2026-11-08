@@ -147,7 +147,7 @@ class ReleasePlan(unittest.TestCase):
         previous['payload']['recorder_control'] = True
         api.items.append(previous)
         self.assertEqual(self.cut(api, 3)['should_cut'], 'false')
-        self.assertIn(f'No cut: cut attempted in the last 6 hours, target {api.tip}', self.summary)
+        self.assertIn(f'No cut: cut attempted in the last 6 hours, target {api.tip}, last attempt run 1', self.summary)
         api.created_at = '2026-10-17T08:00:00Z'
         result = self.cut(api, 8)
         self.assertEqual(result['should_cut'], 'true')
@@ -159,6 +159,7 @@ class ReleasePlan(unittest.TestCase):
         api.tip = 'b' * 40
         api.gates[0]['head_sha'] = api.tip
         self.assertEqual(self.cut(api, 2, workflow_sha=SHA)['should_cut'], 'false')
+        self.assertIn(f'No cut: workflow revision is not the current master tip, target {api.tip}, last attempt none', self.summary)
         self.assertEqual(api.items, [])
         self.assertEqual(api.dispatches, 0)
 
