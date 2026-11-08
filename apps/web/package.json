@@ -49,6 +49,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "aws4fetch": "1.0.20",
     "github-slugger": "2.0.0",
+    "jsdom": "^29.1.1",
     "playwright": "^1.62.1",
     "rehype-autolink-headings": "7.1.0",
     "rehype-slug": "6.0.0",

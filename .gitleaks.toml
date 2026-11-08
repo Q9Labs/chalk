@@ -32,3 +32,8 @@ regexes = ['''^\s*"(?:keystore_sha256": "[0-9a-f]{64}|p12_password_item_id": "[a
 description = "Dashboard UI fixtures return these four deterministic, nonfunctional placeholder credentials."
 regexTarget = "secret"
 regexes = ['''^chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''', '''^chalk_sk_Pq3m8VtL1wXn6RzK2hJc9yBd4sFaG7eU$''', '''^whsec_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''', '''^whsec_Tn5k2LqN0vXc4TzJ7hKp1sYd9mBaE3uG$''']
+
+[[allowlists]]
+description = "Postgres integration tests use a fixture object key and a fixture idempotency key."
+regexTarget = "line"
+regexes = ['''^\s*key := "tenants/fixture/recordings/" \+ fixture\.recordingID\.String\(\) \+ "/capture/1/bundles/0"$''', '''^\s*if _, err := repository\.Patch\(ctx, tenantID, created\.Endpoint\.ID, webhooks\.PatchInput\{Enabled: &enabled, ExpectedRevision: immediate\.Revision, IdempotencyKey: "disable-fence-0001"\}, "", ""\); err != nil \{$''']
