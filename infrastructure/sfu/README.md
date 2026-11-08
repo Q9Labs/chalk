@@ -140,12 +140,12 @@ Run it from a clean checkout, because `deploy` builds the committed revision.
 features/media/sfu/scripts/bench/bench up      # about 5 minutes; prints CHALK_SFU_NODES and the client bundle paths
 features/media/sfu/scripts/bench/bench status  # size, age and estimated cost of every tagged Droplet
 features/media/sfu/scripts/bench/bench down    # delete the fleet and its firewall, then list the tag
-features/media/sfu/scripts/bench/bench reap 4  # delete tagged Droplets older than 4 hours
+features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets older than 3 hours
 ```
 
 - Every Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`. The script
-  lists and deletes only through that tag, so the production and staging nodes
-  and every other Droplet are out of reach.
+  lists and deletes only Droplets with that tag in `sgp1`, so the production and
+  staging nodes and every other Droplet are out of reach.
 - Control (TCP 8443) and SSH accept only this machine's public IPv4 address.
   `BENCH_CONTROL_ADDRESSES` adds comma-separated IPv4 sources for control, such
   as Instabox. The media port stays open to all, like production.
@@ -155,11 +155,16 @@ features/media/sfu/scripts/bench/bench reap 4  # delete tagged Droplets older th
 - `up` ends by calling `/readyz` on both nodes over mutual TLS and requires
   the budgets and two different node incarnations. If any step fails, it deletes
   the fleet before it exits.
-- `down` deletes the fleet's own Droplets (`chalk-sfu-bench-fleet-*`), then lists
-  the tag and exits 1 if one of them remains. Another run that also wears the
-  tag, such as a load generator, is left alone and reported with exit 3. `down
---all` deletes every tagged Droplet. `reap` uses DigitalOcean's creation time,
-  so it works from any machine, and `reap [hours] --dry-run` lists what it would
-  delete.
+- `down` deletes the fleet's own Droplets (`chalk-sfu-bench-fleet-*`), waits
+  until they are gone, then removes the firewall and the certificates and lists
+  the tag. It exits 1 if one of them remains. Another run that also wears the
+  tag, such as a load generator, is left alone and reported with exit 3.
+  `down --all` deletes every tagged Droplet in `sgp1`.
+- `reap [hours]` (default 3) deletes tagged `sgp1` Droplets older than the age
+  whatever their name, including a load generator another run still uses. Skip
+  one with `--exclude <droplet id>`, repeated as needed, and list the targets
+  first with `--dry-run`. It uses DigitalOcean's creation time, so it works from
+  any machine, and it removes the firewall and certificates only after the
+  Droplets are gone.
 
 A stopped Droplet still bills, so never power one off to save money: delete it.
