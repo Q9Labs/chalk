@@ -166,10 +166,15 @@ it("previews and switches real local cameras while unpublished, then releases ca
 it("releases a preview that finishes opening after its menu closes", async () => {
   await load("shell-browser-cameras");
   await expect.poll(() => page.getByRole("button", { name: "Turn on camera", exact: true }).filter({ visible: true }).count()).toBe(1);
-  // Wait for the fixture's retained disabled camera before delaying only preview capture.
+  // Finish the warm preview before delaying only the next capture.
   await page.getByRole("button", { name: "Select camera", exact: true }).filter({ visible: true }).click();
-  await expect.poll(() => page.getByRole("menuitemradio").count()).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => page.getByRole("menuitemradio", { name: /^fake_device_\d+$/ }).count()).toBe(2);
+  const preview = page.locator(".chalk-shell-preview video");
+  await expect.poll(() => preview.evaluate((video: HTMLVideoElement) => video.currentTime)).toBeGreaterThan(0);
+  const warmTrack = await preview.evaluateHandle((video: HTMLVideoElement) => (video.srcObject instanceof MediaStream ? video.srcObject.getVideoTracks()[0] : undefined));
   await page.keyboard.press("Escape");
+  await expect.poll(() => warmTrack.evaluate((track) => track?.readyState)).toBe("ended");
+  await warmTrack.dispose();
   const pending = await page.evaluateHandle(() => {
     const tracks: MediaStreamTrack[] = [];
     let release: (() => void) | undefined;
