@@ -150,7 +150,7 @@ Run it from a clean checkout, because `deploy` builds the committed revision.
 features/media/sfu/scripts/bench/bench up      # about 5 minutes; prints CHALK_SFU_NODES and the client bundle paths
 features/media/sfu/scripts/bench/bench status  # size, age and estimated cost of every tagged Droplet
 features/media/sfu/scripts/bench/bench down    # delete the fleet and its firewall, then list the tag
-features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets older than 3 hours
+features/media/sfu/scripts/bench/bench reap    # delete bench Droplets older than 3 hours
 ```
 
 `features/media/sfu/scripts/bench/faults` is the fault harness of M11 package 5.
@@ -166,9 +166,8 @@ minutes and costs a few cents. The cases open sessions and reserves without a
 WebRTC peer, so they prove admission, drain and restart behavior and not media
 recovery; repair and layer counters reach only the OTLP export.
 
-- Every Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`. The script
-  lists and deletes only Droplets with that tag in `sgp1`, so the production and
-  staging nodes and every other Droplet are out of reach.
+- Every fleet Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`.
+  `status` and `down` use this tag; `down` deletes only in `sgp1`.
 - Control (TCP 8443) and SSH accept only this machine's public IPv4 address.
   `BENCH_CONTROL_ADDRESSES` adds comma-separated IPv4 sources for control, such
   as Instabox. The media port stays open to all, like production.
@@ -183,11 +182,32 @@ recovery; repair and layer counters reach only the OTLP export.
   the tag. It exits 1 if one of them remains. Another run that also wears the
   tag, such as a load generator, is left alone and reported with exit 3.
   `down --all` deletes every tagged Droplet in `sgp1`.
-- `reap [hours]` (default 3) deletes tagged `sgp1` Droplets older than the age
-  whatever their name, including a load generator another run still uses. Skip
+- `reap [hours]` (default 3) deletes Droplets older than the age with a name
+  starting `chalk-sfu-bench` **or** the tag `chalk-sfu-bench`, in any region.
+  This includes legacy rollout load generators with missing or different tags.
+  Names starting `chalk-sfu-staging` or `chalk-sfu-production` are never selected,
+  even if accidentally bench-tagged. Other names without the bench tag are untouched. Skip
   one with `--exclude <droplet id>`, repeated as needed, and list the targets
   first with `--dry-run`. It uses DigitalOcean's creation time, so it works from
   any machine, and it removes the firewall and certificates only after the
   Droplets are gone.
+
+The [SFU bench reaper workflow](../../.github/workflows/sfu-bench-reaper.yml)
+runs `bench reap 4` hourly at minute 23 UTC and supports manual dispatch on
+`master`. It uses the existing `nightly` Environment's `DIGITALOCEAN_ACCESS_TOKEN`,
+as the managed deploy workflow does, and the same `ubuntu-24.04` hosted runners
+as other scheduled workflows. Runs do not overlap. Deletions log the name and ID;
+DigitalOcean list, delete or deletion-poll errors fail the job.
+
+For a longer soak, add a tag `keep-until-<unix-seconds>` to the Droplet, where the
+suffix is the UTC Unix expiry in whole seconds (for example `keep-until-1794153600`).
+The reaper skips it only while at least one well-formed expiry is in the future.
+Expired or malformed keep tags do not prevent deletion once the Droplet is old
+enough. Remove or extend the tag as needed; it never grants a permanent exemption.
+`--exclude` applies only to that invocation, not the scheduled run. Preview with:
+
+```sh
+features/media/sfu/scripts/bench/bench reap 4 --dry-run
+```
 
 A stopped Droplet still bills, so never power one off to save money: delete it.
