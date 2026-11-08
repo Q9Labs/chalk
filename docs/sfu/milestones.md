@@ -556,12 +556,31 @@ lead.
    and observability proof when lifecycle boundaries change.
    Preserve trace/session/operation context through retries and cleanup, and keep
    secrets, SDP, IPs and media out of telemetry.
+
+   **One benchmark on every ship (scorecard parity).** Today only
+   `sfu.loopback.pass` and `sfu.impairment.pass` gate for `chalk_sfu` in
+   `perf/budgets.json`; the `chalk_sfu` and `cf_sfu` action budgets and
+   `proof.leave_median_ms` are `gate:false`, and join startup, loss, stalls,
+   admission refusals, load and `device.*` have no budget. This work adds budgets
+   for join startup, Leave, mic/camera toggles, stalls, `sfu.loss_pct`, admission
+   refusals, load metrics and the `device.*` scenarios (reconnect, network
+   switch, relay/TURN, real browser, phone). A metric nothing emits yet gets one
+   emitter issue, not a budget. A deterministic budget gates from its first
+   commit. A noisy budget flips to `gate:true` in its own PR, only after 7
+   nightly values from at least 3 different nights whose spread is below
+   `tolerancePct`; the 18 `chalk_sfu` action-latency flips are one such PR
+   (earliest around 15 November). `cf_sfu` action budgets stay warn-only and M13
+   deletes them. This is the M7 scorecard follow-up and finishes here.
+
 4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
    only as rollback through M13. When counts show every Tenant and Space on the
-   own provider and the last compatible-client check passes, set
+   own provider and the last compatible-client check passes, and once production
+   has a node configured, the Promote real-call proof also runs on `chalk_sfu`
+   (join startup, Leave, mic/camera toggle) and the scorecard scoring fails the
+   Promote run on regression (rollback stays safe), set
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
