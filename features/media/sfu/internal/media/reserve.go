@@ -151,7 +151,7 @@ func (n *Node) captureBound(shape protocol.EpisodeShape) int {
 // the host guard for an Episode the node does not host, the Episode's mandatory media, the
 // session limit and the packet budget. The same operation ID with the same body returns the first
 // answer; a different body is a conflict. A newer reserve of the Episode replaces its hold, and an
-// older generation is refused.
+// older generation is refused. A reserve of the same generation keeps at least the Participants the hold still promises.
 func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.ReserveEpisodeResponse, error) {
 	ttl, err := n.validateReserve(request)
 	if err != nil {
@@ -176,6 +176,12 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	existing := n.holds[key]
 	if existing != nil && request.Generation < existing.generation || n.newerSession(key, request.Generation) {
 		return protocol.ReserveEpisodeResponse{}, ErrStaleGeneration
+	}
+	// A reserve of the same generation never shrinks the hold it replaces: two replicas that read
+	// different Participant counts both reserve it, and the one that commits the Episode's move
+	// may not be the one that reserves last.
+	if existing != nil && request.Generation == existing.generation {
+		shape.Participants = max(shape.Participants, existing.participants)
 	}
 	if existing == nil && len(n.holds) >= maxHolds {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedHolds, fmt.Errorf("%w: the node holds the most reserved Episodes", ErrCapacityExceeded))

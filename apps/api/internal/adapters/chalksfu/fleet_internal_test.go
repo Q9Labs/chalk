@@ -256,12 +256,32 @@ func TestRecoveryCandidatesFollowPlacementOrderAndSkipSilentDrainingAndFullStand
 		"drain": {budget: testPrimaryBudget, draining: true}, "ok": ready(testPrimaryBudget, 0),
 	})
 	var got []string
-	for _, c := range fleet.recoveryCandidates() {
+	for _, c := range fleet.recoveryCandidates("e") {
 		got = append(got, c.adapter.node)
 	}
 	// A full primary stays: its reserve may hold this very Episode, which the probe cannot show.
 	// A full standby goes: its degraded budget is a limit only the API knows.
 	if want := []string{"full", "ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("candidates %v, want %v: primaries first, then the standby", got, want)
+	}
+}
+
+func TestRecoveryCandidatesKeepAStandbyThatHoldsTheEpisodesOwnReserve(t *testing.T) {
+	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{standby("sfull")}, map[string]*answer{
+		"sfull": ready(testStandbyBudget, testStandbyBudget),
+	})
+	if got := fleet.recoveryCandidates("e"); len(got) != 0 {
+		t.Fatalf("a full standby with no hold of ours is a candidate: %v", got)
+	}
+	fleet.noteHeld("sfull", "e", time.Now().Add(time.Minute))
+	if got := fleet.recoveryCandidates("e"); len(got) != 1 {
+		t.Fatalf("a retry must reach the standby its own reserve filled, got %v", got)
+	}
+	if got := fleet.recoveryCandidates("other"); len(got) != 0 {
+		t.Fatalf("the hold of one Episode opened the standby to another: %v", got)
+	}
+	fleet.noteHeld("sfull", "e", time.Now().Add(-time.Second))
+	if got := fleet.recoveryCandidates("e"); len(got) != 0 {
+		t.Fatalf("an ended hold still opens the standby: %v", got)
 	}
 }

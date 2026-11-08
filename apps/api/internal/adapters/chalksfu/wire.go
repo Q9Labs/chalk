@@ -1,5 +1,7 @@
 package chalksfu
 
+import "time"
+
 // The SFU's control API wire types. They copy features/media/sfu/protocol, which
 // this module cannot import without taking the SFU module's dependency graph.
 // The SFU rejects unknown fields, so the conformance test against the real
@@ -208,6 +210,7 @@ type wireReserveRequest struct {
 }
 
 type wireReserveResponse struct {
-	NodeIncarnation string `json:"nodeIncarnation"`
-	ReservedPackets int    `json:"reservedPackets"`
+	NodeIncarnation string    `json:"nodeIncarnation"`
+	ReservedPackets int       `json:"reservedPackets"`
+	ExpiresAt       time.Time `json:"expiresAt"`
 }

@@ -118,11 +118,12 @@ type candidate struct {
 // the Episode already holds there, which a probe's totals do not, so a retry can reach a node
 // that kept the room it reserved. A standby is the exception: its configured degraded budget is
 // a limit the node does not know, so a standby without room for an Episode under that budget is
-// skipped. It does no I/O and, unlike Place, never offers another
+// skipped unless this process holds the Episode's own reserve there. It does no I/O and, unlike Place, never offers another
 // provider.
-func (f *Fleet) recoveryCandidates() []candidate {
+func (f *Fleet) recoveryCandidates(episodeID string) []candidate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	now := time.Now()
 	var candidates []candidate
 	for _, standby := range []bool{false, true} {
 		for _, node := range f.nodes {
@@ -134,8 +135,10 @@ func (f *Fleet) recoveryCandidates() []candidate {
 				continue
 			}
 			// A standby admits only up to its degraded budget, which the probe's room already
-			// reflects. A primary has no cap below its own budget, so its reserve decides.
-			if standby && !load.fits(len(f.inflightOn(node.node))) {
+			// reflects. A primary has no cap below its own budget, so its reserve decides. A
+			// standby that holds this Episode's own reserve has no room left because of that
+			// hold, so a retry may still try it.
+			if standby && !load.fits(len(f.inflightOn(node.node))) && !now.Before(f.heldUntil[heldKey(node.node, episodeID)]) {
 				continue
 			}
 			candidates = append(candidates, candidate{adapter: node, standby: standby})
@@ -163,7 +166,7 @@ func (f *Fleet) recoveryCandidates() []candidate {
 // outcome. Ending those sessions here could close the ones a winning replica has since rejoined,
 // because the end call carries no allocation fence.
 func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.Binding, tenantID, episodeID string, participants int) (mediaplane.Placement, error) {
-	candidates := f.recoveryCandidates()
+	candidates := f.recoveryCandidates(episodeID)
 	if len(candidates) == 0 {
 		RecordRecovery(ctx, reason, outcomeNoNode)
 		return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcomeNoNode)
@@ -172,28 +175,38 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	window := time.Now().Unix() / int64(hold)
 	refusals, failures := 0, 0
 	for _, node := range candidates {
-		reply, err := node.adapter.reserve(ctx, wireReserveRequest{
-			OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-w%d", episodeID, from.Generation+1, node.adapter.node, participants, window),
-			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
-			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
-			TTLSeconds: hold,
-		})
-		switch {
-		case err == nil && mediaplane.ValidIncarnation(reply.NodeIncarnation):
-			reason := mediaplane.PlacementPrimary
-			if node.standby {
-				reason = mediaplane.PlacementStandby
+		// The reserve asks for room for a screen share first, because a share that is live
+		// cannot be refused after its Participants rejoin. A node that cannot hold the Episode
+		// with a share (a large call, say) is asked again without one.
+		for _, screenShare := range []bool{true, false} {
+			reply, err := node.adapter.reserve(ctx, wireReserveRequest{
+				OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-s%t-w%d", episodeID, from.Generation+1, node.adapter.node, participants, screenShare, window),
+				TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
+				Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: screenShare},
+				TTLSeconds: hold,
+			})
+			switch {
+			case err == nil && mediaplane.ValidIncarnation(reply.NodeIncarnation):
+				f.noteHeld(node.adapter.node, episodeID, reply.ExpiresAt)
+				reason := mediaplane.PlacementPrimary
+				if node.standby {
+					reason = mediaplane.PlacementStandby
+				}
+				return mediaplane.Placement{Node: node.adapter.node, Incarnation: reply.NodeIncarnation, Reason: reason}, nil
+			case err == nil:
+				failures++
+				f.logRecovery(ctx, "chalk sfu reserve answered without an incarnation", node.adapter.node, nil)
+			case errors.Is(err, mediaplane.ErrProviderRateLimited):
+				if screenShare {
+					continue
+				}
+				refusals++
+				f.logRecovery(ctx, "chalk sfu node refused the recovering episode", node.adapter.node, err)
+			default:
+				failures++
+				f.logRecovery(ctx, "chalk sfu node could not reserve the recovering episode", node.adapter.node, err)
 			}
-			return mediaplane.Placement{Node: node.adapter.node, Incarnation: reply.NodeIncarnation, Reason: reason}, nil
-		case err == nil:
-			failures++
-			f.logRecovery(ctx, "chalk sfu reserve answered without an incarnation", node.adapter.node, nil)
-		case errors.Is(err, mediaplane.ErrProviderRateLimited):
-			refusals++
-			f.logRecovery(ctx, "chalk sfu node refused the recovering episode", node.adapter.node, err)
-		default:
-			failures++
-			f.logRecovery(ctx, "chalk sfu node could not reserve the recovering episode", node.adapter.node, err)
+			break
 		}
 		if ctx.Err() != nil {
 			break
@@ -207,6 +220,26 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	}
 	RecordRecovery(ctx, reason, outcome)
 	return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcome)
+}
+
+func heldKey(node, episodeID string) string { return node + "/" + episodeID }
+
+// noteHeld remembers that this process reserved the Episode on the node until the hold ends,
+// so a retry still tries a standby the hold itself filled. Entries past their time go first,
+// which bounds the map by the holds alive at once.
+func (f *Fleet) noteHeld(node, episodeID string, until time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	now := time.Now()
+	for key, expires := range f.heldUntil {
+		if !now.Before(expires) {
+			delete(f.heldUntil, key)
+		}
+	}
+	if f.heldUntil == nil {
+		f.heldUntil = map[string]time.Time{}
+	}
+	f.heldUntil[heldKey(node, episodeID)] = until
 }
 
 func (f *Fleet) recoveryHoldSeconds() int {
