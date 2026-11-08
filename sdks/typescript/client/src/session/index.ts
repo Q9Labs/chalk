@@ -38,7 +38,7 @@ export function newSessionId(): string {
 function browserSession(): string | undefined {
   if (browserId) return browserId;
   if (typeof globalThis.document === "undefined") return undefined;
-  const tab = tabToken();
+  const tab = currentTabId();
   browserId = newSessionId();
   try {
     const storage = globalThis.sessionStorage;
@@ -59,7 +59,7 @@ function storedSession(storage: Storage, tab: string | undefined): string | unde
 }
 
 /** The token that names this tab in `window.name`, which survives reloads but is empty in a duplicated tab. Undefined when the app owns `window.name`. */
-function tabToken(): string | undefined {
+export function currentTabId(): string | undefined {
   const win = globalThis.window;
   if (!win) return undefined;
   if (win.name.startsWith(TAB_NAME_PREFIX)) return win.name;
