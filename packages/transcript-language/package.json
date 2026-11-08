@@ -9,12 +9,10 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "lint": "tsc --noEmit",
-    "test": "node ../../scripts/test/run.mjs vitest run"
+    "lint": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.12"
+    "typescript": "^6.0.3"
   }
 }

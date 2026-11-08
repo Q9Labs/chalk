@@ -65,7 +65,7 @@ TLC's shortest violation of P2 (`results/cf-current-P2-1src.txt`) adds the recon
 3. Drop the Sync connection and reconnect. Serve a snapshot that still shows the participant's microphone enabled.
 4. Observe that no second `setMicrophoneEnabled(false)` is sent. `#resumePendingActions` skips the source because `result.revision === desired.revision` (`sdks/typescript/client/src/space-client/media-controller.ts:702`); if the ports were unbound in between, `#resetObservations` turns the failed result into `confirmed` (`sdks/typescript/client/src/space-client/media-controller.ts:607`). Remote participants keep seeing the microphone as on.
 
-The harness for this lives in `sdks/typescript/client/src/space-client/media-recovery-consent.test.ts` and its neighbours. The steps are written from the model and from reading the code on `origin/master` at `3f9fe4385`; no one has run them against the SDK yet.
+The steps are written from the model and from reading the code on `origin/master` at `3f9fe4385`; no one has run them against the SDK yet.
 
 ## Recommended SDK fix
 
@@ -93,7 +93,7 @@ Fixes 1 and 2 close P2. Fix 3 is what makes P4 hold when the link never drops.
 
 Faults: message loss, duplication and reordering on device to Sync and device to SFU, Sync-link drops, SFU-session drops with a rebuild (new session id), host mute and lift, failed SFU closes (Cloudflare only). Sources: any set of `Sources` (microphone, camera and screen share are interchangeable in the model; they share links and fault budgets).
 
-Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized own SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The own SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests (`features/media/sfu/tests/fencing_test.go`), not by this model.
+Cloudflare today: a close is a separate call and can fail, a dead session's publications stay until closed or garbage-collected, and revoking a grant leaves the publication open until Sync closes it. The idealized own SFU (`own`): closes cannot fail, a dead session's publications vanish, and revoking a grant removes the publication in the same step. That holds only if the SFU and Sync's state change together, which a separate service reached over HTTP cannot do, so `own` does not prove the deployed SFU. The own SFU as a separate service (`own-distributed`) uses the Cloudflare constants: the API's revoke or close call can be lost or fail, and a dead session's publications can linger. The SFU's source fence is atomic only inside its own routing state, and its lease and revision ordering are checked by the SFU's executable tests, not by this model.
 
 ## What it proves and what it does not
 

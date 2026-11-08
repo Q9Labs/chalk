@@ -928,17 +928,6 @@ func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captu
 	return nil
 }
 
-func (a *PionCaptureAttempt) consumePacket(ctx context.Context, writer *captureBundleWriter, event captureRuntimeEvent) error {
-	if (event.packet == nil && event.report == nil) || event.track == nil {
-		return fmt.Errorf("%w: empty RTP event", ErrInvalidCaptureAttempt)
-	}
-	plan, err := a.packetAuthority(ctx)
-	if err != nil {
-		return err
-	}
-	return a.consumeAuthorizedPacket(ctx, writer, event, plan)
-}
-
 // Read authority only after collecting the batch. Reusing an earlier "on"
 // decision for packets that arrive later would store media after a mute.
 func (a *PionCaptureAttempt) consumeQueuedPackets(ctx context.Context, writer *captureBundleWriter, first captureRuntimeEvent, events <-chan captureRuntimeEvent, matches func(captureRuntimeEvent) bool) error {
@@ -1027,10 +1016,6 @@ func capturePacketAllowed(plan captureplan.Plan, track captureplane.PulledCaptur
 		}
 	}
 	return false
-}
-
-func (a *PionCaptureAttempt) emitReady(ctx context.Context, noPublisher bool) error {
-	return a.emitReadyAt(ctx, noPublisher, a.config.Now().UTC())
 }
 
 func (a *PionCaptureAttempt) emitReadyAt(ctx context.Context, noPublisher bool, readyAt time.Time) error {
@@ -1914,12 +1899,6 @@ func (w *captureBundleWriter) addTerminalGapWithContext(ctx context.Context, now
 	}
 	w.terminalGap = true
 	return nil
-}
-
-func (w *captureBundleWriter) close(reason recordingbundle.CloseReason, now time.Time) error {
-	storageCtx, cancel := context.WithTimeout(context.Background(), w.attempt.config.CloseTimeout)
-	defer cancel()
-	return w.closeWithContext(storageCtx, reason, now)
 }
 
 func (w *captureBundleWriter) closeWithContext(ctx context.Context, reason recordingbundle.CloseReason, now time.Time) error {

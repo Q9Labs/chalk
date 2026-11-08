@@ -203,10 +203,6 @@ func (h *receiveHealth) publicationSnapshot(episode ReceiveHealthEpisode, now ti
 	return snapshot
 }
 
-func (h *receiveHealth) publicationIdentities(episode ReceiveHealthEpisode, now time.Time) map[receivePublicationKey][32]byte {
-	return h.publicationSnapshot(episode, now).identities
-}
-
 // RunReceiveHealth discovers listeners independently of signaling requests.
 // The state is diagnostic only; it never changes publication or pull behavior.
 func (s Service) RunReceiveHealth(ctx context.Context) {

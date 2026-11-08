@@ -245,14 +245,6 @@ func (s *sfu) launch(t *testing.T) {
 	}
 }
 
-// restart loses the node: every session, publication and source control goes,
-// and a new process with a new incarnation answers on the same addresses.
-func (s *sfu) restart(t *testing.T) {
-	t.Helper()
-	s.stop()
-	s.launch(t)
-}
-
 func (s *sfu) httpClient(t *testing.T, clientCA *authority, identity string) *http.Client {
 	t.Helper()
 	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
