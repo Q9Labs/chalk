@@ -41,6 +41,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/inspect", s.v1(s.inspect))
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/remove", s.v1(s.removeSession))
 	mux.Handle("POST "+prefix+"/episodes/end", s.v1(s.endEpisode))
+	mux.Handle("POST "+prefix+"/episodes/reserve", s.v1(s.reserveEpisode))
 	mux.Handle("POST "+prefix+"/episodes/sources", s.v1(s.controlSources))
 	mux.Handle("POST "+prefix+"/drain", s.v1(s.drain))
 	mux.Handle("POST "+prefix+"/undrain", s.v1(s.undrain))
@@ -217,6 +218,19 @@ func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID)})
+	return nil
+}
+
+func (s *Server) reserveEpisode(w http.ResponseWriter, r *http.Request) error {
+	var request protocol.ReserveEpisodeRequest
+	if err := s.decode(w, r, &request); err != nil {
+		return err
+	}
+	response, err := s.node.ReserveEpisode(request)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, response)
 	return nil
 }
 
