@@ -30,8 +30,9 @@ The output has no Tenant or Space identifiers, names, emails or rows. A count
 of 1 to 4 prints as `"<5"`, and zero prints as `0`. No total is printed. The
 families of one population (for example the three Tenant families) sum to the
 same hidden total, so a hidden cell could be read off another family. Whenever
-any cell is hidden, every family of the population also hides its smallest
-remaining non-zero cell, so the hidden cells add up to an unknown amount. That
+any cell is hidden, every family of the population also prints `"withheld"`
+for its smallest remaining non-zero cell (its count is 5 or more, possibly far
+more), so the hidden cells add up to an unknown amount. That
 makes a hidden count unrecoverable except when the partner is itself a count
 just above 5. Read the output as internal until a person has checked it against
 the Tenant list, and do not publish more than the command prints.

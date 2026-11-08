@@ -16,10 +16,14 @@ const suppressBelow = 5
 // Cell is one published count.
 type Cell struct {
 	n          int
-	suppressed bool
+	suppressed bool // 1 to 4: prints "<5"
+	withheld   bool // hidden only to protect a small cell: prints "withheld", the count may be large
 }
 
 func (c Cell) String() string {
+	if c.withheld {
+		return "withheld"
+	}
 	if c.suppressed {
 		return "<" + strconv.Itoa(suppressBelow)
 	}
@@ -27,7 +31,7 @@ func (c Cell) String() string {
 }
 
 func (c Cell) MarshalJSON() ([]byte, error) {
-	if c.suppressed {
+	if c.suppressed || c.withheld {
 		return []byte(`"` + c.String() + `"`), nil
 	}
 	return []byte(strconv.Itoa(c.n)), nil
@@ -68,7 +72,7 @@ func publish(drafts ...draft) []Family {
 		partner := ""
 		for _, key := range d.keys {
 			cell := families[i][key]
-			if cell.suppressed || cell.n == 0 {
+			if cell.suppressed || cell.withheld || cell.n == 0 {
 				continue
 			}
 			if partner == "" || cell.n < families[i][partner].n {
@@ -76,7 +80,7 @@ func publish(drafts ...draft) []Family {
 			}
 		}
 		if partner != "" {
-			families[i][partner] = Cell{n: families[i][partner].n, suppressed: true}
+			families[i][partner] = Cell{n: families[i][partner].n, withheld: true}
 		}
 	}
 	return families

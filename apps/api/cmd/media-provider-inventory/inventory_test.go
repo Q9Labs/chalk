@@ -31,16 +31,16 @@ func TestPublishSuppressesSmallCellsAndHidesTheirSum(t *testing.T) {
 	)
 	// One small cell hides itself and the smallest remaining one in every family, so
 	// no family leaves the population total readable.
-	if want := map[string]string{"a": "<5", "b": "10", "c": "<5", "d": "0"}; !maps.Equal(shown(families[0]), want) {
+	if want := map[string]string{"a": "<5", "b": "10", "c": "withheld", "d": "0"}; !maps.Equal(shown(families[0]), want) {
 		t.Fatalf("first = %v, want %v", shown(families[0]), want)
 	}
-	if want := map[string]string{"a": "20", "b": "<5", "c": "0", "d": "0"}; !maps.Equal(shown(families[1]), want) {
+	if want := map[string]string{"a": "20", "b": "withheld", "c": "0", "d": "0"}; !maps.Equal(shown(families[1]), want) {
 		t.Fatalf("second = %v, want %v", shown(families[1]), want)
 	}
 	// Two cells of 1 and a visible total of 12 must not reveal 1 and 1.
 	pair := publish(draft{counts{"a": 1, "b": 1, "c": 10}, []string{"a", "b", "c"}})[0]
-	if got := shown(pair); got["a"] != "<5" || got["b"] != "<5" || got["c"] != "<5" {
-		t.Fatalf("two small cells = %v, want all hidden", got)
+	if got := shown(pair); got["a"] != "<5" || got["b"] != "<5" || got["c"] != "withheld" {
+		t.Fatalf("two small cells = %v, want <5, <5, withheld", got)
 	}
 	clear := publish(draft{counts{"a": 8, "b": 0}, []string{"a", "b"}})[0]
 	if got := shown(clear); got["a"] != "8" || got["b"] != "0" {
