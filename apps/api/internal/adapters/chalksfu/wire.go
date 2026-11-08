@@ -219,6 +219,9 @@ type wireReserveRequest struct {
 	// PacketCeiling caps the node's whole reservation below its own budget; a standby's degraded
 	// budget goes here so the node enforces it against the full shape under its own lock.
 	PacketCeiling int `json:"packetCeiling,omitempty"`
+	// AllocationGeneration is the binding generation the move commits. The node installs it as the
+	// Episode's retirement floor, so a node that restarted refuses what the Episode left.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type wireReserveResponse struct {

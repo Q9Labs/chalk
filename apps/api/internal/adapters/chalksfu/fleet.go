@@ -137,14 +137,24 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
 }
 
-// CapturePlane returns the recorder-facing plane of the node an Episode is bound to, issued under
-// the binding's generation so the node refuses a capture once the Episode is retired above it.
-func (f *Fleet) CapturePlane(id string, generation int64) (captureplane.CapturePlane, error) {
+// Allocation returns the adapter of the node an Episode is bound to, issued under the binding's
+// boot incarnation (empty when the caller has none) and generation. Every create, source control
+// and capture it sends names that generation, so the node refuses it once the Episode is retired
+// above it. Production code reaches a node through here and not through Node, so no caller omits
+// the generation.
+func (f *Fleet) Allocation(id, incarnation string, generation int64) (*Adapter, error) {
 	node, err := f.Node(id)
 	if err != nil {
 		return nil, err
 	}
-	return node.Bound("", generation), nil
+	return node.Bound(incarnation, generation), nil
+}
+
+// CapturePlane returns the recorder-facing plane of the allocation an Episode is bound to. The
+// node refuses a capture once the Episode is retired above the generation, and the plane refuses
+// an answer from another boot than the incarnation.
+func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (captureplane.CapturePlane, error) {
+	return f.Allocation(id, incarnation, generation)
 }
 
 // Place picks the node for a new Episode. Primaries are tried first, in

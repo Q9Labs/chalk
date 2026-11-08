@@ -116,6 +116,9 @@ func (a *Adapter) CreateCaptureConnection(ctx context.Context, input captureplan
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
+	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
+		return captureplane.CreateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, a.discardStaleSession(ctx, created.ConnectionID, request.Scope, err))
+	}
 	reference, err := captureplane.NewProviderReference(strings.TrimSpace(created.ConnectionID))
 	if err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}

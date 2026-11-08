@@ -9,12 +9,20 @@ import (
 )
 
 const (
-	// retiredLimit bounds the retirements a node remembers; the oldest goes first.
-	retiredLimit = 1 << 12
-	// retiredTTL is how long a retirement refuses lower generations. It outlasts any request a
-	// retired allocation can still have in flight, and a node restart clears it sooner.
+	// retiredLimit bounds the retirement floors a node remembers. It is far above the Episodes
+	// one node can run in a day, so reaching it means something is wrong. A floor is never
+	// dropped to make room: a full table closes admission for Episodes without a recorded floor
+	// instead (see refuseUnrecorded).
+	retiredLimit = 1 << 16
+	// retiredTTL is how long a floor refuses lower generations, counted from the last retire of
+	// the Episode. It outlasts any request a retired allocation can still have in flight and
+	// the API's background retries, and a node restart clears the floors sooner.
 	retiredTTL = 24 * time.Hour
+	// reasonRetirementsFull is the admission reason while the table of floors is full.
+	reasonRetirementsFull = "retirements_full"
 )
+
+var errRetirementsFull = fmt.Errorf("%w: the node holds the most retirement floors", ErrCapacityExceeded)
 
 type retirement struct {
 	floor int64
@@ -25,7 +33,13 @@ type retirement struct {
 // one lock it raises the Episode's floor and picks every session below it, so a create that
 // lands before the call is closed by it and one that lands after is refused. The API calls it
 // when it moves an Episode off the node, which is how a join, capture or source grant issued
-// under the old allocation cannot outlive the move. Holds are left to expire.
+// under the old allocation cannot outlive the move. Source grants and forwarding leases of the
+// Episode below the floor lapse in the same step. Holds are left to expire. A caller that names
+// no generation counts as generation 0, so it is below every floor.
+//
+// When the table of floors is full and the Episode has none, the call still ends what is below
+// its generation but cannot record the floor, so it fails with a capacity error and the API
+// asks again.
 func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.RetireEpisodeResponse, error) {
 	scope := protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: 1}
 	if err := ValidateScope(scope); err != nil {
@@ -36,7 +50,17 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	}
 	key := episodeOf(scope)
 	n.mu.Lock()
-	floor := n.raiseRetirement(key, request.Generation)
+	floor, recorded := n.raiseRetirement(key, request.Generation)
+	if !recorded {
+		_ = n.refuse(RefusedRetirements, nil)
+	}
+	// Source authority granted under an older allocation ends too: its lease lapses and the
+	// revision stays, so only a grant under a current allocation forwards again.
+	for source, authority := range n.sources {
+		if sourceEpisode(source) == key && authority.allocation < floor {
+			authority.lapse()
+		}
+	}
 	var ended []*Session
 	for _, session := range n.sessions {
 		if episodeOf(session.scope) == key && session.allocation < floor {
@@ -47,44 +71,75 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	for _, session := range ended {
 		session.Close()
 	}
+	if !recorded {
+		return protocol.RetireEpisodeResponse{}, errRetirementsFull
+	}
 	return protocol.RetireEpisodeResponse{Closed: len(ended), Floor: floor}, nil
 }
 
 // raiseRetirement records the floor and returns the Episode's floor after it. A retirement that
 // is already known keeps its floor and only gains time, so a retry at a lower generation never
-// lowers it, also when the table is full. Only a new Episode makes room by dropping the oldest.
+// lowers it. A floor is never dropped for room: when the table is full and the Episode has none,
+// nothing is recorded and recorded is false. Only floors past their TTL leave the table.
 // The caller holds n.mu.
-func (n *Node) raiseRetirement(key episodeKey, generation int64) int64 {
-	now := n.now()
-	floor := generation
+func (n *Node) raiseRetirement(key episodeKey, generation int64) (floor int64, recorded bool) {
+	n.pruneRetired()
+	floor = generation
 	if known, ok := n.retired[key]; ok {
-		if now.Sub(known.at) <= retiredTTL {
-			floor = max(floor, known.floor)
-		}
+		floor = max(floor, known.floor)
 		n.retiredOrder = slices.DeleteFunc(n.retiredOrder, func(queued episodeKey) bool { return queued == key })
-		delete(n.retired, key)
+	} else if len(n.retiredOrder) >= retiredLimit {
+		return generation, false
 	}
-	for len(n.retiredOrder) > 0 && (len(n.retiredOrder) >= retiredLimit || now.Sub(n.retired[n.retiredOrder[0]].at) > retiredTTL) {
+	n.retired[key] = retirement{floor: floor, at: n.now()}
+	n.retiredOrder = append(n.retiredOrder, key)
+	return floor, true
+}
+
+// pruneRetired drops the floors past their TTL, oldest first. The caller holds n.mu.
+func (n *Node) pruneRetired() {
+	now := n.now()
+	for len(n.retiredOrder) > 0 && now.Sub(n.retired[n.retiredOrder[0]].at) > retiredTTL {
 		delete(n.retired, n.retiredOrder[0])
 		n.retiredOrder = n.retiredOrder[1:]
 	}
-	n.retired[key] = retirement{floor: floor, at: now}
-	n.retiredOrder = append(n.retiredOrder, key)
-	return floor
+}
+
+// retirementsFull reports whether the table of floors cannot take another Episode.
+// The caller holds n.mu.
+func (n *Node) retirementsFull() bool {
+	n.pruneRetired()
+	return len(n.retiredOrder) >= retiredLimit
 }
 
 // refuseRetired reports ErrStaleGeneration for a caller whose allocation generation is below the
-// Episode's retirement floor. A caller that names none is not checked. The caller holds n.mu.
+// Episode's retirement floor. A caller that names none counts as generation 0, so once an Episode
+// has a floor only a caller that names a current generation is admitted. The caller holds n.mu.
 func (n *Node) refuseRetired(key episodeKey, allocation *int64) error {
-	if allocation == nil {
-		return nil
-	}
 	retired, ok := n.retired[key]
 	if !ok || n.now().Sub(retired.at) > retiredTTL {
 		return nil
 	}
-	if *allocation < retired.floor {
+	var generation int64
+	if allocation != nil {
+		generation = *allocation
+	}
+	if generation < retired.floor {
 		return ErrStaleGeneration
 	}
 	return nil
+}
+
+// refuseUnrecorded is the conservative admission a full table of floors falls back to, so a
+// retirement is never forgotten to make room. A create or reserve is refused unless the Episode
+// has a recorded floor (refuseRetired then judges it) or the node already hosts the Episode and
+// the caller names a generation. The caller holds n.mu.
+func (n *Node) refuseUnrecorded(key episodeKey, allocation *int64) error {
+	if !n.retirementsFull() {
+		return nil
+	}
+	if _, floored := n.retired[key]; floored || allocation != nil && n.hostsEpisode(key) {
+		return nil
+	}
+	return n.refuse(RefusedRetirements, errRetirementsFull)
 }

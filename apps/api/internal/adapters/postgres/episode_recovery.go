@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -17,6 +18,7 @@ import (
 type episodeRecoveryDB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
 // EpisodeRecovery is the durable side of whole-Episode recovery: the Episode's size and the
@@ -73,17 +75,33 @@ func (r EpisodeRecovery) MoveBinding(ctx context.Context, tenantID, episodeID ut
 	if err != nil {
 		return mediaplane.Binding{}, fmt.Errorf("encode Episode media plane binding: %w", err)
 	}
-	tag, err := r.db.Exec(ctx, `
-update episodes
-set config_snapshot = jsonb_set(config_snapshot, '{media_plane_binding}', $3::jsonb)
-where tenant_id = $1 and id = $2 and status = 'active'
-  and config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
-  and coalesce((config_snapshot->'media_plane_binding'->>'generation')::bigint, 0) = $4`,
-		uuid(tenantID), uuid(episodeID), encoded, from)
+	nodes, incarnations := make([]string, 0, len(next.PreviousAllocations)), make([]string, 0, len(next.PreviousAllocations))
+	for _, owed := range next.Retirements() {
+		nodes, incarnations = append(nodes, owed.Node), append(incarnations, owed.Incarnation)
+	}
+	// One statement: the move and the retirement debts it creates commit together or not at all.
+	var moved int
+	err = r.db.QueryRow(ctx, `
+with moved as (
+    update episodes
+    set config_snapshot = jsonb_set(config_snapshot, '{media_plane_binding}', $3::jsonb)
+    where tenant_id = $1 and id = $2 and status = 'active'
+      and config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
+      and coalesce((config_snapshot->'media_plane_binding'->>'generation')::bigint, 0) = $4
+    returning tenant_id, id
+), owed as (
+    insert into sfu_retirement_debts (tenant_id, episode_id, node, incarnation, generation)
+    select moved.tenant_id, moved.id, owed.node, owed.incarnation, $5
+    from moved, unnest($6::text[], $7::text[]) as owed(node, incarnation)
+    on conflict (tenant_id, episode_id, node, incarnation)
+    do update set generation = greatest(sfu_retirement_debts.generation, excluded.generation), next_attempt_at = now()
+)
+select count(*) from moved`,
+		uuid(tenantID), uuid(episodeID), encoded, from, next.Generation, nodes, incarnations).Scan(&moved)
 	if err != nil {
 		return mediaplane.Binding{}, fmt.Errorf("move Episode media plane binding: %w", err)
 	}
-	if tag.RowsAffected() == 1 {
+	if moved == 1 {
 		return next, nil
 	}
 	var status string
@@ -103,4 +121,67 @@ where tenant_id = $1 and id = $2 and status = 'active'
 		return mediaplane.Binding{}, fmt.Errorf("decode Episode media plane binding after a lost move: %w", mediaplane.ErrInvalidBinding)
 	}
 	return current, mediaplane.ErrBindingStale
+}
+
+// RecordRetirementDebts adds the debts, keeping the higher generation of one that exists.
+func (r EpisodeRecovery) RecordRetirementDebts(ctx context.Context, debts []mediaplane.RetirementDebt) error {
+	for _, debt := range debts {
+		_, err := r.db.Exec(ctx, `
+insert into sfu_retirement_debts (tenant_id, episode_id, node, incarnation, generation)
+values ($1, $2, $3, $4, $5)
+on conflict (tenant_id, episode_id, node, incarnation)
+do update set generation = greatest(sfu_retirement_debts.generation, excluded.generation)`,
+			uuid(debt.TenantID), uuid(debt.EpisodeID), debt.Allocation.Node, debt.Allocation.Incarnation, debt.Generation)
+		if err != nil {
+			return fmt.Errorf("record retirement debt: %w", err)
+		}
+	}
+	return nil
+}
+
+// ClaimRetirementDebts returns up to limit debts that are due and pushes each one's next attempt
+// out by 5 seconds doubling to 5 minutes, so a node that stays silent costs one call per backoff
+// and concurrent workers skip rows another one has locked.
+func (r EpisodeRecovery) ClaimRetirementDebts(ctx context.Context, limit int) ([]mediaplane.RetirementDebt, error) {
+	rows, err := r.db.Query(ctx, `
+update sfu_retirement_debts debt
+set attempts = debt.attempts + 1,
+    next_attempt_at = now() + make_interval(secs => least(300, 5 * power(2, least(debt.attempts, 6))))
+where (debt.tenant_id, debt.episode_id, debt.node, debt.incarnation) in (
+    select tenant_id, episode_id, node, incarnation from sfu_retirement_debts
+    where next_attempt_at <= now()
+    order by next_attempt_at
+    limit $1
+    for update skip locked)
+returning debt.tenant_id, debt.episode_id, debt.node, debt.incarnation, debt.generation`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("claim retirement debts: %w", err)
+	}
+	defer rows.Close()
+	var debts []mediaplane.RetirementDebt
+	for rows.Next() {
+		var tenantID, episodeID pgtype.UUID
+		var debt mediaplane.RetirementDebt
+		if err := rows.Scan(&tenantID, &episodeID, &debt.Allocation.Node, &debt.Allocation.Incarnation, &debt.Generation); err != nil {
+			return nil, fmt.Errorf("read retirement debt: %w", err)
+		}
+		debt.TenantID, debt.EpisodeID = nullableID(tenantID), nullableID(episodeID)
+		debts = append(debts, debt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read retirement debts: %w", err)
+	}
+	return debts, nil
+}
+
+// SettleRetirementDebt deletes the debt, unless a higher generation was recorded after it was claimed.
+func (r EpisodeRecovery) SettleRetirementDebt(ctx context.Context, debt mediaplane.RetirementDebt) error {
+	_, err := r.db.Exec(ctx, `
+delete from sfu_retirement_debts
+where tenant_id = $1 and episode_id = $2 and node = $3 and incarnation = $4 and generation <= $5`,
+		uuid(debt.TenantID), uuid(debt.EpisodeID), debt.Allocation.Node, debt.Allocation.Incarnation, debt.Generation)
+	if err != nil {
+		return fmt.Errorf("settle retirement debt: %w", err)
+	}
+	return nil
 }

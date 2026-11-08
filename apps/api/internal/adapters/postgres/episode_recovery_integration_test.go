@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -71,6 +72,7 @@ func recoveringEpisode(t *testing.T) (context.Context, *pgxpool.Pool, EpisodeRec
 			query string
 			id    utilities.ID
 		}{
+			{`delete from sfu_retirement_debts where tenant_id = $1`, tenantID},
 			{`delete from episodes where id = $1`, episodeID},
 			{`delete from spaces where id = $1`, spaceID},
 			{`delete from tenants where id = $1`, tenantID},
@@ -191,5 +193,57 @@ func TestConcurrentMovesOfOneBindingHaveOneWinner(t *testing.T) {
 	}
 	if stored, err := store.Binding(ctx, tenantID, episodeID); err != nil || stored.NodeIncarnation != won[0].NodeIncarnation || stored.Generation != 1 {
 		t.Fatalf("stored binding %+v, %v, want the winner's", stored, err)
+	}
+}
+
+// A move records the retirement debt in its own transaction, so a committed move is never without
+// its retire. A move that loses the compare-and-set records none. The worker claims a debt once per
+// backoff, and a settle deletes it unless a newer generation was recorded since.
+func TestAMoveRecordsItsRetirementDebtAtomicallyAndTheWorkerPaysItOnce(t *testing.T) {
+	ctx, pool, store, tenantID, episodeID, bound := recoveringEpisode(t)
+	debtsOf := func() int {
+		t.Helper()
+		var count int
+		if err := pool.QueryRow(ctx, `select count(*) from sfu_retirement_debts where tenant_id = $1 and episode_id = $2`, tenantID.Bytes(), episodeID.Bytes()).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	if _, err := store.MoveBinding(ctx, tenantID, episodeID, 0, moveTo(t, bound, "sfu-b", "bbbb")); err != nil {
+		t.Fatal(err)
+	}
+	if got := debtsOf(); got != 1 {
+		t.Fatalf("%d debts after a move, want the one for sfu-a", got)
+	}
+	if _, err := store.MoveBinding(ctx, tenantID, episodeID, 0, moveTo(t, bound, "sfu-c", "cccc")); !errors.Is(err, mediaplane.ErrBindingStale) {
+		t.Fatalf("stale move: %v", err)
+	}
+	if got := debtsOf(); got != 1 {
+		t.Fatalf("a move that lost the compare-and-set left %d debts, want 1", got)
+	}
+
+	claimed, err := store.ClaimRetirementDebts(ctx, 1000)
+	claimed = slices.DeleteFunc(claimed, func(debt mediaplane.RetirementDebt) bool { return debt.TenantID != tenantID }) // other tests' debts
+	want := mediaplane.RetirementDebt{TenantID: tenantID, EpisodeID: episodeID, Allocation: mediaplane.Allocation{Node: "sfu-a", Incarnation: "aaaa"}, Generation: 1}
+	if err != nil || len(claimed) != 1 || claimed[0] != want {
+		t.Fatalf("claim: %+v, %v, want %+v", claimed, err, want)
+	}
+	again, err := store.ClaimRetirementDebts(ctx, 1000)
+	if again = slices.DeleteFunc(again, func(debt mediaplane.RetirementDebt) bool { return debt.TenantID != tenantID }); err != nil || len(again) != 0 {
+		t.Fatalf("a claimed debt came back at once: %+v, %v", again, err)
+	}
+
+	// A newer generation recorded after the claim survives the settle of the older one.
+	newer := want
+	newer.Generation = 2
+	if err := store.RecordRetirementDebts(ctx, []mediaplane.RetirementDebt{newer}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SettleRetirementDebt(ctx, want); err != nil || debtsOf() != 1 {
+		t.Fatalf("settle at generation 1 removed the debt owed at 2: %v, %d left", err, debtsOf())
+	}
+	if err := store.SettleRetirementDebt(ctx, newer); err != nil || debtsOf() != 0 {
+		t.Fatalf("settle at generation 2: %v, %d left, want 0", err, debtsOf())
 	}
 }

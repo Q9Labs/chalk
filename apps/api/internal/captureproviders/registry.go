@@ -25,7 +25,7 @@ type BindingSource interface {
 // NodePlanes returns the capture plane of one node of a provider that runs several, issued under
 // the binding generation so the node can refuse a capture of a retired allocation.
 type NodePlanes interface {
-	CapturePlane(node string, generation int64) (captureplane.CapturePlane, error)
+	CapturePlane(node, incarnation string, generation int64) (captureplane.CapturePlane, error)
 }
 
 // Registration associates one real media-plane provider with its capture
@@ -107,7 +107,7 @@ func (r *Registry) Resolve(ctx context.Context, identity captureplane.CaptureIde
 	if binding.Node == "" {
 		return nil, resolutionError(ErrInvalidBinding, captureplane.ProviderFailureProtocol, "binding_without_node", false)
 	}
-	plane, err := adapter.nodes.CapturePlane(binding.Node, binding.Generation)
+	plane, err := adapter.nodes.CapturePlane(binding.Node, binding.NodeIncarnation, binding.Generation)
 	if err != nil {
 		return nil, resolutionError(ErrAdapterUnavailable, captureplane.ProviderFailureUnavailable, "node_unavailable", true)
 	}

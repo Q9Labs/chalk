@@ -165,6 +165,12 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	if n.stopped || n.draining {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedDraining, ErrDraining)
 	}
+	if err := n.refuseRetired(key, request.AllocationGeneration); err != nil {
+		return protocol.ReserveEpisodeResponse{}, err
+	}
+	if err := n.refuseUnrecorded(key, request.AllocationGeneration); err != nil {
+		return protocol.ReserveEpisodeResponse{}, err
+	}
 	// reservations drops expired holds first, so everything read below is live.
 	joined, total := n.reservations(nil)
 	if record, ok := n.reserves[request.OperationID]; ok {
@@ -233,6 +239,11 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	if total-current+reserved > budget {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
 	}
+	if request.AllocationGeneration != nil {
+		if _, recorded := n.raiseRetirement(key, *request.AllocationGeneration); !recorded {
+			return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedRetirements, errRetirementsFull)
+		}
+	}
 	expires := n.now().Add(ttl)
 	hold := &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: captureHold, expires: expires}
 	n.holds[key] = hold
@@ -266,6 +277,9 @@ func (n *Node) validateReserve(request protocol.ReserveEpisodeRequest) (time.Dur
 	}
 	if err := ValidateScope(protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: request.Generation}); err != nil {
 		return 0, err
+	}
+	if request.AllocationGeneration != nil && *request.AllocationGeneration < 1 {
+		return 0, fmt.Errorf("%w: allocationGeneration must be at least 1", ErrInvalidRequest)
 	}
 	shape := request.Shape
 	if shape.Participants < 1 || shape.CamerasPerParticipant < 0 || shape.CaptureSlots < 0 || request.PacketCeiling < 0 {

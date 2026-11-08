@@ -650,13 +650,9 @@ func run() error {
 	// nil interface.
 	var chalkNodes providerbridge.ChalkNodes
 	if chalkSFU != nil {
-		chalkNodes = func(node string) (providerbridge.ChalkNode, error) {
-			adapter, err := chalkSFU.Node(node)
-			if err != nil {
-				return nil, err
-			}
-			return adapter, nil
-		}
+		chalkNodes = providerbridge.ChalkNodesOf(func(node string, generation int64) (*chalksfu.Adapter, error) {
+			return chalkSFU.Allocation(node, "", generation)
+		})
 	}
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
@@ -698,6 +694,8 @@ func run() error {
 		go chalkSFU.Watch(signalCtx)
 		// Own SFU nodes forward a source only while the API renews its grant.
 		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
+		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
+		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	receiveHealthDone := make(chan struct{})
 	go func() {

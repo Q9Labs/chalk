@@ -341,11 +341,11 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		return mediaplane.Join{}, a.explainStale(ctx, err)
 	}
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
-		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, input.Scope, err)
+		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
 	}
 	if a.fence != nil {
 		if err := a.fence(ctx); err != nil {
-			return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, input.Scope, err)
+			return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
 		}
 	}
 	participantRef := input.ExternalParticipantID
@@ -369,13 +369,13 @@ func (a *Adapter) explainStale(ctx context.Context, err error) error {
 	return err
 }
 
-// discardStaleSession closes a session a join created and then refused, and returns the join's error. A close
+// discardStaleSession closes a session a join or capture created and then refused, and returns its error. A close
 // that fails is joined to it, so the caller sees that the session may still be live; the
 // Participant's next join replaces it and the Episode's end cleans the retired allocation.
-func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope mediaplane.Scope, cause error) error {
+func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope wireScope, cause error) error {
 	path, err := sessionPath(connectionID, "remove")
 	if err == nil {
-		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: wireScopeOf(scope)}, nil)
+		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: scope}, nil)
 	}
 	if err != nil {
 		return errors.Join(cause, fmt.Errorf("close the session on node %q: %w", a.node, err))

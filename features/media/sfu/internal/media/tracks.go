@@ -59,7 +59,7 @@ type publication struct {
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
-	authority, revision, revoked, err := session.node.authorityFor(session.scope, track.Source)
+	authority, revision, revoked, err := session.node.authorityFor(session.scope, session.allocation, track.Source)
 	if err != nil {
 		return nil, err
 	}

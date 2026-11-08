@@ -11,7 +11,7 @@ func allocationOf(g int64) *int64 { return &g }
 
 // POST /v1/episodes/retire ends the Episode's sessions below a binding generation and refuses
 // every later create, capture and source grant under one, with the stale-generation error. A
-// caller that names no generation is unaffected, and a repeat changes nothing.
+// caller that names no generation counts as generation 0, and a repeat changes nothing.
 func TestRetireEpisodeOverHTTP(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
@@ -53,9 +53,12 @@ func TestRetireEpisodeOverHTTP(t *testing.T) {
 		t.Fatalf("a source grant under generation 1: status %d code %q, want 409 %s", status, code, protocol.CodeStaleGeneration)
 	}
 
-	// The floor and callers that name no generation still join.
+	// A caller that names no generation counts as generation 0, so it is refused too.
+	if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "older-caller", Scope: scope("older")}, nil); status != http.StatusConflict || code != protocol.CodeStaleGeneration {
+		t.Fatalf("a join that names no generation: status %d code %q, want 409 %s", status, code, protocol.CodeStaleGeneration)
+	}
+	// The floor still joins.
 	svc.mustCall(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "floor", Scope: scope("floor"), AllocationGeneration: allocationOf(2)}, &created)
-	svc.mustCall(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "older-caller", Scope: scope("older"), AllocationGeneration: nil}, &created)
 	grant.AllocationGeneration = allocationOf(2)
 	svc.mustCall(t, "/v1/episodes/sources", grant, nil)
 

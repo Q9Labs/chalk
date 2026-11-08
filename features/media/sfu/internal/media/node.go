@@ -383,6 +383,13 @@ func (n *Node) Host() protocol.HostState {
 		UDPSendBufferBytes:    n.sendBuffer,
 	}
 	state.Goroutines, state.HeapInuseBytes = readRuntime()
+	if state.AdmissionReason == "" {
+		n.mu.Lock()
+		if n.retirementsFull() {
+			state.AdmissionReason = reasonRetirementsFull
+		}
+		n.mu.Unlock()
+	}
 	if rss, known := readRSS(rssPath); known {
 		state.RSSBytes = &rss
 	}
@@ -471,6 +478,9 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	n.expireHolds()
 	// A retired allocation takes no create, a replay of an earlier one included.
 	if err := n.refuseRetired(episodeOf(scope), allocation); err != nil {
+		return protocol.CreateSessionResponse{}, nil, err
+	}
+	if err := n.refuseUnrecorded(episodeOf(scope), allocation); err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
 	}
 	// A draining node refuses only new Episodes: a live call on it keeps taking

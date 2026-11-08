@@ -41,15 +41,13 @@ func TestARetireThatOneNodeSwallowsStillReachesTheNextNode(t *testing.T) {
 	for _, id := range []string{"swallowing", "healthy", "current"} {
 		fleet.seen[id] = sighting{at: time.Now(), incarnation: "boot-" + id}
 	}
-	binding := mediaplane.Binding{
-		Node: "current", NodeIncarnation: "boot-current", Generation: 2,
-		PreviousAllocations: []mediaplane.Allocation{{Node: "swallowing", Incarnation: "boot-swallowing"}, {Node: "healthy", Incarnation: "boot-healthy"}},
+	ctx := context.Background()
+	settled, err := fleet.RetireAllocation(ctx, mediaplane.Allocation{Node: "swallowing", Incarnation: "boot-swallowing"}, "tenant", "episode", 2)
+	if settled || err == nil {
+		t.Fatalf("a node that never answered counted as settled: %v, %v", settled, err)
 	}
-	acknowledged, _ := fleet.Retire(context.Background(), binding, "tenant", "episode")
-	if reached.Load() == 0 {
-		t.Fatal("the healthy node never received its retire")
-	}
-	if acknowledged {
-		t.Fatal("a node that never answered counted as acknowledged")
+	settled, err = fleet.RetireAllocation(ctx, mediaplane.Allocation{Node: "healthy", Incarnation: "boot-healthy"}, "tenant", "episode", 2)
+	if !settled || err != nil || reached.Load() == 0 {
+		t.Fatalf("the healthy node's retire: settled %v, err %v, reached %d", settled, err, reached.Load())
 	}
 }

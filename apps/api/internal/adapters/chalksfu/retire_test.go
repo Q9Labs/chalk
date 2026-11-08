@@ -136,7 +136,7 @@ func TestAStaleCapturePlaneIsRefusedByTheRetiredNode(t *testing.T) {
 	bound := placedBinding(t, fleet)
 	store := newRecoveryStore(bound, 2)
 	join(t, primary.service(t), recoveringScope("old-participant"))
-	oldPlane, err := fleet.CapturePlane(bound.Node, bound.Generation)
+	oldPlane, err := fleet.CapturePlane(bound.Node, bound.NodeIncarnation, bound.Generation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,17 +153,14 @@ func TestAStaleCapturePlaneIsRefusedByTheRetiredNode(t *testing.T) {
 	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
 		t.Fatalf("the retired node holds %d sessions, want 0", sessions)
 	}
-	// A caller that names no generation still gets a Participant onto the node, which then hosts
-	// the Episode, so only the generation check can refuse the stale capture.
-	join(t, primary.service(t), recoveringScope("unnamed"))
 	if result, err := oldPlane.CreateCaptureConnection(context.Background(), captureInput()); err == nil {
 		t.Fatalf("a capture was created on the retired allocation: %+v; old sessions %d, new sessions %d", result, stateOf(t, primary).Sessions, stateOf(t, standby).Sessions)
 	}
-	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
-		t.Fatalf("the retired node holds %d sessions, want only the unnamed Participant", sessions)
+	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
+		t.Fatalf("the retired node holds %d sessions after the refused capture, want 0", sessions)
 	}
 	moved, _ := store.current()
-	newPlane, err := fleet.CapturePlane(moved.Node, moved.Generation)
+	newPlane, err := fleet.CapturePlane(moved.Node, moved.NodeIncarnation, moved.Generation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +193,7 @@ func TestARetiredAdapterCannotGrantASourceOrPublish(t *testing.T) {
 	}
 	next := scope
 	next.Generation = 2
-	join(t, *current, next)
+	nextConnection, _ := join(t, *current, next)
 
 	primaryNode, err := fleet.Node(bound.Node)
 	if err != nil {
@@ -209,8 +206,17 @@ func TestARetiredAdapterCannotGrantASourceOrPublish(t *testing.T) {
 	if _, err := retired.ControlSources(context.Background(), grant); err == nil {
 		t.Fatal("an adapter issued under the old binding granted a source after the move")
 	}
-	if _, err := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, retired).AddTracks(context.Background(), mediaplane.TracksRequest{ConnectionID: connection, Scope: scope}); err == nil {
-		t.Fatal("an adapter issued under the old binding took a publication after the move")
+	// A valid publication: a real offer with one audio track. Against a live session this very
+	// request succeeds (the control below), so only the retired session's absence can fail it.
+	publisher := newPeer(t)
+	track := publisher.addAudio(t, "alice-mic")
+	offer := publisher.offer(t)
+	_, err = mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, retired).AddTracks(context.Background(), mediaplane.TracksRequest{
+		ConnectionID: connection, Scope: scope, SessionDescription: &offer,
+		Tracks: []mediaplane.Track{{Location: "local", Mid: publisher.mid(t, track), TrackName: "alice-mic", Source: "microphone"}},
+	})
+	if !errors.Is(err, mediaplane.ErrConnectionNotFound) {
+		t.Fatalf("a publication on the retired session: %v, want the connection-not-found outcome", err)
 	}
 	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
 		t.Fatalf("the retired node holds %d sessions, want 0", sessions)
@@ -218,6 +224,8 @@ func TestARetiredAdapterCannotGrantASourceOrPublish(t *testing.T) {
 	if sessions := stateOf(t, standby).Sessions; sessions != 1 {
 		t.Fatalf("the new node holds %d sessions, want 1", sessions)
 	}
+	// The same publication on the live session of the new allocation succeeds.
+	publish(t, *current, nextConnection, next, "alice-mic-new", "microphone")
 	// The new allocation's adapter grants as usual.
 	newNode, err := fleet.Node("sfu-standby")
 	if err != nil {
@@ -226,40 +234,6 @@ func TestARetiredAdapterCannotGrantASourceOrPublish(t *testing.T) {
 	moved, _ := store.current()
 	if _, err := newNode.Bound(moved.NodeIncarnation, moved.Generation).ControlSources(context.Background(), grant); err != nil {
 		t.Fatalf("the new allocation's source grant: %v", err)
-	}
-}
-
-// A retire the old node never received (the call failed, or the client gave up) is asked for
-// again by the next resolve of a healthy Episode, so the old allocation does not stay live until
-// the Episode ends.
-func TestAHealthyResolveRetriesARetireTheOldNodeMissed(t *testing.T) {
-	ca, primary, standby, nodes := twoNodes(t, roomy)
-	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
-	bound := placedBinding(t, fleet)
-	store := newRecoveryStore(bound, 2)
-	join(t, primary.service(t), recoveringScope("alice"))
-
-	// The Episode moved to the standby and the retire never arrived.
-	moved, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
-	if err != nil {
-		t.Fatal(err)
-	}
-	store.mu.Lock()
-	store.binding = moved
-	store.mu.Unlock()
-	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
-		t.Fatalf("the old node holds %d sessions before the resolve, want 1", sessions)
-	}
-	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
-		t.Fatal(err)
-	}
-	// The retry runs in the background, so a node that swallows the call cannot hold up the resolve.
-	deadline := time.Now().Add(5 * time.Second)
-	for stateOf(t, primary).Sessions != 0 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
-		t.Fatalf("the old node holds %d sessions after a healthy resolve, want 0", sessions)
 	}
 }
 
@@ -280,9 +254,7 @@ func TestAnEpisodeThatReturnsToANodeRetiresItsOldSessionsAndKeepsTheNewOnes(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	store.mu.Lock()
-	store.binding = back
-	store.mu.Unlock()
+	store.set(back)
 	primaryNode, err := fleet.Node("sfu-primary")
 	if err != nil {
 		t.Fatal(err)
@@ -291,14 +263,7 @@ func TestAnEpisodeThatReturnsToANodeRetiresItsOldSessionsAndKeepsTheNewOnes(t *t
 	if sessions := stateOf(t, primary).Sessions; sessions != 2 {
 		t.Fatalf("the node holds %d sessions before the resolve, want the old one and the new one", sessions)
 	}
-	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for stateOf(t, primary).Sessions != 1 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	time.Sleep(200 * time.Millisecond) // a retire that closed too much would have done it by now
+	recoveryRegistry(fleet, store).PayRetirements(context.Background())
 	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
 		t.Fatalf("the node holds %d sessions after the resolve, want only the one joined under generation %d", sessions, back.Generation)
 	}

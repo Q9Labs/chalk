@@ -15,6 +15,7 @@ const (
 	RefusedCameras          = "cameras"
 	RefusedCaptureLimit     = "capture_limit"
 	RefusedHolds            = "holds"
+	RefusedRetirements      = "retirements"
 	RefusedCPUSteal         = reasonCPUSteal
 	RefusedCPUBusy          = reasonCPUBusy
 	RefusedSchedulerLatency = reasonSchedulerLatency
@@ -119,8 +120,12 @@ func (n *Node) Telemetry() Telemetry {
 		PacketBudget: n.cfg.PacketBudget, ReservedPackets: n.reservedPackets(),
 		Refusals: maps.Clone(n.refusals),
 	}
+	retirementsFull := n.retirementsFull()
 	n.mu.Unlock()
 	telemetry.Health = n.guard.snapshot()
+	if telemetry.Health.AdmissionReason == "" && retirementsFull {
+		telemetry.Health.AdmissionReason = reasonRetirementsFull
+	}
 	if errs, known := readUDPErrors(udpStatsPath); known {
 		telemetry.UDPReceiveErrors, telemetry.UDPSendErrors, telemetry.UDPErrorsKnown = errs.receive, errs.send, true
 	}

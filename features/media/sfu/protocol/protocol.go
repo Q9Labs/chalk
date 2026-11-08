@@ -233,6 +233,10 @@ type ReserveEpisodeRequest struct {
 	// PacketCeiling is the most packets/s the node's reservations may total with this hold; zero
 	// means the node's packet budget.
 	PacketCeiling int `json:"packetCeiling,omitempty"`
+	// AllocationGeneration is the binding generation the move commits. The node installs it as the
+	// Episode's retirement floor once it accepts the reserve, so a node that restarted and lost its
+	// floors refuses the generations the Episode left, and refuses a reserve below a floor it holds.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 // ReserveEpisodeResponse reports the reservation. A refusal uses the capacity-exceeded or

@@ -30,6 +30,16 @@ type recoveryStore struct {
 	participants int
 	moves        int
 	crashBefore  error // returned once by MoveBinding before it commits, as a crash would
+	debts        map[debtKey]mediaplane.RetirementDebt
+}
+
+type debtKey struct {
+	tenant, episode utilities.ID
+	node, boot      string
+}
+
+func keyOf(debt mediaplane.RetirementDebt) debtKey {
+	return debtKey{debt.TenantID, debt.EpisodeID, debt.Allocation.Node, debt.Allocation.Incarnation}
 }
 
 func newRecoveryStore(binding mediaplane.Binding, participants int) *recoveryStore {
@@ -66,7 +76,68 @@ func (s *recoveryStore) MoveBinding(_ context.Context, _, _ utilities.ID, from i
 	}
 	s.binding = next
 	s.moves++
+	// The real statement records the debts in the same transaction as the move.
+	for _, old := range next.Retirements() {
+		s.record(mediaplane.RetirementDebt{TenantID: recoveringTenant.ID, EpisodeID: recoveringEpisode, Allocation: old, Generation: next.Generation})
+	}
 	return next, nil
+}
+
+// set puts the store at a binding another replica committed, with the debts that move recorded.
+func (s *recoveryStore) set(binding mediaplane.Binding) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.binding = binding
+	for _, old := range binding.Retirements() {
+		s.record(mediaplane.RetirementDebt{TenantID: recoveringTenant.ID, EpisodeID: recoveringEpisode, Allocation: old, Generation: binding.Generation})
+	}
+}
+
+func (s *recoveryStore) record(debt mediaplane.RetirementDebt) {
+	if s.debts == nil {
+		s.debts = map[debtKey]mediaplane.RetirementDebt{}
+	}
+	if held, ok := s.debts[keyOf(debt)]; !ok || held.Generation < debt.Generation {
+		s.debts[keyOf(debt)] = debt
+	}
+}
+
+func (s *recoveryStore) RecordRetirementDebts(_ context.Context, debts []mediaplane.RetirementDebt) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, debt := range debts {
+		s.record(debt)
+	}
+	return nil
+}
+
+// ClaimRetirementDebts returns every debt: the backoff between attempts is Postgres's, covered
+// by its integration test.
+func (s *recoveryStore) ClaimRetirementDebts(_ context.Context, limit int) ([]mediaplane.RetirementDebt, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var due []mediaplane.RetirementDebt
+	for _, debt := range s.debts {
+		if len(due) < limit {
+			due = append(due, debt)
+		}
+	}
+	return due, nil
+}
+
+func (s *recoveryStore) SettleRetirementDebt(_ context.Context, debt mediaplane.RetirementDebt) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if held, ok := s.debts[keyOf(debt)]; ok && held.Generation <= debt.Generation {
+		delete(s.debts, keyOf(debt))
+	}
+	return nil
+}
+
+func (s *recoveryStore) owed() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.debts)
 }
 
 func (s *recoveryStore) current() (mediaplane.Binding, int) {

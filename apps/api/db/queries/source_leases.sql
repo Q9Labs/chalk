@@ -11,6 +11,7 @@ select
     grant_row.tenant_id,
     grant_row.episode_id,
     coalesce(episode.config_snapshot->'media_plane_binding'->>'node', '')::text as node,
+    coalesce((episode.config_snapshot->'media_plane_binding'->>'generation')::bigint, 0)::bigint as generation,
     grant_row.participant_id,
     grant_row.source,
     grant_row.control_revision::bigint as control_revision

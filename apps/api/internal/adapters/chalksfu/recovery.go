@@ -180,6 +180,7 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	}
 	hold := f.recoveryHoldSeconds()
 	window := time.Now().Unix() / int64(hold)
+	committed := from.Generation + 1
 	refusals, failures := 0, 0
 	for _, node := range candidates {
 		ceiling := 0
@@ -187,9 +188,9 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 			ceiling = f.standbyBudget
 		}
 		request := wireReserveRequest{
-			OperationID:   recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, ceiling, window),
-			PacketCeiling: ceiling,
-			TenantID:      tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
+			OperationID:   recoveryOperationID(episodeID, committed, node.adapter.node, participants, ceiling, window),
+			PacketCeiling: ceiling, AllocationGeneration: &committed,
+			TenantID: tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
 			// A recovered Episode may have a screen share live, and a share the node cannot carry
 			// would be refused after its Participants rejoined, so the reserve always holds room for
 			// one. A node that cannot carry the Episode with a share refuses, and that is the
@@ -308,57 +309,52 @@ func (a *Adapter) checkIncarnation(answered string) error {
 	return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, errStaleIncarnation)
 }
 
-// retireNodeTimeout bounds the retire calls to one node, retries included.
+// retireNodeTimeout bounds one retire call to one node, so a node that swallows the request cannot
+// hold up the others.
 const retireNodeTimeout = 2 * time.Second
 
-// Retire retires the Episode on every allocation its binding left, at the binding's generation:
-// each such node closes the Episode's sessions of lower generations and refuses any later create,
-// capture or source grant under one (see the SFU's POST /v1/episodes/retire). It runs once the
-// move commits, so a join issued under the old binding that lands on the old node afterwards is
-// refused, and one that landed before is closed. It runs again when the Episode ends and on later
-// resolves until every node has answered. It spares what the binding lives on:
-//
-//   - A retired allocation on the node the Episode is bound to now, under another incarnation,
-//     is skipped: that node restarted and holds nothing of it. The same node and incarnation
-//     (the Episode came back to a node that kept its old sessions) is retired like any other,
-//     because the call closes only sessions below the binding's generation, never the ones the
-//     Episode has joined under it.
-//   - A node that answers with another incarnation than the retired one holds nothing of it.
-//   - A node the probes call silent is still asked, because silent only means its last probe
-//     failed and its HTTP side may be up. When it does not answer, that is logged and skipped,
-//     because a node that never returns must not keep the Episode's end from confirming. The
-//     call then reports acknowledged as false, so a later resolve asks again.
-//
-// A node that is not silent and fails is an error. Retiring is idempotent, so a retry is harmless.
-func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID, episodeID string) (acknowledged bool, err error) {
-	var failures []error
-	acknowledged = true
-	for _, old := range binding.PreviousAllocations {
-		if old.Node == binding.Node && old.Incarnation != binding.Current().Incarnation {
-			continue
-		}
-		adapter, err := f.Node(old.Node)
-		if err != nil {
-			continue // a node removed from the configuration has no process to clean
-		}
-		reason, lost := f.Lost(old)
-		if lost && reason != LossSilent {
-			continue
-		}
-		request := wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: binding.Generation}
-		// Each node gets its own bound, so one that swallows the request cannot use up the time
-		// the nodes after it need.
-		nodeCtx, cancel := context.WithTimeout(ctx, retireNodeTimeout)
-		err = adapter.call(nodeCtx, "/v1/episodes/retire", request, nil)
-		cancel()
-		if err != nil {
-			acknowledged = false
-			if lost {
-				f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not retired yet", old.Node, err)
-				continue
-			}
-			failures = append(failures, fmt.Errorf("retire the episode on node %q: %w", old.Node, err))
-		}
+// Retirement outcomes, the label of the retirement metric.
+const (
+	retireAcknowledged = "acknowledged"
+	retireGone         = "gone"
+	retirePending      = "pending"
+)
+
+var retirements, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
+	"chalk.sfu.retirements",
+	metric.WithDescription("Retire calls to the own-SFU allocations whole-Episode recovery left, by outcome"),
+	metric.WithUnit("{retirement}"),
+)
+
+// RetireAllocation retires the Episode on one allocation it left, at the binding's generation:
+// the node closes the Episode's sessions of lower generations, lapses their source leases, and
+// refuses any later create, capture or source grant under one (see the SFU's POST
+// /v1/episodes/retire). Retiring is idempotent, so a retry is harmless. It reports settled when
+// there is nothing left to do: the node acknowledged, answers with another boot than the
+// allocation's and so holds nothing of the Episode, or is no longer configured. Otherwise it
+// returns the error and the caller keeps the debt. A node the probes call silent is still asked,
+// because silent only means its last probe failed and its HTTP side may be up.
+func (f *Fleet) RetireAllocation(ctx context.Context, old mediaplane.Allocation, tenantID, episodeID string, generation int64) (settled bool, err error) {
+	adapter, err := f.Node(old.Node)
+	if err != nil {
+		recordRetirement(ctx, retireGone)
+		return true, nil // a node removed from the configuration has no process to clean
 	}
-	return acknowledged, errors.Join(failures...)
+	if reason, lost := f.Confirm(ctx, old); lost && reason == LossRestarted {
+		recordRetirement(ctx, retireGone)
+		return true, nil
+	}
+	nodeCtx, cancel := context.WithTimeout(ctx, retireNodeTimeout)
+	defer cancel()
+	err = adapter.call(nodeCtx, "/v1/episodes/retire", wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: generation}, nil)
+	if err != nil {
+		recordRetirement(ctx, retirePending)
+		return false, fmt.Errorf("retire the episode on node %q: %w", old.Node, err)
+	}
+	recordRetirement(ctx, retireAcknowledged)
+	return true, nil
+}
+
+func recordRetirement(ctx context.Context, outcome string) {
+	retirements.Add(ctx, 1, metric.WithAttributes(attribute.String("chalk.sfu.retirement.outcome", outcome)))
 }

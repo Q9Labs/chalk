@@ -36,6 +36,7 @@ func (s SourceGrants) ListRenewableSourceGrants(ctx context.Context, after provi
 			TenantID:      nullableID(row.TenantID),
 			EpisodeID:     nullableID(row.EpisodeID),
 			Node:          row.Node,
+			Generation:    row.Generation,
 			ParticipantID: nullableID(row.ParticipantID),
 			Source:        row.Source,
 			Revision:      row.ControlRevision,

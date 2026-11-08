@@ -50,7 +50,16 @@ type EpisodeRecovery interface {
 	// MoveBinding replaces the Episode's binding with next only while the stored binding is
 	// at generation from. When another writer moved it first it returns the stored binding
 	// with mediaplane.ErrBindingStale, so the caller follows the winner.
+	// The move also records, in the same transaction, a retirement debt for each allocation next
+	// owes (next.Retirements()), so a committed move is never without its retires.
 	MoveBinding(ctx context.Context, tenantID, episodeID utilities.ID, from int64, next mediaplane.Binding) (mediaplane.Binding, error)
+	// RecordRetirementDebts adds the debts, keeping the higher generation of a debt that exists.
+	RecordRetirementDebts(ctx context.Context, debts []mediaplane.RetirementDebt) error
+	// ClaimRetirementDebts returns up to limit debts that are due and pushes their next attempt
+	// out by a bounded backoff, so concurrent workers do not take the same debt.
+	ClaimRetirementDebts(ctx context.Context, limit int) ([]mediaplane.RetirementDebt, error)
+	// SettleRetirementDebt deletes the debt unless a higher generation was recorded since.
+	SettleRetirementDebt(ctx context.Context, debt mediaplane.RetirementDebt) error
 }
 
 type Registry struct {
@@ -61,8 +70,6 @@ type Registry struct {
 	chalkSpaces     spaces.ChalkSFUAllowlist
 	episodes        EpisodeReader
 	recovery        EpisodeRecovery
-	// retired remembers which moved Episodes' old nodes acknowledged their retire (see retireLedger).
-	retired *retireLedger
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
 	turn *turn.Credentials
@@ -95,7 +102,6 @@ func NewRegistry(config Config) Registry {
 		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
 		recovery:        config.Recovery,
-		retired:         newRetireLedger(),
 		turn:            turn.New(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
@@ -163,7 +169,6 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 			if *binding, err = r.recoverBinding(ctx, tenant.ID, episodeID, *binding); err != nil {
 				return nil, err
 			}
-			r.reconcileRetirement(ctx, tenant.ID, episodeID, *binding)
 		}
 		allocation, generation = binding.Current(), binding.Generation
 	}
