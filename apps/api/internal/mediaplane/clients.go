@@ -13,7 +13,8 @@ var ErrClientUnsupported = errors.New("the caller's SDK cannot run the Episode's
 // Every released SDK runs Cloudflare, so a caller that declares nothing gets
 // Cloudflare only. The own SFU needs an SDK that declares chalk_sfu.
 type ClientProviders struct {
-	chalk bool
+	chalk   bool
+	assumed bool
 }
 
 // ParseClientProviders reads a comma-separated list of provider names. Names
@@ -31,7 +32,13 @@ func ParseClientProviders(list string) ClientProviders {
 // AllClientProviders is for a request with no SDK of its own to ask, such as a
 // host approving a guest. The guest's SDK is checked when the guest collects access.
 func AllClientProviders() ClientProviders {
-	return ClientProviders{chalk: true}
+	return ClientProviders{chalk: true, assumed: true}
+}
+
+// DeclarationKnown distinguishes a client's declaration (including an absent
+// header) from server-assumed support on requests made on the client's behalf.
+func (c ClientProviders) DeclarationKnown() bool {
+	return !c.assumed
 }
 
 // Runs reports whether the caller's SDK can run the provider.

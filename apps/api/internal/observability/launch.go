@@ -105,10 +105,10 @@ type AccessGrantIssuer struct {
 
 type accessGrantChalkSFUDeclaredContextKey struct{}
 
-// ContextWithAccessGrantClientProviders carries only the parsed capability's
-// bounded boolean to issuance telemetry, not the request header or identities.
+// ContextWithAccessGrantClientProviders carries only parsed capabilities and
+// declaration provenance to issuance telemetry, not request headers or identities.
 func ContextWithAccessGrantClientProviders(ctx context.Context, clients mediaplane.ClientProviders) context.Context {
-	return context.WithValue(ctx, accessGrantChalkSFUDeclaredContextKey{}, clients.Runs(mediaplane.ProviderChalkSFU))
+	return context.WithValue(ctx, accessGrantChalkSFUDeclaredContextKey{}, clients)
 }
 
 func InstrumentAccessGrantIssuer(next accessGrantIssuer, telemetry *LaunchTelemetry) AccessGrantIssuer {
@@ -188,9 +188,12 @@ func (v ParticipantMediaVerifier) VerifyForRecovery(ctx context.Context, credent
 }
 
 func (t *LaunchTelemetry) recordParticipantIssuance(ctx context.Context, outcome, reason string, duration time.Duration) {
-	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
-	chalkSFUDeclared, _ := ctx.Value(accessGrantChalkSFUDeclaredContextKey{}).(bool)
-	t.participantIssuance.Add(ctx, 1, attributes, otelmetric.WithAttributes(attribute.Bool("chalk_sfu_declared", chalkSFUDeclared)))
+	issuanceAttributes := []attribute.KeyValue{attribute.String("outcome", outcome), attribute.String("reason", reason)}
+	attributes := otelmetric.WithAttributes(issuanceAttributes...)
+	if clients, ok := ctx.Value(accessGrantChalkSFUDeclaredContextKey{}).(mediaplane.ClientProviders); ok && clients.DeclarationKnown() {
+		issuanceAttributes = append(issuanceAttributes, attribute.Bool("chalk_sfu_declared", clients.Runs(mediaplane.ProviderChalkSFU)))
+	}
+	t.participantIssuance.Add(ctx, 1, otelmetric.WithAttributes(issuanceAttributes...))
 	t.participantIssuanceDuration.Record(ctx, nonNegative(duration).Seconds(), attributes)
 	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "access grant issuance", "event", "access_grant.issuance", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
 }
