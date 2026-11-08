@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,7 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 	}
 
 	const before int64 = 20261106120000
+	latest := strconv.FormatInt(migrations.LatestVersion, 10)
 	run := func(args ...string) {
 		t.Helper()
 		parsed, err := parseOptions(append([]string{"--database-url-file", file}, args...))
@@ -110,7 +112,7 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 		return version, table
 	}
 
-	run("--target", "20261109090000")
+	run("--target", latest)
 	if version, table := state(); version != migrations.LatestVersion || !table {
 		t.Fatalf("after the up run: version %d, debt table %v", version, table)
 	}
@@ -123,7 +125,7 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 	if version, table := state(); version != before || table {
 		t.Fatalf("after --down-to %d: version %d, debt table %v", before, version, table)
 	}
-	run("--target", "20261109090000")
+	run("--target", latest)
 	if _, table := state(); !table {
 		t.Fatal("the debt table did not come back on the next up")
 	}
