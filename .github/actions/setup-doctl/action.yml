@@ -1,0 +1,28 @@
+name: Set up doctl
+description: Install a pinned doctl release, verified against a checksum recorded here, without calling the GitHub release API.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore the pinned tool downloads
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/chalk-tools
+        key: chalk-tools-doctl-${{ hashFiles('.github/actions/setup-doctl/action.yml') }}
+
+    - name: Install pinned doctl
+      shell: bash
+      run: |
+        set -euo pipefail
+        # DigitalOcean publishes doctl on GitHub, Homebrew, snap and Docker Hub, with no plain
+        # download outside GitHub, so the cache is the fallback when github.com fails. The checksum
+        # is pinned here so a tampered release cannot vouch for itself.
+        version="2.3.0"
+        sha256="782f720843364bfe5e7eaffa561af7685987ec3658510faa64ec330c5ea87a3c"
+        archive="doctl-${version}-linux-amd64.tar.gz"
+        bin_dir="${RUNNER_TEMP}/doctl-bin"
+        mkdir -p "${bin_dir}"
+        download="$(scripts/deploy/install-pinned-tool.sh \
+          "${sha256}=${archive}=https://github.com/digitalocean/doctl/releases/download/v${version}/${archive}")"
+        tar -xzf "${download}" -C "${bin_dir}" doctl
+        echo "${bin_dir}" >> "${GITHUB_PATH}"
