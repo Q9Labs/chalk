@@ -177,7 +177,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 					if !window.Due {
 						return nil
 					}
-					request, err := episodes.NewLingerRequest(tenantID, spaceID, episodeID, timestamp(window.EmptySince))
+					request, err := episodes.NewLingerRequest(tenantID, spaceID, episodeID, timestamp(window.EmptySince), int(window.FailedAttempts))
 					if err != nil {
 						return err
 					}

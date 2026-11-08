@@ -106,13 +106,22 @@ cross join lateral (
         ) end
     ) as empty_since
 ) empty_window
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "<base>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where o.status<>'failed') as live_attempts,
+        (count(*) filter (where o.status='failed'))::integer as failed_attempts,
+        max(o.completed_at) filter (where o.status='failed') as last_failed_at
+    from sync_external_operations o
+    where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+        and o.operation_name='tenant_end_episode'
+        and (o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
+            or o.request_key like 'empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text || '-retry-%')
+) linger
 where episodes.status='active' and empty_window.empty_since is not null
-    and not exists (
-        select 1 from sync_external_operations o
-        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
-            and o.operation_name='tenant_end_episode'
-            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
-    )
+    and linger.live_attempts = 0
+    and (linger.failed_attempts = 0 or linger.last_failed_at
+        + make_interval(mins => least(power(2, least(linger.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
     and episodes.id <> all($2::uuid[])
 order by episodes.id
@@ -945,14 +954,11 @@ func (q *Queries) CreateTenantExternalOperation(ctx context.Context, arg CreateT
 const episodeLingerStillDue = `-- name: EpisodeLingerStillDue :one
 select empty_window.empty_since::timestamptz as empty_since, coalesce(
     episodes.status='active'
-    and not exists (
-        select 1 from sync_external_operations o
-        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
-            and o.operation_name='tenant_end_episode'
-            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
-    )
+    and linger.live_attempts = 0
+    and (linger.failed_attempts = 0 or linger.last_failed_at
+        + make_interval(mins => least(power(2, least(linger.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp(), false
-)::boolean as due
+)::boolean as due, linger.failed_attempts
 from episodes
 left join episode_presence_leases presence on presence.tenant_id=episodes.tenant_id
     and presence.space_id=episodes.space_id and presence.episode_id=episodes.id
@@ -974,6 +980,18 @@ cross join lateral (
         ) end
     ) as empty_since
 ) empty_window
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "<base>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where o.status<>'failed') as live_attempts,
+        (count(*) filter (where o.status='failed'))::integer as failed_attempts,
+        max(o.completed_at) filter (where o.status='failed') as last_failed_at
+    from sync_external_operations o
+    where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+        and o.operation_name='tenant_end_episode'
+        and (o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
+            or o.request_key like 'empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text || '-retry-%')
+) linger
 where episodes.tenant_id=$2 and episodes.space_id=$3 and episodes.id=$4
 `
 
@@ -985,8 +1003,9 @@ type EpisodeLingerStillDueParams struct {
 }
 
 type EpisodeLingerStillDueRow struct {
-	EmptySince pgtype.Timestamptz `json:"empty_since"`
-	Due        bool               `json:"due"`
+	EmptySince     pgtype.Timestamptz `json:"empty_since"`
+	Due            bool               `json:"due"`
+	FailedAttempts int32              `json:"failed_attempts"`
 }
 
 // Recheck both empty signals after the Episode lock. Heartbeat renewal and
@@ -999,7 +1018,7 @@ func (q *Queries) EpisodeLingerStillDue(ctx context.Context, arg EpisodeLingerSt
 		arg.EpisodeID,
 	)
 	var i EpisodeLingerStillDueRow
-	err := row.Scan(&i.EmptySince, &i.Due)
+	err := row.Scan(&i.EmptySince, &i.Due, &i.FailedAttempts)
 	return i, err
 }
 
