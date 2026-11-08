@@ -8,9 +8,16 @@ import time
 from urllib.parse import urlsplit
 
 
-def runtime(name, user_id):
+class ContainerNotRunning(RuntimeError):
+    pass
+
+
+def runtime(name, user_id, timeout=10):
     command = ["sudo", "-u", "#" + str(user_id), "env", "XDG_RUNTIME_DIR=/run/user/" + str(user_id), "podman"]
-    container = json.loads(subprocess.check_output(command + ["inspect", name], text=True))[0]
+    container = json.loads(subprocess.check_output(command + ["container", "inspect", name], text=True,
+                                                  stderr=subprocess.PIPE, timeout=timeout))[0]
+    if not container["State"]["Running"] or container["State"]["Pid"] <= 0:
+        raise ContainerNotRunning("recorder container is not running")
     environment = dict(value.split("=", 1) for value in container["Config"]["Env"] if "=" in value)
     return container, environment, "/proc/" + str(container["State"]["Pid"]) + "/root"
 
@@ -37,22 +44,19 @@ def control(environment, root, body, operation):
     return {"status": int(status), "body": json.loads(raw) if raw else None}
 
 
-def registration(user_id, provider_id):
-    # The issuer container can restart while the check runs, which makes its PID and
-    # /proc root stale. Resolve both on every read; after a short pause for the new
-    # container to start, retry once, then fail with the path.
-    for attempt in (0, 1):
-        _, issuer, root = runtime("chalk-recorder-issuer", user_id)
+def registration(user_id, provider_id, deadline):
+    # Re-resolve the issuer across recreation; its same-named volume outlives it.
+    while time.monotonic() < deadline:
         try:
+            _, issuer, root = runtime("chalk-recorder-issuer", user_id, timeout=max(0.001, min(10, deadline - time.monotonic())))
             state = json.loads(pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_STATE_PATH"]).read_text())
             ca = pathlib.Path(root + issuer["CHALK_RECORDER_FLEET_ISSUER_WORKER_CA_CERT"]).read_text()
-        except FileNotFoundError:
-            if attempt:
-                raise
-            time.sleep(5)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ContainerNotRunning, FileNotFoundError):
+            time.sleep(min(1, max(0, deadline - time.monotonic())))
             continue
         return {"record": state["registrations"].get(provider_id), "ca_pem": ca,
                 "trust_domain": issuer["CHALK_RECORDER_FLEET_ISSUER_SPIFFE_TRUST_DOMAIN"]}
+    raise RuntimeError("issuer container/state did not become ready before the boot-check deadline")
 
 
 def bootstrap_pending(result):
@@ -73,6 +77,7 @@ def duration_seconds(value):
 
 
 def execute(task):
+    deadline = time.monotonic() + task.get("timeout", 60)
     role = task["role"]
     container, environment, root = runtime("chalk-recorder-" + role, task["user_id"])
     if task["action"] == "summary":
@@ -88,18 +93,17 @@ def execute(task):
                 "issuer_control_plane_url": issuer["CHALK_RECORDER_FLEET_ISSUER_CONTROL_PLANE_URL"]}
     if task["action"] == "abandon":
         result = control(environment, root, task["bootstrap"], "abandon")
-        return {**result, **registration(task["user_id"], task["bootstrap"]["provider_id"])}
-    deadline = time.monotonic() + task["timeout"]
+        return {**result, **registration(task["user_id"], task["bootstrap"]["provider_id"], deadline)}
     interval = duration_seconds(environment.get("CHALK_RECORDER_FLEET_RECONCILE_INTERVAL", "5s"))
     history = []
     while time.monotonic() < deadline:
         result = control(environment, root, task["bootstrap"], "register")
         history.append({"time": time.time(), "status": result["status"]})
         history = history[-50:]
-        evidence = registration(task["user_id"], task["bootstrap"]["provider_id"])
+        evidence = registration(task["user_id"], task["bootstrap"]["provider_id"], deadline)
         if result["status"] == 200 and evidence["record"] and evidence["record"]["certificates"]:
             return {"history": history, "controller_response": result, "controller_request": {**task["bootstrap"], "schema_version": "recorder_fleet_bootstrap.v1"}, **evidence}
         if result["status"] != 202 and not bootstrap_pending(result):
             return {"history": history, "controller_response": result, "controller_request": {**task["bootstrap"], "schema_version": "recorder_fleet_bootstrap.v1"}, **evidence}
         time.sleep(min(interval, max(0, deadline - time.monotonic())))
-    return {"history": history, **registration(task["user_id"], task["bootstrap"]["provider_id"])}
+    return {"history": history}
