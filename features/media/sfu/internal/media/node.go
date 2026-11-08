@@ -89,6 +89,11 @@ type Node struct {
 	sourceLimit  int                            // bounds sources, and sourceFloors apart from it
 	sourceFloors map[episodeKey]int64           // highest revision of a source evicted per Episode
 
+	holds        map[episodeKey]*episodeHold // Episodes reserved ahead of their joins (see ReserveEpisode)
+	reserves     map[string]reserveRecord    // reserve results by operation ID, for replay
+	reserveOrder []string                    // reserve operation IDs, oldest first
+	now          func() time.Time            // the clock holds expire by; tests replace it
+
 	// plans holds each Episode's latest plan change. Only the control loop touches it.
 	plans map[episodeKey]int64
 	stats atomic.Pointer[mediaStats]
@@ -165,6 +170,9 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sources:       map[sourceKey]*sourceAuthority{},
 		sourceLimit:   defaultSourceLimit,
 		sourceFloors:  map[episodeKey]int64{},
+		holds:         map[episodeKey]*episodeHold{},
+		reserves:      map[string]reserveRecord{},
+		now:           time.Now,
 		plans:         map[episodeKey]int64{},
 		refusals:      map[string]uint64{},
 		fenceLimit:    defaultFenceLimit,
@@ -446,9 +454,11 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	key := sessionKey(scope, kind)
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	n.expireHolds()
 	// A draining node refuses only new Episodes: a live call on it keeps taking
-	// joins and reconnects, so it can run to its end before the restart.
-	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) {
+	// joins and reconnects, so it can run to its end before the restart. A held Episode is not
+	// new: its reserve passed the drain check.
+	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) && n.heldParticipants(episodeOf(scope)) == 0 {
 		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedDraining, ErrDraining)
 	}
 	if record, ok := n.creates[operationID]; ok {
@@ -462,6 +472,11 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	if scope.Generation < n.fences[key] {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
+	// The per-Participant fence cannot know a Participant that never ran on this node, so the
+	// Episode's hold fences the first rejoin: an older generation than the reserve's is stale.
+	if held := n.holds[episodeOf(scope)]; kind != kindCapture && held != nil && scope.Generation < held.generation {
+		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
+	}
 	evict, err := n.fenceVictim(key)
 	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedFences, err)
@@ -470,11 +485,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	// same generation: the API replaces a media connection that way, and its database has
 	// already superseded the old connection ID.
 	fenced := n.participants[key]
-	live := len(n.sessions)
-	if fenced != nil {
-		live--
-	}
-	if live >= n.cfg.MaxSessions {
+	if n.sessionSlots(scope, kind, fenced) > n.cfg.MaxSessions {
 		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedSessions, ErrCapacityExceeded)
 	}
 	admit := n.admit
@@ -498,6 +509,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	n.participants[key] = session
 	n.raiseFence(key, scope.Generation)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
+	n.settleHold(episodeOf(scope), fenced)
 	return n.responseFor(session.id), fenced, nil
 }
 
@@ -587,6 +599,7 @@ func (n *Node) releaseScreen(s *Session) {
 // EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
 func (n *Node) EndEpisode(tenantID, episodeID string) int {
 	n.mu.Lock()
+	delete(n.holds, episodeKey{tenantID, episodeID})
 	var ended []*Session
 	for _, session := range n.sessions {
 		if session.scope.TenantID == tenantID && session.scope.EpisodeID == episodeID {

@@ -30,6 +30,10 @@ type Session struct {
 	kind            sessionKind
 	// captureReserved is the packets/s the capture's subscriptions reserve. n.mu guards it.
 	captureReserved int
+	// captureHold is the Episode hold this capture drew packets from, and captureBorrowed how many it
+	// still owes it. n.mu guards them.
+	captureHold     *episodeHold
+	captureBorrowed int
 	node            *Node
 	pc              *webrtc.PeerConnection
 

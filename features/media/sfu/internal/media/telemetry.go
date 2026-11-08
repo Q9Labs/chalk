@@ -14,6 +14,7 @@ const (
 	RefusedScreenCeiling    = "screen_ceiling"
 	RefusedCameras          = "cameras"
 	RefusedCaptureLimit     = "capture_limit"
+	RefusedHolds            = "holds"
 	RefusedCPUSteal         = reasonCPUSteal
 	RefusedCPUBusy          = reasonCPUBusy
 	RefusedSchedulerLatency = reasonSchedulerLatency
