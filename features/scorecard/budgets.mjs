@@ -44,6 +44,19 @@ export function planeBudgets(budgets, plane) {
 }
 
 /**
+ * gatedActionIds lists the action.* metric ids whose budget for the plane has gate true, as scorecard metric ids.
+ * A card for that plane must measure each of them.
+ * @param {Record<string, any>} budgets  The budgets object of perf/budgets.json.
+ * @param {string} plane
+ */
+export function gatedActionIds(budgets, plane) {
+  return Object.entries(planeBudgets(budgets, plane))
+    .filter(([id, entry]) => id.startsWith("action.") && entry.gate === true)
+    .map(([id]) => id)
+    .sort();
+}
+
+/**
  * loadCallBudgets returns the file as the call performance check reads it: run settings,
  * the route limits, and one explicit limit per device, scenario and metric. The default limit
  * of a metric is the highest scenario limit, which only a run that records a baseline uses.

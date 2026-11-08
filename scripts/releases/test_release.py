@@ -18,6 +18,18 @@ OTHER_SHA = 'b' * 40
 RUN = '123'
 
 
+def complete(card, budgets=None):
+    """Add the gated chalk_sfu action metrics the card lacks, well under their ceilings, as evaluate.mjs requires."""
+    if budgets is None:
+        budgets = json.loads(subprocess.check_output(['git', 'show', f'{SHA}:perf/budgets.json'], cwd=release.ROOT, text=True))['budgets']
+    have = {metric['id'] for metric in card['metrics']}
+    for key, entry in sorted(budgets.items()):
+        metric = key.removeprefix('chalk_sfu.')
+        if key.startswith('chalk_sfu.action.') and entry['gate'] is True and metric not in have:
+            card['metrics'].append(dict(id=metric, unit='ms', n=20, p50=100, p95=100, source='latency-kit'))
+    return card
+
+
 def held(result='passed', sha=SHA, identity=1):
     info = dict(channel='nightly-cut', target_sha=sha, run_id=RUN, proof_run_id=RUN,
                 release_id='release', applied_release_id='release', proof_result='passed',
@@ -241,7 +253,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
                     for metric in card['metrics']:
                         metric['p95'] = 100
                 path = Path(directory) / 'card.json'
-                path.write_text(json.dumps(card))
+                path.write_text(json.dumps(complete(card)))
                 verdict_output = Path(directory) / 'output'
                 result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)],
                                         cwd=release.ROOT, capture_output=True, text=True,
@@ -286,7 +298,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
             own = Path(directory) / 'own.json'
             for metric in fixture['metrics']:
                 metric['p95'] = 100
-            own.write_text(json.dumps(fixture))
+            own.write_text(json.dumps(complete(fixture)))
             result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path), str(own)], cwd=release.ROOT,
                                     capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -342,11 +354,37 @@ class OwnSfuPromotionTests(unittest.TestCase):
             self.assertIn('chalk_sfu scorecard', summary)
             self.assertIn(reason, summary)
 
+    def test_own_card_lacking_a_gated_action_metric_is_missing_and_names_it(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        full = complete(fixture)
+        for metric in full['metrics']:
+            metric['p95'] = 100
+        gone = 'action.leave_media_removed_ms'
+        absent = copy.deepcopy(full)
+        absent['metrics'] = [metric for metric in absent['metrics'] if metric['id'] != gone]
+        empty = copy.deepcopy(full)
+        next(metric for metric in empty['metrics'] if metric['id'] == gone).update(n=0, p50=None, p95=None)
+        for name, cards, expected in (('absent', [absent], 'missing'), ('no samples', [empty], 'missing'),
+                                      ('split across cards', [absent, dict(full, metrics=[m for m in full['metrics'] if m['id'] == gone])], 'passed')):
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                paths = []
+                for index, card in enumerate(cards):
+                    paths.append(Path(directory) / f'card{index}.json')
+                    paths[-1].write_text(json.dumps(card))
+                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, *map(str, paths)], cwd=release.ROOT,
+                                        capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+                verdict = json.loads(result.stdout)
+                self.assertEqual(verdict['result'], expected)
+                self.assertEqual(result.returncode, 0 if expected == 'passed' else 1, result.stderr)
+                self.assertEqual(verdict['missing_items'], [] if expected == 'passed' else [f'chalk_sfu.{gone}'])
+                self.assertEqual(verdict['gated_metrics'], [])
+
     def test_budget_limits_come_from_scored_commit_not_newer_checkout(self):
         script = release.ROOT / 'features/scorecard/evaluate.mjs'
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
         budgets = json.loads((release.ROOT / 'perf/budgets.json').read_text())
         fixture['metrics'] = [dict(id='action.join.first_audio_ms', unit='ms', n=20, p50=100, p95=300, source='latency-kit')]
+        complete(fixture, budgets['budgets'])
         with tempfile.TemporaryDirectory() as directory:
             directory = Path(directory)
             environment = {**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1', 'GITHUB_OUTPUT': os.devnull}
