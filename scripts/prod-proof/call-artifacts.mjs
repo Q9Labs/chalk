@@ -1,3 +1,4 @@
+import { checkCaptureSlotFree, readCapturePool, waitForCapture } from "./capture-pool.mjs";
 import { generateTurnVoices, turnPhrases } from "./fixture.mjs";
 import { launchGuests } from "./media.mjs";
 import { availableSource, createEpisode, createSpace } from "./proofs.mjs";
@@ -21,10 +22,18 @@ export function callSeconds(environment = process.env) {
   return seconds;
 }
 
+/** Whether the automatic Capture is recording; a failed one throws with the failure code the SDK reports. */
+export function captureReady(current) {
+  if (!current) return false;
+  check(current.status !== "failed", `Capture failed before readiness: ${current.failureCode ?? "no failure code"}`);
+  return current.status === "recording";
+}
+
 // Three headless Chromium guests each publish a camera and a voice that speaks only in its own slot.
 // The Space's automatic policies must start the Recording and the Transcript without any request.
 export async function captureCall(run, receiver) {
   const seconds = callSeconds();
+  await checkCaptureSlotFree(run);
   const space = await createSpace(run, mediaPlane, automatic);
   const { episode, end, useSDK } = await createEpisode(run, space, automatic);
   run.episodeId = episode.id;
@@ -35,7 +44,17 @@ export async function captureCall(run, receiver) {
   await waitFor("every guest receives the other guests' camera and microphone", async () =>
     (await Promise.all(guests.pages.map((page) => page.evaluate(() => window.proofClient.getSnapshot().media.remote.filter((entry) => entry.source === "camera" || entry.source === "microphone").length)))).every((count) => count === others),
   );
-  console.log(`All guests connected; holding the call for ${seconds}s`);
+  await waitForCapture({
+    recordingId: () => run.recordingId,
+    ready: async () => {
+      const current = await guests.pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
+      if (current) run.recordingId = current.recordingId;
+      return captureReady(current);
+    },
+    readPool: () => readCapturePool(run),
+    signal: run.signal,
+  });
+  console.log(`All guests connected and Capture ready; holding the call for ${seconds}s`);
   await run.wait(seconds * 1000);
   console.log("Ending own Episode");
   await end();

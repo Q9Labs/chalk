@@ -31,11 +31,13 @@ No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
 
 The Capture pool is shared and small, so one stale Capture job can block every
-Recording. While it waits for Capture readiness, the proof reads
+Recording. Every proof that records reads
 `GET /v1/tenants/{tenant_id}/recording-capture-pool` (the proof key's
-`recordings:read` scope) after 25 seconds and again at the 180-second timeout.
-When every slot is held and none belongs to this proof's Recording, it fails at
-once with reason `capture-slot-held`. The private evidence names the job,
+`recordings:read` scope) while it waits for Capture readiness, after 25 seconds
+and again at the 180-second timeout. `call-artifacts` (own SFU, automatic
+Recording) also reads it before it creates the Space, so a held slot fails the
+run before any call starts. When every slot is held and none belongs to this
+proof's Recording, it fails at once with reason `capture-slot-held`. The private evidence names the job,
 Recording, Episode, claim time and lease expiry; slots held for other Tenants
 are counted without identifiers. Otherwise it keeps waiting, and the timeout
 message in the private evidence carries the pool readout or why it was

@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { slotBlockage, waitForCapture } from "./capture-pool.mjs";
+import { checkCaptureSlotFree, slotBlockage, waitForCapture } from "./capture-pool.mjs";
 
 const ours = "recording-ours";
-const stale = { job_id: "job-stale", recording_id: "recording-stale", episode_id: "episode-stale", claimed_at: "2026-11-08T01:00:00Z", lease_expires_at: "2026-11-08T01:05:00Z" };
-const own = { ...stale, job_id: "job-ours", recording_id: ours, episode_id: "episode-ours" };
+// Shape observed on nightly 2026-11-08: a healthy Capture for a 1 h Episode kept renewing its lease until
+// the recorder's duration_limit, so it held the only slot for an hour. The keys are the ones
+// apps/api/internal/httpapi/recording_capture_pool.go returns; the ids are synthetic.
+// The observed response did not record two values, so they are placeholders: claimed_at is the job's
+// creation time (it was re-leased once, so the last claim is unknown) and lease_expires_at is a time inside
+// the hold (the lease was cleared when the job succeeded). The optional observed_at is left out.
+const nightlyHold = {
+  job_id: "00000000-0000-4000-8000-000000000001",
+  recording_id: "00000000-0000-4000-8000-000000000002",
+  episode_id: "00000000-0000-4000-8000-000000000003",
+  claimed_at: "2026-11-08T16:25:26.431829Z",
+  lease_expires_at: "2026-11-08T17:00:00Z",
+};
+const own = { ...nightlyHold, job_id: "job-ours", recording_id: ours, episode_id: "episode-ours" };
 const pool = (overrides) => ({ slots_total: 1, slots_used: 1, held: [], held_by_other_tenants: 0, ...overrides });
 
 function fakeTime() {
@@ -29,10 +41,10 @@ function run(outcome, { ready = () => false, ...options } = {}) {
 }
 
 test("a slot held by another job fails at the early check with that job's details", async () => {
-  const { result, reads, time } = run({ pool: pool({ held: [stale] }) });
+  const { result, reads, time } = run({ pool: pool({ held: [nightlyHold] }) });
   await assert.rejects(result, (error) => {
     assert.equal(error.reason, "capture-slot-held");
-    assert.equal(error.message, "capture slot held by job job-stale since 2026-11-08T01:00:00Z (recording recording-stale, Episode episode-stale, lease expires 2026-11-08T01:05:00Z)");
+    assert.equal(error.message, "capture slot held by job 00000000-0000-4000-8000-000000000001 since 2026-11-08T16:25:26.431829Z (recording 00000000-0000-4000-8000-000000000002, Episode 00000000-0000-4000-8000-000000000003, lease expires 2026-11-08T17:00:00Z)");
     return true;
   });
   assert.deepEqual(reads, [27_000]);
@@ -60,14 +72,14 @@ test("an unavailable readout keeps the timeout path and says why", async () => {
   await assert.rejects(result, { reason: "timeout", message: "Capture ready timed out after 180s; capture pool readout unavailable: API resource not found" });
 });
 
-test("a stale job that appears after the early check fails at the timeout", async () => {
+test("a job that appears after the early check fails at the timeout", async () => {
   let reads = 0;
   const time = fakeTime();
   await assert.rejects(
     waitForCapture({
       recordingId: ours,
       ready: () => false,
-      readPool: async () => ({ pool: pool({ slots_used: reads++ === 0 ? 0 : 1, held: reads === 1 ? [] : [stale] }) }),
+      readPool: async () => ({ pool: pool({ slots_used: reads++ === 0 ? 0 : 1, held: reads === 1 ? [] : [nightlyHold] }) }),
       time,
     }),
     { reason: "capture-slot-held" },
@@ -75,17 +87,49 @@ test("a stale job that appears after the early check fails at the timeout", asyn
 });
 
 test("readiness before the early check never reads the pool", async () => {
-  const { result, reads } = run({ pool: pool({ held: [stale] }) }, { ready: () => true });
+  const { result, reads } = run({ pool: pool({ held: [nightlyHold] }) }, { ready: () => true });
   await result;
   assert.deepEqual(reads, []);
 });
 
 test("a pool with free slots or no slots is not a blockage", () => {
-  assert.equal(slotBlockage(pool({ slots_total: 2, slots_used: 1, held: [stale] }), ours), undefined);
+  assert.equal(slotBlockage(pool({ slots_total: 2, slots_used: 1, held: [nightlyHold] }), ours), undefined);
   assert.equal(slotBlockage(pool({ slots_total: 0, slots_used: 0 }), ours), undefined);
 });
 
 test("the oldest foreign hold is named and the rest are counted", () => {
-  const second = { ...stale, job_id: "job-second" };
-  assert.match(slotBlockage(pool({ slots_total: 2, slots_used: 2, held: [stale, second] }), ours), /^capture slot held by job job-stale .*\(\+1 more\)$/);
+  const second = { ...nightlyHold, job_id: "job-second" };
+  assert.match(slotBlockage(pool({ slots_total: 2, slots_used: 2, held: [nightlyHold, second] }), ours), /^capture slot held by job 00000000-0000-4000-8000-000000000001 .*\(\+1 more\)$/);
+});
+
+// The call-artifacts proof uses an automatic Recording, so its id is only known once Capture starts.
+const apiRun = (response) => ({
+  tenantPath: "/v1/tenants/t1",
+  apiRequest: async () => {
+    if (response instanceof Error) throw response;
+    return response;
+  },
+});
+
+test("call-artifacts preflight fails before the call when another job holds the last slot", async () => {
+  await assert.rejects(checkCaptureSlotFree(apiRun(pool({ held: [nightlyHold] }))), (error) => {
+    assert.equal(error.reason, "capture-slot-held");
+    assert.match(error.message, /^capture slot held by job 00000000-0000-4000-8000-000000000001 since 2026-11-08T16:25:26.431829Z \(recording 00000000-0000-4000-8000-000000000002, Episode 00000000-0000-4000-8000-000000000003,/);
+    return true;
+  });
+});
+
+test("call-artifacts preflight passes with a free slot or an unreadable pool", async () => {
+  await checkCaptureSlotFree(apiRun(pool({ slots_used: 0 })));
+  await checkCaptureSlotFree(apiRun(new Error("HTTP 403")));
+});
+
+test("an automatic Recording's own hold is not a blockage once its id is known", async () => {
+  let recordingId;
+  const nightlyPool = { pool: pool({ held: [nightlyHold] }) };
+  const early = run(nightlyPool, { recordingId: () => recordingId });
+  recordingId = nightlyHold.recording_id;
+  await assert.rejects(early.result, /Capture ready timed out after 180s/);
+  const foreign = run(nightlyPool, { recordingId: () => ours });
+  await assert.rejects(foreign.result, /capture slot held by job 00000000-0000-4000-8000-000000000001/);
 });
