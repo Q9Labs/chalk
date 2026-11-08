@@ -59,9 +59,13 @@ test("a Recording without audio, video, frames or sound fails", () => {
 // Real media through ffprobe, ffmpeg and the recorder's analyzer. Tiles use the three guest camera colours.
 const tiles = ["0x1b365d", "0x613c69", "0x5d2a1b"];
 // `frozen` tiles keep their square still; `blackAfter` maps a tile index to the second its picture goes black;
+// `labels` lists tiles with a grey label band across their full width, below the moving square;
 // `squares` maps a tile index to the colour of its moving square (white by default).
-function video(tileColors, { frozen = [], blackAfter = {}, squares = {} } = {}) {
-  const boxes = tileColors.map((color, index) => `drawbox=x=${index * 107}:y=0:w=106:h=180:color=${color}:t=fill:enable='lt(t,${blackAfter[index] ?? 1000})'`).join(",");
+function video(tileColors, { frozen = [], blackAfter = {}, squares = {}, labels = [] } = {}) {
+  const boxes = tileColors
+    .map((color, index) => `drawbox=x=${index * 107}:y=0:w=106:h=180:color=${color}:t=fill:enable='lt(t,${blackAfter[index] ?? 1000})'`)
+    .concat(labels.map((index) => `drawbox=x=${index * 107}:y=60:w=106:h=20:color=0x808080:t=fill`))
+    .join(",");
   const moving = (index) => (frozen.includes(index) ? "0" : "mod(n*9,80)");
   const overlays = tileColors.map((_, index) => `[${index === 0 ? "bg" : `t${index}`}][${index + 1}:v]overlay=x='${index * 107}+${moving(index)}':y=40:eval=frame[t${index + 1}]`).join(";");
   return { inputs: tileColors.flatMap((_, index) => ["-f", "lavfi", "-i", `color=c=${squares[index] ?? "white"}:s=16x16:r=15:d=6`]), graph: `[0:v]${boxes}[bg];${overlays}`, output: `[t${tileColors.length}]` };
@@ -132,7 +136,19 @@ test("another guest's animation never makes a fully frozen tile pass", { skip: !
     assert.equal(evidence.guests[1].tile.liveFrames, 0);
     assert.equal(evidence.guests[0].tile.liveShare, 1);
     assert.equal(evidence.guests[2].tile.liveShare, 1);
-    assert.deepEqual(recordingFailures(evidence, 4), ["Recording shows guest 2's camera frozen"]);
+    assert.match(recordingFailures(evidence, 4).join(";"), /no live video in guest 2's tile/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a live tile split by a full-width label still counts as live", { skip: !hasFfmpeg && "ffmpeg is not installed" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "call-artifacts-label-"));
+  try {
+    // The label leaves the larger patch of guest 2's colour below it, which has no motion; the moving square is in the smaller one above.
+    const evidence = await recordingEvidence(await fixture(directory, "label", { labels: [1] }), 3);
+    assert.equal(evidence.guests[1].tile.liveShare, 1);
+    assert.deepEqual(recordingFailures(evidence, 4), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

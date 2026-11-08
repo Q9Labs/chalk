@@ -34,43 +34,25 @@ export async function recordingRejoinWindow(run, { pages, rejoin, participants }
   await save(`${run.directory}/rejoin-timeline.json`, timeline);
 }
 
-function near(frame, offset, color) {
-  return Math.abs(color[0] - frame[offset]) <= 22 && Math.abs(color[1] - frame[offset + 1]) <= 22 && Math.abs(color[2] - frame[offset + 2]) <= 22;
+function near(pixel, color) {
+  return color.every((channel, index) => Math.abs(channel - pixel[index]) <= 22);
 }
 
 // Check the exported pixels, not live browser counters. Phase-specific backgrounds
 // also reject a mistaken export-clock alignment or a frozen pre-rejoin picture.
-// The region is the largest connected patch of the guest's colour, which is that guest's tile:
-// stray pixels of the same colour inside another guest's animated picture must not widen it.
-const stack = new Int32Array(width * height);
-export function cameraRegion(frame, color) {
-  const matching = new Uint8Array(width * height);
-  for (let pixel = 0; pixel < width * height; pixel++) matching[pixel] = near(frame, pixel * 3, color) ? 1 : 0;
-  let best = { count: 0, left: width, right: -1, top: height, bottom: -1 };
-  for (let seed = 0; seed < width * height; seed++) {
-    if (!matching[seed]) continue;
-    const patch = { count: 0, left: width, right: -1, top: height, bottom: -1 };
-    let size = 0;
-    stack[size++] = seed;
-    matching[seed] = 0;
-    while (size) {
-      const pixel = stack[--size];
-      const x = pixel % width;
-      const y = (pixel - x) / width;
-      patch.count++;
-      patch.left = Math.min(patch.left, x);
-      patch.right = Math.max(patch.right, x);
-      patch.top = Math.min(patch.top, y);
-      patch.bottom = Math.max(patch.bottom, y);
-      for (const next of [x > 0 ? pixel - 1 : -1, x < width - 1 ? pixel + 1 : -1, y > 0 ? pixel - width : -1, y < height - 1 ? pixel + width : -1]) {
-        if (next < 0 || !matching[next]) continue;
-        matching[next] = 0;
-        stack[size++] = next;
-      }
-    }
-    if (patch.count > best.count) best = patch;
+function cameraRegion(frame, color) {
+  const region = { count: 0, left: width, right: -1, top: height, bottom: -1 };
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    if (!near(frame.subarray(pixel * 3, pixel * 3 + 3), color)) continue;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    region.count++;
+    region.left = Math.min(region.left, x);
+    region.right = Math.max(region.right, x);
+    region.top = Math.min(region.top, y);
+    region.bottom = Math.max(region.bottom, y);
   }
-  return best;
+  return region;
 }
 function* regionPixels(region) {
   for (let y = region.top; y <= region.bottom; y++) {
