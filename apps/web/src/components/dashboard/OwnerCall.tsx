@@ -11,6 +11,7 @@ import { dashboardAccessFailure } from "../../lib/dashboard/owner-access";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
+import { createCallAction, readNewCallLanguage } from "./transcript-languages";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
@@ -232,7 +233,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
           startingCall.current = true;
           owner.clearReload();
           setStartError("Starting a new call…");
-          void act("home", { action: "create-call", admission: "knock", idempotencyKey: startKey.current })
+          void act("home", createCallAction(startKey.current, readNewCallLanguage()))
             .then(({ call }) => navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } }))
             .catch(() => setStartError("Couldn’t start a new call. Try again."))
             .finally(() => {

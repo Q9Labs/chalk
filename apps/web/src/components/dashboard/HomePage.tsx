@@ -9,7 +9,7 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
-import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
+import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */
 async function inviteLink(call: HomeCallDTO): Promise<string> {
@@ -117,7 +117,7 @@ export function HomePage() {
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
-      const { call } = await act("home", { action: "create-call", admission: "knock", ...(language ? { transcriptLanguage: language } : {}), idempotencyKey: startKey.current });
+      const { call } = await act("home", createCallAction(startKey.current, language));
       startKey.current = intentKey();
       // The empty-state opener disappears when the first row is added.
       startButton.current?.focus();
