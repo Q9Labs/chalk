@@ -42,6 +42,7 @@ type Fleet struct {
 // hasRoom false, so placement skips it, and is told apart from a silent node.
 type nodeLoad struct {
 	hasRoom     bool // the budget left fits a new Episode
+	hostGuard   bool // the node's host guard refuses new Episodes, whatever budget is left
 	incarnation string
 	NodeHealth
 	at time.Time
@@ -104,22 +105,29 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 // would refuse the Episode, so room is false and the caller may start it on
 // another provider. The placement then names the first node, the fallback when
 // there is no other provider, and why nothing had room: a node that takes new
-// Episodes was full, every answering node was draining, or none answered.
+// Episodes was full, else a node's host guard refused them (spare budget or
+// not), else every answering node was draining, else none answered.
 // Before the first probe it reports the first node with room, whose admission
 // then answers the join. It reads the last probes and does no I/O, because
 // Episode creation calls it inside a database transaction.
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	answering, serving := false, false // a node answered; a node that takes new Episodes answered
+	var answering, full, guarded bool // a node answered; a serving node was full; a serving node's host guard refused
 	for index, node := range f.nodes {
 		load, probed := f.loads[node.node]
 		if !probed || time.Since(load.at) > probeFreshness {
 			continue
 		}
 		answering = true
-		serving = serving || !load.Draining
 		if !load.hasRoom {
+			switch {
+			case load.Draining:
+			case load.hostGuard:
+				guarded = true
+			default:
+				full = true
+			}
 			continue
 		}
 		reason := mediaplane.PlacementPrimary
@@ -133,8 +141,10 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 		return first, true
 	}
 	switch {
-	case serving:
+	case full:
 		first.Reason = mediaplane.PlacementOverflowNoRoom
+	case guarded:
+		first.Reason = mediaplane.PlacementOverflowHostGuard
 	case answering:
 		first.Reason = mediaplane.PlacementOverflowDraining
 	default:
@@ -198,13 +208,15 @@ func (f *Fleet) Probe(ctx context.Context) {
 			case !ready.Draining && known && before.Draining:
 				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
 			}
-			hasRoom := !ready.Draining && ready.Host.AdmissionReason == "" && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
+			hostGuard := ready.Host.AdmissionReason != ""
+			hasRoom := !ready.Draining && !hostGuard && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
 			incarnation := ready.NodeIncarnation
 			if !mediaplane.ValidIncarnation(incarnation) {
 				incarnation = "" // a malformed value must not fail Episode creation
 			}
 			f.loads[node.node] = nodeLoad{
 				hasRoom:     hasRoom,
+				hostGuard:   hostGuard,
 				incarnation: incarnation,
 				NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
 				at:          time.Now(),

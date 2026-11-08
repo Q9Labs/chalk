@@ -3,10 +3,13 @@ package chalksfu_test
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -374,6 +377,62 @@ func TestConformanceAnEntirelyDrainingPoolIsNotReportedAsFull(t *testing.T) {
 	short, err := registryOn(mixed, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
 	if err != nil || short.PlacementReason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("draining and full nodes: %+v, %v, want overflow_no_room", short, err)
+	}
+}
+
+// A node whose host guard refuses new Episodes has packet budget left, so it must
+// not be reported as full. A real node cannot be pushed past its guard on demand,
+// so this test answers /readyz the way a guarded node does and uses the rest of the
+// pool for real.
+func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	real := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"})
+	certPEM, keyPEM := ca.issue(t, "localhost", x509.ExtKeyUsageServerAuth)
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clients := x509.NewCertPool()
+	clients.AppendCertsFromPEM(ca.pem)
+	guarded := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"nodeIncarnation":"guarded-1","packetBudget":100000,"reservedPackets":0,"newEpisodePackets":600,"host":{"admissionReason":"cpu_busy"}}`))
+	}))
+	guarded.TLS = &tls.Config{Certificates: []tls.Certificate{pair}, ClientCAs: clients, ClientAuth: tls.RequireAndVerifyClientCert}
+	guarded.StartTLS()
+	t.Cleanup(guarded.Close)
+	guardedNode := runtimeconfig.ChalkSFUNode{ID: "sfu-guarded", ControlURL: guarded.URL}
+	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	ctx := context.Background()
+
+	alone := real.fleetWithOverflow(t, ca, clientIdentity, true, guardedNode)
+	alone.Probe(ctx)
+	telemetry := &placements{}
+	moved, err := registryOn(alone, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if err != nil || moved.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || moved.PlacementReason != mediaplane.PlacementOverflowHostGuard {
+		t.Fatalf("guarded pool, overflow on: %+v, %v, want Cloudflare overflow_host_guard", moved, err)
+	}
+	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, guardedNode)
+	refusing.Probe(ctx)
+	if refused, err := registryOn(refusing, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+		t.Fatalf("guarded pool, overflow off: %+v, %v, want the placement refusal", refused, err)
+	}
+	if want := []string{"cf_sfu/overflow_host_guard", "chalk_sfu/capacity_refused"}; !slices.Equal(telemetry.got, want) {
+		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
+	}
+
+	// A guarded node next to a node out of packet budget is still out of room.
+	fullNode := runtimeconfig.ChalkSFUNode{ID: "sfu-full", ControlURL: real.controlURL}
+	pool := real.fleetWithOverflow(t, ca, clientIdentity, true, guardedNode, fullNode)
+	node, err := pool.Node("sfu-full")
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
+	pool.Probe(ctx)
+	short, err := registryOn(pool, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if err != nil || short.PlacementReason != mediaplane.PlacementOverflowNoRoom {
+		t.Fatalf("guarded and full nodes: %+v, %v, want overflow_no_room", short, err)
 	}
 }
 

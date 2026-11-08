@@ -44,12 +44,16 @@ const (
 	// the first configured node is the primary and every later one a standby.
 	PlacementPrimary PlacementReason = "primary"
 	PlacementStandby PlacementReason = "standby"
-	// PlacementOverflowNoRoom, PlacementOverflowDraining and
-	// PlacementOverflowNodeUnavailable bind the Episode to Cloudflare because no
-	// own-SFU node had room. NoRoom: a node that takes new Episodes was full.
-	// Draining: every answering node was draining, a planned state and not a
-	// capacity shortage. NodeUnavailable: no node answered ready.
+	// PlacementOverflowNoRoom, PlacementOverflowHostGuard,
+	// PlacementOverflowDraining and PlacementOverflowNodeUnavailable bind the
+	// Episode to Cloudflare because no own-SFU node had room. NoRoom: a node
+	// that takes new Episodes was out of packet budget. HostGuard: the host
+	// guard refused new Episodes (CPU or scheduler pressure) although packet
+	// budget may be left. Draining: every answering node was draining, a
+	// planned state and not a capacity shortage. NodeUnavailable: no node
+	// answered ready.
 	PlacementOverflowNoRoom          PlacementReason = "overflow_no_room"
+	PlacementOverflowHostGuard       PlacementReason = "overflow_host_guard"
 	PlacementOverflowDraining        PlacementReason = "overflow_draining"
 	PlacementOverflowNodeUnavailable PlacementReason = "overflow_node_unavailable"
 	// PlacementNoCapacity keeps the Episode on the first node although no node had
@@ -142,7 +146,7 @@ func (binding Binding) Validate() error {
 		return ErrInvalidBinding
 	}
 	switch binding.PlacementReason {
-	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
+	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowHostGuard, PlacementOverflowDraining, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
 	default:
 		return ErrInvalidBinding
 	}

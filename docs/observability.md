@@ -422,8 +422,10 @@ The API counts own-SFU placement decisions for new Episodes as
 `chalk.api.media_plane.placement_decisions`, with `chalk.media_plane.provider`,
 `chalk.media_plane.node_role` (`primary`, `standby`, `overflow`, `none`) and
 `chalk.media_plane.placement_reason` (`primary`, `standby`, `overflow_no_room`,
-`overflow_draining`, `overflow_node_unavailable`, `no_capacity`, `capacity_refused`).
-`overflow_no_room` means a node that takes new Episodes was full, `overflow_draining`
+`overflow_host_guard`, `overflow_draining`, `overflow_node_unavailable`, `no_capacity`,
+`capacity_refused`). `overflow_no_room` means a node that takes new Episodes was out of
+packet budget, `overflow_host_guard` means a node's host guard refused new Episodes
+(CPU or scheduler pressure) whatever budget was left, `overflow_draining`
 means every node that answered was draining (a planned state, not a capacity shortage),
 and `overflow_node_unavailable` means no node answered ready. It counts decisions, not
 committed Episodes: placement runs inside the creation transaction, so a request that
