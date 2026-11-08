@@ -61,14 +61,16 @@ func TestMetadataClientAcceptsAValidDocumentAndStoresOneRow(t *testing.T) {
 
 func TestMetadataClientRefusesUnsafeDocuments(t *testing.T) {
 	cases := map[string]string{
-		"id mismatch":        strings.Replace(cimdDocument(), cimdID, "https://evil.test/doc", 1),
-		"secret client":      cimdDocument(`,"client_secret":"s3cret"`),
-		"confidential":       strings.Replace(cimdDocument(), `"none"`, `"client_secret_basic"`, 1),
-		"no auth code grant": cimdDocument(`,"grant_types":["client_credentials"]`),
-		"foreign redirect":   strings.Replace(cimdDocument(), "https://claude.ai/api/mcp/auth_callback", "https://evil.test/cb", 1),
-		"no redirects":       strings.Replace(cimdDocument(), `["https://claude.ai/api/mcp/auth_callback","http://localhost:8123/callback"]`, `[]`, 1),
-		"no name":            strings.Replace(cimdDocument(), `"client_name":"Claude",`, ``, 1),
-		"not json":           `<html>`,
+		"id mismatch":          strings.Replace(cimdDocument(), cimdID, "https://evil.test/doc", 1),
+		"secret client":        cimdDocument(`,"client_secret":"s3cret"`),
+		"confidential":         strings.Replace(cimdDocument(), `"none"`, `"client_secret_basic"`, 1),
+		"private_key_jwt only": strings.Replace(cimdDocument(`,"token_endpoint_auth_methods_supported":["private_key_jwt"]`), `"none"`, `"private_key_jwt"`, 1),
+		"secret method listed": cimdDocument(`,"token_endpoint_auth_methods_supported":["none","client_secret_post"]`),
+		"no auth code grant":   cimdDocument(`,"grant_types":["client_credentials"]`),
+		"foreign redirect":     strings.Replace(cimdDocument(), "https://claude.ai/api/mcp/auth_callback", "https://evil.test/cb", 1),
+		"no redirects":         strings.Replace(cimdDocument(), `["https://claude.ai/api/mcp/auth_callback","http://localhost:8123/callback"]`, `[]`, 1),
+		"no name":              strings.Replace(cimdDocument(), `"client_name":"Claude",`, ``, 1),
+		"not json":             `<html>`,
 	}
 	for name, body := range cases {
 		repo := &memoryClients{rows: map[string]Client{}}
@@ -166,5 +168,17 @@ func TestMetadataFetcherReadsOnlySmallJSONFromThePinnedAddress(t *testing.T) {
 		if (err != nil) != test.wantErr || err == nil && !strings.Contains(string(body), "client_id") {
 			t.Errorf("%s: body=%q err=%v", name, body, err)
 		}
+	}
+}
+
+// The document ChatGPT serves at https://chatgpt.com/oauth/<callback_id>/client.json.
+func TestMetadataClientAcceptsChatGPTAsAPublicClient(t *testing.T) {
+	const id = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
+	body := `{"client_id":"` + id + `","client_uri":"https://chatgpt.com/","redirect_uris":["https://chatgpt.com/connector/oauth/BpZIpxL-aggt"],"token_endpoint_auth_method":"private_key_jwt","token_endpoint_auth_methods_supported":["none","private_key_jwt"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"client_name":"ChatGPT","token_endpoint_auth_signing_alg":"RS256","jwks_uri":"https://chatgpt.com/oauth/jwks.json"}`
+	repo := &memoryClients{rows: map[string]Client{}}
+	service := NewService(repo, Config{}).WithMetadataFetcher(&fixedDocument{body: body})
+	client, failure := service.metadataClient(context.Background(), id)
+	if failure != nil || client.Name != "ChatGPT" || len(repo.rows) != 1 {
+		t.Fatalf("%+v %+v rows=%d", client, failure, len(repo.rows))
 	}
 }
