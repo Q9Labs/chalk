@@ -2405,7 +2405,7 @@
     left: 50%;
     width: 36px;
     height: 5px;
-    margin-left: calc(var(--space-4) * -1);
+    translate: -50% 0;
     border-radius: var(--corner-xs);
     background: var(--chalk-line-strong);
   }
@@ -2430,7 +2430,7 @@
     left: 50%;
     width: 36px;
     height: 5px;
-    margin-left: calc(var(--space-4) * -1);
+    translate: -50% 0;
     border-radius: var(--corner-xs);
     background: var(--chalk-line-strong);
   }
