@@ -12,7 +12,7 @@ export function webMediaFixture(guest) {
     window.AudioContext = class extends NativeAudioContext {
       constructor(...args) {
         super(...args);
-        document.addEventListener("pointerdown", () => { void this.resume(); }, { once: true });
+        document.addEventListener("pointerdown", () => { this.resume().catch(() => {}); }, { once: true });
       }
     };
     navigator.mediaDevices.getUserMedia = async () => new MediaStream();

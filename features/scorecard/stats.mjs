@@ -1,7 +1,7 @@
 import { METRICS } from "./schema.mjs";
 
 /** percentile is the nearest-rank percentile, the same rule the call performance check uses. */
-function percentile(values, p) {
+export function percentile(values, p) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.ceil(sorted.length * p) - 1];
 }
