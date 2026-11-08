@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"html"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -103,6 +104,7 @@ func registerHandler(service MCPOAuthService) http.HandlerFunc {
 		}
 		client, oauthErr := service.RegisterClient(r.Context(), body.ClientName, body.RedirectURIs)
 		if oauthErr != nil {
+			slog.WarnContext(r.Context(), "MCP OAuth registration rejected", "event", "mcp.oauth.registration_rejected", "error", oauthErr.Code, "client_name", body.ClientName, "redirect_uris", body.RedirectURIs)
 			writeOAuthError(w, oauthErr)
 			return
 		}
