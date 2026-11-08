@@ -58,12 +58,13 @@ test("a Recording without audio, video, frames or sound fails", () => {
 
 // Real media through ffprobe, ffmpeg and the recorder's analyzer. Tiles use the three guest camera colours.
 const tiles = ["0x1b365d", "0x613c69", "0x5d2a1b"];
-// `frozen` tiles keep their square still; `blackAfter` maps a tile index to the second its picture goes black.
-function video(tileColors, { frozen = [], blackAfter = {} } = {}) {
+// `frozen` tiles keep their square still; `blackAfter` maps a tile index to the second its picture goes black;
+// `squares` maps a tile index to the colour of its moving square (white by default).
+function video(tileColors, { frozen = [], blackAfter = {}, squares = {} } = {}) {
   const boxes = tileColors.map((color, index) => `drawbox=x=${index * 107}:y=0:w=106:h=180:color=${color}:t=fill:enable='lt(t,${blackAfter[index] ?? 1000})'`).join(",");
   const moving = (index) => (frozen.includes(index) ? "0" : "mod(n*9,80)");
   const overlays = tileColors.map((_, index) => `[${index === 0 ? "bg" : `t${index}`}][${index + 1}:v]overlay=x='${index * 107}+${moving(index)}':y=40:eval=frame[t${index + 1}]`).join(";");
-  return { inputs: tileColors.flatMap(() => ["-f", "lavfi", "-i", "color=c=white:s=16x16:r=15:d=6"]), graph: `[0:v]${boxes}[bg];${overlays}`, output: `[t${tileColors.length}]` };
+  return { inputs: tileColors.flatMap((_, index) => ["-f", "lavfi", "-i", `color=c=${squares[index] ?? "white"}:s=16x16:r=15:d=6`]), graph: `[0:v]${boxes}[bg];${overlays}`, output: `[t${tileColors.length}]` };
 }
 async function fixture(directory, name, { tileColors = tiles, audio = "sine=frequency=440:sample_rate=48000:d=6", ...pictureOptions } = {}) {
   const picture = video(tileColors, pictureOptions);
@@ -118,6 +119,20 @@ test("each guest's tile is counted by its live decoded frames over the whole Rec
     assert.equal(frozen.guests[0].tile.liveFrames, 0);
     assert.equal(frozen.guests[0].tile.visibleFrames, frozen.guests[0].tile.intervals + 1);
     assert.match(recordingFailures(frozen, 4).join(";"), /guest 1's camera frozen/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("another guest's animation never makes a fully frozen tile pass", { skip: !hasFfmpeg && "ffmpeg is not installed" }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "call-artifacts-frozen-"));
+  try {
+    // Guests 1 and 3 animate squares in guest 2's own camera colour; guest 2's whole picture is frozen.
+    const evidence = await recordingEvidence(await fixture(directory, "other-squares", { frozen: [1], squares: { 0: tiles[1], 2: tiles[1] } }), 3);
+    assert.equal(evidence.guests[1].tile.liveFrames, 0);
+    assert.equal(evidence.guests[0].tile.liveShare, 1);
+    assert.equal(evidence.guests[2].tile.liveShare, 1);
+    assert.deepEqual(recordingFailures(evidence, 4), ["Recording shows guest 2's camera frozen"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
