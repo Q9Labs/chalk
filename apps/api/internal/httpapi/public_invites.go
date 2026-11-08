@@ -633,7 +633,7 @@ func publicInviteManagementErrors() []APIError {
 }
 
 func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorMediaPlaneUnavailable, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
 func publicInviteRefreshErrors() []APIError {
@@ -656,6 +656,8 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorAdmissionRequestNotFound, true
 	case errors.Is(err, publicinvites.ErrArrivalNotFound), errors.Is(err, publicinvites.ErrArrivalUnavailable), errors.Is(err, publicinvites.ErrCredentialMismatch), errors.Is(err, publicinvites.ErrInvalidCredential):
 		return apiErrorArrivalUnavailable, true
+	case errors.Is(err, mediaplane.ErrConnectionNotFound):
+		return apiErrorMediaConnectionNotFound, true
 	case errors.Is(err, mediaplane.ErrClientUnsupported):
 		return apiErrorMediaClientUnsupported, true
 	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
