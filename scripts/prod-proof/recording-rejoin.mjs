@@ -77,7 +77,7 @@ export function cameraEvidence(frames, phase, guest) {
 
 // The MP4 mixes audio, so attribute its energy using the two injected frequencies.
 // Projection rejects the other guest's tone; ordinary mixed RMS alone cannot do so.
-export function toneEvidence(pcm, frequency) {
+function toneEvidence(pcm, frequency) {
   const samples = pcm.length / 4;
   let sine = 0,
     cosine = 0,

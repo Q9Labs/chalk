@@ -5,9 +5,9 @@ const { width, height } = frameSize;
 const frameBytes = width * height * 3;
 
 /** Frames per second of the Recording that are sampled for each guest's tile. */
-export const tileSampleRate = 2;
+const tileSampleRate = 2;
 /** A guest's tile must be live in at least this share of the sampled Recording. */
-export const minimumLiveShare = 0.6;
+const minimumLiveShare = 0.6;
 // Same thresholds as `cameraEvidence`: the camera colour fills 3% of the frame, and 0.3% of the tile moves between samples.
 const visibleShare = 0.03;
 const movingShare = 0.003;
@@ -70,7 +70,7 @@ function splitsTile(main, patch) {
  * The guest's own tile: its largest patch of camera colour plus the pieces of it that a label or border cut off.
  * Same-colour pixels elsewhere, such as another guest's animated squares, are not part of it.
  */
-export function tileRegion(frame, color) {
+function tileRegion(frame, color) {
   const patches = colorPatches(frame, color);
   if (!patches.length) return { count: 0, left: width, right: -1, top: height, bottom: -1 };
   const main = patches.reduce((largest, patch) => (patch.count > largest.count ? patch : largest));
