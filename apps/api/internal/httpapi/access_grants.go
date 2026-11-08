@@ -244,7 +244,7 @@ func issueAccessGrantEndpoint(
 				return accessGrantResponse{}, err
 			}
 			stage = "media_credential"
-			mediaCredential, err := mediaIssuer.Issue(ctx, subject)
+			mediaCredential, err := mediaIssuer.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
 			if err != nil {
 				return accessGrantResponse{}, err
 			}
