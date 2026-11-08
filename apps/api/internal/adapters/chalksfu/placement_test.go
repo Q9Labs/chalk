@@ -37,12 +37,18 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
 	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	ctx := context.Background()
+	// Each question gets a fresh pool, because Place charges the Episode it answers with
+	// against the node, and this test only asks where the next one would go.
+	placeNow := func() (string, bool) {
+		asked := primary.fleetOf(t, ca, clientIdentity, nodes...)
+		asked.Probe(ctx)
+		return place(asked)
+	}
 
 	if placed, room := place(fleet); placed != "sfu-primary" || !room {
 		t.Fatalf("before any probe: placed on %q with room %t, want the primary", placed, room)
 	}
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-primary" {
+	if placed, _ := placeNow(); placed != "sfu-primary" {
 		t.Fatalf("two nodes with room: placed on %q, want the primary", placed)
 	}
 
@@ -52,13 +58,11 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	}
 	onPrimary := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first)
 	join(t, onPrimary, scopeOf("ep-1", "alice"))
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-primary" {
+	if placed, _ := placeNow(); placed != "sfu-primary" {
 		t.Fatalf("primary with room for one more Episode: placed on %q, want the primary", placed)
 	}
 	join(t, onPrimary, scopeOf("ep-2", "bob"))
-	fleet.Probe(ctx)
-	if placed, _ := place(fleet); placed != "sfu-standby" {
+	if placed, _ := placeNow(); placed != "sfu-standby" {
 		t.Fatalf("full primary: placed on %q, want the standby", placed)
 	}
 
@@ -72,8 +76,7 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	if err != nil || found.Found {
 		t.Fatalf("the standby's session on the primary: %+v, %v, want not found", found, err)
 	}
-	fleet.Probe(ctx)
-	if placed, room := place(fleet); placed != "sfu-primary" || room {
+	if placed, room := placeNow(); placed != "sfu-primary" || room {
 		t.Fatalf("no node with room: placed on %q with room %t, want the primary without room", placed, room)
 	}
 

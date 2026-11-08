@@ -19,6 +19,11 @@ const (
 	// A probe older than this no longer counts, so a node that stops answering
 	// leaves placement within a few intervals.
 	probeFreshness = 3 * probeInterval
+	// An Episode this process placed on a node counts against that node's room for
+	// this long. The SFU reserves packets only at the Episode's first join, so a probe
+	// taken before the join does not show it. The counter is a burst guard: the SFU's
+	// admission at first join stays the authority.
+	inflightTTL = 30 * time.Second
 )
 
 // ErrUnknownNode means an Episode's binding names a node this process does not
@@ -36,9 +41,10 @@ type Fleet struct {
 	standbyBudget int             // packets/s a standby admits for new Episodes
 	log           *slog.Logger
 
-	mu     sync.Mutex
-	loads  map[string]nodeLoad
-	probed bool // a probe round has finished, so a node without a load record has none
+	mu       sync.Mutex
+	loads    map[string]nodeLoad
+	inflight map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
+	probed   bool                   // a probe round has finished, so a node without a load record has none
 }
 
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
@@ -46,16 +52,15 @@ type Fleet struct {
 type nodeLoad struct {
 	room        int  // packets/s of budget left at the probe, below the standby cap on a standby
 	episode     int  // packets/s a new Episode reserves
-	placed      int  // Episodes this process placed here since the probe
 	hostGuard   bool // the node's host guard refuses new Episodes, whatever budget is left
 	incarnation string
 	NodeHealth
 	at time.Time
 }
 
-// fits reports whether the room left, after the Episodes placed since the probe,
-// holds one more new Episode.
-func (l nodeLoad) fits() bool { return l.room >= (l.placed+1)*l.episode }
+// fits reports whether the room left holds one more new Episode after the in-flight
+// ones, which the probe may not include yet.
+func (l nodeLoad) fits(inflight int) bool { return l.room >= (inflight+1)*l.episode }
 
 // NodeHealth is what a node's last answered probe said about its drain.
 type NodeHealth struct {
@@ -86,6 +91,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 		standbyBudget: config.StandbyPacketBudget,
 		log:           log,
 		loads:         map[string]nodeLoad{},
+		inflight:      map[string][]time.Time{},
 	}
 	for _, node := range config.Nodes {
 		adapter, err := newAdapter(config, node, client)
@@ -122,8 +128,8 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 // configuration order, and a standby only when no primary can take it (silent,
 // draining, host-guard closed or out of budget). A node qualifies when its last
 // probe is fresh, ready and has packet budget left for a new Episode, after the
-// Episodes this process placed there since that probe, so concurrent creations in
-// one probe window do not all pin to the last slot. A standby counts only the
+// Episodes this process placed there in the last inflightTTL, so concurrent creations
+// do not all pin to the last slot, even across a probe that does not show them yet. A standby counts only the
 // degraded budget it is configured with. The first qualifying node wins and room
 // is true. The placement then records the node, its boot incarnation from that
 // probe and whether it is a primary or a standby. When no node qualifies after a
@@ -153,11 +159,10 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 			case load.Draining:
 			case load.hostGuard:
 				guarded = true
-			case !load.fits():
+			case !load.fits(len(f.inflightOn(node.node))):
 				full = true
 			default:
-				load.placed++
-				f.loads[node.node] = load
+				f.inflight[node.node] = append(f.inflight[node.node], time.Now())
 				reason := mediaplane.PlacementPrimary
 				if standby {
 					reason = mediaplane.PlacementStandby
@@ -181,6 +186,14 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 		first.Reason = mediaplane.PlacementOverflowNodeUnavailable
 	}
 	return first, false
+}
+
+// inflightOn returns the Episodes placed on a node less than inflightTTL ago and
+// forgets older ones. It holds f.mu.
+func (f *Fleet) inflightOn(node string) []time.Time {
+	live := slices.DeleteFunc(f.inflight[node], func(at time.Time) bool { return time.Since(at) > inflightTTL })
+	f.inflight[node] = live
+	return live
 }
 
 // firstPrimary names the first primary in configuration order. NewFleet

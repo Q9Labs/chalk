@@ -28,7 +28,7 @@ func ready(budget, reserved int) *answer { return &answer{budget: budget, reserv
 // poolOf builds a Fleet whose last probes are the given answers, in configuration order.
 // Place reads only those records, so no node is dialled.
 func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[string]*answer) *Fleet {
-	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, probed: true}
+	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, inflight: map[string][]time.Time{}, probed: true}
 	for _, node := range nodes {
 		fleet.nodes = append(fleet.nodes, &Adapter{node: node.ID})
 		if node.Role == runtimeconfig.ChalkSFURoleStandby {
@@ -133,13 +133,12 @@ func TestPlaceCapsAStandbyAtTheDegradedBudget(t *testing.T) {
 	}
 }
 
-// Episodes placed since the last probe are charged against the node's room, so a burst
-// does not pin every creation to the last slot. A fresh probe starts the count again.
-func TestPlaceChargesEpisodesPlacedSinceTheLastProbe(t *testing.T) {
+// Episodes placed recently are charged against the node's room, so a burst does not pin
+// every creation to the last slot.
+func TestPlaceChargesEpisodesPlacedRecently(t *testing.T) {
 	nodes := []runtimeconfig.ChalkSFUNode{primary("p"), standby("s")}
 	// The primary has room for two new Episodes, the standby for one.
-	answers := map[string]*answer{"p": ready(testPrimaryBudget, testPrimaryBudget-2*testEpisode), "s": ready(testStandbyBudget, testStandbyBudget-testEpisode)}
-	fleet := poolOf(testStandbyBudget, nodes, answers)
+	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{"p": ready(testPrimaryBudget, testPrimaryBudget-2*testEpisode), "s": ready(testStandbyBudget, testStandbyBudget-testEpisode)})
 
 	for step, want := range []string{"p", "p", "s"} {
 		if placed, room := fleet.Place(); placed.Node != want || !room {
@@ -149,16 +148,33 @@ func TestPlaceChargesEpisodesPlacedSinceTheLastProbe(t *testing.T) {
 	if placed, room := fleet.Place(); room || placed.Reason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("a pool with every slot charged placed %+v with room %t, want overflow_no_room", placed, room)
 	}
+}
 
-	// A fresh probe replaces the load record, and with it the count.
-	fleet.mu.Lock()
-	for id, a := range answers {
-		reply := wireReady{PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode}
-		fleet.loads[id] = fleet.loadOf(id, reply, time.Now())
+// The SFU reserves packets at an Episode's first join, so a probe taken between Place and
+// that join still shows the old room. The slot stays taken until the entry is older than
+// inflightTTL.
+func TestPlaceKeepsAnEpisodeInFlightAcrossAProbeThatDoesNotShowIt(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{primary("p")}
+	oneSlot := &answer{budget: testPrimaryBudget, reserved: testPrimaryBudget - testEpisode}
+	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{"p": oneSlot})
+
+	if placed, room := fleet.Place(); placed.Node != "p" || !room {
+		t.Fatalf("first placement went to %q with room %t, want the primary", placed.Node, room)
 	}
+	// A fresh probe replaces the load record with the same room: the Episode has not joined.
+	fleet.mu.Lock()
+	fleet.loads["p"] = fleet.loadOf("p", wireReady{PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
+	fleet.mu.Unlock()
+	if placed, room := fleet.Place(); room || placed.Reason != mediaplane.PlacementOverflowNoRoom {
+		t.Fatalf("after a probe that does not show the Episode: placed %+v with room %t, want the slot still taken", placed, room)
+	}
+
+	// Past the TTL the entry no longer counts.
+	fleet.mu.Lock()
+	fleet.inflight["p"] = []time.Time{time.Now().Add(-2 * inflightTTL)}
 	fleet.mu.Unlock()
 	if placed, room := fleet.Place(); placed.Node != "p" || !room {
-		t.Fatalf("after a fresh probe placed on %q with room %t, want the primary again", placed.Node, room)
+		t.Fatalf("after the TTL: placed on %q with room %t, want the slot free again", placed.Node, room)
 	}
 }
 
