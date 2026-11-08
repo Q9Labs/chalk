@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Choose newest held record and verify that exact choice and rollback source
+      - name: Choose newest held record and verify its own-SFU proof, exact SHA and rollback source
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Recheck exact selection after approval under the production lock
+      - name: Recheck exact selection and own-SFU proof after approval under the production lock
         env:
           GH_TOKEN: ${{ github.token }}
           SELECTION: ${{ needs.select.outputs.selection }}

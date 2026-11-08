@@ -114,6 +114,13 @@ The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
+Nightly also records `own_sfu_proof_result` (`passed`, `failed` or `skipped`),
+bound to the cut's `target_sha` and `proof_run_id`. Promote requires a passed
+own-SFU proof for that exact SHA, both at selection and in the approval recheck.
+Missing results (including older cuts), skipped proofs and failed proofs block
+promotion with an error naming the SHA and nightly run. There is no override;
+cut a new nightly to obtain passing proof. The existing Cloudflare proof and
+held-cut rules are unchanged.
 
 The parent holds `chalk-environment-production` across approval, deploy, call
 and rollback. **Pending approval holds this lock**, blocking other production

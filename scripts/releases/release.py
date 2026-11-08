@@ -240,6 +240,13 @@ def validate_choice(github, item):
     return info
 
 
+def require_own_sfu_proof(info):
+    result = info.get('own_sfu_proof_result', 'missing')
+    require(result == 'passed',
+            f"cannot promote SHA {info['target_sha']} from nightly run {info.get('proof_run_id') or info['run_id']}: "
+            f'own_sfu_proof_result={result}; a passed own-SFU proof for this SHA is required')
+
+
 def select(github, args):
     records = github.deployments('nightly')
     held = held_candidates(records)
@@ -248,7 +255,10 @@ def select(github, args):
     info = validate_choice(github, selected)
     expected = os.environ.get('EXPECTED_RELEASE_SHA')
     if expected:
-        require(info['target_sha'] == expected, 'newest held nightly is not the approved release revision')
+        require(info['target_sha'] == expected,
+                f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
+    require_own_sfu_proof(info)
+    if expected:
         median = float(env('LEAVE_BASELINE_MEDIAN_MS'))
         require(0 < median <= 5000, 'captured Leave baseline median must be positive and at most 5000 ms')
         evidence = env('LEAVE_BASELINE_EVIDENCE_SHA256')
@@ -268,7 +278,8 @@ def recheck(github, args):
     require(held_candidates([item]) and payload(item) == selection['selection'], 'selected nightly changed or is no longer held')
     newest = held_candidates(github.deployments('nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
-    validate_choice(github, item)
+    info = validate_choice(github, item)
+    require_own_sfu_proof(info)
     manifest_bytes(github, selection['previous'])
     require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
 
@@ -350,9 +361,11 @@ def record(github, args):
     info['web'] = json.loads(info.get('web') or '{}')
     real_call = os.environ.get('PROOF_RESULT', 'failed')
     web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
+    own_sfu = os.environ.get('OWN_SFU_RESULT', 'skipped')
     passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
     info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
-                real_call_proof_result=real_call, web_e2e_result=web_e2e, proof_run_id=env('GITHUB_RUN_ID'))
+                real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
+                proof_run_id=env('GITHUB_RUN_ID'))
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         require_current_write(github.deployments('nightly', 'nightly-write'), info)
