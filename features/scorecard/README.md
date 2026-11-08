@@ -115,7 +115,8 @@ as an optional second source behind the same fields.
 
 A successful API query with no `chalk_sfu` events sets
 `zero_chalk_sfu_events.value: true`: it may mean an idle node or a logging gap,
-not measured zero load. Missing/partial log windows, no own-Episode coverage,
+not measured zero load. Missing/partial log windows (including a full 1,000-row
+page, a continuation token, or more matching rows than returned), no own-Episode coverage,
 a lost lease, or observed foreign Episodes make a card `contended: true`.
 Quiet API logs do not prove that an already connected, silent foreign session
 is absent. All active node gauges remain unavailable with this fallback.

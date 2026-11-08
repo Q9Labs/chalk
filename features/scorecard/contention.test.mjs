@@ -107,3 +107,22 @@ test("Axiom reads are read-only, configured once, and reject partial or malforme
   body.tables[0].columns.pop();
   await assert.rejects(readLogs("start", "end", { env, fetchImpl }), /malformed/);
 });
+
+test("Axiom row limits and pagination cannot produce an isolated verdict", async () => {
+  const env = { CHALK_AXIOM_STAGING_LOG_DATASET: "test-api", CHALK_AXIOM_QUERY_TOKEN: "test-token" };
+  for (const [rows, metadata] of [
+    [1000, {}],
+    [1, { continuationToken: "next-page" }],
+    [1, { status: { continuationToken: "next-page" } }],
+    [1, { status: { rowsMatched: 2 } }],
+  ]) {
+    const fetchImpl = async () => ({ ok: true, json: async () => ({ ...metadata, tables: [{ fields: [{ name: "episode_id" }, { name: "session_id" }], columns: [Array(rows).fill(own.episode_id), Array(rows).fill(own.session_id)] }] }) });
+    await assert.rejects(readLogs("start", "end", { env, fetchImpl }), /incomplete/);
+    // The collector's failed read is unavailable, never a clean page of only own events.
+    const window = await readLogs("start", "end", { env, fetchImpl }).catch(() => undefined);
+    const result = contention({ ...input(), window });
+    assert.equal(result.foreign_episodes_seen.value, "unavailable");
+    assert.equal(result.contended, true);
+    assert.equal(card(result).contention.contended, true);
+  }
+});

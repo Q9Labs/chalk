@@ -1,5 +1,5 @@
 // Public contention evidence contains counts and provenance, never resource identifiers.
-export const UNAVAILABLE = "unavailable";
+const UNAVAILABLE = "unavailable";
 export const signal = (value, source) => ({ value, source });
 const absent = () => signal(UNAVAILABLE, UNAVAILABLE);
 

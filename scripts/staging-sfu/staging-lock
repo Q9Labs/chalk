@@ -84,6 +84,33 @@ def label(value):
     return value
 
 
+def stop_workload(child):
+    def send(signum):
+        try:
+            os.killpg(child.pid, signum)
+        except ProcessLookupError:
+            pass
+
+    def running():
+        child.poll()  # Reap the leader, but do not mistake its exit for the group's exit.
+        processes = subprocess.run(["ps", "-axo", "pgid=,stat="], check=True, capture_output=True, text=True, timeout=5)
+        # Orphan zombies may await init's reaper; they cannot execute more workload.
+        return any(int(pgid) == child.pid and not state.startswith(("Z", "X"))
+                   for pgid, state in (line.split() for line in processes.stdout.splitlines()))
+
+    for signum in (signal.SIGTERM, signal.SIGKILL):
+        send(signum)
+        deadline = time.monotonic() + 5
+        while running():
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+        else:
+            child.wait()
+            return
+    raise RuntimeError("staging workload process group did not stop; retaining lease until expiry")
+
+
 def run(args):
     store = Store(args.remote)
     deadline = time.monotonic() + args.wait
@@ -114,8 +141,6 @@ def run(args):
     child = None
 
     def stop(signum, _frame):
-        if child and child.poll() is None:
-            os.killpg(child.pid, signal.SIGTERM)
         raise InterruptedError("staging lease command interrupted")
 
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -133,13 +158,15 @@ def run(args):
         print("Staging SFU lease renewal failed; stopping its workload.", file=sys.stderr)
         return 75
     finally:
-        if child and child.poll() is None:
-            os.killpg(child.pid, signal.SIGTERM)
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, signal.SIG_IGN)
+        if child:
             try:
-                child.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(child.pid, signal.SIGKILL)
-                child.wait()
+                stop_workload(child)
+            except (RuntimeError, OSError, subprocess.SubprocessError):
+                evidence["lost"] = True
+                save()
+                raise
         try:
             store.update(sha, lease)
         except (Conflict, RuntimeError, subprocess.SubprocessError):

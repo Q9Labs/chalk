@@ -8,6 +8,7 @@ import os
 import shutil
 import signal
 import tempfile
+import time
 import unittest
 
 loader = importlib.machinery.SourceFileLoader("staging_lock", str(Path(__file__).with_name("staging-lock")))
@@ -61,6 +62,76 @@ class LeaseTests(unittest.TestCase):
         self.assertTrue(json.loads(Path(evidence).read_text())["acquired"])
         self.assertEqual(self.store.read()[1]["holder"], "lane-b")
         self.store.acquire("lane-c", "retest", "run-3", 180)
+
+    def test_cancellation_stops_entire_group_before_release(self):
+        self.assert_group_stopped_before_release(cancel=True)
+
+    def test_renewal_failure_stops_entire_group_before_release(self):
+        self.assert_group_stopped_before_release(cancel=False)
+
+    def assert_group_stopped_before_release(self, cancel):
+        directory = Path(self.directory.name)
+        pids = directory / "pids.json"
+        ready = directory / "grandchild-ready"
+        audit = directory / "release.json"
+        hook = Path(self.remote) / "hooks/pre-receive"
+        hook.write_text("#!" + sys.executable + "\n" + f'''
+import datetime as dt
+import json
+from pathlib import Path
+import subprocess
+import sys
+old, new, ref = sys.stdin.read().split()
+lease = json.loads(subprocess.check_output(["git", "show", new + ":lease.json"]))
+expired = dt.datetime.fromisoformat(lease["expires_at"].replace("Z", "+00:00")) <= dt.datetime.now(dt.timezone.utc)
+if expired:
+    states = [subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True).stdout.strip() for pid in json.loads(Path({str(pids)!r}).read_text())]
+    Path({str(audit)!r}).write_text(json.dumps(states))
+    sys.exit(0 if all(not state or state.startswith(("Z", "X")) for state in states) else 1)
+if old != "0" * 40 and {not cancel!r}:
+    previous = json.loads(subprocess.check_output(["git", "show", old + ":lease.json"]))
+    if previous["token"] == lease["token"]:
+        sys.exit(1)  # Reject renewal, but allow release and the next holder.
+''')
+        hook.chmod(0o755)
+        grandchild = f'''
+import os, signal, time
+from pathlib import Path
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+Path({str(ready)!r}).write_text(str(os.getpid()))
+time.sleep(120)
+'''
+        workload = f'''
+import json, os, subprocess, sys, time
+from pathlib import Path
+subprocess.Popen([sys.executable, "-c", {grandchild!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+while not Path({str(ready)!r}).exists():
+    time.sleep(0.01)
+Path({str(pids)!r}).write_text(json.dumps([os.getpid(), int(Path({str(ready)!r}).read_text())]))
+time.sleep(120)
+'''
+        wrapper = subprocess.Popen([sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", self.remote, "--holder", "lane-a", "--purpose", "latency", "--run-id", "run-1", "--ttl", "60", "--wait", "0", "--", sys.executable, "-c", workload], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            deadline = time.monotonic() + 5
+            while not pids.exists() and wrapper.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.02)
+            self.assertTrue(pids.exists(), "workload and grandchild did not start")
+            if cancel:
+                wrapper.send_signal(signal.SIGTERM)
+            _, stderr = wrapper.communicate(timeout=15 if cancel else 40)
+            self.assertEqual(wrapper.returncode, 75, stderr)
+            self.assertTrue(audit.exists(), stderr)
+            self.assertTrue(all(not state or state.startswith(("Z", "X")) for state in json.loads(audit.read_text())), "lease released before the entire workload stopped")
+            self.store.acquire("next-lane", "retest", "run-2", 180)
+        finally:
+            if pids.exists():
+                try:
+                    os.killpg(json.loads(pids.read_text())[0], signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if wrapper.poll() is None:
+                wrapper.kill()
+            wrapper.communicate()
 
     def test_workflow_cleanup_deletes_own_resources_while_another_lane_holds_lease(self):
         held, _, _ = self.store.acquire("other-lane", "soak", "other-run", 180)

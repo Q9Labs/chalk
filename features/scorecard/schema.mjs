@@ -103,7 +103,7 @@ const forbidden = [
  * @param {unknown} value
  * @returns {string[]}
  */
-export function scorecardProblems(value) {
+function scorecardProblems(value) {
   const problems = [];
   const fail = (/** @type {string} */ problem) => problems.push(problem);
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
