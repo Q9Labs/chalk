@@ -55,7 +55,9 @@ export function baselineCard(history, plane) {
     ),
   }));
   const latest = runs.at(-1);
-  return { ...latest, run: { ...latest.run, id: `median-of-${runs.length}` }, metrics, dropped: [] };
+  const baseline = { ...latest, run: { ...latest.run, id: `median-of-${runs.length}` }, metrics, dropped: [] };
+  delete baseline.series;
+  return baseline;
 }
 
 const number = (value) => String(Math.abs(value) >= 100 ? Math.round(value) : Number(value.toPrecision(3)));
