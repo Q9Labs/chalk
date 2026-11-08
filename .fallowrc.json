@@ -89,6 +89,8 @@
   ],
   "ignoreDependencies": [
     "js-yaml",
+    "openapi-typescript",
+    "oxlint",
     "@arethetypeswrong/cli",
     "playwright",
     "publint",

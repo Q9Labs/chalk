@@ -15,9 +15,7 @@ auditConfig:
     - CVE-2025-71329
 
 overrides:
-  "@q9labsai/cli": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-cli-0.3.0.tgz
   "@q9labsai/config-depcruise": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-config-depcruise-0.3.0.tgz
-  "@q9labsai/diagnostics": https://github.com/Q9Labs/q9stack/releases/download/v0.3.0/q9labsai-diagnostics-0.3.0.tgz
   "@q9labsai/gates": "0.4.1"
   "@babel/core": ^7.29.7
   "@tanstack/start-server-core": 1.169.39
@@ -59,7 +57,6 @@ overrides:
   react-dom: 19.2.7
   sharp: 0.35.5
   shell-quote: 1.11.0
-  tar: ^7.5.21
   toml: ^5.0.1
   turbo: ^2.9.14
   undici: ^7.30.1
