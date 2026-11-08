@@ -20,7 +20,7 @@ export function slotBlockage(pool, recordingId) {
   return `capture slot held by job ${oldest.job_id} since ${oldest.claimed_at} (recording ${oldest.recording_id}, Episode ${oldest.episode_id}, lease expires ${oldest.lease_expires_at})${more}`;
 }
 
-export function describeCapturePool(outcome) {
+function describeCapturePool(outcome) {
   if (outcome.unavailable) return `capture pool readout unavailable: ${outcome.unavailable}`;
   const { pool } = outcome;
   return `capture pool: ${pool.slots_used} of ${pool.slots_total} slots in use`;
