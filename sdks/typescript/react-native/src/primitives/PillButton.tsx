@@ -4,7 +4,7 @@ import Animated from "react-native-reanimated";
 import { Icon, type IconName } from "../icons/Icon";
 import { usePressAnimation } from "../motion/press";
 import { useTheme } from "../theme/theme";
-import { fixed, type TypeStyle } from "../theme/tokens";
+import { fixed, type TypeStyle, space, corners } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
 export type PillButtonProps = {
@@ -51,6 +51,6 @@ export const PillButton = memo(
 );
 
 const styles = StyleSheet.create({
-  pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 999 },
+  pill: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space["1-5"], borderRadius: corners.pill },
   full: { alignSelf: "stretch" },
 });

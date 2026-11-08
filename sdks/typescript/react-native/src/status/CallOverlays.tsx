@@ -11,6 +11,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { useTheme } from "../theme/theme";
 import type { CallScreen } from "./call-screen";
 import { StatusPage } from "./StatusPage";
+import { corners, space } from "../theme/tokens";
 
 export type CallOverlaysProps = {
   readonly screen: CallScreen;
@@ -51,7 +52,7 @@ export function CallOverlays({ screen, callName, rejoining, onHold, onRejoin, on
       <Veil level={screen.kind === "status" ? "none" : veil} />
       {screen.kind === "reconnecting" || (screen.kind === "call" && connection.syncHealth === "degraded") ? (
         <View pointerEvents="none" style={{ position: "absolute", top: header.y + header.height + 4, left: layout.insets.left + 16, right: layout.insets.right + 16, alignItems: "center" }} testID="connection.notice">
-          <ChalkText accessibilityLiveRegion="polite" variant="caption" style={{ backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6 }}>
+          <ChalkText accessibilityLiveRegion="polite" variant="caption" style={{ backgroundColor: colors.surface, borderRadius: corners.xl, paddingHorizontal: space[3], paddingVertical: space["1-5"] }}>
             {screen.kind === "reconnecting" ? `Reconnecting…${queuedMessages ? ` ${queuedMessages} messages waiting to send.` : ""}` : "Connection is slow"}
           </ChalkText>
         </View>

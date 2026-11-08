@@ -6,6 +6,7 @@ import { usePortalCount } from "../../frame/portal";
 import { timings } from "../../motion/motion";
 import { Toast } from "./Toast";
 import { createToastStore, type ToastStore } from "./toast-store";
+import { space } from "../../theme/tokens";
 
 const ToastContext = createContext<ToastStore | null>(null);
 
@@ -85,5 +86,5 @@ const toastExiting: EntryExitAnimationFunction = () => {
 };
 
 const styles = StyleSheet.create({
-  stack: { position: "absolute", left: 0, right: 0, alignItems: "center", gap: 8 },
+  stack: { position: "absolute", left: 0, right: 0, alignItems: "center", gap: space[2] },
 });

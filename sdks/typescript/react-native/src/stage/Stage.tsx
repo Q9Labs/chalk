@@ -12,7 +12,7 @@ import { MovingFrame, type Frame } from "../motion/MovingFrame";
 import { tileEntering, tileLeaving } from "../motion/presence";
 import { ChalkText } from "../primitives/ChalkText";
 import { useTheme } from "../theme/theme";
-import { elevations, fontFamilies, radii } from "../theme/tokens";
+import { elevations, fontFamilies, radii, fontSizes } from "../theme/tokens";
 import { ContentTile, type SharedContent } from "./ContentTile";
 import { nextStageOrder, stageLayout, type StageItem, type StageOrder } from "./layout";
 import { ParticipantTile } from "./ParticipantTile";
@@ -184,5 +184,5 @@ const styles = StyleSheet.create({
   layer: StyleSheet.absoluteFillObject,
   float: { zIndex: 12, borderRadius: radii.tilePhone },
   more: { flex: 1, borderRadius: radii.tilePhone, alignItems: "center", justifyContent: "center" },
-  moreText: { fontFamily: fontFamilies[600], fontSize: 22, lineHeight: 22 * 1.4 },
+  moreText: { fontFamily: fontFamilies[600], fontSize: fontSizes.title, lineHeight: 22 * 1.4 },
 });

@@ -13,7 +13,7 @@ import { ChalkText } from "../../primitives/ChalkText";
 import { IconButton } from "../../primitives/IconButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
-import { chatOverlays, fontFamilies } from "../../theme/tokens";
+import { chatOverlays, fontFamilies, space, corners } from "../../theme/tokens";
 import { FileBadge } from "./attachments";
 import { fileKind, formatSize, mimeTypeOf, stagingError, type StagedFile } from "./chat-model";
 import { TextField } from "./TextField";
@@ -165,18 +165,19 @@ function StagedChip({ file, onRemove }: { readonly file: StagedFile; readonly on
 }
 
 const styles = StyleSheet.create({
-  composer: { paddingTop: 8, paddingHorizontal: 12 },
+  composer: { paddingTop: space[2], paddingHorizontal: space[3] },
   staged: { maxHeight: 196 },
-  stagedList: { gap: 4, paddingBottom: 8 },
-  field: { flexDirection: "row", alignItems: "center", height: 44, paddingHorizontal: 4, borderRadius: 999, borderWidth: 1 },
-  clip: { marginRight: 2 },
-  send: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4, paddingRight: 4, paddingBottom: 4, paddingLeft: 6, borderRadius: 12, borderWidth: 1 },
+  stagedList: { gap: space[1], paddingBottom: space[2] },
+  field: { flexDirection: "row", alignItems: "center", height: 44, paddingHorizontal: space[1], borderRadius: corners.pill, borderWidth: 1 },
+  clip: { marginRight: space["0-5"] },
+  send: { width: 36, height: 36, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
+  chip: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: space["2-5"], paddingTop: space[1], paddingRight: space[1], paddingBottom: space[1], paddingLeft: space["1-5"], borderRadius: corners.xl, borderWidth: 1 },
   chipPreview: { width: 32, height: 32 },
-  chipImage: { width: 32, height: 32, borderRadius: 7 },
-  chipShade: { borderRadius: 7, backgroundColor: chatOverlays.uploading, alignItems: "center", justifyContent: "center" },
+  chipImage: { width: 32, height: 32, borderRadius: corners.md },
+  chipShade: { borderRadius: corners.md, backgroundColor: chatOverlays.uploading, alignItems: "center", justifyContent: "center" },
   faded: { opacity: 0.5 },
+  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
   chipText: { flex: 1, minWidth: 0, gap: 1 },
   chipDetail: { fontFamily: fontFamilies[400], lineHeight: 15 },
-  remove: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  remove: { width: 28, height: 28, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
 });

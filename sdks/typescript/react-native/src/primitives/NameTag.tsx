@@ -2,7 +2,7 @@ import { memo } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMeasuredRef } from "../frame/measurement";
 import { Icon, type IconName } from "../icons/Icon";
-import { fixed, fontFamilies, type } from "../theme/tokens";
+import { fixed, fontFamilies, type, space, corners } from "../theme/tokens";
 import { ChalkText } from "./ChalkText";
 
 export type NameTagProps = {
@@ -66,9 +66,9 @@ export const nameTagZone = INSET + HEIGHT;
 const styles = StyleSheet.create({
   // `.tag`: 8 pt from the bottom-left corner and never wider than the tile less 16 pt.
   slot: { position: "absolute", left: INSET, right: INSET, bottom: INSET, flexDirection: "row", zIndex: 2 },
-  tag: { flexShrink: 1, height: HEIGHT, paddingHorizontal: 8, borderRadius: 6, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: 5 },
+  tag: { flexShrink: 1, height: HEIGHT, paddingHorizontal: space[2], borderRadius: corners.md, backgroundColor: fixed.overlay, flexDirection: "row", alignItems: "center", gap: space["1-5"] },
   name: { flexShrink: 1 },
   you: { flexShrink: 0 },
-  hand: { flexDirection: "row", alignItems: "center", gap: 2 },
+  hand: { flexDirection: "row", alignItems: "center", gap: space["0-5"] },
   order: { ...type.caption, fontFamily: fontFamilies[700] },
 });

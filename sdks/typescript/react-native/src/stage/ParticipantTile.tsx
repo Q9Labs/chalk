@@ -14,7 +14,7 @@ import { timings } from "../motion/motion";
 import { NameTag, nameTagZone } from "../primitives/NameTag";
 import { TileShell } from "../primitives/TileShell";
 import { useToasts } from "../primitives/toast/ToastStack";
-import { fixed, pressScale } from "../theme/tokens";
+import { fixed, pressScale, corners } from "../theme/tokens";
 import { cameraFacing, otherCamera } from "./camera";
 import { shallowEqual, useSpaceSelector } from "./space-selector";
 
@@ -138,6 +138,6 @@ const styles = StyleSheet.create({
   mirrored: { transform: [{ scaleX: -1 }] },
   flip: { position: "absolute", top: 2, right: 2, width: 44, height: 44, alignItems: "center", justifyContent: "center", zIndex: 4 },
   flipFloat: { top: 0, right: 0 },
-  flipKnob: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  flipKnob: { width: 32, height: 32, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
   flipPressed: { transform: [{ scale: pressScale.small }] },
 });

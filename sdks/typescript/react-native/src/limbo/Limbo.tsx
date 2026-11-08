@@ -6,7 +6,7 @@ import { Icon } from "../icons/Icon";
 import { ChalkText } from "../primitives/ChalkText";
 import { PillButton } from "../primitives/PillButton";
 import { useTheme } from "../theme/theme";
-import { fontFamilies } from "../theme/tokens";
+import { fontFamilies, space, corners } from "../theme/tokens";
 
 /** The waiting states that sit over the blurred call (T1, T3 to T6). */
 export type LimboState =
@@ -148,14 +148,14 @@ function Spinner(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   limbo: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  card: { alignItems: "center", gap: 8, maxWidth: "100%", paddingVertical: 22, paddingHorizontal: 28, borderWidth: 1, borderRadius: 16, marginHorizontal: 16 },
-  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  card: { alignItems: "center", gap: space[2], maxWidth: "100%", paddingVertical: space[6], paddingHorizontal: space[6], borderWidth: 1, borderRadius: corners["2xl"], marginHorizontal: space[4] },
+  row: { flexDirection: "row", alignItems: "center", gap: space["2-5"] },
   center: { textAlign: "center" },
   // `.lmsg .pb` adds 10 pt above the button on top of the card's 8 pt gap.
-  action: { marginTop: 10 },
-  holdIcon: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  consent: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  action: { marginTop: space["2-5"] },
+  holdIcon: { width: 44, height: 44, borderRadius: corners.pill, alignItems: "center", justifyContent: "center", marginBottom: space[1] },
+  consent: { flexDirection: "row", alignItems: "center", gap: space["1-5"], marginTop: space[1] },
   // `.consent` is 12 pt at the body weight.
   consentText: { fontFamily: fontFamilies[400], flexShrink: 1 },
-  spinner: { width: 18, height: 18, borderRadius: 9, borderWidth: 2 },
+  spinner: { width: 18, height: 18, borderRadius: corners.pill, borderWidth: 2 },
 });

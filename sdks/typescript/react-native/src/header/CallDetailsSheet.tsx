@@ -15,7 +15,7 @@ import { MenuSection } from "../primitives/Menu";
 import { SegmentedControl } from "../primitives/SegmentedControl";
 import { Switch } from "../primitives/Switch";
 import { useTheme } from "../theme/theme";
-import { sizes, type ColorScheme } from "../theme/tokens";
+import { sizes, type ColorScheme, space, corners } from "../theme/tokens";
 import { QrCode } from "./QrCode";
 
 export type CallDetailsSheetProps = {
@@ -143,15 +143,15 @@ function MenuRow({ label, end }: { readonly label: string; readonly end: React.R
 }
 
 const styles = StyleSheet.create({
-  heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 2, paddingBottom: 4, paddingLeft: 10 },
+  heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2], paddingTop: space["0-5"], paddingBottom: space[1], paddingLeft: space["2-5"] },
   title: { flexShrink: 1 },
-  section: { paddingTop: 4, paddingBottom: 8 },
-  link: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, height: 44, marginHorizontal: 6, paddingLeft: 14, paddingRight: 4, borderRadius: 999 },
+  section: { paddingTop: space[1], paddingBottom: space[2] },
+  link: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2], height: 44, marginHorizontal: space["1-5"], paddingLeft: space[3], paddingRight: space[1], borderRadius: corners.pill },
   linkText: { flexShrink: 1 },
-  linkButtons: { flexDirection: "row", gap: 2 },
-  round: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  qr: { flexDirection: "row", alignItems: "center", gap: 14, marginTop: 10, marginHorizontal: 6, marginBottom: 2 },
+  linkButtons: { flexDirection: "row", gap: space["0-5"] },
+  round: { width: 36, height: 36, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
+  qr: { flexDirection: "row", alignItems: "center", gap: space[3], marginTop: space["2-5"], marginHorizontal: space["1-5"], marginBottom: space["0-5"] },
   qrText: { flex: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: sizes.menuRowPhone, paddingHorizontal: 10 },
+  row: { flexDirection: "row", alignItems: "center", gap: space["2-5"], minHeight: sizes.menuRowPhone, paddingHorizontal: space["2-5"] },
   rowLabel: { flex: 1 },
 });

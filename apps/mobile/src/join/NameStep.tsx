@@ -2,6 +2,7 @@ import { ChalkText, PillButton, useTheme } from "@q9labsai/chalk-react-native/ui
 import { useEffect, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, StyleSheet, View } from "react-native";
 import { TextField } from "../home/TextField";
+import { space, corners } from "@q9labsai/chalk-react-native";
 
 type NameStepProps = {
   readonly onSubmit: (name: string) => void;
@@ -39,6 +40,6 @@ export function NameStep({ onSubmit, onCancel }: NameStepProps): React.JSX.Eleme
 
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center", justifyContent: "center" },
-  card: { width: 300, padding: 20, gap: 8, borderWidth: 1, borderRadius: 16 },
-  submit: { marginTop: 6 },
+  card: { width: 300, padding: space[5], gap: space[2], borderWidth: 1, borderRadius: corners["2xl"] },
+  submit: { marginTop: space["1-5"] },
 });

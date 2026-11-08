@@ -9,7 +9,7 @@ import { Icon, type IconName } from "../../icons/Icon";
 import { usePressAnimation } from "../../motion/press";
 import { announce } from "../../primitives/announce";
 import { ChalkText } from "../../primitives/ChalkText";
-import { durations, easings, fontFamilies, viewer } from "../../theme/tokens";
+import { durations, easings, fontFamilies, viewer, space, corners } from "../../theme/tokens";
 import { useAttachmentSource, useDownload } from "./attachments";
 
 export type ViewedPhotos = {
@@ -51,7 +51,7 @@ export function PhotoViewer({ viewing, onChange, onClose }: PhotoViewerProps): R
   return (
     <Portal layer="menus">
       <Animated.View accessibilityLabel="Image viewer" accessibilityViewIsModal entering={fadeIn} exiting={fadeOut} onAccessibilityEscape={onClose} style={[StyleSheet.absoluteFill, styles.root]} testID="chat.viewer">
-        <View style={[styles.top, { paddingTop: Math.max(52, layout.insets.top), paddingLeft: 16 + layout.insets.left, paddingRight: 8 + layout.insets.right }]}>
+        <View style={[styles.top, { paddingTop: Math.max(52, layout.insets.top), paddingLeft: space[4] + layout.insets.left, paddingRight: space[2] + layout.insets.right }]}>
           <View style={styles.title}>
             <ChalkText color={viewer.text} numberOfLines={1} variant="bodyStrong">
               {photo.fileName}
@@ -121,13 +121,13 @@ const fadeOut: EntryExitAnimationFunction = () => {
 
 const styles = StyleSheet.create({
   root: { backgroundColor: viewer.backdrop },
-  top: { flexDirection: "row", alignItems: "center", gap: 8, paddingBottom: 8 },
+  top: { flexDirection: "row", alignItems: "center", gap: space[2], paddingBottom: space[2] },
   title: { flex: 1, minWidth: 0 },
   detail: { fontFamily: fontFamilies[400] },
   stage: { flex: 1 },
   // `.phone .lbs img`: the full width, 108 pt kept free under it for the arrows.
   photoBox: { position: "absolute", top: 0, left: 0, right: 0, bottom: 108, alignItems: "center", justifyContent: "center" },
   photo: { width: "100%", height: "100%" },
-  arrows: { position: "absolute", left: 0, right: 0, bottom: 40, flexDirection: "row", justifyContent: "center", gap: 32 },
-  button: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+  arrows: { position: "absolute", left: 0, right: 0, bottom: 40, flexDirection: "row", justifyContent: "center", gap: space[8] },
+  button: { width: 44, height: 44, borderRadius: corners.pill, alignItems: "center", justifyContent: "center" },
 });
