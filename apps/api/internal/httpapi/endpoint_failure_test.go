@@ -1,11 +1,18 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
 // A new Episode refused because no own-SFU node has room fails with the same
@@ -28,8 +35,8 @@ func TestOwnSFUPlacementRefusalLogsItsReason(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
 	refusal := fmt.Errorf("resolve episode media binding: %w: %w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused)
-	endpoint := Post("/v1/refusal", "/v1/refusal", "placementRefusal", decodeNoRequest, func(context.Context, noRequest) (noRequest, error) {
-		return noRequest{}, refusal
+	endpoint := Post("/v1/refusal", "/v1/refusal", "placementRefusal", func(*http.Request) (struct{}, error) { return struct{}{}, nil }, func(context.Context, struct{}) (struct{}, error) {
+		return struct{}{}, refusal
 	}).MapErrors(episodeLifecycleEndpointAPIError)
 	endpoint.Mount(router, RateLimitOptions{})
 	response := httptest.NewRecorder()
