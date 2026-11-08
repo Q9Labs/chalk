@@ -71,8 +71,8 @@ jobs:
       release_sha: ${{ needs.plan.outputs.target_sha }}
     secrets: inherit
   own-sfu:
-    # The own SFU's real-call proof and action latency on staging. A failure turns this job red but leaves the deploy and the release record as they are;
-    # the proof cleans up its Spaces and Episodes in every outcome.
+    # The own SFU's real-call proof and action latency on staging. A failure turns this job red and is recorded as own_sfu_proof_result, which Promote requires.
+    # It does not change the deploy or whether the cut is held, and the proof cleans up its Spaces and Episodes in every outcome.
     needs: [plan, release]
     if: needs.release.result == 'success'
     uses: ./.github/workflows/real-call-proof.yml
@@ -91,7 +91,7 @@ jobs:
       environment: nightly
     secrets: inherit
   record:
-    needs: [plan, release, proof, web-e2e]
+    needs: [plan, release, proof, own-sfu, web-e2e]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -106,6 +106,8 @@ jobs:
           DEPLOY_RESULT: ${{ needs.release.result }}
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
+          # Recorded for Promote only: it does not decide whether this cut is held.
+          OWN_SFU_RESULT: ${{ needs.own-sfu.result == 'success' && needs.own-sfu.outputs.result || 'failed' }}
         run: |
           python3 scripts/releases/release.py record
           test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed

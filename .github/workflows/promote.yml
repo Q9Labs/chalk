@@ -63,6 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SELECTION: ${{ needs.select.outputs.selection }}
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
         run: python3 scripts/releases/release.py recheck
       - name: Select the explicit production Pages destination
         run: |

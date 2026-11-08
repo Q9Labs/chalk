@@ -98,13 +98,17 @@ to match the run and applied identity; retrying an older record job cannot reviv
 Completed-cut history remains.
 Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
+The nightly `own-sfu` job proves the own SFU (`chalk_sfu`) on staging for the same revision: the `camera-share` proof and the action latency run. The `record` job stores its result as `own_sfu_proof_result` (`passed` or `failed`) in the held record, next to `proof_run_id`, the nightly run that produced both. The result does not decide whether the cut is held: a cut with a failed own-SFU proof is still held and still releases on GitHub, but Promote refuses it.
+
 ## Promote
 
 Dispatch `Promote newest held nightly` from master with three required inputs:
 `expected_sha` (the held release revision you approve), `leave_baseline_median_ms` and
 `leave_baseline_evidence_sha256` (from the same-session Leave comparison in
 [prod-proof](../scripts/prod-proof/README.md)). `scorecard_override` is optional.
-Selection fails before deployment if the newest held release is not `expected_sha`.
+Selection fails before deployment if the newest held release is not `expected_sha`,
+or if its `own_sfu_proof_result` is not `passed`. A record from before the own-SFU nightly has no
+result and fails the same way; the approval recheck applies the same rule.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
 first decisive record, and fetch statuses only for matching candidates. Nightly

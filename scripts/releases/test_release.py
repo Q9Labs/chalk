@@ -123,6 +123,23 @@ class MemoryGitHub(GitHub):
 class CutTests(unittest.TestCase):
     @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
     @patch.dict(os.environ, GITHUB_RUN_ID='1')
+    def test_own_sfu_result_is_recorded_and_does_not_decide_whether_the_cut_is_held(self):
+        for own_sfu, expected in [('passed', 'passed'), ('failed', 'failed'), ('', ''), (None, 'failed')]:
+            with self.subTest(own_sfu=own_sfu):
+                api = MemoryGitHub()
+                with patch.dict(os.environ, RELEASE_ID='A'):
+                    release.invalidate(api, None)
+                result = {} if own_sfu is None else dict(OWN_SFU_RESULT=own_sfu)
+                with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success',
+                                PROOF_RESULT='passed', WEB_E2E_RESULT='passed', **result):
+                    release.record(api, None)
+                cut = api.items[-1]
+                self.assertEqual(cut['latest_status'], 'success')
+                self.assertEqual(cut['payload']['own_sfu_proof_result'], expected)
+                self.assertEqual(cut['payload']['proof_run_id'], '1')
+
+    @patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA)
+    @patch.dict(os.environ, GITHUB_RUN_ID='1')
     def test_cut_requires_both_proofs_and_records_each_result(self):
         for real_call, web_e2e, expected in [('passed', 'passed', True), ('failed', 'passed', False),
                                              ('passed', 'failed', False), ('passed', '', False),
@@ -406,11 +423,39 @@ class HeldSelectionTests(unittest.TestCase):
                  (dict(LEAVE_BASELINE_MEDIAN_MS='nan'), 'baseline median'),
                  (dict(LEAVE_BASELINE_MEDIAN_MS='5001'), 'baseline median'),
                  (dict(LEAVE_BASELINE_EVIDENCE_SHA256='invalid'), 'evidence')]
-        with patch.object(release, 'validate_choice', return_value=held()['payload']):
+        with patch.object(release, 'validate_choice', return_value=dict(held()['payload'], own_sfu_proof_result='passed')):
             for changes, message in cases:
                 with self.subTest(changes=changes), patch.dict(os.environ, {**valid, **changes}):
                     with self.assertRaisesRegex(ValueError, message):
                         release.select(api, None)
+
+    def test_promotion_requires_a_passed_own_sfu_proof_on_the_approved_revision(self):
+        approved = dict(EXPECTED_RELEASE_SHA=SHA, LEAVE_BASELINE_MEDIAN_MS='150.5', LEAVE_BASELINE_EVIDENCE_SHA256='a' * 64)
+        for result, message in [('failed', 'own_sfu_proof_result=failed'), (None, 'own_sfu_proof_result=None'), ('passed', None)]:
+            with self.subTest(own_sfu=result), tempfile.TemporaryDirectory() as directory:
+                api = MemoryGitHub()
+                with patch.dict(os.environ, GITHUB_OUTPUT=os.devnull, TARGET_SHA=SHA, GITHUB_RUN_ID='1', RELEASE_ID='A'):
+                    release.invalidate(api, None)
+                    own_sfu = {} if result is None else dict(OWN_SFU_RESULT=result)
+                    with patch.dict(os.environ, RELEASE=json.dumps(api.info('1', 'A')), DEPLOY_RESULT='success',
+                                    PROOF_RESULT='passed', WEB_E2E_RESULT='passed', **own_sfu):
+                        release.record(api, None)
+                    if result is None:
+                        del api.items[-1]['payload']['own_sfu_proof_result']  # A record from before the own-SFU nightly.
+                output = Path(directory) / 'output'
+                with patch.dict(os.environ, GITHUB_OUTPUT=str(output), GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'), **approved):
+                    if message:
+                        with self.assertRaisesRegex(ValueError, message):
+                            release.select(api, None)
+                        continue
+                    release.select(api, None)
+                    selection = output.read_text().split('selection=', 1)[1]
+                    with patch.dict(os.environ, SELECTION=selection):
+                        release.recheck(api, None)
+                        with patch.object(release, 'require_own_sfu_proof', side_effect=ValueError('own-SFU')) as check:
+                            with self.assertRaisesRegex(ValueError, 'own-SFU'):
+                                release.recheck(api, None)
+                            check.assert_called_once()
 
     def test_approval_recheck_allows_inflight_but_rejects_newly_held_replacement(self):
         api = MemoryGitHub()
