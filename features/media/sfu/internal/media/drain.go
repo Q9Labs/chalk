@@ -41,10 +41,11 @@ func (n *Node) DrainState() protocol.DrainState {
 	}
 }
 
-// allocations counts what the node holds per Episode: live sessions and source leases that are
-// still open. A lease with no session lapses on its own TTL, so it counts until then. Every new
-// kind of per-Episode holding, such as a capture session, is added here so that drain, readiness
-// and the restart gate all see it. The caller holds n.mu.
+// allocations counts what the node holds per Episode: live sessions, capture sessions included
+// because they live in n.sessions, and source leases that are still open. A lease with no session
+// lapses on its own TTL, so it counts until then. Every new kind of per-Episode holding outside
+// n.sessions is added here so that drain, readiness and the restart gate all see it. The caller
+// holds n.mu.
 func (n *Node) allocations() int {
 	count := len(n.sessions)
 	now := monotonic()
