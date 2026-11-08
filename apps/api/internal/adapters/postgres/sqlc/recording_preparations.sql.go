@@ -74,7 +74,11 @@ func (q *Queries) CancelRecordingPreparation(ctx context.Context, arg CancelReco
 
 const getRecordingEntranceEligibility = `-- name: GetRecordingEntranceEligibility :one
 select spaces.recording_policy, spaces.archived_at,
-    coalesce(nullif(btrim(spaces.media_plane), ''), (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '')::text as media_plane,
+    ($1::boolean or coalesce(
+        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
+         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
+        nullif(btrim(spaces.media_plane), ''),
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')::boolean as plane_eligible,
     (exists (select 1 from sync_recordings where sync_recordings.tenant_id = spaces.tenant_id
         and sync_recordings.space_id = spaces.id and sync_recordings.status in ('starting', 'recording', 'stopping'))
      or exists (select 1 from recordings join episodes on episodes.id = recordings.episode_id
@@ -85,18 +89,19 @@ select spaces.recording_policy, spaces.archived_at,
     preparation.starts_at
 from spaces
 left join recording_preparations preparation on preparation.tenant_id = spaces.tenant_id and preparation.space_id = spaces.id
-where spaces.tenant_id = $1 and spaces.id = $2
+where spaces.tenant_id = $2 and spaces.id = $3
 `
 
 type GetRecordingEntranceEligibilityParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	SpaceID  pgtype.UUID `json:"space_id"`
+	OwnCapture bool        `json:"own_capture"`
+	TenantID   pgtype.UUID `json:"tenant_id"`
+	SpaceID    pgtype.UUID `json:"space_id"`
 }
 
 type GetRecordingEntranceEligibilityRow struct {
 	RecordingPolicy  string             `json:"recording_policy"`
 	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
-	MediaPlane       string             `json:"media_plane"`
+	PlaneEligible    bool               `json:"plane_eligible"`
 	Active           bool               `json:"active"`
 	Revision         int64              `json:"revision"`
 	PreparationState string             `json:"preparation_state"`
@@ -104,12 +109,12 @@ type GetRecordingEntranceEligibilityRow struct {
 }
 
 func (q *Queries) GetRecordingEntranceEligibility(ctx context.Context, arg GetRecordingEntranceEligibilityParams) (GetRecordingEntranceEligibilityRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingEntranceEligibility, arg.TenantID, arg.SpaceID)
+	row := q.db.QueryRow(ctx, getRecordingEntranceEligibility, arg.OwnCapture, arg.TenantID, arg.SpaceID)
 	var i GetRecordingEntranceEligibilityRow
 	err := row.Scan(
 		&i.RecordingPolicy,
 		&i.ArchivedAt,
-		&i.MediaPlane,
+		&i.PlaneEligible,
 		&i.Active,
 		&i.Revision,
 		&i.PreparationState,
@@ -128,11 +133,16 @@ with eligible as (
       and preparation.starts_at <= $3::timestamptz + interval '5 minutes'
       and preparation.starts_at > $3::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
+      and ($4::boolean or coalesce(
+        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
+         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
+        nullif(btrim(spaces.media_plane), ''),
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
 ), capacity as (
     -- Sync reserves ten participants for each new Recording.
     select greatest(0, least(
-        coalesce(nullif($4::integer, 0), 10) - reserved_episodes,
-        (coalesce(nullif($5::integer, 0), 100) - reserved_participants) / 10
+        coalesce(nullif($5::integer, 0), 10) - reserved_episodes,
+        (coalesce(nullif($6::integer, 0), 100) - reserved_participants) / 10
     ))::integer as available, reserved_episodes as occupied
     from recording_capacity where id = 1
 ), ready as (
@@ -154,6 +164,7 @@ type GetRecordingPreparationParams struct {
 	TenantID       pgtype.UUID        `json:"tenant_id"`
 	SpaceID        pgtype.UUID        `json:"space_id"`
 	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	OwnCapture     bool               `json:"own_capture"`
 	RecordingCap   int32              `json:"recording_cap"`
 	ParticipantCap int32              `json:"participant_cap"`
 }
@@ -178,6 +189,7 @@ func (q *Queries) GetRecordingPreparation(ctx context.Context, arg GetRecordingP
 		arg.TenantID,
 		arg.SpaceID,
 		arg.ObservedAt,
+		arg.OwnCapture,
 		arg.RecordingCap,
 		arg.ParticipantCap,
 	)
@@ -206,8 +218,6 @@ with written as (
     from spaces
     where tenant_id = $1 and id = $2
       and archived_at is null and recording_policy <> 'disabled'
-      -- The own SFU has no capture path yet, so no Space that selects it, directly or through its Tenant, holds a preparation.
-      and coalesce(nullif(btrim(media_plane), ''), (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
       and ($5::bigint = 0 or exists (
           select 1 from recording_preparations where tenant_id = $1 and space_id = $2
       ))

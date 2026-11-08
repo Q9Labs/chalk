@@ -189,6 +189,7 @@ func run() error {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
 	}
+	ownCapture := chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled
 	mediaPlaneTelemetry := observability.NewMediaPlaneResolutionTelemetry(logger)
 	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
@@ -281,7 +282,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recorder worker identity: %w", err)
 		}
-		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier)
+		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier, ownCapture)
 		if err != nil {
 			return err
 		}
@@ -296,7 +297,7 @@ func run() error {
 		captureRegistrations := []captureproviders.Registration{{
 			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
 		}}
-		if chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled {
+		if ownCapture {
 			ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, chalkSFU.ApplicationID())
 			if err != nil {
 				return fmt.Errorf("configure own SFU recording identity: %w", err)
@@ -408,12 +409,13 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool).WithOwnCapture(ownCapture))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
-		recordingEntrance = postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission)
-		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService)
+		recordingPreparations := postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission).WithOwnCapture(ownCapture)
+		recordingEntrance = recordingPreparations
+		recordingPreparationService = recordingpreparation.NewService(recordingPreparations, spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)

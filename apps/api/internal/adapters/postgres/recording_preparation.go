@@ -22,6 +22,7 @@ type recordingPreparationQuerier interface {
 
 type RecordingPreparationRepository struct {
 	admissionLimits recordingpipeline.AdmissionLimits
+	ownCapture      bool
 	pool            *pgxpool.Pool
 	queries         recordingPreparationQuerier
 }
@@ -32,7 +33,14 @@ func NewRecordingPreparationRepository(pool *pgxpool.Pool) RecordingPreparationR
 
 func (r RecordingPreparationRepository) Prepare(ctx context.Context, input recordingpreparation.Input, now time.Time) (recordingpreparation.Preparation, error) {
 	return r.mutate(ctx, input, now, func(queries *sqlc.Queries) error {
-		_, err := queries.PrepareRecordingSpace(ctx, sqlc.PrepareRecordingSpaceParams{
+		eligibility, err := queries.GetRecordingEntranceEligibility(ctx, sqlc.GetRecordingEntranceEligibilityParams{TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), OwnCapture: r.ownCapture})
+		if err != nil {
+			return err
+		}
+		if !eligibility.PlaneEligible {
+			return recordingpreparation.ErrPolicyDenied
+		}
+		_, err = queries.PrepareRecordingSpace(ctx, sqlc.PrepareRecordingSpaceParams{
 			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), StartsAt: timestamptzValue(input.StartsAt),
 			ExpectedRevision: input.ExpectedRevision, ObservedAt: timestamptzValue(now),
 		})
@@ -50,7 +58,7 @@ func (r RecordingPreparationRepository) Cancel(ctx context.Context, input record
 }
 
 func (r RecordingPreparationRepository) Get(ctx context.Context, tenantID, spaceID utilities.ID, now time.Time) (recordingpreparation.Preparation, error) {
-	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now, r.admissionLimits.WithDefaults())
+	return getRecordingPreparation(ctx, r.queries, tenantID, spaceID, now, r.admissionLimits.WithDefaults(), r.ownCapture)
 }
 
 func (r RecordingPreparationRepository) mutate(ctx context.Context, input recordingpreparation.Input, now time.Time, change func(*sqlc.Queries) error) (recordingpreparation.Preparation, error) {
@@ -66,12 +74,15 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 		return recordingpreparation.Preparation{}, fmt.Errorf("lock recording preparation capacity: %w", err)
 	}
 	if err := change(queries); err != nil {
+		if errors.Is(err, recordingpreparation.ErrPolicyDenied) {
+			return recordingpreparation.Preparation{}, err
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return recordingpreparation.Preparation{}, recordingpreparation.ErrConflict
 		}
 		return recordingpreparation.Preparation{}, fmt.Errorf("update recording preparation: %w", err)
 	}
-	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now, r.admissionLimits.WithDefaults())
+	preparation, err := getRecordingPreparation(ctx, queries, input.TenantID, input.SpaceID, now, r.admissionLimits.WithDefaults(), r.ownCapture)
 	if err != nil {
 		return recordingpreparation.Preparation{}, err
 	}
@@ -81,9 +92,9 @@ func (r RecordingPreparationRepository) mutate(ctx context.Context, input record
 	return preparation, nil
 }
 
-func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time, limits recordingpipeline.AdmissionLimits) (recordingpreparation.Preparation, error) {
+func getRecordingPreparation(ctx context.Context, queries recordingPreparationQuerier, tenantID, spaceID utilities.ID, now time.Time, limits recordingpipeline.AdmissionLimits, ownCapture bool) (recordingpreparation.Preparation, error) {
 	row, err := queries.GetRecordingPreparation(ctx, sqlc.GetRecordingPreparationParams{
-		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now),
+		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), TenantID: uuid(tenantID), SpaceID: uuid(spaceID), ObservedAt: timestamptzValue(now), OwnCapture: ownCapture,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return recordingpreparation.Preparation{}, recordingpreparation.ErrNotFound
@@ -110,15 +121,14 @@ func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, ten
 	if _, err = q.LockRecordingCapacity(ctx); err != nil {
 		return false, fmt.Errorf("lock Entrance preparation: %w", err)
 	}
-	row, err := q.GetRecordingEntranceEligibility(ctx, sqlc.GetRecordingEntranceEligibilityParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID)})
+	row, err := q.GetRecordingEntranceEligibility(ctx, sqlc.GetRecordingEntranceEligibilityParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID), OwnCapture: r.ownCapture})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, spaces.ErrSpaceNotFound
 	}
 	if err != nil {
 		return false, fmt.Errorf("read Entrance eligibility: %w", err)
 	}
-	// The own SFU has no capture path yet, so its Spaces get no pre-warmed recorder.
-	if row.RecordingPolicy != "automatic" || row.ArchivedAt.Valid || row.Active || row.MediaPlane == string(spaces.MediaPlaneProviderChalkSFU) || (row.PreparationState == "scheduled" && row.StartsAt.Valid && !row.StartsAt.Time.After(now) && now.Before(row.StartsAt.Time.Add(recordingpreparation.NoShowGrace))) {
+	if row.RecordingPolicy != "automatic" || row.ArchivedAt.Valid || row.Active || !row.PlaneEligible || (row.PreparationState == "scheduled" && row.StartsAt.Valid && !row.StartsAt.Time.After(now) && now.Before(row.StartsAt.Time.Add(recordingpreparation.NoShowGrace))) {
 		return false, nil
 	}
 	_, err = q.PrepareRecordingSpace(ctx, sqlc.PrepareRecordingSpaceParams{TenantID: uuid(tenantID), SpaceID: uuid(spaceID), StartsAt: timestamptzValue(now), ObservedAt: timestamptzValue(now), ExpectedRevision: row.Revision})
@@ -130,6 +140,13 @@ func (r RecordingPreparationRepository) PrepareEntrance(ctx context.Context, ten
 	}
 	slog.InfoContext(ctx, "Capture pre-warmed for Entrance", "event", "recording.entrance.prewarmed", "revision", row.Revision+1)
 	return true, nil
+}
+
+// WithOwnCapture says the recorder can reach the own SFU's nodes, so a Space on it can hold a
+// preparation. Without it the own SFU has no capture path, and no preparation for it counts.
+func (r RecordingPreparationRepository) WithOwnCapture(enabled bool) RecordingPreparationRepository {
+	r.ownCapture = enabled
+	return r
 }
 
 func (r RecordingPreparationRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingPreparationRepository {
