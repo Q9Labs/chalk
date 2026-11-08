@@ -70,7 +70,7 @@ test("the API-only source never fabricates node readings or accepts zero-event c
 test("contended values never enter the regression baseline or trends but remain clearly marked in comments", (t) => {
   const clean = card(contention(input()));
   const dirty = card(contention({ ...input(), lease: { ...lease, lost: true } }), 10000, "nightly-2");
-  assert.equal(baselineCard([clean, dirty], "chalk_sfu").metrics[0].p95, 300);
+  assert.equal(baselineCard([clean, dirty, { ...dirty, run: { ...dirty.run, id: "nightly-3" } }], "chalk_sfu").metrics[0].p95, 300);
   assert.equal(baselineCard([dirty], "chalk_sfu"), undefined);
   assert.ok(!trendsMarkdown([clean, dirty], {}).includes("10000"));
   const directory = mkdtempSync(join(tmpdir(), "contention-diff-"));
@@ -80,6 +80,10 @@ test("contended values never enter the regression baseline or trends but remain 
   const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), "diff", "--current", join(directory, "card.json"), "--fail-on-gate", "--markdown", markdown], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
   assert.match(sectionComment("nightly", readFileSync(markdown, "utf8")), /CONTENDED.*excluded from regression baselines/);
+  writeFileSync(join(directory, "card.json"), JSON.stringify(card(contention(input()), 10000)));
+  const cleanBreach = spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), "diff", "--current", join(directory, "card.json"), "--fail-on-gate"], { encoding: "utf8" });
+  assert.equal(cleanBreach.status, 1);
+  assert.match(cleanBreach.stderr, /over a gated budget/);
 });
 
 test("contention schema rejects resource identifiers, extra fields, and fabricated unavailable values", () => {

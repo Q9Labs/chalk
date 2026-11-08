@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 // The parent owns the shared lease; the child measures and retries under that lease.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { contention, signal } from "./contention.mjs";
 import { readLogs } from "./staging-logs.mjs";
 import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
-import { command } from "../../scripts/prod-proof/runtime.mjs";
 
 const evidence = resolve(".private/latency-scorecard");
 const leaseFile = resolve(".private/staging-lease.json");
@@ -27,7 +26,7 @@ async function json(path, fallback) {
 async function emptyCard() {
   return {
     schema: SCORECARD_SCHEMA,
-    run: { id: `${prefix}-latency`, commit: (await command("git", ["rev-parse", "HEAD"])).trim(), tier: "nightly", environment: "staging", startedAt: new Date().toISOString(), client: { kind: "browser", browser: "unknown", region: "github-hosted", size: "ubuntu-24-04" } },
+    run: { id: `${prefix}-latency`, commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(), tier: "nightly", environment: "staging", startedAt: new Date().toISOString(), client: { kind: "browser", browser: "unknown", region: "github-hosted", size: "ubuntu-24-04" } },
     mediaPlane: "chalk_sfu",
     metrics: [],
     dropped: [],
