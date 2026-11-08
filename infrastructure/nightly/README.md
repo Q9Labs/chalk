@@ -135,11 +135,17 @@ Production rendering remains unchanged.
 | Tunnel                              |       48 |
 | Capture controller                  |       32 |
 | Render controller                   |       32 |
-| Issuer                              |       32 |
+| Issuer                              |      256 |
 | One-shot migrator                   |       64 |
-| Total including migrator            |      880 |
+| Total including migrator            |     1104 |
 | Host OS reserve                     |      640 |
-| Free after caps and host OS reserve |      528 |
+| Free after caps and host OS reserve |      304 |
+
+The [environment contract](../managed-episode/contracts/environments.json) keeps
+smaller nightly caps to fit the 2 GiB host. The issuer matches production's
+256 MiB cap because its former 32 MiB cap caused cgroup OOM kills during recorder
+bootstrap. The free-memory figure uses nominal RAM; the host reports about
+1,835 MiB usable, leaving about 91 MiB after all caps and the OS reserve.
 
 The 640 MiB host reserve exceeds the measured production idle non-container
 usage of about 618 MB. Redis retains its 256 MiB maxmemory policy.
