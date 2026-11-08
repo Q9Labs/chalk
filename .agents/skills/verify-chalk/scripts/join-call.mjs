@@ -133,6 +133,14 @@ try {
       const first = received.state.frames;
       await page.waitForTimeout(3000);
       const { frames: second } = await page.evaluate(tileState, other);
+      if (!(second > first + 5)) {
+        const trace = [];
+        for (let i = 0; i < 30; i++) {
+          await page.waitForTimeout(1000);
+          trace.push((await page.evaluate(tileState, other)).frames);
+        }
+        measurements[name] = { ...measurements[name], framesEachSecondAfterStall: trace };
+      }
       if (!(second > first + 5)) throw new Error(`${other}'s tile decoded ${first} then ${second} frames after ${received.firstFrameMs} ms; video is not advancing`);
       return { firstFrameMs: received.firstFrameMs, frames: [first, second] };
     });

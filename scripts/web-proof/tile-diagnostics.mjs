@@ -43,8 +43,8 @@ export const peerStats = async () => {
               remoteType: byId.get(pair.remoteCandidateId)?.candidateType,
             }
           : null,
-        inboundVideo: video("inbound-rtp").map((row) => pick(row, ["packetsReceived", "bytesReceived", "packetsLost", "framesReceived", "framesDecoded", "keyFramesDecoded", "pliCount", "firCount", "nackCount", "freezeCount"])),
-        outboundVideo: video("outbound-rtp").map((row) => pick(row, ["packetsSent", "bytesSent", "framesEncoded", "keyFramesEncoded", "pliCount", "firCount", "nackCount", "active"])),
+        inboundVideo: video("inbound-rtp").map((row) => pick(row, ["packetsReceived", "bytesReceived", "packetsLost", "framesReceived", "framesDecoded", "framesDropped", "framesPerSecond", "frameWidth", "frameHeight", "keyFramesDecoded", "pliCount", "firCount", "nackCount", "freezeCount"])),
+        outboundVideo: video("outbound-rtp").map((row) => pick(row, ["rid", "packetsSent", "bytesSent", "framesEncoded", "keyFramesEncoded", "frameWidth", "frameHeight", "framesPerSecond", "targetBitrate", "qualityLimitationReason", "pliCount", "firCount", "nackCount", "active"])),
       };
     }),
   );
