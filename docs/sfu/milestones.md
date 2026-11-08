@@ -457,7 +457,8 @@ an overflow switch, whole-Episode recovery, and every proof below.
    `apps/api/internal/mediaplane/binding.go`, config,
    `apps/api/internal/observability/media_plane.go`.
 2. **Drain control.** `/readyz` reports `draining`, live allocations (sessions,
-   leases and capture sessions) and cleanup debt. An mTLS drain request replaces
+   capture sessions included), cleanup debt and, apart from both, open source
+   leases, which do not hold a restart. An mTLS drain request replaces
    SIGUSR1 as the control path, with an undrain for an aborted deploy. The
    deploy script waits for zero allocations and zero debt, and a forced deadline
    is logged as disruptive replacement. The API probe tells a draining node from
