@@ -8,14 +8,15 @@ becomes default-on in M12. [Design](design.md) owns the contracts, capacity gate
 and temporary exclusions. Provisioning follows the [hosting decision](design.md#hosting-and-budget),
 not these docs alone.
 
-Run heavy Linux/browser/load checks on Instabox. Chalk runs two Basic `s-1vcpu-1gb`
-nodes in `sgp1`, one for staging and one for production, about $12/month, and
-keeps both. Production moves to the $18 `s-2vcpu-2gb` tier only with the
-owner's approval, when measured load needs it. Real `sgp1` capacity proofs run on the
-production node's size, not the Air. Chalk has no active users yet, so M6 and M7
-carry no rollback plan: M7 verifies the live media plane instead. The design
-identifies workload combinations that do not fit the initial reservation
-budgets; a passing canary must not conceal that full-cutover blocker.
+Run heavy Linux/browser/load checks on Instabox. Chalk runs a $6 `s-1vcpu-1gb`
+staging node and an $18 `s-2vcpu-2gb` production node in `sgp1`, $24/month, and
+keeps both; no other always-on node is authorized. Multi-node proofs use staging
+or short-lived Droplets tagged `chalk-sfu-bench` that are deleted the same day
+(under $1 per run). Real `sgp1` capacity proofs run on the production node's size,
+not the Air. Chalk has no active users yet, so M6 and M7 carry no rollback plan:
+M7 verifies the live media plane instead. The design identifies workload
+combinations that do not fit the initial reservation budgets; a passing canary
+must not conceal that full-cutover blocker.
 
 ## M1 — Service skeleton and real single-layer push/pull
 
@@ -416,172 +417,224 @@ Recorder capture load must be reserved; it cannot bypass the node packet ceiling
 
 ## M11 — Primary placement, degraded standby and drain
 
-**Dependencies:** start after M2 records a node in the Episode binding. Use M3's
-generation/source fences, M5 budgets and M6 capacity evidence. Build in parallel
-with M10; final capacity acceptance includes M10 capture.
+**Dependencies:** M2 records the node in the Episode binding. M3 generation and
+source fences, M5 budgets and M6 capacity evidence apply. Work packages 1–5 do not
+wait for M10 and run in parallel with it; package 6 (the capacity proof) includes
+M10 capture. M11 owns placement, the allocator, drain and recovery; M10 owns
+capture code, and the two share only `ReadyResponse`, `features/media/sfu/protocol/protocol.go`,
+`features/media/sfu/internal/media/admission.go` and
+`apps/api/internal/adapters/chalksfu/adapter.go`, where each change lands as its own small PR.
 
-**Scope:** operate one **$18 `s-2vcpu-2gb` primary** and one **$6 `s-1vcpu-1gb`
-standby**, $24/month total, once the owner approves the $18 tier. New Episodes use primary unless it is unhealthy,
-draining or full. Only then try standby in degraded mode: M5 holds camera layers
-low, protects audio/screen, bounds repair/queues and refuses admission at
-**16,000**, versus primary's **32,000** initial budget. This is not equal-node
-load balancing or full-capacity redundancy. Single-encoding video cannot be
-made lower-resolution by RID selection; pause/refuse it when necessary.
+**Topology:** production runs **one $18 `s-2vcpu-2gb` node** and staging one $6
+`s-1vcpu-1gb` node, $24/month, and no other always-on node is authorized. The fleet
+code takes any number of nodes in placement order, with a `primary` or `standby`
+role, so a second node is configuration and not new code. Multi-node behavior is
+proved on two short-lived `sgp1` bench Droplets tagged `chalk-sfu-bench` (an
+`s-2vcpu-2gb` primary and an `s-1vcpu-1gb` standby, about $0.04/hour) under one
+test CA, deleted the same day. Staging never serves production traffic, so it is
+not a production standby. Production with one node has no failover target:
+planned replacement is drain, restart and rejoin on the same node, and a lost
+node ends in an explicit capacity result until the M6 infrastructure rebuilds it.
+A production standby ($6/month) or a larger primary is an owner decision outside
+this plan, and nothing here depends on it.
 
-Keep each Episode on one node. Route joins, signaling, leases, capture and
-cleanup by its durable binding and boot incarnation. Primary failure uses
-fresh, generation-fenced allocations on standby within the degraded envelope,
-not seamless transport migration. Atomically reserve complete recovering
-Episodes from their known shape, avoiding half-recovered calls that consume
-capacity through individual retry races. When primary recovers, new Episodes
-prefer it; existing standby Episodes remain pinned until they end.
+**Current code:** `Fleet.Place` already picks the first ready node with packet
+budget left, skips silent nodes, and starts a new Episode on Cloudflare when none
+has room. The SFU already drains on SIGUSR1: it refuses new Episodes, keeps live
+calls and fails readiness, and `deploy/deploy` waits for it. Missing: node roles
+and a degraded envelope, an API-reachable drain with allocation and cleanup-debt
+counts, boot incarnation in the binding, recorded placement and overflow reasons,
+an overflow switch, whole-Episode recovery, and every proof below.
 
-At the initial costs, standby fits **six three-person Episodes** at 14,400,
-not seven at 16,800, or one capped ten-person Episode plus one three-person
-Episode at 13,920. Six realistic screen-on classes held on `l` use about 10,620
-actual packets/s before repair/capture. It carries realistic admitted traffic, not the
-twelve-class 28,800 reservation or the all-high peak. M5 low-layer savings do
-not automatically lower M2 reservations. A wider degraded envelope needs
-measured, enforced reservation calibration; capture consumes capacity too.
+**Work packages**
 
-**Decision until M13:** if standby also refuses a new Episode, overflow
-to Cloudflare SFU before persisting its provider binding. Record the reason and
-keep overflow Episodes pinned. This is migration policy, not an indefinite
-Cloudflare exception. Never send a refused join in
-an existing own-SFU Episode alone to Cloudflare. Return capacity/retry, or use
-an explicit whole-call rollback with an authority-approved new Episode.
-M13 removes overflow; afterwards smaller-standby refusals are explicit degraded
-service, not hidden Cloudflare calls.
+1. **Placement record and overflow switch.** Add the placement reason (`primary`,
+   `standby`, `overflow:<bounded reason>`) and the node's boot incarnation to the
+   binding's JSON, additively and without a schema bump. Add a placement counter
+   with bounded labels. Add `CHALK_SFU_CLOUDFLARE_OVERFLOW` (on until M12 ends).
+   With it off and no node with room, creating an Episode returns the explicit
+   capacity/retry result. Files: `apps/api/internal/adapters/mediaplaneproviders/binding.go`,
+   `apps/api/internal/mediaplane/binding.go`, config,
+   `apps/api/internal/observability/media_plane.go`.
+2. **Drain control.** `/readyz` reports `draining`, live allocations (sessions,
+   leases and capture sessions) and cleanup debt. An mTLS drain request replaces
+   SIGUSR1 as the control path, with an undrain for an aborted deploy. The
+   deploy script waits for zero allocations and zero debt, and a forced deadline
+   is logged as disruptive replacement. The API probe tells a draining node from
+   a silent one.
+3. **Roles and degraded envelope.** A node entry carries `role`. A standby takes
+   a new Episode only when every primary is unhealthy, draining or full, and
+   runs at a configured degraded budget (initially 16,000) with M5 holding
+   camera layers on `l` and protecting audio and screen. Single-encoding video
+   that cannot be lowered is paused or refused. A standby drains only while a
+   primary is healthy with room. `Fleet.Place` also counts the Episodes it has
+   placed on a node since that node's last probe against the node's remaining
+   new-Episode room, so concurrent creations cannot all pin to the last slot;
+   the SFU's own atomic admission stays the final authority.
+4. **Whole-Episode recovery.** When a bound node is lost or returns with a new
+   boot incarnation, the Episode moves through one durable, generation-fenced
+   transition: the SFU reserves the Episode's complete admitted shape atomically
+   (a new reserve operation), then participants rejoin with fresh generations and
+   M3 consent rules. A node refusing the reserve gives an explicit capacity
+   outcome and never a half-recovered call. Responses from a replaced
+   incarnation are rejected, and cleanup keeps targeting the old allocation. On a
+   single-node pool the same transition is restart recovery on the same node.
+5. **Fault and proof harness.** Scripts create and delete the bench pair, run the
+   fault cases below against real SFU processes and the real API adapter, count
+   in/out packets, CPU steal, queues and RSS per SKU, and end by listing
+   Droplets and failing if any `chalk-sfu-bench` remains.
+6. **Capacity proof (needs M10 and M6).** The full admitted workload on a single
+   `s-2vcpu-2gb` node with capture, repair and the rare-call stress case. The
+   design's initial-budget failures get a reviewed capacity or quality policy; a
+   standby or Cloudflare route is not a primary proof.
 
-For primary deploys, drain without taking new Episodes, keep current calls and
-recordings running to completion, then restart only at zero allocations and
-cleanup debt. New calls use standby's bounded capacity and temporary
-overflow. This preserves existing media, not full new-call availability during
-drain. A forced deadline causes explicit replacement and must not be called
-zero-interruption. Drain standby only with a healthy primary.
+**Check:** packages 1–5 are proved with real processes and no mock of the SFU:
 
-**Files:** provider/node registry, Episode binding persistence and routing,
-SFU health/drain/degraded controls, admission, infrastructure/runtime composition,
-public deploy/recovery guidance, fault/proof scripts and correlated telemetry.
-The binding starts in M2; extend it without a competing model.
+- Placement. Concurrent Episode creation against a pool one Episode from full
+  never over-admits. Primary full, unhealthy and draining each send new
+  Episodes to the standby and to nothing else. Overflow lands on Cloudflare
+  before the binding commits, records its reason, and stays pinned. With overflow
+  off the result is capacity/retry. A refused join in a bound Episode never goes
+  to another provider.
+- Drain. A one-hour drain on the primary: existing calls and recordings finish
+  uninterrupted, new Episodes go to the standby or overflow, refusals are counted,
+  restart happens at zero allocations and debt. A forced deadline is reported as
+  disruptive. Recovery of the primary restores preferred placement without moving
+  a live call.
+- Failure, on the bench pair. Kill the primary, partition control, return the old
+  node, expire leases, crash during replacement, and saturate the standby. Admitted
+  whole calls recover rendered media within M7's bound with no consent or
+  privacy failure, double reservation or stale publication; excess demand gets the
+  explicit outcome. The standby admits exactly what its 16,000 budget allows at the
+  current reservation costs (two three-person, two-camera Episodes; three with one
+  camera each), and the next is refused. Six realistic classes fit only after a
+  reviewed degraded reservation profile lowers their reservation, and the rare ten-person call is held low or paused under its
+  ceiling. Capture runs separately and asserts its reduced envelope.
+- Each run repeats with overflow off to prove post-M13 behavior.
 
-**Check:** first prove the complete admitted primary workload on the $18 node
-alone, including M10 capture, M5 repair and the overlapping rare-call stress
-case. Resolve the design's initial-budget failures with measured, reviewed
-capacity/quality policy; a standby or Cloudflare route is not a primary proof.
-No second $18 node or larger SKU is authorized by this plan.
+Package 6 passes only with measured numbers per SKU (in/out/repair, layers,
+CPU/steal, queues, RSS, capture cost, accepted and refused demand). Real
+`sgp1` proofs run on the bench Droplets or the production node before cutover,
+never on the Air.
 
-Then prove drain and failure **onto the $6 node**, not another $18 node. Test
-six realistic three-person Episodes without capture, a seventh refusal, and the rare ten-person
-case with all-high demand held low/paused under its Episode ceiling. Include
-capture in a separate run and assert its reduced admission envelope. Include
-single-encoding publishers, primary full/unhealthy/draining triggers,
-standby saturation, concurrent placement, control partition, old-node return,
-lease expiry, crash during replacement and cleanup debt. Admitted whole calls
-recover rendered media within M7's bound without consent/privacy failures,
-double reservations or stale publication. Excess demand returns the explicit
-outcome, with Cloudflare overflow tested for new Episodes only.
+**Rollback:** every package is additive. Overflow, roles and drain control sit
+behind configuration; a one-node pool with overflow on behaves as today. The
+binding gains optional fields only, so the previous release still reads it.
+Bench Droplets are deleted by tag; nothing in production changes until the SFU
+lead deploys.
 
-Run an hour-long primary drain: existing calls/recordings finish uninterrupted,
-new Episodes go only to degraded standby or Cloudflare overflow, and all refusals
-are counted. Force a deadline to distinguish disruptive replacement. Show
-primary recovery restores preferred new-Episode placement without moving live
-standby/Cloudflare calls. Report actual in/out/repair, layers/quality, CPU/steal,
-queues, RSS, capture cost, accepted calls and refused/overflowed demand for each
-SKU. Repeat with overflow disabled to prove post-M13 behavior.
+**Needs the owner:** nothing in this plan. A production standby, a larger primary
+or an always-on second node is a money decision and is not assumed.
 
-**Risk:** the $6 standby cannot carry the full all-high reservation at peak.
-Calling it redundant without showing reduced capacity hides join refusals.
-Overflow before pinning, whole-Episode recovery and bounded admission prevent
-provider drift and overload from turning primary failure into a fleet failure.
+**Risk:** a single production node means a lost node is an outage for its live
+calls until it is rebuilt. This plan makes that outcome explicit and bounded
+instead of hiding it, and does not claim redundancy. Calling the bench-proved
+standby role "production failover" would be false while production has one node.
 
 ## M12 — Full cutover, cohort sunset and monitoring parity
 
-**Dependencies:** rollout requires M1–M8, M10 and M11. Inventory, client release
-planning and dashboards can start sooner in parallel. M9 is optional.
+**Dependencies:** rollout requires M1–M8, M10 and M11 packages 1–6, with package 5's fault proofs passing. The
+inventory, SDK version policy, monitoring and dashboards start now and run in
+parallel. M9 is optional. Production deploys and the flag flips belong to the SFU
+lead.
 
-**Scope:** move every Tenant and Space to the own SFU, including explicit
-Cloudflare overrides, tenant-managed provider configuration and
-recording/transcription dependencies. Release compatible browser/shared SDKs,
-React Native SDKs and first-party apps before selection changes. Inventory old
-SDK and native releases, set a bounded upgrade window/minimum version, measure
-remaining demand and enforce an explicit upgrade requirement at sunset. Do not
-keep an indefinite Cloudflare cohort or send an unknown grant to an old decoder.
+**Work packages**
 
-Expand the migration flag through canary/cohorts, then flip the deployment and
-all Tenant/Space defaults to `chalk_sfu`. New Tenants/Spaces inherit it; existing
-Episodes stay pinned until completion or explicit authority-controlled
-replacement. Retain Cloudflare SFU only as rollback through M13. Include TURN
-credentials/renewal and relay alarms independently of SFU selection.
+1. **Inventory and counts (starts now).** One audited query set counts Tenants,
+   Spaces, explicit Cloudflare overrides, tenant-managed provider configuration,
+   inactive settings and live bindings by provider, plus recording and
+   transcription dependencies. Output is sanitized counts only.
+2. **Client release and sunset (starts now).** Release compatible browser/shared
+   SDKs, React Native SDKs and first-party apps before selection changes.
+   Inventory old releases, set a bounded upgrade window and minimum version, and
+   return an actionable upgrade response at sunset. Never send an unknown grant to
+   an old decoder, and keep no indefinite Cloudflare cohort.
+3. **Monitoring parity (starts now).** Provider-aware client stats, rendered-media
+   and listener-heal evidence, API/SFU/capture failure alarms, latency/loss/freeze,
+   packet admission, node health/drain/repair, and TURN credential and relay
+   alarms independent of SFU selection. Update the journey ledger, event contract
+   and observability proof when lifecycle boundaries change.
+   Preserve trace/session/operation context through retries and cleanup, and keep
+   secrets, SDP, IPs and media out of telemetry.
+4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
+   the deployment and all Tenant/Space defaults to `chalk_sfu`, including
+   explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
+   pinned until they finish or an authority replaces them. Cloudflare SFU stays
+   only as rollback through M13. When counts show every Tenant and Space on the
+   own provider and the last compatible-client check passes, set
+   `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
+5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
+   pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 
-Finish monitoring parity: provider-aware client stats, rendered-media and
-listener-heal evidence, API/SFU/capture failures, latency/loss/freeze, packet
-admission, node health/drain/repair and actionable alerts. Update the existing
-journey ledger, event contract and executable observability proofs when lifecycle
-boundaries change. Preserve trace/session/operation context through retries and
-cleanup, and keep secrets/SDP/IPs/media out of public evidence and telemetry.
+**Check:** audit counts show every Tenant and Space resolves to the own provider
+for new Episodes, and live bindings and traffic counts agree with the flag. Each
+supported browser and real iOS and Android builds pass join, refresh,
+restart/replacement, every source, relay-only paths and recording/transcription.
+Unsupported versions get the upgrade response. Matched peak cohorts compare
+success, rendered latency/freezes, recovery and capacity under M6/M7 gates.
+Injected API, SFU, TURN, capture and cleanup faults fire their alarms with
+journey correlation. Publish sanitized counts and proof, no Tenant identifiers
+or private queries.
 
-**Files:** provider selection/runtime configuration, shared/native SDK version
-policy, first-party consumers, public upgrade guidance and cutover/proof scripts;
-`docs/observability.md`, `contract/webhooks/v1/journey-events.json`, API
-observability and `infrastructure/observability/production-alerts/` as needed.
+**Rollback:** the flag returns new Episodes to Cloudflare; pinned calls finish
+where they are. Rehearsed in package 5 before the flip is called complete.
 
-**Check:** audit counts prove all Tenants/Spaces, including inactive settings,
-resolve to the own provider for new Episodes. Test each supported browser and
-real iOS/Android cohort for join, refresh, restart/replacement, all supported
-sources, relay-only paths and recording/transcription. Verify unsupported
-versions get an actionable upgrade response and no residual Cloudflare exception.
-Compare matched peak cohorts for success, rendered latency/freezes, recovery and
-capacity using M6/M7 gates. Inject API, SFU, TURN, capture and cleanup faults and
-assert their alarms and journey correlation actually fire. Rehearse default-on
-rollback: new Episodes return to Cloudflare, pinned live Episodes do not drift,
-and explicit replacement/cleanup succeeds. Publish sanitized counts and proof,
-not Tenant identifiers, private queries or customer runbooks.
+**Needs the owner:** the production flag flips and deploys are routine for the
+SFU lead. A minimum-client-version cutoff date that shuts out real users is
+direction and needs the owner's date.
 
-**Risk:** flipping only a process default leaves explicit Space selectors,
-old app installs, capture and vendor-specific support queries behind. Counts of
-bindings and actual traffic, not a checked flag, prove full cutover.
+**Risk:** flipping only a process default leaves explicit Space selectors, old app
+installs, capture and vendor-specific support queries behind. Counts of bindings
+and actual traffic, not a checked flag, prove full cutover.
 
 ## M13 — Cloudflare SFU retirement and removal
 
-**Dependencies:** M12 is complete. Retain the tested Cloudflare rollback release
-and credentials until every criterion below passes. This is separate from TURN.
+**Dependencies:** M12 is complete and overflow is off. Keep the tested Cloudflare
+rollback release and credentials until every criterion below passes. This is
+separate from TURN.
 
-**Scope and retirement criteria:** observe at least **30 consecutive days** after
-full cutover, including busy evening peaks, with every Tenant/Space and supported
-client cohort using the own provider. Require no unresolved privacy, media,
-recording or primary-capacity regressions, passing full-primary single-node
-proofs and passing degraded-standby drain/failure proofs with documented
-refusals. Require zero Cloudflare overflow, including during deployment/failure
-drills, throughout the window. Require zero Cloudflare SFU signaling throughout
-the window and zero
-remaining Cloudflare SFU Episodes, capture connections, queued retries, cleanup
-intents or unsupported legacy-client demand at its end. Rehearse the rollback
-path before closing the window. Do not infer retirement from low billed egress.
+**Work packages**
 
-Then remove the Cloudflare SFU adapter, runtime SFU credentials/config,
-provider-selection/SDK branches, obsolete fixtures and vendor-only monitoring.
-Migrate or retain readers for historical bindings and recording artifacts until
-their retention obligations end; no destructive removal that breaks the previous
-release. Keep Cloudflare TURN/STUN, its minter, least-privilege credentials and
-renewal/relay monitoring. A dependency called Cloudflare, such as the native
-WebRTC binding, stays unless the audited SFU removal actually makes it unused.
-
-**Files:** Cloudflare SFU adapter and composition, contracts/generated clients,
-provider configuration, old tests/fixtures and public docs. TURN can move out of
-the SFU adapter package if needed; do not delete it with the adapter.
+1. **TURN extraction (starts now, no behavior change).** Move Cloudflare TURN/STUN,
+   its minter and least-privilege credentials out of the SFU adapter package so
+   deleting the adapter cannot remove them. The native WebRTC binding stays unless
+   the audit shows it unused.
+2. **Observation window.** Starts when M12 package 4 finishes. It lasts **7
+   consecutive days**, including at least two evening peaks and one matched
+   synthetic peak, with every Tenant, Space and supported client cohort on the
+   own provider. The earlier 30-day figure assumed busy traffic; Chalk has no
+   active users, so a calendar window would add waiting and no evidence. The
+   window extends until the criteria hold, and the owner can lengthen it.
+   Require no unresolved privacy, media, recording or capacity regression,
+   passing M11 capacity and drain proofs, zero Cloudflare overflow including
+   during deploy and failure drills, zero Cloudflare SFU signaling, and at its end
+   zero Cloudflare SFU Episodes, capture connections, queued retries, cleanup
+   intents or unsupported legacy-client demand. Rehearse rollback before it closes.
+   Do not infer retirement from low billed egress.
+3. **Removal.** Delete the Cloudflare SFU adapter, runtime SFU credentials and
+   configuration, provider-selection and SDK branches, obsolete fixtures,
+   vendor-only monitoring and the overflow switch. Keep readers for historical
+   bindings and recording artifacts until retention ends, and no destructive
+   change breaks the previous release.
 
 **Check:** own-SFU browser/native calls, recording/transcription and relay-only
 calls pass with Cloudflare **SFU** credentials absent and outbound SFU API access
-blocked. TURN still mints/renews credentials and relays media. Check old binding
+blocked. TURN still mints and renews credentials and relays media. Old binding
 and artifact reads, schema compatibility, `pnpm run regen`,
-`pnpm run check:generated`, targeted gates and a search for live vendor SFU calls.
-Record the observation window and remaining independent TURN dependency.
+`pnpm run check:generated`, targeted gates, and a search for live vendor SFU calls
+pass. Record the window and the remaining TURN dependency.
 
-**Risk:** after removal, flag rollback is gone; recovery to Cloudflare requires
-redeploying the retained compatible release. Treat that as an explicit retirement
-release decision, not automatic cleanup after a canary. Removing a shared token
-or native WebRTC dependency can break TURN or supported clients.
+**Rollback:** package 1 reverts by itself. Before package 3, the flag returns new
+Episodes to Cloudflare. After package 3 the flag is gone: recovery means
+redeploying the retained compatible release, which is why package 3 ships as an
+explicit retirement release with that release named in the PR.
+
+**Needs the owner:** the retirement release is the point of no flag rollback;
+the SFU lead records the owner's go before package 3 merges. The window length
+above is a decision made here, open to the owner's change.
+
+**Risk:** removing a shared token or the native WebRTC dependency can break TURN
+or supported clients; package 1 exists to prevent that.
 
 ## Lane boundaries
 
@@ -600,8 +653,8 @@ After M2, **M10 capture and M11 fleet operations can run in parallel**, coordina
 capture resource costs, node binding and protocol changes. M10's final proof
 waits for M3–M6; M11's final peak/drain proof waits for M6 and M10. M12's client
 inventory and monitoring work can run alongside them, but full rollout waits for
-M1–M8/M10/M11. The primary proof is on $18; standby drain/failover is on $6,
-with reduced admission and explicit refusal/temporary-overflow outcomes. M13 starts its observation window only after M12 completes.
+M1–M8/M10/M11. The primary proof is on the $18 size; standby drain and failover are proved on bench Droplets,
+with reduced admission and explicit refusal/temporary-overflow outcomes. Production runs one node. M13 starts its observation window only after M12 completes.
 
 Coordinate `protocol/`, generated contracts, Episode bindings and shared SDK
 changes with their owning lane. Use the existing authority/capture pipeline;
