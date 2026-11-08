@@ -352,7 +352,7 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	fleet.Probe(ctx)
 
 	refused, err := registryOn(fleet, withCloudflare, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if refused != nil || !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) {
+	if refused != nil || !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("full pool with overflow off: %+v, %v, want the capacity error and no binding", refused, err)
 	}
 	stays, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)

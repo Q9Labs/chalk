@@ -54,7 +54,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 				placement.Reason = mediaplane.PlacementNoCapacity
 			case !r.chalk.CloudflareOverflow():
 				r.recordPlacement(ctx, resolution.Provider, providercontracts.PlacementRefused)
-				return nil, fmt.Errorf("%w: %w: no chalk sfu node has room for a new Episode", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited)
+				return nil, fmt.Errorf("%w: %w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused)
 			default:
 				resolved, resolution = fallback, fallbackResolution
 				placement.Node, placement.Incarnation = "", ""

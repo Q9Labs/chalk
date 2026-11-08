@@ -418,13 +418,20 @@ The export matches `inspect` and carries no identities.
   (1 or 0, with the admission reason), `process.cpu.time` and
   `process.memory.usage` (resident bytes, Linux).
 
-The API counts where each new own-SFU Episode goes as `chalk.api.media_plane.placements`,
-with `chalk.media_plane.provider`, `chalk.media_plane.node_role` (`primary`, `standby`,
-`overflow`, `none`) and `chalk.media_plane.placement_reason` (`primary`, `standby`,
-`overflow_no_room`, `overflow_node_unavailable`, `no_capacity`, `capacity_refused`).
+The API counts own-SFU placement decisions for new Episodes as
+`chalk.api.media_plane.placement_decisions`, with `chalk.media_plane.provider`,
+`chalk.media_plane.node_role` (`primary`, `standby`, `overflow`, `none`) and
+`chalk.media_plane.placement_reason` (`primary`, `standby`, `overflow_no_room`,
+`overflow_node_unavailable`, `no_capacity`, `capacity_refused`). It counts decisions, not
+committed Episodes: placement runs inside the creation transaction, so a request that
+later rolls back (for example an Episode already live in the Space) still counts once.
+Read it as a rate of placement attempts by outcome. The binding frozen on a committed
+Episode is the record of what was kept.
+
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
 no node can take is then refused with `503 media.unavailable` and counted as
-`capacity_refused`, and the refusal is logged by `http.failure` with its typed cause.
+`capacity_refused`, and the refusal is logged by `http.failure` with the bounded reason
+`own sfu pool full and cloudflare overflow disabled`.
 The same reason and the node's boot incarnation are frozen in the Episode binding
 (`placement_reason`, `node_incarnation`), so a past overflow stays findable.
 

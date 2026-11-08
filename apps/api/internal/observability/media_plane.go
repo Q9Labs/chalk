@@ -23,7 +23,8 @@ type MediaPlaneResolutionTelemetry struct {
 	logger   *slog.Logger
 	requests otelmetric.Int64Counter
 	duration otelmetric.Float64Histogram
-	// placements counts where each new Episode went, by provider, node role and reason.
+	// placements counts placement decisions, not committed Episodes: a decision whose
+	// enclosing transaction later rolls back is still counted.
 	placements otelmetric.Int64Counter
 }
 
@@ -43,14 +44,15 @@ func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionT
 		otelmetric.WithUnit("s"),
 	)
 	placements, _ := meter.Int64Counter(
-		"chalk.api.media_plane.placements",
-		otelmetric.WithDescription("Where new Episodes were placed, and why"),
-		otelmetric.WithUnit("{episode}"),
+		"chalk.api.media_plane.placement_decisions",
+		otelmetric.WithDescription("Own-SFU placement decisions for new Episodes, including ones whose creation later rolls back"),
+		otelmetric.WithUnit("{decision}"),
 	)
 	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration, placements: placements}
 }
 
-// RecordPlacement counts one new Episode placement. Labels are bounded: the node
+// RecordPlacement counts one placement decision. The resolver runs inside the
+// Episode-creation transaction, so a rolled-back creation still counts. Labels are bounded: the node
 // role comes from the reason, never from a node name, and no Tenant, Episode or
 // Participant identity is attached.
 func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
