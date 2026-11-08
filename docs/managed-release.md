@@ -121,6 +121,13 @@ Missing results (including older cuts), skipped proofs and failed proofs block
 promotion with an error naming the SHA and nightly run. There is no override;
 cut a new nightly to obtain passing proof. The existing Cloudflare proof and
 held-cut rules are unchanged.
+The scorecard job evaluates every `gate: true` budget before the cut is recorded.
+It saves `scorecard_result` (`passed` or `gated-breach`) and
+`scorecard_gated_metrics` against the same SHA and nightly run. Selection and
+recheck reject gated breaches with the metric names, and reject missing results.
+Budgets with `gate: false` remain warnings. History or issue publication cannot
+erase the saved verdict. Contended measurements are not performance evidence;
+their failed own-SFU proof still blocks promotion.
 
 The parent holds `chalk-environment-production` across approval, deploy, call
 and rollback. **Pending approval holds this lock**, blocking other production

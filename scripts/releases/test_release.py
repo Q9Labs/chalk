@@ -3,6 +3,7 @@
 import copy
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,14 +12,15 @@ from unittest.mock import Mock, patch
 import release
 from github_release import GitHub, payload
 
-SHA = 'a' * 40
+SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
 OTHER_SHA = 'b' * 40
 RUN = '123'
 
 
 def held(result='passed', sha=SHA, identity=1):
     info = dict(channel='nightly-cut', target_sha=sha, run_id=RUN, proof_run_id=RUN,
-                release_id='release', applied_release_id='release', proof_result='passed')
+                release_id='release', applied_release_id='release', proof_result='passed',
+                scorecard_result='passed', scorecard_gated_metrics=[])
     if result is not None:
         info['own_sfu_proof_result'] = result
     return dict(id=identity, created_at='2026-11-08T02:00:00Z', latest_status='success', payload=info)
@@ -118,6 +120,126 @@ class OwnSfuPromotionTests(unittest.TestCase):
                     self.assertEqual(saved['real_call_proof_result'], cf_result)
                     self.assertEqual(saved['proof_result'], cf_result)
                     self.assertEqual(passed, cf_result == 'passed')
+
+    def test_real_nightly_breaches_and_passing_cards_flow_through_record_to_promotion(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        expected = sorted(f"chalk_sfu.{metric['id']}" for metric in fixture['metrics'])
+        for passing in (False, True):
+            with self.subTest(passing=passing), tempfile.TemporaryDirectory() as directory:
+                card = copy.deepcopy(fixture)
+                if passing:
+                    for metric in card['metrics']:
+                        metric['p95'] = 100
+                path = Path(directory) / 'card.json'
+                path.write_text(json.dumps(card))
+                verdict_output = Path(directory) / 'output'
+                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)],
+                                        cwd=release.ROOT, capture_output=True, text=True,
+                                        env={**os.environ, 'GITHUB_OUTPUT': str(verdict_output)})
+                self.assertEqual(result.returncode, 0 if passing else 1, result.stderr)
+                verdict = json.loads(result.stdout)
+                self.assertEqual(verdict['result'], 'passed' if passing else 'gated-breach')
+                self.assertEqual(verdict['gated_metrics'], [] if passing else expected)
+                self.assertEqual(json.loads(verdict_output.read_text().split('result=', 1)[1]), verdict)
+                item = held()
+                api = self.github(item)
+                api.deployments.return_value = [dict(id=1, created_at=item['created_at'],
+                                                    payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))]
+                api.record.return_value = 2
+                with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN, release_id='release', applied_release_id='release')),
+                                TARGET_SHA=SHA, GITHUB_RUN_ID=RUN, OWN_SFU_RESULT='passed', DEPLOY_RESULT='success',
+                                PROOF_RESULT='passed', WEB_E2E_RESULT='passed', SCORECARD_RESULT=json.dumps(verdict)):
+                    release.record(api, None)
+                item['payload'] = api.record.call_args.args[1]
+                self.assertEqual(item['payload']['scorecard_result'], verdict['result'])
+                self.assertEqual(item['payload']['scorecard_gated_metrics'], verdict['gated_metrics'])
+                api.deployments.return_value = [item]
+                selection = dict(deployment_id=item['id'], selection=item['payload'], previous=self.previous)
+                with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                    for operation in ('select', 'recheck'):
+                        if passing:
+                            getattr(release, operation)(api, None)
+                        else:
+                            with self.assertRaises(ValueError) as error:
+                                getattr(release, operation)(api, None)
+                            self.assertEqual(str(error.exception),
+                                             f'cannot promote SHA {SHA} from nightly run {RUN}: '
+                                             f'scorecard_result=gated-breach; gated metrics: {", ".join(expected)}')
+
+    def test_warn_only_breaches_do_not_block(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        fixture['mediaPlane'] = 'cf_sfu'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'card.json'
+            path.write_text(json.dumps(fixture))
+            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
+                                    capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)['gated_metrics'], [])
+
+    def test_scorecard_must_exist_and_match_cut_identity(self):
+        item = held()
+        del item['payload']['scorecard_result']
+        for operation in ('select', 'recheck'):
+            with self.subTest(operation=operation):
+                selection = dict(deployment_id=item['id'], selection=item['payload'], previous=self.previous)
+                with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                    with self.assertRaisesRegex(ValueError, f'SHA {SHA} from nightly run {RUN}: scorecard_result=missing'):
+                        getattr(release, operation)(self.github(item), None)
+        for changes in (dict(target_sha=OTHER_SHA), dict(run_id='999')):
+            with self.subTest(changes=changes):
+                verdict = dict(target_sha=SHA, run_id=RUN, result='passed', gated_metrics=[])
+                verdict.update(changes)
+                with patch.dict(os.environ, RELEASE=json.dumps(dict(run_id=RUN)), TARGET_SHA=SHA,
+                                GITHUB_RUN_ID=RUN, SCORECARD_RESULT=json.dumps(verdict)):
+                    with self.assertRaisesRegex(ValueError, 'scorecard identity does not match'):
+                        release.record(self.github(item), None)
+
+    def test_evaluator_refuses_wrong_revision_or_contended_evidence(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        for wrong_sha in (True, False):
+            with self.subTest(wrong_sha=wrong_sha), tempfile.TemporaryDirectory() as directory:
+                card = copy.deepcopy(fixture)
+                if wrong_sha:
+                    card['run']['commit'] = OTHER_SHA
+                else:
+                    card['contention'] = dict(contended=True)
+                path = Path(directory) / 'card.json'
+                path.write_text(json.dumps(card))
+                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
+                                        capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+
+    def test_nightly_returns_breach_status_after_saving_history(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        for passing in (False, True):
+            with self.subTest(passing=passing), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                remote = directory / 'history.git'
+                subprocess.run(['git', 'init', '--bare', '--quiet', str(remote)], check=True)
+                bin_dir = directory / 'bin'
+                bin_dir.mkdir()
+                gh = bin_dir / 'gh'
+                gh.write_text('#!/bin/sh\nexit 0\n')
+                gh.chmod(0o755)
+                card = copy.deepcopy(fixture)
+                if passing:
+                    for metric in card['metrics']:
+                        metric['p95'] = 100
+                path = directory / 'card.json'
+                path.write_text(json.dumps(card))
+                environment = {**os.environ, 'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
+                               'SCORECARD_HISTORY_REMOTE': str(remote), 'GITHUB_REPOSITORY': 'Q9Labs/chalk',
+                               'GITHUB_SERVER_URL': 'https://github.com', 'GITHUB_RUN_ID': RUN,
+                               'GITHUB_STEP_SUMMARY': str(directory / 'summary'), 'GIT_CONFIG_GLOBAL': os.devnull,
+                               'GIT_CONFIG_NOSYSTEM': '1'}
+                result = subprocess.run(['bash', 'features/scorecard/nightly.sh', str(path)], cwd=release.ROOT,
+                                        env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0 if passing else 1, result.stderr)
+                saved = subprocess.check_output(['git', '--git-dir', str(remote), 'show',
+                                                 'scorecard-history:history.jsonl'], text=True)
+                self.assertEqual(json.loads(saved)['run']['commit'], SHA)
 
 
 if __name__ == '__main__':

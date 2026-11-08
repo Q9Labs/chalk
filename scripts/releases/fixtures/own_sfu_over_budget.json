@@ -1,0 +1,20 @@
+{
+  "schema": "chalk.scorecard/v1",
+  "run": {
+    "id": "nightly-latency",
+    "commit": "693cb26f710040c0cbca65f6e299ce0a639bfe40",
+    "tier": "nightly",
+    "environment": "staging",
+    "startedAt": "2026-11-08T16:55:52.628Z",
+    "client": { "kind": "browser", "browser": "chromium-headless/151", "region": "github-hosted", "size": "ubuntu-24-04" }
+  },
+  "mediaPlane": "chalk_sfu",
+  "metrics": [
+    { "id": "action.join.first_audio_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 4469, "source": "latency-kit" },
+    { "id": "action.join.first_video_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 6623, "source": "latency-kit" },
+    { "id": "action.camera_toggle.off_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 727, "source": "latency-kit" },
+    { "id": "action.unpublish.removed_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 1039, "source": "latency-kit" },
+    { "id": "action.screenshare.start_signal_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 1334, "source": "latency-kit" }
+  ],
+  "dropped": []
+}
