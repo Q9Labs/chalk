@@ -5,6 +5,8 @@
 // the SDK-facing envelope stays the same for both providers.
 package protocol
 
+import "time"
+
 // Version is the control API version. Every route lives under "/" + Version.
 const Version = "v1"
 
@@ -171,6 +173,45 @@ type EndEpisodeRequest struct {
 
 type EndEpisodeResponse struct {
 	Closed int `json:"closed"`
+}
+
+// Reservation hold times in seconds. A request without a TTL gets the default.
+const (
+	DefaultReservationTTLSeconds = 30
+	MaxReservationTTLSeconds     = 120
+)
+
+// EpisodeShape is what an Episode was admitted with on the node it recovers from.
+// CamerasPerParticipant may not exceed the node's limit, and the reservation is the node's own
+// upper bound for the shape, the same as a join reserves, so the Participants' joins replace it
+// without growing the node's total. CaptureSlots is the capture sessions to keep room for.
+type EpisodeShape struct {
+	Participants          int  `json:"participants"`
+	CamerasPerParticipant int  `json:"camerasPerParticipant"`
+	ScreenShare           bool `json:"screenShare,omitempty"`
+	CaptureSlots          int  `json:"captureSlots,omitempty"`
+}
+
+// ReserveEpisodeRequest reserves a complete recovering Episode before any Participant rejoins.
+// Generation fences it: a reserve older than the Episode's hold or its live sessions is refused as
+// stale. TTLSeconds bounds how long the reservation stays; the Participants' joins replace it, and
+// an expired or ended Episode releases what is left. The same OperationID with the same body
+// returns the first result.
+type ReserveEpisodeRequest struct {
+	OperationID string       `json:"operationId"`
+	TenantID    string       `json:"tenantId"`
+	EpisodeID   string       `json:"episodeId"`
+	Generation  int64        `json:"generation"`
+	Shape       EpisodeShape `json:"shape"`
+	TTLSeconds  int          `json:"ttlSeconds,omitempty"`
+}
+
+// ReserveEpisodeResponse reports the reservation. A refusal uses the capacity-exceeded or
+// draining error codes.
+type ReserveEpisodeResponse struct {
+	NodeIncarnation string    `json:"nodeIncarnation"`
+	ReservedPackets int       `json:"reservedPackets"`
+	ExpiresAt       time.Time `json:"expiresAt"`
 }
 
 // MaxSourceControls bounds one source control batch: every source of a full Episode.

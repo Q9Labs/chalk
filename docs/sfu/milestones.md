@@ -475,7 +475,7 @@ an overflow switch, whole-Episode recovery, and every proof below.
 4. **Whole-Episode recovery.** When a bound node is lost or returns with a new
    boot incarnation, the Episode moves through one durable, generation-fenced
    transition: the SFU reserves the Episode's complete admitted shape atomically
-   (a new reserve operation), then participants rejoin with fresh generations and
+   (`POST /v1/episodes/reserve`, an expiring hold that each rejoin replaces), then participants rejoin with fresh generations and
    M3 consent rules. A node refusing the reserve gives an explicit capacity
    outcome and never a half-recovered call. Responses from a replaced
    incarnation are rejected, and cleanup keeps targeting the old allocation. On a

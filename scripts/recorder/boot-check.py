@@ -162,7 +162,7 @@ class Services:
             online = [item["InstanceId"] for item in instances if item["PingStatus"] == "Online"]
             require(len(online) == 1, "select the exact managed instance with CHALK_BOOT_CHECK_INSTANCE_ID")
             self.instance = online[0]
-        payload = base64.b64encode(json.dumps({**task, "user_id": self.user_id}).encode()).decode()
+        payload = base64.b64encode(json.dumps({"timeout": timeout, **task, "user_id": self.user_id}).encode()).decode()
         script = (SCRIPTS / "boot-check-host.py").read_text()
         script += "\nimport base64\nprint(json.dumps(execute(json.loads(base64.b64decode('" + payload + "')))))\n"
         parameters = {"commands": ["python3 - <<'PYBOOTCHECK'\n" + script + "\nPYBOOTCHECK"], "executionTimeout": [str(max(60, timeout))]}
