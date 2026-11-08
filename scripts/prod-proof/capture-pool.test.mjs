@@ -92,9 +92,32 @@ test("readiness before the early check never reads the pool", async () => {
   assert.deepEqual(reads, []);
 });
 
-test("a pool with free slots or no slots is not a blockage", () => {
+test("a pool with a free slot is not a blockage", () => {
   assert.equal(slotBlockage(pool({ slots_total: 2, slots_used: 1, held: [nightlyHold] }), ours), undefined);
-  assert.equal(slotBlockage(pool({ slots_total: 0, slots_used: 0 }), ours), undefined);
+});
+
+// An idle capture node scaled to zero reports slots_total 0, so `slots_used < slots_total` cannot hold.
+const scaledToZero = (overrides) => pool({ slots_total: 0, slots_used: 0, ...overrides });
+
+test("an idle scaled-to-zero pool is free", async () => {
+  assert.equal(slotBlockage(scaledToZero(), ours), undefined);
+  await checkCaptureSlotFree(apiRun(scaledToZero()));
+});
+
+test("a scaled-to-zero pool with a held job blocks and names it", async () => {
+  const held = scaledToZero({ slots_used: 1, held: [nightlyHold] });
+  assert.match(slotBlockage(held, ours), /^capture slot held by job 00000000-0000-4000-8000-000000000001 since /);
+  await assert.rejects(checkCaptureSlotFree(apiRun(held)), { reason: "capture-slot-held", message: /job 00000000-0000-4000-8000-000000000001/ });
+});
+
+test("a scaled-to-zero pool held only for other Tenants blocks without ids", async () => {
+  const held = scaledToZero({ held_by_other_tenants: 2 });
+  assert.equal(slotBlockage(held, ours), "capture pool reports no slots but 2 held by other Tenants' jobs");
+  await assert.rejects(checkCaptureSlotFree(apiRun(held)), { reason: "capture-slot-held" });
+});
+
+test("a scaled-to-zero pool holding only this proof's own job is not a blockage", () => {
+  assert.equal(slotBlockage(scaledToZero({ slots_used: 1, held: [own] }), ours), undefined);
 });
 
 test("the oldest foreign hold is named and the rest are counted", () => {

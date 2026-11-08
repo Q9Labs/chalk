@@ -37,7 +37,9 @@ Recording. Every proof that records reads
 and again at the 180-second timeout. `call-artifacts` (own SFU, automatic
 Recording) also reads it before it creates the Space, so a held slot fails the
 run before any call starts. When every slot is held and none belongs to this
-proof's Recording, it fails at once with reason `capture-slot-held`. The private evidence names the job,
+proof's Recording, it fails at once with reason `capture-slot-held`. An idle
+Capture node scaled to zero reports `slots_total` 0; that pool counts as free
+only while no job holds a slot, so any held job still fails the check. The private evidence names the job,
 Recording, Episode, claim time and lease expiry; slots held for other Tenants
 are counted without identifiers. Otherwise it keeps waiting, and the timeout
 message in the private evidence carries the pool readout or why it was
