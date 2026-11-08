@@ -595,7 +595,7 @@ lead.
    own provider and the last compatible-client check passes, and Promote has a
    passing `chalk_sfu` real-call proof scorecard (join startup, Leave, mic/camera
    toggle) for the same SHA from the nightly or staging node, so it needs no
-   production canary, and the scorecard scoring fails the Promote run on
+   production canary for that scorecard, and the scorecard scoring fails the Promote run on
    regression (rollback stays safe). That gate is built only if it fits the
    existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
    otherwise it stays in this package with its cost written down. Today nightly
@@ -615,6 +615,13 @@ success, rendered latency/freezes, recovery and capacity under M6/M7 gates.
 Injected API, SFU, TURN, capture and cleanup faults fire their alarms with
 journey correlation. Publish sanitized counts and proof, no Tenant identifiers
 or private queries.
+
+- Production calibration canary (owner: SFU lead). Before package 4 cutover,
+  the canary on the production node confirms the 40% guard setting and records
+  paired 10 s own-CPU and steal samples under the existing bench/canary rules.
+  This [production acceptance proof](capacity-calibration.md#soak-acceptance)
+  must pass independently of Promote's scorecard. The five-hour, three-class
+  staging soak is a separate proof.
 
 **Rollback:** the flag returns new Episodes to Cloudflare; pinned calls finish
 where they are. Rehearsed in package 5 before the flip is called complete.
