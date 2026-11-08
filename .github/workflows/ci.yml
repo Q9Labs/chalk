@@ -130,6 +130,9 @@ on:
       orchestrated:
         type: boolean
         default: false
+      promotion_audit:
+        description: Approved scorecard override audit from Promote selection; does not bypass release checks
+        type: string
     outputs:
       release_id:
         value: ${{ jobs.prepare-release.outputs.release_id }}
@@ -740,6 +743,7 @@ jobs:
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           MANIFEST_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
           MANIFEST_ARTIFACT_ID: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
+          PROMOTION_AUDIT: ${{ inputs.promotion_audit }}
         run: python3 scripts/releases/release.py retain_production --directory "${{ runner.temp }}/managed-release"
 
       - name: Validate managed deployment configuration

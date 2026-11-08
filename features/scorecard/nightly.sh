@@ -63,3 +63,4 @@ if [[ "${regressions}" -eq 1 ]]; then
 elif [[ -n "${number}" ]]; then
   gh issue close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "The latest nightly run has no gated metric over its budget."
 fi
+exit "${regressions}"

@@ -3,7 +3,7 @@
 # nightly runs. The gate never changes the deploy: it only fails the Promote run, after the rollback decision is made.
 # Usage: promote-gate.sh first|final <scorecard.json>   (run from the repository root)
 #   first: score the first proof. A gated metric over budget writes over=true to GITHUB_OUTPUT, so the workflow reruns the proof once.
-#          A non-empty SCORECARD_OVERRIDE records its reason and never blocks.
+#          A non-blank SCORECARD_OVERRIDE records its reason and never blocks.
 #   SCORECARD_EXPECTED=false marks a revision that predates the scorecard; its missing card is skipped on the first pass.
 #   final: score the rerun. A gated metric still over budget fails the run and opens or updates the regression issue.
 # Needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, GITHUB_RUN_ID, GITHUB_SERVER_URL.
@@ -11,7 +11,7 @@ set -euo pipefail
 
 mode="${1:?usage: promote-gate.sh first|final <scorecard.json>}"
 card="${2:?usage: promote-gate.sh first|final <scorecard.json>}"
-override="${SCORECARD_OVERRIDE:-}"
+override="$(python3 scripts/releases/scorecard_override.py)"
 scorecard="node features/scorecard/scorecard.mjs"
 run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 work="$(mktemp -d)"

@@ -71,8 +71,8 @@ jobs:
       release_sha: ${{ needs.plan.outputs.target_sha }}
     secrets: inherit
   own-sfu:
-    # The own SFU's real-call proof and action latency on staging. A failure turns this job red but leaves the deploy and the release record as they are;
-    # the proof cleans up its Spaces and Episodes in every outcome.
+    # Promote requires this result, but it does not change whether the nightly cut is held.
+    # The proof cleans up its Spaces and Episodes in every outcome.
     needs: [plan, release]
     if: needs.release.result == 'success'
     uses: ./.github/workflows/real-call-proof.yml
@@ -91,7 +91,7 @@ jobs:
       environment: nightly
     secrets: inherit
   record:
-    needs: [plan, release, proof, web-e2e]
+    needs: [plan, release, proof, own-sfu, web-e2e, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -106,6 +106,9 @@ jobs:
           DEPLOY_RESULT: ${{ needs.release.result }}
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
+          # The shared job includes proof and latency: a failed latency measurement intentionally blocks promotion.
+          OWN_SFU_RESULT: ${{ needs.own-sfu.result == 'skipped' && 'skipped' || needs.own-sfu.result == 'success' && needs.own-sfu.outputs.result || 'failed' }}
+          SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |
           python3 scripts/releases/release.py record
           test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed
@@ -128,9 +131,11 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, own-sfu, record]
+    needs: [plan, proof, own-sfu]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
+    outputs:
+      result: ${{ steps.evaluate.outputs.result }}
     permissions:
       contents: write
       issues: write
@@ -147,7 +152,15 @@ jobs:
           pattern: scorecard-nightly-*
           path: artifacts/nightly
           merge-multiple: true
+      - name: Evaluate gated budgets for this exact cut
+        id: evaluate
+        env:
+          TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+        run: |
+          mapfile -t cards < <(find artifacts/nightly -name "scorecard-*.json")
+          node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
       - name: Score the nightly run and add it to the history
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
