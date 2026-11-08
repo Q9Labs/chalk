@@ -47,7 +47,6 @@ func TestPreparationChecksSpacePolicyBeforePersisting(t *testing.T) {
 		{"disabled", spaces.Space{RecordingPolicy: artifactpolicy.RecordingDisabled}, nil},
 		{"archived", spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual, ArchivedAt: &now}, nil},
 		{"missing", spaces.Space{}, spaces.ErrSpaceNotFound},
-		{"own SFU with capture off", spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual, MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &preparationRepositoryStub{}
@@ -61,13 +60,14 @@ func TestPreparationChecksSpacePolicyBeforePersisting(t *testing.T) {
 	}
 }
 
-func TestPreparationAcceptsAnOwnSFUSpaceWhenCaptureIsOn(t *testing.T) {
+func TestPreparationPreservesRepositoryPolicyDenial(t *testing.T) {
 	now := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
-	repository := &preparationRepositoryStub{}
-	service := NewService(repository, preparationSpaceStub{space: spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual, MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}}).WithOwnCapture(true)
+	repository := &preparationRepositoryStub{err: ErrPolicyDenied}
+	service := NewService(repository, preparationSpaceStub{space: spaces.Space{RecordingPolicy: artifactpolicy.RecordingManual}})
 	service.now = func() time.Time { return now }
-	if _, err := service.Prepare(t.Context(), Input{TenantID: preparationID(t), SpaceID: preparationID(t), StartsAt: now.Add(time.Hour)}); err != nil || !repository.called {
-		t.Fatalf("result = %v, persisted = %t", err, repository.called)
+	_, err := service.Prepare(t.Context(), Input{TenantID: preparationID(t), SpaceID: preparationID(t), StartsAt: now})
+	if !errors.Is(err, ErrPolicyDenied) || !repository.called {
+		t.Fatalf("result = %v, called = %t", err, repository.called)
 	}
 }
 

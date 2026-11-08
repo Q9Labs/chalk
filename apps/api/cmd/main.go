@@ -412,8 +412,9 @@ func run() error {
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
-		recordingEntrance = postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission)
-		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService).WithOwnCapture(ownCapture)
+		recordingPreparations := postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission).WithOwnCapture(ownCapture)
+		recordingEntrance = recordingPreparations
+		recordingPreparationService = recordingpreparation.NewService(recordingPreparations, spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)
