@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import os
+import re
 import shutil
 import signal
 import tempfile
@@ -69,7 +70,13 @@ class LeaseTests(unittest.TestCase):
     def test_renewal_failure_stops_entire_group_before_release(self):
         self.assert_group_stopped_before_release(cancel=False)
 
-    def assert_group_stopped_before_release(self, cancel):
+    def test_measurement_timeout_stops_with_lease_before_release(self):
+        source = (Path(__file__).resolve().parents[2] / "features/scorecard/staging-latency.mjs").read_text()
+        args = json.loads(re.search(r'workload\("timeout", (\[[^\n]*?\]),', source)[1])
+        # Exercise the real measurement command's timeout options, not a mirrored flag list.
+        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *args[:args.index("pnpm")]])
+
+    def assert_group_stopped_before_release(self, cancel, command_prefix=()):
         directory = Path(self.directory.name)
         pids = directory / "pids.json"
         ready = directory / "grandchild-ready"
@@ -110,7 +117,11 @@ while not Path({str(ready)!r}).exists():
 Path({str(pids)!r}).write_text(json.dumps([os.getpid(), int(Path({str(ready)!r}).read_text())]))
 time.sleep(120)
 '''
-        wrapper = subprocess.Popen([sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", self.remote, "--holder", "lane-a", "--purpose", "latency", "--run-id", "run-1", "--ttl", "60", "--wait", "0", "--", sys.executable, "-c", workload], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        command = [sys.executable, "-c", workload]
+        if command_prefix:
+            # Match the leased orchestrator -> timeout -> kit nesting, not timeout as group leader.
+            command = [sys.executable, "-c", f"import subprocess; raise SystemExit(subprocess.call({[*command_prefix, *command]!r}, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))"]
+        wrapper = subprocess.Popen([sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", self.remote, "--holder", "lane-a", "--purpose", "latency", "--run-id", "run-1", "--ttl", "60", "--wait", "0", "--", *command], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             deadline = time.monotonic() + 5
             while not pids.exists() and wrapper.poll() is None and time.monotonic() < deadline:
@@ -125,10 +136,13 @@ time.sleep(120)
             self.store.acquire("next-lane", "retest", "run-2", 180)
         finally:
             if pids.exists():
-                try:
-                    os.killpg(json.loads(pids.read_text())[0], signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                for pid in json.loads(pids.read_text()):
+                    try:
+                        group = os.getpgid(pid)
+                        if group != os.getpgrp():
+                            os.killpg(group, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
             if wrapper.poll() is None:
                 wrapper.kill()
             wrapper.communicate()

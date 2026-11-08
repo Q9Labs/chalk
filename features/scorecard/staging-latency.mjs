@@ -80,7 +80,10 @@ async function measure() {
     // Do not add load to an already busy or unobservable node.
     if (before && before.length === 0) {
       await appendFile(".private/proof-run-ids", `${runId}\n`);
-      status = await workload("timeout", ["--signal=TERM", "--kill-after=10s", "20m", "pnpm", "prod:latency", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"], { env: { ...process.env, CHALK_PROOF_RUN_ID: runId } });
+      // Keep timeout and the kit in the lease's process group so lease loss stops both.
+      status = await workload("timeout", ["--foreground", "--signal=TERM", "--kill-after=10s", "20m", "pnpm", "prod:latency", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"], {
+        env: { ...process.env, CHALK_PROOF_RUN_ID: runId },
+      });
     }
     const end = Date.now();
     await delay(30_000);
