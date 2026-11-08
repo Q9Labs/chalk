@@ -10,12 +10,21 @@ export async function readCapturePool(run) {
   }
 }
 
-/** Says why no slot is free for this proof's Recording, or returns nothing when one is or may become free. */
+/**
+ * Says why no slot is free for this proof's Recording, or returns nothing when one is or may become free.
+ * An idle scaled-to-zero pool reports `slots_total` 0, so there `slots_used < slots_total` can never hold:
+ * it is free only when no job holds a slot.
+ */
 export function slotBlockage(pool, recordingId) {
-  if (pool.slots_total === 0 || pool.slots_used < pool.slots_total) return;
+  const scaledToZero = pool.slots_total === 0;
+  const heldByOthers = Math.max(pool.slots_used, pool.held_by_other_tenants);
+  const full = scaledToZero ? pool.held.length > 0 || heldByOthers > 0 : pool.slots_used >= pool.slots_total;
+  if (!full) return;
   if (pool.held.some((slot) => slot.recording_id === recordingId)) return;
   const [oldest] = pool.held;
-  if (!oldest) return `capture pool full: ${pool.slots_used} of ${pool.slots_total} slots held by other Tenants' jobs`;
+  if (!oldest) {
+    return scaledToZero ? `capture pool reports no slots but ${heldByOthers} held by other Tenants' jobs` : `capture pool full: ${pool.slots_used} of ${pool.slots_total} slots held by other Tenants' jobs`;
+  }
   const more = pool.held.length > 1 ? ` (+${pool.held.length - 1} more)` : "";
   return `capture slot held by job ${oldest.job_id} since ${oldest.claimed_at} (recording ${oldest.recording_id}, Episode ${oldest.episode_id}, lease expires ${oldest.lease_expires_at})${more}`;
 }
