@@ -320,7 +320,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 		t.Fatalf("no node answers: %+v, %v, want Cloudflare overflow_node_unavailable", down, err)
 	}
 
-	want := []string{"chalk_sfu/primary", "chalk_sfu/primary", "chalk_sfu/standby", "cloudflare_sfu/overflow_no_room", "cloudflare_sfu/overflow_node_unavailable"}
+	want := []string{"chalk_sfu/primary", "chalk_sfu/primary", "chalk_sfu/standby", "cf_sfu/overflow_no_room", "cf_sfu/overflow_node_unavailable"}
 	if !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}
