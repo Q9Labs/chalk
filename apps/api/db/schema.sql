@@ -2707,6 +2707,18 @@ create table recording_job_failure_history (
     primary key (job_id, manual_retry_count)
 );
 
+create table recording_job_attempt_failures (
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    kind text not null check (kind in ('capture', 'transcription', 'render')),
+    error_code text not null check (octet_length(error_code) <= 128),
+    error_detail text not null check (octet_length(error_detail) <= 2048),
+    lease_owner text not null check (octet_length(lease_owner) between 1 and 256),
+    failed_at timestamptz not null default now(),
+    primary key (job_id, attempt_count, fencing_generation)
+);
+
 create table recording_job_attempt_authorities (
     job_id uuid not null references recording_jobs(id) on delete restrict,
     attempt_count integer not null check (attempt_count > 0),
