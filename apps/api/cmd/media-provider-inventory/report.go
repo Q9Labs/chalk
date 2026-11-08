@@ -28,9 +28,9 @@ func (c Cell) String() string {
 
 func (c Cell) MarshalJSON() ([]byte, error) {
 	if c.suppressed {
-		return json.Marshal(c.String())
+		return []byte(`"` + c.String() + `"`), nil
 	}
-	return json.Marshal(c.n)
+	return []byte(strconv.Itoa(c.n)), nil
 }
 
 // Family is a set of cells that partition one population. Encoding sorts the keys.
@@ -162,6 +162,13 @@ func newReport(raw rawReport, list allowlist) Report {
 			TranscriptionsInFlightByProvider:     publish(raw.Dependencies.TranscriptionsInFlightByProvider, boundProviderKeys),
 		},
 	}
+}
+
+func (r Report) writeJSON(out io.Writer) error {
+	encoder := json.NewEncoder(out)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(r)
 }
 
 func (r Report) writeTable(out io.Writer) {

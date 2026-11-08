@@ -29,9 +29,10 @@ func TestPublishSuppressesSmallCellsAndTheirComplement(t *testing.T) {
 	if two["a"].String() != "<5" || two["b"].String() != "<5" || two["c"].String() != "9" {
 		t.Fatalf("two small cells = %v %v %v, want <5 <5 9", two["a"], two["b"], two["c"])
 	}
-	encoded, err := json.Marshal(Family{"a": {n: 3, suppressed: true}, "b": {n: 12}})
-	if err != nil || string(encoded) != `{"a":"<5","b":12}` {
-		t.Fatalf("json = %s, %v", encoded, err)
+	var encoded bytes.Buffer
+	report := Report{Spaces: SpacesReport{ByNewEpisodeProvider: Family{"a": {n: 3, suppressed: true}, "b": {n: 12}}}}
+	if err := report.writeJSON(&encoded); err != nil || !strings.Contains(encoded.String(), `"a": "<5"`) || !strings.Contains(encoded.String(), `"b": 12`) {
+		t.Fatalf("json = %s, %v", encoded.String(), err)
 	}
 }
 

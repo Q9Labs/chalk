@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -63,11 +62,9 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 		return err
 	}
 	report := newReport(raw, list)
-	encoded, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
+	if err := report.writeJSON(out); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, string(encoded))
 	report.writeTable(stderr)
 	return nil
 }

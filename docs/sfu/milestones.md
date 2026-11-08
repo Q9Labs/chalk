@@ -555,7 +555,8 @@ lead.
 1. **Inventory and counts (starts now).** One audited query set counts Tenants,
    Spaces, explicit Cloudflare overrides, tenant-managed provider configuration,
    inactive settings and live bindings by provider, plus recording and
-   transcription dependencies. Output is sanitized counts only.
+   transcription dependencies. Output is sanitized counts only. Usage and
+   count meanings: [provider inventory](provider-inventory.md).
 2. **Client release and sunset (starts now).** Release compatible browser/shared
    SDKs, React Native SDKs and first-party apps before selection changes.
    Inventory old releases, set a bounded upgrade window and minimum version, and
