@@ -136,7 +136,8 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 		return n.refuse(RefusedEpisodeFull, errEpisodeFull)
 	}
 	// A replacement keeps its Participant's place, so only a new Episode meets the guard.
-	if count == 0 && replacing == nil {
+	// A held Episode passed the guard when it was reserved.
+	if count == 0 && replacing == nil && n.heldParticipants(key) == 0 {
 		if reason := n.guard.closedReason(); reason != "" {
 			return n.refuse(reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
@@ -207,8 +208,12 @@ func (n *Node) reserveCapture(s *Session, cost int) error {
 		return n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	if hold := n.holds[key]; hold != nil {
+		if s.captureHold != hold {
+			s.captureHold, s.captureBorrowed = hold, 0
+		}
 		hold.capture -= held
-		n.dropSpentHold(key)
+		hold.lent += held
+		s.captureBorrowed += held
 	}
 	s.captureReserved += cost
 	return nil
@@ -218,4 +223,14 @@ func (n *Node) releaseCapture(s *Session, cost int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	s.captureReserved -= cost
+	// Packets the subscription took from its Episode's hold go back to it while that same hold
+	// lasts, so a failed or replaced subscription does not hand promised room to other Episodes.
+	key := episodeOf(s.scope)
+	if hold := n.holds[key]; hold != nil && hold == s.captureHold {
+		back := min(cost, s.captureBorrowed)
+		s.captureBorrowed -= back
+		hold.capture += back
+		hold.lent -= back
+	}
+	n.dropSpentHold(key)
 }

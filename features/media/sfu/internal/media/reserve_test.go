@@ -29,6 +29,19 @@ type reserveFixture struct {
 
 func newReserveNode(t *testing.T, configure ...func(*config.Config)) *reserveFixture {
 	t.Helper()
+	node, err := newReserveNodeErr(configure...)
+	if err != nil {
+		t.Fatalf("new node: %v", err)
+	}
+	t.Cleanup(node.Close)
+	start := time.Now()
+	clock := &atomic.Pointer[time.Time]{}
+	clock.Store(&start)
+	node.now = func() time.Time { return *clock.Load() }
+	return &reserveFixture{node: node, clock: clock}
+}
+
+func newReserveNodeErr(configure ...func(*config.Config)) (*Node, error) {
 	cfg := config.Config{
 		UDPAddr:                "127.0.0.1:0",
 		AnnounceIPs:            []string{"127.0.0.1"},
@@ -56,16 +69,7 @@ func newReserveNode(t *testing.T, configure ...func(*config.Config)) *reserveFix
 	for _, apply := range configure {
 		apply(&cfg)
 	}
-	node, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err != nil {
-		t.Fatalf("new node: %v", err)
-	}
-	t.Cleanup(node.Close)
-	start := time.Now()
-	clock := &atomic.Pointer[time.Time]{}
-	clock.Store(&start)
-	node.now = func() time.Time { return *clock.Load() }
-	return &reserveFixture{node: node, clock: clock}
+	return NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func (f *reserveFixture) advance(d time.Duration) {
@@ -462,5 +466,153 @@ func TestCaptureSlotsKeepRoomUntilACaptureTakesIt(t *testing.T) {
 	f.advance(31 * time.Second)
 	if want := 300; f.reserved() != want {
 		t.Fatalf("after expiry %d reserved, want the capture's own %d", f.reserved(), want)
+	}
+}
+
+func (f *reserveFixture) closeAdmission(reason string) {
+	f.node.guard.mu.Lock()
+	f.node.guard.health.AdmissionReason = reason
+	f.node.guard.mu.Unlock()
+}
+
+func TestAHeldEpisodeRejoinsAfterTheNodeDrainsOrTheGuardCloses(t *testing.T) {
+	f := newReserveNode(t)
+	if _, err := f.node.ReserveEpisode(reserveRequest("held", 2)); err != nil {
+		t.Fatal(err)
+	}
+	f.closeAdmission(RefusedCPUBusy)
+	join(t, f.node, "held", "a")
+	if _, err := f.node.CreateSession("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("a new Episode while the guard is closed: %v, want capacity exceeded", err)
+	}
+
+	f.closeAdmission("")
+	other := newReserveNode(t)
+	if _, err := other.node.ReserveEpisode(reserveRequest("held", 2)); err != nil {
+		t.Fatal(err)
+	}
+	other.node.Drain()
+	join(t, other.node, "held", "a")
+	join(t, other.node, "held", "b")
+	if _, err := other.node.CreateSession("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrDraining) {
+		t.Fatalf("a new Episode on a draining node: %v, want draining", err)
+	}
+}
+
+func TestReservedCapturesKeepTheirSessionSlots(t *testing.T) {
+	f := newReserveNode(t, func(cfg *config.Config) { cfg.MaxSessions = 4 })
+	request := reserveRequest("one", 3)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	// Three Participants and the capture fill the four slots: nobody else gets one.
+	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("another Episode took a slot the hold promised: %v", err)
+	}
+	for _, participant := range []string{"a", "b", "c"} {
+		join(t, f.node, "one", participant)
+	}
+	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("another Episode took the capture's slot: %v", err)
+	}
+	if _, err := f.node.CreateCaptureSession("capture", protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}); err != nil {
+		t.Fatalf("the reserved capture: %v", err)
+	}
+
+	short := newReserveNode(t, func(cfg *config.Config) { cfg.MaxSessions = 3 })
+	if _, err := short.node.ReserveEpisode(request); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("three Participants and a capture on a limit of three: %v, want capacity exceeded", err)
+	}
+}
+
+func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
+	f := newReserveNode(t)
+	request := reserveRequest("one", 2)
+	request.Generation = 6
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	stale := protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "a", Generation: 5}
+	if _, err := f.node.CreateSession("stale", stale); !errors.Is(err, ErrStaleGeneration) {
+		t.Fatalf("a create below the hold's generation: %v, want stale", err)
+	}
+	if f.reserved() != newEpisode {
+		t.Fatalf("a stale create changed the reservation to %d", f.reserved())
+	}
+	fresh := stale
+	fresh.Generation = 6
+	if _, err := f.node.CreateSession("fresh", fresh); err != nil {
+		t.Fatalf("a create at the hold's generation: %v", err)
+	}
+}
+
+func TestACaptureReturnsHeldPacketsWhenItsSubscriptionRollsBack(t *testing.T) {
+	f := newReserveNode(t)
+	request := reserveRequest("one", 3)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	session := &Session{kind: kindCapture, scope: protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}}
+	f.node.mu.Lock()
+	f.node.sessions["capture"] = session
+	f.node.mu.Unlock()
+	t.Cleanup(func() {
+		f.node.mu.Lock()
+		delete(f.node.sessions, "capture")
+		f.node.mu.Unlock()
+	})
+	before := f.reserved()
+	heldCapture := func() int {
+		f.node.mu.Lock()
+		defer f.node.mu.Unlock()
+		return f.node.holds[episodeKey{"tenant", "one"}].capture
+	}
+	full := heldCapture()
+	if err := f.node.reserveCapture(session, 300); err != nil {
+		t.Fatal(err)
+	}
+	if heldCapture() != full-300 {
+		t.Fatalf("the hold keeps %d, want %d", heldCapture(), full-300)
+	}
+	f.node.releaseCapture(session, 300)
+	if heldCapture() != full || f.reserved() != before {
+		t.Fatalf("after a rollback the hold keeps %d (want %d) and %d is reserved (want %d)", heldCapture(), full, f.reserved(), before)
+	}
+
+	// Once the Episode ends, a late release must not bring the hold back.
+	if err := f.node.reserveCapture(session, 300); err != nil {
+		t.Fatal(err)
+	}
+	f.node.mu.Lock()
+	delete(f.node.sessions, "capture") // the fake has no peer connection for EndEpisode to close
+	f.node.mu.Unlock()
+	f.node.EndEpisode("tenant", "one")
+	f.node.releaseCapture(session, 300)
+	if f.reserved() != 0 {
+		t.Fatalf("a release after the Episode ended left %d reserved", f.reserved())
+	}
+}
+
+func TestReserveChecksMandatoryMediaAtEveryRejoinCount(t *testing.T) {
+	// NewNode refuses a ceiling that a call at the large-call threshold cannot meet, so a valid
+	// node never reaches a refusal at an intermediate count. Lowering the ceiling after start,
+	// before any session exists, stands in for a node whose rule and shape disagree: seven
+	// Participants pass at their last count against the budget, but the third rejoin needs 2,790
+	// mandatory packets/s against 2,000.
+	f := newReserveNode(t)
+	f.node.cfg.EpisodePacketCeiling = 2000
+	if _, err := f.node.ReserveEpisode(reserveRequest("one", 7)); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("a shape that cannot reach its size: %v, want capacity exceeded", err)
+	}
+	if f.reserved() != 0 {
+		t.Fatalf("the refusal left %d reserved", f.reserved())
+	}
+	if _, err := f.node.ReserveEpisode(reserveRequest("one", 2)); err != nil {
+		t.Fatalf("a shape within the ceiling: %v", err)
+	}
+	if _, err := newReserveNodeErr(func(cfg *config.Config) { cfg.EpisodePacketCeiling = 2000 }); err == nil {
+		t.Fatal("NewNode accepted a ceiling below the large-call threshold's mandatory media")
 	}
 }

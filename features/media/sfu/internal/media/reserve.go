@@ -19,12 +19,15 @@ const defaultReserveLimit = 1 << 10
 
 // episodeHold is an Episode reserved before any Participant rejoins, from the shape the API admitted on
 // the node it recovers from. Its Participants count as reserved until their sessions join, which
-// replace the hold, and its capture packets until capture sessions take them. What is left
-// is released when the hold expires or the Episode ends. n.mu guards it.
+// replace the hold, and its capture sessions and packets until captures take them. What is left
+// is released when the hold expires or the Episode ends. generation also fences joins: a
+// Participant create below it is stale. n.mu guards it.
 type episodeHold struct {
 	generation   int64
 	participants int // Participants not yet joined; the Episode reserves for at least this many
-	capture      int // packets/s reserved for capture sessions not yet joined
+	captures     int // capture sessions not yet joined, which keep session slots
+	capture      int // packets/s reserved for capture subscriptions not yet accepted
+	lent         int // packets/s of capture that live subscriptions took from the hold
 	expires      time.Time
 }
 
@@ -55,55 +58,79 @@ func (n *Node) expireHolds() {
 	}
 }
 
-// settleHold lets the Episode's joined Participants replace the hold. replacing is the session a
-// join just fenced, which no longer counts. The caller holds n.mu.
+// liveSessions counts the node's sessions per Episode by kind, leaving out one that is about to be
+// replaced. The caller holds n.mu.
+func (n *Node) liveSessions(replacing *Session) (participants, captures map[episodeKey]int) {
+	participants, captures = map[episodeKey]int{}, map[episodeKey]int{}
+	for _, session := range n.sessions {
+		switch {
+		case session == replacing:
+		case session.kind == kindCapture:
+			captures[episodeOf(session.scope)]++
+		default:
+			participants[episodeOf(session.scope)]++
+		}
+	}
+	return participants, captures
+}
+
+// settleHold lets the Episode's joined sessions replace what the hold promised for them.
+// replacing is the session a join just fenced, which no longer counts. The caller holds n.mu.
 func (n *Node) settleHold(key episodeKey, replacing *Session) {
 	held := n.holds[key]
 	if held == nil {
 		return
 	}
-	joined := 0
-	for _, session := range n.sessions {
-		if session != replacing && session.kind != kindCapture && episodeOf(session.scope) == key {
-			joined++
-		}
-	}
-	if joined >= held.participants {
+	participants, captures := n.liveSessions(replacing)
+	if participants[key] >= held.participants {
 		held.participants = 0
+	}
+	if captures[key] >= held.captures {
+		held.captures = 0
 	}
 	n.dropSpentHold(key)
 }
 
-// dropSpentHold deletes the Episode's hold once nothing is left in it. The caller holds n.mu.
+// dropSpentHold deletes the Episode's hold once nothing is left in it and no live capture
+// subscription owes it packets back. The caller holds n.mu.
 func (n *Node) dropSpentHold(key episodeKey) {
-	if held := n.holds[key]; held != nil && held.participants == 0 && held.capture == 0 {
+	if held := n.holds[key]; held != nil && held.participants == 0 && held.captures == 0 && held.capture == 0 && held.lent == 0 {
 		delete(n.holds, key)
 	}
 }
 
-// sessionSlots is the session count the node's limit would see after one more session of the kind
-// joins: the live sessions, less the one it replaces, and every Participant a hold still promises.
-// The caller holds n.mu.
-func (n *Node) sessionSlots(scope protocol.Scope, kind sessionKind, replacing *Session) int {
-	n.expireHolds()
-	joined := map[episodeKey]int{}
-	slots := 1
-	for _, session := range n.sessions {
-		if session == replacing {
-			continue
-		}
-		slots++
-		if session.kind != kindCapture {
-			joined[episodeOf(session.scope)]++
-		}
-	}
-	if kind != kindCapture {
-		joined[episodeOf(scope)]++
-	}
+// promisedSlots is the sessions the holds other than skip still promise, beyond the live ones.
+func (n *Node) promisedSlots(skip episodeKey, participants, captures map[episodeKey]int) int {
+	slots := 0
 	for key, held := range n.holds {
-		slots += max(0, held.participants-joined[key])
+		if key != skip {
+			slots += max(0, held.participants-participants[key]) + max(0, held.captures-captures[key])
+		}
 	}
 	return slots
+}
+
+// sessionSlots is the session count the node's limit would see after one more session of the kind
+// joins: the live sessions, less the one it replaces, and every Participant and capture a hold
+// still promises. The caller holds n.mu.
+func (n *Node) sessionSlots(scope protocol.Scope, kind sessionKind, replacing *Session) int {
+	n.expireHolds()
+	key := episodeOf(scope)
+	participants, captures := n.liveSessions(replacing)
+	if kind == kindCapture {
+		captures[key]++
+	} else {
+		participants[key]++
+	}
+	slots := 1 + len(n.sessions)
+	if replacing != nil {
+		slots--
+	}
+	own := n.holds[key]
+	if own != nil {
+		slots += max(0, own.participants-participants[key]) + max(0, own.captures-captures[key])
+	}
+	return slots + n.promisedSlots(key, participants, captures)
 }
 
 // captureBound is the most packets/s the shape's capture sessions reserve when each pulls every
@@ -170,15 +197,16 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		}
 	}
 	participants := max(live, shape.Participants)
-	if n.mandatoryPackets(participants, shape.ScreenShare || n.screens[key] != nil) > n.episodeCeiling(participants) {
-		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
-	}
-	slots := len(n.sessions) + max(0, shape.Participants-live)
-	for other, held := range n.holds {
-		if other != key {
-			slots += max(0, held.participants-joined[other])
+	// Each rejoin meets the mandatory-media rule at its own count, and the ceiling changes with the
+	// count, so the shape must pass at every count it reaches, not only at its last.
+	screen := shape.ScreenShare || n.screens[key] != nil
+	for count := live + 1; count <= participants; count++ {
+		if n.mandatoryPackets(count, screen) > n.episodeCeiling(count) {
+			return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
 		}
 	}
+	_, liveCaptures := n.liveSessions(nil)
+	slots := len(n.sessions) + max(0, shape.Participants-live) + max(0, shape.CaptureSlots-liveCaptures[key]) + n.promisedSlots(key, joined, liveCaptures)
 	if slots > n.cfg.MaxSessions {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedSessions, ErrCapacityExceeded)
 	}
@@ -192,7 +220,7 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	expires := n.now().Add(ttl)
-	n.holds[key] = &episodeHold{generation: request.Generation, participants: shape.Participants, capture: n.captureBound(shape), expires: expires}
+	n.holds[key] = &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: n.captureBound(shape), expires: expires}
 	n.settleHold(key, nil)
 	response := protocol.ReserveEpisodeResponse{NodeIncarnation: n.incarnation, ReservedPackets: reserved, ExpiresAt: expires}
 	n.reserves[request.OperationID] = reserveRecord{digest: digest, response: response}
