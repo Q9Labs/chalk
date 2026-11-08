@@ -42,14 +42,6 @@ func parseAllowlist(value string) (allowlist, error) {
 // counts maps a value to how many rows have it.
 type counts map[string]int
 
-func (c counts) total() int {
-	sum := 0
-	for _, n := range c {
-		sum += n
-	}
-	return sum
-}
-
 // rawReport holds exact counts. Only report.go turns it into publishable output.
 type rawReport struct {
 	Tenants struct {
