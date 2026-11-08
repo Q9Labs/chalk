@@ -565,22 +565,28 @@ lead.
    for join startup, Leave, mic/camera toggles, stalls, `sfu.loss_pct`, admission
    refusals, load metrics and the `device.*` scenarios (reconnect, network
    switch, relay/TURN, real browser, phone). A metric nothing emits yet gets one
-   emitter issue, not a budget. A deterministic budget gates from its first
-   commit. A noisy budget flips to `gate:true` in its own PR, only after 7
-   nightly values from at least 3 different nights whose spread is below
-   `tolerancePct`; the 18 `chalk_sfu` action-latency flips are one such PR
-   (earliest around 15 November). `cf_sfu` action budgets stay warn-only and M13
-   deletes them. This is the M7 scorecard follow-up and finishes here.
+   emitter issue, not a budget. The first PR (the M7 scorecard follow-up) gates every emitted own-SFU latency
+   metric at once with a loose ceiling of about twice the worst value in existing
+   evidence, cited in the `perf/budgets.json` comment; a metric with thin evidence
+   stays warn-only, and a deterministic budget gates from its first commit. Each
+   ceiling then tightens to its real budget in its own PR, only after 7 nightly
+   values from at least 3 different nights whose spread is below `tolerancePct`;
+   the 18 `chalk_sfu` action-latency tightenings are one such PR (earliest around
+   15 November, owned by M12). `cf_sfu` action budgets stay warn-only and M13
+   deletes them.
 
 4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
    only as rollback through M13. When counts show every Tenant and Space on the
-   own provider and the last compatible-client check passes, and once production
-   has a node configured, the Promote real-call proof also runs on `chalk_sfu`
-   (join startup, Leave, mic/camera toggle) and the scorecard scoring fails the
-   Promote run on regression (rollback stays safe), set
+   own provider and the last compatible-client check passes, and Promote has a
+   passing `chalk_sfu` real-call proof scorecard (join startup, Leave, mic/camera
+   toggle) for the same SHA from the nightly or staging node, so it needs no
+   production canary, and the scorecard scoring fails the Promote run on
+   regression (rollback stays safe). That gate is built only if it fits the
+   existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
+   otherwise it stays in this package with its cost written down, set
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
