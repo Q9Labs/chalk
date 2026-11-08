@@ -37,10 +37,22 @@ type Fleet struct {
 	probed bool // a probe round has finished, so a node without a load record has none
 }
 
-// nodeLoad is a node's last ready probe. A draining or silent node has none.
+// nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
+// hasRoom false, so placement skips it, and is told apart from a silent node.
 type nodeLoad struct {
 	hasRoom bool // the budget left fits a new Episode
-	at      time.Time
+	NodeHealth
+	at time.Time
+}
+
+// NodeHealth is what a node's last answered probe said about its drain.
+type NodeHealth struct {
+	// Draining means the node refuses new Episodes and keeps its live ones.
+	Draining bool
+	// Allocations is what the node holds for live Episodes. A restart without interruption
+	// waits for it and CleanupDebt to reach zero.
+	Allocations int
+	CleanupDebt int
 }
 
 // NewFleet builds one adapter per node. They share one mTLS client.
@@ -112,9 +124,21 @@ func (f *Fleet) Watch(ctx context.Context) {
 	}
 }
 
+// Health reports a node's drain state from its last probe. It reports false when the node did
+// not answer recently, so a silent node reads as unknown rather than as serving.
+func (f *Fleet) Health(node string) (NodeHealth, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	load, probed := f.loads[node]
+	if !probed || time.Since(load.at) > probeFreshness {
+		return NodeHealth{}, false
+	}
+	return load.NodeHealth, true
+}
+
 // Probe reads every node's readiness once, concurrently. A node that does not
-// answer ready, a draining node's 503 included, loses its load record and with
-// it its place in placement.
+// answer loses its load record and with it its place in placement. A draining
+// node keeps a record that says so, and it too is out of placement.
 func (f *Fleet) Probe(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, node := range f.nodes {
@@ -124,19 +148,39 @@ func (f *Fleet) Probe(ctx context.Context) {
 			ready, err := node.ready(probeCtx)
 			f.mu.Lock()
 			defer f.mu.Unlock()
+			before, known := f.loads[node.node]
 			if err != nil {
-				if _, known := f.loads[node.node]; known && f.log != nil {
-					f.log.WarnContext(ctx, "chalk sfu node left placement", "node", node.node)
+				switch {
+				case known && before.Draining:
+					f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
+				case known:
+					f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
 				}
 				delete(f.loads, node.node)
 				return
 			}
-			hasRoom := ready.Host.AdmissionReason == "" && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
-			f.loads[node.node] = nodeLoad{hasRoom: hasRoom, at: time.Now()}
+			switch {
+			case ready.Draining && !(known && before.Draining):
+				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node draining", node.node, "allocations", ready.Allocations, "cleanupDebt", ready.CleanupDebt)
+			case !ready.Draining && known && before.Draining:
+				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
+			}
+			hasRoom := !ready.Draining && ready.Host.AdmissionReason == "" && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
+			f.loads[node.node] = nodeLoad{
+				hasRoom:    hasRoom,
+				NodeHealth: NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
+				at:         time.Now(),
+			}
 		})
 	}
 	wg.Wait()
 	f.mu.Lock()
 	f.probed = true
 	f.mu.Unlock()
+}
+
+func (f *Fleet) logTransition(ctx context.Context, level slog.Level, message, node string, attrs ...any) {
+	if f.log != nil {
+		f.log.Log(ctx, level, message, append([]any{"node", node}, attrs...)...)
+	}
 }

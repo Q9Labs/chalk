@@ -344,6 +344,20 @@ type ReadyResponse struct {
 	// SessionKinds lists the non-default session kinds this node creates, such as
 	// "capture". A node that predates session kinds omits it.
 	SessionKinds []string `json:"sessionKinds,omitempty"`
+	DrainState
+}
+
+// DrainState is what a restart waits on. The drain and undrain requests answer with it and
+// readiness carries it. A node restarts without interrupting a call once Allocations and
+// CleanupDebt are both zero.
+type DrainState struct {
+	// Draining is true while the node refuses new Episodes. Calls already on it continue and
+	// still take joins.
+	Draining bool `json:"draining"`
+	// Allocations counts what the node holds for live Episodes: sessions and open source leases.
+	Allocations int `json:"allocations"`
+	// CleanupDebt counts closes that have begun and not finished.
+	CleanupDebt int `json:"cleanupDebt"`
 }
 
 // HostState is the host-health guard's view over its window.

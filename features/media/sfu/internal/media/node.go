@@ -73,7 +73,7 @@ type Node struct {
 	wg sync.WaitGroup
 
 	mu           sync.Mutex
-	draining     bool // refuses new Episodes
+	draining     bool // refuses new Episodes; Undrain clears it
 	stopped      bool // refuses all work
 	sessions     map[string]*Session
 	participants map[participantKey]*Session
@@ -94,6 +94,8 @@ type Node struct {
 	stats atomic.Pointer[mediaStats]
 	// totals are the node's media counts since start. Only the control loop touches them.
 	totals nodeTotals
+	// closing counts sessions whose Close has begun and not finished: the node's cleanup debt.
+	closing atomic.Int64
 	// refusals counts refused joins and screen shares by reason. n.mu guards it.
 	refusals map[string]uint64
 }
@@ -412,13 +414,6 @@ func (n *Node) SessionKinds() []string {
 	return []string{protocol.SessionKindCapture}
 }
 
-// Draining reports whether the node refuses new work.
-func (n *Node) Draining() bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return n.draining || n.stopped
-}
-
 // CreateSession creates the participant's session, or returns the session the
 // same operation ID already created. A newer generation fences the older session.
 func (n *Node) CreateSession(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, error) {
@@ -665,13 +660,6 @@ func (n *Node) track(fn func()) bool {
 	}
 	n.wg.Go(fn)
 	return true
-}
-
-// Drain makes the node refuse new Episodes while its live calls finish.
-func (n *Node) Drain() {
-	n.mu.Lock()
-	n.draining = true
-	n.mu.Unlock()
 }
 
 // Close refuses new work, closes every session and releases the UDP socket.
