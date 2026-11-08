@@ -102,7 +102,7 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
-    timeout-minutes: 130
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 130 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -164,7 +164,7 @@ jobs:
           sudo mount --bind /dev/shm/chalk-proof-private .private
           echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
-        timeout-minutes: 50
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 40 }}
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
@@ -217,7 +217,7 @@ jobs:
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: 70
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 70 || 25 }}
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
@@ -279,7 +279,7 @@ jobs:
           if [ -f .private/proof-run-ids ]; then
             while IFS= read -r run_id; do
               if [[ "$STAGING_SFU_PROOF" == true ]]; then
-                scripts/staging-sfu/staging-lock --holder nightly-cleanup --purpose cleanup --run-id "$RUN_PREFIX" -- pnpm prod:proof cleanup "$run_id" || status=1
+                scripts/staging-sfu/staging-lock --holder nightly-cleanup --purpose cleanup --run-id "$RUN_PREFIX" --wait 60 -- pnpm prod:proof cleanup "$run_id" || status=1
               else
                 pnpm prod:proof cleanup "$run_id" || status=1
               fi
