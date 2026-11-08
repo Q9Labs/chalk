@@ -250,14 +250,25 @@ because the API stops renewing a lease once the Episode moves or ends. Three sig
 the gauges `chalk.sfu.retirement_debts` (count) and `chalk.sfu.retirement_debt_oldest_age` (seconds,
 unit `s`), each reported by every API replica from the same table; the `sfu_retirement_debts` object
 (`count`, `oldest_age_seconds`) in the `/readyz` body, which never fails readiness; and the warning logs
-`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed),
+`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed; both
+carry `tenant_id` and `episode_id`, and the API log handler adds the trace and journey IDs when the move
+that owed the debt ran inside a request, so a try by the worker has none),
 `chalk_sfu.retire_debts_unread` and `chalk_sfu.retire_backlog_unread` (the table could not be read).
 Alert when the oldest unpaid debt is above 15 minutes for 5 minutes (the maximum across replicas). A
 healthy fleet pays a debt within seconds, so an older debt means a node has been silent through many
 backoff cycles: check that node, and restart it if it is up but not answering control calls.
 
+The own SFU counts each control call that ends in a provider failure, after the adapter's
+retries, in the API metric `chalk.api.chalk_sfu.failures`. Its attributes are
+`chalk.media_plane.provider`, `chalk.provider.operation` (the route without the session ID,
+such as `episodes/retire` or `sessions/tracks`), `chalk.provider.failure_stage` (`transport`,
+`http_status` or `decode`) and, by stage, `chalk.provider.transport_cause` or
+`http.response.status_class`. It carries no node, Tenant, Episode or Participant identity.
+A caller that cancels is not counted, and an answer such as a gone session or a refused
+request is not a failure. The own SFU has no failure span: the call has no span of its own.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
-`chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
+`chalk.provider.transport_cause` span/metric attribute, for both providers: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
 error text is not retained. A canceled or expired caller context produces
 `cloudflare_sfu.client_canceled`, does not increment the provider-failure counter
