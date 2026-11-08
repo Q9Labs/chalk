@@ -180,7 +180,11 @@ remote systemctl --user -M chalk-sfu@ daemon-reload
 
 port=$((20000 + RANDOM % 20000))
 tunnel=""
+# draining is the obligation to reopen the node on exit. It is set before the drain request is
+# sent, because a lost reply can hide a drain that took effect, and cleared only once a
+# restarted process answers. Undrain is idempotent, so a spurious reopen is harmless.
 draining=false
+old_incarnation=""
 # sfu_curl calls the node's control API through the SSH tunnel with the operator certificate.
 sfu_curl() {
   curl --silent --max-time 10 --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
@@ -208,12 +212,14 @@ if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
     open_tunnel
     deadline=$((SECONDS + drain_timeout))
     status=000
+    draining=true
     for _ in $(seq 10); do # the tunnel needs a moment
       status="$(sfu_curl --output /dev/null --write-out '%{http_code}' -X POST "https://chalk-sfu:${port}/v1/drain")" && break
       sleep 1
     done
     if [[ "$status" == 404 ]]; then
       # The running node predates the drain request; remove this branch once no node does.
+      draining=false # it has no undrain either
       since="$(remote date -u +%Y-%m-%dT%H:%M:%SZ)"
       as_sfu podman kill --signal USR1 chalk-sfu >/dev/null
       until as_sfu podman logs --since "$since" chalk-sfu 2>&1 | grep -q '"msg":"sfu drained"'; do
@@ -222,7 +228,6 @@ if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
       done
     else
       [[ "$status" == 200 ]] || { echo "the drain request answered ${status}" >&2; exit 1; }
-      draining=true
       last=""
       until state="$(sfu_curl --max-time 5 "https://chalk-sfu:${port}/readyz")" && [[ "$(jq -r '.allocations == 0 and .cleanupDebt == 0' <<<"$state" 2>/dev/null)" == true ]]; do
         counts="$(jq -r '"allocations \(.allocations), cleanup debt \(.cleanupDebt)"' <<<"$state" 2>/dev/null || echo unknown)"
@@ -230,7 +235,7 @@ if remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu; then
         ((SECONDS < deadline)) || { echo "${counts} remain after ${drain_timeout}s; restarting now would be a disruptive replacement that cuts live calls; the node is reopened. Rerun with --force to accept it" >&2; exit 1; }
         sleep 5
       done
-      draining=false # the restart replaces the node, so there is nothing to reopen
+      old_incarnation="$(jq -r .nodeIncarnation <<<"$state")"
     fi
   fi
 fi
@@ -241,12 +246,17 @@ echo "==> checking readiness"
 [[ -n "$tunnel" ]] || open_tunnel
 ready=""
 for _ in $(seq 30); do
-  if ready="$(sfu_curl --fail --max-time 3 "https://chalk-sfu:${port}/readyz")"; then
+  # A new process answers with a new boot incarnation and is not draining. Until then a failed
+  # restart leaves the old process, and the exit trap reopens it.
+  if ready="$(sfu_curl --fail --max-time 3 "https://chalk-sfu:${port}/readyz")" &&
+    [[ "$(jq -r --arg old "$old_incarnation" '.draining == false and .nodeIncarnation != $old' <<<"$ready")" == true ]]; then
     break
   fi
+  ready=""
   sleep 2
 done
 [[ -n "$ready" ]] || { echo "the node did not become ready" >&2; exit 1; }
+draining=false # the new process is up, so there is nothing left to reopen
 granted="$(jq -r '.host.udpReceiveBufferBytes' <<<"$ready")"
 echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .packetBudget <<<"$ready"), receive buffer ${granted} bytes, receive-buffer drops $(jq -r '.host.udpReceiveBufferErrors // "unknown"' <<<"$ready")"
 ((granted >= 8388608)) || { echo "the receive buffer is below 8 MiB; check net.core.rmem_max" >&2; exit 1; }
