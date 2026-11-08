@@ -40,8 +40,8 @@ func TestTenantEndWithExistingPublicationFenceReturnsControlBusy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(context.Background())
-	tenantID, spaceID, episodeID := recordingLifecycleIntegrationID(t), recordingLifecycleIntegrationID(t), recordingLifecycleIntegrationID(t)
-	participantID, operationID := recordingLifecycleIntegrationID(t), recordingLifecycleIntegrationID(t)
+	tenantID, spaceID, episodeID := accountTenantIntegrationID(t), accountTenantIntegrationID(t), accountTenantIntegrationID(t)
+	participantID, operationID := accountTenantIntegrationID(t), accountTenantIntegrationID(t)
 	for _, seed := range []struct {
 		query string
 		args  []any

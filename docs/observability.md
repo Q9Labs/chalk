@@ -207,19 +207,6 @@ epoch retires the obsolete obligation. A source stop still pending in Sync keeps
 the obligation pending until that authority is applied. Sync retains its normal callback authority
 checks, including an Episode end that adopts the stop (#618).
 
-`apps/api/internal/adapters/postgres/recording_capture_publication_integration_test.go` proves a three-hour outbox
-outage releases capture capacity, never terminalizes completed media, respects
-backoff and drains automatically after recovery. It runs the production #619
-alert SQL against a completed capture with pending publication: Sync `stopping`
-continues to alert until the callback is applied. The existing two-connection
-regressions in `apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go` cover both
-worker/completion lock orders and concurrent completion without duplicate release
-or publication.
-The regression in
-`apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
-callback recovery, and duplicate delivery against the Go controller and maintenance
-commands.
-
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
 failure code. `provider_raw_code` and `provider_message` retain the rejected
@@ -229,10 +216,7 @@ at 240 characters plus a truncation marker. The active API span receives the sam
 values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
 `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
-HTTP 200 acceptance rules are unchanged. The regression in
-`apps/api/internal/adapters/cloudflare/sfu/capture_close_observability_test.go`
-checks the recorded logs and span events against provider responses with
-credential-shaped fields.
+HTTP 200 acceptance rules are unchanged.
 
 When the API cannot mint Cloudflare TURN credentials it logs
 `cloudflare_turn.credentials_failed` at warning level with the failure cause and
@@ -477,8 +461,7 @@ completion. Successful capture jobs still count. Any nonzero latest snapshot
 newer than five minutes alerts on the next evaluation. A zero snapshot clears
 the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
-The PostgreSQL fixture in `infrastructure/observability/production-alerts/collector_test.go` checks stranded,
-recent, incomplete, healthy, and cross-Tenant rows and clearing after repair.
+
 The same collector independently samples Sync `/readyz` every minute, including
 when its SQL snapshot fails. The grouped state monitor alerts when at least four
 distinct minute samples in the last five minutes are unready and the latest
@@ -700,9 +683,7 @@ an active Episode keeps current-binding revocation terminal. A local End in
 flight settles first. Unavailable status reads keep Sync running and retry
 without requesting a replacement binding; a late read cannot fail a newer binding.
 Normal end emits no `connection_failed` report. End/rejection races are covered
-in `sdks/typescript/client/src/connection/episode-end-race.test.ts`. The timing and rejection
-regressions are covered in
-`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+in `sdks/typescript/client/src/connection/episode-end-race.test.ts`.
 
 Automatic replacement forwards `expectedMediaConnectionId` through the browser
 access context and the server SDK's refresh request. The API compares the
