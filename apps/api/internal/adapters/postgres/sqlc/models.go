@@ -663,6 +663,17 @@ type RecordingJobAttemptAuthority struct {
 	IssuedAt          pgtype.Timestamptz `json:"issued_at"`
 }
 
+type RecordingJobAttemptFailure struct {
+	JobID             pgtype.UUID        `json:"job_id"`
+	AttemptCount      int32              `json:"attempt_count"`
+	FencingGeneration int64              `json:"fencing_generation"`
+	Kind              string             `json:"kind"`
+	ErrorCode         string             `json:"error_code"`
+	ErrorDetail       string             `json:"error_detail"`
+	LeaseOwner        string             `json:"lease_owner"`
+	FailedAt          pgtype.Timestamptz `json:"failed_at"`
+}
+
 type RecordingJobFailureHistory struct {
 	JobID             pgtype.UUID        `json:"job_id"`
 	ManualRetryCount  int32              `json:"manual_retry_count"`

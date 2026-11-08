@@ -1293,6 +1293,15 @@ with failure_policy as (
             and authority.lease_owner = $8
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
+), attempt_failure as (
+    -- The job row keeps only its latest error and clears it on success; this row outlives a retry.
+    insert into recording_job_attempt_failures (
+        job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
+    )
+    select failed.id, failed.attempt_count, failed.fencing_generation, failed.kind,
+        $1, $4, $8
+    from failed
+    on conflict do nothing
 ), publication_failure as (
     insert into recording_capture_publication_failures(job_id, attempt_count, fencing_generation)
     select id, attempt_count, fencing_generation from failed

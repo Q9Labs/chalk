@@ -449,6 +449,9 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 		if (job.Kind == recordingpipeline.JobKindRender || job.Kind == recordingpipeline.JobKindTranscription) && body.ErrorCode == "render_attempt_failed" {
 			observability.LogRenderAttemptFailure(request.Context(), logger, input)
 		}
+		if job.Kind == recordingpipeline.JobKindCapture {
+			observability.LogCaptureAttemptFailure(request.Context(), logger, job, input)
+		}
 		writeJSON(w, http.StatusOK, recorderWorkerJobResponseValue(job))
 	}
 }
