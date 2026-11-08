@@ -132,8 +132,21 @@ def complete_production(github, args):
     github.request(f"deployments/{env('DEPLOYMENT_ID')}/statuses", {'state': 'success', 'auto_inactive': False})
 
 
-def defer_cut(github, target, reason, *, manual):
+def write_no_cut_summary(github, reason, target, records=None):
+    # A skipped plan leaves every later job skipped and the run green, so the run page must say why.
+    if records is None:
+        records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
+    # Cooldown falls back to completed cuts when no reservation exists, so the summary does the same.
+    attempts = [item for item in records if payload(item).get('channel') == 'nightly-attempt'] or records
+    last = max(attempts, key=lambda item: item['created_at'], default=None)
+    when = last and (f"run {payload(last)['run_id']}" if payload(last).get('run_id') else last['created_at'])
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f"No cut: {reason}, target {target}, last attempt {when or 'none'}\n")
+
+
+def defer_cut(github, target, reason, *, manual, records=None):
     print(f'Nightly: {reason}')
+    write_no_cut_summary(github, reason, target, records)
     if manual:
         github.dispatch_nightly()
         print('Nightly: manual request requeued on master with fresh orchestration')
@@ -156,6 +169,8 @@ def plan(github, args):
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
+    if not cut:
+        write_no_cut_summary(github, reason, target, records)
     if args.manual:
         require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
                 f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')
@@ -177,7 +192,7 @@ def plan(github, args):
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
         if github.request('git/ref/heads/master')['object']['sha'] != tip:
-            defer_cut(github, target, 'master moved during planning', manual=args.manual)
+            defer_cut(github, target, 'master moved during planning', manual=args.manual, records=records)
             return
         github.reserve_cut(target)
     outputs(result)
