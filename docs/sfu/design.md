@@ -45,14 +45,13 @@ Goals:
 - Low latency at the real peak, not just a successful forwarding demo. Compare
   rendered-media latency, freezes, join and recovery against matched Cloudflare
   cohorts. Bound packet queues and measure the complete M5 media path.
-- Today one `s-1vcpu-1gb` production node and one staging node of the same size
-  in `sgp1`, **$12/month** total. Full cutover targets one Basic `s-2vcpu-2gb`
-  primary and one `s-1vcpu-1gb` degraded standby, **$24/month**, once the
-  owner approves the larger tier. The primary carries the full admitted
-  peak; standby carries a smaller, low-layer workload when primary is unhealthy,
-  draining or full. Prove both envelopes separately. Drain keeps existing calls
-  running but does not promise full new-call capacity on standby.
-  Create staging only for test runs and destroy it afterwards.
+- Today a `s-1vcpu-1gb` staging node and an `s-2vcpu-2gb` production node in
+  `sgp1`, **$24/month** total, and no other always-on node. The production node
+  carries the full admitted peak. The fleet supports a degraded standby role
+  (primary first; standby only when the primary is unhealthy, draining or full),
+  proved on short-lived bench Droplets; production has no standby, so a drain or a
+  lost node ends in Cloudflare overflow until M13 and an explicit capacity result
+  afterwards. Create staging and bench nodes only for test runs.
 - A configurable maximum of **16 active Participants per own-SFU Episode by
   default**, not a fixed eight-person cap. Packet, memory and live-health budgets
   decide actual admission. A configured maximum is not a capacity promise.
@@ -570,30 +569,30 @@ limits and bounded unauthenticated handshakes. Apply host and cloud firewalls.
 
 ## Hosting and budget
 
-Chalk runs two Basic Regular `s-1vcpu-1gb` nodes in Singapore `sgp1`, one for
-staging and one for production, about $12/month, and keeps both (decided
-6 November 2026). Production moves to one `s-2vcpu-2gb` only with the owner's
-approval, when measured load needs it. The starting capacity bar is six
-concurrent three-person classes on the $6 production node.
+Chalk runs one Basic Regular `s-1vcpu-1gb` staging node and one `s-2vcpu-2gb`
+production node in Singapore `sgp1`, $24/month, and keeps both (staging decided
+6 November 2026; production resized to the $18 tier for full cutover). A
+production standby, a second $18 node or a dedicated-CPU tier is not authorized
+and nothing in the plan depends on one.
 
-The full-cutover target is one `s-2vcpu-2gb` primary and one `s-1vcpu-1gb`
-standby. The primary is preferred for new Episodes. The standby takes new
-Episodes only when the primary is unhealthy, draining or full, with M5 holding
-camera layers low and refusing admission at the smaller packet budget. That is a
-full-capacity primary with a **degraded standby**, not two equal nodes or a
-guarantee that failover preserves every peak call at full quality.
+The fleet code supports a **degraded standby**: the primary is preferred for new
+Episodes, and the standby takes them only when the primary is unhealthy, draining
+or full, with M5 holding camera layers low and refusing admission at the smaller
+packet budget. It is not two equal nodes or a guarantee that failover preserves
+every peak call at full quality. Because production runs one node, that role is
+proved on bench Droplets (an `s-2vcpu-2gb` and an `s-1vcpu-1gb` under one test CA),
+not deployed in production.
 
 Public list prices checked **5 November 2026**, USD before tax. Regional SKU
 availability does not guarantee creation-time stock.
 
-| Use                           | Layout                                                                                                                               | Included monthly outbound     | Compute                                      |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- | -------------------------------------------- |
-| Production node               | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk                                                                             | 1,000 GiB per full-month node | **$6/month**                                 |
-| Staging node                  | One `s-1vcpu-1gb`                                                                                                                    | 1,000 GiB per full-month node | **$6/month**                                 |
-| Full-cutover primary          | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk                                                                             | 3,000 GiB per full-month node | $18/month, only with the owner's approval    |
-| Load generator for a test run | Instabox, or a disposable Droplet tagged `chalk-sfu-bench-<lane>`, deleted by that tag and listed empty before the lane reports done | Prorated while created        | Free on Instabox; under $1 per run otherwise |
+| Use                          | Layout                                                                                                                        | Included monthly outbound     | Compute                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------- |
+| Staging node                 | One `s-1vcpu-1gb`, 1 shared vCPU, 1 GiB RAM, 25 GiB disk                                                                      | 1,000 GiB per full-month node | **$6/month**                                 |
+| Production node              | One `s-2vcpu-2gb`, 2 shared vCPU, 2 GiB RAM, 60 GiB disk                                                                      | 3,000 GiB per full-month node | **$18/month**                                |
+| Load generator or bench node | Instabox, or a disposable Droplet tagged `chalk-sfu-bench`, deleted by that tag and listed empty before the lane reports done | Prorated while created        | Free on Instabox; under $1 per run otherwise |
 
-SFU compute totals **$12/month** today.
+SFU compute totals **$24/month** today.
 
 DigitalOcean bills per second with a minimum charge. Stopped Droplets still cost
 money; delete load generators after collecting sanitized results. No media load
@@ -777,8 +776,8 @@ throughput with total capacity. If the required primary envelope fails, full
 cutover stays blocked pending a supported capacity/quality plan; this layout
 does not authorize a second $18 node or a larger SKU.
 
-**Standby acceptance:** prove degraded admission, drain and recovery on the $6
-node at **16,000**, not the primary's budget. M5 caps camera selection at `l`,
+**Standby acceptance:** prove degraded admission, drain and recovery on a bench
+`s-1vcpu-1gb` standby at **16,000**, not the primary's budget. M5 caps camera selection at `l`,
 protects audio and screen, bounds repair and queueing, and refuses work it cannot
 carry. A single-layer publisher has no lower RID to select; pause video or refuse
 the unsupported shape rather than pretend to downscale it. Screen is
@@ -885,12 +884,12 @@ At the observed **103 decimal GB/month**, Cloudflare SFU costs **$0**, inside it
 shared 1,000 GB allowance; it then charges **$0.05/GB**. Replacing it is a control,
 quality and product-completeness decision, not a saving at present usage.
 
-The two $6 nodes Chalk runs today cost **$12/month** before tax. The full-cutover
-$18 primary and $6 standby would cost **$24/month**, plus disposable test runs. Their full-month combined transfer allowance is **4,000 GiB**, subject
-to the team pool. 103 GB is about **95.9 GiB**, even all through one node below that
-node's 3,000 GiB. DigitalOcean ingress is free and excess outbound is $0.01/GiB.
-The own-SFU egress estimate stays $0 at this volume if other team workloads have
-not consumed the allowance. Formula:
+The $6 staging and $18 production nodes Chalk runs today cost **$24/month**
+before tax, plus disposable bench runs. Their full-month combined transfer
+allowance is **4,000 GiB**, subject to the team pool. 103 GB is about **95.9 GiB**,
+even all through the production node below its 3,000 GiB. DigitalOcean ingress is
+free and excess outbound is $0.01/GiB. The own-SFU egress estimate stays $0 at
+this volume if other team workloads have not consumed the allowance. Formula:
 `$24 + $0.01 · max(0, SFU GiB - available pooled GiB) + test compute + TURN`.
 
 Cloudflare TURN stays **$0** while total billable Realtime egress, including any
@@ -1050,8 +1049,8 @@ and consent. Keep the own adapter, node and capture cleanup until all its bound
 work drains. No destructive schema reversal is required. Rehearse the same
 behavior after default-on cutover, not just during the internal canary.
 
-**Cloudflare SFU retirement:** M13 requires 30 consecutive days after full cutover
-covering evening peaks, with all Tenants/Spaces and supported browser/native
+**Cloudflare SFU retirement:** M13 requires 7 consecutive days after full cutover
+(extended until the criteria hold) covering evening peaks and a matched synthetic peak, with all Tenants/Spaces and supported browser/native
 cohorts on the own provider; no unresolved privacy, recording, media or capacity
 regressions; and proven full single-node primary peak plus degraded-standby
 drain/recovery gates with documented refusals. Require zero Cloudflare overflow
