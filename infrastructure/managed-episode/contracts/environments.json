@@ -30,7 +30,7 @@
       "chalk-cloudflared.container": "48m",
       "chalk-recorder-capture.container": "32m",
       "chalk-recorder-render.container": "32m",
-      "chalk-recorder-issuer.container": "32m",
+      "chalk-recorder-issuer.container": "256m",
       "chalk-api-migrate.container": "64m"
     }
   }
