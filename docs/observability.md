@@ -374,6 +374,12 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
 - `media readers still running after close` (error) when shutdown gave up
   waiting for a stream reader. A publisher that sent a second SSRC under a RID
   causes it; the process still exits.
+- `subscription paused for congestion` and `subscription resumed after a congestion pause`
+  (info) identify the subscriber by its media `connectionId` and subscription `mid`,
+  with the allocated `rid`, `reason` (`insufficient_bandwidth` or `bandwidth_recovered`),
+  `estimateBps`, `provenBps`, `deliveredShare`, `probing` and `hostPressure`.
+  The connection ID and MID together correlate one subscription across transitions;
+  no track names or participant identities are logged.
 
 To follow one subscriber, call the session's `inspect`. Each subscription shows
 its requested and effective RID, `state` and `reason` (`congestion` for a
