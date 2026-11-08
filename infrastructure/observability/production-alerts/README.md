@@ -114,7 +114,10 @@ monitor through `${DEADLINE_SCHEDULER_BRANCH}`. It alerts when the same Episode
 fails more than five passes in a row. A `control_busy` skip waits for another
 operation's publication fence, which Sync normally releases within seconds, so
 that reason alerts only after sixty passes. A failure of a whole pass has no
-Episode and uses `reason=cycle_error`.
+Episode and uses `reason=cycle_error`. Axiom refuses to save a monitor that names
+a field its dataset has never received, and `consecutive_failures` and `phase`
+exist only once the API that logs them is deployed, so the query reads those two
+through `column_ifexists` with defaults that never alert.
 
 The freshness monitor still expects six rules and does not list
 `sfu-readiness`. The SFU row exists only on hosts that enable the probe, so
