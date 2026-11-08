@@ -70,11 +70,10 @@ no-microphone-stall-over-500-ms criteria. Production acceptance is partial: the
 40% guard setting and paired 10 s steal and own-CPU samples still need evidence.
 The run does not prove sustained throughput at 36,000 packets/s or staging capacity.
 
-The SFU lead owns the remaining production evidence: confirm the 40% guard
-setting and collect paired 10 s own-CPU and steal samples in the production
-canary on the production node under the existing bench/canary rules. This canary
-must pass [M12's acceptance check](milestones.md#m12--full-cutover-cohort-sunset-and-monitoring-parity)
-before package 4 cutover. Production serves no `chalk_sfu` users yet.
+The SFU lead owns the production canary on the production node under the existing
+bench/canary rules. Its guard-setting and paired CPU/steal evidence must meet the
+independent [M12 package 4 entry condition](milestones.md#package-4-entry-condition)
+before cutover, not M12's post-cutover checks. Production serves no `chalk_sfu` users yet.
 
 For the separate staging proof, run `TestLiveSmokeClasses` for 5 hours at 3 classes (budget 22,000),
 covering the :00 and :30 marks, and require no microphone stall over 500 ms.

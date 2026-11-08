@@ -587,7 +587,8 @@ lead.
    15 November, owned by M12). `cf_sfu` action budgets stay warn-only and M13
    deletes them.
 
-4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
+4. **Cutover.** First pass the [production canary entry condition](#package-4-entry-condition).
+   Expand the flag through internal canary, cohorts, and then flip
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
@@ -606,7 +607,21 @@ lead.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 
-**Check:** audit counts show every Tenant and Space resolves to the own provider
+### Package 4 entry condition
+
+The SFU lead owns the production calibration canary, run on the production node
+under the existing bench/canary rules before package 4 expands the flag.
+The named pass line, `production-calibration-canary: PASS`, requires at least
+3 hours with five classes (15 participants), the 36,000 packets/s budget configured,
+the 40% guard setting confirmed, paired 10 s own-CPU and steal samples, and no
+microphone stall over 500 ms. Record actual packet rates; the configured budget
+does not prove sustained throughput at 36,000 packets/s. This gate is independent
+of Promote's scorecard and the post-cutover checks below. The five-hour,
+three-class staging soak remains a separate proof.
+
+### Post-cutover checks
+
+Audit counts show every Tenant and Space resolves to the own provider
 for new Episodes, and live bindings and traffic counts agree with the flag. Each
 supported browser and real iOS and Android builds pass join, refresh,
 restart/replacement, every source, relay-only paths and recording/transcription.
@@ -615,13 +630,6 @@ success, rendered latency/freezes, recovery and capacity under M6/M7 gates.
 Injected API, SFU, TURN, capture and cleanup faults fire their alarms with
 journey correlation. Publish sanitized counts and proof, no Tenant identifiers
 or private queries.
-
-- Production calibration canary (owner: SFU lead). Before package 4 cutover,
-  the canary on the production node confirms the 40% guard setting and records
-  paired 10 s own-CPU and steal samples under the existing bench/canary rules.
-  This [production acceptance proof](capacity-calibration.md#soak-acceptance)
-  must pass independently of Promote's scorecard. The five-hour, three-class
-  staging soak is a separate proof.
 
 **Rollback:** the flag returns new Episodes to Cloudflare; pinned calls finish
 where they are. Rehearsed in package 5 before the flip is called complete.
