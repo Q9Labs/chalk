@@ -10,7 +10,7 @@ const root = resolve(import.meta.dirname, "../..");
 const script = resolve(import.meta.dirname, "promote-gate.sh");
 
 // A fake `gh` records its calls and reports the open regression issue named by FAKE_OPEN_ISSUE.
-function gate(mode, { passRate = 1, override = "", open = "" } = {}) {
+function gate(mode, { passRate = 1, override = "", open = "", missing = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "scorecard-promote-"));
   const remote = join(dir, "remote.git");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -32,7 +32,7 @@ function gate(mode, { passRate = 1, override = "", open = "" } = {}) {
   );
   const output = join(dir, "output");
   writeFileSync(output, "");
-  const result = spawnSync("bash", [script, mode, card], {
+  const result = spawnSync("bash", [script, mode, missing ? join(dir, "none.json") : card], {
     cwd: root,
     encoding: "utf8",
     env: {
@@ -79,12 +79,26 @@ test("an override records its reason in the summary and on the open issue, and n
   assert.equal(gate("final", { passRate: 0.5, override: "known staging noise" }).status, 0);
 });
 
-test("only the scorecard jobs of promote.yml refer to the scorecard, so a failed scorecard cannot start rollback", () => {
+test("a proof with no scorecard is not scored, so it does not rerun or fail", () => {
+  for (const mode of ["first", "final"]) {
+    const run = gate(mode, { missing: true });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.summary, /nothing was scored/);
+    assert.equal(run.output, mode === "first" ? "over=false" : "");
+  }
+});
+
+test("only the scorecard jobs and the release publication refer to the scorecard, so a failed scorecard cannot start rollback", () => {
   const workflow = readFileSync(join(root, ".github/workflows/promote.yml"), "utf8");
   const jobs = workflow.split(/\n(?=  [a-z-]+:\n)/).slice(1);
   for (const job of jobs) {
     const name = job.match(/^ {2}([a-z-]+):/)[1];
     if (name.startsWith("scorecard")) continue;
+    // Publishing a release as verified waits for the scorecard decision; nothing that can roll back may.
+    if (name === "github-release") {
+      assert.match(job, /needs: \[select, result, scorecard, scorecard-rerun, scorecard-final\]/);
+      continue;
+    }
     assert.doesNotMatch(job, /scorecard/, `job ${name} must not need or read a scorecard job`);
   }
 });

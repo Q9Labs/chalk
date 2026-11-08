@@ -217,6 +217,8 @@ jobs:
           exit "$status"
       - name: Build the scorecard from the Leave proof
         if: always() && (inputs.environment == 'nightly' || (inputs.environment == 'production' && github.event_name == 'workflow_dispatch'))
+        # A scoring failure must not change the proof result: Promote rolls back on a failed proof, and the nightly records a failed proof as a failed cut.
+        continue-on-error: true
         run: |
           # The scorecard holds timings only, so unlike the evidence it is not encrypted. The nightly run appends it to the history.
           leave=$(find .private/prod-proof -path "*-leave/leave-comparison.json" -print -quit 2> /dev/null || true)
@@ -234,6 +236,8 @@ jobs:
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || 'production' }}
       - name: Upload the scorecard
         if: always() && (inputs.environment == 'nightly' || (inputs.environment == 'production' && github.event_name == 'workflow_dispatch'))
+        # A scoring failure must not change the proof result: Promote rolls back on a failed proof, and the nightly records a failed proof as a failed cut.
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scorecard-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}

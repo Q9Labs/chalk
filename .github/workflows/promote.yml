@@ -161,7 +161,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .tool-versions
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download the scorecard of the proof
+        # A held release from before the scorecard existed uploads none; the gate then scores nothing.
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: scorecard-promote-proof
           path: artifacts
@@ -198,7 +201,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .tool-versions
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download the scorecard of the rerun
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: scorecard-promote-rerun
           path: artifacts
@@ -312,8 +317,9 @@ jobs:
         if: always() && (needs.approve.result != 'success' || needs.release.result == 'skipped')
         run: exit 1
   github-release:
-    needs: [select, result]
-    if: ${{ !cancelled() && needs.result.result == 'success' }}
+    # A release is published as verified, so it waits for the scorecard decision. A failed scorecard job holds it back; it never starts rollback.
+    needs: [select, result, scorecard, scorecard-rerun, scorecard-final]
+    if: ${{ !cancelled() && needs.result.result == 'success' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

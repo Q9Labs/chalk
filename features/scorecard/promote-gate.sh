@@ -16,6 +16,13 @@ run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
+# A held release from before the scorecard existed uploads no card. Scoring nothing is not a regression.
+if [[ ! -f "${card}" ]]; then
+  echo "No scorecard from this proof (the selected revision may predate it); nothing was scored." >> "${GITHUB_STEP_SUMMARY}"
+  [[ "${mode}" == first ]] && echo "over=false" >> "${GITHUB_OUTPUT}"
+  exit 0
+fi
+
 # The baseline is the nightly median of the card's media plane. Without history the table shows budgets only.
 baseline=()
 remote="${SCORECARD_HISTORY_REMOTE:-https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git}"
