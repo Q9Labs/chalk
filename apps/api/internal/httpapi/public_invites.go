@@ -674,7 +674,11 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, publicinvites.ErrInvalidSpaceID):
 		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, publicinvites.ErrSpaceUnavailable), errors.Is(err, publicinvites.ErrLifecycleUnavailable), errors.Is(err, publicinvites.ErrAccessUnavailable), errors.Is(err, publicinvites.ErrAccountsUnavailable), errors.Is(err, publicinvites.ErrInvalidKeyring):
+	case errors.Is(err, publicinvites.ErrAccessUnavailable):
+		unavailable := apiErrorServiceUnavailable
+		unavailable.RetryAfter = 1
+		return unavailable, true
+	case errors.Is(err, publicinvites.ErrSpaceUnavailable), errors.Is(err, publicinvites.ErrLifecycleUnavailable), errors.Is(err, publicinvites.ErrAccountsUnavailable), errors.Is(err, publicinvites.ErrInvalidKeyring):
 		return apiErrorServiceUnavailable, true
 	case errors.Is(err, publicinvites.ErrInvalidAccountID), errors.Is(err, publicinvites.ErrInvalidInvite), errors.Is(err, publicinvites.ErrInvalidPublicRole), errors.Is(err, publicinvites.ErrInvalidAdmissionMode), errors.Is(err, publicinvites.ErrInvalidArrival), errors.Is(err, publicinvites.ErrInvalidIdentityMode), errors.Is(err, publicinvites.ErrInvalidAdmissionRequest), errors.Is(err, publicinvites.ErrInvalidAdmissionDecision), errors.Is(err, publicinvites.ErrAdmissionRequestTerminal), errors.Is(err, publicinvites.ErrInvalidLifecycleState):
 		return apiErrorInvalidRequest, true
