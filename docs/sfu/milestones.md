@@ -594,18 +594,16 @@ lead.
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
-   only as rollback through M13. When counts show every Tenant and Space on the
-   own provider and the last compatible-client check passes, and Promote has a
-   passing `chalk_sfu` real-call proof scorecard (join startup, Leave, mic/camera
-   toggle) for the same SHA from the nightly or staging node, so it needs no
-   production canary for that scorecard, and the scorecard scoring fails the Promote run on
-   regression (rollback stays safe). That gate is built only if it fits the
-   existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
-   otherwise it stays in this package with its cost written down. Today nightly
-   defaults to `cf_sfu` and proof scoring records only Leave, so the gate needs a
-   same-SHA `chalk_sfu` run in the nightly or staging workflow and scoring for
-   join startup and the toggles. When all of that holds, set
-   `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
+   only as rollback through M13. Promote already requires a same-SHA own-SFU
+   scorecard, so the cutover needs no production canary for it: the nightly
+   `own-sfu` job measures the staging SFU node, `features/scorecard/evaluate.mjs`
+   marks the cut `missing` when a gated `chalk_sfu.action.*` metric (join startup,
+   Leave, mic/camera toggle and the rest) has no samples and `gated-breach` when
+   one is over budget, and `scripts/releases/release.py` refuses a held cut
+   without a passing scorecard unless `scorecard_override` gives a written reason.
+   When counts show every Tenant and Space on the own provider and the last
+   compatible-client check passes, the SFU lead sets `CHALK_SFU_CLOUDFLARE_OVERFLOW`
+   off; that moment starts M13's window.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 

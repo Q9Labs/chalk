@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { gatedActionIds, readBudgets } from "./budgets.mjs";
 import { contention, contentionMarkdown } from "./contention.mjs";
 import { baselineCard, trendsMarkdown } from "./history.mjs";
 import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
@@ -94,13 +95,16 @@ test("contention schema rejects resource identifiers, extra fields, and fabricat
   assert.throws(() => card({ ...value, steal_max: { value: "unavailable", source: "unavailable" } }), /requires a contended card/);
 });
 
-test("the cut-scoped promotion evaluator fails closed on valid contended cards", (t) => {
+test("the cut-scoped promotion evaluator fails closed on valid contended cards", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "contention-verdict-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const root = resolve(import.meta.dirname, "../..");
   const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
   const path = join(directory, "card.json");
   const output = join(directory, "output");
+  // The evaluator wants every gated action metric; only leave_ms varies here.
+  const { budgets } = await readBudgets();
+  const others = gatedActionIds(budgets, "chalk_sfu").filter((id) => id !== "action.leave_ms");
   for (const [value, isolation, expected] of [
     [300, contention(input()), "passed"],
     [10000, contention(input()), "gated-breach"],
@@ -108,6 +112,7 @@ test("the cut-scoped promotion evaluator fails closed on valid contended cards",
   ]) {
     const current = card(isolation, value);
     current.run.commit = revision;
+    current.metrics.push(...others.map((id) => ({ id, unit: "ms", n: 20, p50: 100, p95: 100, source: "latency-kit" })));
     writeFileSync(path, JSON.stringify(current));
     writeFileSync(output, "");
     const result = spawnSync(process.execPath, [resolve(import.meta.dirname, "evaluate.mjs"), revision, "123", path], { cwd: root, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: output } });

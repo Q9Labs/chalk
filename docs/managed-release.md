@@ -126,7 +126,8 @@ It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
 newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
 It saves `scorecard_result` (`passed`, `gated-breach` or `missing`),
 `scorecard_gated_metrics` and `scorecard_missing_items` against the same SHA and nightly run.
-A missing own-SFU card is missing evidence, even when a Cloudflare card exists.
+A missing own-SFU card is missing evidence, even when a Cloudflare card exists,
+and so is any gated `chalk_sfu.action.*` metric that no own-SFU card measures.
 Selection and
 recheck reject gated breaches with the metric names unless `scorecard_override`
 supplies a written reason. Missing scorecard evidence also blocks unless a
