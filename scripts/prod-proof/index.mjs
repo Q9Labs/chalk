@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
+import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
 import { offReasonProof } from "./off-reason.mjs";
 import { resolve } from "node:path";
@@ -49,8 +50,15 @@ const plans = {
     webhooks: true,
     proofs: ["transcript"],
   },
+  // Three guests with automatic Recording and Transcript, on the media plane CHALK_PROOF_MEDIA_PLANE selects.
+  "call-artifacts": {
+    media: false,
+    callArtifacts: true,
+    webhooks: false,
+    proofs: ["export", "call-artifacts"],
+  },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|leave|offreason] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|leave|offreason] [--force-layer-switch|--no-layer-switch]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -87,6 +95,11 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     receiver = await prepareIntegration(run, plan.webhooks);
     captured = await recordProof(run, receiver, plan.cameraShare, forceLayerSwitch, plan.rejoin);
   }
+  let call;
+  if (plan.callArtifacts) {
+    receiver = await prepareIntegration(run, plan.webhooks);
+    call = await captureCall(run, receiver);
+  }
   const actions = {
     leave: () => leaveProof(run),
     offreason: () => offReasonProof(run),
@@ -104,6 +117,10 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
       return smokeProof(run, receiver);
     },
     transcript: () => transcriptProof(run, receiver),
+    "call-artifacts": () => {
+      check(report.proofs.export.result === "passed", "MP4 Export/download did not pass");
+      return callArtifactsProof(run, call);
+    },
   };
   for (const name of plan.proofs) await recordResult(run, report, name, actions[name]);
 }

@@ -90,7 +90,9 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
       await context.addInitScript(installAgreementProbe);
       await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
-      await context.addInitScript(installFixture, { speech, guest, tones });
+      // An array of speech tracks gives each guest its own voice at equal volume.
+      const ownVoice = Array.isArray(speech);
+      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       const page = await context.newPage();
       const network = [];

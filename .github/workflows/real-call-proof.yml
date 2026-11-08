@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share and call-artifacts
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -48,7 +48,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share and call-artifacts
         type: string
         default: cf_sfu
       latency:
@@ -187,12 +187,12 @@ jobs:
           esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|leave) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|leave) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
-            # Recording, export and transcripts need Cloudflare, and smoke includes an export, so the own SFU proves the call alone.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ]; then
-              echo "chalk_sfu supports only camera-share" >&2
+            # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof and is in no default list.
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ]; then
+              echo "chalk_sfu supports only camera-share and call-artifacts" >&2
               exit 1
             fi
           done

@@ -19,6 +19,7 @@ pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
+CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts # three guests, automatic Recording and Transcript
 pnpm prod:proof leave
 pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
@@ -162,8 +163,31 @@ The proof Space uses Cloudflare. Set `CHALK_PROOF_MEDIA_PLANE=chalk_sfu`, or the
 Real-call proof workflow's `media_plane` input, to run it on the own SFU where the
 API's switch is on, as on nightly. The proof's
 clients declare both media providers, so the Episode binds the Space's choice.
-Recording and export need Cloudflare, so use `camera-share` for the own SFU; it
-skips the Capture there and checks the call alone.
+The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
+for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.
+
+### Recording and Transcript of a three-guest call (`call-artifacts`)
+
+`pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
+`transcription_policy=automatic` on `CHALK_PROOF_MEDIA_PLANE` (default `cf_sfu`) and joins three
+headless Chromium guests with a fake camera and microphone. Each guest has its own camera colour
+and speaks its own phrase in its own 12-second slot of a looping 36-second cycle, so no speech
+overlaps. The call lasts `CHALK_PROOF_CALL_SECONDS` (default 60, minimum 40). The proof then ends
+the Episode with the SDK and requests nothing else except the MP4 export. The Recording and
+Transcript must appear on their own.
+
+The `export` proof downloads the Recording MP4. The `call-artifacts` proof then fails unless:
+
+- `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the call;
+- `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
+- each guest's camera colour is visible and moving in all three sampled frames of the composite;
+- the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
+
+The private run folder `.private/prod-proof/<run>/` has the Recording evidence file (duration, bytes, codecs,
+decoded frames, audio samples and levels, black, freeze and silence intervals, per-guest camera
+checks), the Transcript evidence file (first 300 characters, word count, speaker names, matched
+words per guest), the export contact sheet, and the console prints the same summary lines.
+Speaker names in the Transcript are reported but not required to match the guests.
 
 ### One-time webhook setup (each environment)
 

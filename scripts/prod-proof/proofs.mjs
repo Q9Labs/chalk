@@ -32,21 +32,22 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-export async function createSpace(run, plane = mediaPlane) {
+const manualPolicy = { recording: "manual", transcription: "on_demand" };
+export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
     media_plane: plane,
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
+    recording_policy: policy.recording,
+    transcription_policy: policy.transcription,
     default_episode_duration_seconds: 1800,
     maximum_episode_duration_seconds: 1800,
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
-  check(space.recording_policy === "manual", "Space Recording policy was not applied");
-  check(space.transcription_policy === "on_demand", "Space Transcription policy was not applied");
+  check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
+  check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
   await save(`${run.directory}/space.json`, space);
   return space;
 }
@@ -68,13 +69,13 @@ export function episodeEnd(run, path) {
     },
   };
 }
-async function createEpisode(run, space) {
+export async function createEpisode(run, space, policy = manualPolicy) {
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
-  const policy = episode.config_snapshot.artifact_policy;
-  check(policy.transcription.mode === "on_demand", "Episode effective transcription policy is not on_demand");
-  check(policy.recording.mode === "manual", "Episode effective Recording policy is not manual");
+  const effective = episode.config_snapshot.artifact_policy;
+  check(effective.transcription.mode === policy.transcription, `Episode effective transcription policy is not ${policy.transcription}`);
+  check(effective.recording.mode === policy.recording, `Episode effective Recording policy is not ${policy.recording}`);
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
@@ -186,9 +187,8 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   await share.close();
   return { seconds: observed.seconds, failure };
 }
-async function finalizedSource(run) {
-  if (!recordable) return null;
-  const recording = await waitFor(
+export function availableSource(run) {
+  return waitFor(
     "Recording source",
     async () => {
       const value = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
@@ -200,6 +200,10 @@ async function finalizedSource(run) {
     5000,
     run.signal,
   );
+}
+async function finalizedSource(run) {
+  if (!recordable) return null;
+  const recording = await availableSource(run);
   check(recording.transcription_policy === "on_demand", "Recording effective transcription policy is disabled");
   return recording;
 }
