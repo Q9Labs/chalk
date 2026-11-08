@@ -91,6 +91,7 @@ const (
 	ChalkSFUTimeoutMS          = "CHALK_SFU_TIMEOUT_MS"
 	ChalkSFUSTUNURLs           = "CHALK_SFU_STUN_URLS"
 	ChalkSFUCloudflareOverflow = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
+	ChalkSFUStandbyBudget      = "CHALK_SFU_STANDBY_PACKET_BUDGET"
 	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
 	DefaultMediaPlane          = "CHALK_DEFAULT_MEDIA_PLANE"
 
@@ -135,6 +136,9 @@ const (
 	DefaultLogLevel                           = "info"
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
 	DefaultChalkSFUTimeoutMS                  = int64(6000)
+	// DefaultChalkSFUStandbyBudget is the packets/s a standby admits for new
+	// Episodes: half the primary's 32,000, because a standby is a smaller node.
+	DefaultChalkSFUStandbyBudget = 16000
 
 	DefaultRequestLogs                  = "off"
 	DefaultRequestSampleRate            = 0.01
@@ -197,11 +201,21 @@ type CloudflareRealtimeConfig struct {
 	RequestTimeout time.Duration
 }
 
+// ChalkSFURole says whether placement prefers a node. A primary takes new
+// Episodes in configuration order; a standby takes one only when no primary can.
+type ChalkSFURole string
+
+const (
+	ChalkSFURolePrimary ChalkSFURole = "primary"
+	ChalkSFURoleStandby ChalkSFURole = "standby"
+)
+
 // ChalkSFUNode is one SFU node. ID is the stable name Episode bindings record;
-// ControlURL may change when the node's host changes.
+// ControlURL may change when the node's host changes. An empty Role is a primary.
 type ChalkSFUNode struct {
 	ID         string
 	ControlURL string
+	Role       ChalkSFURole
 }
 
 // ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
@@ -211,16 +225,20 @@ type ChalkSFUConfig struct {
 	// ApplicationID names the SFU pool and goes into each Episode binding, so it
 	// stays the same when hosts or certificates rotate.
 	ApplicationID string
-	// Nodes are the SFU nodes of the pool in placement order: the primary first,
-	// then standbys. A new Episode goes to the first ready node with budget left
-	// for it, and its binding names the node, so adding a node needs no migration
-	// and never moves a live Episode.
+	// Nodes are the SFU nodes of the pool in placement order. A new Episode goes to
+	// the first ready primary with budget left for it, and to a standby only when no
+	// primary can take it. Its binding names the node, so adding a node needs no
+	// migration and never moves a live Episode.
 	Nodes          []ChalkSFUNode
 	ServerName     string
 	CAFile         string
 	ClientCertFile string
 	ClientKeyFile  string
 	STUNURLs       []string
+
+	// StandbyPacketBudget caps the packets/s a standby admits for new Episodes, below
+	// what the node itself reports. The node enforces its own budget as well.
+	StandbyPacketBudget int
 
 	// AllowedSpaces are the only Spaces that start Episodes on the own SFU while the
 	// rest of the deployment stays on Cloudflare. It is empty by default, even when
@@ -664,6 +682,13 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}
+	standbyBudget, err := envInt32(ChalkSFUStandbyBudget, DefaultChalkSFUStandbyBudget)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
+	if standbyBudget <= 0 {
+		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUStandbyBudget)
+	}
 	config := ChalkSFUConfig{
 		Enabled:            true,
 		CloudflareOverflow: overflow,
@@ -688,6 +713,7 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 			return ChalkSFUConfig{}, fmt.Errorf("%s must be set when %s is on", field.name, ChalkSFUEnabled)
 		}
 	}
+	config.StandbyPacketBudget = int(standbyBudget)
 	nodes, err := parseChalkSFUNodes(envList(ChalkSFUNodes))
 	if err != nil {
 		return ChalkSFUConfig{}, err
@@ -699,7 +725,8 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	return config, nil
 }
 
-// parseChalkSFUNodes reads "id=https://host:port" entries. IDs must be unique and
+// parseChalkSFUNodes reads "id=https://host:port" and "standby:id=https://host:port"
+// entries; an entry without a role prefix is a primary. IDs must be unique and
 // valid binding node names, and every URL absolute https without query or fragment.
 func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	nodes := make([]ChalkSFUNode, 0, len(entries))
@@ -707,6 +734,13 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	for _, entry := range entries {
 		id, controlURL, found := strings.Cut(entry, "=")
 		id, controlURL = strings.TrimSpace(id), strings.TrimSpace(controlURL)
+		role := ChalkSFURolePrimary
+		if prefix, rest, hasRole := strings.Cut(id, ":"); hasRole {
+			if ChalkSFURole(prefix) != ChalkSFURoleStandby && ChalkSFURole(prefix) != ChalkSFURolePrimary {
+				return nil, fmt.Errorf("%s entry %q has role %q, want primary or standby", ChalkSFUNodes, entry, prefix)
+			}
+			role, id = ChalkSFURole(prefix), rest
+		}
 		if !found || !mediaplane.ValidNodeID(id) {
 			return nil, fmt.Errorf("%s entry %q must be id=https://host:port with a lowercase id", ChalkSFUNodes, entry)
 		}
@@ -718,7 +752,7 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 			return nil, fmt.Errorf("%s node %q must have an absolute https URL without query or fragment", ChalkSFUNodes, id)
 		}
-		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL})
+		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL, Role: role})
 	}
 	return nodes, nil
 }

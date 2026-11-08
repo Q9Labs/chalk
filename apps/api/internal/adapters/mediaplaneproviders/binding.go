@@ -53,8 +53,10 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 			case err != nil || fallback == nil:
 				placement.Reason = mediaplane.PlacementNoCapacity
 			case !r.chalk.CloudflareOverflow():
-				r.recordPlacement(ctx, resolution.Provider, providercontracts.PlacementRefused)
-				return nil, fmt.Errorf("%w: %w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused)
+				// The refusal keeps the reason nothing had room, so a host guard
+				// reads differently from a full pool or a drain.
+				r.recordPlacement(ctx, resolution.Provider, placement.Reason)
+				return nil, fmt.Errorf("%w: %w: %w: %s", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused, placement.Reason)
 			default:
 				resolved, resolution = fallback, fallbackResolution
 				placement.Node, placement.Incarnation = "", ""

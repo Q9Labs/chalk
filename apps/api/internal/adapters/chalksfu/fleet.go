@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ type Fleet struct {
 	applicationID string
 	overflow      bool
 	nodes         []*Adapter
+	standbys      map[string]bool // node IDs with the standby role
+	standbyBudget int             // packets/s a standby admits for new Episodes
 	log           *slog.Logger
 
 	mu     sync.Mutex
@@ -39,14 +42,20 @@ type Fleet struct {
 }
 
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
-// hasRoom false, so placement skips it, and is told apart from a silent node.
+// Draining set, so placement skips it, and is told apart from a silent node.
 type nodeLoad struct {
-	hasRoom     bool // the budget left fits a new Episode
+	room        int  // packets/s of budget left at the probe, below the standby cap on a standby
+	episode     int  // packets/s a new Episode reserves
+	placed      int  // Episodes this process placed here since the probe
 	hostGuard   bool // the node's host guard refuses new Episodes, whatever budget is left
 	incarnation string
 	NodeHealth
 	at time.Time
 }
+
+// fits reports whether the room left, after the Episodes placed since the probe,
+// holds one more new Episode.
+func (l nodeLoad) fits() bool { return l.room >= (l.placed+1)*l.episode }
 
 // NodeHealth is what a node's last answered probe said about its drain.
 type NodeHealth struct {
@@ -63,17 +72,30 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 	if len(config.Nodes) == 0 {
 		return nil, fmt.Errorf("%w: no nodes", ErrMissingConfig)
 	}
+	if !slices.ContainsFunc(config.Nodes, func(node runtimeconfig.ChalkSFUNode) bool { return node.Role != runtimeconfig.ChalkSFURoleStandby }) {
+		return nil, fmt.Errorf("%w: no primary node", ErrMissingConfig)
+	}
 	client, err := newClient(config)
 	if err != nil {
 		return nil, err
 	}
-	fleet := &Fleet{applicationID: config.ApplicationID, overflow: config.CloudflareOverflow, log: log, loads: map[string]nodeLoad{}}
+	fleet := &Fleet{
+		applicationID: config.ApplicationID,
+		overflow:      config.CloudflareOverflow,
+		standbys:      map[string]bool{},
+		standbyBudget: config.StandbyPacketBudget,
+		log:           log,
+		loads:         map[string]nodeLoad{},
+	}
 	for _, node := range config.Nodes {
 		adapter, err := newAdapter(config, node, client)
 		if err != nil {
 			return nil, err
 		}
 		fleet.nodes = append(fleet.nodes, adapter)
+		if node.Role == runtimeconfig.ChalkSFURoleStandby {
+			fleet.standbys[node.ID] = true
+		}
 	}
 	return fleet, nil
 }
@@ -96,47 +118,55 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
 }
 
-// Place picks the node for a new Episode. Nodes are tried in configuration
-// order, so the first one is the primary and later ones are standbys of any
-// size: the first node whose last probe is fresh, ready (so not draining) and
-// has packet budget left for a new Episode wins, and room is true. The placement
-// then records the node, its boot incarnation from that probe and whether it is
-// the primary or a standby. When no node qualifies after a probe, every node
-// would refuse the Episode, so room is false and the caller may start it on
-// another provider. The placement then names the first node, the fallback when
-// there is no other provider, and why nothing had room: a node that takes new
-// Episodes was full, else a node's host guard refused them (spare budget or
-// not), else every answering node was draining, else none answered.
-// Before the first probe it reports the first node with room, whose admission
+// Place picks the node for a new Episode. Primaries are tried first, in
+// configuration order, and a standby only when no primary can take it (silent,
+// draining, host-guard closed or out of budget). A node qualifies when its last
+// probe is fresh, ready and has packet budget left for a new Episode, after the
+// Episodes this process placed there since that probe, so concurrent creations in
+// one probe window do not all pin to the last slot. A standby counts only the
+// degraded budget it is configured with. The first qualifying node wins and room
+// is true. The placement then records the node, its boot incarnation from that
+// probe and whether it is a primary or a standby. When no node qualifies after a
+// probe, every node would refuse the Episode, so room is false and the caller may
+// start it on another provider. The placement then names the first primary, the
+// fallback when there is no other provider, and why nothing had room: a node that
+// takes new Episodes was full, else a node's host guard refused them (spare budget
+// or not), else every answering node was draining, else none answered.
+// Before the first probe it reports the first primary with room, whose admission
 // then answers the join. It reads the last probes and does no I/O, because
 // Episode creation calls it inside a database transaction.
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var answering, full, guarded bool // a node answered; a serving node was full; a serving node's host guard refused
-	for index, node := range f.nodes {
-		load, probed := f.loads[node.node]
-		if !probed || time.Since(load.at) > probeFreshness {
-			continue
-		}
-		answering = true
-		if !load.hasRoom {
+	for _, standby := range []bool{false, true} {
+		for _, node := range f.nodes {
+			if f.standbys[node.node] != standby {
+				continue
+			}
+			load, probed := f.loads[node.node]
+			if !probed || time.Since(load.at) > probeFreshness {
+				continue
+			}
+			answering = true
 			switch {
 			case load.Draining:
 			case load.hostGuard:
 				guarded = true
-			default:
+			case !load.fits():
 				full = true
+			default:
+				load.placed++
+				f.loads[node.node] = load
+				reason := mediaplane.PlacementPrimary
+				if standby {
+					reason = mediaplane.PlacementStandby
+				}
+				return mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: reason}, true
 			}
-			continue
 		}
-		reason := mediaplane.PlacementPrimary
-		if index > 0 {
-			reason = mediaplane.PlacementStandby
-		}
-		return mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: reason}, true
 	}
-	first := mediaplane.Placement{Node: f.nodes[0].node, Reason: mediaplane.PlacementPrimary}
+	first := mediaplane.Placement{Node: f.firstPrimary(), Reason: mediaplane.PlacementPrimary}
 	if !f.probed {
 		return first, true
 	}
@@ -151,6 +181,17 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 		first.Reason = mediaplane.PlacementOverflowNodeUnavailable
 	}
 	return first, false
+}
+
+// firstPrimary names the first primary in configuration order. NewFleet
+// guarantees there is one.
+func (f *Fleet) firstPrimary() string {
+	for _, node := range f.nodes {
+		if !f.standbys[node.node] {
+			return node.node
+		}
+	}
+	return ""
 }
 
 // Watch probes every node's readiness until ctx ends.
@@ -208,25 +249,35 @@ func (f *Fleet) Probe(ctx context.Context) {
 			case !ready.Draining && known && before.Draining:
 				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
 			}
-			hostGuard := ready.Host.AdmissionReason != ""
-			hasRoom := !ready.Draining && !hostGuard && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
-			incarnation := ready.NodeIncarnation
-			if !mediaplane.ValidIncarnation(incarnation) {
-				incarnation = "" // a malformed value must not fail Episode creation
-			}
-			f.loads[node.node] = nodeLoad{
-				hasRoom:     hasRoom,
-				hostGuard:   hostGuard,
-				incarnation: incarnation,
-				NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
-				at:          time.Now(),
-			}
+			f.loads[node.node] = f.loadOf(node.node, ready, time.Now())
 		})
 	}
 	wg.Wait()
 	f.mu.Lock()
 	f.probed = true
 	f.mu.Unlock()
+}
+
+// loadOf turns a node's ready answer into its load record, with no placed
+// Episodes. A standby's budget is capped at the degraded budget the Fleet is
+// configured with.
+func (f *Fleet) loadOf(node string, ready wireReady, at time.Time) nodeLoad {
+	budget := ready.PacketBudget
+	if f.standbys[node] {
+		budget = min(budget, f.standbyBudget)
+	}
+	incarnation := ready.NodeIncarnation
+	if !mediaplane.ValidIncarnation(incarnation) {
+		incarnation = "" // a malformed value must not fail Episode creation
+	}
+	return nodeLoad{
+		room:        budget - ready.ReservedPackets,
+		episode:     ready.NewEpisodePackets,
+		hostGuard:   ready.Host.AdmissionReason != "",
+		incarnation: incarnation,
+		NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
+		at:          at,
+	}
 }
 
 func (f *Fleet) logTransition(ctx context.Context, level slog.Level, message, node string, attrs ...any) {

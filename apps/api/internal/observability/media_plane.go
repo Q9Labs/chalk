@@ -65,7 +65,9 @@ func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, prov
 }
 
 // boundedPlacement maps a placement reason to its node role and a known reason.
-// A no-capacity Episode stays on the primary; a refused one gets no node.
+// A no-capacity Episode stays on the primary. A refused Episode, with overflow off,
+// counts under its overflow reason on the own-SFU provider; one that moved to
+// Cloudflare counts the same reason under the Cloudflare provider.
 func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) {
 	switch reason {
 	case mediaplane.PlacementPrimary, mediaplane.PlacementNoCapacity:
@@ -74,8 +76,6 @@ func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) 
 		return "standby", string(reason)
 	case mediaplane.PlacementOverflowNoRoom, mediaplane.PlacementOverflowHostGuard, mediaplane.PlacementOverflowDraining, mediaplane.PlacementOverflowNodeUnavailable:
 		return "overflow", string(reason)
-	case mediaplaneproviders.PlacementRefused:
-		return "none", string(reason)
 	default:
 		return "unknown", "unknown"
 	}

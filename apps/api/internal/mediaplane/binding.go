@@ -63,8 +63,9 @@ const (
 )
 
 // ErrPlacementRefused means a new Episode was refused because no own-SFU node had
-// room and Cloudflare overflow is off. It is a bounded reason, safe to log.
-var ErrPlacementRefused = errors.New("no own sfu node with room (full, draining or not answering) and cloudflare overflow disabled")
+// room and Cloudflare overflow is off. The wrapping error names the overflow
+// placement reason. It is a bounded reason, safe to log.
+var ErrPlacementRefused = errors.New("no own sfu node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled")
 
 // Placement is where a new Episode goes: a node of a provider that runs several,
 // or none for a provider with one global endpoint.

@@ -195,7 +195,7 @@ up() {
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
     SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
-    nodes_value+="${nodes_value:+,}${id}=https://${address}:${control_port}"
+    nodes_value+="${nodes_value:+,}$([[ "$role" == standby ]] && echo standby:)${id}=https://${address}:${control_port}"
   done
 
   echo "==> checking /readyz over mutual TLS from this machine"

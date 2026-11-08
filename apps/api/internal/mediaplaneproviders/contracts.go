@@ -52,10 +52,6 @@ type Resolution struct {
 	Duration            time.Duration
 }
 
-// PlacementRefused is the metric-only placement reason for a new Episode that
-// was not created because no own-SFU node had room and overflow is off.
-const PlacementRefused mediaplane.PlacementReason = "capacity_refused"
-
 type Telemetry interface {
 	RecordResolution(context.Context, Resolution)
 	// RecordPlacement counts where a new Episode went and why.
