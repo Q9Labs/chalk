@@ -282,7 +282,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recorder worker identity: %w", err)
 		}
-		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier)
+		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier, ownCapture)
 		if err != nil {
 			return err
 		}

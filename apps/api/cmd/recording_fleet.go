@@ -18,7 +18,7 @@ type recorderFleetComponents struct {
 	workerVerifier     httpapi.RecorderWorkerVerifier
 }
 
-func newRecorderFleetComponents(cfg config.Config, queries sqlc.Querier, base httpapi.RecorderWorkerVerifier) (recorderFleetComponents, error) {
+func newRecorderFleetComponents(cfg config.Config, queries sqlc.Querier, base httpapi.RecorderWorkerVerifier, ownCapture bool) (recorderFleetComponents, error) {
 	var issuer recorderfleet.BootstrapAuthority = recorderfleetissuer.UnavailableAuthority{}
 	if cfg.RecorderFleetIssuer.URL != "" {
 		configured, err := recorderfleetissuer.New(recorderfleetissuer.Config{
@@ -33,7 +33,7 @@ func newRecorderFleetComponents(cfg config.Config, queries sqlc.Querier, base ht
 		}
 		issuer = configured
 	}
-	service, err := recorderfleetauthority.NewService(cfg.Observability.Environment, postgres.NewRecordingFleetAuthorityRepository(queries).WithAdmissionLimits(cfg.RecordingAdmission).WithOwnCapture(cfg.ChalkSFU.CaptureEnabled), issuer)
+	service, err := recorderfleetauthority.NewService(cfg.Observability.Environment, postgres.NewRecordingFleetAuthorityRepository(queries).WithAdmissionLimits(cfg.RecordingAdmission).WithOwnCapture(ownCapture), issuer)
 	if err != nil {
 		return recorderFleetComponents{}, fmt.Errorf("configure recorder fleet authority: %w", err)
 	}
