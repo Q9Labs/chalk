@@ -586,7 +586,10 @@ lead.
    production canary, and the scorecard scoring fails the Promote run on
    regression (rollback stays safe). That gate is built only if it fits the
    existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
-   otherwise it stays in this package with its cost written down. Today nightly defaults to `cf_sfu` and proof scoring records only Leave, so it needs a same-SHA `chalk_sfu` run in the nightly or staging workflow and scoring for join startup and the toggles, set
+   otherwise it stays in this package with its cost written down. Today nightly
+   defaults to `cf_sfu` and proof scoring records only Leave, so the gate needs a
+   same-SHA `chalk_sfu` run in the nightly or staging workflow and scoring for
+   join startup and the toggles. When all of that holds, set
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
