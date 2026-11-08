@@ -174,7 +174,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 
 	// A: default configuration, own SFU, on the allowlist.
 	tenantA := tenant(nil, "")
-	a1 = space(tenantA, "chalk_sfu", false, a1)
+	space(tenantA, "chalk_sfu", false, a1)
 	// B: the Tenant default is Cloudflare and the Space inherits it.
 	tenantB := tenant(ptr("cf_sfu"), "")
 	b1 := space(tenantB, "", false)
@@ -186,14 +186,14 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	// D: tenant-managed Cloudflare. It runs on Cloudflare but cannot move to the own SFU.
 	tenantD := tenant(nil, tenantManagedCloudflare)
 	d1 := space(tenantD, "cf_sfu", false)
-	d2 = space(tenantD, "chalk_sfu", false, d2)
+	space(tenantD, "chalk_sfu", false, d2)
 	// E: media disabled for the Tenant.
 	tenantE := tenant(nil, disabledConfig)
-	e1 = space(tenantE, "chalk_sfu", false, e1)
+	space(tenantE, "chalk_sfu", false, e1)
 	space(tenantE, "cf_sfu", false)
 	// F: unreadable settings and an unknown Tenant default.
 	tenantF := tenant(ptr("bogus"), `{}`)
-	f1 = space(tenantF, "chalk_sfu", false, f1)
+	space(tenantF, "chalk_sfu", false, f1)
 	// G: a Space with a provider the API does not know.
 	tenantG := tenant(nil, "")
 	space(tenantG, "wat", false)
