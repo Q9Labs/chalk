@@ -96,6 +96,7 @@ def execute(task):
         return {**result, **registration(task["user_id"], task["bootstrap"]["provider_id"], deadline)}
     interval = duration_seconds(environment.get("CHALK_RECORDER_FLEET_RECONCILE_INTERVAL", "5s"))
     history = []
+    evidence = {}
     while time.monotonic() < deadline:
         result = control(environment, root, task["bootstrap"], "register")
         history.append({"time": time.time(), "status": result["status"]})
@@ -106,4 +107,4 @@ def execute(task):
         if result["status"] != 202 and not bootstrap_pending(result):
             return {"history": history, "controller_response": result, "controller_request": {**task["bootstrap"], "schema_version": "recorder_fleet_bootstrap.v1"}, **evidence}
         time.sleep(min(interval, max(0, deadline - time.monotonic())))
-    return {"history": history}
+    return {"history": history, **evidence}

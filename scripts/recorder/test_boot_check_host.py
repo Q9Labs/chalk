@@ -13,7 +13,7 @@ spec.loader.exec_module(host)
 
 
 class IssuerReadinessTest(unittest.TestCase):
-    def run_registration(self, unavailable=None):
+    def run_registration(self, unavailable=None, response_status=200):
         now = [0]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -61,7 +61,7 @@ class IssuerReadinessTest(unittest.TestCase):
                     patch.object(Path, 'read_text', read), \
                     patch.object(host.time, 'monotonic', side_effect=lambda: now[0]), \
                     patch.object(host.time, 'sleep', side_effect=sleep), \
-                    patch.object(host, 'control', return_value={'status': 200}):
+                    patch.object(host, 'control', return_value={'status': response_status}):
                 try:
                     result = host.execute({'action': 'register', 'role': 'capture', 'user_id': 1000,
                                            'timeout': 7, 'bootstrap': {'provider_id': 'node'}})
@@ -82,6 +82,12 @@ class IssuerReadinessTest(unittest.TestCase):
                 self.assertIsInstance(result, RuntimeError)
                 self.assertEqual(elapsed, 7)
                 self.assertIn('deadline', str(result))
+
+    def test_pending_registration_retains_last_issuer_evidence_at_deadline(self):
+        result, elapsed = self.run_registration(response_status=202)
+        self.assertEqual(elapsed, 7)
+        self.assertEqual(result['record'], {'certificates': ['certificate']})
+        self.assertNotIn('controller_response', result)
 
 
 if __name__ == '__main__':
