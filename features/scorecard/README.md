@@ -125,8 +125,11 @@ in-window sessions include the kit's own. Incarnation IDs never enter a card.
 
 Missing tokens, failed queries, empty readings and incomplete responses leave
 node signals **unavailable**, never zero. Node coverage in all three phases is
-required; unavailable steal cannot produce an isolated card. The observed
-metrics-v2 response has no pagination or completeness field. The collector
+required; unavailable steal cannot produce an isolated card.
+API observation spans the preflight boundary through workload completion, so
+joins while the metrics queries run are not lost. Failures retain fixed,
+redacted reason codes in the job log and step summary, never raw exceptions.
+The observed metrics-v2 response has no pagination or completeness field. The collector
 rejects unexpected response metadata and results reaching its conservative
 1,000-point or 1,000-series cap; that cap is a collector policy, not a claimed
 MPL endpoint limit. Queries use `align using max`, so normal responses hold one
