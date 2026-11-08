@@ -813,7 +813,9 @@ the two cameras, three microphones, screen and screen audio adds **530 outbound
 packets/s per realistic class**, or 6,360 across twelve. Simulcast input need not
 be duplicated, but recorder pulls, transport, retransmission and memory count.
 Twelve recorded classes plus the realistic rare call reach **37,400 total**
-before repair, above 32,000. M10 measures the actual capture subscription shape;
+before repair, above 32,000. The node does not reserve that flat 530: a capture reserves the
+Participant per-track cost (top layer) of each track it pulls and a pull that does not fit the node budget
+is refused. M10 measures the actual capture subscription shape;
 M11 reserves it in primary/standby placement and degraded failure tests.
 
 ### Memory budget

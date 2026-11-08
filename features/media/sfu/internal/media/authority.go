@@ -176,7 +176,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 	named := map[sourceKey]bool{}
 	added := 0
 	for index, control := range request.Controls {
-		keys[index] = sourceKey{participantKey{request.TenantID, request.EpisodeID, control.ParticipantID}, control.Source}
+		keys[index] = sourceKey{participantKey{tenant: request.TenantID, episode: request.EpisodeID, participant: control.ParticipantID}, control.Source}
 		if !named[keys[index]] && n.sources[keys[index]] == nil {
 			added++
 		}
