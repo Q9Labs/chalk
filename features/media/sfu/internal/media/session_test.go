@@ -44,7 +44,6 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 		MaxSubscriptionsPerSession: 4,
 		MaxCapturesPerEpisode:      2,
 		MaxCaptureSubscriptions:    8,
-		CapturePackets:             530,
 		MaxRequestBytes:            256 << 10,
 		PacketBudget:               1 << 20,
 		VideoStreamCost:            150,

@@ -35,8 +35,8 @@ func TestACaptureHoldsNoParticipantSlot(t *testing.T) {
 	if _, err := node.CreateSession("create-a-p3", episodeScope("a", "p3")); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("third Participant: %v, want the Episode full at 2", err)
 	}
-	if _, reserved := node.Budget(); reserved != node.episodeReservation(2)+530 {
-		t.Fatalf("reserved %d, want two Participants plus one capture (%d)", reserved, node.episodeReservation(2)+530)
+	if _, reserved := node.Budget(); reserved != node.episodeReservation(2) {
+		t.Fatalf("reserved %d, want two Participants and nothing for a capture that pulled nothing (%d)", reserved, node.episodeReservation(2))
 	}
 }
 
@@ -57,34 +57,50 @@ func TestACaptureNeedsAnEpisodeTheNodeHosts(t *testing.T) {
 	}
 }
 
-func TestACaptureReservesItsOwnPacketsAgainstTheNodeBudget(t *testing.T) {
+func TestACaptureReservesWhatItPullsAgainstTheNodeBudget(t *testing.T) {
 	two := (&Node{cfg: config.Config{VideoStreamCost: 150, CameraUplinkCost: 150, CamerasPerParticipant: 1, AudioStreamCost: 50, ScreenStreamCost: 210, EpisodePacketCeiling: 1 << 20, PacketBudget: 1 << 20}}).episodeReservation(2)
-	node := newTestNode(t, func(cfg *config.Config) { cfg.PacketBudget = two + 529 })
+	// Room for exactly one camera (150) and one microphone (50) beyond the Episode.
+	node := newTestNode(t, func(cfg *config.Config) { cfg.PacketBudget = two + 200 })
 	node.newTestSession(t, episodeScope("a", "p1"))
 	node.newTestSession(t, episodeScope("a", "p2"))
-	if _, err := node.CreateCaptureSession("capture-full", captureScope("a", "recording-1", 1)); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("capture one packet over the budget: %v, want capacity exceeded", err)
+	capture := node.newTestCapture(t, captureScope("a", "recording-1", 1))
+	reserved := func() int { _, total := node.Budget(); return total }
+
+	if err := node.reserveCapture(capture, node.cfg.VideoStreamCost); err != nil {
+		t.Fatalf("camera that fits: %v", err)
+	}
+	if err := node.reserveCapture(capture, node.cfg.ScreenStreamCost); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("screen share past the budget: %v, want capacity exceeded", err)
 	}
 	if refusals := node.Telemetry().Refusals; refusals[RefusedNodeFull] != 1 {
 		t.Fatalf("refusals %v, want one node_full", refusals)
 	}
-
-	exact := newTestNode(t, func(cfg *config.Config) { cfg.PacketBudget = two + 530 })
-	exact.newTestSession(t, episodeScope("a", "p1"))
-	exact.newTestSession(t, episodeScope("a", "p2"))
-	first := exact.newTestCapture(t, captureScope("a", "recording-1", 1))
-	// A new epoch replaces the old capture and does not count twice.
-	exact.newTestCapture(t, captureScope("a", "recording-1", 2))
-	if !first.isClosed() {
-		t.Fatal("the newer epoch left the older capture open")
+	if err := node.reserveCapture(capture, node.cfg.AudioStreamCost); err != nil {
+		t.Fatalf("microphone that fits exactly: %v", err)
+	}
+	if got := reserved(); got != two+200 {
+		t.Fatalf("reserved %d, want %d", got, two+200)
 	}
 	// A Participant join sees the capture's reservation: no room to grow.
-	if _, err := exact.CreateSession("create-a-p3", episodeScope("a", "p3")); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := node.CreateSession("create-a-p3", episodeScope("a", "p3")); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("join into a budget the capture holds: %v, want capacity exceeded", err)
 	}
-	exact.EndEpisode("tenant-1", "a")
-	if _, reserved := exact.Budget(); reserved != 0 {
-		t.Fatalf("reserved %d after the Episode ended, want 0", reserved)
+	// An unsubscribed track returns its cost, so the next pull fits.
+	node.releaseCapture(capture, node.cfg.VideoStreamCost)
+	if err := node.reserveCapture(capture, node.cfg.VideoStreamCost); err != nil {
+		t.Fatalf("camera after a release: %v", err)
+	}
+	// A new epoch replaces the old capture and its reservation.
+	node.newTestCapture(t, captureScope("a", "recording-1", 2))
+	if !capture.isClosed() {
+		t.Fatal("the newer epoch left the older capture open")
+	}
+	if got := reserved(); got != two {
+		t.Fatalf("reserved %d after the capture was replaced, want %d", got, two)
+	}
+	node.EndEpisode("tenant-1", "a")
+	if got := reserved(); got != 0 {
+		t.Fatalf("reserved %d after the Episode ended, want 0", got)
 	}
 }
 

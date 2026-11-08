@@ -88,17 +88,17 @@ func episodeOf(scope protocol.Scope) episodeKey { return episodeKey{scope.Tenant
 func (n *Node) NewEpisodePackets() int { return n.episodeReservation(1) }
 
 // reservations counts live Participant sessions per Episode, leaving out one session that is
-// about to be replaced, and sums the Episodes' reservations. Each capture session adds its own
-// CapturePackets to the total and no Participant to its Episode, so a recording takes node budget
-// without changing what the Episode's callers reserve. The caller holds n.mu.
+// about to be replaced, and sums the Episodes' reservations. A capture session adds what its
+// accepted subscriptions reserve (see reserveCapture) to the total and no Participant to its
+// Episode, so a recording takes node budget without changing what the Episode's callers reserve.
+// The caller holds n.mu.
 func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total int) {
 	counts = map[episodeKey]int{}
-	captures := 0
 	for _, session := range n.sessions {
 		switch {
 		case session == leaving:
 		case session.kind == kindCapture:
-			captures++
+			total += session.captureReserved
 		default:
 			counts[episodeOf(session.scope)]++
 		}
@@ -106,7 +106,7 @@ func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total 
 	for _, count := range counts {
 		total += n.episodeReservation(count)
 	}
-	return counts, total + captures*n.cfg.CapturePackets
+	return counts, total
 }
 
 // reservedPackets is the sum of every live Episode's reservation. The caller holds n.mu.
@@ -141,7 +141,8 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 	return nil
 }
 
-// admitCapture checks that one more capture session fits its Episode and the node. replacing is the
+// admitCapture checks that one more capture session fits its Episode. It reserves no packets: the
+// capture reserves each track it pulls (see reserveCapture). replacing is the
 // older epoch of the same capture, which the new session replaces, so a new epoch does not count
 // twice. A capture joins an Episode the node already hosts; it never opens one, so the host guard
 // that closes admission to new Episodes does not apply. The caller holds n.mu.
@@ -162,9 +163,36 @@ func (n *Node) admitCapture(scope protocol.Scope, replacing *Session) error {
 	if captures+1 > n.cfg.MaxCapturesPerEpisode {
 		return n.refuse(RefusedCaptureLimit, errCaptureLimit)
 	}
-	_, total := n.reservations(replacing)
-	if total+n.cfg.CapturePackets > n.cfg.PacketBudget {
+	return nil
+}
+
+// captureCost is the packets/s a capture reserves for one subscription: the Participant cost of
+// the same track at its top layer, because a capture is never lowered and keeps the layer it asks for.
+func (n *Node) captureCost(pub *publication) int {
+	switch {
+	case !pub.video():
+		return n.cfg.AudioStreamCost
+	case pub.source == sourceScreen:
+		return n.cfg.ScreenStreamCost
+	}
+	return n.cfg.VideoStreamCost
+}
+
+// reserveCapture adds one subscription's cost to the capture's reservation, or refuses it when the
+// node budget has no room. A capture creates no Participant, so it reserves per accepted
+// subscription instead of up front. releaseCapture returns the cost when the subscription ends.
+func (n *Node) reserveCapture(s *Session, cost int) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if _, total := n.reservations(nil); total+cost > n.cfg.PacketBudget {
 		return n.refuse(RefusedNodeFull, errNodeFull)
 	}
+	s.captureReserved += cost
 	return nil
+}
+
+func (n *Node) releaseCapture(s *Session, cost int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	s.captureReserved -= cost
 }

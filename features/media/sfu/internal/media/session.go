@@ -28,6 +28,8 @@ type Session struct {
 	createOperation string
 	scope           protocol.Scope
 	kind            sessionKind
+	// captureReserved is the packets/s the capture's subscriptions reserve. n.mu guards it.
+	captureReserved int
 	node            *Node
 	pc              *webrtc.PeerConnection
 
@@ -551,12 +553,22 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
+	reserved := 0
+	if s.kind == kindCapture {
+		reserved = s.node.captureCost(pub)
+		if s.node.reserveCapture(s, reserved) != nil {
+			return nil, protocol.TrackCodeLimitExceeded, "the node packet budget is reserved"
+		}
+	}
 	egress := newEgressTrack(pub, s.transport)
 	transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
 	if err != nil {
+		if reserved > 0 {
+			s.node.releaseCapture(s, reserved)
+		}
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
 	}
-	return newSubscription(pub, transceiver, egress, layerRequestFor(track)), "", ""
+	return newSubscription(s, pub, transceiver, egress, layerRequestFor(track), reserved), "", ""
 }
 
 // layerRequestFor reads the layer policy of a pull or update. Without one the

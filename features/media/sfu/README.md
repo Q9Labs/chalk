@@ -32,13 +32,16 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
     must have a live Participant session on the node, else the create reads as `session_gone`. A capture only
     pulls; a push gets 501 `unsupported_operation`.
   - A capture is not a Participant. It takes no slot against `SFU_MAX_EPISODE_PARTICIPANTS`, adds nothing to
-    the Episode's reservation, and reserves `SFU_CAPTURE_PACKETS` packets/s of its own against the node
-    budget. A capture create that would pass `SFU_PACKET_BUDGET` is refused with `node_full`, and a
-    Participant join sees the capture's reservation. An Episode holds at most `SFU_MAX_CAPTURES_PER_EPISODE`
+    the Episode's reservation, and reserves packets/s of its own against the node budget for each track it
+    pulls: `SFU_VIDEO_STREAM_COST` for a camera, `SFU_SCREEN_STREAM_COST` for a screen share's video and
+    `SFU_AUDIO_STREAM_COST` for audio, the cost of the same track for a Participant at its top layer. A pull
+    that would pass `SFU_PACKET_BUDGET` fails that track with `limit_exceeded` and counts a `node_full`
+    refusal, and a closed track or closed capture returns its reservation. A Participant join sees the
+    capture's reservation. An Episode holds at most `SFU_MAX_CAPTURES_PER_EPISODE`
     captures (refusal reason `capture_limit`), and one capture pulls up to `SFU_MAX_CAPTURE_SUBSCRIPTIONS`
     tracks.
   - The Episode's plan, packet ceiling, probes and congestion pauses serve the call, so they leave the capture
-    out: its subscriptions keep the layer they asked for, and its packets do not make the plan lower a
+    out: its subscriptions start on the layer they asked for, with no startup cap, and keep it, and its packets do not make the plan lower a
     Participant's camera. Its packets count in the node's totals.
   - Forwarding follows the source lease, not the subscriber, so a revoke or lapse stops the capture's copy with
     everyone's. `POST /v1/episodes/end` and `/remove` close captures like any session. A capture that never
@@ -98,7 +101,6 @@ go run ./cmd/sfu
 | `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                                             |
 | `SFU_MAX_CAPTURES_PER_EPISODE`          | `2`             | 0 to 8. 0 turns capture sessions off.                                 |
 | `SFU_MAX_CAPTURE_SUBSCRIPTIONS`         | `64`            | 1 to 128. Tracks one capture session pulls.                           |
-| `SFU_CAPTURE_PACKETS`                   | `530`           | 1 to 100000. Packets/s one capture reserves; to be measured.          |
 | `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                                      |
 | `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; `deploy` sets `45000` on 1 vCPU and `60000` on 2.   |
 | `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.                               |

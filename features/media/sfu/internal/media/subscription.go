@@ -39,6 +39,11 @@ type subscription struct {
 	track       *egressTrack
 	mid         string
 	closed      atomic.Bool
+	// owner is the session that pulled the track. reserved is what a capture owner holds for it
+	// against the node budget, 0 for a Participant; detach returns it.
+	owner    *Session
+	capture  bool
+	reserved int
 
 	// interest has a bit per layer whose packets this subscription reads: the
 	// forwarded layer and the one it waits to switch to. Readers check it
@@ -94,13 +99,13 @@ type resentPacket struct {
 	at  int64 // monotonic; 0 marks a free slot
 }
 
-func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest) *subscription {
+func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, reserved int) *subscription {
 	clockRate := uint32(90000)
 	if !pub.video() {
 		clockRate = 48000
 	}
 	return &subscription{
-		pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		owner: owner, capture: owner.kind == kindCapture, reserved: reserved, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
 		order: serials.Add(1),
 	}
@@ -108,9 +113,10 @@ func newSubscription(pub *publication, transceiver *webrtc.RTPTransceiver, track
 
 // start joins the publication's forwarding and chooses the first layer. A
 // camera starts on its lowest layer, and the allocator raises it as the
-// subscriber's estimate allows.
+// subscriber's estimate allows. A capture is outside the allocator, so nothing would raise it:
+// it starts on the layer it asks for.
 func (s *subscription) start() {
-	if s.pub.video() && s.pub.source != sourceScreen {
+	if s.pub.video() && s.pub.source != sourceScreen && !s.capture {
 		s.mu.Lock()
 		s.limit = serverLimit{rid: lowestLayer}
 		s.mu.Unlock()
@@ -510,6 +516,9 @@ func (s *subscription) detach() bool {
 	}
 	s.interest.Store(0)
 	s.pub.removeSubscriber(s)
+	if s.reserved > 0 {
+		s.owner.node.releaseCapture(s.owner, s.reserved)
+	}
 	return true
 }
 

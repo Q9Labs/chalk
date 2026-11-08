@@ -51,11 +51,7 @@ type Config struct {
 	// MaxCaptureSubscriptions is the most tracks one capture session pulls. A capture takes every
 	// Participant's microphone and camera, so it needs more than a Participant's limit.
 	MaxCaptureSubscriptions int
-	// CapturePackets is the packets/s one capture session reserves against the node budget, apart
-	// from its Episode's reservation. The first value is the design cost of a class, to be replaced
-	// by the measured cost of a recorded Episode.
-	CapturePackets  int
-	MaxRequestBytes int64
+	MaxRequestBytes         int64
 	// PacketBudget is the node's admission budget in packets/s, in plus out. Set it
 	// per node size: 16000 on s-1vcpu-1gb, 32000 on s-2vcpu-2gb. A join that would
 	// push the Episodes' reservations above it is refused.
@@ -171,7 +167,6 @@ func Load(lookup Lookup) (Config, error) {
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
 		MaxCapturesPerEpisode:      r.integer("SFU_MAX_CAPTURES_PER_EPISODE", 2, 0, 8),
 		MaxCaptureSubscriptions:    r.integer("SFU_MAX_CAPTURE_SUBSCRIPTIONS", 64, 1, 128),
-		CapturePackets:             r.integer("SFU_CAPTURE_PACKETS", 530, 1, 100000),
 		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 256<<10, 4<<10, 1<<20)),
 		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 300, 1, 10000),

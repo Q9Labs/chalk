@@ -111,7 +111,6 @@ func startService(t *testing.T, ca *authority, configure ...func(*config.Config)
 		MaxSubscriptionsPerSession: 8,
 		MaxCapturesPerEpisode:      2,
 		MaxCaptureSubscriptions:    8,
-		CapturePackets:             530,
 		MaxRequestBytes:            256 << 10,
 		NegotiationTimeout:         time.Second,
 		ConnectTimeout:             30 * time.Second,
