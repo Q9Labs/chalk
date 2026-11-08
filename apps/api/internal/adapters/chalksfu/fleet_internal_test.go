@@ -1,6 +1,7 @@
 package chalksfu
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -283,5 +284,25 @@ func TestRecoveryCandidatesKeepAStandbyThatHoldsTheEpisodesOwnReserve(t *testing
 	fleet.noteHeld("sfull", "e", time.Now().Add(-time.Second))
 	if got := fleet.recoveryCandidates("e"); len(got) != 0 {
 		t.Fatalf("an ended hold still opens the standby: %v", got)
+	}
+}
+
+func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
+	node, episode := strings.Repeat("n", 64), "0198f3a2-7b1c-7d4e-9a10-3c5b8e2f6a71"
+	id := recoveryOperationID(episode, 1, node, 2, true, 7)
+	if len(id) > 128 {
+		t.Fatalf("operation ID has %d characters, the SFU accepts 128", len(id))
+	}
+	if id != recoveryOperationID(episode, 1, node, 2, true, 7) {
+		t.Fatal("the same tuple gave two operation IDs")
+	}
+	for name, other := range map[string]string{
+		"generation": recoveryOperationID(episode, 2, node, 2, true, 7), "participants": recoveryOperationID(episode, 1, node, 3, true, 7),
+		"screen share": recoveryOperationID(episode, 1, node, 2, false, 7), "window": recoveryOperationID(episode, 1, node, 2, true, 8),
+		"node": recoveryOperationID(episode, 1, node+"x", 2, true, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, true, 7),
+	} {
+		if other == id {
+			t.Errorf("a different %s gave the same operation ID", name)
+		}
 	}
 }

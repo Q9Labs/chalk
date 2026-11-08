@@ -2,6 +2,8 @@ package chalksfu
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -180,7 +182,7 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 		// with a share (a large call, say) is asked again without one.
 		for _, screenShare := range []bool{true, false} {
 			reply, err := node.adapter.reserve(ctx, wireReserveRequest{
-				OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-s%t-w%d", episodeID, from.Generation+1, node.adapter.node, participants, screenShare, window),
+				OperationID: recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, screenShare, window),
 				TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
 				Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: screenShare},
 				TTLSeconds: hold,
@@ -220,6 +222,14 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	}
 	RecordRecovery(ctx, reason, outcome)
 	return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcome)
+}
+
+// recoveryOperationID names one reserve by the Episode, the generation the move would commit, the
+// node, the shape and the hold window. The tuple is hashed, because a long node ID and an Episode
+// ID together exceed the 128 characters the SFU accepts.
+func recoveryOperationID(episodeID string, generation int64, node string, participants int, screenShare bool, window int64) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%d\x00%t\x00%d", episodeID, generation, node, participants, screenShare, window))
+	return "recover-" + hex.EncodeToString(digest[:16])
 }
 
 func heldKey(node, episodeID string) string { return node + "/" + episodeID }
