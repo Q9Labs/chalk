@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -41,16 +42,16 @@ const (
 
 // liveLoad is the shape of a live run.
 type liveLoad struct {
-	classes, participants, cameras int
-	smallTiles                     int    // classes larger than this ask for l, except one featured Participant's cameras
-	cameraKbps                     [2]int // h and l
-	shareDuty                      float64
-	sharePeriod, hold, step, every time.Duration
-	samples                        string
-	capKbps                        int           // caps the first Participant's downlink, 0 for none
-	capAfter                       time.Duration // after this long in the hold
-	capEvery                       time.Duration // lift and restore the cap at this interval, 0 to keep it
-	capWithin                      time.Duration // the capped Participant must back off within this long of each cap
+	classes, classOffset, participants, cameras int
+	smallTiles                                  int    // classes larger than this ask for l, except one featured Participant's cameras
+	cameraKbps                                  [2]int // h and l
+	shareDuty                                   float64
+	sharePeriod, hold, step, every              time.Duration
+	samples                                     string
+	capKbps                                     int           // caps the first Participant's downlink, 0 for none
+	capAfter                                    time.Duration // after this long in the hold
+	capEvery                                    time.Duration // lift and restore the cap at this interval, 0 to keep it
+	capWithin                                   time.Duration // the capped Participant must back off within this long of each cap
 }
 
 // shareOn is how long one share stretch lasts.
@@ -67,6 +68,7 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 		target any
 	}{
 		{"SFU_LIVE_CLASSES", &load.classes}, {"SFU_LIVE_PARTICIPANTS", &load.participants}, {"SFU_LIVE_CAMERAS", &load.cameras},
+		{"SFU_LIVE_CLASS_OFFSET", &load.classOffset},
 		{"SFU_LIVE_SMALL_TILES", &load.smallTiles},
 		{"SFU_LIVE_CAMERA_KBPS", &load.cameraKbps}, {"SFU_LIVE_SHARE_DUTY", &load.shareDuty}, {"SFU_LIVE_SHARE_PERIOD", &load.sharePeriod},
 		{"SFU_LIVE_CAP_KBPS", &load.capKbps}, {"SFU_LIVE_CAP_AFTER", &load.capAfter}, {"SFU_LIVE_CAP_EVERY", &load.capEvery}, {"SFU_LIVE_CAP_WITHIN", &load.capWithin},
@@ -100,6 +102,87 @@ func liveLoadFromEnv(t *testing.T) liveLoad {
 	return load
 }
 
+type liveGeneratorDiagnostic struct {
+	At             time.Time `json:"at"`
+	Expected       time.Time `json:"expected"`
+	WindowStart    time.Time `json:"windowStart"`
+	LatenessNs     int64     `json:"latenessNs"`
+	MaxLatenessNs  int64     `json:"maxLatenessNs"`
+	MissedTicks    int64     `json:"missedTicks"`
+	GCPauseDeltaNs uint64    `json:"gcPauseDeltaNs"`
+	GCPauseTotalNs uint64    `json:"gcPauseTotalNs"`
+}
+
+// startLiveGeneratorDiagnostics records one timer-lateness and GC sample per
+// expected second. A delayed wake is recorded once with its full lateness and
+// missed tick count, then sampling resumes on the next future tick.
+func startLiveGeneratorDiagnostics(t *testing.T) func() {
+	t.Helper()
+	path := os.Getenv("SFU_LIVE_DIAGNOSTICS")
+	if path == "" {
+		return func() {}
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	errCh := make(chan error, 1)
+	go func() {
+		defer close(done)
+		encoder := json.NewEncoder(file)
+		var previous runtime.MemStats
+		runtime.ReadMemStats(&previous)
+		expected := time.Now().Add(time.Second)
+		for {
+			timer := time.NewTimer(time.Until(expected))
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
+
+			actual := time.Now()
+			lateness := actual.Sub(expected).Nanoseconds()
+			var current runtime.MemStats
+			runtime.ReadMemStats(&current)
+			missed := int64(0)
+			if lateness > 0 {
+				missed = lateness / int64(time.Second)
+			}
+			if err := encoder.Encode(liveGeneratorDiagnostic{
+				At: actual.UTC(), Expected: expected.UTC(), WindowStart: expected.Truncate(time.Second).UTC(),
+				LatenessNs: lateness, MaxLatenessNs: max(lateness, int64(0)), MissedTicks: missed,
+				GCPauseDeltaNs: current.PauseTotalNs - previous.PauseTotalNs, GCPauseTotalNs: current.PauseTotalNs,
+			}); err != nil {
+				errCh <- err
+				return
+			}
+			previous = current
+			expected = expected.Add(time.Second)
+			for !expected.After(actual) {
+				expected = expected.Add(time.Second)
+			}
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-done
+		select {
+		case err := <-errCh:
+			t.Errorf("write generator diagnostics: %v", err)
+		default:
+		}
+		if err := file.Close(); err != nil {
+			t.Errorf("close generator diagnostics: %v", err)
+		}
+	}
+}
+
 // frameBytes is one frame's size at a bitrate and the fixtures' 30 frames/s.
 func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 
@@ -113,6 +196,7 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	SFU_LIVE_CA            the service CA
 //	SFU_LIVE_CERT, _KEY    a client certificate with the API identity
 //	SFU_LIVE_CLASSES       classes to hold (default 2)
+//	SFU_LIVE_CLASS_OFFSET  first class index for disjoint generator subsets (default 0)
 //	SFU_LIVE_PARTICIPANTS  Participants per class (default 3)
 //	SFU_LIVE_CAMERAS       cameras per Participant (default 2)
 //	SFU_LIVE_SMALL_TILES   in a class of more Participants than this, every viewer asks for the
@@ -129,12 +213,14 @@ func frameBytes(kbps int) int { return kbps * 1000 / 8 / 30 }
 //	                       one or a quality signal breaks (default off)
 //	SFU_LIVE_SAMPLE        how often to sample (default 1m)
 //	SFU_LIVE_SAMPLES       a file to append one JSON sample per line to
+//	SFU_LIVE_DIAGNOSTICS   a file for per-second timer-lateness and GC-pause samples
 func TestLiveSmokeClasses(t *testing.T) {
 	controlURL := os.Getenv("SFU_LIVE_URL")
 	if controlURL == "" {
 		t.Skip("SFU_LIVE_URL is not set")
 	}
 	load := liveLoadFromEnv(t)
+	t.Cleanup(startLiveGeneratorDiagnostics(t))
 	var out *json.Encoder
 	if load.samples != "" {
 		file, err := os.OpenFile(load.samples, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
@@ -153,8 +239,9 @@ func TestLiveSmokeClasses(t *testing.T) {
 
 	var mu sync.Mutex
 	var classes []*liveClass
+	classIndexes := make(map[*liveClass]int)
 	join := func() string {
-		index, joining := len(classes), time.Now()
+		index, joining := load.classOffset+len(classes), time.Now()
 		defer func() {
 			t.Logf("class %d joined at %s in %v", index, joining.UTC().Format(time.TimeOnly), time.Since(joining).Round(time.Millisecond))
 		}()
@@ -170,6 +257,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 		go class.shareInStretches(classCtx, load, time.Duration(index)*load.sharePeriod/5)
 		mu.Lock()
 		classes = append(classes, class)
+		classIndexes[class] = index
 		mu.Unlock()
 		for deadline := time.Now().Add(30 * time.Second); !class.flowing(); time.Sleep(100 * time.Millisecond) {
 			if time.Now().After(deadline) {
@@ -214,7 +302,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 				break
 			}
 			if attempt == 6 {
-				t.Fatalf("the node refused class %d %d times: %s", len(classes), attempt, refused)
+				t.Fatalf("the node refused class %d %d times: %s", load.classOffset+len(classes), attempt, refused)
 			}
 			t.Logf("refused, retrying in 10 s: %s", refused)
 			time.Sleep(10 * time.Second)
@@ -282,7 +370,7 @@ func TestLiveSmokeClasses(t *testing.T) {
 			receiver.mu.Lock()
 			for key, track := range receiver.tracks {
 				if stalls, longest := track.stallsAt(time.Now(), class.sharingSince()); stalls > 0 {
-					t.Logf("stalled: %s %s %s: %d stalls, longest %v ending %s, frames %v", class.people[index].name, key, track.kind, stalls, longest, track.longestAt.Format(time.TimeOnly), track.frames)
+					t.Logf("class %d stalled: %s %s %s: %d stalls, longest %v ending %s, frames %v", classIndexes[class], class.people[index].name, key, track.kind, stalls, longest, track.longestAt.UTC().Format(time.RFC3339Nano), track.frames)
 				}
 			}
 			receiver.mu.Unlock()
