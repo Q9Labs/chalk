@@ -4,6 +4,7 @@
 # Usage: promote-gate.sh first|final <scorecard.json>   (run from the repository root)
 #   first: score the first proof. A gated metric over budget writes over=true to GITHUB_OUTPUT, so the workflow reruns the proof once.
 #          A non-empty SCORECARD_OVERRIDE records its reason and never blocks.
+#   SCORECARD_EXPECTED=false marks a revision that predates the scorecard; its missing card is skipped on the first pass.
 #   final: score the rerun. A gated metric still over budget fails the run and opens or updates the regression issue.
 # Needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT, GITHUB_RUN_ID, GITHUB_SERVER_URL.
 set -euo pipefail
@@ -16,11 +17,17 @@ run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
-# A held release from before the scorecard existed uploads no card. Scoring nothing is not a regression.
+# A missing card is a failure, except on the first pass for a held release from before the scorecard existed (SCORECARD_EXPECTED=false).
+# A rerun was only requested because the first proof had a card, so a missing rerun card always fails.
 if [[ ! -f "${card}" ]]; then
-  echo "No scorecard from this proof (the selected revision may predate it); nothing was scored." >> "${GITHUB_STEP_SUMMARY}"
-  [[ "${mode}" == first ]] && echo "over=false" >> "${GITHUB_OUTPUT}"
-  exit 0
+  if [[ "${mode}" == first && "${SCORECARD_EXPECTED:-true}" == false ]]; then
+    echo "No scorecard from this proof: the selected revision predates the scorecard, so nothing was scored." >> "${GITHUB_STEP_SUMMARY}"
+    echo "over=false" >> "${GITHUB_OUTPUT}"
+    exit 0
+  fi
+  echo "The ${mode} proof produced no scorecard file: ${card}" >&2
+  echo "The ${mode} proof produced no scorecard, so the gate cannot decide. Check the build and upload steps of the proof." >> "${GITHUB_STEP_SUMMARY}"
+  exit 1
 fi
 
 # The baseline is the nightly median of the card's media plane. Without history the table shows budgets only.

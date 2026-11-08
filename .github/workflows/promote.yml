@@ -162,7 +162,7 @@ jobs:
         with:
           node-version-file: .tool-versions
       - name: Download the scorecard of the proof
-        # A held release from before the scorecard existed uploads none; the gate then scores nothing.
+        # The gate decides what a missing card means.
         continue-on-error: true
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -173,7 +173,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
-        run: features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json
+          REVISION: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
+        run: |
+          # A held release from before the scorecard code existed uploads no card; every newer revision must.
+          SCORECARD_EXPECTED=true
+          if git cat-file -e "${REVISION}^{commit}" 2> /dev/null && ! git cat-file -e "${REVISION}:features/scorecard/adapters/proof.mjs" 2> /dev/null; then
+            SCORECARD_EXPECTED=false
+          fi
+          export SCORECARD_EXPECTED
+          features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json
   scorecard-rerun:
     needs: [select, scorecard]
     if: needs.scorecard.outputs.over == 'true'

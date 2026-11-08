@@ -10,7 +10,7 @@ const root = resolve(import.meta.dirname, "../..");
 const script = resolve(import.meta.dirname, "promote-gate.sh");
 
 // A fake `gh` records its calls and reports the open regression issue named by FAKE_OPEN_ISSUE.
-function gate(mode, { passRate = 1, override = "", open = "", missing = false } = {}) {
+function gate(mode, { passRate = 1, override = "", open = "", missing = false, expected = "true" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "scorecard-promote-"));
   const remote = join(dir, "remote.git");
   execFileSync("git", ["init", "--quiet", "--bare", remote]);
@@ -47,6 +47,7 @@ function gate(mode, { passRate = 1, override = "", open = "", missing = false } 
       GITHUB_RUN_ID: "9",
       GITHUB_SERVER_URL: "https://github.com",
       FAKE_OPEN_ISSUE: open,
+      SCORECARD_EXPECTED: expected,
     },
   });
   const calls = readFileSync(join(dir, "gh.log"), "utf8").split("\n").filter(Boolean);
@@ -79,13 +80,18 @@ test("an override records its reason in the summary and on the open issue, and n
   assert.equal(gate("final", { passRate: 0.5, override: "known staging noise" }).status, 0);
 });
 
-test("a proof with no scorecard is not scored, so it does not rerun or fail", () => {
+test("a missing scorecard fails the gate, except on the first pass of a revision that predates the scorecard", () => {
   for (const mode of ["first", "final"]) {
     const run = gate(mode, { missing: true });
-    assert.equal(run.status, 0, run.stderr);
-    assert.match(run.summary, /nothing was scored/);
-    assert.equal(run.output, mode === "first" ? "over=false" : "");
+    assert.equal(run.status, 1);
+    assert.equal(run.output, "");
   }
+  const rerun = gate("final", { missing: true, expected: "false" });
+  assert.equal(rerun.status, 1);
+  const old = gate("first", { missing: true, expected: "false" });
+  assert.equal(old.status, 0, old.stderr);
+  assert.match(old.summary, /predates the scorecard/);
+  assert.equal(old.output, "over=false");
 });
 
 test("only the scorecard jobs and the release publication refer to the scorecard, so a failed scorecard cannot start rollback", () => {
