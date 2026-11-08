@@ -283,6 +283,17 @@ gates. Starve CPU and expire TURN credentials to prove admission guards, renewal
 alerts and bounded recovery. Load generators run on Instabox, or on disposable
 Droplets tagged with the lane's own tag, `chalk-sfu-bench-<lane>`, and deleted by that tag after each run. The tag list must be empty before the lane reports done.
 
+**Node sizing evidence (soak C, 2026-11-08):**
+
+| Area                | Evidence                                                                                                                                                                                                                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setup               | 3.0 node-hours on the production-class own-SFU node: DigitalOcean `sgp1`, `s-2vcpu-2gb`, Basic shared CPU (`DO-Regular`). Two `s-2vcpu-4gb` `DO-Regular` generators in `sgp1`: classes 0–2 (3 classes, 9 participants) and 3–4 (2 classes, 6 participants), 15 participants total. |
+| Media               | Zero camera, screen or audio stalls across all five classes; 0 freezes.                                                                                                                                                                                                            |
+| Node                | Host steal: mean 3.4%, p99 36%, max 68%; SFU `/readyz` steal means 1.15% and 1.18%. Node `eth0`: mean 33,696 packets/s, p99 35,108; budget 36,000.                                                                                                                                 |
+| Generator exclusion | Generator pauses are excluded: timer lateness maxima 28 ms and 32 ms, 0 seconds ≥100 ms, max GC pause delta 12 ms; 0 TSC/clocksource journal hits on node and generators. The earlier shared-generator run's 4 freezes in 10.98 node-hours (0.364/h) were generator-side.          |
+| Sizing decision     | A dedicated-CPU node is not needed on today's evidence. A dedicated CPU-Optimized comparison was considered but not run because the shared node showed no freezes even at steal p99 36%.                                                                                           |
+| Unproved capacity   | Above 15 participants on the shared node, toward the 36,000 packets/s budget. Run only if M11 needs it, on the shared node under the bench rules: short-lived bench droplets, at most USD 1, delete by ID.                                                                         |
+
 **Risk:** shared CPU and generator limits can distort one run. Staging matches
 production's size, so its results carry over, but one run is not a capacity
 guarantee. Full cutover waits for M10's capture demand and M11's placement and
