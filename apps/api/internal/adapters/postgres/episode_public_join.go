@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -327,6 +328,10 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 		result.Removed = true
 		return nil
 	})
+	var postgresError *pgconn.PgError
+	if errors.As(err, &postgresError) && postgresError.Code == "55P03" {
+		return result, fmt.Errorf("%w: %w", publicinvites.ErrAccessUnavailable, err)
+	}
 	return result, err
 }
 

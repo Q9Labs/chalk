@@ -1,11 +1,15 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+	"strconv"
+)
 
 type APIError struct {
-	Status  int
-	Code    string
-	Message string
+	Status     int
+	Code       string
+	Message    string
+	RetryAfter int
 }
 
 func (err APIError) Error() string {
@@ -94,5 +98,8 @@ var (
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {
+	if err.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(err.RetryAfter))
+	}
 	writeError(w, err.Status, err.Code, err.Message)
 }
