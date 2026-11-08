@@ -1,5 +1,5 @@
 {
-  "count": 293,
+  "count": 292,
   "acceptedAt": "2026-11-08T00:05:26.778Z",
   "message": "rebase onto master",
   "entries": [
@@ -50,7 +50,6 @@
     {"file":"apps/mobile/src/privacy/PrivacyNotice.tsx","kind":"spacing","value":"8","count":3},
     {"file":"apps/web/src/styles/dashboard.css","kind":"font-size","value":"1.1em","count":1},
     {"file":"apps/web/src/styles/dashboard.css","kind":"radius","value":"11px","count":1},
-    {"file":"apps/web/src/styles/dashboard.css","kind":"shadow","value":"0 0 0 1px","count":1},
     {"file":"sdks/typescript/react-native/src/dock/Dock.tsx","kind":"spacing","value":"14","count":1},
     {"file":"sdks/typescript/react-native/src/dock/Dock.tsx","kind":"spacing","value":"20","count":1},
     {"file":"sdks/typescript/react-native/src/dock/Dock.tsx","kind":"spacing","value":"8","count":1},

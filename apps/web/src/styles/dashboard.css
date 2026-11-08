@@ -2742,7 +2742,7 @@
   height: 16px;
   border-radius: var(--corner-xs);
   object-fit: cover;
-  box-shadow: 0 0 0 1px var(--chalk-line-strong);
+  box-shadow: var(--elevation-hairline-strong);
 }
 
 .site .dash .lp-code,
