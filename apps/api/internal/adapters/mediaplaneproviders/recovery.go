@@ -156,10 +156,18 @@ func (r Registry) PayRetirements(ctx context.Context) {
 // The Episode's end is confirmed on durable ownership, not on the node's acknowledgement: once the
 // debt rows are committed, the RunRetirements worker owns the cleanup and retries it until the node
 // acknowledges, comes back as a new boot, or is no longer configured. A node that is silent on the
-// control path therefore does not hold the end. The cost is that a node that stays silent for good
-// keeps the old sessions until it restarts or its 24 hour floor tombstone expires. Those sessions
-// cannot publish for longer than the source lease TTL, because the API stops renewing a lease once
-// the Episode ends. An unpaid debt is visible as chalk.sfu.retirement_debts and its oldest age.
+// control path therefore does not hold the end. What a silent node keeps is three separate things:
+//
+//   - The fence. The node's retirement floor, if it ever received one, expires after 24 hours. That
+//     only ends the refusal of lower generations. It never closes a session.
+//   - The sessions. A session closes when the retire is acknowledged, when the node restarts, or
+//     when its own peer connection fails or its client closes it. A node that stays silent for good
+//     keeps its connected sessions until it restarts, with no time limit.
+//   - The media. Forwarding and publication stop within the source lease TTL (15 seconds by
+//     default, 2 minutes at the most), because the API stops renewing a lease once the Episode
+//     moves or ends and the node checks the lease on every write.
+//
+// An unpaid debt is visible as chalk.sfu.retirement_debts and its oldest age.
 //
 // It is idempotent and never touches the Episode's current allocation.
 func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID utilities.ID) error {

@@ -16,7 +16,9 @@ const (
 	retiredLimit = 1 << 16
 	// retiredTTL is how long a floor refuses lower generations, counted from the last retire of
 	// the Episode. It outlasts any request a retired allocation can still have in flight and
-	// the API's background retries, and a node restart clears the floors sooner.
+	// the API's background retries, and a node restart clears the floors sooner. Expiry only ends
+	// the fence: it never closes a session. Sessions close on a retire, a restart or their own
+	// peer connection ending, and only the end of a source lease stops forwarding.
 	retiredTTL = 24 * time.Hour
 	// reasonRetirementsFull is the admission reason while the table of floors is full.
 	reasonRetirementsFull = "retirements_full"
