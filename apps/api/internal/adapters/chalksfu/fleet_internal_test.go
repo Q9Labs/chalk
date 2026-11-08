@@ -249,17 +249,18 @@ func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 	}
 }
 
-func TestRecoveryCandidatesFollowPlacementOrderAndSkipOnlySilentOrDrainingNodes(t *testing.T) {
-	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), primary("full"), primary("down"), primary("drain"), primary("ok")}
+func TestRecoveryCandidatesFollowPlacementOrderAndSkipSilentDrainingAndFullStandbyNodes(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), standby("sfull"), primary("full"), primary("down"), primary("drain"), primary("ok")}
 	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{
-		"s": ready(testStandbyBudget, 0), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
+		"s": ready(testStandbyBudget, 0), "sfull": ready(testStandbyBudget, testStandbyBudget), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
 		"drain": {budget: testPrimaryBudget, draining: true}, "ok": ready(testPrimaryBudget, 0),
 	})
 	var got []string
 	for _, c := range fleet.recoveryCandidates() {
 		got = append(got, c.adapter.node)
 	}
-	// A full node stays: its reserve may hold this very Episode, which the probe cannot show.
+	// A full primary stays: its reserve may hold this very Episode, which the probe cannot show.
+	// A full standby goes: its degraded budget is a limit only the API knows.
 	if want := []string{"full", "ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("candidates %v, want %v: primaries first, then the standby", got, want)
 	}
