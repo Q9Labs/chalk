@@ -29,6 +29,7 @@ var ErrUnknownNode = errors.New("chalk sfu node is not configured")
 // for that Episode, cleanup included, goes to that node.
 type Fleet struct {
 	applicationID string
+	overflow      bool
 	nodes         []*Adapter
 	log           *slog.Logger
 
@@ -40,7 +41,8 @@ type Fleet struct {
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
 // hasRoom false, so placement skips it, and is told apart from a silent node.
 type nodeLoad struct {
-	hasRoom bool // the budget left fits a new Episode
+	hasRoom     bool // the budget left fits a new Episode
+	incarnation string
 	NodeHealth
 	at time.Time
 }
@@ -64,7 +66,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 	if err != nil {
 		return nil, err
 	}
-	fleet := &Fleet{applicationID: config.ApplicationID, log: log, loads: map[string]nodeLoad{}}
+	fleet := &Fleet{applicationID: config.ApplicationID, overflow: config.CloudflareOverflow, log: log, loads: map[string]nodeLoad{}}
 	for _, node := range config.Nodes {
 		adapter, err := newAdapter(config, node, client)
 		if err != nil {
@@ -79,6 +81,10 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 // when nodes, hosts or certificates change.
 func (f *Fleet) ApplicationID() string { return f.applicationID }
 
+// CloudflareOverflow reports whether a new Episode may start on Cloudflare when
+// no node has room.
+func (f *Fleet) CloudflareOverflow() bool { return f.overflow }
+
 // Node returns the adapter of the node an Episode is bound to.
 func (f *Fleet) Node(id string) (*Adapter, error) {
 	for _, node := range f.nodes {
@@ -92,22 +98,43 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 // Place picks the node for a new Episode. Nodes are tried in configuration
 // order, so the first one is the primary and later ones are standbys of any
 // size: the first node whose last probe is fresh, ready (so not draining) and
-// has packet budget left for a new Episode wins, and room is true. When no
-// node qualifies after a probe, every node would refuse the Episode, so room
-// is false and the caller may start it on another provider. Before the first
-// probe it reports the first node with room, whose admission then answers the
-// join. It reads the last probes and does no I/O, because Episode creation
-// calls it inside a database transaction.
-func (f *Fleet) Place() (node string, room bool) {
+// has packet budget left for a new Episode wins, and room is true. The placement
+// then records the node, its boot incarnation from that probe and whether it is
+// the primary or a standby. When no node qualifies after a probe, every node
+// would refuse the Episode, so room is false and the caller may start it on
+// another provider. The placement then names the first node, the fallback when
+// there is no other provider, and why nothing had room: every answering node was
+// full, or none answered ready. Before the first probe it reports the first node
+// with room, whose admission then answers the join. It reads the last probes and
+// does no I/O, because Episode creation calls it inside a database transaction.
+func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, node := range f.nodes {
+	answering := false
+	for index, node := range f.nodes {
 		load, probed := f.loads[node.node]
-		if probed && load.hasRoom && time.Since(load.at) <= probeFreshness {
-			return node.node, true
+		if !probed || time.Since(load.at) > probeFreshness {
+			continue
 		}
+		answering = true
+		if !load.hasRoom {
+			continue
+		}
+		reason := mediaplane.PlacementPrimary
+		if index > 0 {
+			reason = mediaplane.PlacementStandby
+		}
+		return mediaplane.Placement{Node: node.node, Incarnation: load.incarnation, Reason: reason}, true
 	}
-	return f.nodes[0].node, !f.probed
+	first := mediaplane.Placement{Node: f.nodes[0].node, Reason: mediaplane.PlacementPrimary}
+	if !f.probed {
+		return first, true
+	}
+	first.Reason = mediaplane.PlacementOverflowNodeUnavailable
+	if answering {
+		first.Reason = mediaplane.PlacementOverflowNoRoom
+	}
+	return first, false
 }
 
 // Watch probes every node's readiness until ctx ends.
@@ -166,10 +193,15 @@ func (f *Fleet) Probe(ctx context.Context) {
 				f.logTransition(ctx, slog.LevelInfo, "chalk sfu node no longer draining", node.node)
 			}
 			hasRoom := !ready.Draining && ready.Host.AdmissionReason == "" && ready.PacketBudget-ready.ReservedPackets >= ready.NewEpisodePackets
+			incarnation := ready.NodeIncarnation
+			if !mediaplane.ValidIncarnation(incarnation) {
+				incarnation = "" // a malformed value must not fail Episode creation
+			}
 			f.loads[node.node] = nodeLoad{
-				hasRoom:    hasRoom,
-				NodeHealth: NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
-				at:         time.Now(),
+				hasRoom:     hasRoom,
+				incarnation: incarnation,
+				NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
+				at:          time.Now(),
 			}
 		})
 	}

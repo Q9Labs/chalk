@@ -418,6 +418,16 @@ The export matches `inspect` and carries no identities.
   (1 or 0, with the admission reason), `process.cpu.time` and
   `process.memory.usage` (resident bytes, Linux).
 
+The API counts where each new own-SFU Episode goes as `chalk.api.media_plane.placements`,
+with `chalk.media_plane.provider`, `chalk.media_plane.node_role` (`primary`, `standby`,
+`overflow`, `none`) and `chalk.media_plane.placement_reason` (`primary`, `standby`,
+`overflow_no_room`, `overflow_node_unavailable`, `no_capacity`, `capacity_refused`).
+`CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
+no node can take is then refused with `503 media.unavailable` and counted as
+`capacity_refused`, and the refusal is logged by `http.failure` with its typed cause.
+The same reason and the node's boot incarnation are frozen in the Episode binding
+(`placement_reason`, `node_incarnation`), so a past overflow stays findable.
+
 A rate from the totals is exact over any window. A stream that closes between two
 100 ms control ticks loses that tick's counts, so totals can run slightly under
 the sum of every session's `inspect`. A restart starts every total again from

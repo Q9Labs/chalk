@@ -81,17 +81,18 @@ const (
 
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
-	ChalkSFUEnabled        = "CHALK_SFU_ENABLED"
-	ChalkSFUNodes          = "CHALK_SFU_NODES"
-	ChalkSFUApplicationID  = "CHALK_SFU_APPLICATION_ID"
-	ChalkSFUServerName     = "CHALK_SFU_SERVER_NAME"
-	ChalkSFUCAFile         = "CHALK_SFU_CA_FILE"
-	ChalkSFUClientCertFile = "CHALK_SFU_CLIENT_CERT_FILE"
-	ChalkSFUClientKeyFile  = "CHALK_SFU_CLIENT_KEY_FILE"
-	ChalkSFUTimeoutMS      = "CHALK_SFU_TIMEOUT_MS"
-	ChalkSFUSTUNURLs       = "CHALK_SFU_STUN_URLS"
-	ChalkSFUAllowedSpaces  = "CHALK_SFU_ALLOWED_SPACES"
-	DefaultMediaPlane      = "CHALK_DEFAULT_MEDIA_PLANE"
+	ChalkSFUEnabled            = "CHALK_SFU_ENABLED"
+	ChalkSFUNodes              = "CHALK_SFU_NODES"
+	ChalkSFUApplicationID      = "CHALK_SFU_APPLICATION_ID"
+	ChalkSFUServerName         = "CHALK_SFU_SERVER_NAME"
+	ChalkSFUCAFile             = "CHALK_SFU_CA_FILE"
+	ChalkSFUClientCertFile     = "CHALK_SFU_CLIENT_CERT_FILE"
+	ChalkSFUClientKeyFile      = "CHALK_SFU_CLIENT_KEY_FILE"
+	ChalkSFUTimeoutMS          = "CHALK_SFU_TIMEOUT_MS"
+	ChalkSFUSTUNURLs           = "CHALK_SFU_STUN_URLS"
+	ChalkSFUCloudflareOverflow = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
+	ChalkSFUAllowedSpaces      = "CHALK_SFU_ALLOWED_SPACES"
+	DefaultMediaPlane          = "CHALK_DEFAULT_MEDIA_PLANE"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -226,7 +227,11 @@ type ChalkSFUConfig struct {
 	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
 	AllowedSpaces spaces.ChalkSFUAllowlist
 
-	RequestTimeout time.Duration
+	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
+	// room. It is on by default. When it is off, creating that Episode fails with
+	// a retryable capacity error instead. Migration policy until M13 removes it.
+	CloudflareOverflow bool
+	RequestTimeout     time.Duration
 }
 
 type ProviderBridgeConfig struct {
@@ -655,15 +660,20 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if timeout <= 0 {
 		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUTimeoutMS)
 	}
+	overflow, err := envStrictBool(ChalkSFUCloudflareOverflow, true)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
-		Enabled:        true,
-		ApplicationID:  strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
-		ServerName:     strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
-		CAFile:         strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
-		ClientCertFile: strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
-		ClientKeyFile:  strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
-		STUNURLs:       envList(ChalkSFUSTUNURLs),
-		RequestTimeout: timeout,
+		Enabled:            true,
+		CloudflareOverflow: overflow,
+		ApplicationID:      strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
+		ServerName:         strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
+		CAFile:             strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
+		ClientCertFile:     strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
+		ClientKeyFile:      strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
+		STUNURLs:           envList(ChalkSFUSTUNURLs),
+		RequestTimeout:     timeout,
 	}
 	required := []struct{ name, value string }{
 		{ChalkSFUApplicationID, config.ApplicationID},

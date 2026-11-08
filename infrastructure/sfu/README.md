@@ -63,6 +63,11 @@ CHALK_SFU_CLIENT_KEY_FILE=/run/chalk/provider-bridge/server.key
 CHALK_SFU_STUN_URLS=stun:stun.cloudflare.com:3478
 ```
 
+`CHALK_SFU_CLOUDFLARE_OVERFLOW` defaults to `true`: a new Episode that no node can
+take starts on Cloudflare when its Tenant has a Cloudflare application. Set it to
+`false` to refuse that Episode with a retryable `503 media.unavailable` instead.
+An Episode already bound to a node never moves either way.
+
 The switch lets a Space choose `chalk_sfu`, and the allowlist decides which
 Spaces may:
 

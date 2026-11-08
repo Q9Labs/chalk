@@ -23,7 +23,7 @@ func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Conte
 		DefaultMediaPlane:        nullableText(policy.DefaultMediaPlane),
 		MediaPlaneProviderConfig: json.RawMessage(policy.MediaPlaneProviderConfig),
 	}
-	binding, err := r.mediaBindingResolver.ResolveBinding(tenant, mapSpace(space), clients)
+	binding, err := r.mediaBindingResolver.ResolveBinding(ctx, tenant, mapSpace(space), clients)
 	if err != nil {
 		return nil, err
 	}

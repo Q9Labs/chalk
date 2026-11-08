@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"go.opentelemetry.io/otel"
@@ -22,6 +23,8 @@ type MediaPlaneResolutionTelemetry struct {
 	logger   *slog.Logger
 	requests otelmetric.Int64Counter
 	duration otelmetric.Float64Histogram
+	// placements counts where each new Episode went, by provider, node role and reason.
+	placements otelmetric.Int64Counter
 }
 
 func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionTelemetry {
@@ -39,7 +42,41 @@ func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionT
 		otelmetric.WithDescription("MediaPlane resolution latency"),
 		otelmetric.WithUnit("s"),
 	)
-	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration}
+	placements, _ := meter.Int64Counter(
+		"chalk.api.media_plane.placements",
+		otelmetric.WithDescription("Where new Episodes were placed, and why"),
+		otelmetric.WithUnit("{episode}"),
+	)
+	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration, placements: placements}
+}
+
+// RecordPlacement counts one new Episode placement. Labels are bounded: the node
+// role comes from the reason, never from a node name, and no Tenant, Episode or
+// Participant identity is attached.
+func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+	role, bounded := boundedPlacement(reason)
+	t.placements.Add(ctx, 1, otelmetric.WithAttributes(
+		attribute.String("chalk.media_plane.provider", boundedMediaPlaneProvider(provider)),
+		attribute.String("chalk.media_plane.node_role", role),
+		attribute.String("chalk.media_plane.placement_reason", bounded),
+	))
+}
+
+// boundedPlacement maps a placement reason to its node role and a known reason.
+// A no-capacity Episode stays on the primary; a refused one gets no node.
+func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) {
+	switch reason {
+	case mediaplane.PlacementPrimary, mediaplane.PlacementNoCapacity:
+		return "primary", string(reason)
+	case mediaplane.PlacementStandby:
+		return "standby", string(reason)
+	case mediaplane.PlacementOverflowNoRoom, mediaplane.PlacementOverflowNodeUnavailable:
+		return "overflow", string(reason)
+	case mediaplaneproviders.PlacementRefused:
+		return "none", string(reason)
+	default:
+		return "unknown", "unknown"
+	}
 }
 
 func (t MediaPlaneResolutionTelemetry) RecordResolution(ctx context.Context, resolution mediaplaneproviders.Resolution) {

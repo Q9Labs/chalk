@@ -28,6 +28,39 @@ type Binding struct {
 	// more than one, so every call for the Episode reaches the same node. It is
 	// empty for a provider with one global endpoint, such as Cloudflare.
 	Node string `json:"node,omitempty"`
+	// NodeIncarnation is the boot incarnation of Node at placement, when the last
+	// readiness probe had one. PlacementReason says why the Episode went where it
+	// did. Both are optional and additive, so the previous release still reads
+	// the binding and a binding written before they existed stays valid.
+	NodeIncarnation string          `json:"node_incarnation,omitempty"`
+	PlacementReason PlacementReason `json:"placement_reason,omitempty"`
+}
+
+// PlacementReason is the bounded reason a new Episode got its provider and node.
+type PlacementReason string
+
+const (
+	// PlacementPrimary and PlacementStandby name the role of the node that had room:
+	// the first configured node is the primary and every later one a standby.
+	PlacementPrimary PlacementReason = "primary"
+	PlacementStandby PlacementReason = "standby"
+	// PlacementOverflowNoRoom and PlacementOverflowNodeUnavailable bind the Episode
+	// to Cloudflare because no own-SFU node had room: every probed node was full,
+	// or none answered ready (down, draining or silent).
+	PlacementOverflowNoRoom          PlacementReason = "overflow_no_room"
+	PlacementOverflowNodeUnavailable PlacementReason = "overflow_node_unavailable"
+	// PlacementNoCapacity keeps the Episode on the first node although no node had
+	// room, because the Tenant has no Cloudflare application to take it. The
+	// node's admission then refuses the join.
+	PlacementNoCapacity PlacementReason = "no_capacity"
+)
+
+// Placement is where a new Episode goes: a node of a provider that runs several,
+// or none for a provider with one global endpoint.
+type Placement struct {
+	Node        string
+	Incarnation string
+	Reason      PlacementReason
 }
 
 func NewBinding(provider, source, applicationID string) (Binding, error) {
@@ -42,12 +75,15 @@ func NewBinding(provider, source, applicationID string) (Binding, error) {
 	return binding, nil
 }
 
-// OnNode places the binding on one provider node. The node is not part of the
+// Placed records where the Episode goes. The node is not part of the
 // fingerprint: it locates the Episode inside the application, it does not pick one.
-func (binding Binding) OnNode(node string) (Binding, error) {
-	binding.Node = node
-	if !ValidNodeID(node) {
+func (binding Binding) Placed(placement Placement) (Binding, error) {
+	binding.Node, binding.NodeIncarnation, binding.PlacementReason = placement.Node, placement.Incarnation, placement.Reason
+	if binding.Node != "" && !ValidNodeID(binding.Node) {
 		return Binding{}, ErrInvalidBinding
+	}
+	if err := binding.Validate(); err != nil {
+		return Binding{}, err
 	}
 	return binding, nil
 }
@@ -95,7 +131,29 @@ func (binding Binding) Validate() error {
 	if binding.Node != "" && !ValidNodeID(binding.Node) {
 		return ErrInvalidBinding
 	}
+	if binding.NodeIncarnation != "" && (binding.Node == "" || !ValidIncarnation(binding.NodeIncarnation)) {
+		return ErrInvalidBinding
+	}
+	switch binding.PlacementReason {
+	case "", PlacementPrimary, PlacementStandby, PlacementOverflowNoRoom, PlacementOverflowNodeUnavailable, PlacementNoCapacity:
+	default:
+		return ErrInvalidBinding
+	}
 	return nil
+}
+
+// ValidIncarnation reports whether a node incarnation is 1 to 64 lowercase letters, digits or '-'.
+func ValidIncarnation(incarnation string) bool {
+	if incarnation == "" || len(incarnation) > 64 {
+		return false
+	}
+	for _, char := range incarnation {
+		if char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validBindingProvider(provider string) bool {
