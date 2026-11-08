@@ -22,15 +22,19 @@ runs with (`*`, comma-separated Space IDs, or empty for none), either as the
 flag or as that environment variable. The API pins a `chalk_sfu` Space outside
 the allowlist to Cloudflare, so a wrong value gives wrong counts and the
 command refuses to guess. The report records only the mode (`all`, `listed`,
-`none`) and the number of listed Spaces.
+`none`) and the number of listed Spaces, which follows the same `"<5"` rule.
 
 ## Sanitizing
 
 The output has no Tenant or Space identifiers, names, emails or rows. A count
-of 1 to 4 prints as `"<5"`, and zero prints as `0`. When a family has exactly
-one suppressed cell, its smallest remaining non-zero cell is suppressed too,
-because the other families of the same population show the total and would
-reveal the single hidden cell. Do not publish more than the command prints.
+of 1 to 4 prints as `"<5"`, and zero prints as `0`. No total is printed. The
+families of one population (for example the three Tenant families) sum to the
+same hidden total, so a hidden cell could be read off another family. Whenever
+any cell is hidden, every family of the population also hides its smallest
+remaining non-zero cell, so the hidden cells add up to an unknown amount. That
+makes a hidden count unrecoverable except when the partner is itself a count
+just above 5. Read the output as internal until a person has checked it against
+the Tenant list, and do not publish more than the command prints.
 
 ## What each count means
 
@@ -49,7 +53,8 @@ or mode).
 **Tenants** are counted `by_default_media_plane` (`default_media_plane`:
 `cf_sfu`, `chalk_sfu`, `none` when unset, `unknown`), `by_configuration_source`,
 and `by_space_selection`: whether the Tenant has any non-archived Space that
-selects Cloudflare, the Tenants a Cloudflare removal still touches.
+selects Cloudflare or that the allowlist pins to it, the Tenants a Cloudflare
+removal still touches.
 
 **Spaces** exclude archived ones, counted separately in `archived`:
 
@@ -63,11 +68,13 @@ selects Cloudflare, the Tenants a Cloudflare removal still touches.
   `unresolvable` is a Space the API refuses to bind: unknown provider, invalid
   Tenant settings, a tenant-managed Tenant selecting `chalk_sfu` (it has no
   tenant-managed mode), or tenant-managed settings with no Cloudflare SFU
-  section or a different provider. Credentials are not inspected.
+  section or a different provider. Settings are `invalid` when a field has a
+  type the API cannot read (for example a numeric `app_id`); credential values
+  are not inspected.
   Cutover is complete when every cell but `chalk_sfu` and `none` is zero.
 - `by_configuration_source` counts Spaces by their Tenant's source.
-- `cloudflare_selected_by_configuration_source` splits the Spaces that still
-  select Cloudflare by source. A `tenant_managed` cell cannot move without a
+- `cloudflare_by_configuration_source` splits the Spaces that still select
+  Cloudflare, or select `chalk_sfu` outside the allowlist, by source. A `tenant_managed` cell cannot move without a
   Tenant settings change.
 
 **Episodes** use the provider in `episodes.config_snapshot`
@@ -82,9 +89,10 @@ because capture authority comes only from that snapshot. `cf_sfu` plus
 `legacy_cf_sfu` is the Cloudflare dependency.
 
 - `recordings_by_bound_provider` counts every Recording.
-- `recording_pipelines_in_flight_by_bound_provider` counts pipelines not yet
-  `committed`, `terminal_failure` or `deleted`: captures still needing the
-  provider.
+- `recording_pipelines_in_flight_by_bound_provider` counts pipelines whose
+  capture is not finished: `requested`, `reserved`, `capture_leased`,
+  `capturing_segmented` or `retryable_failure` (a retry may capture again).
+  Render and verify states no longer need the provider and are not counted.
 - `transcriptions_in_flight_by_bound_provider` counts Transcriptions in
   `preparing`, `transcribing`, `verifying` or `retryable_failure`.
 

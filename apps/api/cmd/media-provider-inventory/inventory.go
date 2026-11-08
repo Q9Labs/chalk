@@ -58,11 +58,11 @@ type rawReport struct {
 		BySpaceSelection      counts
 	}
 	Spaces struct {
-		Archived                         int
-		BySelection                      counts
-		ByNewEpisodeProvider             counts
-		ByConfigurationSource            counts
-		CloudflareSelectedByConfigSource counts
+		Archived                 int
+		BySelection              counts
+		ByNewEpisodeProvider     counts
+		ByConfigurationSource    counts
+		CloudflareByConfigSource counts
 	}
 	Episodes struct {
 		LiveByBoundProvider           counts
@@ -89,25 +89,35 @@ type rawReport struct {
 // outcome is the provider a new Episode would bind, or none (no provider or
 // media disabled), or unresolvable (the API refuses to create the binding).
 const classificationSQL = `
-with tenant_class as (
-    select t.id,
+with tenant_doc as (
+    select t.id, t.default_media_plane, t.media_plane_provider_config as c from tenants t
+),
+tenant_class as (
+    select d.id,
         case
-            when t.default_media_plane is null then 'none'
-            else case btrim(t.default_media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
+            when d.default_media_plane is null then 'none'
+            else case btrim(d.default_media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
         end as default_provider,
         case
-            when t.media_plane_provider_config is null or jsonb_typeof(t.media_plane_provider_config) = 'null' then 'deployment_default'
-            when jsonb_typeof(t.media_plane_provider_config) <> 'object'
-                or jsonb_typeof(t.media_plane_provider_config -> 'enabled') not in ('boolean', 'null') then 'invalid'
-            when t.media_plane_provider_config -> 'enabled' = 'false'::jsonb then 'disabled'
-            when btrim(coalesce(t.media_plane_provider_config ->> 'provider', '')) not in ('', 'cf_sfu', 'chalk_sfu') then 'invalid'
-            when btrim(coalesce(t.media_plane_provider_config ->> 'mode', '')) = 'chalk_managed' then 'tenant_chalk_managed'
-            when btrim(coalesce(t.media_plane_provider_config ->> 'mode', '')) = 'tenant_managed' then 'tenant_managed'
+            when d.c is null or jsonb_typeof(d.c) = 'null' then 'deployment_default'
+            when jsonb_typeof(d.c) <> 'object'
+                or coalesce(jsonb_typeof(d.c -> 'enabled'), 'null') not in ('boolean', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'provider'), 'null') not in ('string', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'mode'), 'null') not in ('string', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'cloudflare'), 'null') not in ('object', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'cloudflare' -> 'account_id'), 'null') not in ('string', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'cloudflare' -> 'sfu'), 'null') not in ('object', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'cloudflare' -> 'sfu' -> 'app_id'), 'null') not in ('string', 'null')
+                or coalesce(jsonb_typeof(d.c -> 'cloudflare' -> 'sfu' -> 'app_secret'), 'null') not in ('string', 'null') then 'invalid'
+            when d.c -> 'enabled' = 'false'::jsonb then 'disabled'
+            when btrim(coalesce(d.c ->> 'provider', '')) not in ('', 'cf_sfu', 'chalk_sfu') then 'invalid'
+            when btrim(coalesce(d.c ->> 'mode', '')) = 'chalk_managed' then 'tenant_chalk_managed'
+            when btrim(coalesce(d.c ->> 'mode', '')) = 'tenant_managed' then 'tenant_managed'
             else 'invalid'
         end as config_source,
-        btrim(coalesce(t.media_plane_provider_config ->> 'provider', '')) as config_provider,
-        coalesce(jsonb_typeof(t.media_plane_provider_config -> 'cloudflare' -> 'sfu') = 'object', false) as sfu_configured
-    from tenants t
+        btrim(coalesce(d.c ->> 'provider', '')) as config_provider,
+        coalesce(jsonb_typeof(d.c -> 'cloudflare' -> 'sfu') = 'object', false) as sfu_configured
+    from tenant_doc d
 ),
 space_class as (
     select s.id, s.tenant_id, tc.config_source,
@@ -146,7 +156,7 @@ space_result as (
 
 const tenantsSQL = classificationSQL + `
 select tc.default_provider, tc.config_source,
-    exists (select 1 from space_result sr where sr.tenant_id = tc.id and sr.selected = 'cf_sfu') as has_cloudflare_space,
+    exists (select 1 from space_result sr where sr.tenant_id = tc.id and (sr.selected = 'cf_sfu' or sr.pinned)) as has_cloudflare_space,
     count(*)
 from tenant_class tc
 group by 1, 2, 3`
@@ -187,7 +197,7 @@ from recordings r join episodes e on e.id = r.episode_id group by 1`
 from recording_pipelines p
 join recordings r on r.id = p.recording_id
 join episodes e on e.id = r.episode_id
-where p.state not in ('committed', 'terminal_failure', 'deleted') group by 1`
+where p.state in ('requested', 'reserved', 'capture_leased', 'capturing_segmented', 'retryable_failure') group by 1`
 
 	transcriptionsSQL = `select ` + boundProviderSQL("e.config_snapshot") + ` as bound, count(*)
 from transcriptions x join episodes e on e.id = x.episode_id
@@ -199,7 +209,7 @@ func collect(ctx context.Context, q querier, list allowlist) (rawReport, error) 
 	var report rawReport
 	report.Tenants.ByDefaultMediaPlane, report.Tenants.ByConfigurationSource, report.Tenants.BySpaceSelection = counts{}, counts{}, counts{}
 	report.Spaces.BySelection, report.Spaces.ByNewEpisodeProvider = counts{}, counts{}
-	report.Spaces.ByConfigurationSource, report.Spaces.CloudflareSelectedByConfigSource = counts{}, counts{}
+	report.Spaces.ByConfigurationSource, report.Spaces.CloudflareByConfigSource = counts{}, counts{}
 
 	err := scan(ctx, q, tenantsSQL, []any{list.all, list.spaces}, func(rows pgx.Rows) error {
 		var provider, source string
@@ -238,8 +248,8 @@ func collect(ctx context.Context, q querier, list allowlist) (rawReport, error) 
 		}
 		report.Spaces.ByNewEpisodeProvider[outcome] += n
 		report.Spaces.ByConfigurationSource[source] += n
-		if selected == "cf_sfu" {
-			report.Spaces.CloudflareSelectedByConfigSource[source] += n
+		if selected == "cf_sfu" || pinned {
+			report.Spaces.CloudflareByConfigSource[source] += n
 		}
 		return nil
 	})

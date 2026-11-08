@@ -65,8 +65,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) error {
 	if err := report.writeJSON(out); err != nil {
 		return err
 	}
-	report.writeTable(stderr)
-	return nil
+	return report.writeTable(stderr)
 }
 
 // inventory counts inside one read-only repeatable-read transaction, so every

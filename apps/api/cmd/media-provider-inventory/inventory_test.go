@@ -15,19 +15,36 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func TestPublishSuppressesSmallCellsAndTheirComplement(t *testing.T) {
-	family := publish(counts{"a": 3, "b": 10, "c": 7, "d": 0}, []string{"a", "b", "c", "d"})
-	got := map[string]string{}
-	for key, cell := range family {
-		got[key] = cell.String()
+func shown(f Family) map[string]string {
+	result := map[string]string{}
+	for key, cell := range f {
+		result[key] = cell.String()
 	}
-	want := map[string]string{"a": "<5", "b": "10", "c": "<5", "d": "0"}
-	if !maps.Equal(got, want) {
-		t.Fatalf("published = %v, want %v", got, want)
+	return result
+}
+
+func TestPublishSuppressesSmallCellsAndHidesTheirSum(t *testing.T) {
+	keys := []string{"a", "b", "c", "d"}
+	families := publish(
+		draft{counts{"a": 3, "b": 10, "c": 7, "d": 0}, keys},
+		draft{counts{"a": 20, "b": 5, "c": 0, "d": 0}, keys},
+	)
+	// One small cell hides itself and the smallest remaining one in every family, so
+	// no family leaves the population total readable.
+	if want := map[string]string{"a": "<5", "b": "10", "c": "<5", "d": "0"}; !maps.Equal(shown(families[0]), want) {
+		t.Fatalf("first = %v, want %v", shown(families[0]), want)
 	}
-	two := publish(counts{"a": 1, "b": 4, "c": 9}, []string{"a", "b", "c"})
-	if two["a"].String() != "<5" || two["b"].String() != "<5" || two["c"].String() != "9" {
-		t.Fatalf("two small cells = %v %v %v, want <5 <5 9", two["a"], two["b"], two["c"])
+	if want := map[string]string{"a": "20", "b": "<5", "c": "0", "d": "0"}; !maps.Equal(shown(families[1]), want) {
+		t.Fatalf("second = %v, want %v", shown(families[1]), want)
+	}
+	// Two cells of 1 and a visible total of 12 must not reveal 1 and 1.
+	pair := publish(draft{counts{"a": 1, "b": 1, "c": 10}, []string{"a", "b", "c"}})[0]
+	if got := shown(pair); got["a"] != "<5" || got["b"] != "<5" || got["c"] != "<5" {
+		t.Fatalf("two small cells = %v, want all hidden", got)
+	}
+	clear := publish(draft{counts{"a": 8, "b": 0}, []string{"a", "b"}})[0]
+	if got := shown(clear); got["a"] != "8" || got["b"] != "0" {
+		t.Fatalf("large cells = %v, want exact", got)
 	}
 	var encoded bytes.Buffer
 	report := Report{Spaces: SpacesReport{ByNewEpisodeProvider: Family{"a": {n: 3, suppressed: true}, "b": {n: 12}}}}
@@ -114,8 +131,8 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	}
 	defer tx.Rollback(context.Background())
 
-	a1, d2, e1, f1 := newID(t), newID(t), newID(t), newID(t)
-	list, err := parseAllowlist(strings.Join([]string{a1.String(), d2.String(), e1.String(), f1.String()}, ","))
+	a1, d2, e1, f1, i1 := newID(t), newID(t), newID(t), newID(t), newID(t)
+	list, err := parseAllowlist(strings.Join([]string{a1.String(), d2.String(), e1.String(), f1.String(), i1.String()}, ","))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,6 +211,15 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	// F: unreadable settings and an unknown Tenant default.
 	tenantF := tenant(ptr("bogus"), `{}`)
 	space(tenantF, "chalk_sfu", false, f1)
+	// H: only an own-SFU Space outside the allowlist, which the API pins to Cloudflare.
+	tenantH := tenant(nil, "")
+	space(tenantH, "chalk_sfu", false)
+	// I: a settings document the API cannot read, even though it names a mode.
+	tenantI := tenant(nil, `{"mode":"chalk_managed","cloudflare":[]}`)
+	space(tenantI, "chalk_sfu", false, i1)
+	// J: tenant-managed Cloudflare with a numeric app_id.
+	tenantJ := tenant(nil, `{"mode":"tenant_managed","provider":"cf_sfu","cloudflare":{"sfu":{"app_id":7,"app_secret":"s"}}}`)
+	space(tenantJ, "cf_sfu", false)
 	// G: a Space with a provider the API does not know.
 	tenantG := tenant(nil, "")
 	space(tenantG, "wat", false)
@@ -207,6 +233,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	dEnded := episode(tenantD, d2, "ended", `{"media_plane_binding":{"provider":"cf_sfu"}}`)
 	// Recordings: Cloudflare with live capture and transcription, own SFU finished, legacy with neither.
 	recording(tenantB, b1, bEpisode, "capturing_segmented", "transcribing")
+	recording(tenantB, b1, bEpisode, "rendering", "")
 	recording(tenantA, a1, aEpisode, "committed", "complete")
 	recording(tenantC, c1, cLegacy, "", "")
 	_ = dEnded
@@ -215,18 +242,18 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectCounts(t, "tenants by default plane", delta(after.Tenants.ByDefaultMediaPlane, before.Tenants.ByDefaultMediaPlane), counts{"none": 4, "cf_sfu": 1, "chalk_sfu": 1, "unknown": 1})
+	expectCounts(t, "tenants by default plane", delta(after.Tenants.ByDefaultMediaPlane, before.Tenants.ByDefaultMediaPlane), counts{"none": 7, "cf_sfu": 1, "chalk_sfu": 1, "unknown": 1})
 	expectCounts(t, "tenants by configuration source", delta(after.Tenants.ByConfigurationSource, before.Tenants.ByConfigurationSource),
-		counts{"deployment_default": 3, "tenant_chalk_managed": 1, "tenant_managed": 1, "disabled": 1, "invalid": 1})
-	expectCounts(t, "tenants by space selection", delta(after.Tenants.BySpaceSelection, before.Tenants.BySpaceSelection), counts{"has_cloudflare_space": 4, "no_cloudflare_space": 3})
+		counts{"deployment_default": 4, "tenant_chalk_managed": 1, "tenant_managed": 1, "disabled": 1, "invalid": 3})
+	expectCounts(t, "tenants by space selection", delta(after.Tenants.BySpaceSelection, before.Tenants.BySpaceSelection), counts{"has_cloudflare_space": 6, "no_cloudflare_space": 4})
 	expectCounts(t, "spaces by selection", delta(after.Spaces.BySelection, before.Spaces.BySelection),
-		counts{"space_chalk_sfu": 5, "space_cf_sfu": 3, "tenant_default_cf_sfu": 1, "space_unknown": 1})
+		counts{"space_chalk_sfu": 7, "space_cf_sfu": 4, "tenant_default_cf_sfu": 1, "space_unknown": 1})
 	expectCounts(t, "spaces by new Episode provider", delta(after.Spaces.ByNewEpisodeProvider, before.Spaces.ByNewEpisodeProvider),
-		counts{"chalk_sfu": 1, "cf_sfu": 3, "cf_sfu_by_allowlist": 1, "none": 2, "unresolvable": 3})
+		counts{"chalk_sfu": 1, "cf_sfu": 3, "cf_sfu_by_allowlist": 2, "none": 2, "unresolvable": 5})
 	expectCounts(t, "spaces by configuration source", delta(after.Spaces.ByConfigurationSource, before.Spaces.ByConfigurationSource),
-		counts{"deployment_default": 3, "tenant_chalk_managed": 2, "tenant_managed": 2, "disabled": 2, "invalid": 1})
-	expectCounts(t, "Cloudflare Spaces by configuration source", delta(after.Spaces.CloudflareSelectedByConfigSource, before.Spaces.CloudflareSelectedByConfigSource),
-		counts{"deployment_default": 1, "tenant_chalk_managed": 1, "tenant_managed": 1, "disabled": 1})
+		counts{"deployment_default": 4, "tenant_chalk_managed": 2, "tenant_managed": 2, "disabled": 2, "invalid": 3})
+	expectCounts(t, "Cloudflare Spaces (selected or pinned) by configuration source", delta(after.Spaces.CloudflareByConfigSource, before.Spaces.CloudflareByConfigSource),
+		counts{"deployment_default": 2, "tenant_chalk_managed": 2, "tenant_managed": 1, "disabled": 1, "invalid": 1})
 	if got := after.Spaces.Archived - before.Spaces.Archived; got != 1 {
 		t.Errorf("archived Spaces delta = %d, want 1", got)
 	}
@@ -235,7 +262,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	expectCounts(t, "Episodes created in 24h", delta(after.Episodes.CreatedLast24hByBoundProvider, before.Episodes.CreatedLast24hByBoundProvider),
 		counts{"chalk_sfu": 1, "cf_sfu": 2, "legacy_cf_sfu": 1, "none": 1, "other": 1})
 	expectCounts(t, "Recordings", delta(after.Dependencies.RecordingsByBoundProvider, before.Dependencies.RecordingsByBoundProvider),
-		counts{"cf_sfu": 1, "chalk_sfu": 1, "legacy_cf_sfu": 1})
+		counts{"cf_sfu": 2, "chalk_sfu": 1, "legacy_cf_sfu": 1})
 	expectCounts(t, "recording pipelines in flight", delta(after.Dependencies.RecordingPipelinesInFlightByProvider, before.Dependencies.RecordingPipelinesInFlightByProvider), counts{"cf_sfu": 1})
 	expectCounts(t, "Transcriptions in flight", delta(after.Dependencies.TranscriptionsInFlightByProvider, before.Dependencies.TranscriptionsInFlightByProvider), counts{"cf_sfu": 1})
 }
