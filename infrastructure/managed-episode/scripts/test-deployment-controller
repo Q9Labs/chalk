@@ -1381,6 +1381,10 @@ nightly_recording_state="${fixture_root}/nightly-recording-state"
 mkdir -p "$nightly_recording_state"
 make_request nightly-recording "${fixture_root}/nightly-recording-request.json" '[]' nightly
 make_manifest nightly-recording | jq '.images.recorder_control = .images.api' >"${fixture_root}/nightly-recording-manifest.json"
+for environment in production nightly; do
+  "${managed_root}/scripts/render-runtime" "${fixture_root}/nightly-recording-manifest.json" "${fixture_root}/${environment}-recorder-runtime" "$environment" >/dev/null
+  grep -Eq '^PodmanArgs=.*--memory=256m([[:space:]]|$)' "${fixture_root}/${environment}-recorder-runtime/quadlet/chalk-recorder-issuer.container" || fail "${environment} recorder issuer must retain the production 256 MiB cap"
+done
 run_controller "$nightly_recording_state" "${fixture_root}/nightly-recording-request.json" "${fixture_root}/nightly-recording-manifest.json" ok >/dev/null
 run_restore "$nightly_recording_state" ok >/dev/null || fail "nightly recorder reboot restore failed"
 for role in capture render; do
