@@ -28,12 +28,11 @@ type Session struct {
 	createOperation string
 	scope           protocol.Scope
 	kind            sessionKind
-	// captureReserved is the packets/s the capture's subscriptions reserve. n.mu guards it.
+	// captureReserved is the packets/s the capture's subscriptions reserve, and captureLeases are
+	// the subscriptions' leases, which a re-reserve of the Episode moves to its new hold. n.mu
+	// guards both.
 	captureReserved int
-	// captureHold is the Episode hold this capture drew packets from, and captureBorrowed how many it
-	// still owes it. n.mu guards them.
-	captureHold     *episodeHold
-	captureBorrowed int
+	captureLeases   []*captureLease
 	node            *Node
 	pc              *webrtc.PeerConnection
 
@@ -559,22 +558,22 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 	case full || len(s.pc.GetTransceivers()) >= s.transceiverLimit():
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
-	reserved := 0
+	var lease *captureLease
 	if s.kind == kindCapture {
-		reserved = s.node.captureCost(pub)
-		if s.node.reserveCapture(s, reserved) != nil {
+		var err error
+		if lease, err = s.node.reserveCapture(s, s.node.captureCost(pub)); err != nil {
 			return nil, protocol.TrackCodeLimitExceeded, "the node packet budget is reserved"
 		}
 	}
 	egress := newEgressTrack(pub, s.transport)
 	transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
 	if err != nil {
-		if reserved > 0 {
-			s.node.releaseCapture(s, reserved)
+		if lease != nil {
+			s.node.releaseCapture(s, lease)
 		}
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
 	}
-	return newSubscription(s, pub, transceiver, egress, layerRequestFor(track), reserved), "", ""
+	return newSubscription(s, pub, transceiver, egress, layerRequestFor(track), lease), "", ""
 }
 
 // layerRequestFor reads the layer policy of a pull or update. Without one the

@@ -39,11 +39,11 @@ type subscription struct {
 	track       *egressTrack
 	mid         string
 	closed      atomic.Bool
-	// owner is the session that pulled the track. reserved is what a capture owner holds for it
-	// against the node budget, 0 for a Participant; detach returns it.
-	owner    *Session
-	capture  bool
-	reserved int
+	// owner is the session that pulled the track. lease is what a capture owner holds for it
+	// against the node budget, nil for a Participant; detach returns it.
+	owner   *Session
+	capture bool
+	lease   *captureLease
 
 	// interest has a bit per layer whose packets this subscription reads: the
 	// forwarded layer and the one it waits to switch to. Readers check it
@@ -99,13 +99,13 @@ type resentPacket struct {
 	at  int64 // monotonic; 0 marks a free slot
 }
 
-func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, reserved int) *subscription {
+func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, lease *captureLease) *subscription {
 	clockRate := uint32(90000)
 	if !pub.video() {
 		clockRate = 48000
 	}
 	return &subscription{
-		owner: owner, capture: owner.kind == kindCapture, reserved: reserved, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		owner: owner, capture: owner.kind == kindCapture, lease: lease, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
 		order: serials.Add(1),
 	}
@@ -516,8 +516,8 @@ func (s *subscription) detach() bool {
 	}
 	s.interest.Store(0)
 	s.pub.removeSubscriber(s)
-	if s.reserved > 0 {
-		s.owner.node.releaseCapture(s.owner, s.reserved)
+	if s.lease != nil {
+		s.owner.node.releaseCapture(s.owner, s.lease)
 	}
 	return true
 }
