@@ -2,6 +2,8 @@ package chalksfu_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,12 +19,18 @@ import (
 // between a join's read and the join's decision.
 type pausedRead struct {
 	*recoveryStore
+	once    sync.Once
 	read    chan struct{}
 	release chan struct{}
 }
 
 func (p *pausedRead) Binding(ctx context.Context, tenant, episode utilities.ID) (*mediaplane.Binding, error) {
 	snapshot, err := p.recoveryStore.Binding(ctx, tenant, episode)
+	first := false
+	p.once.Do(func() { first = true })
+	if !first {
+		return snapshot, err
+	}
 	close(p.read)
 	select {
 	case <-p.release:
@@ -113,8 +121,8 @@ func TestAJoinWhoseBindingReadRacesTheMoveLeavesNoSessionOnTheOldNode(t *testing
 				Provider: mediaplane.ProviderChalkSFU, Scope: recoveringScope("later"), Episode: mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: scope.EpisodeID},
 				ParticipantName: "later", ExternalParticipantID: "later", ParticipantPreset: "contributor",
 			})
-			if err == nil || stateOf(t, primary).Sessions != 0 {
-				t.Fatalf("a stale join after the move: %v, old node sessions %d, want a refusal and none", err, stateOf(t, primary).Sessions)
+			if !errors.Is(err, mediaplane.ErrBindingStale) || stateOf(t, primary).Sessions != 0 {
+				t.Fatalf("a stale join after the move: %v, old node sessions %d, want the stale-binding retry error and none", err, stateOf(t, primary).Sessions)
 			}
 		})
 	}

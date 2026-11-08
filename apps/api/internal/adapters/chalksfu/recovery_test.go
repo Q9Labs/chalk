@@ -355,11 +355,13 @@ func TestAJoinIssuedBeforeARecoveryClosesItsSessionOnTheOldNode(t *testing.T) {
 	}
 	join(t, *current, recoveringScope("new-participant"))
 
-	// A resumed join on the stale adapter is refused too: its session is on the retired allocation.
+	// The move retired the old node's allocation, which closed the session the Participant joined
+	// with before it. A resume of it fails, so the client creates a new session under the
+	// current binding.
 	resumeScope := recoveringScope("resuming-participant")
 	_, err = stale.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderChalkSFU, Scope: resumeScope, Episode: mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: resumeScope.EpisodeID}, ExternalParticipantID: resumeScope.ParticipantID, ConnectionRef: oldConnection})
-	if !errors.Is(err, mediaplane.ErrBindingStale) {
-		t.Fatalf("a resumed join issued under the old binding: %v, want the stale-binding retry error", err)
+	if err == nil {
+		t.Fatal("a resumed join issued under the old binding was handed back its connection")
 	}
 
 	scope := recoveringScope("late-participant")
@@ -367,8 +369,8 @@ func TestAJoinIssuedBeforeARecoveryClosesItsSessionOnTheOldNode(t *testing.T) {
 	if !errors.Is(err, mediaplane.ErrBindingStale) || !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
 		t.Fatalf("a join issued under the old binding: %v, want the stale-binding retry error", err)
 	}
-	if old, now := stateOf(t, primary).Sessions, stateOf(t, standby).Sessions; old != 1 || now != 1 {
-		t.Fatalf("sessions on the old node %d (want only the one that joined before the move) and on the new node %d (want 1)", old, now)
+	if old, now := stateOf(t, primary).Sessions, stateOf(t, standby).Sessions; old != 0 || now != 1 {
+		t.Fatalf("sessions on the old node %d (want none: the retire closed the one that joined before the move) and on the new node %d (want 1)", old, now)
 	}
 }
 

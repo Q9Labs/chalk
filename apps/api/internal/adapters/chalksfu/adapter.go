@@ -338,7 +338,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	var created wireCreateResponse
 	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
-		return mediaplane.Join{}, err
+		return mediaplane.Join{}, a.explainStale(ctx, err)
 	}
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
 		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, input.Scope, err)
@@ -353,6 +353,20 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		participantRef = input.ParticipantName
 	}
 	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
+}
+
+// explainStale turns a node's stale-generation refusal of a create into the binding's retry error
+// when the Episode has moved: the node refuses the join because it retired the allocation the join
+// was issued under, and the caller should retry under the current binding. The same refusal for an
+// Episode that has not moved is a stale Participant generation, which stays as it is.
+func (a *Adapter) explainStale(ctx context.Context, err error) error {
+	if a.fence == nil || !errors.Is(err, errStaleGeneration) {
+		return err
+	}
+	if fenceErr := a.fence(ctx); fenceErr != nil {
+		return errors.Join(fenceErr, err)
+	}
+	return err
 }
 
 // discardStaleSession closes a session a join created and then refused, and returns the join's error. A close
