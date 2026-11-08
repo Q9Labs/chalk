@@ -2,21 +2,39 @@ import { readFile, unlink } from "node:fs/promises";
 import { command } from "./runtime.mjs";
 
 const spokenWords = "The purple lantern shines beside the quiet river. We are testing camera, screen sharing, recording, export, and transcription.";
-export async function generateVoice(directory, signal) {
-  const source = `${directory}/voice.aiff`;
-  const target = `${directory}/voice.wav`;
+// One phrase per guest, spoken in the guest's own slot of a looping three-slot cycle, so the call has no overlapping speech to transcribe.
+export const turnPhrases = ["The purple lantern shines beside the quiet river.", "Seven copper kettles are boiling on the mountain.", "A green falcon crosses the silver harbor at dawn."];
+const turnSlotSeconds = 12;
+async function synthesize(directory, signal, name, words) {
+  const target = `${directory}/${name}.wav`;
   if (process.platform === "darwin") {
-    await command("say", ["-v", "Samantha", "-r", "145", "-o", source, spokenWords], { signal });
+    const source = `${directory}/${name}.aiff`;
+    await command("say", ["-v", "Samantha", "-r", "145", "-o", source, words], { signal });
     await command("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", source, "-ar", "48000", "-ac", "1", target], { signal });
     await unlink(source);
   } else {
-    await command("espeak", ["-s", "145", "-w", target, spokenWords], { signal });
+    await command("espeak", ["-s", "145", "-w", target, words], { signal });
   }
-  return (await readFile(target)).toString("base64");
+  return target;
+}
+export async function generateVoice(directory, signal) {
+  return (await readFile(await synthesize(directory, signal, "voice", spokenWords))).toString("base64");
+}
+// One looping track per guest: the guest's phrase inside its own slot, silence in the others.
+export async function generateTurnVoices(directory, signal) {
+  const cycle = turnPhrases.length * turnSlotSeconds;
+  return Promise.all(
+    turnPhrases.map(async (words, guest) => {
+      const phrase = await synthesize(directory, signal, `turn-${guest + 1}-phrase`, words);
+      const target = `${directory}/turn-${guest + 1}.wav`;
+      await command("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", phrase, "-af", `adelay=${guest * turnSlotSeconds * 1000}:all=1,apad=whole_dur=${cycle}`, "-ar", "48000", "-ac", "1", target], { signal });
+      return (await readFile(target)).toString("base64");
+    }),
+  );
 }
 
 // Browser-side generator: animated, distinguishable camera; repeatable spoken audio.
-export function installFixture({ speech, guest, tones = false }) {
+export function installFixture({ speech, guest, tones = false, voiceGain }) {
   const NativePC = window.RTCPeerConnection;
   window.proofConnections = [];
   window.RTCPeerConnection = class extends NativePC {
@@ -45,9 +63,9 @@ export function installFixture({ speech, guest, tones = false }) {
     canvas.height = 720;
     const context = canvas.getContext("2d");
     let frame = 0;
-    const backgrounds = { before: ["#1b365d", "#613c69"], after: ["#185d45", "#69461d"] };
+    const backgrounds = { before: ["#1b365d", "#613c69", "#5d2a1b"], after: ["#185d45", "#69461d", "#5d1b45"] };
     window.proofCameraTimer = setInterval(() => {
-      context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest % 2];
+      context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest % 3];
       context.fillRect(0, 0, 1280, 720);
       context.fillStyle = "white";
       context.font = "64px sans-serif";
@@ -93,7 +111,7 @@ export function installFixture({ speech, guest, tones = false }) {
       source.buffer = buffer;
       source.loop = true;
       const gain = context.createGain();
-      gain.gain.value = guest === 0 ? 0.8 : 0.08;
+      gain.gain.value = voiceGain ?? (guest === 0 ? 0.8 : 0.08);
       const destination = context.createMediaStreamDestination();
       source.connect(gain);
       gain.connect(destination);
