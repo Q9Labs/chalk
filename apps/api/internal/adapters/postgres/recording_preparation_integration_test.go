@@ -209,8 +209,11 @@ func seedOwnSFUPlane(t *testing.T, pool *pgxpool.Pool, test ownSFUPlaneCase, ten
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		pool.Exec(context.Background(), `delete from episodes where tenant_id=$1`, tenant.Bytes())
-		pool.Exec(context.Background(), `delete from tenants where id=$1`, tenant.Bytes())
+		for _, statement := range []string{`delete from recording_preparations where tenant_id=$1`, `delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from tenants where id=$1`} {
+			if _, err := pool.Exec(context.Background(), statement, tenant.Bytes()); err != nil {
+				t.Errorf("clean up %q: %v", statement, err)
+			}
+		}
 	})
 	if _, err := pool.Exec(t.Context(), `insert into spaces (id,tenant_id,name,slug,media_plane,recording_policy) values ($1,$2,'Own SFU proof','own-sfu-proof',$3,'automatic')`, space.Bytes(), tenant.Bytes(), test.spacePlane); err != nil {
 		t.Fatal(err)
@@ -291,7 +294,11 @@ func TestExistingPreparationStopsCountingWhenTheSpaceSwitchesToTheOwnSFU(t *test
 		}
 		return row.DesiredNodes
 	}
-	counted := demand(false)
+	// Other rows may exist, so compare against the demand before the switch.
+	counted := demand(true)
+	if before := demand(false); before != counted {
+		t.Fatalf("fleet demand before the switch = %d with capture off, %d with it on", before, counted)
+	}
 	if _, err := pool.Exec(t.Context(), `update spaces set media_plane='chalk_sfu' where id=$1`, space.Bytes()); err != nil {
 		t.Fatal(err)
 	}
