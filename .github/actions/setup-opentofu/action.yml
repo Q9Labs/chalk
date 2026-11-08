@@ -4,6 +4,12 @@ description: Install the OpenTofu version pinned in .tool-versions and verify it
 runs:
   using: composite
   steps:
+    - name: Restore the pinned tool downloads
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ~/.cache/chalk-tools
+        key: chalk-tools-opentofu-${{ hashFiles('.tool-versions', '.github/actions/setup-opentofu/action.yml') }}
+
     - name: Install pinned OpenTofu
       shell: bash
       run: |
@@ -22,11 +28,28 @@ runs:
             exit 1
             ;;
         esac
+        # The GitHub archive is the primary source. OpenTofu's own package repository is the second,
+        # so a github.com release outage does not stop a deploy or its rollback.
+        case "${version}" in
+          1.12.3) deb_sha256="02de7a0fcf218141b8bce2dec6438525fba80d88c372307c86b499488a1f9981" ;;
+          *)
+            echo "No pinned package checksum for OpenTofu ${version}; add it to .github/actions/setup-opentofu/action.yml" >&2
+            exit 1
+            ;;
+        esac
         archive="tofu_${version}_linux_amd64.tar.gz"
-        base_url="https://github.com/opentofu/opentofu/releases/download/v${version}"
+        deb="tofu_${version}_amd64.deb"
         bin_dir="${RUNNER_TEMP}/tofu-bin"
         mkdir -p "${bin_dir}"
-        curl --fail --silent --show-error --location --retry 3 --retry-all-errors "${base_url}/${archive}" --output "${RUNNER_TEMP}/${archive}"
-        echo "${sha256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check
-        tar -xzf "${RUNNER_TEMP}/${archive}" -C "${bin_dir}" tofu
+        download="$(scripts/deploy/install-pinned-tool.sh \
+          "${sha256}=${archive}=https://github.com/opentofu/opentofu/releases/download/v${version}/${archive}" \
+          "${deb_sha256}=${deb}=https://packages.opentofu.org/opentofu/tofu/packages/any/any/${deb}/download")"
+        case "${download}" in
+          *.tar.gz) tar -xzf "${download}" -C "${bin_dir}" tofu ;;
+          *.deb)
+            unpacked="$(mktemp -d)"
+            dpkg-deb -x "${download}" "${unpacked}"
+            install -m 0755 "${unpacked}/usr/bin/tofu" "${bin_dir}/tofu"
+            ;;
+        esac
         echo "${bin_dir}" >> "${GITHUB_PATH}"

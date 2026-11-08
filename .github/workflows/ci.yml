@@ -782,9 +782,7 @@ jobs:
 
       - name: Install doctl for read-only snapshot validation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2
-        with:
-          no_auth: "true"
+        uses: ./.github/actions/setup-doctl
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         if: inputs.managed_environment == 'nightly'
