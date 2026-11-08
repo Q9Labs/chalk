@@ -322,6 +322,7 @@ func run() error {
 		Telemetry:       mediaPlaneTelemetry,
 		ChalkSFU:        chalkSFU,
 		Episodes:        episodeService,
+		Recovery:        postgres.NewEpisodeRecovery(pool),
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
@@ -648,7 +649,7 @@ func run() error {
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
-		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {

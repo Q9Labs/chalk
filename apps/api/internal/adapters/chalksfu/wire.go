@@ -191,3 +191,22 @@ type wireReady struct {
 		AdmissionReason string `json:"admissionReason"`
 	} `json:"host"`
 }
+
+type wireShape struct {
+	Participants          int `json:"participants"`
+	CamerasPerParticipant int `json:"camerasPerParticipant"`
+}
+
+type wireReserveRequest struct {
+	OperationID string    `json:"operationId"`
+	TenantID    string    `json:"tenantId"`
+	EpisodeID   string    `json:"episodeId"`
+	Generation  int64     `json:"generation"`
+	Shape       wireShape `json:"shape"`
+	TTLSeconds  int       `json:"ttlSeconds,omitempty"`
+}
+
+type wireReserveResponse struct {
+	NodeIncarnation string `json:"nodeIncarnation"`
+	ReservedPackets int    `json:"reservedPackets"`
+}

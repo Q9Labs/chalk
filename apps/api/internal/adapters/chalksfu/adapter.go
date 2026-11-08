@@ -58,6 +58,9 @@ type Adapter struct {
 	relay         RelaySource
 	backoff       time.Duration
 	captureReplay *captureplane.ReplayCache
+	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
+	// join the node answers for another incarnation is refused as stale.
+	incarnation string
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -329,6 +332,9 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	var created wireCreateResponse
 	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope)}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
+		return mediaplane.Join{}, err
+	}
+	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
 		return mediaplane.Join{}, err
 	}
 	participantRef := input.ExternalParticipantID

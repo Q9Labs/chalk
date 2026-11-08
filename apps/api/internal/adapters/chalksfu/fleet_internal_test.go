@@ -207,3 +207,47 @@ func TestNewFleetNeedsAPrimary(t *testing.T) {
 		t.Fatal("a pool of standbys alone was accepted")
 	}
 }
+
+func TestLostReadsOnlyTheLastProbes(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{primary("p"), primary("quiet"), standby("s")}
+	answers := map[string]*answer{"p": ready(testPrimaryBudget, 0), "quiet": {budget: testPrimaryBudget, stale: true}, "s": {budget: testStandbyBudget, draining: true}}
+	cases := []struct {
+		name       string
+		allocation mediaplane.Allocation
+		want       LossReason
+	}{
+		{"a node that answers under the bound incarnation", mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}, ""},
+		{"a node that answers under another incarnation restarted", mediaplane.Allocation{Node: "p", Incarnation: "boot-old"}, LossRestarted},
+		{"a binding that never recorded an incarnation cannot see a restart", mediaplane.Allocation{Node: "p"}, ""},
+		{"a node whose last probe is past the freshness window is silent", mediaplane.Allocation{Node: "quiet", Incarnation: "boot-quiet"}, LossSilent},
+		{"a node with no probe record is silent", mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}, LossSilent},
+		{"a draining node still answers, so it is not lost", mediaplane.Allocation{Node: "s", Incarnation: "boot-s"}, ""},
+	}
+	fleet := poolOf(testStandbyBudget, nodes, answers)
+	for _, c := range cases {
+		got, lost := fleet.Lost(c.allocation)
+		if got != c.want || lost != (c.want != "") {
+			t.Errorf("%s: got %q, %v", c.name, got, lost)
+		}
+	}
+	// Before the first probe nothing is known, so nothing is lost.
+	fleet.probed = false
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}); lost {
+		t.Errorf("before the first probe: lost as %q", got)
+	}
+}
+
+func TestRecoveryCandidatesFollowPlacementOrderAndSkipNodesThatCannotTakeAnEpisode(t *testing.T) {
+	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), primary("full"), primary("down"), primary("drain"), primary("ok")}
+	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{
+		"s": ready(testStandbyBudget, 0), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
+		"drain": {budget: testPrimaryBudget, draining: true}, "ok": ready(testPrimaryBudget, 0),
+	})
+	var got []string
+	for _, c := range fleet.recoveryCandidates() {
+		got = append(got, c.adapter.node)
+	}
+	if want := []string{"ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("candidates %v, want %v: primaries first, then the standby", got, want)
+	}
+}

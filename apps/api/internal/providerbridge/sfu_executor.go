@@ -60,6 +60,15 @@ type SFUExecutor struct {
 	episodes     EpisodeProviders
 	chalk        ChalkNodes
 	closeBudget  time.Duration
+	// retired ends an Episode on the allocations it moved away from.
+	retired func(ctx context.Context, tenantID, episodeID utilities.ID) error
+}
+
+// WithRetiredAllocations makes the end of an Episode also clean up the allocations that
+// whole-Episode recovery left, which the Episode's current binding no longer names.
+func (e SFUExecutor) WithRetiredAllocations(retired func(ctx context.Context, tenantID, episodeID utilities.ID) error) SFUExecutor {
+	e.retired = retired
+	return e
 }
 
 // WithChalkSFU makes grants and cleanup follow the Episode's binding. Without it
@@ -134,6 +143,11 @@ func (e SFUExecutor) execute(ctx context.Context, input provideroperations.Opera
 		ended := mediaplane.EndEpisodeInput{Provider: provider, TenantID: input.TenantID.String(), EpisodeRef: input.EpisodeID.String()}
 		if err := chalk.EndEpisode(ctx, ended); err != nil {
 			return providerExecutionFailure(err)
+		}
+		if e.retired != nil {
+			if err := e.retired(ctx, input.TenantID, input.EpisodeID); err != nil {
+				return providerExecutionFailure(err)
+			}
 		}
 	}
 	if chalk != nil && input.Effect != provideroperations.EffectEndEpisode && input.ControlRevision > 0 {
