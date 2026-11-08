@@ -224,15 +224,15 @@ fixed. Search the log for the Episode id to find the affected class. Any value
 above zero over a few minutes means clients on UDP-blocked networks cannot
 connect media.
 
-A live own-SFU Episode whose node goes silent past the probe freshness window, or answers
+A live own-SFU Episode whose node goes silent (no probe answer for the probe freshness window, so one missed probe does not count), or answers
 with another `NodeIncarnation` than its binding recorded, moves through one
 generation-fenced binding change (see the SFU milestones, M11). Each attempt adds one
 to the API metric `chalk.sfu.episode_recoveries`, whose only attributes are
 `chalk.sfu.recovery.reason` (`node_silent`, `node_restarted`) and
 `chalk.sfu.recovery.outcome`: `moved`, `lost_race` (another API replica committed
 the move first and this one followed it), `refused_no_node` (no node was fit to ask),
-`refused_no_room` (every node asked refused the reserve) and `refused_unreachable`
-(no node answered). It carries no Episode id. The logs name the Episode: `chalk_sfu.recovered`
+`refused_no_room` (every node asked answered and refused the reserve) and `refused_unreachable`
+(at least one node asked could not be reached or failed, and none accepted). It carries no Episode id. The logs name the Episode: `chalk_sfu.recovered`
 (from and to node, generation), `chalk_sfu.recovery_refused` (callers then get 503
 `media.unavailable` and retry; the binding did not change) and `chalk_sfu.recovery` at warning
 level for each node that could not reserve. A sustained `refused_*` rate means live calls cannot

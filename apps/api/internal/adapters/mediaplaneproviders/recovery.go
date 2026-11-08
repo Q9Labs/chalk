@@ -50,6 +50,7 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 	current, err := r.recovery.MoveBinding(ctx, tenantID, episodeID, binding.Generation, next)
 	switch {
 	case err == nil:
+		r.chalk.ChargeRecovered(placement.Node)
 		chalksfu.RecordMoved(ctx, reason)
 		slog.InfoContext(ctx, "chalk sfu episode recovered", "event", "chalk_sfu.recovered", "episode_id", episodeID.String(),
 			"from_node", binding.Node, "to_node", current.Node, "reason", string(reason), "generation", current.Generation)

@@ -28,7 +28,7 @@ func ready(budget, reserved int) *answer { return &answer{budget: budget, reserv
 // poolOf builds a Fleet whose last probes are the given answers, in configuration order.
 // Place reads only those records, so no node is dialled.
 func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[string]*answer) *Fleet {
-	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, inflight: map[string][]time.Time{}, probed: true}
+	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, seen: map[string]sighting{}, inflight: map[string][]time.Time{}, probed: true, firstRound: time.Now().Add(-2 * probeFreshness)}
 	for _, node := range nodes {
 		fleet.nodes = append(fleet.nodes, &Adapter{node: node.ID})
 		if node.Role == runtimeconfig.ChalkSFURoleStandby {
@@ -46,6 +46,7 @@ func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[s
 			at = at.Add(-2 * probeFreshness)
 		}
 		fleet.loads[id] = fleet.loadOf(id, reply, at)
+		fleet.seen[id] = sighting{at: at, incarnation: reply.NodeIncarnation}
 	}
 	return fleet
 }
@@ -220,7 +221,7 @@ func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 		{"a node that answers under another incarnation restarted", mediaplane.Allocation{Node: "p", Incarnation: "boot-old"}, LossRestarted},
 		{"a binding that never recorded an incarnation cannot see a restart", mediaplane.Allocation{Node: "p"}, ""},
 		{"a node whose last probe is past the freshness window is silent", mediaplane.Allocation{Node: "quiet", Incarnation: "boot-quiet"}, LossSilent},
-		{"a node with no probe record is silent", mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}, LossSilent},
+		{"a node that never answered is silent once the first round is old", mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}, LossSilent},
 		{"a draining node still answers, so it is not lost", mediaplane.Allocation{Node: "s", Incarnation: "boot-s"}, ""},
 	}
 	fleet := poolOf(testStandbyBudget, nodes, answers)
@@ -229,6 +230,17 @@ func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 		if got != c.want || lost != (c.want != "") {
 			t.Errorf("%s: got %q, %v", c.name, got, lost)
 		}
+	}
+	// One failed probe deletes the node's load record but not its last answer, so a node that
+	// answered a moment ago is not lost yet.
+	delete(fleet.loads, "p")
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}); lost {
+		t.Errorf("after one failed probe: lost as %q", got)
+	}
+	// A node that never answered is not silent while the first round is still young.
+	fleet.firstRound = time.Now()
+	if got, lost := fleet.Lost(mediaplane.Allocation{Node: "gone", Incarnation: "boot-gone"}); lost {
+		t.Errorf("a node the first round just failed to reach: lost as %q", got)
 	}
 	// Before the first probe nothing is known, so nothing is lost.
 	fleet.probed = false
