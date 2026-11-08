@@ -51,7 +51,7 @@ Goals:
   (primary first; standby only when the primary is unhealthy, draining or full),
   proved on short-lived bench Droplets; production has no standby, so a drain or a
   lost node ends in Cloudflare overflow until M13 and an explicit capacity result
-  afterwards. Create staging and bench nodes only for test runs.
+  afterwards. Keep staging; create bench nodes only for test runs and delete them.
 - A configurable maximum of **16 active Participants per own-SFU Episode by
   default**, not a fixed eight-person cap. Packet, memory and live-health budgets
   decide actual admission. A configured maximum is not a capacity promise.

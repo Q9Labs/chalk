@@ -467,7 +467,10 @@ an overflow switch, whole-Episode recovery, and every proof below.
    runs at a configured degraded budget (initially 16,000) with M5 holding
    camera layers on `l` and protecting audio and screen. Single-encoding video
    that cannot be lowered is paused or refused. A standby drains only while a
-   primary is healthy with room.
+   primary is healthy with room. `Fleet.Place` also counts the Episodes it has
+   placed on a node since that node's last probe against the node's remaining
+   new-Episode room, so concurrent creations cannot all pin to the last slot;
+   the SFU's own atomic admission stays the final authority.
 4. **Whole-Episode recovery.** When a bound node is lost or returns with a new
    boot incarnation, the Episode moves through one durable, generation-fenced
    transition: the SFU reserves the Episode's complete admitted shape atomically
@@ -502,8 +505,10 @@ an overflow switch, whole-Episode recovery, and every proof below.
   node, expire leases, crash during replacement, and saturate the standby. Admitted
   whole calls recover rendered media within M7's bound with no consent or
   privacy failure, double reservation or stale publication; excess demand gets the
-  explicit outcome. Six realistic three-person Episodes fit the standby, a seventh
-  is refused, and the rare ten-person call is held low or paused under its
+  explicit outcome. The standby admits exactly what its 16,000 budget allows at the
+  current reservation costs (two three-person, two-camera Episodes; three with one
+  camera each), and the next is refused. Six realistic classes fit only after a
+  reviewed degraded reservation profile lowers their reservation, and the rare ten-person call is held low or paused under its
   ceiling. Capture runs separately and asserts its reduced envelope.
 - Each run repeats with overflow off to prove post-M13 behavior.
 
@@ -528,7 +533,7 @@ standby role "production failover" would be false while production has one node.
 
 ## M12 — Full cutover, cohort sunset and monitoring parity
 
-**Dependencies:** rollout requires M1–M8, M10 and M11 packages 1–4 and 6. The
+**Dependencies:** rollout requires M1–M8, M10 and M11 packages 1–6, with package 5's fault proofs passing. The
 inventory, SDK version policy, monitoring and dashboards start now and run in
 parallel. M9 is optional. Production deploys and the flag flips belong to the SFU
 lead.
