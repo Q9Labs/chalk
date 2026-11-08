@@ -178,7 +178,7 @@ class GitHub:
 
     def reserve_cut(self, sha):
         self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-attempt', 'auto_merge': False,
-                     'required_contexts': [], 'payload': {'channel': 'nightly-attempt'}})
+                     'required_contexts': [], 'payload': {'channel': 'nightly-attempt', 'run_id': os.environ.get('GITHUB_RUN_ID', '')}})
 
     def latest_gate(self, sha, *, push_only=False):
         # A merge queue group runs the Gate on a temporary gh-readonly-queue branch and then fast-forwards master to that

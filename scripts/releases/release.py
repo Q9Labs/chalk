@@ -140,6 +140,15 @@ def defer_cut(github, target, reason, *, manual):
     outputs(dict(should_cut=False, target_sha=target))
 
 
+def write_no_cut_summary(records, reason, target):
+    # A skipped plan leaves every later job skipped and the run green, so the run page must say why.
+    attempts = [item for item in records if payload(item).get('channel') == 'nightly-attempt']
+    last = max(attempts, key=lambda item: item['created_at'], default=None)
+    when = last and (f"run {payload(last)['run_id']}" if payload(last).get('run_id') else last['created_at'])
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f"No cut: {reason}, target {target}, last attempt {when or 'none'}\n")
+
+
 def plan(github, args):
     tip = github.request('git/ref/heads/master')['object']['sha']
     if tip != env('GITHUB_SHA'):
@@ -156,6 +165,8 @@ def plan(github, args):
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
+    if not cut:
+        write_no_cut_summary(records, reason, target)
     if args.manual:
         require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
                 f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')

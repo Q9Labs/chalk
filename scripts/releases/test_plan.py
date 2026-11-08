@@ -38,10 +38,13 @@ class ReleasePlan(unittest.TestCase):
 
     def cut(self, api, hour, *, manual=False, workflow_sha=None):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ,
-                GITHUB_OUTPUT=str(Path(directory) / 'output'), GITHUB_SHA=workflow_sha or api.tip), \
+                GITHUB_OUTPUT=str(Path(directory) / 'output'), GITHUB_SHA=workflow_sha or api.tip,
+                GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary')), \
                 patch.object(release, 'datetime') as clock:
             clock.now.return_value = datetime(2026, 10, 17, hour, tzinfo=timezone.utc)
             release.plan(api, SimpleNamespace(manual=manual))
+            summary = Path(directory) / 'summary'
+            self.summary = summary.read_text() if summary.exists() else ''
             return dict(line.split('=', 1) for line in (Path(directory) / 'output').read_text().splitlines())
 
     def test_nightly_child_release_applies_the_gate_rule_its_plan_used(self):
@@ -144,6 +147,7 @@ class ReleasePlan(unittest.TestCase):
         previous['payload']['recorder_control'] = True
         api.items.append(previous)
         self.assertEqual(self.cut(api, 3)['should_cut'], 'false')
+        self.assertIn(f'No cut: cut attempted in the last 6 hours, target {api.tip}', self.summary)
         api.created_at = '2026-10-17T08:00:00Z'
         result = self.cut(api, 8)
         self.assertEqual(result['should_cut'], 'true')
