@@ -23,8 +23,6 @@ import (
 
 const videoClockRate uint64 = 90_000
 
-const vp8ReplayWindow = 1_024
-
 type videoSegment struct {
 	path       string
 	startTicks uint64
