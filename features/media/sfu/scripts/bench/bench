@@ -231,7 +231,7 @@ down() {
     sleep 5
   done
   echo "==> doctl compute droplet list --tag-name ${tag}"
-  doctl compute droplet list --tag-name "$tag" --format ID,Name,Region,Memory,VCPUs,Created
+  doctl compute droplet list --tag-name "$tag" --format ID,Name,Region,Memory,VCPUs,Status
   [[ "$remaining" == 0 ]] || die "FAILED: ${remaining} paid Droplet(s) tagged ${tag} remain"
   rm -rf "$dir"
   local others

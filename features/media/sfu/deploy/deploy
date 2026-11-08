@@ -27,9 +27,9 @@ case "$mode" in
   *) echo "$usage" >&2; exit 2 ;;
 esac
 case "$environment" in
-  staging) spiffe_environment=nightly ;;
-  production) spiffe_environment=production ;;
-  bench) spiffe_environment=bench ;;
+  staging) spiffe_environment=nightly sfu_environment=staging ;;
+  production) spiffe_environment=production sfu_environment=production ;;
+  bench) spiffe_environment=bench sfu_environment=staging ;; # the SFU knows local, staging and production
   *) echo "$usage" >&2; exit 2 ;;
 esac
 
@@ -177,7 +177,7 @@ else
 fi
 sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
   -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__STEAL_LIMIT__|${steal_limit}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
-  -e "s|__ENVIRONMENT__|${environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
+  -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
   "${deploy_dir}/sfu.env.in" |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
 sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" \
