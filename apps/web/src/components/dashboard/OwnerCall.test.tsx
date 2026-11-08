@@ -83,25 +83,13 @@ it("starts the new call from the time-limit screen in the language chosen for ne
   window.localStorage.setItem("chalk.transcript-language.new-call", "ur");
   const platform = terminalTestPlatform();
   mocks.dashboardAction.mockImplementation(async (_page, input) => (input.action === "create-call" ? { call: { id: "space-2" } } : { access: opaqueAccessGrant(1) }));
-  mocks.createClient.mockImplementation((options) =>
-    createSpaceClientForPlatform(options, {
-      ...platform,
-      dependencies: {
-        ...platform.dependencies,
-        createSyncClient: () => ({
-          ...platform.sync,
-          stop: platform.syncStopped,
-          start: async () => {
-            platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", endReason: "maximum_duration", participants: [] }, connection: { phase: "terminal", terminalReason: "episode_ended" } });
-          },
-        }),
-      },
-    }),
-  );
+  let client: ReturnType<typeof createSpaceClientForPlatform> | undefined;
+  mocks.createClient.mockImplementation((options) => (client = createSpaceClientForPlatform(options, platform)));
   try {
     await act(async () => render(<OwnerCall spaceId="space-1" />));
-    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Start a new call" })).toBeDefined()));
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Start a new call" })));
+    await act(async () => vi.waitFor(() => expect(client?.getSnapshot().connection.status).toBe("live")));
+    await act(async () => platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", endReason: "maximum_duration", participants: [] } }));
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "Start a new call" })));
     expect(mocks.dashboardAction).toHaveBeenCalledWith("home", expect.objectContaining({ action: "create-call", transcriptLanguage: "ur" }));
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/dashboard/call/$spaceId/join", params: { spaceId: "space-2" } });
   } finally {
