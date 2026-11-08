@@ -25,6 +25,10 @@ on:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
         default: false
+      latency_only:
+        description: Skip real-call proofs and run only the nightly chalk_sfu latency scorecard
+        type: boolean
+        default: false
       release_sha:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
@@ -53,6 +57,10 @@ on:
         default: cf_sfu
       latency:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
+        type: boolean
+        default: false
+      latency_only:
+        description: Skip real-call proofs and run only the nightly chalk_sfu latency scorecard
         type: boolean
         default: false
       release_sha:
@@ -116,6 +124,17 @@ jobs:
           if [[ -n "$RELEASE_SHA" ]]; then
             [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           fi
+      - name: Validate latency-only dispatch
+        if: ${{ inputs.latency_only }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          MEDIA_PLANE: ${{ inputs.media_plane }}
+          LATENCY: ${{ inputs.latency }}
+        run: |
+          [[ "$ENVIRONMENT" == nightly && "$MEDIA_PLANE" == chalk_sfu && "$LATENCY" == true ]] || {
+            echo "Latency-only mode requires nightly, chalk_sfu, and latency=true." >&2
+            exit 1
+          }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
@@ -167,6 +186,7 @@ jobs:
           sudo mount --bind /dev/shm/chalk-proof-private .private
           echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
+        if: ${{ !cancelled() && !inputs.latency_only }}
         timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 40 }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -218,7 +238,7 @@ jobs:
             echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
           done
       - name: Measure action latency
-        if: ${{ !cancelled() && inputs.latency }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || (inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu')) }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
         timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 70 || 25 }}
         env:
@@ -255,7 +275,7 @@ jobs:
           echo "$run_id" >> .private/proof-run-ids
           CHALK_PROOF_RUN_ID="$run_id" pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04
       - name: Collect the latency scorecard
-        if: ${{ !cancelled() && inputs.latency }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || (inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu')) }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}

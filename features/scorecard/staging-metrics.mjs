@@ -4,6 +4,8 @@ import { datasets } from "./staging-logs.mjs";
 const instruments = { stealPercent: "chalk.sfu.host.cpu.steal", draining: "chalk.sfu.draining", sessions: "chalk.sfu.sessions" };
 // MPL publishes no point limit. Apply the log collector's conservative cap to both axes.
 const limit = 1000;
+const maxAttempts = 3;
+const retryBaseMs = 250;
 
 export async function readNodeMetrics(startTime, endTime, { env = process.env, fetchImpl = fetch, refreshSessions = false } = {}) {
   const { metrics, metricsBaseUrl } = datasets(env);
@@ -17,12 +19,22 @@ export async function readNodeMetrics(startTime, endTime, { env = process.env, f
   for (const { field, metric, endTime: queryEnd } of queries) {
     const end = queryEnd ?? new Date(Date.now()).toISOString();
     const start = queryEnd ? startTime : new Date(Date.parse(end) - 30_000).toISOString();
-    const response = await fetchImpl(url.href, {
-      method: "POST",
-      headers: { authorization: `Bearer ${env.CHALK_AXIOM_METRICS_QUERY_TOKEN}`, "content-type": "application/json", accept: "application/vnd.metrics.v2+json" },
-      body: JSON.stringify({ startTime: start, endTime: end, mpl: `\`${metrics}\`:\`${metric}\` | where \`service.name\` == "chalk-sfu" and \`deployment.environment.name\` == "staging" | align using max` }),
-      signal: AbortSignal.timeout(30_000),
-    });
+    let response;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      response = await fetchImpl(url.href, {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.CHALK_AXIOM_METRICS_QUERY_TOKEN}`, "content-type": "application/json", accept: "application/vnd.metrics.v2+json" },
+        body: JSON.stringify({ startTime: start, endTime: end, mpl: `\`${metrics}\`:\`${metric}\` | where \`service.name\` == "chalk-sfu" and \`deployment.environment.name\` == "staging" | align using max` }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (response.status === 200) break;
+      const statusClass = Number.isInteger(response.status) ? `${Math.trunc(response.status / 100)}xx` : "unknown";
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      const willRetry = retryable && attempt < maxAttempts;
+      console.warn(`Axiom staging metrics query returned HTTP ${statusClass}${willRetry ? `; retry ${attempt + 1}/${maxAttempts}` : "; stopping"}.`);
+      if (!willRetry) throw new Error("staging_metrics_query_failed");
+      await new Promise((resolve) => setTimeout(resolve, retryBaseMs * 2 ** (attempt - 1)));
+    }
     if (response.status !== 200) throw new Error("staging_metrics_query_failed");
     for (const [name, value] of response.headers ?? []) {
       if ((name.toLowerCase() === "link" && /\brel\s*=\s*"?next\b/i.test(value)) || (/continuation|truncat|partial|next.?page/i.test(name) && !["", "0", "false"].includes(value.toLowerCase()))) throw new Error("staging_metrics_query_incomplete");

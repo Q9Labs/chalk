@@ -86,7 +86,8 @@ async function measure() {
       }
     }
     const boundary = before.end;
-    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
+    const nodeBeforeResult = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
+    const nodeBefore = nodeBeforeResult ?? [];
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);
@@ -107,7 +108,9 @@ async function measure() {
     // Include joins while the preflight queries ran, not just events after the kit began.
     const window = await logs(before.end, end);
     const after = await logs(end, Date.now());
-    const [nodeWindow, nodeAfter] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
+    const [nodeWindowResult, nodeAfterResult] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
+    const nodeWindow = nodeWindowResult ?? [];
+    const nodeAfter = nodeAfterResult ?? [];
     const card = await json(resolve(directory, "scorecard-chalk_sfu.json"), await emptyCard());
     let ownEpisodes = [];
     try {
@@ -119,9 +122,10 @@ async function measure() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    card.contention = contention({ lease: await json(leaseFile), before: before.events, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter });
+    const metricsUnavailable = nodeBeforeResult === null || nodeWindowResult === null || nodeAfterResult === null || nodeBefore.length === 0 || nodeWindow.length === 0 || nodeAfter.length === 0;
+    card.contention = contention({ lease: await json(leaseFile), before: before.events, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter, unobservable: metricsUnavailable });
     // A skipped attempt or missing boundary readout cannot be accepted as an isolated run.
-    if (!before.events || before.events.length > 0 || !after || card.metrics.length === 0) card.contention.contended = true;
+    if (!before.events || before.events.length > 0 || !after || (card.metrics.length === 0 && !card.contention.unobservable)) card.contention.contended = true;
     await save(card);
     await writeFile(resolve(evidence, `attempt-${attempt}.json`), JSON.stringify(card));
     if (!card.contention.contended) return status;

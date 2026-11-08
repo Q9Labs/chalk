@@ -4,7 +4,7 @@ export const signal = (value, source) => ({ value, source });
 const absent = () => signal(UNAVAILABLE, UNAVAILABLE);
 
 // Boundary sessions are foreign; sessions during measurement include the job's own.
-export function contention({ lease, before, after, window, ownEpisodes = [], nodeBefore = [], nodeAfter = [], nodeWindow = [] }) {
+export function contention({ lease, before, after, window, ownEpisodes = [], nodeBefore = [], nodeAfter = [], nodeWindow = [], unobservable = false }) {
   const own = new Set(ownEpisodes);
   const foreign = window?.concat(before ?? [], after ?? []).filter((row) => row.episode_id && !own.has(row.episode_id));
   const episodes = foreign ? new Set(foreign.map((row) => row.episode_id)).size : UNAVAILABLE;
@@ -19,8 +19,10 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
   const nodeForeign = nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
   const nodeSessions = Math.max(0, ...nodeReadouts.map((row) => row.sessions));
   const zeroEvents = window ? window.length === 0 : UNAVAILABLE;
-  return {
-    contended: !lease?.acquired || !!lease?.lost || !before || !after || episodes === UNAVAILABLE || episodes > 0 || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown || nodeForeign || changes > 0 || readings.some((row) => row.draining),
+  const observedContention = !lease?.acquired || !!lease?.lost || episodes > 0 || nodeForeign || changes > 0 || readings.some((row) => row.draining);
+  const missingEvidence = !before || !after || episodes === UNAVAILABLE || !window?.some((row) => row.episode_id && own.has(row.episode_id)) || !stealKnown || !drainKnown;
+  const result = {
+    contended: observedContention || (!unobservable && missingEvidence),
     source: "axiom_api_logs_and_metrics_and_github_lease",
     lease_holder_before: lease?.previous ? signal(lease.previous.holder, "github_lease") : absent(),
     lease_acquired_at_before: lease?.previous ? signal(lease.previous.acquired_at, "github_lease") : absent(),
@@ -43,11 +45,20 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
         )
       : absent(),
   };
+  if (unobservable) result.unobservable = true;
+  return result;
 }
 
 export function contentionMarkdown(value) {
   if (!value) return "";
-  const lines = [value.contended ? "**⚠️ CONTENDED — diagnostic only; excluded from regression baselines and trends.**" : "Lease held; no foreign Episodes observed in the API-log window."];
+  const headline = value.unobservable
+    ? value.contended
+      ? "**⚠️ UNOBSERVABLE AND CONTENDED — isolation could not be established; excluded from regression baselines and trends.**"
+      : "**⚠️ UNOBSERVABLE — isolation could not be established; no load is accepted.**"
+    : value.contended
+      ? "**⚠️ CONTENDED — diagnostic only; excluded from regression baselines and trends.**"
+      : "Lease held; no foreign Episodes observed in the API-log window.";
+  const lines = [headline];
   lines.push(`Source: \`${value.source}\`. Foreign Episodes: ${value.foreign_episodes_seen.value}; foreign sessions: ${value.foreign_sessions_seen.value}.`);
   lines.push(`Previous lease holder: \`${value.lease_holder_before.value}\` (${value.lease_acquired_at_before.value} to ${value.lease_expires_at_before.value}).`);
   lines.push(`Node steal max: ${value.steal_max.value}; incarnation changes: ${value.incarnation_changes.value}; drain: ${value.drain.value}.`);
