@@ -25,6 +25,32 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - `POST /v1/sessions/{id}/remove` ends one session. `POST /v1/episodes/end` closes every session of a Tenant's Episode and reports the count.
   - **Admission** reserves, per Episode with `n` live Participants (at least 2), `m` cameras each, microphone cost `a` and screen cost `s`: `n·(m·u + a) + n·(n-1)·(m·d + a) + n·(s + a)` packets/s. `u` is a camera's uplink (`SFU_CAMERA_UPLINK_COST`, every simulcast layer, because publishers keep sending all of them) and `d` its downlink to one subscriber (`SFU_VIDEO_STREAM_COST`, one layer). The defaults come from the SDK's camera encodings: `h` at 2.5 Mbit/s and `l` at 650 kbit/s, 30 frames/s, a frame needing `ceil(bytes/1150)` packets. That is 300 for `h` and 90 for `l`, so `d` is 300 and `u` is 390, which matches what real SDK cameras sent on a deployed node. `SFU_CAMERAS_PER_PARTICIPANT` (2 by default) is `m`: a push of one more camera gets the track error `limit_exceeded`. At the defaults a 3-person class with 2 cameras each reserves 7170 packets/s, so a 16000 budget holds two such classes and refuses the third class's first join with 429 `capacity_exceeded`; a 4-person class already reaches the 11520 Episode ceiling. A create that would push the node past `SFU_PACKET_BUDGET` is refused the same way, and the node logs a `refused` line naming the reason. `SFU_MAX_EPISODE_PARTICIPANTS` is a separate safety cap, 16 by default. A reconnect replaces its own session and is not counted twice. `/readyz` reports the budget and the reserved packets.
   - **One screen share** per Episode. A second screen publication gets the per-track error `screen_share_active`.
+- **Capture sessions** (M10) give the recorder a receive-only connection to an Episode the node hosts.
+  - `POST /v1/sessions` with `"kind":"capture"` creates one. `scope.participantId` names the capture and
+    `scope.generation` is its capture epoch: a newer epoch replaces the older session and an older epoch is
+    refused, as for a Participant. A capture never shares a name or a fence with a Participant. The Episode
+    must have a live Participant session on the node, else the create reads as `session_gone`. A capture only
+    pulls; a push gets 501 `unsupported_operation`.
+  - A capture is not a Participant. It takes no slot against `SFU_MAX_EPISODE_PARTICIPANTS`, adds nothing to
+    the Episode's reservation, and reserves packets/s of its own against the node budget for each track it
+    pulls: `SFU_VIDEO_STREAM_COST` for a camera, `SFU_SCREEN_STREAM_COST` for a screen share's video and
+    `SFU_AUDIO_STREAM_COST` for audio, the cost of the same track for a Participant at its top layer. A pull
+    that would pass `SFU_PACKET_BUDGET` fails that track with `limit_exceeded` and counts a `node_full`
+    refusal, and a closed track or closed capture returns its reservation. A Participant join sees the
+    capture's reservation. An Episode holds at most `SFU_MAX_CAPTURES_PER_EPISODE`
+    captures (refusal reason `capture_limit`), and one capture pulls up to `SFU_MAX_CAPTURE_SUBSCRIPTIONS`
+    tracks.
+  - The Episode's plan, packet ceiling, probes and congestion pauses serve the call, so they leave the capture
+    out: its subscriptions start on the layer they asked for, with no startup cap, and keep it, and its packets do not make the plan lower a
+    Participant's camera. Its packets count in the node's totals.
+  - Forwarding follows the source lease, not the subscriber, so a revoke or lapse stops the capture's copy with
+    everyone's. `POST /v1/episodes/end` and `/remove` close captures like any session. A capture that never
+    connects closes after `SFU_CONNECT_TIMEOUT`, and one whose peer connection fails closes at once.
+  - Compatibility: the kind is an additive field, absent for a Participant, so an API that predates it is
+    unchanged. The node decodes strictly, so a node that predates the kind answers a capture create with 400
+    `invalid_request` and creates nothing. `GET /readyz` lists `sessionKinds: ["capture"]` on a node that
+    creates them (absent when `SFU_MAX_CAPTURES_PER_EPISODE=0`), which a caller checks before it places a
+    capture. The protocol stays `v1`.
 - **Source control** (M3) decides which sources may forward. A source forwards only under a live grant, which the API sends when Sync authorizes the source and renews from durable authorization.
   - `POST /v1/episodes/sources` grants or revokes Participants' sources in one Tenant's Episode, 1 to 64 controls per request. Each control carries the Episode's durable control revision. The node applies a control only at or above the source's recorded revision, and a revoke wins a tie, so a duplicate, delayed or stale control never undoes a newer one. Each result says whether the control applied, the recorded revision, the lease left and the publications a revoke closed.
   - A revoke stops forwarding before it returns, and closes the source's publications admitted before it on every session of the Participant; their MIDs are retired. Controls outlive sessions, so a revoke also fences a later publication of a source that had none.
@@ -73,8 +99,10 @@ go run ./cmd/sfu
 | `SFU_MAX_SESSIONS`                      | `64`            | 1 to 1024.                                                            |
 | `SFU_MAX_PUBLISHED_PER_SESSION`         | `8`             | 1 to 32.                                                              |
 | `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                                             |
+| `SFU_MAX_CAPTURES_PER_EPISODE`          | `2`             | 0 to 8. 0 turns capture sessions off.                                 |
+| `SFU_MAX_CAPTURE_SUBSCRIPTIONS`         | `64`            | 1 to 128. Tracks one capture session pulls.                           |
 | `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                                      |
-| `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; `deploy` sets `45000` on 1 vCPU and `60000` on 2.   |
+| `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; `deploy` sets `22000` on 1 vCPU and `36000` on 2.   |
 | `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.                               |
 | `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.                               |
 | `SFU_MAX_EPISODE_PARTICIPANTS`          | `16`            | 1 to 64. Live sessions allowed in one Episode.                        |
@@ -112,7 +140,7 @@ SIGUSR1 drains the node and keeps it running: `/readyz` fails, so the API places
 
 - `deploy/certs <staging|production> <ca|server|api|operator>` issues certificates from the environment's service CA. The CA key lives in 1Password; issued files go to `~/.config/chalk-sfu/<env>`, never into Git. The API's certificate keeps its key and names and adds the identity the SFU requires, `spiffe://chalkmeet.com/environment/<env>/api`, with client auth. Rotate a certificate by issuing it again and redeploying; the server certificate lasts 180 days and the API's 365.
 - Metrics export needs `~/.config/chalk-sfu/<env>/otlp-headers`, holding the `OTEL_EXPORTER_OTLP_METRICS_HEADERS` value, for example `Authorization=Bearer%20<ingest token>,X-Axiom-Dataset=<metrics dataset>`. Use an ingest-only token for the API's metrics dataset and keep it in 1Password. Deploy installs the file as the Podman secret `chalk-sfu-otlp-headers`, which reaches the container as that environment variable, and sets `SFU_OTLP_ENDPOINT` (default `https://api.axiom.co`; override it with `SFU_OTLP_ENDPOINT`). Without the file, deploy warns and the node exports nothing.
-- `deploy/deploy <staging|production> <node address> [--force|--firewall-only]` first makes the node's ufw allow exactly the control and SSH sources of its cloud firewall (`--firewall-only` stops there, with no restart), then builds the image at the current commit, loads it into the node's Podman, installs the certificates as Podman secrets, renders the settings for the node's size (`SFU_PACKET_BUDGET` 45000 on 1 vCPU and 60000 on 2, which admit 6 and 8 three-person classes at 7,170 reserved packets/s each, about 70% of the 8 and 11 to 12 classes the load runs held clean; `GOMEMLIMIT=384MiB` on 1 GiB of memory, 768 MiB on 2 GiB), drains the running node until its calls end, restarts it and checks `/readyz` through an SSH tunnel. It fails when the granted receive buffer is below 8 MiB. Running it twice converges on the same state.
+- `deploy/deploy <staging|production> <node address> [--force|--firewall-only]` first makes the node's ufw allow exactly the control and SSH sources of its cloud firewall (`--firewall-only` stops there, with no restart), then builds the image at the current commit, loads it into the node's Podman, installs the certificates as Podman secrets, renders the settings for the node's size (`SFU_PACKET_BUDGET` 22000 on 1 vCPU and 36000 on 2, which admit 3 and 5 three-person classes at 7,170 reserved packets/s each, set by the CPU steal a shared vCPU shows under load (see [capacity calibration](../../../docs/sfu/capacity-calibration.md)); `SFU_GUARD_MAX_STEAL_PERCENT` 40 on production and 25 on staging; `GOMEMLIMIT=384MiB` on 1 GiB of memory, 768 MiB on 2 GiB), drains the running node until its calls end, restarts it and checks `/readyz` through an SSH tunnel. It fails when the granted receive buffer is below 8 MiB. Running it twice converges on the same state.
 
 ## Tests
 

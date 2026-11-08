@@ -405,7 +405,7 @@ The export matches `inspect` and carries no identities.
   `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
   `cpu_steal`, `cpu_busy`, `scheduler_latency`, `pacer_drops`,
-  `udp_buffer_errors`, `screen_ceiling`, `cameras`).
+  `udp_buffer_errors`, `screen_ceiling`, `cameras`, `capture_limit`).
 - Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
   only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
   ceiling),

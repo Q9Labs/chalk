@@ -336,8 +336,13 @@ func randomHex(bytes int) string {
 	return hex.EncodeToString(buffer)
 }
 
-func scopeDigest(scope protocol.Scope) [sha256.Size]byte {
+// scopeDigest fingerprints a create, so a reused operation ID with another body conflicts. A
+// participant create digests as it did before session kinds, and a capture create never matches it.
+func scopeDigest(scope protocol.Scope, kind sessionKind) [sha256.Size]byte {
 	encoded, _ := json.Marshal(scope)
+	if kind == kindCapture {
+		encoded = append(encoded, "capture"...)
+	}
 	return sha256.Sum256(encoded)
 }
 
@@ -398,6 +403,15 @@ func (n *Node) SessionCount() int {
 	return len(n.sessions)
 }
 
+// SessionKinds lists the non-default session kinds the node creates, for readiness. A node with
+// captures turned off lists none, so the API places no capture on it.
+func (n *Node) SessionKinds() []string {
+	if n.cfg.MaxCapturesPerEpisode == 0 {
+		return nil
+	}
+	return []string{protocol.SessionKindCapture}
+}
+
 // Draining reports whether the node refuses new work.
 func (n *Node) Draining() bool {
 	n.mu.Lock()
@@ -408,21 +422,33 @@ func (n *Node) Draining() bool {
 // CreateSession creates the participant's session, or returns the session the
 // same operation ID already created. A newer generation fences the older session.
 func (n *Node) CreateSession(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, error) {
+	return n.create(operationID, scope, kindParticipant)
+}
+
+// CreateCaptureSession creates a receive-only capture session for a recording or transcription.
+// Scope.ParticipantID names the capture and Scope.Generation is its capture epoch: a newer epoch
+// replaces the older session, and an older epoch is refused. A capture holds no Participant slot.
+func (n *Node) CreateCaptureSession(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, error) {
+	return n.create(operationID, scope, kindCapture)
+}
+
+func (n *Node) create(operationID string, scope protocol.Scope, kind sessionKind) (protocol.CreateSessionResponse, error) {
 	if !identifierPattern.MatchString(operationID) {
 		return protocol.CreateSessionResponse{}, fmt.Errorf("%w: operationId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest)
 	}
 	if err := ValidateScope(scope); err != nil {
 		return protocol.CreateSessionResponse{}, err
 	}
-	response, fenced, err := n.register(operationID, scope)
+	response, fenced, err := n.register(operationID, scope, kind)
 	if fenced != nil {
 		fenced.Close()
 	}
 	return response, err
 }
 
-func (n *Node) register(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, *Session, error) {
-	digest := scopeDigest(scope)
+func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKind) (protocol.CreateSessionResponse, *Session, error) {
+	digest := scopeDigest(scope, kind)
+	key := sessionKey(scope, kind)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	// A draining node refuses only new Episodes: a live call on it keeps taking
@@ -438,17 +464,17 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	}
 	// The fence outlives the session, so a delayed create from an older generation stays refused
 	// after the newer session closes.
-	if scope.Generation < n.fences[keyOf(scope)] {
+	if scope.Generation < n.fences[key] {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
-	evict, err := n.fenceVictim(keyOf(scope))
+	evict, err := n.fenceVictim(key)
 	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedFences, err)
 	}
 	// A create with a new operation ID replaces the Participant's live session, also at the
 	// same generation: the API replaces a media connection that way, and its database has
 	// already superseded the old connection ID.
-	fenced := n.participants[keyOf(scope)]
+	fenced := n.participants[key]
 	live := len(n.sessions)
 	if fenced != nil {
 		live--
@@ -456,10 +482,14 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 	if live >= n.cfg.MaxSessions {
 		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedSessions, ErrCapacityExceeded)
 	}
-	if err := n.admit(scope, fenced); err != nil {
+	admit := n.admit
+	if kind == kindCapture {
+		admit = n.admitCapture
+	}
+	if err := admit(scope, fenced); err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
 	}
-	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope)
+	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope, kind)
 	if err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
 	}
@@ -470,16 +500,18 @@ func (n *Node) register(operationID string, scope protocol.Scope) (protocol.Crea
 		n.fenceOrder = slices.Delete(n.fenceOrder, evict, evict+1)
 	}
 	n.sessions[session.id] = session
-	n.participants[keyOf(scope)] = session
-	n.raiseFence(scope)
+	n.participants[key] = session
+	n.raiseFence(key, scope.Generation)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
 	return n.responseFor(session.id), fenced, nil
 }
 
-// hostsEpisode reports whether a live session belongs to the Episode. The caller holds n.mu.
+// hostsEpisode reports whether a live Participant session belongs to the Episode. A capture does
+// not host one: a node holding only captures admits no new Participants of a draining node's Episode.
+// The caller holds n.mu.
 func (n *Node) hostsEpisode(key episodeKey) bool {
 	for _, session := range n.sessions {
-		if episodeOf(session.scope) == key {
+		if session.kind == kindParticipant && episodeOf(session.scope) == key {
 			return true
 		}
 	}
@@ -504,12 +536,11 @@ func (n *Node) fenceVictim(key participantKey) (int, error) {
 
 // raiseFence records the generation as the lowest the Participant may create again.
 // fenceVictim has already made room under the same lock.
-func (n *Node) raiseFence(scope protocol.Scope) {
-	key := keyOf(scope)
+func (n *Node) raiseFence(key participantKey, generation int64) {
 	if _, known := n.fences[key]; !known {
 		n.fenceOrder = append(n.fenceOrder, key)
 	}
-	n.fences[key] = max(n.fences[key], scope.Generation)
+	n.fences[key] = max(n.fences[key], generation)
 }
 
 func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
@@ -529,7 +560,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 	}
 	participants := 0
 	for _, session := range n.sessions {
-		if episodeOf(session.scope) == key {
+		if session.kind == kindParticipant && episodeOf(session.scope) == key {
 			participants++
 		}
 	}
@@ -611,8 +642,8 @@ func (n *Node) remove(session *Session) {
 	if n.sessions[session.id] == session {
 		delete(n.sessions, session.id)
 	}
-	if n.participants[keyOf(session.scope)] == session {
-		delete(n.participants, keyOf(session.scope))
+	if n.participants[session.key()] == session {
+		delete(n.participants, session.key())
 	}
 	// The create record outlives the session, so a delayed retry of the same create replays the
 	// closed connection ID instead of creating a second session. Closed records are bounded.

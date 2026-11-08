@@ -114,13 +114,20 @@ if ((memory_kib > 1536 * 1024)); then
 else
   gomemlimit=384MiB memory_limit=700m
 fi
-# The packet budget follows the CPU, about 70% of the load at which a node of that size starts to
-# drop video. A 3-person, 2-camera class reserves 7170 packets/s, so 45000 admits 6 classes and
-# 60000 admits 8. The load runs stayed clean up to 8 classes on 1 vCPU and 11 to 12 on 2.
+# The packet budget admits only as many classes as keep our own CPU use under about 65% of what
+# the vCPUs deliver at the worst steal seen (52% over 10 s). A 3-person, 2-camera class reserves
+# 7170 packets/s and costs about 11% of one vCPU, so 22000 admits 3 classes on 1 vCPU and 36000
+# admits 5 on 2. The calibration and its limits are in docs/sfu/capacity-calibration.md.
+# Production closes admission to new Episodes at 40% steal. Staging keeps 25 so the guard stays
+# easy to exercise there.
+case "$environment" in
+  production) steal_limit=40 ;;
+  *) steal_limit=25 ;;
+esac
 vcpus="$(remote nproc)"
 case "$vcpus" in
-  1) budget=45000 ;;
-  2) budget=60000 ;;
+  1) budget=22000 ;;
+  2) budget=36000 ;;
   *) echo "no measured packet budget for ${vcpus} vCPUs; load-test the size and add it here" >&2; exit 1 ;;
 esac
 
@@ -160,7 +167,7 @@ else
   echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
 fi
 sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
-  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
+  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__STEAL_LIMIT__|${steal_limit}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
   -e "s|__ENVIRONMENT__|${environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
   "${deploy_dir}/sfu.env.in" |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"

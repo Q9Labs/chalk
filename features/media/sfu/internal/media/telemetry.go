@@ -13,6 +13,7 @@ const (
 	RefusedNodeFull         = "node_full"
 	RefusedScreenCeiling    = "screen_ceiling"
 	RefusedCameras          = "cameras"
+	RefusedCaptureLimit     = "capture_limit"
 	RefusedCPUSteal         = reasonCPUSteal
 	RefusedCPUBusy          = reasonCPUBusy
 	RefusedSchedulerLatency = reasonSchedulerLatency

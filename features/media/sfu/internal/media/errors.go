@@ -20,6 +20,8 @@ var (
 
 	errEpisodeFull = fmt.Errorf("%w: the Episode is full", ErrCapacityExceeded)
 	errNodeFull    = fmt.Errorf("%w: the node packet budget is reserved", ErrCapacityExceeded)
+	// errCaptureLimit refuses a capture session past the Episode's capture limit.
+	errCaptureLimit = fmt.Errorf("%w: the Episode holds the most capture sessions", ErrCapacityExceeded)
 	// errMandatoryMedia refuses a join whose microphones, camera uplinks, and screen share if one
 	// runs, would exceed the Episode's packet ceiling. The allocator never lowers audio, the
 	// screen or what publishers send.
