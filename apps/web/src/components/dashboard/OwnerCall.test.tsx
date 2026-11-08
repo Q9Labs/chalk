@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { expect, it, vi } from "vitest";
 import { opaqueAccessGrant } from "../../../../../sdks/typescript/client/src/space-client/core.test.helpers";
 import { createSpaceClientForPlatform } from "../../../../../sdks/typescript/client/src/space-client/space-client";
-import { terminalTestPlatform } from "../../../../../sdks/typescript/client/src/space-client/terminal.test.helpers";
+import { control, terminalTestPlatform } from "../../../../../sdks/typescript/client/src/space-client/terminal.test.helpers";
 import { OwnerCall } from "./OwnerCall";
 import { DashboardRequestError } from "../../lib/dashboard/client";
 import { requireParsedAccessGrant } from "../../../../../sdks/typescript/client/src/access/grant";
@@ -74,6 +74,27 @@ it.each(["confirmed", "unconfirmed"] as const)("navigates immediately and clears
     resolveDeparture();
     await leaving;
     await act(async () => cleanup());
+    vi.clearAllMocks();
+  }
+});
+
+it("starts the new call from the time-limit screen in the language chosen for new calls", async () => {
+  window.sessionStorage.clear();
+  window.localStorage.setItem("chalk.transcript-language.new-call", "ur");
+  const platform = terminalTestPlatform();
+  mocks.dashboardAction.mockImplementation(async (_page, input) => (input.action === "create-call" ? { call: { id: "space-2" } } : { access: opaqueAccessGrant(1) }));
+  let client: ReturnType<typeof createSpaceClientForPlatform> | undefined;
+  mocks.createClient.mockImplementation((options) => (client = createSpaceClientForPlatform(options, platform)));
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(client?.getSnapshot().connection.status).toBe("live")));
+    await act(async () => platform.emitSync({ ...platform.sync.getSnapshot(), control: { ...control, status: "ended", endReason: "maximum_duration", participants: [] } }));
+    await act(async () => fireEvent.click(await screen.findByRole("button", { name: "Start a new call" })));
+    expect(mocks.dashboardAction).toHaveBeenCalledWith("home", expect.objectContaining({ action: "create-call", transcriptLanguage: "ur" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/dashboard/call/$spaceId/join", params: { spaceId: "space-2" } });
+  } finally {
+    await act(async () => cleanup());
+    window.localStorage.clear();
     vi.clearAllMocks();
   }
 });
