@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
@@ -122,6 +123,15 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 		}
 	}
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
+}
+
+// CapturePlane returns the recorder-facing plane of the node an Episode is bound to.
+func (f *Fleet) CapturePlane(id string) (captureplane.CapturePlane, error) {
+	node, err := f.Node(id)
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
 }
 
 // Place picks the node for a new Episode. Primaries are tried first, in
