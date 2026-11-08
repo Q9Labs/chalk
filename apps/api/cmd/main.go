@@ -578,8 +578,12 @@ func run() error {
 		LocalSystemToken: cfg.API.LocalSystemToken,
 		ServicePrincipal: cfg.API.ServicePrincipal,
 
-		RateLimit:            rateLimitOptions,
-		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RateLimit: rateLimitOptions,
+		Readiness: postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RetirementBacklog: func() (int, time.Duration, bool) {
+			backlog, observed := mediaPlaneRegistry.RetirementBacklog()
+			return backlog.Count, backlog.Oldest, observed
+		},
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
 

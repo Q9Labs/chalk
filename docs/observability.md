@@ -238,6 +238,24 @@ the move first and this one followed it), `refused_no_node` (no node was fit to 
 level for each node that could not reserve. A sustained `refused_*` rate means live calls cannot
 leave a lost node: check pool capacity first. Any `moved` is worth a look at the lost node.
 
+A moved or ended own-SFU Episode owes a retire to every node it left. The debt is a row in
+`sfu_retirement_debts`, written in the same transaction as the binding move, or re-recorded when the
+Episode ends. The Episode's end is confirmed once that row is durable, not when the node acknowledges
+it. The API worker pays each debt every few seconds with a growing backoff (5 seconds up to 5 minutes)
+and deletes it when the node acknowledges the retire, when the node answers with a new boot, or when the
+node is no longer configured. A node that stays silent on the control path keeps its stale sessions
+until it restarts or its 24 hour floor tombstone expires. Those sessions cannot keep publishing for
+longer than the source lease TTL (`SFU_SOURCE_LEASE_TTL`, 15 seconds by default, at most 2 minutes),
+because the API stops renewing a lease once the Episode moves or ends. Three signals show unpaid debt:
+the gauges `chalk.sfu.retirement_debts` (count) and `chalk.sfu.retirement_debt_oldest_age` (seconds,
+unit `s`), each reported by every API replica from the same table; the `sfu_retirement_debts` object
+(`count`, `oldest_age_seconds`) in the `/readyz` body, which never fails readiness; and the warning logs
+`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed),
+`chalk_sfu.retire_debts_unread` and `chalk_sfu.retire_backlog_unread` (the table could not be read).
+Alert when the oldest unpaid debt is above 15 minutes for 5 minutes (the maximum across replicas). A
+healthy fleet pays a debt within seconds, so an older debt means a node has been silent through many
+backoff cycles: check that node, and restart it if it is up but not answering control calls.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport

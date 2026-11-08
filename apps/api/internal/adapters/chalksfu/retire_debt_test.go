@@ -2,6 +2,7 @@ package chalksfu_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -9,9 +10,11 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/mediaplaneproviders"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/providerbridge"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 // partition is a TCP relay in front of a node's control port. Severing it drops every open
@@ -83,10 +86,33 @@ func (p *partition) heal() {
 	p.mu.Unlock()
 }
 
-// A retire the old node never received is paid by the retirement worker once the node is
-// reachable again, with no further resolve, and survives the Episode's end: the debt is in the
-// store before the end is confirmed.
-func TestARetirementDebtIsPaidAfterAPartitionWithoutAnotherResolve(t *testing.T) {
+// failingDebts fails the debt write the Episode's end makes. With afterWrite the debt is stored
+// first and the error comes after, as a crash between the write and its acknowledgement would.
+type failingDebts struct {
+	*recoveryStore
+	fail       bool
+	afterWrite bool
+}
+
+func (f *failingDebts) RecordRetirementDebts(ctx context.Context, debts []mediaplane.RetirementDebt) error {
+	if !f.fail {
+		return f.recoveryStore.RecordRetirementDebts(ctx, debts)
+	}
+	if f.afterWrite {
+		if err := f.recoveryStore.RecordRetirementDebts(ctx, debts); err != nil {
+			return err
+		}
+	}
+	return errors.New("injected fault")
+}
+
+// The Episode's end is confirmed on durable ownership of the cleanup, not on the old node's
+// acknowledgement. The debt row, written with the binding move, is that ownership: the end
+// confirms while a partitioned node still holds the Episode's stale sessions, and the retirement
+// worker pays the debt once the node is reachable, with no further resolve. A node that never
+// returns keeps its stale sessions until it restarts or its floor lifetime ends, and the sources
+// it forwards lapse within the source lease lifetime because the API no longer renews them.
+func TestEpisodeEndConfirmsOnTheDurableDebtNotTheNodeAndTheWorkerPaysItAfterTheHeal(t *testing.T) {
 	ca, primary, _, nodes := twoNodes(t, roomy)
 	relay := newPartition(t, primary.controlURL)
 	nodes[0].ControlURL = relay.url()
@@ -108,19 +134,75 @@ func TestARetirementDebtIsPaidAfterAPartitionWithoutAnotherResolve(t *testing.T)
 		t.Fatalf("%d retirement debts after a move the old node did not hear, want 1", owed)
 	}
 
-	// The Episode ends while the node is still unreachable.
+	// The Episode ends while the node is still unreachable. The end confirms (nil) because the
+	// debt is durable, and the node still holds its stale session: that is the stated trade-off.
 	if err := registry.EndRetiredAllocations(context.Background(), recoveringTenant.ID, recoveringEpisode); err != nil {
-		t.Fatalf("end the Episode: %v", err)
+		t.Fatalf("the end must confirm on the durable debt while the node is unreachable: %v", err)
 	}
 	registry.PayRetirements(context.Background())
 	if owed, sessions := store.owed(), stateOf(t, primary).Sessions; owed != 1 || sessions != 1 {
-		t.Fatalf("behind the partition: %d debts and %d sessions on the old node, want 1 and 1", owed, sessions)
+		t.Fatalf("behind the partition: %d debts and %d stale sessions, want 1 and 1", owed, sessions)
+	}
+	if backlog, observed := registry.RetirementBacklog(); !observed || backlog.Count != 1 {
+		t.Fatalf("the unpaid debt is not visible: %+v observed %v", backlog, observed)
 	}
 
 	relay.heal()
 	registry.PayRetirements(context.Background())
 	if owed, sessions := store.owed(), stateOf(t, primary).Sessions; owed != 0 || sessions != 0 {
 		t.Fatalf("after the partition healed: %d debts and %d sessions on the old node, want 0 and 0", owed, sessions)
+	}
+	if backlog, _ := registry.RetirementBacklog(); backlog.Count != 0 {
+		t.Fatalf("the paid debt is still counted: %+v", backlog)
+	}
+}
+
+// No state confirms an Episode's end without its debt row, and no fault loses a debt. A fault
+// before the write fails the end (so the executor retries it) and writes nothing. A fault after
+// the write also fails the end, leaves the row, and the retry neither duplicates it nor loses it.
+func TestAFaultAroundTheDebtWriteNeverConfirmsAnEndWithoutTheDebtOrLosesIt(t *testing.T) {
+	for _, afterWrite := range []bool{false, true} {
+		name := map[bool]string{false: "before the write", true: "after the write"}[afterWrite]
+		t.Run(name, func(t *testing.T) {
+			ca, primary, standby, nodes := twoNodes(t, roomy)
+			fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
+			bound := placedBinding(t, fleet)
+			store := newRecoveryStore(bound, 2)
+			join(t, primary.service(t), recoveringScope("alice"))
+			// A binding another replica moved without recording a debt (an Episode moved by the
+			// previous release): only the end can write it.
+			moved, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
+			if err != nil {
+				t.Fatal(err)
+			}
+			store.mu.Lock()
+			store.binding = moved
+			store.mu.Unlock()
+			faulty := &failingDebts{recoveryStore: store, fail: true, afterWrite: afterWrite}
+			registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
+				ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
+				ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: store, Recovery: faulty,
+			})
+
+			err = registry.EndRetiredAllocations(context.Background(), recoveringTenant.ID, recoveringEpisode)
+			if err == nil {
+				t.Fatal("the end confirmed although the debt write failed")
+			}
+			if owed := store.owed(); afterWrite && owed != 1 || !afterWrite && owed != 0 {
+				t.Fatalf("%d debts after a fault %s", owed, name)
+			}
+			if sessions := stateOf(t, primary).Sessions; sessions != 1 {
+				t.Fatalf("the node was asked to retire although the end did not confirm: %d sessions", sessions)
+			}
+
+			faulty.fail = false // the executor retries the end
+			if err := registry.EndRetiredAllocations(context.Background(), recoveringTenant.ID, recoveringEpisode); err != nil {
+				t.Fatalf("the retried end: %v", err)
+			}
+			if owed, sessions := store.owed(), stateOf(t, primary).Sessions; owed != 0 || sessions != 0 {
+				t.Fatalf("after the retry: %d debts and %d sessions, want the node retired and the debt paid", owed, sessions)
+			}
+		})
 	}
 }
 

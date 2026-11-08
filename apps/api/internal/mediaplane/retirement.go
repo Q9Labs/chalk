@@ -1,15 +1,23 @@
 package mediaplane
 
-import "github.com/q9labs/chalk/apps/api/internal/utilities"
+import (
+	"slices"
+
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
+)
 
 // Retirements lists the allocations the binding owes a retire at its generation: every
 // allocation the Episode left, except one on the current node under another boot, which holds
 // nothing of the Episode. The same node and boot (the Episode came back to a node that kept its
 // old sessions) is owed, because a retire closes only what is below the binding's generation.
+// An allocation the Episode left twice (A, B, A, B) is owed once.
 func (binding Binding) Retirements() []Allocation {
 	var owed []Allocation
 	for _, old := range binding.PreviousAllocations {
 		if old.Node == binding.Node && old.Incarnation != binding.NodeIncarnation {
+			continue
+		}
+		if slices.Contains(owed, old) {
 			continue
 		}
 		owed = append(owed, old)

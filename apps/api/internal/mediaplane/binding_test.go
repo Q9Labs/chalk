@@ -3,6 +3,7 @@ package mediaplane
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -143,5 +144,16 @@ func TestBindingGenerationAndHistoryAreBounded(t *testing.T) {
 		if !errors.Is(bad.Validate(), ErrInvalidBinding) {
 			t.Errorf("%s accepted: %#v", name, bad)
 		}
+	}
+}
+
+func TestRetirementsOweAnAllocationTheEpisodeLeftTwiceOnce(t *testing.T) {
+	binding := Binding{Node: "sfu-b", NodeIncarnation: "bbbb", Generation: 3, PreviousAllocations: []Allocation{
+		{Node: "sfu-a", Incarnation: "aaaa"}, {Node: "sfu-b", Incarnation: "bbbb"}, {Node: "sfu-a", Incarnation: "aaaa"},
+		{Node: "sfu-b", Incarnation: "old"}, // the current node under another boot holds nothing
+	}}
+	owed := binding.Retirements()
+	if want := []Allocation{{Node: "sfu-a", Incarnation: "aaaa"}, {Node: "sfu-b", Incarnation: "bbbb"}}; !slices.Equal(owed, want) {
+		t.Fatalf("retirements %+v, want %+v", owed, want)
 	}
 }

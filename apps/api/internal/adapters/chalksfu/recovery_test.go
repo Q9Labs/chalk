@@ -31,6 +31,7 @@ type recoveryStore struct {
 	moves        int
 	crashBefore  error // returned once by MoveBinding before it commits, as a crash would
 	debts        map[debtKey]mediaplane.RetirementDebt
+	since        map[debtKey]time.Time
 }
 
 type debtKey struct {
@@ -97,6 +98,12 @@ func (s *recoveryStore) record(debt mediaplane.RetirementDebt) {
 	if s.debts == nil {
 		s.debts = map[debtKey]mediaplane.RetirementDebt{}
 	}
+	if s.since == nil {
+		s.since = map[debtKey]time.Time{}
+	}
+	if _, ok := s.debts[keyOf(debt)]; !ok {
+		s.since[keyOf(debt)] = time.Now()
+	}
 	if held, ok := s.debts[keyOf(debt)]; !ok || held.Generation < debt.Generation {
 		s.debts[keyOf(debt)] = debt
 	}
@@ -132,6 +139,16 @@ func (s *recoveryStore) SettleRetirementDebt(_ context.Context, debt mediaplane.
 		delete(s.debts, keyOf(debt))
 	}
 	return nil
+}
+
+func (s *recoveryStore) RetirementBacklog(context.Context) (int, time.Duration, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var oldest time.Duration
+	for key := range s.debts {
+		oldest = max(oldest, time.Since(s.since[key]))
+	}
+	return len(s.debts), oldest, nil
 }
 
 func (s *recoveryStore) owed() int {

@@ -23,6 +23,7 @@ const migrationTimeout = 15 * time.Minute
 type options struct {
 	databaseURLFile             string
 	target                      int64
+	down                        bool
 	allowMissing                []int64
 	entryWriterProtocol         int
 	rollbackEntryWriterProtocol int
@@ -42,7 +43,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "database migration failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("database migrations complete target=%d\n", options.target)
+	direction := "target"
+	if options.down {
+		direction = "down-to"
+	}
+	fmt.Printf("database migrations complete %s=%d\n", direction, options.target)
 }
 
 func parseOptions(args []string) (options, error) {
@@ -53,6 +58,7 @@ func parseOptions(args []string) (options, error) {
 	rollbackEntryWriterProtocol := flags.Int("rollback-entry-writer-protocol", 0, "retained rollback Sync entry writer protocol")
 	enforceEntryOwnership := flags.String("enforce-entry-ownership", "", "record entry enforcement for this release; requires an expanded rollback baseline")
 	targetText := flags.String("target", "", "migration version to apply")
+	downToText := flags.String("down-to", "", "emergency rollback: revert migrations newer than this version, which stays applied")
 	allowMissing := []int64{}
 	allowMissingSet := map[int64]struct{}{}
 	flags.Func("allow-missing-version", "allow one explicitly named out-of-order migration; may be repeated", func(value string) error {
@@ -79,12 +85,20 @@ func parseOptions(args []string) (options, error) {
 	if !filepath.IsAbs(*databaseURLFile) {
 		return options{}, errors.New("--database-url-file must be absolute")
 	}
-	if *targetText == "" {
-		return options{}, errors.New("--target is required")
+	if (*targetText == "") == (*downToText == "") {
+		return options{}, errors.New("exactly one of --target and --down-to is required")
 	}
-	target, err := strconv.ParseInt(*targetText, 10, 64)
+	down := *downToText != ""
+	flagName, targetValue := "--target", *targetText
+	if down {
+		flagName, targetValue = "--down-to", *downToText
+	}
+	target, err := strconv.ParseInt(targetValue, 10, 64)
 	if err != nil || target < 1 {
-		return options{}, errors.New("--target must be a positive migration version")
+		return options{}, fmt.Errorf("%s must be a positive migration version", flagName)
+	}
+	if down && (len(allowMissing) > 0 || *entryWriterProtocol != 0 || *rollbackEntryWriterProtocol != 0 || *enforceEntryOwnership != "") {
+		return options{}, errors.New("--down-to takes no out-of-order or Sync entry flags")
 	}
 	if target > migrations.LatestVersion {
 		return options{}, fmt.Errorf("migration target %d is newer than this image's migration set", target)
@@ -96,7 +110,7 @@ func parseOptions(args []string) (options, error) {
 		return options{}, errors.New("entry enforcement requires expanded candidate and rollback Sync writers")
 	}
 	return options{entryWriterProtocol: *entryWriterProtocol, rollbackEntryWriterProtocol: *rollbackEntryWriterProtocol,
-		enforceEntryOwnership: *enforceEntryOwnership, databaseURLFile: *databaseURLFile, target: target, allowMissing: allowMissing}, nil
+		enforceEntryOwnership: *enforceEntryOwnership, databaseURLFile: *databaseURLFile, target: target, down: down, allowMissing: allowMissing}, nil
 }
 
 func parseMigrationVersion(value string) (int64, error) {
@@ -129,6 +143,14 @@ func migrate(ctx context.Context, options options) error {
 	provider, err := newMigrationProvider(database, migrations.Files, goose.DialectPostgres)
 	if err != nil {
 		return errors.New("configure migration provider")
+	}
+	if options.down {
+		// An emergency rollback: it reverts the migrations after the target and leaves the
+		// target applied. Releases roll back by redeploying the previous image instead.
+		if _, err := provider.DownTo(ctx, options.target); err != nil {
+			return fmt.Errorf("revert migrations down to %d: %w", options.target, redactDatabaseURL(err, databaseURL))
+		}
+		return nil
 	}
 	if len(options.allowMissing) > 0 {
 		statuses, err := provider.Status(ctx)

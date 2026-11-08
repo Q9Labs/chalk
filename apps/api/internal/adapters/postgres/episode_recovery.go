@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -184,4 +185,18 @@ where tenant_id = $1 and episode_id = $2 and node = $3 and incarnation = $4 and 
 		return fmt.Errorf("settle retirement debt: %w", err)
 	}
 	return nil
+}
+
+// RetirementBacklog counts the unpaid retirement debts and ages the oldest one. A debt is deleted
+// only when its node acknowledged, answered with a new boot, or left the configuration, so what
+// remains is cleanup the API still owes.
+func (r EpisodeRecovery) RetirementBacklog(ctx context.Context) (int, time.Duration, error) {
+	var count int
+	var oldest float64
+	err := r.db.QueryRow(ctx, `
+select count(*), coalesce(extract(epoch from now() - min(created_at)), 0)::float8 from sfu_retirement_debts`).Scan(&count, &oldest)
+	if err != nil {
+		return 0, 0, fmt.Errorf("read retirement backlog: %w", err)
+	}
+	return count, time.Duration(oldest * float64(time.Second)), nil
 }

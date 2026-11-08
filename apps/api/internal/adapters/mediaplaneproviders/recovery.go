@@ -118,6 +118,7 @@ func (r Registry) RunRetirements(ctx context.Context) {
 	if r.chalk == nil || r.recovery == nil {
 		return
 	}
+	r.observeBacklog(ctx)
 	ticker := time.NewTicker(retirementTick)
 	defer ticker.Stop()
 	for {
@@ -133,6 +134,7 @@ func (r Registry) RunRetirements(ctx context.Context) {
 // PayRetirements runs one pass of the retirement worker: it claims the debts that are due and
 // settles each one. RunRetirements calls it on a timer.
 func (r Registry) PayRetirements(ctx context.Context) {
+	defer r.readBacklog(ctx)
 	debts, err := r.recovery.ClaimRetirementDebts(ctx, retirementBatch)
 	if err != nil {
 		if ctx.Err() == nil {
@@ -148,9 +150,18 @@ func (r Registry) PayRetirements(ctx context.Context) {
 }
 
 // EndRetiredAllocations retires a finished Episode on the allocations its binding left, so a node
-// that returns holding its old sessions releases them. It writes the debts first, so the Episode's
-// end is only confirmed once a retirement worker can finish the job, and then tries each node
-// once. It is idempotent and never touches the Episode's current allocation.
+// that returns holding its old sessions releases them. It writes the debts first and then tries
+// each node once.
+//
+// The Episode's end is confirmed on durable ownership, not on the node's acknowledgement: once the
+// debt rows are committed, the RunRetirements worker owns the cleanup and retries it until the node
+// acknowledges, comes back as a new boot, or is no longer configured. A node that is silent on the
+// control path therefore does not hold the end. The cost is that a node that stays silent for good
+// keeps the old sessions until it restarts or its 24 hour floor tombstone expires. Those sessions
+// cannot publish for longer than the source lease TTL, because the API stops renewing a lease once
+// the Episode ends. An unpaid debt is visible as chalk.sfu.retirement_debts and its oldest age.
+//
+// It is idempotent and never touches the Episode's current allocation.
 func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID utilities.ID) error {
 	if r.chalk == nil || r.recovery == nil {
 		return nil

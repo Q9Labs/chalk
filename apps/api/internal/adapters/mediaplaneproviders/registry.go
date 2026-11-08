@@ -60,6 +60,8 @@ type EpisodeRecovery interface {
 	ClaimRetirementDebts(ctx context.Context, limit int) ([]mediaplane.RetirementDebt, error)
 	// SettleRetirementDebt deletes the debt unless a higher generation was recorded since.
 	SettleRetirementDebt(ctx context.Context, debt mediaplane.RetirementDebt) error
+	// RetirementBacklog counts the unpaid debts and ages the oldest one.
+	RetirementBacklog(ctx context.Context) (count int, oldest time.Duration, err error)
 }
 
 type Registry struct {
@@ -70,6 +72,8 @@ type Registry struct {
 	chalkSpaces     spaces.ChalkSFUAllowlist
 	episodes        EpisodeReader
 	recovery        EpisodeRecovery
+	// backlog is what the retirement worker last read; the pointer is shared by the copies of the Registry.
+	backlog *backlogCell
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
 	turn *turn.Credentials
@@ -102,6 +106,7 @@ func NewRegistry(config Config) Registry {
 		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
 		recovery:        config.Recovery,
+		backlog:         &backlogCell{},
 		turn:            turn.New(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
