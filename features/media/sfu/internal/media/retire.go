@@ -120,14 +120,18 @@ func (n *Node) refuseRetired(key episodeKey, allocation *int64) error {
 	if !ok || n.now().Sub(retired.at) > retiredTTL {
 		return nil
 	}
-	var generation int64
-	if allocation != nil {
-		generation = *allocation
-	}
-	if generation < retired.floor {
+	if allocationOrZero(allocation) < retired.floor {
 		return ErrStaleGeneration
 	}
 	return nil
+}
+
+// allocationOrZero is the allocation generation a caller names; one that names none counts as 0.
+func allocationOrZero(allocation *int64) int64 {
+	if allocation == nil {
+		return 0
+	}
+	return *allocation
 }
 
 // refuseUnrecorded is the conservative admission a full table of floors falls back to, so a

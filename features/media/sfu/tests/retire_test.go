@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
@@ -64,5 +65,44 @@ func TestRetireEpisodeOverHTTP(t *testing.T) {
 
 	if status, _ := svc.call(t, "/v1/episodes/retire", protocol.RetireEpisodeRequest{TenantID: "tenant-1", EpisodeID: "episode-r", Generation: 0}, nil); status != http.StatusBadRequest {
 		t.Fatalf("retire at generation 0: status %d, want 400", status)
+	}
+}
+
+// An Episode that returns to a node's same boot reserves there while its sessions from the earlier
+// allocation are still open. Those sessions belong to the allocation that is being retired, so they
+// must not settle the new hold: after the retire the hold still keeps the Episode's room, and no
+// other Episode can take it before the Participants rejoin under the new allocation.
+func TestAHoldSurvivesTheRetireOfTheSessionsOfAnEarlierAllocation(t *testing.T) {
+	ca := newAuthority(t, "chalk test CA")
+	svc := startService(t, ca, func(cfg *config.Config) { cfg.PacketBudget = threePersonPackets + 1000 })
+	scope := func(participant string) protocol.Scope {
+		return protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-a", ParticipantID: participant, Generation: 1}
+	}
+	participants := []string{"alice", "bob", "carol"}
+	for _, participant := range participants {
+		svc.mustCall(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "old-" + participant, Scope: scope(participant), AllocationGeneration: allocationOf(1)}, nil)
+	}
+
+	reserve := reserveBody("reserve-a", "episode-a", 0)
+	reserve.AllocationGeneration = allocationOf(3)
+	svc.mustCall(t, "/v1/episodes/reserve", reserve, nil)
+	var retired protocol.RetireEpisodeResponse
+	svc.mustCall(t, "/v1/episodes/retire", protocol.RetireEpisodeRequest{TenantID: "tenant-1", EpisodeID: "episode-a", Generation: 3}, &retired)
+	if retired.Closed != len(participants) || svc.sessions(t) != 0 {
+		t.Fatalf("retire at 3 closed %d, %d sessions left, want all %d closed", retired.Closed, svc.sessions(t), len(participants))
+	}
+
+	if reserved := svc.readiness(t).ReservedPackets; reserved != threePersonPackets {
+		t.Fatalf("after the retire the node reserves %d, want the Episode's %d: the old sessions settled its hold", reserved, threePersonPackets)
+	}
+	if status, code := svc.call(t, "/v1/episodes/reserve", reserveBody("reserve-b", "episode-b", 0), nil); status != http.StatusTooManyRequests || code != protocol.CodeCapacityExceeded {
+		t.Fatalf("another Episode took the recovering Episode's room: status %d code %q, want 429 capacity_exceeded", status, code)
+	}
+
+	for _, participant := range participants {
+		svc.mustCall(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: "new-" + participant, Scope: scope(participant), AllocationGeneration: allocationOf(3)}, nil)
+	}
+	if sessions := svc.sessions(t); sessions != len(participants) {
+		t.Fatalf("%d sessions after the rejoin, want %d", sessions, len(participants))
 	}
 }

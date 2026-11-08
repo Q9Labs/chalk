@@ -319,3 +319,40 @@ func TestRetireAtALowerGenerationKeepsTheFloorOfAFullTable(t *testing.T) {
 		t.Fatalf("%d retirements and %d queued, want equal and %d", known, queued, retiredLimit)
 	}
 }
+
+// Only a session of the hold's own allocation or a later one settles the hold. A session that names
+// no generation counts as 0, and a reserve that names none settles with any session, as before.
+func TestOnlyASessionOfTheHoldsAllocationSettlesIt(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		reserveAt *int64
+		sessionAt *int64
+		wantHeld  bool
+	}{
+		{name: "an earlier allocation", reserveAt: generation(3), sessionAt: generation(1), wantHeld: true},
+		{name: "a session that names none", reserveAt: generation(3), sessionAt: nil, wantHeld: true},
+		{name: "the hold's own allocation", reserveAt: generation(3), sessionAt: generation(3), wantHeld: false},
+		{name: "a later allocation", reserveAt: generation(3), sessionAt: generation(4), wantHeld: false},
+		{name: "a reserve that names none", reserveAt: nil, sessionAt: generation(1), wantHeld: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newReserveNode(t)
+			if _, err := f.node.CreateSessionAt("joined", scopeOf("one", "p"), test.sessionAt); err != nil {
+				t.Fatal(err)
+			}
+			request := protocol.ReserveEpisodeRequest{
+				OperationID: "reserve-1", TenantID: "tenant", EpisodeID: "one", Generation: 1,
+				Shape: protocol.EpisodeShape{Participants: 1}, AllocationGeneration: test.reserveAt,
+			}
+			if _, err := f.node.ReserveEpisode(request); err != nil {
+				t.Fatal(err)
+			}
+			f.node.mu.Lock()
+			_, held := f.node.holds[episodeKey{"tenant", "one"}]
+			f.node.mu.Unlock()
+			if held != test.wantHeld {
+				t.Fatalf("hold kept = %v, want %v", held, test.wantHeld)
+			}
+		})
+	}
+}
