@@ -81,6 +81,22 @@ later reconnects. The whiteboard client sends the same baggage member beside its
 presenter-view extensions, then retries without baggage after a 1009 close from
 an older server.
 
+### Measure client readiness for the own SFU
+
+`chalk.api.access_grant.issuance` has exactly three bounded tags: `outcome`,
+`reason`, and `chalk_sfu_declared` (boolean). The boolean comes from the parsed
+`X-Chalk-Media-Providers` capability used by media binding resolution: `true`
+when it declares `chalk_sfu`, and `false` when absent or containing only other
+providers. No header text, SDK version, or client identity is exported as a tag.
+The issuance duration metric keeps only `outcome` and `reason`.
+
+To choose `CHALK_SFU_CLIENT_SUNSET`, filter the production issuance counter to
+`outcome=issued`. Divide the sum of counter increases with
+`chalk_sfu_declared=false` by the sum across both boolean values in the same
+time window. Exclude older series without the tag. This measures credential
+issuances, including refreshes, not unique participants or all join attempts:
+requests rejected before credential issuance do not increment this counter.
+
 ### Compare call quality by connection type
 
 The SDK summarises WebRTC stats on the device every 10 seconds and uploads them

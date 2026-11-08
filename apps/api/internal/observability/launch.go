@@ -8,6 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -102,6 +103,14 @@ type AccessGrantIssuer struct {
 	telemetry *LaunchTelemetry
 }
 
+type accessGrantChalkSFUDeclaredContextKey struct{}
+
+// ContextWithAccessGrantClientProviders carries only the parsed capability's
+// bounded boolean to issuance telemetry, not the request header or identities.
+func ContextWithAccessGrantClientProviders(ctx context.Context, clients mediaplane.ClientProviders) context.Context {
+	return context.WithValue(ctx, accessGrantChalkSFUDeclaredContextKey{}, clients.Runs(mediaplane.ProviderChalkSFU))
+}
+
 func InstrumentAccessGrantIssuer(next accessGrantIssuer, telemetry *LaunchTelemetry) AccessGrantIssuer {
 	return AccessGrantIssuer{next: next, telemetry: telemetry}
 }
@@ -180,7 +189,8 @@ func (v ParticipantMediaVerifier) VerifyForRecovery(ctx context.Context, credent
 
 func (t *LaunchTelemetry) recordParticipantIssuance(ctx context.Context, outcome, reason string, duration time.Duration) {
 	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
-	t.participantIssuance.Add(ctx, 1, attributes)
+	chalkSFUDeclared, _ := ctx.Value(accessGrantChalkSFUDeclaredContextKey{}).(bool)
+	t.participantIssuance.Add(ctx, 1, attributes, otelmetric.WithAttributes(attribute.Bool("chalk_sfu_declared", chalkSFUDeclared)))
 	t.participantIssuanceDuration.Record(ctx, nonNegative(duration).Seconds(), attributes)
 	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "access grant issuance", "event", "access_grant.issuance", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
 }
