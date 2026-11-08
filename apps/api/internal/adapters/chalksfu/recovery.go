@@ -18,6 +18,9 @@ const (
 	// Participants to rejoin. A hold that nobody uses, such as the loser's of a race or one
 	// whose binding commit never happened, expires on its own.
 	recoveryHoldSeconds = 60
+	// An Episode's reservation already assumes a screen share may run, so the reserve asks for
+	// one: the node then checks that the Episode's mandatory media fits its ceiling with a screen
+	// share, and a share that is live now cannot be refused after the Participants rejoin.
 	// recoveryCameras is the smallest camera count every node accepts. A node reserves each
 	// Participant at its own configured camera count whatever the shape says, and the shape's
 	// cameras only size capture sessions, which recovery does not reserve (capture is M10's).
@@ -113,7 +116,9 @@ type candidate struct {
 // uses: every primary that answered within the freshness window and is not draining, then the
 // same standbys. It does not filter on room or the host guard: the node's reserve knows what
 // the Episode already holds there, which a probe's totals do not, so a retry can reach a node
-// that kept the room it reserved. It does no I/O and, unlike Place, never offers another
+// that kept the room it reserved. A standby is the exception: its configured degraded budget is
+// a limit the node does not know, so a standby without room for an Episode under that budget is
+// skipped. It does no I/O and, unlike Place, never offers another
 // provider.
 func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
@@ -126,6 +131,11 @@ func (f *Fleet) recoveryCandidates() []candidate {
 			}
 			load, probed := f.loads[node.node]
 			if !probed || time.Since(load.at) > probeFreshness || load.Draining {
+				continue
+			}
+			// A standby admits only up to its degraded budget, which the probe's room already
+			// reflects. A primary has no cap below its own budget, so its reserve decides.
+			if standby && !load.fits(len(f.inflightOn(node.node))) {
 				continue
 			}
 			candidates = append(candidates, candidate{adapter: node, standby: standby})
@@ -165,7 +175,7 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 		reply, err := node.adapter.reserve(ctx, wireReserveRequest{
 			OperationID: fmt.Sprintf("recover-%s-g%d-%s-p%d-w%d", episodeID, from.Generation+1, node.adapter.node, participants, window),
 			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
-			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras},
+			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
 			TTLSeconds: hold,
 		})
 		switch {

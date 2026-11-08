@@ -193,8 +193,9 @@ type wireReady struct {
 }
 
 type wireShape struct {
-	Participants          int `json:"participants"`
-	CamerasPerParticipant int `json:"camerasPerParticipant"`
+	Participants          int  `json:"participants"`
+	CamerasPerParticipant int  `json:"camerasPerParticipant"`
+	ScreenShare           bool `json:"screenShare,omitempty"`
 }
 
 type wireReserveRequest struct {
