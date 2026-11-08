@@ -129,8 +129,8 @@ kill_primary_and_return() {
   check "primary accepts a join of Episode ${episode} (HTTP ${status})" [ "$status" = 200 ]
   old_connection="$(jq -r .connectionId <<<"$body")" old_incarnation="$(jq -r .nodeIncarnation <<<"$body")"
   snapshot
-  unit primary kill --signal=SIGKILL --kill-whom=all >/dev/null
-  unit primary stop >/dev/null
+  # SIGKILL to the SFU process itself, then stop the unit before systemd restarts it after 2 s.
+  node_ssh primary "pkill -9 -x chalk-sfu && systemctl --user -M chalk-sfu@ stop chalk-sfu"
   check "primary /readyz is unreachable" wait_until 30 is_down primary
   evidence "primary /readyz status ${status} after SIGKILL"
   sfu standby POST /v1/episodes/reserve "$(reserve_body "res-${run}-1" "$fresh" 1 3 2 60)"
