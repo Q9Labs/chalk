@@ -9,6 +9,11 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 )
 
+const (
+	syntheticCaptureLeaseToken = "lease-token-AbCdEf0123456789"
+	syntheticCaptureCaption    = "Dr Synthetic Person says the quarterly numbers are private"
+)
+
 // The fixture fails attempt 1 with a provider close error, then claims a
 // completion-only attempt 2. Completing it clears the job's own error, so the
 // attempt failure row is the only record of what attempt 1 reported.
@@ -46,8 +51,13 @@ func TestFailedCaptureAttemptStaysReadableAfterRetrySucceeds(t *testing.T) {
 			t.Fatal(err)
 		}
 		count++
+		for _, secret := range []string{syntheticCaptureLeaseToken, "X-Amz", "objects.example.test", "deadbeef", "Synthetic", "quarterly"} {
+			if strings.Contains(detail, secret) {
+				t.Fatalf("stored detail kept %q: %s", secret, detail)
+			}
+		}
 		if attempt != 1 || generation != 1 || kind != "capture" || code != "capture_attempt_failed" ||
-			!strings.Contains(detail, "HTTP status 502") || owner != f.leaseOwner || !hasTime {
+			detail != "recorder control-plane request failed with HTTP status 502 code recording.capture_provider_failed: [redacted]" || owner != f.leaseOwner || !hasTime {
 			t.Fatalf("attempt failure lost detail: attempt=%d generation=%d kind=%s code=%s detail=%q owner=%q time=%v",
 				attempt, generation, kind, code, detail, owner, hasTime)
 		}

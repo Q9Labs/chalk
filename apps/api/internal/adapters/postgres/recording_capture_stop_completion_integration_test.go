@@ -95,8 +95,12 @@ func newStoppedCompletionFixture(t *testing.T) (pgx.Tx, transcriptionAllocationC
 	execCleanupFixture(t, tx, `insert into recording_data_keys(recording_id,capture_epoch,tenant_id,episode_id,job_id,attempt_count,fencing_generation,key_handle,environment,envelope_digest,encryption_context_digest,ciphertext_blob)
 		select recording_id,1,tenant_id,episode_id,id,1,1,gen_random_uuid(),'test',$2,$2,'retained-key' from recording_jobs where id=$1`, f.jobID.Bytes(), f.digest)
 	failure := f.failureInput()
-	failure.ErrorCode = pgtype.Text{String: "capture_attempt_failed", Valid: true}
-	failure.ErrorDetail = pgtype.Text{String: "recorder control-plane request failed with HTTP status 502 code recording.capture_provider_failed", Valid: true}
+	// The worker text carries synthetic secrets; the API handler sanitizes it before FailRecordingJob.
+	code, detail := recordingpipeline.SanitizeCaptureFailure("capture_attempt_failed",
+		"recorder control-plane request failed with HTTP status 502 code recording.capture_provider_failed"+
+			": "+syntheticCaptureLeaseToken+": https://objects.example.test/seg.mp4?X-Amz-Signature=deadbeef0123: "+syntheticCaptureCaption)
+	failure.ErrorCode = pgtype.Text{String: code, Valid: true}
+	failure.ErrorDetail = pgtype.Text{String: detail, Valid: true}
 	// This fixture claims again in the same transaction, whose now() is fixed.
 	if err := tx.QueryRow(ctx, `select now()`).Scan(&failure.AvailableAt); err != nil {
 		t.Fatal(err)

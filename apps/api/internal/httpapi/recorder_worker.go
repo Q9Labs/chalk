@@ -441,6 +441,10 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 			return
 		}
 		input := recordingpipeline.FailureInput{LeaseInput: lease, AvailableAt: availableAt, ErrorCode: body.ErrorCode, ErrorDetail: body.ErrorDetail}
+		if identity.Role == workeridentity.RoleCapture {
+			// The one place worker text enters storage and logs: keep only a fail-closed diagnostic.
+			input.ErrorCode, input.ErrorDetail = recordingpipeline.SanitizeCaptureFailure(body.ErrorCode, body.ErrorDetail)
+		}
 		job, err := service.Fail(request.Context(), input)
 		if err != nil {
 			writeRecorderWorkerError(w, err)
