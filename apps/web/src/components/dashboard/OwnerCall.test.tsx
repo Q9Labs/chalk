@@ -78,6 +78,40 @@ it.each(["confirmed", "unconfirmed"] as const)("navigates immediately and clears
   }
 });
 
+it("starts the new call from the time-limit screen in the language chosen for new calls", async () => {
+  window.sessionStorage.clear();
+  window.localStorage.setItem("chalk.transcript-language.new-call", "ur");
+  const platform = terminalTestPlatform();
+  mocks.dashboardAction.mockImplementation(async (_page, input) => (input.action === "create-call" ? { call: { id: "space-2" } } : { access: opaqueAccessGrant(1) }));
+  mocks.createClient.mockImplementation((options) =>
+    createSpaceClientForPlatform(options, {
+      ...platform,
+      dependencies: {
+        ...platform.dependencies,
+        createSyncClient: () => ({
+          ...platform.sync,
+          stop: platform.syncStopped,
+          start: async () => {
+            const snapshot = platform.sync.getSnapshot();
+            platform.emitSync({ ...snapshot, control: { ...snapshot.control, status: "ended", endReason: "maximum_duration" }, connection: { phase: "terminal", terminalReason: "episode_ended" } });
+          },
+        }),
+      },
+    }),
+  );
+  try {
+    await act(async () => render(<OwnerCall spaceId="space-1" />));
+    await act(async () => vi.waitFor(() => expect(screen.getByRole("button", { name: "Start a new call" })).toBeDefined()));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Start a new call" })));
+    expect(mocks.dashboardAction).toHaveBeenCalledWith("home", expect.objectContaining({ action: "create-call", transcriptLanguage: "ur" }));
+    expect(mocks.navigate).toHaveBeenCalledWith({ to: "/dashboard/call/$spaceId/join", params: { spaceId: "space-2" } });
+  } finally {
+    await act(async () => cleanup());
+    window.localStorage.clear();
+    vi.clearAllMocks();
+  }
+});
+
 it("keeps an open owner report editable with Send disabled when the five-minute proof expires", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-23T12:00:00Z"));
