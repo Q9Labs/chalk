@@ -354,10 +354,15 @@ type DrainState struct {
 	// Draining is true while the node refuses new Episodes. Calls already on it continue and
 	// still take joins.
 	Draining bool `json:"draining"`
-	// Allocations counts what the node holds for live Episodes: sessions and open source leases.
+	// Allocations counts what the node holds for live Episodes: its sessions, capture sessions
+	// included. Source leases are not in it.
 	Allocations int `json:"allocations"`
 	// CleanupDebt counts closes that have begun and not finished.
 	CleanupDebt int `json:"cleanupDebt"`
+	// SourceLeases counts the source leases open now. It is informational: leases are soft state,
+	// the API renews standing grants with no session on the node, and a restart drops them, so
+	// they do not hold a restart.
+	SourceLeases int `json:"sourceLeases"`
 }
 
 // HostState is the host-health guard's view over its window.

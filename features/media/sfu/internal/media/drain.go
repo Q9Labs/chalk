@@ -35,19 +35,25 @@ func (n *Node) DrainState() protocol.DrainState {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return protocol.DrainState{
-		Draining:    n.draining || n.stopped,
-		Allocations: n.allocations(),
-		CleanupDebt: n.cleanupDebt(),
+		Draining:     n.draining || n.stopped,
+		Allocations:  n.allocations(),
+		CleanupDebt:  n.cleanupDebt(),
+		SourceLeases: n.sourceLeases(),
 	}
 }
 
-// allocations counts what the node holds per Episode: live sessions, capture sessions included
-// because they live in n.sessions, and source leases that are still open. A lease with no session
-// lapses on its own TTL, so it counts until then. Every new kind of per-Episode holding outside
-// n.sessions is added here so that drain, readiness and the restart gate all see it. The caller
-// holds n.mu.
-func (n *Node) allocations() int {
-	count := len(n.sessions)
+// allocations counts what the node holds for live Episodes: its sessions, capture sessions
+// included because they live in n.sessions. A restart cuts these, so drain waits for them. Every
+// new kind of hard per-Episode holding outside n.sessions is added here so that drain, readiness
+// and the restart gate all see it. Source leases are not counted: they are soft state, which a
+// restart drops and the API grants again when a Participant rejoins, and the API keeps renewing
+// standing grants while no session exists. The caller holds n.mu.
+func (n *Node) allocations() int { return len(n.sessions) }
+
+// sourceLeases counts the source leases that are open now. It only informs: a lease with no
+// session does not hold a restart. The caller holds n.mu.
+func (n *Node) sourceLeases() int {
+	count := 0
 	now := monotonic()
 	for _, authority := range n.sources {
 		if authority.window.Load().open(now) {
