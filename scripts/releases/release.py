@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from github_release import GitHub, cut_decision, digest, held_candidates, outputs, payload, require
+from scorecard_override import override_reason
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -120,6 +121,11 @@ def retain_production(github, args):
     media = source.with_suffix('.media.json')
     if media.exists():
         info.update(media_sha256=digest(media.read_bytes()), media_base64=base64.b64encode(media.read_bytes()).decode())
+    audit = json.loads(os.environ.get('PROMOTION_AUDIT') or 'null')
+    if audit:
+        require(audit['target_sha'] == info['target_sha'] and override_reason(audit['reason']),
+                'scorecard override audit does not match the production release or has no reason')
+        info['scorecard_override'] = audit
     item = save_production(github, info)
     outputs({'deployment_id': item['id']})
 
@@ -255,6 +261,30 @@ def require_scorecard(info):
             f'scorecard_result={result}; gated metrics: {metrics}')
 
 
+def promotion_override(info):
+    reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
+    if not reason or info.get('scorecard_result') != 'gated-breach':
+        require_scorecard(info)
+    if not reason:
+        require_own_sfu_proof(info)
+        return None
+    proof_results = {}
+    if info.get('own_sfu_proof_result') != 'passed':
+        proof_results['own_sfu_proof_result'] = info.get('own_sfu_proof_result', 'missing')
+    if info.get('scorecard_result') == 'gated-breach':
+        proof_results['scorecard_result'] = 'gated-breach'
+    return dict(reason=reason, target_sha=info['target_sha'], nightly_run_id=info.get('proof_run_id') or info['run_id'],
+                actor=os.environ.get('GITHUB_ACTOR', ''), proof_results=proof_results,
+                gated_metrics=info.get('scorecard_gated_metrics', []))
+
+
+def summarize_override(audit):
+    if audit:
+        with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+            summary.write('## Scorecard override\n\nThe following failures are explicitly accepted for this promotion.\n\n```json\n'
+                          + json.dumps(audit, indent=2) + '\n```\n')
+
+
 def select(github, args):
     records = github.deployments('nightly')
     held = held_candidates(records)
@@ -265,8 +295,7 @@ def select(github, args):
     if expected:
         require(info['target_sha'] == expected,
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
-    require_scorecard(info)
-    require_own_sfu_proof(info)
+    audit = promotion_override(info)
     if expected:
         median = float(env('LEAVE_BASELINE_MEDIAN_MS'))
         require(0 < median <= 5000, 'captured Leave baseline median must be positive and at most 5000 ms')
@@ -274,9 +303,12 @@ def select(github, args):
         require(len(evidence) == 64 and all(char in '0123456789abcdef' for char in evidence), 'captured Leave evidence must be a SHA-256')
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
+    if audit:
+        result['scorecard_override'] = audit
     outputs({'selection': result})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write('## Exact promotion choice and rollback source\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
+    summarize_override(audit)
 
 
 def recheck(github, args):
@@ -288,10 +320,11 @@ def recheck(github, args):
     newest = held_candidates(github.deployments('nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
     info = validate_choice(github, item)
-    require_scorecard(info)
-    require_own_sfu_proof(info)
+    audit = promotion_override(info)
+    require(audit == selection.get('scorecard_override'), 'scorecard override changed after selection')
     manifest_bytes(github, selection['previous'])
     require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
+    summarize_override(audit)
 
 
 def fresh_envelope(source, output):

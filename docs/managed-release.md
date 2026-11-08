@@ -118,16 +118,23 @@ Nightly also records `own_sfu_proof_result` (`passed`, `failed` or `skipped`),
 bound to the cut's `target_sha` and `proof_run_id`. Promote requires a passed
 own-SFU proof for that exact SHA, both at selection and in the approval recheck.
 Missing results (including older cuts), skipped proofs and failed proofs block
-promotion with an error naming the SHA and nightly run. There is no override;
-cut a new nightly to obtain passing proof. The existing Cloudflare proof and
-held-cut rules are unchanged.
+promotion with an error naming the SHA and nightly run unless the existing
+`scorecard_override` input supplies a written reason. The existing Cloudflare
+proof and held-cut rules are unchanged.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
 It saves `scorecard_result` (`passed` or `gated-breach`) and
 `scorecard_gated_metrics` against the same SHA and nightly run. Selection and
-recheck reject gated breaches with the metric names, and reject missing results.
+recheck reject gated breaches with the metric names unless `scorecard_override`
+supplies a written reason, and always reject missing scorecard results.
 Budgets with `gate: false` remain warnings. History or issue publication cannot
 erase the saved verdict. Contended measurements are not performance evidence;
-their failed own-SFU proof still blocks promotion.
+their failed own-SFU result requires an override to promote.
+Empty and whitespace-only reasons do not override either check. A reason has no
+other length, format or user-role rule; dispatch permissions and production
+approval remain unchanged. The accepted proof results, gated metric names,
+reason and actor are labelled as a scorecard override in the run summary and
+retained production release record. Approval rechecks the same override; it
+cannot bypass SHA, artifact, Gate or rollback-source validation.
 
 The parent holds `chalk-environment-production` across approval, deploy, call
 and rollback. **Pending approval holds this lock**, blocking other production

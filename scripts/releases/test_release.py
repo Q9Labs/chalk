@@ -7,10 +7,11 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import release
-from github_release import GitHub, payload
+from github_release import GitHub, digest, payload
 
 SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
 OTHER_SHA = 'b' * 40
@@ -32,6 +33,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.output = Path(directory) / 'output'
         self.enterContext(patch.dict(os.environ, GITHUB_OUTPUT=str(self.output),
                                     GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'),
+                                    SCORECARD_OVERRIDE='',
                                     EXPECTED_RELEASE_SHA=SHA, LEAVE_BASELINE_MEDIAN_MS='150',
                                     LEAVE_BASELINE_EVIDENCE_SHA256='c' * 64))
         # Unrelated archive, media, Gate and rollback validation has its own boundaries.
@@ -83,6 +85,109 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.assertEqual(selection['selection']['proof_run_id'], RUN)
         with patch.dict(os.environ, SELECTION=json.dumps(selection)):
             release.recheck(api, None)
+
+    def test_existing_override_reason_continues_and_is_retained_with_results_and_metrics(self):
+        reason = 'Accept this staging regression for the approved rollout.'
+        metrics = ['chalk_sfu.action.join.first_audio_ms', 'chalk_sfu.action.camera_toggle.off_ms']
+        item = held('failed')
+        item['payload'].update(scorecard_result='gated-breach', scorecard_gated_metrics=metrics)
+        api = self.github(item)
+        with patch.dict(os.environ, SCORECARD_OVERRIDE=reason, GITHUB_ACTOR='release-operator'):
+            release.select(api, None)
+            selection = json.loads(self.output.read_text().split('selection=', 1)[1])
+            audit = selection['scorecard_override']
+            self.assertEqual(audit, dict(reason=reason, target_sha=SHA, nightly_run_id=RUN, actor='release-operator',
+                                        proof_results=dict(own_sfu_proof_result='failed', scorecard_result='gated-breach'),
+                                        gated_metrics=metrics))
+            self.assertNotIn('scorecard_override', item['payload'])
+            with patch.dict(os.environ, SELECTION=json.dumps(selection)):
+                release.recheck(api, None)
+        summary = Path(os.environ['GITHUB_STEP_SUMMARY']).read_text()
+        self.assertIn('## Scorecard override', summary)
+        for value in (reason, 'own_sfu_proof_result', 'failed', 'gated-breach', *metrics):
+            self.assertIn(value, summary)
+        with tempfile.TemporaryDirectory() as directory:
+            manifest = json.dumps(dict(release_id='release', source_revision=SHA)).encode()
+            (Path(directory) / 'release.json').write_bytes(manifest)
+            api.request.side_effect = None
+            api.request.return_value = dict(id=2)
+            with patch.dict(os.environ, RELEASE_ID='release', TARGET_SHA=SHA, GITHUB_RUN_ID='456',
+                            MANIFEST_SHA256=digest(manifest), MANIFEST_ARTIFACT_ID='10', PROMOTION_AUDIT=json.dumps(audit)):
+                release.retain_production(api, SimpleNamespace(directory=Path(directory)))
+            record = api.request.call_args.args[1]
+            self.assertEqual(record['task'], 'production-release')
+            self.assertEqual(record['payload']['scorecard_override'], audit)
+
+    def test_blank_override_reasons_keep_the_existing_failure_messages(self):
+        for reason in ('', ' \t\n '):
+            for scorecard_breach in (False, True):
+                for operation in ('select', 'recheck'):
+                    with self.subTest(reason=reason, scorecard_breach=scorecard_breach, operation=operation):
+                        item = held('failed')
+                        if scorecard_breach:
+                            item['payload'].update(scorecard_result='gated-breach', scorecard_gated_metrics=['chalk_sfu.action.leave_ms'])
+                        selection = dict(deployment_id=item['id'], selection=item['payload'], previous=self.previous)
+                        with patch.dict(os.environ, SCORECARD_OVERRIDE=reason, SELECTION=json.dumps(selection)):
+                            action = lambda: getattr(release, operation)(self.github(item), None)
+                            if not scorecard_breach:
+                                self.assert_blocked(action, 'failed')
+                            else:
+                                with self.assertRaises(ValueError) as error:
+                                    action()
+                                self.assertEqual(str(error.exception),
+                                                 f'cannot promote SHA {SHA} from nightly run {RUN}: '
+                                                 'scorecard_result=gated-breach; gated metrics: chalk_sfu.action.leave_ms')
+
+    def test_override_accepts_missing_and_skipped_proof_but_not_sha_or_missing_scorecard(self):
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='Accept the proof gap.'):
+            for result in (None, 'skipped'):
+                with self.subTest(result=result):
+                    self.output.write_text('')
+                    release.select(self.github(held(result)), None)
+                    selection = json.loads(self.output.read_text().split('selection=', 1)[1])
+                    self.assertEqual(selection['scorecard_override']['proof_results']['own_sfu_proof_result'], result or 'missing')
+            with self.assertRaisesRegex(ValueError, f'cannot promote SHA {SHA}: newest held nightly is SHA {OTHER_SHA}'):
+                release.select(self.github(held('failed', OTHER_SHA)), None)
+            item = held('failed')
+            del item['payload']['scorecard_result']
+            with self.assertRaisesRegex(ValueError, 'scorecard_result=missing'):
+                release.select(self.github(item), None)
+
+    def test_override_cannot_change_between_selection_and_approval(self):
+        api = self.github(held('failed'))
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='First reason'):
+            release.select(api, None)
+        selection = json.loads(self.output.read_text().split('selection=', 1)[1])
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='Different reason', SELECTION=json.dumps(selection)):
+            with self.assertRaisesRegex(ValueError, 'scorecard override changed after selection'):
+                release.recheck(api, None)
+
+    def test_existing_production_scorecard_gate_uses_the_same_nonblank_reason_rule(self):
+        fixture = Path(__file__).parent / 'fixtures/own_sfu_over_budget.json'
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            remote = directory / 'history.git'
+            subprocess.run(['git', 'init', '--bare', '--quiet', str(remote)], check=True)
+            bin_dir = directory / 'bin'
+            bin_dir.mkdir()
+            gh = bin_dir / 'gh'
+            gh.write_text('#!/bin/sh\nexit 0\n')
+            gh.chmod(0o755)
+            for reason in ('Accepted regression: monitor during rollout.', '', ' \t\n '):
+                with self.subTest(reason=reason):
+                    summary = directory / 'summary'
+                    summary.write_text('')
+                    environment = {**os.environ, 'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
+                                   'SCORECARD_HISTORY_REMOTE': str(remote), 'SCORECARD_OVERRIDE': reason,
+                                   'GITHUB_REPOSITORY': 'Q9Labs/chalk', 'GITHUB_SERVER_URL': 'https://github.com',
+                                   'GITHUB_RUN_ID': RUN, 'GITHUB_STEP_SUMMARY': str(summary),
+                                   'GITHUB_OUTPUT': str(directory / 'output')}
+                    result = subprocess.run(['bash', 'features/scorecard/promote-gate.sh', 'final', str(fixture.resolve())],
+                                            cwd=release.ROOT, env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0 if reason.strip() else 1, result.stderr)
+                    if reason.strip():
+                        self.assertIn('Scorecard override', summary.read_text())
+                        self.assertIn(reason, summary.read_text())
 
     def test_select_does_not_fall_back_to_an_older_passed_proof(self):
         for older_sha in (SHA, OTHER_SHA):
