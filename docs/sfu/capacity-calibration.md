@@ -11,7 +11,9 @@ budgets leave the initial 16,000 and 32,000. It sets what `deploy/deploy` render
 
 A class is three Participants with two cameras each, which reserves 7,170 packets/s
 ([design](design.md#workload-and-packet-rate-math)). The 22,000 and 36,000 figures are
-a model fitted to the runs below. No run has yet held a node at its new budget for hours.
+a model fitted to the runs below. The production soak proves five-class media
+stability below 36,000 packets/s, not sustained traffic at that budget. The staging
+three-class soak remains unproved.
 
 ## What limits a shared vCPU
 
@@ -37,10 +39,17 @@ for the worst burst, not the average.
 - Steal over 10 s peaked at 31%; media was clean to 9 classes, and 10 classes stalled 8 videos for up to 23 s.
 - At 5 classes demand over available CPU is 30% / 48% = 62% at steal 52%, and 50% at the 40% guard. Staging stalled at 75% and above. Production ran clean at 9 classes, where 46% own CPU over the 23% peak steal is 60%.
 
+**Evidence, 2 vCPU production node, 5 classes, 3.0 hours** (soak C, 2026-11-08):
+
+- All five classes (15 participants) had zero camera, screen or audio stalls and zero freezes.
+- Node `eth0` averaged 33,696 packets/s, with p99 35,108: below the 36,000 packets/s budget, not at it.
+- Host steal averaged 3.4%, with p99 36% and maximum 68%. Generator pauses are excluded; see the [M6 sizing evidence](milestones.md#m6--reproducible-sgp1-staging-and-production-nodes).
+
 ## Decision
 
-Keep demand over available CPU at about 65% or below at the worst steal seen (52%).
-That gives 3 classes on 1 vCPU (32% / 48% = 66%) and 5 on 2 vCPU (62%). The 4 classes
+The sizing model targets demand over available CPU at about 65% or below using
+52% steal. This is a model assumption, not an upper bound: soak C's maximum is 68%.
+The model gives 3 classes on 1 vCPU (32% / 48% = 66%) and 5 on 2 vCPU (62%). The 4 classes
 that stalled on 1 vCPU would sit at 88%. Production's guard of 40% closes admission
 before steal reaches the range where 5 classes would reach 75%; staging keeps 25% so
 the guard is easy to exercise there. The guard stops new Episodes only, so running
@@ -48,11 +57,26 @@ calls ride out a burst on the headroom above.
 
 ## Not proved
 
-- No soak has run at 22,000 on staging or at 36,000 on production. The 3 and 5 class figures come from the model above.
-- Production was measured for 25 minutes, so its steal tails over hours are unknown. The staging tails came after the first hour.
+- The five-hour, three-class staging soak at budget 22,000 remains unproved. Its capacity figure comes from the model above.
+- Production's five-class, three-hour result is proved only at the measured traffic below 36,000 packets/s. Capacity above 15 participants, toward the 36,000 packet budget, remains unproved.
+- The soak C summary does not establish the requested 40% production guard setting or paired 10 s steal and own-CPU samples.
 - The 06:47Z event is unexplained by steal.
 - Reservations stay at the M2 costs. The 2 vCPU figure holds for the class shape above, not for other mixes.
 
-## Next soak
+## Soak acceptance
 
-Run `TestLiveSmokeClasses` for 5 hours on staging at 3 classes (budget 22,000), covering the :00 and :30 marks, and require no microphone stall over 500 ms. Run the same on production at 5 classes (budget 36,000) for at least 3 hours with the 40% guard. Record 10 s steal and own CPU for both. If staging passes, the model holds for 1 vCPU and the production run confirms the 2 vCPU figure.
+Soak C meets the production duration (at least 3 hours), class count (5) and
+no-microphone-stall-over-500-ms criteria. Production acceptance is partial: the
+40% guard setting and paired 10 s steal and own-CPU samples still need evidence.
+The run does not prove sustained throughput at 36,000 packets/s or staging capacity.
+
+The SFU lead owns the production canary on the production node under the existing
+bench/canary rules. Its guard-setting and paired CPU/steal evidence must meet the
+independent [M12 package 4 entry condition](milestones.md#package-4-entry-condition)
+before cutover, not M12's post-cutover checks. Production serves no `chalk_sfu` users yet.
+
+For the separate staging proof, run `TestLiveSmokeClasses` for 5 hours at 3 classes (budget 22,000),
+covering the :00 and :30 marks, and require no microphone stall over 500 ms.
+Record 10 s steal and own CPU. If M11 needs capacity above 15 participants toward
+36,000 packets/s, measure it on the shared production node under the bench rules:
+short-lived bench droplets, at most USD 1, delete by ID.

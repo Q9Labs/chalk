@@ -283,6 +283,17 @@ gates. Starve CPU and expire TURN credentials to prove admission guards, renewal
 alerts and bounded recovery. Load generators run on Instabox, or on disposable
 Droplets tagged with the lane's own tag, `chalk-sfu-bench-<lane>`, and deleted by that tag after each run. The tag list must be empty before the lane reports done.
 
+**Node sizing evidence (soak C, 2026-11-08):**
+
+| Area                | Evidence                                                                                                                                                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setup               | 3.0 node-hours on the production-class own-SFU node: DigitalOcean `sgp1`, `s-2vcpu-2gb`, Basic shared CPU (`DO-Regular`). Two `s-2vcpu-4gb` `DO-Regular` generators in `sgp1`: classes 0–2 (3 classes, 9 participants) and 3–4 (2 classes, 6 participants), 15 participants total.                    |
+| Media               | Zero camera, screen or audio stalls across all five classes; 0 freezes.                                                                                                                                                                                                                               |
+| Node                | Host steal: mean 3.4%, p99 36%, max 68%; SFU `/readyz` steal means 1.15% and 1.18%. Node `eth0`: mean 33,696 packets/s, p99 35,108, both below the 36,000 packets/s budget. This is not a soak at the budget.                                                                                         |
+| Generator exclusion | Generator pauses are excluded: timer lateness maxima 28 ms and 32 ms, 0 seconds ≥100 ms, max GC pause delta 12 ms; 0 TSC/clocksource journal hits on node and generators. The earlier shared-generator run's 4 freezes in 10.98 node-hours (0.364/h) were generator-side.                             |
+| Sizing decision     | A dedicated-CPU node is not needed on today's evidence. A dedicated CPU-Optimized comparison was considered but not run because the shared node showed no freezes even at steal p99 36%.                                                                                                              |
+| Unproved capacity   | The staging soak and capacity above 15 participants toward 36,000 packets/s remain unproved. See [partial soak acceptance](capacity-calibration.md#soak-acceptance). Run the higher-capacity proof only if M11 needs it, on the shared node: short-lived bench droplets, at most USD 1, delete by ID. |
+
 **Risk:** shared CPU and generator limits can distort one run. Staging matches
 production's size, so its results carry over, but one run is not a capacity
 guarantee. Full cutover waits for M10's capture demand and M11's placement and
@@ -576,7 +587,8 @@ lead.
    15 November, owned by M12). `cf_sfu` action budgets stay warn-only and M13
    deletes them.
 
-4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
+4. **Cutover.** First pass the [production canary entry condition](#package-4-entry-condition).
+   Expand the flag through internal canary, cohorts, and then flip
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
@@ -584,7 +596,7 @@ lead.
    own provider and the last compatible-client check passes, and Promote has a
    passing `chalk_sfu` real-call proof scorecard (join startup, Leave, mic/camera
    toggle) for the same SHA from the nightly or staging node, so it needs no
-   production canary, and the scorecard scoring fails the Promote run on
+   production canary for that scorecard, and the scorecard scoring fails the Promote run on
    regression (rollback stays safe). That gate is built only if it fits the
    existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
    otherwise it stays in this package with its cost written down. Today nightly
@@ -595,7 +607,21 @@ lead.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 
-**Check:** audit counts show every Tenant and Space resolves to the own provider
+### Package 4 entry condition
+
+The SFU lead owns the production calibration canary, run on the production node
+under the existing bench/canary rules before package 4 expands the flag.
+The named pass line, `production-calibration-canary: PASS`, requires at least
+3 hours with five classes (15 participants), the 36,000 packets/s budget configured,
+the 40% guard setting confirmed, paired 10 s own-CPU and steal samples, and no
+microphone stall over 500 ms. Record actual packet rates; the configured budget
+does not prove sustained throughput at 36,000 packets/s. This gate is independent
+of Promote's scorecard and the post-cutover checks below. The five-hour,
+three-class staging soak remains a separate proof.
+
+### Post-cutover checks
+
+Audit counts show every Tenant and Space resolves to the own provider
 for new Episodes, and live bindings and traffic counts agree with the flag. Each
 supported browser and real iOS and Android builds pass join, refresh,
 restart/replacement, every source, relay-only paths and recording/transcription.
