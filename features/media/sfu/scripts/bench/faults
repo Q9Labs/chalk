@@ -165,13 +165,14 @@ partition_and_heal() {
   incarnation="$(ready_value primary .nodeIncarnation)"
   sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-2" "$episode" 1 2 1 120)"
   check "a 120 s hold exists on the primary (HTTP ${status})" [ "$status" = 200 ]
-  node_ssh primary "ufw insert 1 deny from ${runner} to any port ${control_port} proto tcp" >/dev/null
+  # iptables, not ufw: ufw skips a deny that has the same match as the allow rule it would precede.
+  node_ssh primary "iptables -I INPUT 1 -s ${runner} -p tcp --dport ${control_port} -j DROP"
   check "primary /readyz is unreachable from this machine" wait_until 20 is_down primary
   evidence "control port blocked, /readyz status ${status}"
   check "SSH to the primary still works" node_ssh primary true
   check "the standby still answers" is_up standby
   check "the SFU process keeps running on the primary" node_ssh primary systemctl --user -M chalk-sfu@ is-active --quiet chalk-sfu
-  node_ssh primary "ufw delete deny from ${runner} to any port ${control_port} proto tcp" >/dev/null
+  node_ssh primary "iptables -D INPUT -s ${runner} -p tcp --dport ${control_port} -j DROP"
   check "primary /readyz answers after the heal" wait_until 20 is_up primary
   check "same incarnation after the heal" ready_is primary ".nodeIncarnation == \"${incarnation}\""
   check "the hold survived the partition" ready_is primary ".allocations == 1"
