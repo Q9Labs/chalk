@@ -48,6 +48,7 @@ type Fleet struct {
 	inflight    map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
 	probed      bool                   // a probe round has finished, so a node without a load record has none
 	firstRound  time.Time              // when the first probe round finished
+	heldUntil   map[string]time.Time   // when this process's recovery reserve of an Episode on a node ends, by node and Episode
 	holdSeconds int                    // how long a recovery's reservation waits for rejoins; zero means recoveryHoldSeconds
 }
 

@@ -722,3 +722,25 @@ func TestASubscriptionEndingAfterAReReserveReturnsItsShareToTheNewHold(t *testin
 		t.Fatalf("after the subscription ended the hold keeps %d (want %d) and the node reserves %d (want %d)", got, want, f.reserved(), threePerson+capture)
 	}
 }
+
+func TestASameGenerationReserveNeverShrinksTheHold(t *testing.T) {
+	f := newReserveNode(t)
+	if _, err := f.node.ReserveEpisode(reserveRequest("one", 3)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.node.ReserveEpisode(reserveRequest("one", 2)); err != nil {
+		t.Fatal(err)
+	}
+	if reserved := f.reserved(); reserved != threePerson {
+		t.Fatalf("a delayed smaller reserve left %d reserved, want %d", reserved, threePerson)
+	}
+	// A newer generation is a new decision and may hold less.
+	newer := reserveRequest("one", 2)
+	newer.Generation = 2
+	if _, err := f.node.ReserveEpisode(newer); err != nil {
+		t.Fatal(err)
+	}
+	if reserved := f.reserved(); reserved >= threePerson {
+		t.Fatalf("a newer generation left %d reserved, want less than %d", reserved, threePerson)
+	}
+}

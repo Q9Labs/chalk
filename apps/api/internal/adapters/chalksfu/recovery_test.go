@@ -221,6 +221,29 @@ func TestRecoveryAfterARestartStaysOnTheSameNode(t *testing.T) {
 	}
 }
 
+// The reserve asks for room for a screen share, but a node whose ceiling cannot carry the
+// Episode with one still takes it without: the Episode stays recoverable.
+func TestRecoveryFallsBackToAnEpisodeWithoutAScreenShare(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	// With the harness costs, three Participants need 900 packets/s of mandatory media without a
+	// share and 1500 with one, so a ceiling of 1200 carries them only without.
+	box := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "10000", "SFU_EPISODE_PACKET_CEILING": "1200"})
+	fleet := box.fleetWithOverflow(t, ca, clientIdentity, true, runtimeconfig.ChalkSFUNode{ID: "sfu-a", ControlURL: box.controlURL})
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 3)
+	restart(t, box)
+	fleet.Probe(context.Background())
+	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
+		t.Fatalf("recovery of three Participants on a node that cannot carry a share: %v", err)
+	}
+	if moved, moves := store.current(); moves != 1 || moved.Generation != 1 {
+		t.Fatalf("after the fallback: %+v (%d moves), want one move", moved, moves)
+	}
+	if stateOf(t, box).ReservedPackets == 0 {
+		t.Fatal("the node holds nothing for the recovering Episode")
+	}
+}
+
 // A refused reserve, or no node to ask, leaves the binding as it was and gives the capacity
 // error. The Episode never moves to Cloudflare, with overflow on.
 func TestRecoveryRefusedLeavesTheBindingAndSaysCapacity(t *testing.T) {
