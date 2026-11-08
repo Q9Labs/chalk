@@ -342,13 +342,13 @@ function CallReadyDialog({ link, onJoin, onClose }: { readonly link: string; rea
         </button>
       }
     >
-      <div className="linkrow" style={{ marginTop: 18 }}>
+      <div className="linkrow" style={{ marginTop: "var(--space-4)" }}>
         <div className="linkbox">
           <span>{displayLink(link)}</span>
         </div>
         <CopyAction text={link} pill />
       </div>
-      <p className="help" style={{ marginTop: 12 }}>
+      <p className="help" style={{ marginTop: "var(--space-3)" }}>
         People ask to join, and you let them in. Change this on the call’s page.
       </p>
     </Dialog>
@@ -399,7 +399,7 @@ function JoinLinkDialog({ onClose }: { readonly onClose: () => void }) {
         </>
       }
     >
-      <div className="field" style={{ marginTop: 16 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="join-link">
           Call link
         </label>
@@ -470,7 +470,7 @@ export function RenameDialog({ call, page, link, onClose, onRenamed }: { readonl
         </>
       }
     >
-      <div className="field" style={{ marginTop: 16 }}>
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
         <label className="lbl" htmlFor="rename-input">
           Name
         </label>

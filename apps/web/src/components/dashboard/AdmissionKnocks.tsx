@@ -4,7 +4,7 @@ import { Avatar } from "../site/Avatar";
 export function AdmissionKnocks({ knocks, onDecision }: { readonly knocks: CallPageDTO["knocks"]; readonly onDecision: (handle: string, allow: boolean) => Promise<void> }) {
   if (!knocks.length) return null;
   return (
-    <div className="list" aria-label="Asking to join" style={{ marginTop: 16 }}>
+    <div className="list" aria-label="Asking to join" style={{ marginTop: "var(--space-4)" }}>
       {knocks.map((knock) => {
         const busy = knock.decisionState === "in_flight";
         return (

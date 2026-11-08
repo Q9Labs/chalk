@@ -1437,7 +1437,10 @@
 [data-chalk] {
   --elevation-speaking-band: inset 0 0 0 3px color-mix(in srgb, var(--chalk-on-overlay) 90%, transparent), inset 0 0 0 4px var(--chalk-scrim);
   --elevation-hairline: 0 0 0 1px var(--chalk-line);
+  --elevation-hairline-strong: 0 0 0 1px var(--chalk-line-strong);
   --elevation-outline: 0 0 0 1px var(--chalk-text);
+  --elevation-outline-danger: 0 0 0 1px var(--chalk-danger-text);
+  --elevation-segment-light: 0 1px 2px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--chalk-line);
   --elevation-hairline-inset: inset 0 0 0 1px var(--chalk-line);
   --elevation-divider-top: inset 0 1px 0 var(--chalk-line);
   --elevation-divider-bottom: inset 0 -1px 0 var(--chalk-line-strong);

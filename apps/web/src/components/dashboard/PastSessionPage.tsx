@@ -113,7 +113,7 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
     return (
       <div className="wrap wide">
         {back(null)}
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: "var(--space-6)" }}>
           <ErrorPanel title="Couldn’t load this session" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       </div>
@@ -479,13 +479,13 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
     );
   else if (transcript.kind === "failed")
     body = (
-      <div style={{ padding: 14 }}>
+      <div style={{ padding: "var(--space-3)" }}>
         <ErrorPanel title={TRANSCRIPT.failed.copy} detail="The transcript isn’t available for this session." />
       </div>
     );
   else if (transcript.kind === "unreadable")
     body = (
-      <div style={{ padding: 14 }}>
+      <div style={{ padding: "var(--space-3)" }}>
         <ErrorPanel title="Couldn’t load the transcript" detail={transcript.message} />
       </div>
     );

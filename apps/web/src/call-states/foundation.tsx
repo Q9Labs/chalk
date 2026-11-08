@@ -12,7 +12,7 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
   const [layout, setLayout] = useState("spotlight");
   const moving = useRef<HTMLDivElement>(null);
   return (
-    <main data-chalk data-chalk-theme={theme} className="chalk-root chalk-frame" style={{ padding: 24 }}>
+    <main data-chalk data-chalk-theme={theme} className="chalk-root chalk-frame" style={{ padding: "var(--space-6)" }}>
       <div className="flex flex-wrap items-center gap-2">
         <ChalkTooltip
           trigger={
@@ -80,7 +80,7 @@ export function FoundationKit({ scheme, initialNotice = true }: { readonly schem
         Same node
       </div>
       <ChalkSheet open={sheet} onOpenChange={setSheet} title="More">
-        <div style={{ fontSize: 16, display: "flex" }}>
+        <div style={{ fontSize: "var(--type-lead)", display: "flex" }}>
           <ChalkSegmentedControl
             label="Layout"
             value={layout}
