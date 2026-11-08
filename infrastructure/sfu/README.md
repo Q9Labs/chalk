@@ -153,6 +153,19 @@ features/media/sfu/scripts/bench/bench down    # delete the fleet and its firewa
 features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets older than 3 hours
 ```
 
+`features/media/sfu/scripts/bench/faults` is the fault harness of M11 package 5.
+It runs `up`, then the node-level cases against the real SFU processes: kill the
+primary, partition control and heal, return the old node, expire a hold and a
+lease, saturate the standby, and drain with a short deadline, a forced
+replacement and a drain to zero. It prints a snapshot of both nodes after each
+case, deletes the Droplets it created by ID, lists the tag, and exits 1 if a case
+failed or a `chalk-sfu-bench-fleet-*` Droplet remains. Droplets of other runs are
+listed and left alone. `--long-drain` adds the one-hour drain
+(`BENCH_LONG_DRAIN_SECONDS` shortens it for a smoke run). A run takes about 25
+minutes and costs a few cents. The cases open sessions and reserves without a
+WebRTC peer, so they prove admission, drain and restart behavior and not media
+recovery; repair and layer counters reach only the OTLP export.
+
 - Every Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`. The script
   lists and deletes only Droplets with that tag in `sgp1`, so the production and
   staging nodes and every other Droplet are out of reach.
