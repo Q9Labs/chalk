@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { contention, signal } from "./contention.mjs";
 import { readLogs } from "./staging-logs.mjs";
+import { readNodeMetrics } from "./staging-metrics.mjs";
 import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
 
 const evidence = resolve(".private/latency-scorecard");
@@ -48,10 +49,21 @@ async function logs(start, end) {
   }
 }
 
+async function nodeMetrics(start, end, options) {
+  try {
+    return await readNodeMetrics(new Date(start).toISOString(), new Date(end).toISOString(), options);
+  } catch (error) {
+    const reason = /^staging_metrics_(configuration_missing|endpoint_invalid|query_(empty|failed|incomplete|malformed))$/.test(error?.message) ? error.message : "staging_metrics_query_unavailable";
+    console.error(`Staging node metrics unavailable: ${reason}.`);
+    if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `Staging node metrics unavailable: \`${reason}\`.\n`);
+    return [];
+  }
+}
+
 // Allow 30 seconds for log ingestion; a quiet API window is observable, not proof of node idleness.
 async function quietWindow() {
   const end = Date.now() - 30_000;
-  return logs(end - 30_000, end);
+  return { events: await logs(end - 30_000, end), end };
 }
 
 function workload(program, args, options = {}) {
@@ -68,27 +80,34 @@ async function measure() {
     if (attempt === 2) {
       console.log("Contended attempt; waiting up to 10 minutes for a quiet staging API-log window before one retry.");
       const deadline = Date.now() + 600_000;
-      while ((!before || before.length > 0) && Date.now() < deadline) {
+      while ((!before.events || before.events.length > 0) && Date.now() < deadline) {
         await delay(Math.min(15_000, deadline - Date.now()));
         before = await quietWindow();
       }
     }
+    const boundary = before.end;
+    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);
     let status = 1;
     // Do not add load to an already busy or unobservable node.
-    if (before && before.length === 0) {
+    const nodeIdle = nodeBefore.length === 1 && nodeBefore.every((row) => Number.isFinite(row.host?.stealPercent) && row.sessions === 0 && row.draining === false);
+    if (before.events && before.events.length === 0 && nodeIdle) {
       await appendFile(".private/proof-run-ids", `${runId}\n`);
       // Keep timeout and the kit in the lease's process group so lease loss stops both.
+      const measurementEnv = { ...process.env, CHALK_PROOF_RUN_ID: runId };
+      delete measurementEnv.CHALK_AXIOM_METRICS_QUERY_TOKEN;
       status = await workload("timeout", ["--foreground", "--signal=TERM", "--kill-after=10s", "20m", "pnpm", "prod:latency", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"], {
-        env: { ...process.env, CHALK_PROOF_RUN_ID: runId },
+        env: measurementEnv,
       });
     }
     const end = Date.now();
     await delay(30_000);
-    const window = await logs(start, end);
+    // Include joins while the preflight queries ran, not just events after the kit began.
+    const window = await logs(before.end, end);
     const after = await logs(end, Date.now());
+    const [nodeWindow, nodeAfter] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
     const card = await json(resolve(directory, "scorecard-chalk_sfu.json"), await emptyCard());
     let ownEpisodes = [];
     try {
@@ -100,9 +119,9 @@ async function measure() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    card.contention = contention({ lease: await json(leaseFile), before, after, window, ownEpisodes });
+    card.contention = contention({ lease: await json(leaseFile), before: before.events, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter });
     // A skipped attempt or missing boundary readout cannot be accepted as an isolated run.
-    if (!before || before.length > 0 || !after || card.metrics.length === 0) card.contention.contended = true;
+    if (!before.events || before.events.length > 0 || !after || card.metrics.length === 0) card.contention.contended = true;
     await save(card);
     await writeFile(resolve(evidence, `attempt-${attempt}.json`), JSON.stringify(card));
     if (!card.contention.contended) return status;

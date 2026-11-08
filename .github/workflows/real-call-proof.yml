@@ -76,6 +76,9 @@ on:
       CHALK_AXIOM_QUERY_TOKEN:
         description: Read-only staging API-log query token, needed only for own-SFU staging latency
         required: false
+      CHALK_AXIOM_METRICS_QUERY_TOKEN:
+        description: Read-only SFU metrics query token, needed only for own-SFU staging latency
+        required: false
       CHALK_ALERTS_DISCORD_WEBHOOK_URL:
         description: Production alerts Discord webhook; only timer runs use it
         required: false
@@ -234,6 +237,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CHALK_AXIOM_QUERY_TOKEN: ${{ secrets.CHALK_AXIOM_QUERY_TOKEN }}
           CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
+          CHALK_AXIOM_METRICS_QUERY_TOKEN: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && secrets.CHALK_AXIOM_METRICS_QUERY_TOKEN || '' }}
+          CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ vars.CHALK_AXIOM_STAGING_METRICS_DATASET }}
+          CHALK_AXIOM_METRICS_BASE_URL: ${{ vars.CHALK_AXIOM_METRICS_BASE_URL }}
         run: |
           # A revision from before the own-SFU nightly has no latency kit scorecard code to run.
           if [ ! -f features/scorecard/own-sfu.mjs ]; then

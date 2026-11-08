@@ -108,10 +108,36 @@ unavailable signals have `value: "unavailable"`, never an invented zero.
 `lease_holder_before` and its acquisition/expiry times come from the Git ref.
 `foreign_episodes_seen`, `foreign_sessions_seen`, before/after event counts,
 measurement event count and own-Episode event count come from API logs.
-`steal_max`, `incarnation_changes` and `drain` are **unavailable** in this source.
-The SFU deploy exports OTLP metrics but does not ship its journal lines; node
-metric read access is a separate follow-up. The collector keeps node readouts
-as an optional second source behind the same fields.
+Node gauges use a second, read-only Axiom MPL source. Configure nightly's
+`CHALK_AXIOM_STAGING_METRICS_DATASET` and `CHALK_AXIOM_METRICS_BASE_URL` variables
+for the metrics dataset's edge deployment. The existing
+`CHALK_AXIOM_METRICS_QUERY_TOKEN` repository secret is exposed only to the
+own-SFU latency step, and is removed from the latency kit's environment.
+Dataset configuration lives in `staging-logs.mjs` for both collectors.
+
+`staging-metrics.mjs` filters `service.name=chalk-sfu` and
+`deployment.environment.name=staging`. It queries maximum gauge values per
+incarnation before, during and after measurement. `chalk.sfu.host.cpu.steal`
+is a ratio and becomes `steal_max` in percent. Distinct `service.instance.id`
+tags supply incarnation changes; `chalk.sfu.draining` supplies drain state.
+Only boundary `chalk.sfu.sessions` readings count as foreign sessions, because
+in-window sessions include the kit's own. Incarnation IDs never enter a card.
+Before starting the kit, the collector refreshes sessions over the latest
+30-second window after the three historical gauge queries finish. A positive,
+empty or failed refresh prevents the workload from starting.
+
+Missing tokens, failed queries, empty readings and incomplete responses leave
+node signals **unavailable**, never zero. Node coverage in all three phases is
+required; unavailable steal cannot produce an isolated card.
+API observation spans the preflight boundary through workload completion, so
+joins while the metrics queries run are not lost. Failures retain fixed,
+redacted reason codes in the job log and step summary, never raw exceptions.
+The observed metrics-v2 response has no pagination or completeness field. The collector
+rejects unexpected response metadata and results reaching its conservative
+1,000-point or 1,000-series cap; that cap is a collector policy, not a claimed
+MPL endpoint limit. Queries use `align using max`, so normal responses hold one
+peak per incarnation. A sanitized live wire shape is retained in
+`fixtures/axiom-metrics-shape.json` for the fake-response tests.
 
 A successful API query with no `chalk_sfu` events sets
 `zero_chalk_sfu_events.value: true`: it may mean an idle node or a logging gap,
@@ -119,7 +145,7 @@ not measured zero load. Missing/partial log windows (including a full 1,000-row
 page, a continuation token, or more matching rows than returned), no own-Episode coverage,
 a lost lease, or observed foreign Episodes make a card `contended: true`.
 Quiet API logs do not prove that an already connected, silent foreign session
-is absent. All active node gauges remain unavailable with this fallback.
+is absent; boundary session gauges provide an additional check.
 
 After a contended attempt, the job waits up to 10 minutes for a quiet API-log
 window and retries the measurement once under the lease. Each measurement is

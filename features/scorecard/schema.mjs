@@ -124,11 +124,12 @@ function contentionProblems(value, fail) {
   const dates = ["lease_acquired_at_before", "lease_expires_at_before"];
   const fields = [...counts, ...booleans, ...dates, "lease_holder_before", "steal_max"];
   exactKeys(value, ["contended", "source", ...fields], "contention", fail);
-  if (typeof value?.contended !== "boolean" || value?.source !== "axiom_api_logs_and_github_lease") fail("contention: invalid status or source");
+  if (typeof value?.contended !== "boolean" || !["axiom_api_logs_and_github_lease", "axiom_api_logs_and_metrics_and_github_lease"].includes(value?.source)) fail("contention: invalid status or source");
+  if (value?.source === "axiom_api_logs_and_metrics_and_github_lease" && value?.steal_max?.value === "unavailable" && !value?.contended) fail("contention: unavailable node steal requires a contended card");
   for (const field of fields) {
     const item = value?.[field];
     exactKeys(item, ["value", "source"], `contention.${field}`, fail);
-    if (!["github_lease", "axiom_api_logs", "node_readout", "unavailable"].includes(item?.source)) fail(`contention.${field}: invalid source`);
+    if (!["github_lease", "axiom_api_logs", "node_readout", "axiom_metrics", "unavailable"].includes(item?.source)) fail(`contention.${field}: invalid source`);
     if (item?.value === "unavailable") continue;
     if (item?.source === "unavailable") fail(`contention.${field}: measured value needs a source`);
     const measured = item?.value;
