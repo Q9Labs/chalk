@@ -36,6 +36,9 @@ type wireTrack struct {
 type wireCreateRequest struct {
 	OperationID string    `json:"operationId"`
 	Scope       wireScope `json:"scope"`
+	// Kind is "capture" for a recorder's receive-only session. A node that does not
+	// know the field refuses the request, so it is sent only for captures.
+	Kind string `json:"kind,omitempty"`
 }
 
 type wireCreateResponse struct {
@@ -96,6 +99,10 @@ type wireClosedTrack struct {
 type wireCloseResponse struct {
 	Tracks             []wireClosedTrack `json:"tracks"`
 	SessionDescription *wireDescription  `json:"sessionDescription,omitempty"`
+}
+
+type wireRemoveRequest struct {
+	Scope wireScope `json:"scope"`
 }
 
 type wireEndRequest struct {
@@ -173,7 +180,13 @@ type wireReady struct {
 	ReservedPackets int    `json:"reservedPackets"`
 	// NewEpisodePackets is what a new Episode reserves at its first join.
 	NewEpisodePackets int `json:"newEpisodePackets"`
-	Host              struct {
+	// Draining is true while the node refuses new Episodes. A draining node answers 503 with this
+	// body; an older node answers 503 with an error body, which leaves Draining false.
+	Draining bool `json:"draining"`
+	// Allocations is what the node holds for live Episodes, and CleanupDebt the closes it still owes.
+	Allocations int `json:"allocations"`
+	CleanupDebt int `json:"cleanupDebt"`
+	Host        struct {
 		// AdmissionReason is set while the node refuses new Episodes.
 		AdmissionReason string `json:"admissionReason"`
 	} `json:"host"`

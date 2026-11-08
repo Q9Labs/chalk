@@ -126,3 +126,45 @@ Compare `packet_rate` with `packet_budget` for headroom. Any `refusals`, any
 sustained `pacer.drops`, or steal above a few percent during a call means the
 node is at its limit. The `sfu-readiness` alert in
 `infrastructure/observability/production-alerts` watches the node's `/readyz`.
+
+## Bench fleet for multi-node proofs
+
+`features/media/sfu/scripts/bench/bench` makes the two nodes M11 proofs need,
+and deletes them the same day: a `s-2vcpu-2gb` primary at packet budget 32000
+and a `s-1vcpu-1gb` standby at 16000, about $0.04 an hour together. It uses the
+production path (the cloud-init template, `deploy/certs` and `deploy/deploy`
+with the `bench` environment), so the nodes run the same image as production.
+Run it from a clean checkout, because `deploy` builds the committed revision.
+
+```sh
+features/media/sfu/scripts/bench/bench up      # about 5 minutes; prints CHALK_SFU_NODES and the client bundle paths
+features/media/sfu/scripts/bench/bench status  # size, age and estimated cost of every tagged Droplet
+features/media/sfu/scripts/bench/bench down    # delete the fleet and its firewall, then list the tag
+features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets older than 3 hours
+```
+
+- Every Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`. The script
+  lists and deletes only Droplets with that tag in `sgp1`, so the production and
+  staging nodes and every other Droplet are out of reach.
+- Control (TCP 8443) and SSH accept only this machine's public IPv4 address.
+  `BENCH_CONTROL_ADDRESSES` adds comma-separated IPv4 sources for control, such
+  as Instabox. The media port stays open to all, like production.
+- Each run issues a fresh CA, server certificate and a one-day client
+  certificate with the API identity into `~/.config/chalk-sfu/bench`. `down` deletes the
+  directory. Nothing goes to Git or 1Password.
+- `up` ends by calling `/readyz` on both nodes over mutual TLS and requires
+  the budgets and two different node incarnations. If any step fails, it deletes
+  the fleet before it exits.
+- `down` deletes the fleet's own Droplets (`chalk-sfu-bench-fleet-*`), waits
+  until they are gone, then removes the firewall and the certificates and lists
+  the tag. It exits 1 if one of them remains. Another run that also wears the
+  tag, such as a load generator, is left alone and reported with exit 3.
+  `down --all` deletes every tagged Droplet in `sgp1`.
+- `reap [hours]` (default 3) deletes tagged `sgp1` Droplets older than the age
+  whatever their name, including a load generator another run still uses. Skip
+  one with `--exclude <droplet id>`, repeated as needed, and list the targets
+  first with `--dry-run`. It uses DigitalOcean's creation time, so it works from
+  any machine, and it removes the firewall and certificates only after the
+  Droplets are gone.
+
+A stopped Droplet still bills, so never power one off to save money: delete it.

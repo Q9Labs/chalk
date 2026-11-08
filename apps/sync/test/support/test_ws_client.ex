@@ -61,11 +61,6 @@ defmodule ChalkSync.TestWSClient do
     })
   end
 
-  @doc "Initiates a graceful WebSocket close handshake."
-  def close(%__MODULE__{} = client, code \\ 1_000, reason \\ "") do
-    send_frame(client, {:close, code, reason})
-  end
-
   @doc "Closes the underlying TCP socket without sending a WebSocket close frame."
   def close_tcp(%__MODULE__{} = client) do
     {:ok, conn} = HTTP.close(client.conn)

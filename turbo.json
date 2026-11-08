@@ -22,7 +22,7 @@
     },
     "test": {
       "inputs": ["$TURBO_ROOT$/scripts/test/**", "$TURBO_DEFAULT$", "!**/*.md", "!**/node_modules/**", "!**/dist/**", "!**/coverage/**", "!**/.turbo/**", "!**/.astro/**", "!**/.next/**", "!**/.wrangler/**", "!**/.output/**", "!example/**", "!ios/**", "!android/**"],
-      "outputs": ["coverage/**"],
+      "outputs": [],
       "env": ["CI", "NODE_ENV"]
     },
     "check-types": {

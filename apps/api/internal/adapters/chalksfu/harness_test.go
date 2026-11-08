@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -244,14 +245,6 @@ func (s *sfu) launch(t *testing.T) {
 	}
 }
 
-// restart loses the node: every session, publication and source control goes,
-// and a new process with a new incarnation answers on the same addresses.
-func (s *sfu) restart(t *testing.T) {
-	t.Helper()
-	s.stop()
-	s.launch(t)
-}
-
 func (s *sfu) httpClient(t *testing.T, clientCA *authority, identity string) *http.Client {
 	t.Helper()
 	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
@@ -299,12 +292,18 @@ func (s *sfu) fleet(t *testing.T) *chalksfu.Fleet {
 // from clientCA that names identity.
 func (s *sfu) fleetOf(t *testing.T, clientCA *authority, identity string, nodes ...runtimeconfig.ChalkSFUNode) *chalksfu.Fleet {
 	t.Helper()
+	return s.loggedFleetOf(t, nil, clientCA, identity, nodes...)
+}
+
+// loggedFleetOf is fleetOf with a logger, for tests that read the pool's transitions.
+func (s *sfu) loggedFleetOf(t *testing.T, log *slog.Logger, clientCA *authority, identity string, nodes ...runtimeconfig.ChalkSFUNode) *chalksfu.Fleet {
+	t.Helper()
 	certPEM, keyPEM := clientCA.issue(t, identity, x509.ExtKeyUsageClientAuth)
 	fleet, err := chalksfu.NewFleet(runtimeconfig.ChalkSFUConfig{
 		Enabled: true, ApplicationID: "conformance-pool", Nodes: nodes, ServerName: "localhost", STUNURLs: []string{"stun:stun.example:3478"},
 		CAFile: write(t, s.dir, "trust.pem", s.ca.pem), ClientCertFile: write(t, s.dir, fmt.Sprintf("client-%d.pem", serial.Add(1)), certPEM),
 		ClientKeyFile: write(t, s.dir, fmt.Sprintf("client-%d.key", serial.Load()), keyPEM), RequestTimeout: 10 * time.Second,
-	}, nil)
+	}, log)
 	if err != nil {
 		t.Fatalf("new fleet: %v", err)
 	}

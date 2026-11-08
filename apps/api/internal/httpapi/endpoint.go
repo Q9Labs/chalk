@@ -245,13 +245,6 @@ func errorAsAPIError(err error) (APIError, bool) {
 	return APIError{}, false
 }
 
-type noRequest struct{}
-
-func decodeNoRequest(r *http.Request) (noRequest, error) {
-	_ = r
-	return noRequest{}, nil
-}
-
 func decodeJSONBody[Request any](r *http.Request) (Request, error) {
 	return decodeJSONBodyWithLimit[Request](r, maxRequestBodyBytes)
 }

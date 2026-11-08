@@ -76,8 +76,7 @@ Clearing prepared capture retains the advertised publication for reuse, like
 the production adapter; only explicit forced retirement removes it. This keeps
 the OS-ended-camera cleanup gap visible instead of silently repairing it.
 It exercises the real packed SpaceClient and React UI, but replaces the provider
-and Sync transport adapters. The SDK selector regression in
-`sdks/typescript/client/src/space-client/media-agreement.test.ts` independently checks the
-real SDK selectors against split SFU/Sync snapshots. The release web proof runs
+and Sync transport adapters. The SDK selectors are checked
+independently against split SFU/Sync snapshots. The release web proof runs
 the actual call test in Chromium and WebKit; the production SDK proof also saves
 the media-agreement JSON artifact. No production proof is run by the packed fixture.

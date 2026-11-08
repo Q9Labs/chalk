@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { ConnectionReporter, type ConnectionReport } from "../connection/report";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
-import { captureClient, stream, track } from "../space-client/capture.test.helpers";
+import { captureClient, stream, track } from "./camera-effects.test.helpers";
 import { markCameraEffectFailure } from "./camera-effects";
 
 it("carries a failed processor through camera termination into the bounded report", async () => {

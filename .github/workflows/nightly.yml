@@ -70,6 +70,20 @@ jobs:
       proofs: leave smoke transcript
       release_sha: ${{ needs.plan.outputs.target_sha }}
     secrets: inherit
+  own-sfu:
+    # The own SFU's real-call proof and action latency on staging. A failure turns this job red but leaves the deploy and the release record as they are;
+    # the proof cleans up its Spaces and Episodes in every outcome.
+    needs: [plan, release]
+    if: needs.release.result == 'success'
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      proofs: camera-share
+      media_plane: chalk_sfu
+      latency: true
+      release_sha: ${{ needs.plan.outputs.target_sha }}
+      scorecard_label: chalk_sfu
+    secrets: inherit
   web-e2e:
     needs: [release, proof]
     uses: ./.github/workflows/web-call-proof.yml
@@ -114,7 +128,7 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, record]
+    needs: [plan, proof, own-sfu, record]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     permissions:

@@ -1,9 +1,7 @@
 # Prove recovery through network outages
 
-Run `slow-link.test.mjs` on an isolated Instabox machine. It changes the machine's
-IPv4 and IPv6 firewall rules, so do not share the machine with another job.
-Install the locked dependencies, Playwright Chromium and its OS dependencies,
-plus `iptables`. The caller needs passwordless sudo.
+The former isolated firewall unit harness has been removed. Use the real-stack
+class checklist proof below for recovery through network outages.
 
 ## Nightly
 

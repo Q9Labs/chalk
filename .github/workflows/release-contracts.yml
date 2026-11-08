@@ -13,6 +13,7 @@ on:
       - .github/workflows/media-cleanup.yml
       - .github/workflows/release-contracts.yml
       - .github/actions/setup-opentofu/**
+      - .github/actions/setup-doctl/**
       - scripts/releases/**
       - scripts/deploy/**
       - scripts/prod-proof/**

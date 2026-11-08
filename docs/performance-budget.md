@@ -143,9 +143,10 @@ now: they have too few kept runs, or no workflow scores them yet.
 
 A gated entry blocks only where something scores it. `scorecard diff
 --fail-on-gate` fails on a gated metric over its budget, and `pnpm prod:latency`
-fails on a gated action p95 over its limit. Today the PR tier, the nightly
-Leave proof and the Promote tier score no `chalk_sfu.action.*` values, so run
-`prod:latency` for them.
+fails on a gated action p95 over its limit. The nightly `own-sfu` job runs
+`prod:latency --planes chalk_sfu` against staging for each cut, so the nightly
+tier scores the `chalk_sfu.action.*` values. The PR tier and the Promote tier
+score none yet, so run `prod:latency` for those.
 
 `--self-test` installs a temporary busy loop of at least 250 ms in trusted click
 handling, sized above the configured interaction/blocking budgets. It feeds the

@@ -1,6 +1,6 @@
 const PUBLIC_WEB_HOSTS: readonly string[] = ["chalkmeet.com", "chalk.q9labs.ai"];
 // The call's dark canvas, so the launch screen hands over to the first frame without a flash.
-const SPLASH_BACKGROUND = "#0B0C0E";
+const SPLASH_BACKGROUND = "#000000";
 // The icon plate from `src/brand/mark.ts` (`ICON_COLORS.plate`); Expo config files cannot import app source.
 const ICON_PLATE = "#16181c";
 // The call's typeface, embedded at build time so the first frame already uses it.

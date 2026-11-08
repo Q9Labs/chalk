@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { track } from "../space-client/capture.test.helpers";
+import { track } from "./camera-effects.test.helpers";
 import { bindCameraEffectLifecycle } from "./camera-effect-lifecycle";
 
 it("turns capture off with publication, while allowing an enabled private preview", () => {

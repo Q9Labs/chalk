@@ -42,15 +42,31 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST "+prefix+"/sessions/{connectionId}/remove", s.v1(s.removeSession))
 	mux.Handle("POST "+prefix+"/episodes/end", s.v1(s.endEpisode))
 	mux.Handle("POST "+prefix+"/episodes/sources", s.v1(s.controlSources))
+	mux.Handle("POST "+prefix+"/drain", s.v1(s.drain))
+	mux.Handle("POST "+prefix+"/undrain", s.v1(s.undrain))
 	return s.logged(mux)
 }
 
+// ready always answers with the node's state. A draining node answers 503 with the same body, so a
+// caller that only checks the status, such as the previous API release, still stops placing on it.
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
-	if s.node.Draining() {
-		return media.ErrDraining
-	}
 	budget, reserved := s.node.Budget()
-	writeJSON(w, http.StatusOK, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host(), SessionKinds: s.node.SessionKinds()})
+	state := s.node.DrainState()
+	status := http.StatusOK
+	if state.Draining {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host(), SessionKinds: s.node.SessionKinds(), DrainState: state})
+	return nil
+}
+
+func (s *Server) drain(w http.ResponseWriter, _ *http.Request) error {
+	writeJSON(w, http.StatusOK, s.Drain())
+	return nil
+}
+
+func (s *Server) undrain(w http.ResponseWriter, _ *http.Request) error {
+	writeJSON(w, http.StatusOK, s.Undrain())
 	return nil
 }
 

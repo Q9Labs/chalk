@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
@@ -56,6 +57,7 @@ type Adapter struct {
 	iceServers    []mediaplane.ICEServer
 	relay         RelaySource
 	backoff       time.Duration
+	captureReplay *captureplane.ReplayCache
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -136,6 +138,7 @@ func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFU
 		applicationID: config.ApplicationID,
 		iceServers:    iceServersOf(config.STUNURLs),
 		backoff:       retryBackoff,
+		captureReplay: captureplane.NewReplayCache(captureReplayCapacity),
 	}, nil
 }
 
@@ -205,7 +208,8 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 }
 
 // ready reads the node's readiness: its packet budget and the part live Episodes
-// reserve. Any reply but 200, a draining node's 503 included, is not ready.
+// reserve. A draining node answers 503 with its state, which is a ready result
+// with Draining set. Any other reply but 200 is not ready.
 func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, a.base.JoinPath("/readyz").String(), nil)
 	if err != nil {
@@ -217,12 +221,15 @@ func (a *Adapter) ready(ctx context.Context) (wireReady, error) {
 		return wireReady{}, err
 	}
 	defer reply.Body.Close()
-	if reply.StatusCode != http.StatusOK {
+	if reply.StatusCode != http.StatusOK && reply.StatusCode != http.StatusServiceUnavailable {
 		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
 	var ready wireReady
 	if err := json.NewDecoder(io.LimitReader(reply.Body, maxResponseBytes)).Decode(&ready); err != nil {
-		return wireReady{}, fmt.Errorf("decode readiness: %w", err)
+		return wireReady{}, fmt.Errorf("decode readiness (status %d): %w", reply.StatusCode, err)
+	}
+	if reply.StatusCode == http.StatusServiceUnavailable && !ready.Draining {
+		return wireReady{}, fmt.Errorf("readiness status %d", reply.StatusCode)
 	}
 	return ready, nil
 }
@@ -243,6 +250,9 @@ func (a *Adapter) send(ctx context.Context, endpoint string, body []byte) (int, 
 	return reply.StatusCode, payload, err
 }
 
+// errStaleGeneration means the SFU holds a newer generation of the session's scope.
+var errStaleGeneration = errors.New("sfu session generation is stale")
+
 // classify turns an SFU error reply into the port's errors. A gone session is
 // the one case callers act on: it means the connection no longer exists.
 func classify(status int, payload []byte) error {
@@ -254,6 +264,8 @@ func classify(status int, payload []byte) error {
 		return fmt.Errorf("%w: sfu %s", mediaplane.ErrConnectionNotFound, code)
 	case status == http.StatusBadRequest:
 		return fmt.Errorf("%w: sfu %s", mediaplane.ErrInvalidSignalRequest, code)
+	case code == "stale_generation":
+		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, errStaleGeneration, code)
 	case status == http.StatusTooManyRequests:
 		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, mediaplane.ErrProviderRateLimited, code)
 	case status == http.StatusForbidden:
