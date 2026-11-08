@@ -36,7 +36,7 @@ def monitor_definitions(variables, disabled=False, without_connection_reports=Fa
     monitors = json.loads(Path(__file__).with_name("monitors.json").read_text())
     branches = {
         name: " | union (\n" + Path(__file__).with_name(file).read_text() + "\n)"
-        for name, file in (("SYNC_READINESS_BRANCH", "sync-readiness.apl"), ("SFU_READINESS_BRANCH", "sfu-readiness.apl"))
+        for name, file in (("SYNC_READINESS_BRANCH", "sync-readiness.apl"), ("SFU_READINESS_BRANCH", "sfu-readiness.apl"), ("DEADLINE_SCHEDULER_BRANCH", "deadline-scheduler.apl"))
     }
     branch = ""
     if not without_connection_reports:

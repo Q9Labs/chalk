@@ -102,87 +102,111 @@ func (r EpisodeLifecycleRepository) SetDeadline(ctx context.Context, input episo
 	return result, err
 }
 
-func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Context, batch int32) (int, error) {
-	count := 0
+func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Context, batch int32) (episodes.DeadlineCycle, error) {
+	cycle := newDeadlineCycle()
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		due, err := queries.ClaimDueEpisodeDeadlines(ctx, batch)
+		err := claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
+			func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimDueEpisodeDeadlinesRow, error) {
+				due, err := queries.ClaimDueEpisodeDeadlines(ctx, sqlc.ClaimDueEpisodeDeadlinesParams{ExcludedEpisodeIds: excluded, BatchSize: limit})
+				if err != nil {
+					return nil, fmt.Errorf("claim due episode deadlines: %w", err)
+				}
+				return due, nil
+			},
+			func(row sqlc.ClaimDueEpisodeDeadlinesRow) pgtype.UUID { return row.EpisodeID },
+			func(row sqlc.ClaimDueEpisodeDeadlinesRow) error {
+				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
+				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
+				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
+				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
+				if err != nil {
+					return err
+				}
+				done, err := cycle.step(ctx, tx, deadlinePhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+					_, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+						TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+						OperationName: episodes.OperationMaximumDurationExpired, Request: request,
+						DeadlineGeneration: row.DeadlineGeneration, JourneyName: "episode.maximum_duration_expired", Payload: request.Payload(),
+					})
+					return err
+				})
+				if done {
+					cycle.result.Enqueued++
+				}
+				return err
+			})
 		if err != nil {
-			return fmt.Errorf("claim due episode deadlines: %w", err)
-		}
-		for _, row := range due {
-			tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
-			spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
-			episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
-			request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
-			if err != nil {
-				return err
-			}
-			if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
-				TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
-				OperationName: episodes.OperationMaximumDurationExpired, Request: request,
-				DeadlineGeneration: row.DeadlineGeneration, JourneyName: "episode.maximum_duration_expired", Payload: request.Payload(),
-			}); err != nil {
-				return err
-			}
-			count++
+			return err
 		}
 		presenceFloor, err := lockPresenceRecoveryFloor(ctx, tx)
 		if err != nil {
 			return fmt.Errorf("lock presence recovery floor: %w", err)
 		}
-		departures, err := enqueueExpiredParticipantPresence(ctx, queries, tx, batch-int32(count))
+		departures, err := enqueueExpiredParticipantPresence(ctx, queries, tx, cycle, batch-int32(cycle.result.Enqueued))
 		if err != nil {
 			return err
 		}
-		count += departures
-		empty, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{
-			PresenceRecoverAfter: presenceFloor, BatchSize: batch - int32(count),
-		})
-		if err != nil {
-			return fmt.Errorf("claim empty episode lingers: %w", err)
-		}
-		for _, row := range empty {
-			window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
-				TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
-				PresenceRecoverAfter: presenceFloor,
+		cycle.result.Enqueued += departures
+		return claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
+			func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimEmptyEpisodeLingersRow, error) {
+				empty, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{
+					PresenceRecoverAfter: presenceFloor, ExcludedEpisodeIds: excluded, BatchSize: limit,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("claim empty episode lingers: %w", err)
+				}
+				return empty, nil
+			},
+			func(row sqlc.ClaimEmptyEpisodeLingersRow) pgtype.UUID { return row.EpisodeID },
+			func(row sqlc.ClaimEmptyEpisodeLingersRow) error {
+				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
+				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
+				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
+				if cycle.fencedByPresence(episodeID) {
+					return nil
+				}
+				ended := false
+				done, err := cycle.step(ctx, tx, emptyLingerPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+					window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
+						TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
+						PresenceRecoverAfter: presenceFloor,
+					})
+					if err != nil {
+						return fmt.Errorf("recheck empty episode linger: %w", err)
+					}
+					if !window.Due {
+						return nil
+					}
+					request, err := episodes.NewLingerRequest(tenantID, spaceID, episodeID, timestamp(window.EmptySince))
+					if err != nil {
+						return err
+					}
+					if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+						TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+						OperationName: episodes.OperationTenantEndEpisode, Request: request,
+						JourneyName: "episode.linger_expired", Payload: request.Payload(),
+					}); err != nil {
+						return err
+					}
+					ended = true
+					return nil
+				})
+				if done && ended {
+					cycle.result.Enqueued++
+				}
+				return err
 			})
-			if err != nil {
-				return fmt.Errorf("recheck empty episode linger: %w", err)
-			}
-			if !window.Due {
-				continue
-			}
-			input := episodes.RequestEpisodeEndInput{
-				TenantID:  utilities.IDFromBytes(row.TenantID.Bytes),
-				SpaceID:   utilities.IDFromBytes(row.SpaceID.Bytes),
-				EpisodeID: utilities.IDFromBytes(row.EpisodeID.Bytes),
-			}
-			request, err := episodes.NewLingerRequest(input.TenantID, input.SpaceID, input.EpisodeID, timestamp(window.EmptySince))
-			if err != nil {
-				return err
-			}
-			input.Request = request
-			if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
-				TenantID: input.TenantID, SpaceID: input.SpaceID, EpisodeID: input.EpisodeID,
-				OperationName: episodes.OperationTenantEndEpisode, Request: input.Request,
-				JourneyName: "episode.linger_expired", Payload: input.Request.Payload(),
-			}); err != nil {
-				return err
-			}
-			count++
-		}
-		return nil
 	})
 	if err != nil {
-		return count, err
+		return episodes.DeadlineCycle{}, err
 	}
 	// Deadline claims lock Episodes first. Release those locks before admission
 	// expiry takes Sync's canonical control-before-Episode lock order.
 	var outcomes []uncollectedAdmissionOutcome
 	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		expired, committedOutcomes, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(count))
+		expired, committedOutcomes, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(cycle.result.Enqueued))
 		if err == nil {
-			count += expired
+			cycle.result.Enqueued += expired
 			outcomes = committedOutcomes
 		}
 		return err
@@ -192,7 +216,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			outcome.record()
 		}
 	}
-	return count, err
+	return cycle.result, err
 }
 
 // The shared row lock serializes deadline claims with Sync startup. sqlc does

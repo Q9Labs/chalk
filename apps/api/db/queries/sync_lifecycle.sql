@@ -504,6 +504,7 @@ where
             and operations.operation_name = 'maximum_episode_duration_expired'
             and operations.deadline_generation = episodes.deadline_generation
     )
+    and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.deadline_at, episodes.id
 for update of episodes skip locked
 limit sqlc.arg(batch_size);
@@ -705,6 +706,7 @@ where episodes.status='active' and empty_window.empty_since is not null
             and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
     )
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
+    and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.id
 for update of episodes skip locked
 limit sqlc.arg(batch_size);
@@ -847,6 +849,7 @@ where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
             and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
             and p.status='active' and e.status='active'
     )
+    and control.episode_id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by control.episode_id
 for update of control skip locked
 limit sqlc.arg(batch_size);

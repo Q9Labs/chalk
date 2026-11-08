@@ -107,6 +107,15 @@ is the intent of alerting when admission has been closed for more than five
 minutes, or when a node sits above 90% of its packet budget. Live calls continue
 while only admission is closed, so the message says new calls may fail to start.
 
+`deadline-scheduler.apl` reads the API log, not the collector. Each skipped
+Episode logs `episode.deadline_scheduler.failed` with `tenant_id`, `episode_id`,
+`phase`, `reason` and `consecutive_failures`, and the rule joins the first grouped
+monitor through `${DEADLINE_SCHEDULER_BRANCH}`. It alerts when the same Episode
+fails more than five passes in a row. A `control_busy` skip waits for another
+operation's publication fence, which Sync normally releases within seconds, so
+that reason alerts only after sixty passes. A failure of a whole pass has no
+Episode and uses `reason=cycle_error`.
+
 The freshness monitor still expects six rules and does not list
 `sfu-readiness`. The SFU row exists only on hosts that enable the probe, so
 counting it would page every host without an SFU. Once enabled, the probe always

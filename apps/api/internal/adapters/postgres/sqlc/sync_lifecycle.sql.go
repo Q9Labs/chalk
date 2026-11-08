@@ -36,10 +36,16 @@ where
             and operations.operation_name = 'maximum_episode_duration_expired'
             and operations.deadline_generation = episodes.deadline_generation
     )
+    and episodes.id <> all($1::uuid[])
 order by episodes.deadline_at, episodes.id
 for update of episodes skip locked
-limit $1
+limit $2
 `
+
+type ClaimDueEpisodeDeadlinesParams struct {
+	ExcludedEpisodeIds []pgtype.UUID `json:"excluded_episode_ids"`
+	BatchSize          int32         `json:"batch_size"`
+}
 
 type ClaimDueEpisodeDeadlinesRow struct {
 	TenantID           pgtype.UUID        `json:"tenant_id"`
@@ -49,8 +55,8 @@ type ClaimDueEpisodeDeadlinesRow struct {
 	DeadlineGeneration int64              `json:"deadline_generation"`
 }
 
-func (q *Queries) ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error) {
-	rows, err := q.db.Query(ctx, claimDueEpisodeDeadlines, batchSize)
+func (q *Queries) ClaimDueEpisodeDeadlines(ctx context.Context, arg ClaimDueEpisodeDeadlinesParams) ([]ClaimDueEpisodeDeadlinesRow, error) {
+	rows, err := q.db.Query(ctx, claimDueEpisodeDeadlines, arg.ExcludedEpisodeIds, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -108,13 +114,15 @@ where episodes.status='active' and empty_window.empty_since is not null
             and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
     )
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
+    and episodes.id <> all($2::uuid[])
 order by episodes.id
 for update of episodes skip locked
-limit $2
+limit $3
 `
 
 type ClaimEmptyEpisodeLingersParams struct {
 	PresenceRecoverAfter pgtype.Timestamptz `json:"presence_recover_after"`
+	ExcludedEpisodeIds   []pgtype.UUID      `json:"excluded_episode_ids"`
 	BatchSize            int32              `json:"batch_size"`
 }
 
@@ -125,7 +133,7 @@ type ClaimEmptyEpisodeLingersRow struct {
 }
 
 func (q *Queries) ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error) {
-	rows, err := q.db.Query(ctx, claimEmptyEpisodeLingers, arg.PresenceRecoverAfter, arg.BatchSize)
+	rows, err := q.db.Query(ctx, claimEmptyEpisodeLingers, arg.PresenceRecoverAfter, arg.ExcludedEpisodeIds, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -158,13 +166,15 @@ where $1::timestamptz <= clock_timestamp()
             and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
             and p.status='active' and e.status='active'
     )
+    and control.episode_id <> all($2::uuid[])
 order by control.episode_id
 for update of control skip locked
-limit $2
+limit $3
 `
 
 type ClaimExpiredParticipantPresenceParams struct {
 	PresenceRecoverAfter pgtype.Timestamptz `json:"presence_recover_after"`
+	ExcludedEpisodeIds   []pgtype.UUID      `json:"excluded_episode_ids"`
 	BatchSize            int32              `json:"batch_size"`
 }
 
@@ -176,7 +186,7 @@ type ClaimExpiredParticipantPresenceRow struct {
 
 // Lock control before Episode/participant, as entry and heartbeat renewal do.
 func (q *Queries) ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error) {
-	rows, err := q.db.Query(ctx, claimExpiredParticipantPresence, arg.PresenceRecoverAfter, arg.BatchSize)
+	rows, err := q.db.Query(ctx, claimExpiredParticipantPresence, arg.PresenceRecoverAfter, arg.ExcludedEpisodeIds, arg.BatchSize)
 	if err != nil {
 		return nil, err
 	}
