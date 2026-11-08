@@ -480,6 +480,10 @@ followed by the `overflow_*` reason.
 The same reason and the node's boot incarnation are frozen in the Episode binding
 (`placement_reason`, `node_incarnation`), so a past overflow stays findable.
 
+After `CHALK_SFU_CLIENT_SUNSET`, an Episode start that is refused because the client cannot run the own
+SFU logs `chalk_sfu.client_refused` with the bounded reason `client_sunset` and no Tenant or user data
+(see [Client sunset](../infrastructure/sfu/README.md#client-sunset)).
+
 A rate from the totals is exact over any window. A stream that closes between two
 100 ms control ticks loses that tick's counts, so totals can run slightly under
 the sum of every session's `inspect`. A restart starts every total again from

@@ -105,9 +105,15 @@ client that does not declare `chalk_sfu` gets `409 media.client_unsupported` wit
 the message "This call needs a newer version of Chalk. Update the app and try
 again." when it starts an Episode in a Space on the allowlist, the same answer it
 already gets when it joins a live Episode on the own SFU. A Space off the
-allowlist still starts on Cloudflare. A live Episode keeps its provider, so a
-client that cannot run it is refused at join, and a client joining a Cloudflare
-Episode is unaffected.
+allowlist still starts on Cloudflare. A Tenant with media disabled still starts
+Episodes without media. The hosted MCP tools have no SDK to ask, so they count as
+capable. A public call is refused before its Space is created. A live Episode
+keeps its provider, so a client that cannot run it is refused at join, and a
+client joining a Cloudflare Episode is unaffected.
+
+Each refusal logs `event=chalk_sfu.client_refused reason=client_sunset` with no
+Tenant or user data, because the request log keeps only the 409 status. Count that
+event to see who still runs old builds after the date.
 
 Run the sunset in this order, with no permanent Cloudflare cohort:
 

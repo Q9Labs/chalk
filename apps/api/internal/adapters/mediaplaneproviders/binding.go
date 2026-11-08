@@ -3,6 +3,7 @@ package mediaplaneproviders
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
@@ -24,11 +25,10 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 	}
 	var pin spaces.MediaPlaneProvider
 	if selected == spaces.MediaPlaneProviderChalkSFU {
-		allowed, runs := r.chalkSpaces.Allows(space.ID), clients.Runs(mediaplane.ProviderChalkSFU)
-		if allowed && !runs && r.afterClientSunset() {
-			return nil, mediaplane.ErrClientUnsupported
+		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
+			return nil, err
 		}
-		if !allowed || !runs {
+		if !r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU) {
 			pin = spaces.MediaPlaneProviderCloudflareSFU
 		}
 	}
@@ -113,6 +113,32 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 	return resolved, resolution, nil
 }
 
-func (r Registry) afterClientSunset() bool {
-	return !r.clientSunset.IsZero() && !r.now().Before(r.clientSunset)
+// RefuseClient is the sunset check of ResolveBinding on its own, for a caller
+// that must refuse before it writes anything. A Space that does not exist yet
+// has the zero ID, so only the allowlist entry * covers it.
+func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) error {
+	selected, err := selectedProvider(tenant, space)
+	if err != nil {
+		return err
+	}
+	return r.refuseAfterSunset(ctx, tenant, space, selected, clients)
+}
+
+// refuseAfterSunset refuses a client that cannot run the own SFU once the client
+// sunset has passed, in a Space that is on the allowlist. Disabled media is left
+// alone: that Episode has no binding, so no client has to run the own SFU.
+func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected spaces.MediaPlaneProvider, clients mediaplane.ClientProviders) error {
+	if selected != spaces.MediaPlaneProviderChalkSFU || !r.chalkSpaces.Allows(space.ID) || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+		return nil
+	}
+	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: providercontracts.ModeUnknown}
+	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, "")
+	if err != nil {
+		return err
+	}
+	if resolved == nil && resolution.ConfigurationSource == providercontracts.ConfigurationSourceDisabled {
+		return nil
+	}
+	slog.InfoContext(ctx, "chalk sfu refused a client that cannot run it", "event", "chalk_sfu.client_refused", "reason", "client_sunset")
+	return mediaplane.ErrClientUnsupported
 }

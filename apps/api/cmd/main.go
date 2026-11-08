@@ -518,6 +518,7 @@ func run() error {
 		spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{
 			ManagedTenantID:   managedTenantID,
 			DefaultMediaPlane: publicInviteConfig.DefaultMediaPlane,
+			RefuseClient:      episodeMediaBindingResolver.RefuseClient,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite Space port: %w", err)

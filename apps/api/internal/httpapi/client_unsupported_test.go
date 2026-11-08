@@ -103,3 +103,28 @@ func (s refusingInviteService) Arrive(_ context.Context, input publicinvites.Pub
 	*s.clients = append(*s.clients, input.MediaClients)
 	return publicinvites.PublicSpaceArrival{}, s.err
 }
+
+type clientRecordingEpisodes struct {
+	EpisodeLifecycleService
+	clients mediaplane.ClientProviders
+}
+
+func (s *clientRecordingEpisodes) CreateEpisode(_ context.Context, input episodes.CreateEpisodeInput) (episodes.Episode, error) {
+	s.clients = input.MediaClients
+	return episodes.Episode{}, nil
+}
+
+// The hosted MCP tool has no SDK to ask, so the client sunset must not apply to it.
+func TestMCPCreateEpisodeRunsTheOwnSFU(t *testing.T) {
+	writer := scopeTestPrincipal(t, authentication.PrincipalAPIKey, authentication.ScopeEpisodesWrite)
+	service := &clientRecordingEpisodes{}
+	handler := NewMCPHandler(Options{Episodes: service, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
+	space, _ := utilities.NewID()
+	request := httptest.NewRequest(http.MethodPost, "/mcp", strings.NewReader(toolCallBody("chalk_create_episode", `{"space_id":"`+space.String()+`","request_key":"mcp-create-episode-0001","body":{}}`)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	handler.ServeHTTP(httptest.NewRecorder(), request.WithContext(authentication.ContextWithPrincipal(request.Context(), writer)))
+	if !service.clients.Runs(mediaplane.ProviderChalkSFU) {
+		t.Fatal("MCP create_episode passed a client that cannot run the own SFU")
+	}
+}
