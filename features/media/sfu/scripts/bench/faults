@@ -276,6 +276,8 @@ long_drain_case() {
   file="$(mktemp)"
   sfu primary POST /v1/sessions "$(join_body "op-${run}-L0" "$episode" p1 1)"
   check "the primary hosts Episode ${episode} (HTTP ${status})" [ "$status" = 200 ]
+  sfu primary POST /v1/drain
+  check "the drain request answers 200 (HTTP ${status})" [ "$status" = 200 ]
   # A draining node keeps taking joins of an Episode it hosts, so a fresh join each 20 s keeps the Episode live.
   (
     end=$((SECONDS + long_drain_seconds))
