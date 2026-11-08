@@ -2,6 +2,7 @@ package media
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -49,22 +50,23 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	return protocol.RetireEpisodeResponse{Closed: len(ended), Floor: floor}, nil
 }
 
-// raiseRetirement records the floor and returns the Episode's floor after it. The caller holds n.mu.
+// raiseRetirement records the floor and returns the Episode's floor after it. A retirement that
+// is already known keeps its floor and only gains time, so a retry at a lower generation never
+// lowers it, also when the table is full. Only a new Episode makes room by dropping the oldest.
+// The caller holds n.mu.
 func (n *Node) raiseRetirement(key episodeKey, generation int64) int64 {
 	now := n.now()
+	floor := generation
+	if known, ok := n.retired[key]; ok {
+		if now.Sub(known.at) <= retiredTTL {
+			floor = max(floor, known.floor)
+		}
+		n.retiredOrder = slices.DeleteFunc(n.retiredOrder, func(queued episodeKey) bool { return queued == key })
+		delete(n.retired, key)
+	}
 	for len(n.retiredOrder) > 0 && (len(n.retiredOrder) >= retiredLimit || now.Sub(n.retired[n.retiredOrder[0]].at) > retiredTTL) {
 		delete(n.retired, n.retiredOrder[0])
 		n.retiredOrder = n.retiredOrder[1:]
-	}
-	floor := generation
-	if known, ok := n.retired[key]; ok {
-		floor = max(floor, known.floor)
-		for index, queued := range n.retiredOrder {
-			if queued == key {
-				n.retiredOrder = append(n.retiredOrder[:index], n.retiredOrder[index+1:]...)
-				break
-			}
-		}
 	}
 	n.retired[key] = retirement{floor: floor, at: now}
 	n.retiredOrder = append(n.retiredOrder, key)

@@ -253,6 +253,11 @@ func TestAHealthyResolveRetriesARetireTheOldNodeMissed(t *testing.T) {
 	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
 		t.Fatal(err)
 	}
+	// The retry runs in the background, so a node that swallows the call cannot hold up the resolve.
+	deadline := time.Now().Add(5 * time.Second)
+	for stateOf(t, primary).Sessions != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
 		t.Fatalf("the old node holds %d sessions after a healthy resolve, want 0", sessions)
 	}
@@ -289,6 +294,11 @@ func TestAnEpisodeThatReturnsToANodeRetiresItsOldSessionsAndKeepsTheNewOnes(t *t
 	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
 		t.Fatal(err)
 	}
+	deadline := time.Now().Add(5 * time.Second)
+	for stateOf(t, primary).Sessions != 1 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond) // a retire that closed too much would have done it by now
 	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
 		t.Fatalf("the node holds %d sessions after the resolve, want only the one joined under generation %d", sessions, back.Generation)
 	}

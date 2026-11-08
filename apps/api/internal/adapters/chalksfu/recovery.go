@@ -308,6 +308,9 @@ func (a *Adapter) checkIncarnation(answered string) error {
 	return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, errStaleIncarnation)
 }
 
+// retireNodeTimeout bounds the retire calls to one node, retries included.
+const retireNodeTimeout = 2 * time.Second
+
 // Retire retires the Episode on every allocation its binding left, at the binding's generation:
 // each such node closes the Episode's sessions of lower generations and refuses any later create,
 // capture or source grant under one (see the SFU's POST /v1/episodes/retire). It runs once the
@@ -343,7 +346,12 @@ func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID
 			continue
 		}
 		request := wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: binding.Generation}
-		if err := adapter.call(ctx, "/v1/episodes/retire", request, nil); err != nil {
+		// Each node gets its own bound, so one that swallows the request cannot use up the time
+		// the nodes after it need.
+		nodeCtx, cancel := context.WithTimeout(ctx, retireNodeTimeout)
+		err = adapter.call(nodeCtx, "/v1/episodes/retire", request, nil)
+		cancel()
+		if err != nil {
 			acknowledged = false
 			if lost {
 				f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not retired yet", old.Node, err)

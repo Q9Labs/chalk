@@ -66,9 +66,6 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 }
 
 const (
-	// retireTimeout bounds one round of retire calls. It does not end with the request that
-	// triggered it, so a client that gives up cannot leave the old node unretired.
-	retireTimeout = 3 * time.Second
 	// retireRetryAfter spaces the retries of a retire the old node has not acknowledged, per
 	// Episode and per process, so a node that stays silent does not slow every call.
 	retireRetryAfter = 30 * time.Second
@@ -127,8 +124,9 @@ func (l *retireLedger) record(episode utilities.ID, generation int64, acknowledg
 // resolves (see reconcileRetirement), by a join's fence that sees the move, and when the Episode
 // ends.
 func (r Registry) retireLeft(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), retireTimeout)
-	defer cancel()
+	// The retire does not end with the request that triggered it, so a client that gives up
+	// cannot leave the old node unretired. The fleet bounds each node's call.
+	ctx = context.WithoutCancel(ctx)
 	acknowledged, err := r.chalk.Retire(ctx, binding, tenantID.String(), episodeID.String())
 	if err != nil {
 		slog.WarnContext(ctx, "chalk sfu retired allocation not retired yet", "event", "chalk_sfu.retire_pending", "episode_id", episodeID.String(), "generation", binding.Generation, "error", err.Error())
@@ -137,12 +135,15 @@ func (r Registry) retireLeft(ctx context.Context, tenantID, episodeID utilities.
 }
 
 // reconcileRetirement asks the old nodes of a moved Episode to retire again when an earlier call
-// did not reach them, so a healthy resolve does not leave the old allocation live for good.
+// did not reach them, so a healthy resolve does not leave the old allocation live for good. It
+// runs in the background, because a node that swallows the call would otherwise hold up the media
+// operation that happened to resolve the Episode; the ledger lets one round start per interval.
 func (r Registry) reconcileRetirement(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) {
 	if r.chalk == nil || r.recovery == nil || len(binding.PreviousAllocations) == 0 || !r.retired.due(episodeID, binding.Generation, time.Now()) {
 		return
 	}
-	r.retireLeft(ctx, tenantID, episodeID, binding)
+	r.retired.record(episodeID, binding.Generation, false, time.Now())
+	go r.retireLeft(ctx, tenantID, episodeID, binding)
 }
 
 // EndRetiredAllocations retires a finished Episode on the allocations its binding left, so a node

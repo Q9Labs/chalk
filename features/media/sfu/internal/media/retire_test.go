@@ -146,3 +146,29 @@ func TestRetireValidatesItsRequest(t *testing.T) {
 		t.Fatal("retire without an Episode succeeded")
 	}
 }
+
+func TestRetireAtALowerGenerationKeepsTheFloorOfAFullTable(t *testing.T) {
+	f := newReserveNode(t)
+	if _, err := f.node.RetireEpisode(retireRequest("oldest", 3)); err != nil {
+		t.Fatal(err)
+	}
+	for index := range retiredLimit - 1 {
+		if _, err := f.node.RetireEpisode(retireRequest(fmt.Sprintf("episode-%d", index), 2)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The table is full and the oldest Episode is next to go. A retry for it only gains time.
+	response, err := f.node.RetireEpisode(retireRequest("oldest", 1))
+	if err != nil || response.Floor != 3 {
+		t.Fatalf("a lower retry on a full table: %+v, %v; want the floor to stay 3", response, err)
+	}
+	if _, err := f.node.CreateSessionAt("late", scopeOf("oldest", "late"), generation(2)); !errors.Is(err, ErrStaleGeneration) {
+		t.Fatalf("a create under generation 2 after the lower retry: %v, want stale generation", err)
+	}
+	f.node.mu.Lock()
+	known, queued := len(f.node.retired), len(f.node.retiredOrder)
+	f.node.mu.Unlock()
+	if known != retiredLimit || queued != known {
+		t.Fatalf("%d retirements and %d queued, want equal and %d", known, queued, retiredLimit)
+	}
+}
