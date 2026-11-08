@@ -116,16 +116,13 @@ type candidate struct {
 
 // recoveryCandidates lists the nodes that may take a recovering Episode, in the order Place
 // uses: every primary that answered within the freshness window and is not draining, then the
-// same standbys. It does not filter on room or the host guard: the node's reserve knows what
-// the Episode already holds there, which a probe's totals do not, so a retry can reach a node
-// that kept the room it reserved. A standby is the exception: its configured degraded budget is
-// a limit the node does not know, so a standby without room for an Episode under that budget is
-// skipped unless this process holds the Episode's own reserve there. It does no I/O and, unlike Place, never offers another
-// provider.
-func (f *Fleet) recoveryCandidates(episodeID string) []candidate {
+// same standbys. It does not guess at capacity from the probe: the probe's totals do not show
+// what the Episode already holds on a node, and a standby's degraded budget is enforced by the
+// node's own reserve (see wireReserveRequest.PacketCeiling), so the node's answer decides. It
+// does no I/O and, unlike Place, never offers another provider.
+func (f *Fleet) recoveryCandidates() []candidate {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	now := time.Now()
 	var candidates []candidate
 	for _, standby := range []bool{false, true} {
 		for _, node := range f.nodes {
@@ -134,13 +131,6 @@ func (f *Fleet) recoveryCandidates(episodeID string) []candidate {
 			}
 			load, probed := f.loads[node.node]
 			if !probed || time.Since(load.at) > probeFreshness || load.Draining {
-				continue
-			}
-			// A standby admits only up to its degraded budget, which the probe's room already
-			// reflects. A primary has no cap below its own budget, so its reserve decides. A
-			// standby that holds this Episode's own reserve has no room left because of that
-			// hold, so a retry may still try it.
-			if standby && !load.fits(len(f.inflightOn(node.node))) && !now.Before(f.heldUntil[heldKey(node.node, episodeID)]) {
 				continue
 			}
 			candidates = append(candidates, candidate{adapter: node, standby: standby})
@@ -168,7 +158,7 @@ func (f *Fleet) recoveryCandidates(episodeID string) []candidate {
 // outcome. Ending those sessions here could close the ones a winning replica has since rejoined,
 // because the end call carries no allocation fence.
 func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.Binding, tenantID, episodeID string, participants int) (mediaplane.Placement, error) {
-	candidates := f.recoveryCandidates(episodeID)
+	candidates := f.recoveryCandidates()
 	if len(candidates) == 0 {
 		RecordRecovery(ctx, reason, outcomeNoNode)
 		return mediaplane.Placement{}, fmt.Errorf("%w: %s", mediaplane.ErrRecoveryRefused, outcomeNoNode)
@@ -177,38 +167,36 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 	window := time.Now().Unix() / int64(hold)
 	refusals, failures := 0, 0
 	for _, node := range candidates {
-		// The reserve asks for room for a screen share first, because a share that is live
-		// cannot be refused after its Participants rejoin. A node that cannot hold the Episode
-		// with a share (a large call, say) is asked again without one.
-		for _, screenShare := range []bool{true, false} {
-			reply, err := node.adapter.reserve(ctx, wireReserveRequest{
-				OperationID: recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, screenShare, window),
-				TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
-				Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: screenShare},
-				TTLSeconds: hold,
-			})
-			switch {
-			case err == nil && mediaplane.ValidIncarnation(reply.NodeIncarnation):
-				f.noteHeld(node.adapter.node, episodeID, reply.ExpiresAt)
-				reason := mediaplane.PlacementPrimary
-				if node.standby {
-					reason = mediaplane.PlacementStandby
-				}
-				return mediaplane.Placement{Node: node.adapter.node, Incarnation: reply.NodeIncarnation, Reason: reason}, nil
-			case err == nil:
-				failures++
-				f.logRecovery(ctx, "chalk sfu reserve answered without an incarnation", node.adapter.node, nil)
-			case errors.Is(err, mediaplane.ErrProviderRateLimited):
-				if screenShare {
-					continue
-				}
-				refusals++
-				f.logRecovery(ctx, "chalk sfu node refused the recovering episode", node.adapter.node, err)
-			default:
-				failures++
-				f.logRecovery(ctx, "chalk sfu node could not reserve the recovering episode", node.adapter.node, err)
+		request := wireReserveRequest{
+			OperationID: recoveryOperationID(episodeID, from.Generation+1, node.adapter.node, participants, window),
+			TenantID:    tenantID, EpisodeID: episodeID, Generation: reserveHoldGeneration,
+			// A recovered Episode may have a screen share live, and a share the node cannot carry
+			// would be refused after its Participants rejoined, so the reserve always holds room for
+			// one. A node that cannot carry the Episode with a share refuses, and that is the
+			// capacity outcome.
+			Shape:      wireShape{Participants: participants, CamerasPerParticipant: recoveryCameras, ScreenShare: true},
+			TTLSeconds: hold,
+		}
+		if node.standby && f.standbyBudget > 0 {
+			request.PacketCeiling = f.standbyBudget
+		}
+		reply, err := node.adapter.reserve(ctx, request)
+		switch {
+		case err == nil && mediaplane.ValidIncarnation(reply.NodeIncarnation):
+			reason := mediaplane.PlacementPrimary
+			if node.standby {
+				reason = mediaplane.PlacementStandby
 			}
-			break
+			return mediaplane.Placement{Node: node.adapter.node, Incarnation: reply.NodeIncarnation, Reason: reason}, nil
+		case err == nil:
+			failures++
+			f.logRecovery(ctx, "chalk sfu reserve answered without an incarnation", node.adapter.node, nil)
+		case errors.Is(err, mediaplane.ErrProviderRateLimited):
+			refusals++
+			f.logRecovery(ctx, "chalk sfu node refused the recovering episode", node.adapter.node, err)
+		default:
+			failures++
+			f.logRecovery(ctx, "chalk sfu node could not reserve the recovering episode", node.adapter.node, err)
 		}
 		if ctx.Err() != nil {
 			break
@@ -225,31 +213,11 @@ func (f *Fleet) Recover(ctx context.Context, reason LossReason, from mediaplane.
 }
 
 // recoveryOperationID names one reserve by the Episode, the generation the move would commit, the
-// node, the shape and the hold window. The tuple is hashed, because a long node ID and an Episode
+// node, the participant count and the hold window. The tuple is hashed, because a long node ID and an Episode
 // ID together exceed the 128 characters the SFU accepts.
-func recoveryOperationID(episodeID string, generation int64, node string, participants int, screenShare bool, window int64) string {
-	digest := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%d\x00%t\x00%d", episodeID, generation, node, participants, screenShare, window))
+func recoveryOperationID(episodeID string, generation int64, node string, participants int, window int64) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "%s\x00%d\x00%s\x00%d\x00%d", episodeID, generation, node, participants, window))
 	return "recover-" + hex.EncodeToString(digest[:16])
-}
-
-func heldKey(node, episodeID string) string { return node + "/" + episodeID }
-
-// noteHeld remembers that this process reserved the Episode on the node until the hold ends,
-// so a retry still tries a standby the hold itself filled. Entries past their time go first,
-// which bounds the map by the holds alive at once.
-func (f *Fleet) noteHeld(node, episodeID string, until time.Time) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	now := time.Now()
-	for key, expires := range f.heldUntil {
-		if !now.Before(expires) {
-			delete(f.heldUntil, key)
-		}
-	}
-	if f.heldUntil == nil {
-		f.heldUntil = map[string]time.Time{}
-	}
-	f.heldUntil[heldKey(node, episodeID)] = until
 }
 
 func (f *Fleet) recoveryHoldSeconds() int {
@@ -295,6 +263,18 @@ func (a *Adapter) Bound(incarnation string) *Adapter {
 	bound := *a
 	bound.incarnation = incarnation
 	return &bound
+}
+
+// WithFence returns an adapter that checks a join against the Episode's durable binding once
+// the node has created the session. A replica that resolved the binding before another one moved
+// it would otherwise create a second live allocation on the node the Episode left, and the
+// incarnation check cannot see that, because it compares against the replica's own stale
+// binding. When the fence fails, the join closes its session on the node it was issued to and
+// returns the fence's error, which the caller retries under the current binding.
+func (a *Adapter) WithFence(fence func(context.Context) error) *Adapter {
+	fenced := *a
+	fenced.fence = fence
+	return &fenced
 }
 
 // checkIncarnation refuses a node's answer from an incarnation other than the one the

@@ -744,3 +744,35 @@ func TestASameGenerationReserveNeverShrinksTheHold(t *testing.T) {
 		t.Fatalf("a newer generation left %d reserved, want less than %d", reserved, threePerson)
 	}
 }
+
+func TestReserveEnforcesTheCallersPacketCeilingAtomically(t *testing.T) {
+	f := newReserveNode(t)
+	request := reserveRequest("one", 3)
+	request.PacketCeiling = threePerson - 1
+	if _, err := f.node.ReserveEpisode(request); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("a reserve above the caller's ceiling: %v, want capacity exceeded", err)
+	}
+	if reserved := f.reserved(); reserved != 0 {
+		t.Fatalf("a refused reserve left %d reserved", reserved)
+	}
+	request = reserveRequest("one", 3)
+	request.PacketCeiling = threePerson
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatalf("a reserve that fits the caller's ceiling: %v", err)
+	}
+	// The ceiling counts the node's other Episodes, so a second Episode does not fit beside the first.
+	other := reserveRequest("two", 3)
+	other.PacketCeiling = threePerson
+	if _, err := f.node.ReserveEpisode(other); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("a second Episode under the same ceiling: %v, want capacity exceeded", err)
+	}
+	// A caller that omits the ceiling gets the node's budget alone.
+	if _, err := f.node.ReserveEpisode(reserveRequest("two", 3)); err != nil {
+		t.Fatalf("a reserve without a ceiling: %v", err)
+	}
+	negative := reserveRequest("three", 2)
+	negative.PacketCeiling = -1
+	if _, err := f.node.ReserveEpisode(negative); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("a negative ceiling: %v, want an invalid request", err)
+	}
+}

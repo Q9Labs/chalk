@@ -61,6 +61,9 @@ type Adapter struct {
 	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
 	// join the node answers for another incarnation is refused as stale.
 	incarnation string
+	// fence, when set, re-reads the Episode's durable binding after a join and fails when it is
+	// no longer the one the join was issued under. See WithFence.
+	fence func(context.Context) error
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -337,11 +340,30 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
 		return mediaplane.Join{}, err
 	}
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, input.Scope, err)
+		}
+	}
 	participantRef := input.ExternalParticipantID
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
 	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
+}
+
+// discardStaleSession closes a session a fenced join created and returns the join's error. A close
+// that fails is joined to it, so the caller sees that the session may still be live; the
+// Participant's next join replaces it and the Episode's end cleans the retired allocation.
+func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope mediaplane.Scope, cause error) error {
+	path, err := sessionPath(connectionID, "remove")
+	if err == nil {
+		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: wireScopeOf(scope)}, nil)
+	}
+	if err != nil {
+		return errors.Join(cause, fmt.Errorf("close the session on node %q: %w", a.node, err))
+	}
+	return cause
 }
 
 // ResumeJoin hands back the same connection when the SFU still holds it. The SFU

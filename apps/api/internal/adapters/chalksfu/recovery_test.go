@@ -221,9 +221,10 @@ func TestRecoveryAfterARestartStaysOnTheSameNode(t *testing.T) {
 	}
 }
 
-// The reserve asks for room for a screen share, but a node whose ceiling cannot carry the
-// Episode with one still takes it without: the Episode stays recoverable.
-func TestRecoveryFallsBackToAnEpisodeWithoutAScreenShare(t *testing.T) {
+// An Episode is recovered with room for a screen share, because a share that was admitted must be
+// able to come back. A node whose ceiling carries the Episode only without one refuses it, and
+// that is the capacity outcome: the binding stays and the node holds nothing.
+func TestRecoveryRefusesAnEpisodeWhoseScreenShareTheNodeCannotCarry(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	// With the harness costs, three Participants need 900 packets/s of mandatory media without a
 	// share and 1500 with one, so a ceiling of 1200 carries them only without.
@@ -233,14 +234,111 @@ func TestRecoveryFallsBackToAnEpisodeWithoutAScreenShare(t *testing.T) {
 	store := newRecoveryStore(bound, 3)
 	restart(t, box)
 	fleet.Probe(context.Background())
-	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
-		t.Fatalf("recovery of three Participants on a node that cannot carry a share: %v", err)
+	err := resolve(recoveryRegistry(fleet, store))
+	if !errors.Is(err, mediaplane.ErrRecoveryRefused) || !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) {
+		t.Fatalf("recovery on a node that cannot carry a share: %v, want the capacity error", err)
 	}
-	if moved, moves := store.current(); moves != 1 || moved.Generation != 1 {
-		t.Fatalf("after the fallback: %+v (%d moves), want one move", moved, moves)
+	if after, moves := store.current(); moves != 0 || after.Generation != 0 || after.NodeIncarnation != bound.NodeIncarnation {
+		t.Fatalf("binding changed to %+v (%d moves)", after, moves)
 	}
-	if stateOf(t, box).ReservedPackets == 0 {
-		t.Fatal("the node holds nothing for the recovering Episode")
+	if reserved := stateOf(t, box).ReservedPackets; reserved != 0 {
+		t.Fatalf("a refused reserve left %d packets/s held", reserved)
+	}
+}
+
+// A standby admits only up to its degraded budget (16000 packets/s here, on a node whose own
+// budget is twice that). Recovery of a nine-Participant Episode reserves 18000, so the node
+// refuses it against the full shape, atomically, and the Episode keeps its binding.
+func TestRecoveryNeverExceedsTheStandbyBudget(t *testing.T) {
+	ca, primary, standby, nodes := twoNodes(t, map[string]string{"SFU_PACKET_BUDGET": "32000", "SFU_EPISODE_PACKET_CEILING": "32000"})
+	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 9)
+	primary.stop()
+	fleet.Probe(context.Background())
+	chalksfu.AgeSighting(fleet, "sfu-primary")
+	err := resolve(recoveryRegistry(fleet, store))
+	if !errors.Is(err, mediaplane.ErrRecoveryRefused) || !errors.Is(err, mediaplane.ErrProviderRateLimited) {
+		t.Fatalf("recovery past the standby budget: %v, want the capacity error", err)
+	}
+	if reserved := stateOf(t, standby).ReservedPackets; reserved > 16000 {
+		t.Fatalf("recovery reserved %d packets/s on a standby limited to 16000", reserved)
+	}
+	if after, moves := store.current(); moves != 0 || after.Node != bound.Node {
+		t.Fatalf("binding changed to %+v (%d moves)", after, moves)
+	}
+}
+
+// An API replica that crashed between its reserve and the binding commit leaves the hold on a
+// standby whose remaining room is smaller than the shape. Another replica, with no memory of the
+// hold, tries the same candidate with the same operation ID, and the node replays the hold.
+func TestAnotherReplicaReplaysAFullStandbysOwnHold(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	primary := startSFUUnder(t, ca, roomy)
+	standby := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1800"})
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
+	first := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, first)
+	store := newRecoveryStore(bound, 2)
+	store.crashBefore = errors.New("simulated crash before the binding commit")
+	primary.stop()
+	first.Probe(context.Background())
+	chalksfu.AgeSighting(first, "sfu-primary")
+	if err := resolve(recoveryRegistry(first, store)); err == nil {
+		t.Fatal("expected the simulated crash")
+	}
+	held := stateOf(t, standby).ReservedPackets
+	if held == 0 {
+		t.Fatal("the crashed replica left no hold")
+	}
+	second := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	second.Probe(context.Background())
+	chalksfu.AgeSighting(second, "sfu-primary")
+	if err := resolve(recoveryRegistry(second, store)); err != nil {
+		current, _ := store.current()
+		t.Fatalf("a fresh replica cannot replay the standby's hold of %d (binding generation %d): %v", held, current.Generation, err)
+	}
+	if moved, moves := store.current(); moves != 1 || moved.Node != "sfu-standby" {
+		t.Fatalf("after the replay: %+v (%d moves), want one move to the standby", moved, moves)
+	}
+	if reserved := stateOf(t, standby).ReservedPackets; reserved != held {
+		t.Fatalf("the replay changed the standby's hold from %d to %d", held, reserved)
+	}
+}
+
+// A join issued under the old binding must not leave a session on the node the Episode left. The
+// replica that issued it resolved the binding before another replica moved it, so the node's
+// answer still matches the stale binding; the durable binding does not.
+func TestAJoinIssuedBeforeARecoveryClosesItsSessionOnTheOldNode(t *testing.T) {
+	ca, primary, standby, nodes := twoNodes(t, roomy)
+	first := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	second := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, first)
+	second.Probe(context.Background())
+	store := newRecoveryStore(bound, 2)
+	stale, err := recoveryRegistry(first, store).ResolveEpisode(context.Background(), recoveringTenant, chalkSpace, recoveringEpisode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the second replica loses its control connection to the primary; the SFU boot lives on.
+	chalksfu.MarkSilent(second, "sfu-primary")
+	registry := recoveryRegistry(second, store)
+	if err := resolve(registry); err != nil {
+		t.Fatal(err)
+	}
+	current, err := registry.ResolveEpisode(context.Background(), recoveringTenant, chalkSpace, recoveringEpisode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, *current, recoveringScope("new-participant"))
+
+	scope := recoveringScope("late-participant")
+	_, err = stale.CreateJoin(context.Background(), mediaplane.CreateJoinInput{Provider: mediaplane.ProviderChalkSFU, Scope: scope, Episode: mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: scope.EpisodeID}, ParticipantName: scope.ParticipantID, ExternalParticipantID: scope.ParticipantID, ParticipantPreset: "contributor"})
+	if !errors.Is(err, mediaplane.ErrBindingStale) || !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
+		t.Fatalf("a join issued under the old binding: %v, want the stale-binding retry error", err)
+	}
+	if old, now := stateOf(t, primary).Sessions, stateOf(t, standby).Sessions; old != 0 || now != 1 {
+		t.Fatalf("sessions on the old node %d (want 0) and on the new node %d (want 1)", old, now)
 	}
 }
 

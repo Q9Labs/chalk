@@ -1,7 +1,5 @@
 package chalksfu
 
-import "time"
-
 // The SFU's control API wire types. They copy features/media/sfu/protocol, which
 // this module cannot import without taking the SFU module's dependency graph.
 // The SFU rejects unknown fields, so the conformance test against the real
@@ -207,10 +205,12 @@ type wireReserveRequest struct {
 	Generation  int64     `json:"generation"`
 	Shape       wireShape `json:"shape"`
 	TTLSeconds  int       `json:"ttlSeconds,omitempty"`
+	// PacketCeiling caps the node's whole reservation below its own budget; a standby's degraded
+	// budget goes here so the node enforces it against the full shape under its own lock.
+	PacketCeiling int `json:"packetCeiling,omitempty"`
 }
 
 type wireReserveResponse struct {
-	NodeIncarnation string    `json:"nodeIncarnation"`
-	ReservedPackets int       `json:"reservedPackets"`
-	ExpiresAt       time.Time `json:"expiresAt"`
+	NodeIncarnation string `json:"nodeIncarnation"`
+	ReservedPackets int    `json:"reservedPackets"`
 }

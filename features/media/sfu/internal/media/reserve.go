@@ -226,7 +226,11 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	}
 	captureHold := max(0, n.captureBound(shape)-liveCapture)
 	reserved := n.episodeReservation(participants) + liveCapture + captureHold
-	if total-current+reserved > n.cfg.PacketBudget {
+	budget := n.cfg.PacketBudget
+	if request.PacketCeiling > 0 {
+		budget = min(budget, request.PacketCeiling)
+	}
+	if total-current+reserved > budget {
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	expires := n.now().Add(ttl)
@@ -264,8 +268,8 @@ func (n *Node) validateReserve(request protocol.ReserveEpisodeRequest) (time.Dur
 		return 0, err
 	}
 	shape := request.Shape
-	if shape.Participants < 1 || shape.CamerasPerParticipant < 0 || shape.CaptureSlots < 0 {
-		return 0, fmt.Errorf("%w: shape needs at least one Participant and no negative counts", ErrInvalidRequest)
+	if shape.Participants < 1 || shape.CamerasPerParticipant < 0 || shape.CaptureSlots < 0 || request.PacketCeiling < 0 {
+		return 0, fmt.Errorf("%w: shape needs at least one Participant and no negative counts or packetCeiling", ErrInvalidRequest)
 	}
 	seconds := request.TTLSeconds
 	if seconds == 0 {

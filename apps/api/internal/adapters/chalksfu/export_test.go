@@ -22,3 +22,14 @@ func Charged(f *Fleet, node string) int {
 	defer f.mu.Unlock()
 	return len(f.inflight[node])
 }
+
+// MarkSilent makes this Fleet see the node as silent while the node itself keeps running, as a
+// control-plane partition between one API replica and the node would.
+func MarkSilent(f *Fleet, node string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.loads, node)
+	seen := f.seen[node]
+	seen.at = time.Now().Add(-2 * probeFreshness)
+	f.seen[node] = seen
+}

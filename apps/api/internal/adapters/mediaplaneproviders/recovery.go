@@ -75,3 +75,23 @@ func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID
 	}
 	return r.chalk.EndRetired(ctx, *binding, tenantID.String(), episodeID.String())
 }
+
+// bindingFence returns the check a join runs after the node created its session: the Episode's
+// durable binding must still be the one the join was issued under, with the same generation,
+// node and incarnation. Without recovery configured nothing moves a binding, so there is
+// nothing to check.
+func (r Registry) bindingFence(tenantID, episodeID utilities.ID, issued mediaplane.Binding) func(context.Context) error {
+	if r.chalk == nil || r.recovery == nil || issued.Provider != string(mediaplane.ProviderChalkSFU) {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		current, err := r.recovery.Binding(ctx, tenantID, episodeID)
+		if err != nil {
+			return fmt.Errorf("%w: confirm the episode's binding after the join: %v", mediaplane.ErrPlaneUnavailable, err)
+		}
+		if current == nil || current.Generation != issued.Generation || current.Current() != issued.Current() {
+			return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrBindingStale)
+		}
+		return nil
+	}
+}

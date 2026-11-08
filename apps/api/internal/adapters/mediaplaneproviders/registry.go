@@ -162,7 +162,11 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 		}
 		allocation = binding.Current()
 	}
-	return r.newService(resolved.provider, resolved.config, allocation)
+	var fence func(context.Context) error
+	if binding != nil {
+		fence = r.bindingFence(tenant.ID, episodeID, *binding)
+	}
+	return r.newService(resolved.provider, resolved.config, allocation, fence)
 }
 
 type resolvedProviderConfig struct {
@@ -346,7 +350,7 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 
 // newService builds the Episode's media plane. allocation is the Episode's bound node and
 // boot incarnation for a provider that runs several; a provider with one endpoint ignores it.
-func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, allocation mediaplane.Allocation) (*mediaplane.Service, error) {
+func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, allocation mediaplane.Allocation, fence func(context.Context) error) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
 
@@ -370,6 +374,9 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
 		}
 		bound = bound.Bound(allocation.Incarnation)
+		if fence != nil {
+			bound = bound.WithFence(fence)
+		}
 		// A nil TURN source would be a typed nil inside the interface.
 		if r.turn != nil {
 			bound = bound.WithRelay(r.turn)

@@ -196,7 +196,10 @@ type EpisodeShape struct {
 // Generation fences it: a reserve older than the Episode's hold or its live sessions is refused as
 // stale. TTLSeconds bounds how long the reservation stays; the Participants' joins replace it, and
 // an expired or ended Episode releases what is left. The same OperationID with the same body
-// returns the first result.
+// returns the first result. PacketCeiling, when set, caps the node's whole reservation, this hold
+// included, below the node's own packet budget, so a caller that runs the node under a lower
+// operating limit (a standby's degraded budget) gets it enforced atomically with the reserve.
+// Callers that omit it get the node's budget alone.
 type ReserveEpisodeRequest struct {
 	OperationID string       `json:"operationId"`
 	TenantID    string       `json:"tenantId"`
@@ -204,6 +207,9 @@ type ReserveEpisodeRequest struct {
 	Generation  int64        `json:"generation"`
 	Shape       EpisodeShape `json:"shape"`
 	TTLSeconds  int          `json:"ttlSeconds,omitempty"`
+	// PacketCeiling is the most packets/s the node's reservations may total with this hold; zero
+	// means the node's packet budget.
+	PacketCeiling int `json:"packetCeiling,omitempty"`
 }
 
 // ReserveEpisodeResponse reports the reservation. A refusal uses the capacity-exceeded or

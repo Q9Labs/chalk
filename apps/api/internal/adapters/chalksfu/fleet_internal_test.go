@@ -250,56 +250,36 @@ func TestLostReadsOnlyTheLastProbes(t *testing.T) {
 	}
 }
 
-func TestRecoveryCandidatesFollowPlacementOrderAndSkipSilentDrainingAndFullStandbyNodes(t *testing.T) {
+func TestRecoveryCandidatesFollowPlacementOrderAndSkipOnlySilentOrDrainingNodes(t *testing.T) {
 	nodes := []runtimeconfig.ChalkSFUNode{standby("s"), standby("sfull"), primary("full"), primary("down"), primary("drain"), primary("ok")}
 	fleet := poolOf(testStandbyBudget, nodes, map[string]*answer{
 		"s": ready(testStandbyBudget, 0), "sfull": ready(testStandbyBudget, testStandbyBudget), "full": ready(testPrimaryBudget, testPrimaryBudget), "down": nil,
 		"drain": {budget: testPrimaryBudget, draining: true}, "ok": ready(testPrimaryBudget, 0),
 	})
 	var got []string
-	for _, c := range fleet.recoveryCandidates("e") {
+	for _, c := range fleet.recoveryCandidates() {
 		got = append(got, c.adapter.node)
 	}
-	// A full primary stays: its reserve may hold this very Episode, which the probe cannot show.
-	// A full standby goes: its degraded budget is a limit only the API knows.
-	if want := []string{"full", "ok", "s"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
-		t.Fatalf("candidates %v, want %v: primaries first, then the standby", got, want)
-	}
-}
-
-func TestRecoveryCandidatesKeepAStandbyThatHoldsTheEpisodesOwnReserve(t *testing.T) {
-	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{standby("sfull")}, map[string]*answer{
-		"sfull": ready(testStandbyBudget, testStandbyBudget),
-	})
-	if got := fleet.recoveryCandidates("e"); len(got) != 0 {
-		t.Fatalf("a full standby with no hold of ours is a candidate: %v", got)
-	}
-	fleet.noteHeld("sfull", "e", time.Now().Add(time.Minute))
-	if got := fleet.recoveryCandidates("e"); len(got) != 1 {
-		t.Fatalf("a retry must reach the standby its own reserve filled, got %v", got)
-	}
-	if got := fleet.recoveryCandidates("other"); len(got) != 0 {
-		t.Fatalf("the hold of one Episode opened the standby to another: %v", got)
-	}
-	fleet.noteHeld("sfull", "e", time.Now().Add(-time.Second))
-	if got := fleet.recoveryCandidates("e"); len(got) != 0 {
-		t.Fatalf("an ended hold still opens the standby: %v", got)
+	// A full node stays, standbys included: its reserve may hold this very Episode, which the
+	// probe cannot show, and the node's own answer decides whether the shape fits.
+	if want := []string{"full", "ok", "s", "sfull"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] || got[3] != want[3] {
+		t.Fatalf("candidates %v, want %v: primaries first, then the standbys", got, want)
 	}
 }
 
 func TestRecoveryOperationIDIsBoundedAndDeterministic(t *testing.T) {
 	node, episode := strings.Repeat("n", 64), "0198f3a2-7b1c-7d4e-9a10-3c5b8e2f6a71"
-	id := recoveryOperationID(episode, 1, node, 2, true, 7)
+	id := recoveryOperationID(episode, 1, node, 2, 7)
 	if len(id) > 128 {
 		t.Fatalf("operation ID has %d characters, the SFU accepts 128", len(id))
 	}
-	if id != recoveryOperationID(episode, 1, node, 2, true, 7) {
+	if id != recoveryOperationID(episode, 1, node, 2, 7) {
 		t.Fatal("the same tuple gave two operation IDs")
 	}
 	for name, other := range map[string]string{
-		"generation": recoveryOperationID(episode, 2, node, 2, true, 7), "participants": recoveryOperationID(episode, 1, node, 3, true, 7),
-		"screen share": recoveryOperationID(episode, 1, node, 2, false, 7), "window": recoveryOperationID(episode, 1, node, 2, true, 8),
-		"node": recoveryOperationID(episode, 1, node+"x", 2, true, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, true, 7),
+		"generation": recoveryOperationID(episode, 2, node, 2, 7), "participants": recoveryOperationID(episode, 1, node, 3, 7),
+		"window": recoveryOperationID(episode, 1, node, 2, 8),
+		"node":   recoveryOperationID(episode, 1, node+"x", 2, 7), "episode": recoveryOperationID(episode+"x", 1, node, 2, 7),
 	} {
 		if other == id {
 			t.Errorf("a different %s gave the same operation ID", name)
