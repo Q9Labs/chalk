@@ -2,6 +2,7 @@ package media
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
@@ -223,6 +224,7 @@ func (n *Node) reserveCapture(s *Session, cost int) (*captureLease, error) {
 		hold.lent += held
 	}
 	s.captureReserved += cost
+	s.captureLeases = append(s.captureLeases, lease)
 	return lease, nil
 }
 
@@ -230,6 +232,7 @@ func (n *Node) releaseCapture(s *Session, lease *captureLease) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	s.captureReserved -= lease.cost
+	s.captureLeases = slices.DeleteFunc(s.captureLeases, func(held *captureLease) bool { return held == lease })
 	// Packets the subscription took from its Episode's hold go back to it while that same hold
 	// lasts, so a failed or replaced subscription does not hand promised room to other Episodes.
 	// Only this subscription's own borrow goes back, never another subscription's.
@@ -240,6 +243,25 @@ func (n *Node) releaseCapture(s *Session, lease *captureLease) {
 		lease.borrowed = 0
 	}
 	n.dropSpentHold(key)
+}
+
+// adoptCaptureLeases moves the Episode's live capture subscriptions onto its new hold. The hold
+// keeps only the capture bound they do not already reserve, so they borrow the rest of it as
+// their lent share, and ending one returns its share to the new hold. Without this, a
+// subscription that ends after a re-reserve would give the room back to nobody and the Episode
+// would end up promised less than its bound. The caller holds n.mu.
+func (n *Node) adoptCaptureLeases(key episodeKey, hold *episodeHold, bound int) {
+	room := bound
+	for _, session := range n.sessions {
+		if session.kind != kindCapture || episodeOf(session.scope) != key {
+			continue
+		}
+		for _, lease := range session.captureLeases {
+			lease.hold, lease.borrowed = hold, min(lease.cost, room)
+			room -= lease.borrowed
+			hold.lent += lease.borrowed
+		}
+	}
 }
 
 // capturePackets is what the Episode's live capture sessions reserve for their subscriptions.

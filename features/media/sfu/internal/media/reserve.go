@@ -224,7 +224,9 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 		return protocol.ReserveEpisodeResponse{}, n.refuse(RefusedNodeFull, errNodeFull)
 	}
 	expires := n.now().Add(ttl)
-	n.holds[key] = &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: captureHold, expires: expires}
+	hold := &episodeHold{generation: request.Generation, participants: shape.Participants, captures: shape.CaptureSlots, capture: captureHold, expires: expires}
+	n.holds[key] = hold
+	n.adoptCaptureLeases(key, hold, n.captureBound(shape))
 	n.settleHold(key, nil)
 	response := protocol.ReserveEpisodeResponse{NodeIncarnation: n.incarnation, ReservedPackets: reserved, ExpiresAt: expires}
 	n.reserves[request.OperationID] = reserveRecord{digest: digest, response: response}

@@ -28,8 +28,11 @@ type Session struct {
 	createOperation string
 	scope           protocol.Scope
 	kind            sessionKind
-	// captureReserved is the packets/s the capture's subscriptions reserve. n.mu guards it.
+	// captureReserved is the packets/s the capture's subscriptions reserve, and captureLeases are
+	// the subscriptions' leases, which a re-reserve of the Episode moves to its new hold. n.mu
+	// guards both.
 	captureReserved int
+	captureLeases   []*captureLease
 	node            *Node
 	pc              *webrtc.PeerConnection
 

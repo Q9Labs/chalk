@@ -693,3 +693,32 @@ func TestReReservingAfterACaptureSubscribedDoesNotCountItTwice(t *testing.T) {
 		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), want)
 	}
 }
+
+// A subscription that ends after its Episode was re-reserved returns its share to the new hold,
+// so the Episode is still promised its whole capture bound and no other Episode can take it.
+func TestASubscriptionEndingAfterAReReserveReturnsItsShareToTheNewHold(t *testing.T) {
+	capture := 3 * (2*300 + 50)
+	f := newReserveNode(t, func(cfg *config.Config) { cfg.PacketBudget = threePerson + capture })
+	request := reserveRequest("one", 3)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatal(err)
+	}
+	session := f.addCaptureSession(t, "one")
+	lease, err := f.node.reserveCapture(session, 300)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := reserveRequest("one", 3)
+	again.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(again); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.heldCapture("one"); got != capture-300 {
+		t.Fatalf("the new hold keeps %d for captures, want %d", got, capture-300)
+	}
+	f.node.releaseCapture(session, lease)
+	if got, want := f.heldCapture("one"), capture; got != want || f.reserved() != threePerson+capture {
+		t.Fatalf("after the subscription ended the hold keeps %d (want %d) and the node reserves %d (want %d)", got, want, f.reserved(), threePerson+capture)
+	}
+}
