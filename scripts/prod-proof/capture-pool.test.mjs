@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { slotBlockage, waitForCapture } from "./capture-pool.mjs";
+import { checkCaptureSlotFree, slotBlockage, waitForCapture } from "./capture-pool.mjs";
 
 const ours = "recording-ours";
 const stale = { job_id: "job-stale", recording_id: "recording-stale", episode_id: "episode-stale", claimed_at: "2026-11-08T01:00:00Z", lease_expires_at: "2026-11-08T01:05:00Z" };
@@ -88,4 +88,36 @@ test("a pool with free slots or no slots is not a blockage", () => {
 test("the oldest foreign hold is named and the rest are counted", () => {
   const second = { ...stale, job_id: "job-second" };
   assert.match(slotBlockage(pool({ slots_total: 2, slots_used: 2, held: [stale, second] }), ours), /^capture slot held by job job-stale .*\(\+1 more\)$/);
+});
+
+// The call-artifacts proof uses an automatic Recording, so its id is only known once Capture starts.
+const apiRun = (response) => ({
+  tenantPath: "/v1/tenants/t1",
+  apiRequest: async () => {
+    if (response instanceof Error) throw response;
+    return response;
+  },
+});
+
+test("call-artifacts preflight fails before the call when another job holds the last slot", async () => {
+  await assert.rejects(checkCaptureSlotFree(apiRun(pool({ held: [stale] }))), (error) => {
+    assert.equal(error.reason, "capture-slot-held");
+    assert.match(error.message, /^capture slot held by job job-stale since 2026-11-08T01:00:00Z \(recording recording-stale, Episode episode-stale/);
+    return true;
+  });
+});
+
+test("call-artifacts preflight passes with a free slot or an unreadable pool", async () => {
+  await checkCaptureSlotFree(apiRun(pool({ slots_used: 0 })));
+  await checkCaptureSlotFree(apiRun(new Error("HTTP 403")));
+});
+
+test("an automatic Recording's own hold is not a blockage once its id is known", async () => {
+  let recordingId;
+  const stalePool = { pool: pool({ held: [stale] }) };
+  const early = run(stalePool, { recordingId: () => recordingId });
+  recordingId = "recording-stale";
+  await assert.rejects(early.result, /Capture ready timed out after 180s/);
+  const foreign = run(stalePool, { recordingId: () => ours });
+  await assert.rejects(foreign.result, /capture slot held by job job-stale/);
 });

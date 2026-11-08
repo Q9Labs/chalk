@@ -1,3 +1,4 @@
+import { checkCaptureSlotFree, readCapturePool, waitForCapture } from "./capture-pool.mjs";
 import { generateTurnVoices, turnPhrases } from "./fixture.mjs";
 import { launchGuests } from "./media.mjs";
 import { availableSource, createEpisode, createSpace } from "./proofs.mjs";
@@ -25,6 +26,7 @@ export function callSeconds(environment = process.env) {
 // The Space's automatic policies must start the Recording and the Transcript without any request.
 export async function captureCall(run, receiver) {
   const seconds = callSeconds();
+  await checkCaptureSlotFree(run);
   const space = await createSpace(run, mediaPlane, automatic);
   const { episode, end, useSDK } = await createEpisode(run, space, automatic);
   run.episodeId = episode.id;
@@ -35,7 +37,19 @@ export async function captureCall(run, receiver) {
   await waitFor("every guest receives the other guests' camera and microphone", async () =>
     (await Promise.all(guests.pages.map((page) => page.evaluate(() => window.proofClient.getSnapshot().media.remote.filter((entry) => entry.source === "camera" || entry.source === "microphone").length)))).every((count) => count === others),
   );
-  console.log(`All guests connected; holding the call for ${seconds}s`);
+  await waitForCapture({
+    recordingId: () => run.recordingId,
+    ready: async () => {
+      const current = await guests.pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
+      if (!current) return false;
+      check(current.status !== "failed", "Capture failed before readiness");
+      run.recordingId = current.recordingId;
+      return current.status === "recording";
+    },
+    readPool: () => readCapturePool(run),
+    signal: run.signal,
+  });
+  console.log(`All guests connected and Capture ready; holding the call for ${seconds}s`);
   await run.wait(seconds * 1000);
   console.log("Ending own Episode");
   await end();
