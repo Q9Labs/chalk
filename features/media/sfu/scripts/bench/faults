@@ -28,7 +28,7 @@
 # repair and layer counters over OTLP only). Run it from a clean checkout: `deploy` builds the commit.
 set -euo pipefail
 
-# shellcheck source=bench
+# shellcheck source=bench disable=SC2154
 source "$(dirname "${BASH_SOURCE[0]}")/bench"
 
 long_drain_seconds="${BENCH_LONG_DRAIN_SECONDS:-3600}"
