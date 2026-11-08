@@ -1,5 +1,5 @@
 // Dataset names are deployment configuration, not public repository constants.
-const datasets = (env = process.env) => ({ api: env.CHALK_AXIOM_STAGING_LOG_DATASET });
+export const datasets = (env = process.env) => ({ api: env.CHALK_AXIOM_STAGING_LOG_DATASET, metrics: env.CHALK_AXIOM_STAGING_METRICS_DATASET, metricsBaseUrl: env.CHALK_AXIOM_METRICS_BASE_URL });
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const rowLimit = 1000;
 

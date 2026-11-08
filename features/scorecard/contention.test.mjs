@@ -12,7 +12,7 @@ import { readLogs } from "./staging-logs.mjs";
 
 const lease = { acquired: true, lost: false, previous: { holder: "lane-retest", acquired_at: "2026-11-08T00:00:00.000Z", expires_at: "2026-11-08T00:10:00.000Z" } };
 const own = { episode_id: "own-episode", session_id: "own-session" };
-const input = () => ({ lease, before: [], after: [], window: [own], ownEpisodes: [own.episode_id] });
+const input = () => ({ lease, before: [], after: [], window: [own], ownEpisodes: [own.episode_id], nodeBefore: [idle], nodeAfter: [idle], nodeWindow: [idle] });
 const idle = { nodeIncarnation: "boot-a", sessions: 0, allocations: 0, draining: false, host: { stealPercent: 4 } };
 function card(evidence, value = 300, id = "nightly-1") {
   return parseScorecard({
@@ -26,7 +26,7 @@ function card(evidence, value = 300, id = "nightly-1") {
 }
 
 test("idle fake node readouts and only own Episode events produce a clean card", () => {
-  const result = contention({ ...input(), nodeReadouts: [idle, idle] });
+  const result = contention({ ...input(), nodeBefore: [idle], nodeAfter: [idle] });
   assert.equal(result.contended, false);
   assert.deepEqual(result.foreign_episodes_seen, { value: 0, source: "axiom_api_logs" });
   assert.equal(result.steal_max.value, 4);
@@ -35,9 +35,9 @@ test("idle fake node readouts and only own Episode events produce a clean card",
 });
 
 test("a foreign session in a fake node readout, or a foreign Episode in a boundary log, taints the run", () => {
-  const node = contention({ ...input(), nodeReadouts: [idle, { ...idle, sessions: 1 }] });
+  const node = contention({ ...input(), nodeBefore: [idle], nodeAfter: [{ ...idle, sessions: 1 }] });
   assert.equal(node.contended, true);
-  assert.deepEqual(node.foreign_sessions_seen, { value: 1, source: "node_readout" });
+  assert.deepEqual(node.foreign_sessions_seen, { value: 1, source: "axiom_metrics" });
   const foreign = { episode_id: "foreign-episode", session_id: "foreign-session" };
   const result = contention({ ...input(), after: [own, foreign, foreign] });
   assert.equal(result.contended, true);
@@ -47,15 +47,15 @@ test("a foreign session in a fake node readout, or a foreign Episode in a bounda
 });
 
 test("a node incarnation change taints the card and records peak steal", () => {
-  const result = contention({ ...input(), nodeReadouts: [idle, { ...idle, nodeIncarnation: "boot-b", host: { stealPercent: 14 } }] });
+  const result = contention({ ...input(), nodeBefore: [idle], nodeAfter: [{ ...idle, nodeIncarnation: "boot-b", host: { stealPercent: 14 } }] });
   assert.equal(result.contended, true);
   assert.equal(result.incarnation_changes.value, 1);
   assert.equal(result.steal_max.value, 14);
 });
 
 test("the API-only source never fabricates node readings or accepts zero-event coverage", () => {
-  const result = contention(input());
-  assert.equal(result.contended, false);
+  const result = contention({ ...input(), nodeBefore: [], nodeAfter: [], nodeWindow: [] });
+  assert.equal(result.contended, true);
   for (const field of ["steal_max", "incarnation_changes", "drain"]) assert.deepEqual(result[field], { value: "unavailable", source: "unavailable" });
   const missing = contention({ ...input(), window: undefined });
   assert.equal(missing.foreign_episodes_seen.value, "unavailable");
@@ -91,6 +91,7 @@ test("contention schema rejects resource identifiers, extra fields, and fabricat
   assert.throws(() => card({ ...value, lease_holder_before: { value: "https://private.example", source: "github_lease" } }), /plain label/);
   assert.throws(() => card({ ...value, episode_id: "private" }), /unknown field/);
   assert.throws(() => card({ ...value, steal_max: { value: 0, source: "unavailable" } }), /needs a source/);
+  assert.throws(() => card({ ...value, steal_max: { value: "unavailable", source: "unavailable" } }), /requires a contended card/);
 });
 
 test("the cut-scoped promotion evaluator fails closed on valid contended cards", (t) => {

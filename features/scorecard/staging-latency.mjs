@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { contention, signal } from "./contention.mjs";
 import { readLogs } from "./staging-logs.mjs";
+import { readNodeMetrics } from "./staging-metrics.mjs";
 import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
 
 const evidence = resolve(".private/latency-scorecard");
@@ -48,6 +49,15 @@ async function logs(start, end) {
   }
 }
 
+async function nodeMetrics(start, end) {
+  try {
+    return await readNodeMetrics(new Date(start).toISOString(), new Date(end).toISOString());
+  } catch {
+    console.error("Staging node metrics unavailable.");
+    return [];
+  }
+}
+
 // Allow 30 seconds for log ingestion; a quiet API window is observable, not proof of node idleness.
 async function quietWindow() {
   const end = Date.now() - 30_000;
@@ -73,22 +83,28 @@ async function measure() {
         before = await quietWindow();
       }
     }
+    const boundary = Date.now() - 30_000;
+    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary);
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);
     let status = 1;
     // Do not add load to an already busy or unobservable node.
-    if (before && before.length === 0) {
+    const nodeIdle = nodeBefore.length === 1 && nodeBefore.every((row) => Number.isFinite(row.host?.stealPercent) && row.sessions === 0 && row.draining === false);
+    if (before && before.length === 0 && nodeIdle) {
       await appendFile(".private/proof-run-ids", `${runId}\n`);
       // Keep timeout and the kit in the lease's process group so lease loss stops both.
+      const measurementEnv = { ...process.env, CHALK_PROOF_RUN_ID: runId };
+      delete measurementEnv.CHALK_AXIOM_METRICS_QUERY_TOKEN;
       status = await workload("timeout", ["--foreground", "--signal=TERM", "--kill-after=10s", "20m", "pnpm", "prod:latency", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"], {
-        env: { ...process.env, CHALK_PROOF_RUN_ID: runId },
+        env: measurementEnv,
       });
     }
     const end = Date.now();
     await delay(30_000);
     const window = await logs(start, end);
     const after = await logs(end, Date.now());
+    const [nodeWindow, nodeAfter] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
     const card = await json(resolve(directory, "scorecard-chalk_sfu.json"), await emptyCard());
     let ownEpisodes = [];
     try {
@@ -100,7 +116,7 @@ async function measure() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    card.contention = contention({ lease: await json(leaseFile), before, after, window, ownEpisodes });
+    card.contention = contention({ lease: await json(leaseFile), before, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter });
     // A skipped attempt or missing boundary readout cannot be accepted as an isolated run.
     if (!before || before.length > 0 || !after || card.metrics.length === 0) card.contention.contended = true;
     await save(card);
