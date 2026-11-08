@@ -312,21 +312,26 @@ func (a *Adapter) checkIncarnation(answered string) error {
 // each such node closes the Episode's sessions of lower generations and refuses any later create,
 // capture or source grant under one (see the SFU's POST /v1/episodes/retire). It runs once the
 // move commits, so a join issued under the old binding that lands on the old node afterwards is
-// refused, and one that landed before is closed. It runs again when the Episode ends. It targets
-// the retired allocation and never the current one:
+// refused, and one that landed before is closed. It runs again when the Episode ends and on later
+// resolves until every node has answered. It spares what the binding lives on:
 //
-//   - A retired allocation on the node the Episode is bound to now is skipped. That node
-//     restarted, so the old incarnation holds nothing, or it is the current allocation again.
+//   - A retired allocation on the node the Episode is bound to now, under another incarnation,
+//     is skipped: that node restarted and holds nothing of it. The same node and incarnation
+//     (the Episode came back to a node that kept its old sessions) is retired like any other,
+//     because the call closes only sessions below the binding's generation, never the ones the
+//     Episode has joined under it.
 //   - A node that answers with another incarnation than the retired one holds nothing of it.
 //   - A node the probes call silent is still asked, because silent only means its last probe
 //     failed and its HTTP side may be up. When it does not answer, that is logged and skipped,
-//     because a node that never returns must not keep the Episode's end from confirming.
+//     because a node that never returns must not keep the Episode's end from confirming. The
+//     call then reports acknowledged as false, so a later resolve asks again.
 //
-// Retiring is idempotent, so a retry is harmless.
-func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID, episodeID string) error {
+// A node that is not silent and fails is an error. Retiring is idempotent, so a retry is harmless.
+func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID, episodeID string) (acknowledged bool, err error) {
 	var failures []error
+	acknowledged = true
 	for _, old := range binding.PreviousAllocations {
-		if old.Node == binding.Node {
+		if old.Node == binding.Node && old.Incarnation != binding.Current().Incarnation {
 			continue
 		}
 		adapter, err := f.Node(old.Node)
@@ -339,12 +344,13 @@ func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID
 		}
 		request := wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: binding.Generation}
 		if err := adapter.call(ctx, "/v1/episodes/retire", request, nil); err != nil {
+			acknowledged = false
 			if lost {
-				f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not retired", old.Node, err)
+				f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not retired yet", old.Node, err)
 				continue
 			}
 			failures = append(failures, fmt.Errorf("retire the episode on node %q: %w", old.Node, err))
 		}
 	}
-	return errors.Join(failures...)
+	return acknowledged, errors.Join(failures...)
 }

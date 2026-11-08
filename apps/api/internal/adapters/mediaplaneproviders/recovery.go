@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -63,13 +65,84 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 	return binding, fmt.Errorf("%w: commit the episode's binding move: %v", mediaplane.ErrPlaneUnavailable, err)
 }
 
-// retireLeft retires the Episode on the allocations the binding left. A failure is logged and
-// not returned: the move is committed, a join that reaches a node that missed this call is still
-// caught by its fence, and the Episode's end retires again until the node answers.
+const (
+	// retireTimeout bounds one round of retire calls. It does not end with the request that
+	// triggered it, so a client that gives up cannot leave the old node unretired.
+	retireTimeout = 3 * time.Second
+	// retireRetryAfter spaces the retries of a retire the old node has not acknowledged, per
+	// Episode and per process, so a node that stays silent does not slow every call.
+	retireRetryAfter = 30 * time.Second
+	// retireLedgerLimit bounds the Episodes the ledger remembers; the oldest goes first.
+	retireLedgerLimit = 1 << 12
+)
+
+// retireLedger remembers, per Episode in this process, the generation whose retire every old node
+// has acknowledged and when it last tried. It only saves calls: retiring is idempotent, a restart
+// of the process forgets it and the next resolve retires once more.
+type retireLedger struct {
+	mu       sync.Mutex
+	episodes map[utilities.ID]retireEntry
+	order    []utilities.ID
+}
+
+type retireEntry struct {
+	generation   int64
+	acknowledged bool
+	tried        time.Time
+}
+
+func newRetireLedger() *retireLedger {
+	return &retireLedger{episodes: map[utilities.ID]retireEntry{}}
+}
+
+// due reports whether the Episode's retire at the generation needs a call now.
+func (l *retireLedger) due(episode utilities.ID, generation int64, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry, known := l.episodes[episode]
+	switch {
+	case !known || entry.generation < generation:
+		return true
+	case entry.generation > generation || entry.acknowledged:
+		return false
+	}
+	return now.Sub(entry.tried) >= retireRetryAfter
+}
+
+func (l *retireLedger) record(episode utilities.ID, generation int64, acknowledged bool, now time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, known := l.episodes[episode]; !known {
+		if len(l.order) >= retireLedgerLimit {
+			delete(l.episodes, l.order[0])
+			l.order = l.order[1:]
+		}
+		l.order = append(l.order, episode)
+	}
+	l.episodes[episode] = retireEntry{generation: generation, acknowledged: acknowledged, tried: now}
+}
+
+// retireLeft retires the Episode on the allocations the binding left. A failure is logged and not
+// returned: the move is committed. A node that does not acknowledge is asked again by later
+// resolves (see reconcileRetirement), by a join's fence that sees the move, and when the Episode
+// ends.
 func (r Registry) retireLeft(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) {
-	if err := r.chalk.Retire(ctx, binding, tenantID.String(), episodeID.String()); err != nil {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), retireTimeout)
+	defer cancel()
+	acknowledged, err := r.chalk.Retire(ctx, binding, tenantID.String(), episodeID.String())
+	if err != nil {
 		slog.WarnContext(ctx, "chalk sfu retired allocation not retired yet", "event", "chalk_sfu.retire_pending", "episode_id", episodeID.String(), "generation", binding.Generation, "error", err.Error())
 	}
+	r.retired.record(episodeID, binding.Generation, acknowledged && err == nil, time.Now())
+}
+
+// reconcileRetirement asks the old nodes of a moved Episode to retire again when an earlier call
+// did not reach them, so a healthy resolve does not leave the old allocation live for good.
+func (r Registry) reconcileRetirement(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) {
+	if r.chalk == nil || r.recovery == nil || len(binding.PreviousAllocations) == 0 || !r.retired.due(episodeID, binding.Generation, time.Now()) {
+		return
+	}
+	r.retireLeft(ctx, tenantID, episodeID, binding)
 }
 
 // EndRetiredAllocations retires a finished Episode on the allocations its binding left, so a node
@@ -84,7 +157,8 @@ func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID
 	if err != nil || binding == nil || len(binding.PreviousAllocations) == 0 {
 		return err
 	}
-	return r.chalk.Retire(ctx, *binding, tenantID.String(), episodeID.String())
+	_, err = r.chalk.Retire(ctx, *binding, tenantID.String(), episodeID.String())
+	return err
 }
 
 // bindingFence returns the check a join runs after the node created its session: the Episode's

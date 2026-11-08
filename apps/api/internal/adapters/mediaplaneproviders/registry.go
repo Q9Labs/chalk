@@ -61,6 +61,8 @@ type Registry struct {
 	chalkSpaces     spaces.ChalkSFUAllowlist
 	episodes        EpisodeReader
 	recovery        EpisodeRecovery
+	// retired remembers which moved Episodes' old nodes acknowledged their retire (see retireLedger).
+	retired *retireLedger
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
 	turn *turn.Credentials
@@ -93,6 +95,7 @@ func NewRegistry(config Config) Registry {
 		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
 		recovery:        config.Recovery,
+		retired:         newRetireLedger(),
 		turn:            turn.New(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
@@ -160,6 +163,7 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 			if *binding, err = r.recoverBinding(ctx, tenant.ID, episodeID, *binding); err != nil {
 				return nil, err
 			}
+			r.reconcileRetirement(ctx, tenant.ID, episodeID, *binding)
 		}
 		allocation, generation = binding.Current(), binding.Generation
 	}

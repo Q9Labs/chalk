@@ -228,3 +228,68 @@ func TestARetiredAdapterCannotGrantASourceOrPublish(t *testing.T) {
 		t.Fatalf("the new allocation's source grant: %v", err)
 	}
 }
+
+// A retire the old node never received (the call failed, or the client gave up) is asked for
+// again by the next resolve of a healthy Episode, so the old allocation does not stay live until
+// the Episode ends.
+func TestAHealthyResolveRetriesARetireTheOldNodeMissed(t *testing.T) {
+	ca, primary, standby, nodes := twoNodes(t, roomy)
+	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 2)
+	join(t, primary.service(t), recoveringScope("alice"))
+
+	// The Episode moved to the standby and the retire never arrived.
+	moved, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.mu.Lock()
+	store.binding = moved
+	store.mu.Unlock()
+	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
+		t.Fatalf("the old node holds %d sessions before the resolve, want 1", sessions)
+	}
+	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
+		t.Fatal(err)
+	}
+	if sessions := stateOf(t, primary).Sessions; sessions != 0 {
+		t.Fatalf("the old node holds %d sessions after a healthy resolve, want 0", sessions)
+	}
+}
+
+// An Episode that returns to a node which kept its old sessions retires them too, and only them:
+// the sessions it has joined under its new generation survive.
+func TestAnEpisodeThatReturnsToANodeRetiresItsOldSessionsAndKeepsTheNewOnes(t *testing.T) {
+	ca, primary, standby, nodes := twoNodes(t, roomy)
+	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
+	bound := placedBinding(t, fleet)
+	store := newRecoveryStore(bound, 2)
+	join(t, primary.service(t), recoveringScope("old"))
+
+	away, err := bound.Moved(mediaplane.Placement{Node: "sfu-standby", Incarnation: stateOf(t, standby).NodeIncarnation, Reason: mediaplane.PlacementStandby})
+	if err != nil {
+		t.Fatal(err)
+	}
+	back, err := away.Moved(mediaplane.Placement{Node: "sfu-primary", Incarnation: stateOf(t, primary).NodeIncarnation, Reason: mediaplane.PlacementPrimary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.mu.Lock()
+	store.binding = back
+	store.mu.Unlock()
+	primaryNode, err := fleet.Node("sfu-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, primaryNode.Bound(back.NodeIncarnation, back.Generation)), recoveringScope("new"))
+	if sessions := stateOf(t, primary).Sessions; sessions != 2 {
+		t.Fatalf("the node holds %d sessions before the resolve, want the old one and the new one", sessions)
+	}
+	if err := resolve(recoveryRegistry(fleet, store)); err != nil {
+		t.Fatal(err)
+	}
+	if sessions := stateOf(t, primary).Sessions; sessions != 1 {
+		t.Fatalf("the node holds %d sessions after the resolve, want only the one joined under generation %d", sessions, back.Generation)
+	}
+}
