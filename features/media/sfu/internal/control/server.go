@@ -15,6 +15,7 @@ import (
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 // Server is the running service: the control listener and the media node.
@@ -91,13 +92,27 @@ func (s *Server) Incarnation() string { return s.node.Incarnation() }
 // Telemetry reports the node for metric export.
 func (s *Server) Telemetry() media.Telemetry { return s.node.Telemetry() }
 
-// Drain stops admission and keeps live sessions: readiness fails, so the API
-// places no new Episode here, and new sessions are refused. It returns how many
-// sessions are still live.
-func (s *Server) Drain() int {
-	s.node.Drain()
-	return s.node.SessionCount()
+// Drain stops admission and keeps live sessions: readiness reports draining, so the API
+// places no new Episode here, and new Episodes are refused. SIGUSR1 and the control request share it.
+func (s *Server) Drain() protocol.DrainState {
+	changed := s.node.Drain()
+	state := s.node.DrainState()
+	if changed {
+		s.log.Info("sfu draining", "allocations", state.Allocations, "cleanupDebt", state.CleanupDebt)
+	}
+	return state
 }
+
+// Undrain reopens admission, for a restart that was called off.
+func (s *Server) Undrain() protocol.DrainState {
+	if s.node.Undrain() {
+		s.log.Info("sfu undrained")
+	}
+	return s.node.DrainState()
+}
+
+// DrainState reads the drain state without changing it.
+func (s *Server) DrainState() protocol.DrainState { return s.node.DrainState() }
 
 // Stop drains the service: readiness fails, in-flight requests finish, then
 // every session closes and the sockets are released.

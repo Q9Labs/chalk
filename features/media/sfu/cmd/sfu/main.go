@@ -66,11 +66,17 @@ func run(log *slog.Logger) error {
 		case <-drain:
 			// SIGUSR1 drains without stopping, so an operator can wait for live
 			// calls to end before a restart. "sfu drained" marks the last one.
-			log.Info("sfu draining", "sessions", server.Drain())
+			server.Drain()
 			waiting = true
 			ticker.Reset(time.Second)
 		case <-ticker.C:
-			if waiting && server.Drain() == 0 {
+			state := server.DrainState()
+			switch {
+			case !waiting:
+			case !state.Draining: // a control request called the restart off
+				waiting = false
+				ticker.Stop()
+			case state.Allocations == 0 && state.CleanupDebt == 0:
 				log.Info("sfu drained")
 				waiting = false
 				ticker.Stop()

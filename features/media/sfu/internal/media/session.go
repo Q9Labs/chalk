@@ -160,6 +160,8 @@ func (s *Session) Close() {
 		return
 	}
 	s.closed = true
+	s.node.closing.Add(1)
+	defer s.node.closing.Add(-1)
 	published, subscribed := slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
 	if s.pending != nil {
 		s.pending.timer.Stop()
