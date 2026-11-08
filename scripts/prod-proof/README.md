@@ -30,6 +30,17 @@ Signed webhook proofs use a temporary Webhook.site receiver. Voice generation us
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
 
+The Capture pool is shared and small, so one stale Capture job can block every
+Recording. While it waits for Capture readiness, the proof reads
+`GET /v1/tenants/{tenant_id}/recording-capture-pool` (the proof key's
+`recordings:read` scope) after 25 seconds and again at the 180-second timeout.
+When every slot is held and none belongs to this proof's Recording, it fails at
+once with reason `capture-slot-held`. The private evidence names the job,
+Recording, Episode, claim time and lease expiry; slots held for other Tenants
+are counted without identifiers. Otherwise it keeps waiting, and the timeout
+message in the private evidence carries the pool readout or why it was
+unavailable.
+
 The Leave plan runs the integrity-verified published 5.2.6 client and the candidate
 on the same host and backend. It compares five ordinary baseline samples with
 five ordinary and five publications-403 candidate samples, and independently

@@ -1097,6 +1097,24 @@ export const RecordingSchema = /* @__PURE__ */ (() =>
   }))();
 export type Recording = typeof RecordingSchema.Type;
 
+export const RecordingCapturePoolSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    held: Schema.Array(
+      Schema.Struct({
+        claimed_at: DateTimeStringSchema,
+        episode_id: EpisodeIdSchema,
+        job_id: UUIDSchema,
+        lease_expires_at: DateTimeStringSchema,
+        recording_id: RecordingIdSchema,
+      }),
+    ),
+    held_by_other_tenants: Schema.Number,
+    observed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    slots_total: Schema.Number,
+    slots_used: Schema.Number,
+  }))();
+export type RecordingCapturePool = typeof RecordingCapturePoolSchema.Type;
+
 export const RecordingDownloadURLSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     expires_at: DateTimeStringSchema,
@@ -2836,6 +2854,15 @@ export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
 
 export const GetRecordingResponseSchema = /* @__PURE__ */ (() => RecordingSchema)();
 export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
+
+export const GetRecordingCapturePoolPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetRecordingCapturePoolPathParams = typeof GetRecordingCapturePoolPathParamsSchema.Type;
+
+export const GetRecordingCapturePoolResponseSchema = /* @__PURE__ */ (() => RecordingCapturePoolSchema)();
+export type GetRecordingCapturePoolResponse = typeof GetRecordingCapturePoolResponseSchema.Type;
 
 export const GetSpacePathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6712,6 +6739,9 @@ export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatu
 
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
+
+export const GetRecordingCapturePoolErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type GetRecordingCapturePoolError = typeof GetRecordingCapturePoolErrorSchema.Type;
 
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;

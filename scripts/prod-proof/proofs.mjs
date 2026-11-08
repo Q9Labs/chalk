@@ -1,3 +1,4 @@
+import { readCapturePool, waitForCapture } from "./capture-pool.mjs";
 import { contactSheetFont } from "./contact-sheet.mjs";
 import { recordingRejoinWindow } from "./recording-rejoin.mjs";
 import { requestEpisodeEnd } from "./episode-end.mjs";
@@ -85,18 +86,17 @@ async function startCapture(run, pages) {
   run.recordingId = started.recordingId;
   await save(`${run.directory}/recording-start.json`, started);
   console.log("Recording acknowledged; waiting for Capture readiness");
-  await waitFor(
-    "Capture ready",
-    async () => {
+  await waitForCapture({
+    recordingId: run.recordingId,
+    ready: async () => {
       const current = await pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
       if (!current) return false;
       check(current.status !== "failed", "Capture failed before readiness");
       return current.recordingId === run.recordingId && current.status === "recording";
     },
-    180_000,
-    3000,
-    run.signal,
-  );
+    readPool: () => readCapturePool(run),
+    signal: run.signal,
+  });
   console.log("Capture ready; collecting media evidence");
 }
 function statsSampler(run, pages) {

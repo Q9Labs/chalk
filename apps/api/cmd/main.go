@@ -609,6 +609,7 @@ func run() error {
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
 		Recordings:                 recordingService,
 		RecordingExports:           recordingPipelineService,
+		RecordingCapturePool:       recordingPipelineService,
 		RecordingPreparations:      recordingPreparationService,
 		RecordingEntrance:          recordingEntrance,
 		EntranceInvites:            entranceInvites,

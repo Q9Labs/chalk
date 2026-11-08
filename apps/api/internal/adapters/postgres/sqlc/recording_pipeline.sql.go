@@ -2242,6 +2242,61 @@ func (q *Queries) InsertRecordingJobAttemptAuthority(ctx context.Context, arg In
 	return i, err
 }
 
+const listHeldCaptureSlots = `-- name: ListHeldCaptureSlots :many
+select
+    job.id,
+    job.tenant_id,
+    job.recording_id,
+    job.episode_id,
+    job.lease_expires_at,
+    coalesce(
+        (select max(authority.issued_at)
+         from recording_job_attempt_authorities authority
+         where authority.job_id = job.id and authority.attempt_count = job.attempt_count),
+        job.updated_at
+    )::timestamptz as claimed_at
+from recording_jobs job
+where job.kind = 'capture' and job.state = 'leased'
+order by claimed_at, job.id
+limit $1
+`
+
+type ListHeldCaptureSlotsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	RecordingID    pgtype.UUID        `json:"recording_id"`
+	EpisodeID      pgtype.UUID        `json:"episode_id"`
+	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	ClaimedAt      pgtype.Timestamptz `json:"claimed_at"`
+}
+
+func (q *Queries) ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error) {
+	rows, err := q.db.Query(ctx, listHeldCaptureSlots, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHeldCaptureSlotsRow
+	for rows.Next() {
+		var i ListHeldCaptureSlotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.RecordingID,
+			&i.EpisodeID,
+			&i.LeaseExpiresAt,
+			&i.ClaimedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecordingDeadLetters = `-- name: ListRecordingDeadLetters :many
 select id, tenant_id, episode_id, recording_id, kind, idempotency_key,
     payload_schema_version, state, priority, available_at, attempt_count,
