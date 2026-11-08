@@ -42,12 +42,12 @@ export function AiAppsPage() {
         </div>
       ) : null}
       {state.kind === "error" ? (
-        <div style={{ marginTop: 32 }}>
+        <div style={{ marginTop: "var(--space-8)" }}>
           <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
         </div>
       ) : null}
       {state.kind === "ready" ? (
-        <div className="secth" style={{ marginTop: 48 }}>
+        <div className="secth" style={{ marginTop: "var(--space-12)" }}>
           <h2>Connected apps</h2>
         </div>
       ) : null}

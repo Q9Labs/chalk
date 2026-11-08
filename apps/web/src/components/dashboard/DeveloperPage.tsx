@@ -150,7 +150,7 @@ export function DeveloperPage() {
         <MoreButton label="Show more endpoints" cursor={data.nextWebhookCursor} load={(webhookCursor) => readPage("developer", { webhookCursor })} onLoaded={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))} />
       ) : null}
 
-      <div className="secth" style={{ marginTop: 48 }}>
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
         <h2>AI apps</h2>
       </div>
       <p className="ohelp">
