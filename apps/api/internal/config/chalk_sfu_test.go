@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func setChalkSFUEnv(t *testing.T, nodes string) {
@@ -66,5 +67,26 @@ func TestChalkSFUNodesRejectAnUnknownRole(t *testing.T) {
 	setChalkSFUEnv(t, "spare:sfu-a=https://a.chalk.test:8443")
 	if _, err := loadChalkSFUConfig(); err == nil || !strings.Contains(err.Error(), "spare") {
 		t.Fatalf("error %v, want the unknown role named", err)
+	}
+}
+
+func TestChalkSFUClientSunset(t *testing.T) {
+	setChalkSFUEnv(t, "sfu-a=https://a.chalk.test:8443")
+	t.Setenv(ChalkSFUClientSunset, "")
+	config, err := loadChalkSFUConfig()
+	if err != nil || !config.ClientSunset.IsZero() {
+		t.Fatalf("sunset %v, err %v, want none by default", config.ClientSunset, err)
+	}
+
+	t.Setenv(ChalkSFUClientSunset, "2027-01-15T00:00:00+04:00")
+	if config, err = loadChalkSFUConfig(); err != nil || !config.ClientSunset.Equal(time.Date(2027, time.January, 14, 20, 0, 0, 0, time.UTC)) {
+		t.Fatalf("sunset %v, err %v, want 2027-01-14T20:00:00Z", config.ClientSunset, err)
+	}
+
+	for _, bad := range []string{"2027-01-15", "tomorrow", "1736899200"} {
+		t.Setenv(ChalkSFUClientSunset, bad)
+		if _, err := loadChalkSFUConfig(); err == nil || !strings.Contains(err.Error(), ChalkSFUClientSunset) {
+			t.Fatalf("%s=%q: error %v, want the setting named", ChalkSFUClientSunset, bad, err)
+		}
 	}
 }

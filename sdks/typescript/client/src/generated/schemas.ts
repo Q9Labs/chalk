@@ -6440,6 +6440,7 @@ export const CreateEpisodeErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaClientUnsupportedErrorSchema,
   MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,

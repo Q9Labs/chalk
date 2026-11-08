@@ -35,7 +35,13 @@ type Config struct {
 	// ChalkSFUSpaces are the Spaces whose new Episodes may start on the own SFU.
 	// Every other Space selecting it starts on Cloudflare.
 	ChalkSFUSpaces spaces.ChalkSFUAllowlist
-	Episodes       EpisodeReader
+	// ChalkSFUClientSunset is the instant after which a client that cannot run the
+	// own SFU is refused a new Episode in an allowlisted Space, instead of getting
+	// Cloudflare. The zero value means never.
+	ChalkSFUClientSunset time.Time
+	// Now is the clock for the sunset; it defaults to time.Now.
+	Now      func() time.Time
+	Episodes EpisodeReader
 	// Recovery moves a live own-SFU Episode whose node was lost. Without it a lost node
 	// only fails the Episode's calls.
 	Recovery EpisodeRecovery
@@ -70,6 +76,8 @@ type Registry struct {
 	telemetry       providercontracts.Telemetry
 	chalk           *chalksfu.Fleet
 	chalkSpaces     spaces.ChalkSFUAllowlist
+	clientSunset    time.Time
+	now             func() time.Time
 	episodes        EpisodeReader
 	recovery        EpisodeRecovery
 	// backlog is what the retirement worker last read; the pointer is shared by the copies of the Registry.
@@ -98,7 +106,13 @@ type cloudflareSFUConfig struct {
 }
 
 func NewRegistry(config Config) Registry {
+	now := config.Now
+	if now == nil {
+		now = time.Now
+	}
 	return Registry{
+		clientSunset:    config.ChalkSFUClientSunset,
+		now:             now,
 		processConfig:   config.ProcessConfig,
 		defaultProvider: config.DefaultProvider,
 		telemetry:       config.Telemetry,

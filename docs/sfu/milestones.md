@@ -561,7 +561,8 @@ lead.
    SDKs, React Native SDKs and first-party apps before selection changes.
    Inventory old releases, set a bounded upgrade window and minimum version, and
    return an actionable upgrade response at sunset. Never send an unknown grant to
-   an old decoder, and keep no indefinite Cloudflare cohort.
+   an old decoder, and keep no indefinite Cloudflare cohort. `CHALK_SFU_CLIENT_SUNSET` turns the refusal on
+   (see [Client sunset](../../infrastructure/sfu/README.md#client-sunset)).
 3. **Monitoring parity (starts now).** Provider-aware client stats, rendered-media
    and listener-heal evidence, API/SFU/capture failure alarms, latency/loss/freeze,
    packet admission, node health/drain/repair, and TURN credential and relay
