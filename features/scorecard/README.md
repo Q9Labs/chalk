@@ -73,14 +73,14 @@ The device lane writes one file per run, with one entry per scenario and one run
 
 ## The nightly tier
 
-`nightly.sh` runs at the end of the `Cut nightly` workflow, in its own `scorecard` job, which runs even when the cut fails or is held. It compares the Leave proof scorecard of the run with the median of the last seven nightly runs, appends it to `history.jsonl` on the `scorecard-history` branch, regenerates `TRENDS.md` (the last 14 nightly values of every metric) and keeps one open `Scorecard regression` issue while a gated metric is over its budget. The nightly run measures staging only and never the production node.
+`nightly.sh` runs at the end of the `Cut nightly` workflow, in its own `scorecard` job, which runs even when the cut fails or is held. It compares the Leave proof scorecard of the run with the median of the last seven nightly runs, appends it to `history.jsonl` on the `scorecard-history` branch, regenerates the trends file (the last 14 nightly values of every metric) and keeps one open `Scorecard regression` issue while a gated metric is over its budget. The nightly run measures staging only and never the production node.
 
 ## The Promote tier
 
-After the production proof passes, `promote.yml` scores the Leave run of that Promote against the nightly median. These jobs run only after `proof`, and no other job needs them or reads their result, so a failure cannot start `rollback`; it only turns the Promote run red.
+After the production proof passes, the Promote workflow scores the Leave run of that Promote against the nightly median. These jobs run only after `proof`, and no other job needs them or reads their result, so a failure cannot start `rollback`; it only turns the Promote run red.
 
 1. `scorecard` scores the first proof. A gated metric over its budget starts one rerun of the Leave proof.
 2. `scorecard-rerun` runs the Leave proof once more.
 3. `scorecard-final` fails the run only when a gated metric is still over its budget in the rerun, and opens or updates the `Scorecard regression` issue. An issue left open from an earlier run never blocks.
 
-The `scorecard_override` input of `promote.yml` takes a reason. With a reason, the gate still shows the table, records the reason in the run summary and as a comment on the open regression issue, and does not fail. Real-node metrics start with `gate: false`, so today the gate has nothing to block on. To remove the gate, revert the commit that added these jobs; the input is optional and does nothing without them.
+The `scorecard_override` input of the Promote workflow takes a reason. With a reason, the gate still shows the table, records the reason in the run summary and as a comment on the open regression issue, and does not fail. Real-node metrics start with `gate: false`, so today the gate has nothing to block on. To remove the gate, revert the commit that added these jobs; the input is optional and does nothing without them.

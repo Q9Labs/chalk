@@ -24,7 +24,7 @@ function gate(mode, { passRate = 1, override = "", open = "" } = {}) {
     card,
     JSON.stringify({
       schema: SCORECARD_SCHEMA,
-      run: { id: "1-1", commit: "d".repeat(40), tier: "promote", environment: "production", startedAt: "2026-11-07T03:00:00.000Z", client: { kind: "browser", browser: "none", region: "github-hosted", size: "ubuntu-24.04" } },
+      run: { id: "1-1", commit: "d".repeat(40), tier: "promote", environment: "production", startedAt: "2026-11-07T03:00:00.000Z", client: { kind: "browser", browser: "none", region: "github-hosted", size: "ubuntu-24-04" } },
       mediaPlane: "chalk_sfu",
       metrics: [{ id: "sfu.loopback.pass", unit: "pass", n: 4, p50: passRate, p95: passRate, source: "go-test" }],
       dropped: [],
