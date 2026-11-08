@@ -79,6 +79,54 @@ The `own-sfu` job of the same workflow runs after `release`, when the cut deploy
 
 Before recording the cut, `evaluate.mjs` reads `perf/budgets.json` from the scored SHA using `git show` and saves a SHA-and-run-bound `passed`, `gated-breach` or `missing` verdict with the budget revision, gated metric names and missing evidence. Every deployed nightly cut runs the own-SFU proof, so a Cloudflare card alone cannot replace a missing own-SFU card. Missing, empty, wrong-revision or contended cards cannot produce a passing verdict. The history job retains its regression issue behavior and exits nonzero on a gated breach. Nightly records the own-SFU proof and scorecard verdict separately; Promote checks both at selection and approval recheck, honoring the existing `scorecard_override` reason for failed proof, gated breaches or named missing evidence. Warn-only budgets remain warnings.
 
+### Staging contention
+
+Shared staging measurements run under the Git-ref lease described in the
+[SFU lane protocol](../media/sfu/README.md#shared-staging-node). Only nightly's
+own-SFU caller grants `contents:write`; other reusable proof callers retain
+their existing permissions. A direct staging dispatch without write access
+fails closed at lease acquisition. The first lease attempt is immediate, then
+retries once with a bounded 10-minute wait.
+
+The measurement reads API-log windows before and after the latency kit and
+queries its complete measurement window after a 30-second ingestion allowance.
+`staging-logs.mjs` owns dataset configuration in one place:
+`CHALK_AXIOM_STAGING_LOG_DATASET` is the nightly environment variable, and
+`CHALK_AXIOM_QUERY_TOKEN` is the existing read-only query credential, scoped to
+that dataset. The collector selects `chalk_sfu` provider events, counts distinct
+foreign Episode and provider-session IDs, and excludes its own Episodes by
+`episode_id`. The latency kit writes those IDs only into private, encrypted
+evidence. Public cards contain counts, never Episode or connection IDs or
+dataset names. Lease labels and times are public: use non-sensitive labels.
+
+The optional `contention` block records each signal as `{ value, source }`;
+unavailable signals have `value: "unavailable"`, never an invented zero.
+`lease_holder_before` and its acquisition/expiry times come from the Git ref.
+`foreign_episodes_seen`, `foreign_sessions_seen`, before/after event counts,
+measurement event count and own-Episode event count come from API logs.
+`steal_max`, `incarnation_changes` and `drain` are **unavailable** in this source.
+The SFU deploy exports OTLP metrics but does not ship its journal lines; node
+metric read access is a separate follow-up. The collector keeps node readouts
+as an optional second source behind the same fields.
+
+A successful API query with no `chalk_sfu` events sets
+`zero_chalk_sfu_events.value: true`: it may mean an idle node or a logging gap,
+not measured zero load. Missing/partial log windows, no own-Episode coverage,
+a lost lease, or observed foreign Episodes make a card `contended: true`.
+Quiet API logs do not prove that an already connected, silent foreign session
+is absent. All active node gauges remain unavailable with this fallback.
+
+After a contended attempt, the job waits up to 10 minutes for a quiet API-log
+window and retries the measurement once under the lease. Each measurement is
+bounded to 20 minutes. It never adds load while its pre-measurement log window
+is busy or unreadable. Both attempts remain in encrypted evidence; only the
+selected final card is published. A contended final card (including an empty
+one on lease timeout) is prominently labelled in summaries and scorecard
+comments, fails the measurement job, and remains in history for diagnosis.
+It is excluded from baselines and trends, does not open a performance-regression
+issue, and cannot close an existing issue as though it were a clean result.
+Budgets are unchanged; an uncontended gated breach still fails the latency kit.
+
 ## The Promote tier
 
 After the production proof passes, the Promote workflow scores the Leave run of that Promote against the nightly median. These jobs run only after `proof`, and no other job needs them or reads their result, so a failure cannot start `rollback`; it only turns the Promote run red.

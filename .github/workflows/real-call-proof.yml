@@ -73,6 +73,9 @@ on:
       CHALK_PROOF_API_KEY:
         description: Bootstrap key for the environment proof Tenant
         required: true
+      CHALK_AXIOM_QUERY_TOKEN:
+        description: Read-only staging API-log query token, needed only for own-SFU staging latency
+        required: false
       CHALK_ALERTS_DISCORD_WEBHOOK_URL:
         description: Production alerts Discord webhook; only timer runs use it
         required: false
@@ -81,11 +84,12 @@ on:
         description: passed or failed; may be absent on cancellation or runner loss
         value: ${{ jobs.smoke.outputs.result }}
 
-permissions:
-  contents: read
+# Inherit the caller's permissions. Only nightly's own-sfu caller grants contents:write
+# for the staging lease; Promote and Cloudflare proof callers retain contents:read.
 
 concurrency:
-  group: real-call-proof-${{ inputs.environment || 'production' }}
+  # All workflows driving the shared staging SFU use this group and the Git-ref lease.
+  group: ${{ inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment || 'production') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
@@ -98,7 +102,7 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
-    timeout-minutes: 50
+    timeout-minutes: 130
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -160,8 +164,10 @@ jobs:
           sudo mount --bind /dev/shm/chalk-proof-private .private
           echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
-        timeout-minutes: 40
+        timeout-minutes: 50
         env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
@@ -201,13 +207,17 @@ jobs:
             start=$(date +%s)
             run_id="${RUN_PREFIX}-${proof}"
             echo "$run_id" >> .private/proof-run-ids
-            CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+            if [[ "$STAGING_SFU_PROOF" == true ]]; then
+              scripts/staging-sfu/staging-lock --holder nightly-proof --purpose "$proof" --run-id "$RUN_PREFIX" -- env CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+            else
+              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+            fi
             echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
           done
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: 25
+        timeout-minutes: 70
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
@@ -221,6 +231,9 @@ jobs:
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
           SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'manual' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
+          GH_TOKEN: ${{ github.token }}
+          CHALK_AXIOM_QUERY_TOKEN: ${{ secrets.CHALK_AXIOM_QUERY_TOKEN }}
+          CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
         run: |
           # A revision from before the own-SFU nightly has no latency kit scorecard code to run.
           if [ ! -f features/scorecard/own-sfu.mjs ]; then
@@ -228,6 +241,10 @@ jobs:
             exit 0
           fi
           mkdir -p .private
+          if [[ "$SCORECARD_ENVIRONMENT" == staging && "$CHALK_PROOF_MEDIA_PLANE" == chalk_sfu ]]; then
+            node features/scorecard/staging-latency.mjs
+            exit $?
+          fi
           run_id="${RUN_PREFIX}-latency"
           echo "$run_id" >> .private/proof-run-ids
           CHALK_PROOF_RUN_ID="$run_id" pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04
@@ -235,14 +252,20 @@ jobs:
         if: ${{ !cancelled() && inputs.latency }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
           if [ ! -f features/scorecard/own-sfu.mjs ]; then
             exit 0
           fi
-          node features/scorecard/own-sfu.mjs .private/prod-proof "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
+          evidence=.private/prod-proof
+          [[ "$STAGING_LATENCY" != true ]] || evidence=.private/latency-scorecard
+          node features/scorecard/own-sfu.mjs "$evidence" "$CHALK_PROOF_MEDIA_PLANE" "$(git rev-parse HEAD)" artifacts
       - name: Clean proof runs
         if: always()
         env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
+          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
@@ -255,7 +278,11 @@ jobs:
           status=0
           if [ -f .private/proof-run-ids ]; then
             while IFS= read -r run_id; do
-              pnpm prod:proof cleanup "$run_id" || status=1
+              if [[ "$STAGING_SFU_PROOF" == true ]]; then
+                scripts/staging-sfu/staging-lock --holder nightly-cleanup --purpose cleanup --run-id "$RUN_PREFIX" -- pnpm prod:proof cleanup "$run_id" || status=1
+              else
+                pnpm prod:proof cleanup "$run_id" || status=1
+              fi
             done < .private/proof-run-ids
           fi
           exit "$status"

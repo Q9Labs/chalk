@@ -8,3 +8,4 @@ Chalk's own media forwarder, a second provider beside Cloudflare Realtime. Read 
 - One negotiation per session at a time. A failed negotiation step closes the session, because its peer connection cannot return to a stable state.
 - Packet loops never hold a lock across network I/O. Bound everything: requests, tracks, sessions, subscriptions and pending offers.
 - `tests/loopback_test.go` must keep using real HTTP and real Pion peers, not a fake media writer.
+- Every lane that drives the staging SFU must run its entire test, rerun, fault test or soak through `scripts/staging-sfu/staging-lock` before touching the node; workflows also use Actions concurrency group `chalk-staging-sfu` with cancellation disabled. See the [lane protocol](README.md#shared-staging-node).

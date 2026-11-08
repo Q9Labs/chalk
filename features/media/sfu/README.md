@@ -146,6 +146,37 @@ Set `net.core.rmem_max`, `net.core.rmem_default`, `net.core.wmem_max` and `net.c
 
 ## Tests
 
+### Shared staging node
+
+Every lane that drives the staging SFU must run its entire test, rerun, fault test or soak through `scripts/staging-sfu/staging-lock` before touching the node; workflows also use Actions concurrency group `chalk-staging-sfu` with cancellation disabled.
+
+From the repository root:
+
+```sh
+scripts/staging-sfu/staging-lock --holder lane-name --purpose retest --run-id run-label -- your-test-command
+```
+
+The helper uses the existing Git remote credentials (`GITHUB_TOKEN` with
+`contents:write` in CI, normal Git authentication on a Mac). It atomically
+creates `refs/heads/locks/staging-sfu`, whose only file is a JSON lease record:
+holder, purpose, run ID, acquisition time, expiry and an ownership token.
+Use plain labels, not customer names, URLs or secrets. The lock branch must
+remain outside release branch protections. Expired leases are taken over with
+compare-and-swap; renewal and release cannot overwrite a newer owner. Release
+expires the record instead of deleting it, preserving the previous holder and
+times. The default wait is 10 minutes and the TTL is 180 seconds, renewed every
+60 seconds. A renewal failure stops the workload before the lease expires.
+Do not detach a workload from the helper: the lease covers its process tree,
+not a separately launched background test. Cancellation releases the lease;
+runner loss leaves a bounded expiry. Do not edit or delete the lock ref by hand.
+
+The disposable primary/standby fleet in `scripts/bench/bench` and M11's
+`scripts/bench/faults` does not target shared staging and needs no staging lease.
+Using staging instead requires the same wrapper. This lease is cooperative:
+an older checkout or an unwrapped command can still interfere. The nightly
+latency card therefore also records observed foreign Episodes and connections
+from API logs; see the [scorecard](../../scorecard/README.md#staging-contention).
+
 Run the heavy runs on Instabox (`box run -- '...'` from the repository root), not on a laptop.
 
 1. **Loopback integration test** starts the real HTTP service and two real Pion peers. Peer A pushes known RTP. Peer B pulls it and answers the SFU's offer through Renegotiate. It asserts payloads and increasing sequence numbers, close, inspect, duplicate create, a wrong client certificate, a cross-Tenant pull and that every peer, listener, socket and goroutine is gone at the end.

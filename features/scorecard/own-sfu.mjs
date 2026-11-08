@@ -6,6 +6,7 @@ import { appendFileSync, copyFileSync, mkdirSync, readFileSync, readdirSync } fr
 import { join } from "node:path";
 import { planeBudgets, readBudgets } from "./budgets.mjs";
 import { WHOLE_CYCLE, parseScorecard } from "./schema.mjs";
+import { contentionMarkdown } from "./contention.mjs";
 
 const [evidence, plane, revision, artifacts] = process.argv.slice(2);
 if (!artifacts) throw new Error("usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
@@ -46,17 +47,19 @@ const over = (metric, budget) => budget !== undefined && ((budget.max_p50 !== un
 const path = findCard(evidence);
 if (!path) fail("The latency run wrote no scorecard.");
 const card = parseScorecard(JSON.parse(readFileSync(path, "utf8")));
-if (card.metrics.length === 0) fail("The scorecard has no metrics.");
+if (card.metrics.length === 0 && !card.contention?.contended) fail("The scorecard has no metrics.");
 
 mkdirSync(artifacts, { recursive: true });
 copyFileSync(path, join(artifacts, `scorecard-${plane}.json`));
+if (card.contention) summarize(contentionMarkdown(card.contention));
 
 const { budgets } = await readBudgets();
 const own = planeBudgets(budgets, card.mediaPlane);
 const rows = card.metrics.map((metric) => {
   const budget = own[metric.id];
-  const status = over(metric, budget) ? (budget.gate ? "❌ blocks" : "⚠️ warns") : "✅";
+  const status = card.contention?.contended ? "⚠️ diagnostic" : over(metric, budget) ? (budget.gate ? "❌ blocks" : "⚠️ warns") : "✅";
   return `| \`${metric.id}\` | ${metric.n} | ${metric.p50} | ${metric.p95} ${metric.unit} | ${limitText(budget)} | ${status} |`;
 });
 const drops = card.dropped.map((drop) => `${drop.metric === WHOLE_CYCLE ? "whole cycle" : drop.metric}: ${drop.reason} ×${drop.count}`);
 summarize([`### ${title}`, "", `Plane \`${card.mediaPlane}\`, revision \`${card.run.commit}\`, ${card.metrics.length} metrics.`, "", "| Metric | n | p50 | p95 | Budget | |", "|---|---|---|---|---|---|", ...rows, ...(drops.length > 0 ? ["", `Dropped: ${drops.join("; ")}.`] : []), ""].join("\n"));
+if (card.contention?.contended) process.exitCode = 1;

@@ -22,7 +22,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: real-call-proof-${{ inputs.environment }}
+  group: ${{ inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment) }}
   cancel-in-progress: false
   queue: max
 jobs:

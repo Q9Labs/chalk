@@ -11,7 +11,7 @@
 // Output in .private/prod-proof/<run>/: latency.json with every sample, and scorecard-<plane>.json in the
 // public scorecard shape. With action.* budgets in perf/budgets.json, a p95 over budget, a timeout or a plane short
 // of samples makes the exit code non-zero.
-import { mkdir } from "node:fs/promises";
+import { appendFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -99,6 +99,7 @@ async function cycle(run, origin, plane, headed, ending) {
   const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
   const createMs = clock() - createdAt;
   ending.path = `${path}/${episode.id}`;
+  await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
   const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true });
   const landed = guests.admissions.map((admission) => admission.provider);
