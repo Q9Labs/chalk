@@ -6,6 +6,8 @@
 #   bench down [--all]               delete the fleet and its firewall, then fail if a paid node remains
 #   bench reap [hours] [--dry-run] [--exclude ID]...   delete tagged Droplets older than the age (default 3 hours)
 #
+# `faults` (a script beside this one) creates the pair with `up`, runs the node-level fault cases and deletes the pair.
+#
 # Every Droplet carries the tag chalk-sfu-bench and lives in sgp1. Only Droplets with that tag in
 # sgp1 are ever listed for deletion, so the production and staging nodes and every other Droplet
 # are out of reach. `down` deletes the fleet's own Droplets (names chalk-sfu-bench-fleet-*);
@@ -37,7 +39,7 @@ nodes=(
   "standby sgp1-b s-1vcpu-1gb 16000"
 )
 
-bench_dir="$(cd "$(dirname "$0")" && pwd)"
+bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sfu_root="$(cd "${bench_dir}/../.." && pwd)"
 export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
 export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
@@ -46,6 +48,11 @@ dir="${CHALK_SFU_PRIVATE_DIR}/bench"
 die() {
   echo "bench: $*" >&2
   exit 1
+}
+
+# operator_cidr is this machine's public IPv4 as a /32, the one source SSH accepts.
+operator_cidr() {
+  host_cidr "${BENCH_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}"
 }
 
 # Tagged Droplets. The tag filter is the only way a Droplet enters this script.
@@ -148,7 +155,7 @@ up() {
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
 
   local operator control_addresses
-  operator="$(host_cidr "${BENCH_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}")"
+  operator="$(operator_cidr)"
   control_addresses="$operator"
   local extra
   for extra in $(tr ',' ' ' <<<"${BENCH_CONTROL_ADDRESSES:-}"); do
@@ -296,6 +303,8 @@ reap() {
   return "$pending"
 }
 
+# `faults` sources this file for its functions and runs no command.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   up) up ;;
   status) status ;;
