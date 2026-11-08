@@ -63,6 +63,8 @@ jobs:
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
+    permissions:
+      contents: read
     needs: [plan, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
@@ -71,6 +73,8 @@ jobs:
       release_sha: ${{ needs.plan.outputs.target_sha }}
     secrets: inherit
   own-sfu:
+    permissions:
+      contents: write # Shared staging-SFU Git-ref lease.
     # Promote requires this result, but it does not change whether the nightly cut is held.
     # The proof cleans up its Spaces and Episodes in every outcome.
     needs: [plan, release]

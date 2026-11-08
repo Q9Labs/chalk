@@ -25,7 +25,11 @@ clone_history() {
 
 clone_history
 regressions=0
+inconclusive=0
 for card in "$@"; do
+  if node -e 'process.exit(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).contention?.contended ? 0 : 1)' "${card}"; then
+    inconclusive=1
+  fi
   plane="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).mediaPlane)' "${card}")"
   baseline=()
   if ${scorecard} baseline --history "${work}/history" --plane "${plane}" --out "${work}/baseline-${plane}.json" | grep -q '^Baseline'; then
@@ -60,7 +64,7 @@ if [[ "${regressions}" -eq 1 ]]; then
     gh label create scorecard-regression --repo "${GITHUB_REPOSITORY}" --color B60205 --description "A gated performance metric is over its budget" 2> /dev/null || true
     gh issue create --repo "${GITHUB_REPOSITORY}" --title "Scorecard regression" --label scorecard-regression --body-file "${work}/issue.md"
   fi
-elif [[ -n "${number}" ]]; then
+elif [[ -n "${number}" && "${inconclusive}" -eq 0 ]]; then
   gh issue close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "The latest nightly run has no gated metric over its budget."
 fi
 exit "${regressions}"

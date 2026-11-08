@@ -47,6 +47,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {MediaPlane} mediaPlane
  * @property {ScorecardMetric[]} metrics
  * @property {ScorecardDrop[]} dropped
+ * @property {object} [contention] Isolation evidence with per-signal provenance; no resource identifiers.
  */
 
 // Units a metric may use. A metric's unit is fixed by its entry in METRICS. A pass value is a share from 0 to 1 and
@@ -102,18 +103,41 @@ const forbidden = [
  * @param {unknown} value
  * @returns {string[]}
  */
-export function scorecardProblems(value) {
+function scorecardProblems(value) {
   const problems = [];
   const fail = (/** @type {string} */ problem) => problems.push(problem);
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
-  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "dropped"], "scorecard", fail);
+  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "dropped", "contention"], "scorecard", fail);
   runProblems(card?.run, fail);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
   dropProblems(card?.dropped, fail);
+  if (card?.contention !== undefined) contentionProblems(card.contention, fail);
   leakProblems(card, fail);
   return problems;
+}
+
+function contentionProblems(value, fail) {
+  const counts = ["foreign_episodes_seen", "foreign_sessions_seen", "events_before", "events_after", "window_events", "own_episode_events", "incarnation_changes"];
+  const booleans = ["lease_acquired", "lease_lost", "zero_chalk_sfu_events", "drain"];
+  const dates = ["lease_acquired_at_before", "lease_expires_at_before"];
+  const fields = [...counts, ...booleans, ...dates, "lease_holder_before", "steal_max"];
+  exactKeys(value, ["contended", "source", ...fields], "contention", fail);
+  if (typeof value?.contended !== "boolean" || value?.source !== "axiom_api_logs_and_github_lease") fail("contention: invalid status or source");
+  for (const field of fields) {
+    const item = value?.[field];
+    exactKeys(item, ["value", "source"], `contention.${field}`, fail);
+    if (!["github_lease", "axiom_api_logs", "node_readout", "unavailable"].includes(item?.source)) fail(`contention.${field}: invalid source`);
+    if (item?.value === "unavailable") continue;
+    if (item?.source === "unavailable") fail(`contention.${field}: measured value needs a source`);
+    const measured = item?.value;
+    if (counts.includes(field) && (!Number.isSafeInteger(measured) || measured < 0)) fail(`contention.${field}: expected a count or unavailable`);
+    if (booleans.includes(field) && typeof measured !== "boolean") fail(`contention.${field}: expected a boolean or unavailable`);
+    if (dates.includes(field) && (typeof measured !== "string" || !isoTime.test(measured) || Number.isNaN(Date.parse(measured)))) fail(`contention.${field}: expected a UTC time or unavailable`);
+    if (field === "lease_holder_before" && (typeof measured !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(measured))) fail("contention: lease holder must be a plain label");
+    if (field === "steal_max" && (!Number.isFinite(measured) || measured < 0 || measured > 100)) fail("contention: steal must be a percent or unavailable");
+  }
 }
 
 /**
