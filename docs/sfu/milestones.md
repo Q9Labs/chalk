@@ -568,7 +568,7 @@ lead.
    emitter issue, not a budget. The first PR (the M7 scorecard follow-up) gates every emitted own-SFU latency
    metric at once with a loose ceiling of about twice the worst value in existing
    evidence, cited in the `perf/budgets.json` comment; a metric with thin evidence
-   stays warn-only, and a deterministic budget gates from its first commit. Each
+   stays warn-only, and a deterministic budget gates from its first commit. A loose ceiling on a real-node metric before seven nightly values is an exception to `features/scorecard/AGENTS.md`, so that PR also amends the rule to allow it. Each
    ceiling then tightens to its real budget in its own PR, only after 7 nightly
    values from at least 3 different nights whose spread is below `tolerancePct`;
    the 18 `chalk_sfu` action-latency tightenings are one such PR (earliest around
@@ -586,7 +586,7 @@ lead.
    production canary, and the scorecard scoring fails the Promote run on
    regression (rollback stays safe). That gate is built only if it fits the
    existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
-   otherwise it stays in this package with its cost written down, set
+   otherwise it stays in this package with its cost written down. Today nightly defaults to `cf_sfu` and proof scoring records only Leave, so it needs a same-SHA `chalk_sfu` run in the nightly or staging workflow and scoring for join startup and the toggles, set
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
