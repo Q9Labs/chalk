@@ -196,11 +196,14 @@ The `export` proof downloads the Recording MP4. The `call-artifacts` proof then 
 - `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the call;
 - `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
 - each guest's camera colour is visible and moving in all three sampled frames of the composite;
+- each guest's own tile is live in a clear majority of the whole Recording. The proof decodes the composite at two frames per second and, for every sampled interval, takes the largest connected patch of the guest's camera colour, plus any piece of it that a label or border across the tile cut off, as that guest's tile (so another guest's animation in the same colour cannot widen it), checks that the tile fills at least 3% of the frame (so a black tile never counts) and that the picture inside moved since the previous sample (so a frozen tile never counts). A tile with no live interval fails, and so does one live in fewer than 60% of the intervals, so "3/3 guests on camera" proves each guest's video and not the total;
 - the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
+
+Known limits of the tile check. It attributes a tile to a guest by that guest's camera colour, and the fixture cameras are flat-colour backgrounds with moving squares, so it does not work for real camera pictures. A tile with a thin border that is frozen, next to a larger moving square of the same colour in another tile, can still pass. The earlier three-frame camera check (visible and moving) is unchanged and shares that limit: it boxes every pixel of the guest's colour.
 
 The private run folder `.private/prod-proof/<run>/` has the Recording evidence file (duration, bytes, codecs,
 decoded frames, audio samples and levels, black, freeze and silence intervals, per-guest camera
-checks), the Transcript evidence file (first 300 characters, word count, speaker names, matched
+checks, and per-guest tile counts: sampled intervals, visible frames, live frames and live share), the Transcript evidence file (first 300 characters, word count, speaker names, matched
 words per guest), the export contact sheet, and the console prints the same summary lines.
 Speaker names in the Transcript are reported but not required to match the guests.
 
