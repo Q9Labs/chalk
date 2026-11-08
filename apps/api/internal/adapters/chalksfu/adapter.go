@@ -338,7 +338,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		return mediaplane.Join{}, err
 	}
 	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
-		return mediaplane.Join{}, err
+		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, input.Scope, err)
 	}
 	if a.fence != nil {
 		if err := a.fence(ctx); err != nil {
@@ -352,7 +352,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }
 
-// discardStaleSession closes a session a fenced join created and returns the join's error. A close
+// discardStaleSession closes a session a join created and then refused, and returns the join's error. A close
 // that fails is joined to it, so the caller sees that the session may still be live; the
 // Participant's next join replaces it and the Episode's end cleans the retired allocation.
 func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope mediaplane.Scope, cause error) error {
@@ -378,6 +378,13 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 	}
 	if !state.Found {
 		return mediaplane.Join{}, mediaplane.ErrConnectionNotFound
+	}
+	// The session lives on the node this adapter was issued for. When the Episode has moved, that
+	// is a retired allocation, so it is not handed out again.
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, err
+		}
 	}
 	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }

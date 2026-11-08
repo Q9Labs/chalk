@@ -320,6 +320,8 @@ func TestAJoinIssuedBeforeARecoveryClosesItsSessionOnTheOldNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A Participant joined under the old binding before the move.
+	oldConnection, _ := join(t, *stale, recoveringScope("resuming-participant"))
 	// Only the second replica loses its control connection to the primary; the SFU boot lives on.
 	chalksfu.MarkSilent(second, "sfu-primary")
 	registry := recoveryRegistry(second, store)
@@ -332,13 +334,20 @@ func TestAJoinIssuedBeforeARecoveryClosesItsSessionOnTheOldNode(t *testing.T) {
 	}
 	join(t, *current, recoveringScope("new-participant"))
 
+	// A resumed join on the stale adapter is refused too: its session is on the retired allocation.
+	resumeScope := recoveringScope("resuming-participant")
+	_, err = stale.ResumeJoin(context.Background(), mediaplane.ResumeJoinInput{Provider: mediaplane.ProviderChalkSFU, Scope: resumeScope, Episode: mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: resumeScope.EpisodeID}, ExternalParticipantID: resumeScope.ParticipantID, ConnectionRef: oldConnection})
+	if !errors.Is(err, mediaplane.ErrBindingStale) {
+		t.Fatalf("a resumed join issued under the old binding: %v, want the stale-binding retry error", err)
+	}
+
 	scope := recoveringScope("late-participant")
 	_, err = stale.CreateJoin(context.Background(), mediaplane.CreateJoinInput{Provider: mediaplane.ProviderChalkSFU, Scope: scope, Episode: mediaplane.Episode{Provider: mediaplane.ProviderChalkSFU, Ref: scope.EpisodeID}, ParticipantName: scope.ParticipantID, ExternalParticipantID: scope.ParticipantID, ParticipantPreset: "contributor"})
 	if !errors.Is(err, mediaplane.ErrBindingStale) || !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
 		t.Fatalf("a join issued under the old binding: %v, want the stale-binding retry error", err)
 	}
-	if old, now := stateOf(t, primary).Sessions, stateOf(t, standby).Sessions; old != 0 || now != 1 {
-		t.Fatalf("sessions on the old node %d (want 0) and on the new node %d (want 1)", old, now)
+	if old, now := stateOf(t, primary).Sessions, stateOf(t, standby).Sessions; old != 1 || now != 1 {
+		t.Fatalf("sessions on the old node %d (want only the one that joined before the move) and on the new node %d (want 1)", old, now)
 	}
 }
 
@@ -485,6 +494,10 @@ func TestAJoinAnsweredByAReplacedIncarnationIsRefused(t *testing.T) {
 	}
 	if err := create(node.Bound("replaced-boot"), "bob"); !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
 		t.Fatalf("join answered by another incarnation: %v, want unavailable", err)
+	}
+	// The refused join's session is closed, not left to hold capacity for a connection nobody got.
+	if sessions := stateOf(t, box).Sessions; sessions != 1 {
+		t.Fatalf("the node holds %d sessions, want only alice's", sessions)
 	}
 }
 
