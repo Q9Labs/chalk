@@ -150,6 +150,7 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 		return nil, err
 	}
 	var allocation mediaplane.Allocation
+	var generation int64
 	if binding != nil {
 		fingerprint, err := mediaplane.AdapterFingerprint(binding.Provider, r.applicationID(resolved))
 		if err != nil || fingerprint != binding.AdapterFingerprint {
@@ -160,13 +161,13 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 				return nil, err
 			}
 		}
-		allocation = binding.Current()
+		allocation, generation = binding.Current(), binding.Generation
 	}
 	var fence func(context.Context) error
 	if binding != nil {
 		fence = r.bindingFence(tenant.ID, episodeID, *binding)
 	}
-	return r.newService(resolved.provider, resolved.config, allocation, fence)
+	return r.newService(resolved.provider, resolved.config, allocation, generation, fence)
 }
 
 type resolvedProviderConfig struct {
@@ -350,7 +351,7 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 
 // newService builds the Episode's media plane. allocation is the Episode's bound node and
 // boot incarnation for a provider that runs several; a provider with one endpoint ignores it.
-func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, allocation mediaplane.Allocation, fence func(context.Context) error) (*mediaplane.Service, error) {
+func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, allocation mediaplane.Allocation, generation int64, fence func(context.Context) error) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
 
@@ -373,7 +374,7 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
 		}
-		bound = bound.Bound(allocation.Incarnation)
+		bound = bound.Bound(allocation.Incarnation, generation)
 		if fence != nil {
 			bound = bound.WithFence(fence)
 		}

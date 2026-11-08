@@ -137,13 +137,14 @@ func (f *Fleet) Node(id string) (*Adapter, error) {
 	return nil, fmt.Errorf("%w: %w: node %q", mediaplane.ErrPlaneUnavailable, ErrUnknownNode, id)
 }
 
-// CapturePlane returns the recorder-facing plane of the node an Episode is bound to.
-func (f *Fleet) CapturePlane(id string) (captureplane.CapturePlane, error) {
+// CapturePlane returns the recorder-facing plane of the node an Episode is bound to, issued under
+// the binding's generation so the node refuses a capture once the Episode is retired above it.
+func (f *Fleet) CapturePlane(id string, generation int64) (captureplane.CapturePlane, error) {
 	node, err := f.Node(id)
 	if err != nil {
 		return nil, err
 	}
-	return node, nil
+	return node.Bound("", generation), nil
 }
 
 // Place picks the node for a new Episode. Primaries are tried first, in

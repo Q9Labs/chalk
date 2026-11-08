@@ -83,6 +83,10 @@ type CreateSessionRequest struct {
 	Scope       Scope  `json:"scope"`
 	// Kind is SessionKindCapture for a capture session and absent for a participant.
 	Kind string `json:"kind,omitempty"`
+	// AllocationGeneration is the binding generation the caller was issued the node under. A
+	// create below the Episode's retirement floor (see RetireEpisodeRequest) is refused as stale;
+	// absent, no floor applies.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -175,6 +179,25 @@ type EndEpisodeResponse struct {
 	Closed int `json:"closed"`
 }
 
+// RetireEpisodeRequest retires every allocation of one Tenant's Episode below a binding
+// generation. The node closes the sessions created under a lower generation (a session that named
+// none counts as generation 0) and refuses any later create, source control or capture below it
+// with the stale-generation error, until the retirement expires or the node restarts. Retiring
+// again, at the same or a lower generation, changes nothing. Generation is the floor: it must be
+// at least 1.
+type RetireEpisodeRequest struct {
+	TenantID   string `json:"tenantId"`
+	EpisodeID  string `json:"episodeId"`
+	Generation int64  `json:"generation"`
+}
+
+type RetireEpisodeResponse struct {
+	// Closed counts the sessions this call closed; a repeat reports 0.
+	Closed int `json:"closed"`
+	// Floor is the Episode's retirement floor on the node after the call.
+	Floor int64 `json:"floor"`
+}
+
 // Reservation hold times in seconds. A request without a TTL gets the default.
 const (
 	DefaultReservationTTLSeconds = 30
@@ -242,6 +265,9 @@ type SourceControlRequest struct {
 	TenantID  string          `json:"tenantId"`
 	EpisodeID string          `json:"episodeId"`
 	Controls  []SourceControl `json:"controls"`
+	// AllocationGeneration is as in CreateSessionRequest: a control below the Episode's retirement
+	// floor is refused as stale.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type SourceControl struct {

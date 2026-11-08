@@ -510,10 +510,10 @@ func TestAJoinAnsweredByAReplacedIncarnationIsRefused(t *testing.T) {
 		})
 		return err
 	}
-	if err := create(node.Bound(live), "alice"); err != nil {
+	if err := create(node.Bound(live, 0), "alice"); err != nil {
 		t.Fatalf("join under the live incarnation: %v", err)
 	}
-	if err := create(node.Bound("replaced-boot"), "bob"); !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
+	if err := create(node.Bound("replaced-boot", 0), "bob"); !errors.Is(err, mediaplane.ErrPlaneUnavailable) {
 		t.Fatalf("join answered by another incarnation: %v, want unavailable", err)
 	}
 	// The refused join's session is closed, not left to hold capacity for a connection nobody got.
@@ -584,6 +584,13 @@ func TestCleanupTargetsTheRetiredAllocationAndSparesTheNewOne(t *testing.T) {
 	if after := stateOf(t, standby); after != newAllocation {
 		t.Fatalf("a late cleanup changed the new allocation: %+v, was %+v", after, newAllocation)
 	}
+	// No retire reached the replaced incarnation: a retire leaves a floor, and the restarted
+	// node would then refuse a create under the old generation.
+	restarted, err := fleet.Node("sfu-primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, restarted.Bound("", bound.Generation)), recoveringScope("bob"))
 	if err := resolve(registry); err != nil {
 		t.Fatal(err)
 	}

@@ -52,6 +52,7 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 	case err == nil:
 		r.chalk.ChargeRecovered(placement.Node)
 		chalksfu.RecordMoved(ctx, reason)
+		r.retireLeft(ctx, tenantID, episodeID, current)
 		slog.InfoContext(ctx, "chalk sfu episode recovered", "event", "chalk_sfu.recovered", "episode_id", episodeID.String(),
 			"from_node", binding.Node, "to_node", current.Node, "reason", string(reason), "generation", current.Generation)
 		return current, nil
@@ -62,9 +63,19 @@ func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilit
 	return binding, fmt.Errorf("%w: commit the episode's binding move: %v", mediaplane.ErrPlaneUnavailable, err)
 }
 
-// EndRetiredAllocations ends a finished Episode on the allocations its binding left, so a node
+// retireLeft retires the Episode on the allocations the binding left. A failure is logged and
+// not returned: the move is committed, a join that reaches a node that missed this call is still
+// caught by its fence, and the Episode's end retires again until the node answers.
+func (r Registry) retireLeft(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) {
+	if err := r.chalk.Retire(ctx, binding, tenantID.String(), episodeID.String()); err != nil {
+		slog.WarnContext(ctx, "chalk sfu retired allocation not retired yet", "event", "chalk_sfu.retire_pending", "episode_id", episodeID.String(), "generation", binding.Generation, "error", err.Error())
+	}
+}
+
+// EndRetiredAllocations retires a finished Episode on the allocations its binding left, so a node
 // that returns holding its old sessions releases them. It is idempotent and never touches the
-// Episode's current allocation (see chalksfu.Fleet.EndRetired).
+// Episode's current allocation (see chalksfu.Fleet.Retire). A node that does not answer fails it,
+// and the Episode's end retries, unless the probes call the node silent.
 func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID utilities.ID) error {
 	if r.chalk == nil || r.recovery == nil {
 		return nil
@@ -73,12 +84,13 @@ func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID
 	if err != nil || binding == nil || len(binding.PreviousAllocations) == 0 {
 		return err
 	}
-	return r.chalk.EndRetired(ctx, *binding, tenantID.String(), episodeID.String())
+	return r.chalk.Retire(ctx, *binding, tenantID.String(), episodeID.String())
 }
 
 // bindingFence returns the check a join runs after the node created its session: the Episode's
 // durable binding must still be the one the join was issued under, with the same generation,
-// node and incarnation. Without recovery configured nothing moves a binding, so there is
+// node and incarnation. It is a fast path. A read can pass just before a move commits, so what
+// stops a stale join is the node refusing the old generation once it is retired. Without recovery configured nothing moves a binding, so there is
 // nothing to check.
 func (r Registry) bindingFence(tenantID, episodeID utilities.ID, issued mediaplane.Binding) func(context.Context) error {
 	if r.chalk == nil || r.recovery == nil || issued.Provider != string(mediaplane.ProviderChalkSFU) {
@@ -90,6 +102,11 @@ func (r Registry) bindingFence(tenantID, episodeID utilities.ID, issued mediapla
 			return fmt.Errorf("%w: confirm the episode's binding after the join: %v", mediaplane.ErrPlaneUnavailable, err)
 		}
 		if current == nil || current.Generation != issued.Generation || current.Current() != issued.Current() {
+			if current != nil && current.Generation > issued.Generation {
+				// The read-back is the fast path. The node's retirement is the guarantee, and this
+				// replica saw the move first, so it makes sure the old node has it.
+				r.retireLeft(ctx, tenantID, episodeID, *current)
+			}
 			return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrBindingStale)
 		}
 		return nil

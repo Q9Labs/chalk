@@ -172,6 +172,9 @@ func validateSourceControls(request protocol.SourceControlRequest) error {
 func (n *Node) applySourceControls(request protocol.SourceControlRequest, results []protocol.SourceControlResult) ([]*sourceAuthority, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if err := n.refuseRetired(episodeKey{request.TenantID, request.EpisodeID}, request.AllocationGeneration); err != nil {
+		return nil, err
+	}
 	keys := make([]sourceKey, len(request.Controls))
 	named := map[sourceKey]bool{}
 	added := 0

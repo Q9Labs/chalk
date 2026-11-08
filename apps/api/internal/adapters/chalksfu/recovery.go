@@ -275,12 +275,15 @@ func (a *Adapter) reserve(ctx context.Context, request wireReserveRequest) (wire
 	return reply, nil
 }
 
-// Bound returns the node's adapter for an Episode placed on the given boot incarnation. A
+// Bound returns the node's adapter for an Episode placed on the given boot incarnation and
+// binding generation. Every create, capture and source control it sends names that generation, so
+// the node refuses it once the Episode is retired above it (see Retire). A
 // join that the node answers for another incarnation is refused as stale instead of being
 // handed to a client: the node restarted and the binding has not caught up yet.
-func (a *Adapter) Bound(incarnation string) *Adapter {
+func (a *Adapter) Bound(incarnation string, generation int64) *Adapter {
 	bound := *a
 	bound.incarnation = incarnation
+	bound.allocation = &generation
 	return &bound
 }
 
@@ -305,18 +308,22 @@ func (a *Adapter) checkIncarnation(answered string) error {
 	return fmt.Errorf("%w: %w", mediaplane.ErrPlaneUnavailable, errStaleIncarnation)
 }
 
-// EndRetired ends the Episode on every allocation its binding left, so a node that comes back
-// still holding the Episode's old sessions releases them. It targets the retired allocation
-// and never the current one:
+// Retire retires the Episode on every allocation its binding left, at the binding's generation:
+// each such node closes the Episode's sessions of lower generations and refuses any later create,
+// capture or source grant under one (see the SFU's POST /v1/episodes/retire). It runs once the
+// move commits, so a join issued under the old binding that lands on the old node afterwards is
+// refused, and one that landed before is closed. It runs again when the Episode ends. It targets
+// the retired allocation and never the current one:
 //
 //   - A retired allocation on the node the Episode is bound to now is skipped. That node
 //     restarted, so the old incarnation holds nothing, or it is the current allocation again.
 //   - A node that answers with another incarnation than the retired one holds nothing of it.
-//   - A node that is silent cannot be reached. It is logged and skipped, because a node that
-//     never returns must not keep the Episode's end from confirming.
+//   - A node the probes call silent is still asked, because silent only means its last probe
+//     failed and its HTTP side may be up. When it does not answer, that is logged and skipped,
+//     because a node that never returns must not keep the Episode's end from confirming.
 //
-// Ending an Episode that the node does not hold succeeds, so a retry is harmless.
-func (f *Fleet) EndRetired(ctx context.Context, binding mediaplane.Binding, tenantID, episodeID string) error {
+// Retiring is idempotent, so a retry is harmless.
+func (f *Fleet) Retire(ctx context.Context, binding mediaplane.Binding, tenantID, episodeID string) error {
 	var failures []error
 	for _, old := range binding.PreviousAllocations {
 		if old.Node == binding.Node {
@@ -326,14 +333,17 @@ func (f *Fleet) EndRetired(ctx context.Context, binding mediaplane.Binding, tena
 		if err != nil {
 			continue // a node removed from the configuration has no process to clean
 		}
-		switch reason, lost := f.Lost(old); {
-		case lost && reason == LossSilent:
-			f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not ended", old.Node, nil)
-		case lost:
-		default:
-			if err := adapter.call(ctx, "/v1/episodes/end", wireEndRequest{TenantID: tenantID, EpisodeID: episodeID}, nil); err != nil {
-				failures = append(failures, fmt.Errorf("end the episode on retired node %q: %w", old.Node, err))
+		reason, lost := f.Lost(old)
+		if lost && reason != LossSilent {
+			continue
+		}
+		request := wireRetireRequest{TenantID: tenantID, EpisodeID: episodeID, Generation: binding.Generation}
+		if err := adapter.call(ctx, "/v1/episodes/retire", request, nil); err != nil {
+			if lost {
+				f.logRecovery(ctx, "chalk sfu retired node is not answering; its old sessions are not retired", old.Node, err)
+				continue
 			}
+			failures = append(failures, fmt.Errorf("retire the episode on node %q: %w", old.Node, err))
 		}
 	}
 	return errors.Join(failures...)

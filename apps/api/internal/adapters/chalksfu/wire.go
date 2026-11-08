@@ -39,6 +39,9 @@ type wireCreateRequest struct {
 	// Kind is "capture" for a recorder's receive-only session. A node that does not
 	// know the field refuses the request, so it is sent only for captures.
 	Kind string `json:"kind,omitempty"`
+	// AllocationGeneration is the binding generation the request was issued under. Absent, the
+	// node applies no retirement floor.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type wireCreateResponse struct {
@@ -114,6 +117,14 @@ type wireSourceControlRequest struct {
 	TenantID  string              `json:"tenantId"`
 	EpisodeID string              `json:"episodeId"`
 	Controls  []wireSourceControl `json:"controls"`
+	// AllocationGeneration is as in wireCreateRequest.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
+}
+
+type wireRetireRequest struct {
+	TenantID   string `json:"tenantId"`
+	EpisodeID  string `json:"episodeId"`
+	Generation int64  `json:"generation"`
 }
 
 type wireSourceControl struct {

@@ -61,6 +61,9 @@ type Adapter struct {
 	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
 	// join the node answers for another incarnation is refused as stale.
 	incarnation string
+	// allocation is the binding generation the adapter was issued under, set by Bound. Sent with
+	// creates and source controls, it lets the node refuse a retired allocation.
+	allocation *int64
 	// fence, when set, re-reads the Episode's durable binding after a join and fails when it is
 	// no longer the one the join was issued under. See WithFence.
 	fence func(context.Context) error
@@ -333,7 +336,7 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		return mediaplane.Join{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
 	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope)}
+	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
 		return mediaplane.Join{}, err
 	}
@@ -585,7 +588,7 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
 	for start := 0; start < len(input.Controls); start += maxSourceControls {
 		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
-		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Controls: make([]wireSourceControl, len(batch))}
+		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]wireSourceControl, len(batch))}
 		for index, control := range batch {
 			request.Controls[index] = wireSourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
 		}
