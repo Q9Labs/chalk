@@ -42,9 +42,8 @@ W3C trace context independently of global telemetry initialization. Only validat
 Other text, including individual diagnostic words, paths, identifiers, numbers,
 URLs, credentials, and media-derived text, is redacted. The private job row still retains the existing bounded diagnostic
 error. No new durable journey event or lifecycle transition is introduced.
-Tests in `apps/api/internal/recordingdecode/writer_test.go` cover H264 with more than 512 variable
-frame intervals in both copy and re-encode paths, checking every decoded frame's
-timestamp. Worker and API tests check accepted-failure evidence, trace correlation,
+H264 with more than 512 variable frame intervals keeps every decoded frame's
+timestamp in both copy and re-encode paths. Worker and API tests check accepted-failure evidence, trace correlation,
 and redaction; rejected failure reports do not emit accepted-failure evidence.
 
 ### Follow a user's session
@@ -155,13 +154,7 @@ receive stall. A failed subscriptions read appears in connection reports as
 A congestion pause is transient delivery that the client observes. It changes no
 durable journey boundary: the Episode, the participant, and the publication stay
 as they were. So it adds no journey-ledger event, and its evidence is the call
-stats and the SFU's own state. Proof is in
-`sdks/typescript/client/src/media/cloudflare-sfu.test.ts` (the "own-SFU
-subscription state" tests), `sdks/typescript/client/src/media/subscription-delivery.test.ts`,
-`sdks/typescript/client/src/media/call-stats.test.ts`,
-`apps/api/internal/httpapi/sfu_subscriptions_test.go`,
-`apps/api/internal/httpapi/call_stats_test.go`, and the pause-in-place case in
-`apps/api/internal/adapters/chalksfu/conformance_test.go`.
+stats and the SFU's own state.
 
 ### Rejected CORS origins
 
@@ -207,19 +200,6 @@ epoch retires the obsolete obligation. A source stop still pending in Sync keeps
 the obligation pending until that authority is applied. Sync retains its normal callback authority
 checks, including an Episode end that adopts the stop (#618).
 
-`apps/api/internal/adapters/postgres/recording_capture_publication_integration_test.go` proves a three-hour outbox
-outage releases capture capacity, never terminalizes completed media, respects
-backoff and drains automatically after recovery. It runs the production #619
-alert SQL against a completed capture with pending publication: Sync `stopping`
-continues to alert until the callback is applied. The existing two-connection
-regressions in `apps/api/internal/adapters/postgres/recording_capture_stop_concurrency_integration_test.go` cover both
-worker/completion lock orders and concurrent completion without duplicate release
-or publication.
-The regression in
-`apps/sync/test/chalk_sync/stateholder/postgres_lifecycle_test.exs` proves end retry,
-callback recovery, and duplicate delivery against the Go controller and maintenance
-commands.
-
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
 failure code. `provider_raw_code` and `provider_message` retain the rejected
@@ -229,10 +209,7 @@ at 240 characters plus a truncation marker. The active API span receives the sam
 values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
 `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
-HTTP 200 acceptance rules are unchanged. The regression in
-`apps/api/internal/adapters/cloudflare/sfu/capture_close_observability_test.go`
-checks the recorded logs and span events against provider responses with
-credential-shaped fields.
+HTTP 200 acceptance rules are unchanged.
 
 When the API cannot mint Cloudflare TURN credentials it logs
 `cloudflare_turn.credentials_failed` at warning level with the failure cause and
@@ -266,8 +243,7 @@ fingerprints, or bodies. Actual HTTP status and existing normalized errors remai
 available. Forced close only recovers from an HTTP 200 track-level
 `provider_internal` failure when a complete inspection of the same session
 returns top-level HTTP 410 with `errorCode: "session_error"`; empty snapshots,
-404s, incomplete bodies, and other failures remain unresolved. The boundary
-tests are in `apps/api/internal/adapters/cloudflare/sfu/http_failure_observability_test.go`.
+404s, incomplete bodies, and other failures remain unresolved.
 
 For capture add-tracks responses containing `not_found_track_error`, API logs
 retain `provider_response_snapshot` on `cloudflare_sfu.request_failed`; the
@@ -338,8 +314,6 @@ Episode overflow or read failures emit the rate-limited
 a fresh sample, stale state is discarded rather than diagnosing from old data.
 Caps and failed reads can leave coverage incomplete. Discovery and evaluation
 are sampled, so a newly visible pair normally logs roughly 15–25 seconds later.
-The fake-time regressions live in
-`apps/api/internal/mediapublications/receive_health_test.go`.
 
 #### Alarm
 
@@ -385,7 +359,6 @@ No token, raw participant or user identity, error text, or media payload is adde
 
 The own SFU (`features/media/sfu`) logs structured JSON with no Tenant, Episode,
 Participant, address, SDP, certificate or payload in its node-wide lines.
-`features/media/sfu/tests/impairment_test.go` scans the logs of impaired calls for those.
 
 - `media telemetry`, every 10 seconds: sessions, Episodes, node packets/s and
   the repair and probe parts of it, subscriptions paused for congestion, subscriptions
@@ -417,8 +390,7 @@ readable without SSH. They carry no Tenant, Episode, Participant, session or
 address. Their only attributes are `chalk.sfu.direction` (`in`, `out`),
 `chalk.sfu.media_kind` (`audio`, `video`, and `repair` and `probe` out),
 `chalk.sfu.refusal_reason` and `chalk.sfu.admission_reason`.
-`features/media/sfu/tests/telemetry_test.go` runs an impaired call and checks
-the export against `inspect` and for identities.
+The export matches `inspect` and carries no identities.
 
 - Load: `chalk.sfu.sessions`, `chalk.sfu.episodes`, `chalk.sfu.packet_budget`,
   `chalk.sfu.packets.reserved`, and `chalk.sfu.packet_rate` and
@@ -477,8 +449,7 @@ completion. Successful capture jobs still count. Any nonzero latest snapshot
 newer than five minutes alerts on the next evaluation. A zero snapshot clears
 the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
-The PostgreSQL fixture in `infrastructure/observability/production-alerts/collector_test.go` checks stranded,
-recent, incomplete, healthy, and cross-Tenant rows and clearing after repair.
+
 The same collector independently samples Sync `/readyz` every minute, including
 when its SQL snapshot fails. The grouped state monitor alerts when at least four
 distinct minute samples in the last five minutes are unready and the latest
@@ -648,7 +619,7 @@ applies until availability arrives. User and moderation pauses still retire
 their owned publication, including when the Sync command fails. A retired
 BUNDLE sender still requires a fresh provider session.
 
-Proof: `sdks/typescript/client/src/media/cloudflare-sfu.test.ts` covers interrupted capture, sender reuse,
+Proof: the SDK covers interrupted capture, sender reuse,
 retirement attribution and query-only compatibility. Its all-track cases assert
 one replacement-cause signal per new binding and at most two attempts, including
 rejected grants and brief startup traffic. Partial-stall and delayed-detach cases
@@ -658,10 +629,9 @@ same-binding retries carry no replacement cause. Late-close success/failure and
 resumed-progress cases cover lifecycle races.
 `sdks/typescript/client/scripts/real-sfu-receive-stall.mjs` verifies rendered audio
 after an all-track fault, one live receive allocation per publication, and
-replacement start and end-to-end times on a disposable SFU app. The API's
-`apps/api/internal/httpapi/sfu_signaling_observation_test.go` covers query decoding
-and requested/missing remote-track observations; `apps/api/internal/observability/media_replacement_test.go`
-verifies every allowed cause and
+replacement start and end-to-end times on a disposable SFU app. The API
+decodes the query, records requested and missing remote-track observations, accepts
+every allowed cause, and
 suppresses unknown or identifying text. This is request-scoped diagnostic
 evidence; it adds no durable journey event.
 
@@ -700,9 +670,7 @@ an active Episode keeps current-binding revocation terminal. A local End in
 flight settles first. Unavailable status reads keep Sync running and retry
 without requesting a replacement binding; a late read cannot fail a newer binding.
 Normal end emits no `connection_failed` report. End/rejection races are covered
-in `sdks/typescript/client/src/connection/episode-end-race.test.ts`. The timing and rejection
-regressions are covered in
-`sdks/typescript/client/src/connection/media-recovery.test.ts`.
+in `sdks/typescript/client/src/connection/episode-end-race.test.ts`.
 
 Automatic replacement forwards `expectedMediaConnectionId` through the browser
 access context and the server SDK's refresh request. The API compares the
@@ -798,16 +766,10 @@ timer stops on media stop, including leave/dispose; results arriving after
 disposal are ignored.
 
 These observations change no user-visible lifecycle or durable journey boundary,
-so they add no journey-ledger event. Diagnostic proof is covered by
-`sdks/typescript/client/src/media/audio-receive-health.test.ts`,
-`sdks/typescript/client/src/media/cloudflare-sfu.test.ts`,
-`sdks/typescript/client/src/connection/report.test.ts`,
-`sdks/typescript/client/src/space-client/audio-observation.test.ts`,
-`sdks/typescript/react/src/components/audio-output/AudioOutput.test.tsx`, and
-`apps/api/internal/httpapi/connection_reports_test.go`. These test state/timing,
+so they add no journey-ledger event. Diagnostic proof covers state/timing,
 sampling disposal, pull failures, report spacing/priority/privacy, synchronous
 element observation, playback rejection/cleanup, and API validation/log levels.
-They do not constitute a real-browser audible-playback proof. The production
+It does not constitute a real-browser audible-playback proof. The production
 alert query in
 `infrastructure/observability/production-alerts/connection-reports.apl` selects
 only `join_failed`, `recovery_exhausted`, and `media_projection_mismatch` triggers;

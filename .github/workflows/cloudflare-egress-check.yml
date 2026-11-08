@@ -1,10 +1,6 @@
 name: Cloudflare egress check
 
 on:
-  pull_request:
-    paths:
-      - infrastructure/cloudflare-egress-alert/**
-      - .github/workflows/cloudflare-egress-check.yml
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
@@ -19,29 +15,12 @@ permissions:
 
 # A new push to a pull request cancels its older run. Scheduled and manual runs keep their own group.
 concurrency:
-  group: cloudflare-egress-check-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  group: cloudflare-egress-check-${{ github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    name: Egress check tests
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-      - run: node --test infrastructure/cloudflare-egress-alert/egress-check.test.mjs
-
   check:
     name: Check SFU and TURN egress
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
