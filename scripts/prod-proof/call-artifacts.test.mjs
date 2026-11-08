@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { callSeconds, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
+import { callSeconds, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
 import { parseVolume, recordingEvidence, recordingFailures } from "./recording-evidence.mjs";
 
 const hasFfmpeg = ["ffmpeg", "ffprobe"].every((program) => spawnSync(program, ["-version"]).status === 0);
@@ -90,4 +90,12 @@ test("recorded media is judged by its decoded frames, sound and each guest's til
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test("a failed Capture names its failure code, and only a recording Capture is ready", () => {
+  assert.throws(() => captureReady({ recordingId: "r1", status: "failed", failureCode: "recording_capture_unsupported" }), /Capture failed before readiness: recording_capture_unsupported/);
+  assert.throws(() => captureReady({ recordingId: "r1", status: "failed", failureCode: null }), /Capture failed before readiness: no failure code/);
+  assert.equal(captureReady(null), false);
+  assert.equal(captureReady({ recordingId: "r1", status: "starting", failureCode: null }), false);
+  assert.equal(captureReady({ recordingId: "r1", status: "recording", failureCode: null }), true);
 });

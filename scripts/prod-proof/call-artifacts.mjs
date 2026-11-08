@@ -22,6 +22,13 @@ export function callSeconds(environment = process.env) {
   return seconds;
 }
 
+/** Whether the automatic Capture is recording; a failed one throws with the failure code the SDK reports. */
+export function captureReady(current) {
+  if (!current) return false;
+  check(current.status !== "failed", `Capture failed before readiness: ${current.failureCode ?? "no failure code"}`);
+  return current.status === "recording";
+}
+
 // Three headless Chromium guests each publish a camera and a voice that speaks only in its own slot.
 // The Space's automatic policies must start the Recording and the Transcript without any request.
 export async function captureCall(run, receiver) {
@@ -41,10 +48,8 @@ export async function captureCall(run, receiver) {
     recordingId: () => run.recordingId,
     ready: async () => {
       const current = await guests.pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
-      if (!current) return false;
-      check(current.status !== "failed", "Capture failed before readiness");
-      run.recordingId = current.recordingId;
-      return current.status === "recording";
+      if (current) run.recordingId = current.recordingId;
+      return captureReady(current);
     },
     readPool: () => readCapturePool(run),
     signal: run.signal,
