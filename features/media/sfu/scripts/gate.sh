@@ -13,6 +13,9 @@ export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 repo_root="$(cd "${sfu_root}/../../.." && pwd)"
 cd "${sfu_root}"
 
+printf '\n==> Bench reaper tests (fake doctl only)\n'
+python3 scripts/bench/test_bench.py
+
 printf '\n==> go version\n'
 go version
 
