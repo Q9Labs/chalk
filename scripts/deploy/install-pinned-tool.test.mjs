@@ -48,11 +48,7 @@ test("a cached copy of the second source also avoids the network", () => {
   const space = workspace();
   mkdirSync(space.cache);
   writeFileSync(join(space.cache, `${sha256("deb")}-tool.deb`), "deb");
-  const result = install(
-    space,
-    `${sha256("archive")}=tool.tar.gz=https://github.com/example/tool.tar.gz`,
-    `${sha256("deb")}=tool.deb=https://packages.example.com/tool.deb`,
-  );
+  const result = install(space, `${sha256("archive")}=tool.tar.gz=https://github.com/example/tool.tar.gz`, `${sha256("deb")}=tool.deb=https://packages.example.com/tool.deb`);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout.trim(), /tool\.deb$/);
   assert.equal(curlCalls(space), 0);
@@ -72,14 +68,8 @@ test("when the first source fails the second source is used and then cached", ()
   const mirror = join(space.root, "mirror.deb");
   writeFileSync(mirror, "deb");
   // This curl fails on any github.com URL and serves file:// URLs, like an outage on one host only.
-  writeFileSync(
-    join(space.bin, "curl"),
-    `#!/usr/bin/env bash\necho "$*" >> "${space.root}/curl-calls"\nfor arg in "$@"; do case "$arg" in https://github.com/*) exit 22 ;; esac; done\nexec /usr/bin/curl "$@"\n`,
-  );
-  const candidates = [
-    `${sha256("archive")}=tool.tar.gz=https://github.com/example/tool.tar.gz`,
-    `${sha256("deb")}=tool.deb=file://${mirror}`,
-  ];
+  writeFileSync(join(space.bin, "curl"), `#!/usr/bin/env bash\necho "$*" >> "${space.root}/curl-calls"\nfor arg in "$@"; do case "$arg" in https://github.com/*) exit 22 ;; esac; done\nexec /usr/bin/curl "$@"\n`);
+  const candidates = [`${sha256("archive")}=tool.tar.gz=https://github.com/example/tool.tar.gz`, `${sha256("deb")}=tool.deb=file://${mirror}`];
   const first = install(space, ...candidates);
   assert.equal(first.status, 0, first.stderr);
   assert.match(first.stdout.trim(), /tool\.deb$/);
