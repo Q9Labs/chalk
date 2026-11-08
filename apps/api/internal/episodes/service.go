@@ -110,7 +110,22 @@ type Repository interface {
 }
 
 type DeadlineSchedulerRepository interface {
-	EnqueueDueEpisodeDeadlines(context.Context, int32) (int, error)
+	EnqueueDueEpisodeDeadlines(context.Context, int32) (DeadlineCycle, error)
+}
+
+// DeadlineCycle is the outcome of one scheduler pass. An Episode whose work
+// failed is skipped and listed, so one bad Episode cannot stop the others.
+type DeadlineCycle struct {
+	Enqueued int
+	Skipped  []SkippedEpisode
+}
+
+type SkippedEpisode struct {
+	TenantID  utilities.ID
+	EpisodeID utilities.ID
+	// Phase names the scheduler step that failed: deadline, presence_expiry or empty_linger.
+	Phase string
+	Err   error
 }
 
 // CommitObserver receives already-committed Episode facts. Implementations must

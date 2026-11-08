@@ -480,6 +480,14 @@ newer than five minutes alerts on the next evaluation. A zero snapshot clears
 the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
 
+The deadline scheduler runs each Episode's deadline, presence-expiry and linger
+work in its own savepoint, so one Episode that cannot take its publication
+fences is skipped instead of rolling back the pass for every Tenant. Each skip
+logs `episode.deadline_scheduler.failed` with `tenant_id`, `episode_id`, `phase`,
+`reason` and `consecutive_failures`. The first grouped monitor alerts when one
+Episode fails more than five passes in a row, or sixty for `control_busy`, which
+normally clears within seconds when Sync settles the blocking operation.
+
 The same collector independently samples Sync `/readyz` every minute, including
 when its SQL snapshot fails. The grouped state monitor alerts when at least four
 distinct minute samples in the last five minutes are unready and the latest
