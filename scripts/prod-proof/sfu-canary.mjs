@@ -28,6 +28,7 @@ import { parseArgs } from "node:util";
 import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
+import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { grew, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
 
@@ -140,9 +141,17 @@ async function trial(run, receiver, fault) {
     const call = await openCall(run, receiver, owned);
     const { pages } = call.guests;
     const joinMs = await rendersWithin(pages, call.startedAt, joinLimitMs, "join");
+    // The timings above are settled; now the audio must also decode (a tone at the other client), not only advance in bytes.
+    await proveAudioDecoded(call.guests);
     if (!fault) result = { ms: joinMs };
     else {
-      const recoveries = [await faultRound(pages, false), await faultRound(pages, true)];
+      const open = await faultRound(pages, false);
+      await proveAudioDecoded(call.guests);
+      const muted = await faultRound(pages, true);
+      // The muted client stays silent at the other; the other's tone still reaches it.
+      await proveSilenceFrom(call.guests, 0);
+      await proveAudioDecoded(call.guests, { pairs: [{ listener: 0, speaker: 1 }] });
+      const recoveries = [open, muted];
       result = { ms: Math.max(...recoveries), joinMs, recoveries };
     }
   } catch (error) {

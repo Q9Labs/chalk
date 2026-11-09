@@ -18,6 +18,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { check, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
+import { proveAudioDecoded } from "./audio-decode.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { growing } from "./sfu-canary-criteria.mjs";
 
@@ -81,6 +82,7 @@ async function runClass(run, receiver, index, arrive) {
     const joinedMs = await rendersWithin(guests.pages, joinStartedAt, joinLimitMs, `class ${index} join`);
     await sleep(holdMs);
     await rendersWithin(guests.pages, performance.now(), 15_000, `class ${index} after the hold`);
+    await proveAudioDecoded(guests); // The bytes kept advancing; the class must also still hear every tone.
     return { class: index, result: "passed", joinedMs, totalMs: Math.round(performance.now() - startedAt) };
   } catch (error) {
     return { class: index, result: "failed", error: error instanceof Error ? error.message : String(error) };

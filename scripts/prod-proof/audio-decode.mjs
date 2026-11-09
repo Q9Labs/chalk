@@ -3,7 +3,8 @@
 // Inbound-rtp bytesReceived grows for silence, garbage and for audio that Chromium never plays out, and in headless
 // Chromium without playout totalAudioEnergy stays 0. So each sender publishes a known tone (fixture.mjs: guest n sends
 // toneHz(n)), and each receiver pipes the remote track into a WebAudio AnalyserNode, which runs headless and needs no
-// output device, then reads the energy of the FFT bins around that tone.
+// output device (a muted media element keeps the track flowing, see startToneProbe), then reads the energy of the FFT
+// bins around that tone.
 //
 // This file holds the pure rules (tested with a fake analyser in audio-decode.test.mjs) and the page probe they feed.
 // The bytes-advancing check stays where it is; callers add this one as a further condition.
@@ -86,7 +87,15 @@ export function startToneProbe({ hzOf, fftSize, intervalMs, keep }, reading) {
       if (entry.source !== "microphone" || entry.track.readyState !== "live") continue;
       if (!listeners.has(entry.track)) {
         const analyser = new AnalyserNode(context, { fftSize, smoothingTimeConstant: 0, minDecibels: -140 });
-        context.createMediaStreamSource(new MediaStream([entry.track])).connect(analyser);
+        const stream = new MediaStream([entry.track]);
+        // Chromium hands a remote WebRTC track to WebAudio only while a media element plays it: without one the analyser reads
+        // digital silence (-Infinity) though the bytes advance. A muted element is enough and makes no sound.
+        const element = new Audio();
+        element.srcObject = stream;
+        element.muted = true;
+        element.play().catch(() => {});
+        document.body.append(element);
+        context.createMediaStreamSource(stream).connect(analyser);
         listeners.set(entry.track, analyser);
       }
       const analyser = listeners.get(entry.track);
@@ -113,7 +122,7 @@ export async function readingsOf(page, speaker, sinceMs) {
   return page.evaluate(({ speaker: id, since }) => (window.proofTone?.readings[id] ?? []).filter((row) => row.at >= since), { speaker, since: sinceMs });
 }
 
-/** The listener-and-speaker pairs among `members` (guest indexes): every member hears every other member. */
+/** The listener-and-speaker pairs among `members` (guest indexes): every member hears every other member. `pairs` below can name others. */
 export const pairsOf = (members) => members.flatMap((listener) => members.filter((speaker) => speaker !== listener).map((speaker) => ({ listener, speaker })));
 const allGuests = (guests) => guests.pages.map((_, index) => index);
 
@@ -142,11 +151,11 @@ const describe = (verdicts) => verdicts.map((v) => `guest ${v.listener} hearing 
  * speech energy must be present. The caller keeps its bytes-advancing check; this is the further condition.
  * @returns the measured verdicts, which the caller saves as evidence
  */
-export async function proveAudioDecoded(guests, { members = allGuests(guests), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {
+export async function proveAudioDecoded(guests, { members = allGuests(guests), pairs = pairsOf(members), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {
   const hzOf = Object.fromEntries(guests.participants.map((id, speaker) => [id, guests.tones ? toneHz(speaker) : null]));
-  await Promise.all(members.map((listener) => startProbe(guests.pages[listener], hzOf, criteria)));
+  await Promise.all([...new Set(pairs.map((pair) => pair.listener))].map((listener) => startProbe(guests.pages[listener], hzOf, criteria)));
   const judge = guests.tones ? judgeTone : judgeSpeech;
-  const verdicts = await Promise.all(pairsOf(members).map((pair) => settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria)));
+  const verdicts = await Promise.all(pairs.map((pair) => settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria)));
   const failed = verdicts.filter((verdict) => !verdict.pass);
   check(failed.length === 0, `Audio bytes advance but are not decoded as ${guests.tones ? "the published tone" : "speech"}: ${describe(failed)}`, "audio-not-decoded");
   return verdicts;
