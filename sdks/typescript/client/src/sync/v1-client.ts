@@ -15,6 +15,7 @@ import { V1SyncError } from "./v1-error";
 import { frameSignature } from "./v1-frame-signature";
 import { V1LiveTargetCoordinator } from "./v1-live-target-coordinator";
 import { InMemoryV1PendingTargetStore } from "./v1-persistence";
+import { syncEntryUrl } from "./entry-url";
 import { applyV1Event, optimisticV1Control, restoreV1Snapshot, V1ReplicaError, V1StateDigestMismatchError } from "./v1-reducer";
 import type {
   V1AdmissionTarget,
@@ -426,7 +427,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#offReasonNegotiated = false;
     let socket: V1Socket;
     try {
-      socket = this.#options.webSocket.connect(entryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
+      socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
     } catch {
       this.#connectFailure = this.#connectDiagnostic();
       this.#emit();
@@ -1173,16 +1174,6 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
     (publication.publicationId === null || typeof publication.publicationId === "string") &&
     (!publication.enabled || publication.publicationId !== null)
   );
-}
-function entryUrl(value: string, generation: number | null, confirmation: boolean): string {
-  const url = new URL(value);
-  url.searchParams.set("participant_devices", "1");
-  url.searchParams.set("participant_device_admissions", "2");
-  // Previous Sync ignores this query and sends the earlier item shape, which means "no evidence".
-  url.searchParams.set("media_off_reason", "1");
-  url.searchParams.set("entry_generation", generation === null ? "new" : String(generation));
-  if (confirmation) url.searchParams.set("entry_confirmation", "1");
-  return url.toString();
 }
 function assertV1Url(value: string): void {
   const url = new URL(value);

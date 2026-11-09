@@ -9,6 +9,7 @@ import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
 import { SpaceStore, SpaceStoreService, makeSpaceStoreLayer } from "./store";
 import type { ClientEventHandler, ClientEventMap, ClientEventName, JoinOptions, SpaceClientOptions, SpaceSnapshot } from "./types";
+import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "./urls";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
 export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => AccessGrant | Promise<AccessGrant>;
 export type SpaceClientPlatform = {
@@ -28,7 +29,7 @@ export type SpaceClientPlatform = {
 export class SpaceClientCoreService extends Context.Service<SpaceClientCoreService, SpaceClientCore>()("@chalk/client/SpaceClientCore") {}
 /** Production composition keeps every mutable owner inside a scoped Layer. */
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
-  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
+  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
@@ -228,16 +229,6 @@ function normalizedBaseUrl(value: string): string {
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/$/u, "");
-}
-export function defaultSyncUrl(apiBaseUrl: string): string {
-  const url = new URL(apiBaseUrl);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  if (url.hostname.startsWith("api.")) url.hostname = `sync.${url.hostname.slice(4)}`;
-  else if (url.hostname.endsWith(".chalkmeet.com")) url.hostname = url.hostname.replace(/^([^.]+-)api\./u, "$1sync.");
-  url.pathname = "/v1/sync";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
 }
 function screenShares(snapshot: SpaceSnapshot): ReadonlySet<string> {
   const participants = new Set(snapshot.media.remote.filter((publication) => publication.source === "screen").map((publication) => publication.participantId));

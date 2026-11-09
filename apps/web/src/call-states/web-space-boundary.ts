@@ -1,7 +1,7 @@
 import type { PreparedPublicSpace, PublicInviteClient } from "../lib/chalk-access";
 import { createCallStateClient, liveSnapshot } from "./fixtures";
 export { createLocalSpaceRelease } from "../lib/local-space-client";
-export { publicAPIBaseURL, resumePublicSpace } from "../lib/chalk-access";
+export { publicAPIBaseURL, publicSyncURL, resumePublicSpace } from "../lib/chalk-access";
 
 // Only the isolated journey server replaces access and transport boundaries.
 // SpacePage, LocalSpace, the theme provider and SDK controls remain the product code.

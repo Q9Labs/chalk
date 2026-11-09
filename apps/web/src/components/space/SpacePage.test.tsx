@@ -97,6 +97,28 @@ it("says calls are unavailable when resuming after a reload returns 503 media.un
   expect(requests).toEqual(["restore", "replace"]);
 });
 
+it("opens the Sync socket and API connection while the name prompt shows, without a request", async () => {
+  document.head.querySelectorAll('link[rel="preconnect"]').forEach((link) => link.remove());
+  const sockets: string[] = [];
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      readyState = 0;
+      constructor(url: string) {
+        sockets.push(url);
+      }
+      addEventListener() {}
+      close() {}
+    },
+  );
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect([...document.head.querySelectorAll('link[rel="preconnect"]')].map((link) => link.getAttribute("href"))).toContain(window.location.origin);
+  expect(sockets).toHaveLength(1);
+  expect(new URL(sockets[0] ?? "").pathname).toBe("/v1/sync");
+  expect(requests).toEqual([]);
+});
+
 async function expectMessage(message: string) {
   await vi.waitFor(async () => {
     await act(async () => undefined);

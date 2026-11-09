@@ -1,10 +1,10 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import type { ThemeMode } from "../../lib/theme";
-import { readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { publicAPIBaseURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
@@ -15,6 +15,14 @@ const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
+/**
+ * Opens the API connection and the Sync WebSocket upgrade before Join, so joining skips both. The call UI stays unloaded
+ * until Join: the call-performance route budget guards that. The socket lives 4 s, so call this again as the visitor acts.
+ */
+function warmCall(): void {
+  const apiBaseURL = publicAPIBaseURL();
+  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
+}
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
 function loadCallSurface(): Promise<typeof CallSurface> {
@@ -124,6 +132,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
   useEffect(() => {
+    if (!reloadMarker) warmCall();
+  }, [reloadMarker]);
+  useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;
     reloadAttempted.current = true;
     const marker = reloadMarker;
@@ -167,6 +178,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelRequested.current = false;
       setError(null);
       setPreparing(true);
+      warmCall();
       void loadCallSurface().catch(() => undefined);
       const preparation = terminal
         ? terminal.cleanup().then(() => {
@@ -435,6 +447,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               onDisplayNameChange={(name) => {
                 nameEdited.current = true;
                 setDisplayName(name);
+                warmCall();
               }}
               onJoin={() => start()}
             />

@@ -22,7 +22,8 @@ function checkMediaPlane(grant, guest, plane) {
 async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
   const result = await build({
     stdin: {
-      contents: `import {createSpaceClient} from ${JSON.stringify(entry)};
+      contents: `import {createSpaceClient, preconnect} from ${JSON.stringify(entry)};
+window.proofLobby=async(baseUrl,dwellMs)=>{preconnect({baseUrl});await new Promise((done)=>setTimeout(done,dwellMs));};
 window.proofJoin=async(space,baseUrl,displayName)=>{
  const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});

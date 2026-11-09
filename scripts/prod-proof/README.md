@@ -78,6 +78,11 @@ pnpm prod:latency --environment staging --samples 3 --planes chalk_sfu
 xvfb-run -a pnpm prod:latency --environment staging --headed
 ```
 
+`--lobby-dwell-ms N` (0 to 3500, default 0) makes the second guest call `preconnect()` and wait N ms before its join
+timer starts, the way a person waits in a lobby. The Sync socket opened then is already open when `join()` runs, so
+`join.prepare` and `join.sync_connect` read 0. Without the flag the join starts cold. Compare runs only with the same
+setting. Sync closes a socket that gets no hello within 5 s, so N stays under 3500.
+
 [`features/scorecard/schema.mjs`](../../features/scorecard/schema.mjs) lists every metric id and what it times. Each
 watch runs in the receiver's page and polls the SDK snapshot and WebRTC stats
 every 10 ms. A video frame counts when it is decoded, and an audio frame counts
