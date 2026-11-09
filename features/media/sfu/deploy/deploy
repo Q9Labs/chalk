@@ -17,7 +17,7 @@
 # would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
 # turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
 # which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
-# `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET.
+# `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
 usage="usage: deploy <staging|production|bench> <node address> [--force|--firewall-only]"
@@ -177,10 +177,17 @@ if [[ -f "${dir}/otlp-headers" ]]; then
 else
   echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
 fi
-sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
-  -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__STEAL_LIMIT__|${steal_limit}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
-  -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
-  "${deploy_dir}/sfu.env.in" |
+if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
+  echo "SFU_MAX_EPISODE_PARTICIPANTS applies to the bench environment only" >&2
+  exit 2
+fi
+{
+  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+    -e "s|__PACKET_BUDGET__|${budget}|" -e "s|__STEAL_LIMIT__|${steal_limit}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
+    -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
+    "${deploy_dir}/sfu.env.in"
+  if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" ]]; then echo "SFU_MAX_EPISODE_PARTICIPANTS=${SFU_MAX_EPISODE_PARTICIPANTS}"; fi
+} |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
 sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" \
   "${deploy_dir}/chalk-sfu.container.in" |

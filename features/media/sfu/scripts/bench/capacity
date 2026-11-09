@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# Measures each production SKU at the packet budget `deploy` renders for it, with one
+# load-generator Droplet per node so the generator is not the bottleneck.
+#
+#   capacity up                    create two generators, then the bench pair (primary s-2vcpu-2gb at 36000,
+#                                  standby s-1vcpu-1gb at 22000), and copy the live test and certificates
+#   capacity run <primary|standby> <name> [VAR=value ...]
+#                                  run TestLiveSmokeClasses against that node while sampling its host, then
+#                                  fetch the logs into $CAPACITY_OUT/<name>-<role>/ (SFU_LIVE_* settings go in VAR=value)
+#   capacity summarize <dir>       print one run's numbers as JSON: pps in and out, CPU, steal, RSS, repair, stalls
+#   capacity down                  delete the generators and the bench pair, then list what is left
+#
+# SFU_LIVE_TEST_BIN is a linux/amd64 `go test -c` binary of the live generator test, which is not on master.
+# The test runs from the soak C generator branch (t3/sfu-soak-c-generator-pause-diag), beside its tests/testdata.
+# Droplets are named chalk-sfu-bench-<mmddHHMM> (generators) and chalk-sfu-bench-fleet-* (nodes); both wear the
+# chalk-sfu-bench tag, so `bench reap` clears anything forgotten. Droplet IDs are kept in $CAPACITY_STATE.
+set -euo pipefail
+
+region=sgp1
+tag=chalk-sfu-bench
+generator_size=${CAPACITY_GENERATOR_SIZE:-s-4vcpu-8gb}
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+sfu_root="$(cd "${here}/../.." && pwd)"
+export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
+export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
+bench_dir="${CHALK_SFU_PRIVATE_DIR}/bench"
+state="${CAPACITY_STATE:-${CHALK_SFU_PRIVATE_DIR}/capacity}"
+out="${CAPACITY_OUT:-${state}/runs}"
+ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${state}/known_hosts" -i "$SFU_SSH_KEY")
+
+die() {
+  echo "capacity: $*" >&2
+  exit 1
+}
+
+# address_of prints a Droplet JSON file's public IPv4.
+address_of() { jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "$1"; }
+
+node_address() { address_of "${bench_dir}/$1.json"; }
+
+up() {
+  [[ -f "${SFU_LIVE_TEST_BIN:-}" ]] || die "set SFU_LIVE_TEST_BIN to the linux/amd64 live test binary"
+  [[ ! -e "${state}/generator-primary.json" ]] || die "generators exist; run: capacity down"
+  mkdir -p "$state" "$out"
+  chmod 700 "$state"
+  local key_id stamp role
+  key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
+  [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
+  stamp="$(date -u +%m%d%H%M)"
+  trap 'echo "capacity: up failed, deleting what was created" >&2; down || true' ERR
+  for role in primary standby; do
+    doctl compute droplet create "chalk-sfu-bench-${stamp}-gen-${role}" --region "$region" --size "$generator_size" \
+      --image ubuntu-24-04-x64 --ssh-keys "$key_id" --tag-name "$tag" --wait --output json >"${state}/generator-${role}.json"
+    echo "generator ${role}: Droplet $(jq -r '.[0].id' "${state}/generator-${role}.json") (${generator_size})"
+  done
+  local control="" role_address
+  for role in primary standby; do
+    control+="${control:+,}$(address_of "${state}/generator-${role}.json")"
+  done
+  BENCH_CONTROL_ADDRESSES="$control" BENCH_PRIMARY_BUDGET=36000 BENCH_STANDBY_BUDGET=22000 "${here}/bench" up
+  for role in primary standby; do
+    role_address="$(address_of "${state}/generator-${role}.json")"
+    for _ in $(seq 40); do
+      ssh "${ssh_options[@]}" "root@${role_address}" true 2>/dev/null && break
+      sleep 5
+    done
+    ssh "${ssh_options[@]}" "root@${role_address}" "mkdir -p /opt/load/tests/testdata /opt/load/certs /opt/load/runs"
+    scp -q "${ssh_options[@]}" "$SFU_LIVE_TEST_BIN" "root@${role_address}:/opt/load/tests/sfu-live.test"
+    scp -q "${ssh_options[@]}" "${sfu_root}"/tests/testdata/*.ivf "root@${role_address}:/opt/load/tests/testdata/"
+    scp -q "${ssh_options[@]}" "${bench_dir}/ca.crt" "${bench_dir}/operator.crt" "${bench_dir}/operator.key" "root@${role_address}:/opt/load/certs/"
+  done
+  trap - ERR
+  echo "capacity: ready. Delete today: capacity down"
+}
+
+sampler='#!/bin/sh
+# One line every 5 s: epoch|cpu line|eth0 counters|chalk-sfu VmRSS kB
+while :; do
+  pid=$(pgrep -x chalk-sfu | head -1)
+  echo "$(date +%s)|$(head -1 /proc/stat)|$(grep eth0: /proc/net/dev)|$(awk "/VmRSS/{print \$2}" /proc/$pid/status 2>/dev/null)"
+  sleep 5
+done'
+
+run() {
+  local role="${1:?role}" name="${2:?name}"
+  shift 2
+  [[ "$role" == primary || "$role" == standby ]] || die "role is primary or standby"
+  local generator node dest settings=("$@")
+  generator="$(address_of "${state}/generator-${role}.json")"
+  node="$(node_address "$role")"
+  dest="${out}/${name}-${role}"
+  mkdir -p "$dest"
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -f /tmp/capacity-sampler || true; cat > /tmp/capacity-sampler; chmod +x /tmp/capacity-sampler; : > /tmp/capacity-host.log
+    nohup /tmp/capacity-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
+  # The test exits non-zero when a run breaks its own rules; the logs are the result either way.
+  ssh "${ssh_options[@]}" "root@${generator}" "cd /opt/load/tests && rm -f /opt/load/runs/${name}.* &&
+    env SFU_LIVE_URL=https://${node}:8443 SFU_LIVE_CA=/opt/load/certs/ca.crt SFU_LIVE_CERT=/opt/load/certs/operator.crt \
+      SFU_LIVE_KEY=/opt/load/certs/operator.key SFU_LIVE_SAMPLES=/opt/load/runs/${name}.jsonl \
+      SFU_LIVE_DIAGNOSTICS=/opt/load/runs/${name}.diag.jsonl SFU_LIVE_SAMPLE=10s ${settings[*]} \
+      ./sfu-live.test -test.run '^TestLiveSmokeClasses\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1" || echo "capacity: the test exited non-zero; see ${dest}/test.log"
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -f /tmp/capacity-sampler || true"
+  scp -q "${ssh_options[@]}" "root@${generator}:/opt/load/runs/${name}.*" "$dest/"
+  scp -q "${ssh_options[@]}" "root@${node}:/tmp/capacity-host.log" "${dest}/host.log"
+  mv "${dest}/${name}.log" "${dest}/test.log"
+  mv "${dest}/${name}.jsonl" "${dest}/samples.jsonl" 2>/dev/null || true
+  mv "${dest}/${name}.diag.jsonl" "${dest}/diagnostics.jsonl" 2>/dev/null || true
+  echo "capacity: ${name}-${role} fetched to ${dest}"
+}
+
+summarize() {
+  python3 "${here}/capacity-summary.py" "${1:?run directory}"
+}
+
+down() {
+  local role id ids=()
+  "${here}/bench" down || echo "capacity: bench down reported a problem; check: doctl compute droplet list" >&2
+  for role in primary standby; do
+    [[ -f "${state}/generator-${role}.json" ]] || continue
+    id="$(jq -r '.[0].id' "${state}/generator-${role}.json")"
+    ids+=("$id")
+    doctl compute droplet delete "$id" --force || echo "capacity: could not delete Droplet ${id}" >&2
+    rm -f "${state}/generator-${role}.json"
+  done
+  # Droplets delete asynchronously, so wait until none of ours is listed.
+  local listed=0
+  for _ in $(seq 24); do
+    listed="$(doctl compute droplet list --format ID --no-header | grep -cwF -f <(printf '%s\n' "${ids[@]:-none}") || true)"
+    [[ "$listed" == 0 ]] && break
+    sleep 5
+  done
+  [[ "$listed" == 0 ]] || die "generator Droplets are still listed"
+  echo "capacity: generator Droplets ${ids[*]:-none} are gone"
+}
+
+command="${1:-}"
+[[ -n "$command" ]] && shift
+case "$command" in
+  up | run | summarize | down) "$command" "$@" ;;
+  *) die "usage: capacity up | run <primary|standby> <name> [VAR=value ...] | summarize <dir> | down" ;;
+esac

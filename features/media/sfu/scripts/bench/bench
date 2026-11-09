@@ -25,7 +25,9 @@
 #
 # Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
 # for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
-# control. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
+# control. BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets (32000 and
+# 16000), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings; `capacity` uses them to
+# measure each size at the budget `deploy` renders for it. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
 set -euo pipefail
 
 tag=chalk-sfu-bench
@@ -37,8 +39,8 @@ media_port=50000
 default_reap_hours=3
 # role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first.
 nodes=(
-  "primary sgp1-a s-2vcpu-2gb 32000"
-  "standby sgp1-b s-1vcpu-1gb 16000"
+  "primary sgp1-a s-2vcpu-2gb ${BENCH_PRIMARY_BUDGET:-32000}"
+  "standby sgp1-b s-1vcpu-1gb ${BENCH_STANDBY_BUDGET:-16000}"
 )
 
 bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
