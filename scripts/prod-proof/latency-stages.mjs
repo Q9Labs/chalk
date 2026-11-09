@@ -29,6 +29,14 @@ function chain(group, start, steps) {
 // A stage that runs beside the chain counts from the call.
 const sinceCall = (start, at) => (at === null ? null : Math.max(0, Math.round(at - start)));
 
+// A receiver that pulls from the Sync media item lists publications after its pull, off the critical path: the stage is
+// skipped so the pull and renegotiate stages keep the time they really cost.
+function listedBeforePull(receiver, from, turningOn) {
+  const listed = httpEnd(receiver, from, "publications");
+  const pulled = turningOn ? httpEnd(receiver, from, "tracks") : null;
+  return listed !== null && pulled !== null && pulled < listed ? null : listed;
+}
+
 /**
  * toggleStages splits one mic, camera or screen toggle.
  * @param {string} group  A group id such as "mic_on".
@@ -47,7 +55,7 @@ export function toggleStages(group, { t0, sender, receiver, command, visibleAt, 
     ["prepare", () => sent],
     ["sync_fanout", () => frame],
     ["roster_apply", () => visibleAt],
-    ["list_publications", (previous) => httpEnd(receiver, frame ?? previous, "publications")],
+    ["list_publications", (previous) => listedBeforePull(receiver, frame ?? previous, turningOn)],
     ...(turningOn
       ? [
           ["pull", afterPrevious("tracks")],

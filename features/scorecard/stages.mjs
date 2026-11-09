@@ -21,7 +21,7 @@
 const prepare = { id: "prepare", from: "previous", description: "call until the Sync command leaves the sender (capture and SDK scheduling)" };
 const syncFanout = { id: "sync_fanout", from: "previous", description: "Sync command sent until the roster frame reaches the receiver (uplink, Sync server, downlink)" };
 const rosterApply = { id: "roster_apply", from: "previous", description: "roster frame until the receiver's roster shows the change" };
-const listPublications = { id: "list_publications", from: "previous", description: "roster change until the receiver's listPublications reply" };
+const listPublications = { id: "list_publications", from: "previous", description: "roster change until the receiver's listPublications reply (skipped when the receiver pulls from the Sync media item first and lists afterwards)" };
 const renegotiate = { id: "renegotiate", from: "previous", description: "previous SFU reply until the receiver's renegotiate reply" };
 const syncAck = { id: "sync_ack", from: "call", description: "call until the sender holds Sync's live_target_result" };
 
@@ -35,7 +35,7 @@ const turnOn = (id, title, metrics, source) => ({
     syncFanout,
     rosterApply,
     listPublications,
-    { id: "pull", from: "previous", description: "listPublications reply until the receiver's pull (tracks) reply" },
+    { id: "pull", from: "previous", description: "listPublications reply, or the roster change when the receiver pulls first, until the receiver's pull (tracks) reply" },
     renegotiate,
     { id: "first_media", from: "previous", description: `last reached stage until the receiver gets the first new ${source}` },
     syncAck,

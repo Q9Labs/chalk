@@ -41,6 +41,15 @@ test("a stage the SDK skipped is null and its time moves to the next stage reach
   assert.equal(stages["mic_on.pull"], 340);
 });
 
+test("a receiver that pulls from the Sync media item and lists afterwards skips the list stage and keeps the pull time", () => {
+  const pullFirst = [at(1150, "ws_in", "projection_event:media"), at(1280, "http_end", "POST tracks"), at(1340, "http_end", "PUT renegotiate"), at(1400, "http_end", "GET publications")];
+  const stages = toggleStages("mic_on", { ...trace, receiver: pullFirst });
+  assert.equal(stages["mic_on.list_publications"], null);
+  assert.equal(stages["mic_on.pull"], 120);
+  assert.equal(stages["mic_on.renegotiate"], 60);
+  assert.equal(stages["mic_on.first_media"], 360);
+});
+
 test("a timeout leaves the stages it never reached null, and an unsent command leaves the chain null", () => {
   const timedOut = toggleStages("mic_on", { ...trace, finalAt: null });
   assert.equal(timedOut["mic_on.first_media"], null);
