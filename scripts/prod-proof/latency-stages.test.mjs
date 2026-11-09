@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import test from "node:test";
-import { STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
+import { AUDIO_KEYS, STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
 import { problemOf, DIAGNOSTICS_SCHEMA } from "../../features/scorecard/diagnostics.mjs";
-import { diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
+import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
+import { diagnosticsFile, scorecard } from "./latency-card.mjs";
+import { summarize } from "./latency-stats.mjs";
+import { METRICS } from "../../features/scorecard/schema.mjs";
 import { installLatencyTrace } from "./latency-trace.mjs";
 
 const at = (t, k, d) => ({ t, k, d });
@@ -130,6 +133,8 @@ test("the page trace records wire events, sends no frame of its own and leaves t
       const rows = new Map([
         ["transport", { type: "transport", selectedCandidatePairId: "pair" }],
         ["pair", { type: "candidate-pair", currentRoundTripTime: 0.205 }],
+        ["audio", { type: "inbound-rtp", kind: "audio", jitterBufferEmittedCount: 100, jitterBufferDelay: 4, totalSamplesCount: 4800, totalPlayoutDelay: 24 }],
+        ["video", { type: "inbound-rtp", kind: "video", jitterBufferEmittedCount: 7, jitterBufferDelay: 9 }],
       ]);
       return rows;
     }
@@ -176,6 +181,7 @@ test("the page trace records wire events, sends no frame of its own and leaves t
     assert.equal(fetched.length, 3);
     assert.equal(sent.length, 1);
     assert.equal(await globalThis.proofTrace.sfuRtt(), 205);
+    assert.deepEqual(await globalThis.proofTrace.audioStats(), { emitted: 100, jitterBufferDelay: 4, samples: 4800, playoutDelay: 24, playoutReported: true }, "audio rows only");
     // The SDK pings and its pong is dropped: the trace has nothing to answer it with, sends nothing, and reads no round trip.
     socket.send('{"type":"ping"}');
     await sleep(50);
@@ -188,4 +194,56 @@ test("the page trace records wire events, sends no frame of its own and leaves t
     for (const [key, value] of Object.entries(saved)) if (value === undefined) delete globalThis[key];
     delete globalThis.proofTrace;
   }
+});
+
+const counters = (emitted, jitterBufferDelay, samples, playoutDelay) => ({ emitted, jitterBufferDelay, samples, playoutDelay, playoutReported: true });
+
+test("the one-way estimate is network time plus jitter buffer, and playout is reported beside it", () => {
+  const found = audioPath(counters(1000, 10, 48000, 100), counters(1100, 12.2, 52800, 1060), { sender: 40, receiver: 60 });
+  // jitter buffer: 2.2 s over 100 samples = 22 ms; network: (40 + 60) / 2 = 50 ms; playout: 960 s*samples over 4800 samples = 200 ms.
+  assert.deepEqual(found, { "media.network_jitter_one_way_ms": 72, "media.network_ms": 50, "media.jitter_buffer_ms": 22, "media.playout_ms": 200 });
+  assert.deepEqual(Object.keys(found), AUDIO_KEYS);
+});
+
+test("an estimate the window cannot show is null, and one side's round trip stands in for a missing one", () => {
+  const still = counters(1000, 10, 48000, 100);
+  assert.deepEqual(audioPath(still, still, { sender: 40, receiver: 60 }), { "media.network_jitter_one_way_ms": null, "media.network_ms": 50, "media.jitter_buffer_ms": null, "media.playout_ms": null });
+  const later = { ...counters(1100, 12.2, 52800, 1060), playoutReported: false };
+  assert.equal(audioPath(still, later, { sender: 40, receiver: null })["media.network_ms"], 40);
+  assert.equal(audioPath(still, later, { sender: 40, receiver: null })["media.playout_ms"], null);
+  assert.equal(audioPath(still, later, { sender: null, receiver: null })["media.network_jitter_one_way_ms"], null);
+  assert.equal(audioPath(counters(1100, 12.2, 1, 1), counters(1200, 12, 2, 2), { sender: 40, receiver: 60 })["media.network_jitter_one_way_ms"], null, "a counter that went backwards is not a delay");
+});
+
+test("the sidecar summarizes the audio parts and omits them when no cycle measured any", () => {
+  const trace = (audio) => ({ rtt: { sfu_ms: 1, sync_ms: 1 }, stages: {}, ...(audio ? { audio } : {}) });
+  assert.equal(diagnosticsOf([{ trace: trace() }]).audio, undefined);
+  const cycles = [60, 70, 80, 90].map((ms) => ({ trace: trace({ "media.network_jitter_one_way_ms": ms }) }));
+  const found = diagnosticsOf(cycles);
+  assert.deepEqual(found.audio["media.network_jitter_one_way_ms"], { n: 4, p50: 70, p95: 90 });
+  assert.equal(problemOf({ schema: DIAGNOSTICS_SCHEMA, plane: "chalk_sfu", cycles: [], summary: found }), undefined);
+});
+
+// The card is built from the gated metric ids only, so the audio estimate cannot reach it: the same cycles with and without the
+// estimate produce the same card, byte for byte, and the estimate shows up only in the sidecar.
+test("the card bytes are identical with and without the one-way estimate", () => {
+  const sample = Object.fromEntries(Object.keys(METRICS).map((id) => [id, 100]));
+  const cycle = (index, audio) => ({ plane: "chalk_sfu", timestamp: `2026-11-08T00:00:0${index}.000Z`, sample, trace: { rtt: { sfu_ms: 40, sync_ms: 20 }, stages: {}, ...(audio ? { audio } : {}) } });
+  const build = (audio) => {
+    const cycles = [1, 2, 3].map((index) => cycle(index, audio));
+    const report = { cycles, planes: { chalk_sfu: { summary: summarize(cycles.map((entry) => entry.sample)) } } };
+    const run = { id: "nightly-1", commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } };
+    return { card: JSON.stringify(scorecard(report, "chalk_sfu", run)), sidecar: diagnosticsFile(report, "chalk_sfu") };
+  };
+  const without = build(undefined);
+  const withEstimate = build({ "media.network_jitter_one_way_ms": 72, "media.network_ms": 50, "media.jitter_buffer_ms": 22, "media.playout_ms": 200 });
+  assert.equal(withEstimate.card, without.card);
+  assert.equal(withEstimate.card.includes("network_jitter"), false);
+  assert.equal(
+    Object.keys(METRICS).some((id) => id.startsWith("media.")),
+    false,
+    "no card metric is named media.*",
+  );
+  assert.deepEqual(withEstimate.sidecar.summary.audio["media.network_jitter_one_way_ms"], { n: 3, p50: 72, p95: 72 });
+  assert.equal(without.sidecar.summary.audio, undefined);
 });

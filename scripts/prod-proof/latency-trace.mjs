@@ -96,5 +96,24 @@ export function installLatencyTrace() {
       }
       return values.length ? Math.round(Math.min(...values) * 10) / 10 : null;
     },
+
+    // Cumulative audio receive counters summed over the connected peer connections. Two reads a window apart give averages for that window.
+    async audioStats() {
+      const total = { emitted: 0, jitterBufferDelay: 0, samples: 0, playoutDelay: 0, playoutReported: false };
+      for (const peer of window.proofConnections ?? []) {
+        if (peer.connectionState !== "connected") continue;
+        for (const row of (await peer.getStats()).values()) {
+          if (row.type !== "inbound-rtp" || (row.kind ?? row.mediaType) !== "audio") continue;
+          total.emitted += row.jitterBufferEmittedCount ?? 0;
+          total.jitterBufferDelay += row.jitterBufferDelay ?? 0;
+          if (row.totalPlayoutDelay !== undefined && row.totalSamplesCount !== undefined) {
+            total.playoutReported = true;
+            total.playoutDelay += row.totalPlayoutDelay;
+            total.samples += row.totalSamplesCount;
+          }
+        }
+      }
+      return total;
+    },
   };
 }
