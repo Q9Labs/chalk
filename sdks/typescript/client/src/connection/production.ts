@@ -137,6 +137,7 @@ function createSFUConnectionMediaClient(client: CloudflareSFUClient): Connection
 }
 type BoundMediaClient = Pick<
   ConnectionMediaClient,
+  | "prepareLocalPublicationTarget"
   | "setLocalPublicationTarget"
   | "pauseLocalCapture"
   | "setLocalSourceIntent"
@@ -157,6 +158,7 @@ type BoundMediaClient = Pick<
 >;
 export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
+    ...(client.prepareLocalPublicationTarget ? { prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client) } : {}),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     ...(client.pauseLocalCapture ? { pauseLocalCapture: client.pauseLocalCapture.bind(client) } : {}),
     ...(client.setLocalSourceIntent ? { setLocalSourceIntent: client.setLocalSourceIntent.bind(client) } : {}),

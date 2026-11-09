@@ -494,6 +494,28 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#clearPoll();
     this.#schedulePoll(0);
   }
+  /**
+   * Swaps a connection that never carried media for a fresh one while Sync still decides the enable, so the
+   * grant does not wait behind that round trip. It adds no transceiver and sends no offer. A denied grant
+   * leaves an unused fresh connection, which is what the enable would have built anyway.
+   */
+  async prepareLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
+    if (!target.enabled || this.#locallyPausedSources.has(target.source)) return;
+    if (resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target).kind !== "state") return;
+    const generation = this.#generation;
+    const attemptedBefore = this.#replacementAttemptedGeneration === generation;
+    try {
+      await this.#serializeSDP(async () => {
+        // A retired bundled sender rebuilds the connection and republishes other sources inside the publish itself.
+        if (this.#retiredLocalConnection === this.#connection && this.#replaceMediaConnection) return;
+        await this.#replaceDormantConnectionBeforeNegotiation(generation);
+      });
+    } catch (error) {
+      // The grant-gated publish owns the replacement now, so its own attempt must still run and report.
+      if (!attemptedBefore && this.#replacementAttemptedGeneration === generation) this.#replacementAttemptedGeneration = null;
+      throw error;
+    }
+  }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
     const result = await this.#enablePublicationTarget(target);
