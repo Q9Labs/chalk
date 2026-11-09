@@ -52,8 +52,9 @@ it("reaches Sync on the nightly host when the app talks to the nightly API", asy
   }
 });
 
-it("joins an own SFU grant with the ICE servers the grant names and no Cloudflare STUN server", async () => {
+it("builds the media peer connection from the ICE servers an own SFU grant names, not Cloudflare's STUN server", async () => {
   stubNetwork();
+  // The test stops at peer construction: it checks the configuration, not that negotiation succeeds.
   peerConnection.mockImplementation(() => {
     throw new Error("stop after the configuration");
   });

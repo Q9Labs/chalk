@@ -24,6 +24,10 @@ type replayScenario struct {
 	freshIssuer  accessgrants.Issuer
 	winning      accessgrants.Subject
 	requestToken string
+	fixture      *refreshGrantPlane
+	repo         *refreshGrantRepository
+	requestHash  [32]byte
+	replayedAt   time.Time
 }
 
 func newReplayScenario(t *testing.T, replayAge time.Duration) replayScenario {
@@ -86,6 +90,10 @@ func newReplayScenario(t *testing.T, replayAge time.Duration) replayScenario {
 		freshIssuer:  freshIssuer,
 		winning:      winning,
 		requestToken: requestToken.Token,
+		fixture:      fixture,
+		repo:         repo,
+		requestHash:  sealed.RequestHash,
+		replayedAt:   now.Add(-replayAge),
 		request:      issueAccessGrantRequest{TenantID: original.TenantID, SpaceID: original.SpaceID, EpisodeID: original.EpisodeID, ParticipantID: original.ParticipantID, Body: issueAccessGrantBody{ParticipantGeneration: original.ParticipantGeneration, CurrentMediaToken: requestToken.Token}},
 	}
 }
@@ -103,6 +111,9 @@ func TestAccessGrantRefreshReplayPastDeadlineIsRefused(t *testing.T) {
 			grant, err := s.endpoint.handle(s.ctx(), s.request)
 			if err == nil || accessGrantAPIError(err).Code != "participant.connection_superseded" {
 				t.Fatalf("consumed request past replay deadline: grant=%v err=%v", grant.Media.Token != "", err)
+			}
+			if s.fixture.created != 0 || s.fixture.resumed != 0 {
+				t.Fatalf("refused replay touched media: created=%d resumed=%d", s.fixture.created, s.fixture.resumed)
 			}
 
 			current, err := s.freshIssuer.Issue(context.Background(), s.winning)
@@ -136,8 +147,17 @@ func TestAccessGrantRefreshReplayInsideDeadlineRenewsTheWinningConnection(t *tes
 	if err != nil || verified.ConnectionID != "replacement" {
 		t.Fatalf("inside-deadline replay did not renew winning connection: subject=%+v err=%v", verified, err)
 	}
+	if s.fixture.created != 0 || s.fixture.resumed != 1 {
+		t.Fatalf("renewal must resume the winning connection once: created=%d resumed=%d", s.fixture.created, s.fixture.resumed)
+	}
+	if got := s.repo.replays[s.requestHash].createdAt; !got.Equal(s.replayedAt) {
+		t.Fatalf("renewal extended replay deadline: created_at=%v", got)
+	}
 	repeated, err := s.endpoint.handle(s.ctx(), s.request)
 	if err != nil || repeated.Media.Token != grant.Media.Token {
 		t.Fatalf("inside-deadline replay did not retain renewed grant: %v", err)
+	}
+	if s.fixture.resumed != 1 {
+		t.Fatalf("repeating the replay resumed the connection again: resumed=%d", s.fixture.resumed)
 	}
 }
