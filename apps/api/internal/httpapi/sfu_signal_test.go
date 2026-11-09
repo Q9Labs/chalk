@@ -206,6 +206,11 @@ var signalCases = []signalCase{
 		`{"op":"tracks","allow_partial_remote_tracks":true,"replacement_cause":"ice_failed","connection_id":"connection-123","session_description":{"sdp":"offer-sdp","type":"offer"},"tracks":[{"location":"local","mid":"0","trackName":"camera","source":"camera"}]}`,
 	},
 	{
+		"tracks_pull_published", http.MethodPost, "tracks?allow_partial_remote_tracks=true",
+		`{"connection_id":"connection-123","tracks":[],"pull_published_audio":true}`,
+		`{"op":"tracks","allow_partial_remote_tracks":true,"connection_id":"connection-123","tracks":[],"pull_published_audio":true}`,
+	},
+	{
 		"tracks_close", http.MethodPut, "tracks/close",
 		`{"connection_id":"connection-123","session_description":{"sdp":"offer-sdp","type":"offer"},"tracks":[{"mid":"0","source":"camera","publication_id":"publication-1"}],"force":true}`,
 		`{"op":"tracks_close","connection_id":"connection-123","session_description":{"sdp":"offer-sdp","type":"offer"},"close_tracks":[{"mid":"0","source":"camera","publication_id":"publication-1"}],"force":true}`,
