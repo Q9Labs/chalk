@@ -139,7 +139,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   ending.path = `${path}/${episode.id}`;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
-  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true });
+  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true, lobby: lobbyDwellMs > 0 });
   const landed = guests.admissions.map((admission) => admission.provider);
   check(
     landed.every((provider) => provider === providers[plane]),

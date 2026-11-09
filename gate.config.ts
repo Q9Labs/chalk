@@ -25,6 +25,7 @@ const taskIds = [
   "call-performance",
   "call-leaks",
   "recorder",
+  "proof-bundle",
   "sfu",
   "publint",
   "attw",

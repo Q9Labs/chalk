@@ -6,12 +6,13 @@ import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } fro
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
 import { installLatencyTrace } from "./latency-trace.mjs";
+import { buildSdkBundle } from "./sdk-bundle.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: sdkEntry, camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
@@ -19,35 +20,15 @@ function checkMediaPlane(grant, guest, plane) {
   check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
 }
 
-// A run builds the bundle once per entry: the source cannot change under it, and a fleet joins hundreds of calls.
+// A run builds each bundle once: the source cannot change under it, and a fleet joins hundreds of calls.
 const bundles = new Map();
-function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
-  if (!bundles.has(entry)) bundles.set(entry, buildSdkBundle(entry));
-  return bundles.get(entry);
-}
-async function buildSdkBundle(entry) {
-  const result = await build({
-    stdin: {
-      contents: `import {createSpaceClient, preconnect} from ${JSON.stringify(entry)};
-window.proofLobby=async(baseUrl,dwellMs)=>{preconnect({baseUrl});await new Promise((done)=>setTimeout(done,dwellMs));};
-window.proofJoin=async(space,baseUrl,displayName)=>{
- const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
- window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
-};`,
-      resolveDir: process.cwd(),
-      sourcefile: "proof.ts",
-    },
-    logLevel: "silent",
-    nodePaths: [new URL("../../sdks/typescript/client/node_modules", import.meta.url).pathname],
-    bundle: true,
-    write: false,
-    format: "iife",
-    platform: "browser",
-  });
-  return result.outputFiles[0].text;
+function sdkBundle(entry = "./sdks/typescript/client/src/index.ts", lobby = false) {
+  const key = `${lobby}:${entry}`;
+  if (!bundles.has(key)) bundles.set(key, buildSdkBundle(entry, { lobby }));
+  return bundles.get(key);
 }
 export async function launchGuests(run, space, episode, speech, origin, tones = false, guestCount = 2, options = {}) {
-  const bundle = await sdkBundle(options.sdkEntry);
+  const bundle = await sdkBundle(options.sdkEntry, options.lobby);
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
