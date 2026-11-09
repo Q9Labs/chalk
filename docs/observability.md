@@ -244,7 +244,9 @@ adds one to the API metric `chalk.sfu.turn_mint_failures`, whose only attribute 
 `chalk.media_plane.provider`; it carries no Episode id, so its cardinality stays
 fixed. Search the log for the Episode id to find the affected class. Any value
 above zero over a few minutes means clients on UDP-blocked networks cannot
-connect media.
+connect media. The production monitor pages on three of either TURN event in five minutes
+(`cloudflare_turn.credentials_failed`, and `chalk_sfu.turn_credentials_failed` once Cloudflare SFU
+is retired).
 
 A live own-SFU Episode whose node goes silent (no probe answer for the probe freshness window, so one missed probe does not count), or answers
 with another `NodeIncarnation` than its binding recorded, moves through one
@@ -258,7 +260,9 @@ the move first and this one followed it), `refused_no_node` (no node was fit to 
 (from and to node, generation), `chalk_sfu.recovery_refused` (callers then get 503
 `media.unavailable` and retry; the binding did not change) and `chalk_sfu.recovery` at warning
 level for each node that could not reserve. A sustained `refused_*` rate means live calls cannot
-leave a lost node: check pool capacity first. Any `moved` is worth a look at the lost node.
+leave a lost node: check pool capacity first. The production monitor pages when
+`chalk_sfu.recovery_refused` is logged in three distinct minutes of five. Any `moved` is worth a look
+at the lost node.
 
 A moved or ended own-SFU Episode owes a retire to every node it left. The debt is a row in
 `sfu_retirement_debts`, written in the same transaction as the binding move, or re-recorded when the
@@ -274,9 +278,11 @@ unit `s`), each reported by every API replica from the same table; the `sfu_reti
 (`count`, `oldest_age_seconds`) in the `/readyz` body, which never fails readiness; and the warning logs
 `chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed),
 `chalk_sfu.retire_debts_unread` and `chalk_sfu.retire_backlog_unread` (the table could not be read).
-Alert when the oldest unpaid debt is above 15 minutes for 5 minutes (the maximum across replicas). A
-healthy fleet pays a debt within seconds, so an older debt means a node has been silent through many
-backoff cycles: check that node, and restart it if it is up but not answering control calls.
+The production alert collector reads the table itself, so the age is the same for every replica, and
+pages when the oldest unpaid debt is above 15 minutes in four of five minute samples (the
+`sfu-retirement-debt` rule). A healthy fleet pays a debt within seconds, so an older debt means a node
+has been silent through many backoff cycles: check that node, and restart it if it is up but not
+answering control calls.
 
 SFU transport failures retain only the bounded `transport_cause` log field and
 `chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
@@ -491,14 +497,16 @@ and `overflow_node_unavailable` means no node answered ready. It counts decision
 committed Episodes: placement runs inside the creation transaction, so a request that
 later rolls back (for example an Episode already live in the Space) still counts once.
 Read it as a rate of placement attempts by outcome. The binding frozen on a committed
-Episode is the record of what was kept.
+Episode is the record of what was kept. No production alert reads this counter, because the
+Axiom monitors read logs and no log line records `no_capacity` or an overflow to Cloudflare; only a
+refusal with overflow off is logged (below), and it counts toward the API 5xx alert.
 
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
 no node can take is then refused with `503 media.unavailable`. It is counted under its
 `overflow_*` reason on the `chalk_sfu` provider (the same reason on `cf_sfu` means the Episode
 moved to Cloudflare), and `http.failure` logs the bounded reason
 `no own sfu node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled`
-followed by the `overflow_*` reason.
+without the `overflow_*` reason.
 The same reason and the node's boot incarnation are frozen in the Episode binding
 (`placement_reason`, `node_incarnation`), so a past overflow stays findable.
 

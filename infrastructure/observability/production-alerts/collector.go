@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -23,6 +24,10 @@ import (
 
 //go:embed state.sql
 var stateSQL string
+
+// sfuRetirementDebtSQL ages the oldest unpaid retirement debt, as the API's /readyz
+// body does, and gives 0 when none is owed. A healthy fleet pays a debt in seconds.
+const sfuRetirementDebtSQL = `select coalesce(extract(epoch from now() - min(created_at)), 0)::bigint from sfu_retirement_debts`
 
 type snapshot struct {
 	Tenant        string     `json:"chalk_alert_tenant"`
@@ -67,7 +72,7 @@ func run() error {
 		}
 		snapshots = []snapshot{{Rule: "delivery-test", Value: value, Summary: "TEST: Chalk production alert delivery proof; no user failure was induced."}}
 	case "", "--check":
-		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"), sfuProbeFromEnv())
+		snapshots, collectionErr = collectState(ctx, http.DefaultClient, os.Getenv("CHALK_DATABASE_URL"), os.Getenv("CHALK_ALERT_SYNC_READY_URL"), sfuProbesFromEnv())
 	default:
 		return errors.New("unknown collector mode")
 	}
@@ -116,7 +121,9 @@ func message(rule string) (headline, impact, next string) {
 	case "sync-readiness":
 		return "Sync has stayed unready", "Sync was unready in at least four minute samples in five minutes and the latest sample is still unready. Joining or reconnecting may fail; existing sockets may still work.", "An engineer must check Sync readiness and its dependency diagnostics now."
 	case "sfu-readiness":
-		return "The own SFU is refusing new calls or unreachable", "The own SFU was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU node's readiness, load and network now."
+		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
+	case "sfu-retirement-debt":
+		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
 	case "export":
 		return "A class video could not be produced", "The class was recorded, but turning it into a video file failed or is taking longer than 14 hours.", "An engineer needs to fix the cause and retry the Export before the retained Recording expires; check its source cleanup deadline now."
 	case "transcript":
@@ -149,11 +156,11 @@ func formatMessage(item *snapshot) {
 	}
 }
 
-func collectState(ctx context.Context, client *http.Client, databaseURL, readinessURL string, sfu sfuProbe) ([]snapshot, error) {
+func collectState(ctx context.Context, client *http.Client, databaseURL, readinessURL string, sfu []sfuProbe) ([]snapshot, error) {
 	// Preserve the independent readiness observations even if the SQL snapshot fails.
 	readiness := []snapshot{collectReadiness(ctx, client, readinessURL)}
-	if sfu.URL != "" {
-		readiness = append(readiness, collectSFUReadiness(ctx, sfu))
+	if len(sfu) > 0 {
+		readiness = append(readiness, collectSFUFleetReadiness(ctx, sfu))
 	}
 	databaseCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -212,22 +219,57 @@ func collectReadiness(ctx context.Context, client *http.Client, endpoint string)
 	return item
 }
 
-// sfuProbe locates the own SFU's readiness endpoint. An empty URL means the SFU
-// is not in production yet, so the collector emits no SFU row. ServerName is the
+// sfuProbe locates one own-SFU node's readiness endpoint. ServerName is the
 // name in the node's certificate, which the API also verifies, because the URL
 // usually holds an address.
 type sfuProbe struct {
 	URL, ServerName, ClientCertFile, ClientKeyFile, CAFile string
 }
 
-func sfuProbeFromEnv() sfuProbe {
-	return sfuProbe{
-		URL:            os.Getenv("CHALK_ALERT_SFU_READY_URL"),
-		ClientCertFile: os.Getenv("CHALK_ALERT_SFU_CLIENT_CERT"),
-		ClientKeyFile:  os.Getenv("CHALK_ALERT_SFU_CLIENT_KEY"),
-		CAFile:         os.Getenv("CHALK_ALERT_SFU_CA"),
-		ServerName:     os.Getenv("CHALK_ALERT_SFU_SERVER_NAME"),
+// sfuProbesFromEnv returns one probe per node. CHALK_ALERT_SFU_READY_URLS holds a
+// comma-separated list and CHALK_ALERT_SFU_READY_URL a single node; both may be
+// set. No node means the SFU is not in production yet, so the collector emits no
+// SFU row.
+func sfuProbesFromEnv() []sfuProbe {
+	var probes []sfuProbe
+	seen := make(map[string]bool)
+	for _, endpoint := range append(strings.Split(os.Getenv("CHALK_ALERT_SFU_READY_URLS"), ","), os.Getenv("CHALK_ALERT_SFU_READY_URL")) {
+		endpoint = strings.TrimSpace(endpoint)
+		if endpoint == "" || seen[endpoint] {
+			continue
+		}
+		seen[endpoint] = true
+		probes = append(probes, sfuProbe{
+			URL:            endpoint,
+			ClientCertFile: os.Getenv("CHALK_ALERT_SFU_CLIENT_CERT"),
+			ClientKeyFile:  os.Getenv("CHALK_ALERT_SFU_CLIENT_KEY"),
+			CAFile:         os.Getenv("CHALK_ALERT_SFU_CA"),
+			ServerName:     os.Getenv("CHALK_ALERT_SFU_SERVER_NAME"),
+		})
 	}
+	return probes
+}
+
+// collectSFUFleetReadiness probes every node at once and folds them into the one
+// global row the monitor reads: unhealthy when any node is, with the reason of the
+// first unhealthy node in list order. A single node gives exactly its own row.
+func collectSFUFleetReadiness(ctx context.Context, probes []sfuProbe) snapshot {
+	nodes := make([]snapshot, len(probes))
+	var wg sync.WaitGroup
+	for i, probe := range probes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			nodes[i] = collectSFUReadiness(ctx, probe)
+		}()
+	}
+	wg.Wait()
+	for _, node := range nodes {
+		if node.Value > 0 {
+			return node
+		}
+	}
+	return nodes[0]
 }
 
 // sfuReadiness is the subset of the SFU /readyz body the alert reads. The node
@@ -373,10 +415,16 @@ func collect(ctx context.Context, databaseURL string) ([]snapshot, error) {
 		seenRules[item.Rule] = true
 		snapshots = append(snapshots, item)
 	}
+	rows.Close()
 	if rows.Err() != nil || len(seenRules) != 5 {
 		return nil, errors.New("alert state snapshot incomplete")
 	}
-	return snapshots, nil
+	// A failed debt read keeps the job and webhook rows, but still fails the service.
+	var oldestDebtSeconds int64
+	if err := tx.QueryRow(ctx, sfuRetirementDebtSQL).Scan(&oldestDebtSeconds); err != nil {
+		return snapshots, errors.New("sfu retirement debt query failed")
+	}
+	return append(snapshots, snapshot{Rule: "sfu-retirement-debt", Value: oldestDebtSeconds}), nil
 }
 
 func ingestConfig(headers string) (token, dataset string) {
