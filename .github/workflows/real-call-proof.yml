@@ -96,7 +96,7 @@ on:
 
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
-  group: ${{ inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment || 'production') }}
+  group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment || 'production') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
   # Promote proof, and Promote rolls back on any proof that did not pass.
@@ -109,7 +109,7 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 130 || 50 }}
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 130 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -327,7 +327,8 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: scorecard-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}
+          # The warn-only Cloudflare latency card has its own prefix, so the gate's scorecard-nightly-* download never sees it.
+          name: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'warn-scorecard' || 'scorecard' }}-${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}-${{ inputs.scorecard_label || 'proof' }}
           path: artifacts/scorecard-*.json
           if-no-files-found: ignore
           retention-days: 3
