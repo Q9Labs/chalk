@@ -102,7 +102,11 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         force: input.force,
         ...(input.receiveOnly ? { receive_only: true } : {}),
       }),
-    updateTracks: async (input) => request<CloudflareSFUTracksResponse>("tracks_update", { connection_id: input.connectionId, tracks: input.tracks }),
+    updateTracks: async (input) =>
+      request<CloudflareSFUTracksResponse>("tracks_update", {
+        connection_id: input.connectionId,
+        tracks: input.tracks.map(({ publicationId, ...track }) => (publicationId === undefined ? track : { ...track, publication_id: publicationId })),
+      }),
     listSubscriptions: async (): Promise<readonly SFUSubscriptionState[]> => {
       const response = await request<{
         subscriptions: readonly {

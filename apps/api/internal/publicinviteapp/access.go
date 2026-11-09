@@ -425,6 +425,7 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			ICERestart:            flags["iceRestart"] == true,
 			PullPublished:         flags["pullPublished"] == true,
 			UnifiedSignaling:      flags["unifiedSignaling"] == true,
+			MuteInPlace:           flags["muteInPlace"] == true,
 		}
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 	case mediaplane.ProviderCloudflareSFU:

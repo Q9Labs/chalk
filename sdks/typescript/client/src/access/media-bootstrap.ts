@@ -19,6 +19,7 @@ export function mediaBootstrap(media: ParticipantMediaAccess): CloudflareSFUBoot
           iceRestart: media.clientPayload.capabilities.iceRestart,
           pullPublished: media.clientPayload.capabilities.pullPublished,
           unifiedSignaling: media.clientPayload.capabilities.unifiedSignaling,
+          muteInPlace: media.clientPayload.capabilities.muteInPlace,
         },
       };
     default:

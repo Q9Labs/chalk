@@ -399,6 +399,7 @@ type PublicAccessCapabilities struct {
 	PullPublished         bool
 	// UnifiedSignaling says the SDK may send every signalling call to the single signal route.
 	UnifiedSignaling bool
+	MuteInPlace      bool
 }
 
 type SpacePublicInvite = ManagedInvite

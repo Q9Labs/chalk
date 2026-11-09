@@ -380,7 +380,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": advertiseMuteInPlace},
 		},
 		Metadata: a.metadata(),
 	}
@@ -492,6 +492,14 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 func (a *Adapter) RestartICE(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	return a.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: input.ConnectionID, Scope: input.Scope, SessionDescription: input.SessionDescription})
 }
+
+// advertiseMuteInPlace stays false until a mute is proven on an Orb that runs the own SFU. The
+// node and the hold endpoint are in place, so turning it on is this one value; while it is off,
+// no client parks a publication and a mute closes it as before.
+const advertiseMuteInPlace = false
+
+// HoldsPublications marks that the node parks a participant's own publication in place.
+func (a *Adapter) HoldsPublications() {}
 
 // UpdateTracks changes a subscription's layer ceiling or pauses and resumes it in
 // place. The MID and track stay, so no renegotiation follows.

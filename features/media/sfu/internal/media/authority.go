@@ -308,7 +308,9 @@ func (s *Session) closeSource(authority *sourceAuthority, revision int64) []prot
 		// The revoke applied over any grant at its own revision, so only a publication
 		// admitted at that revision while revoked came after it.
 		admittedSince := pub.revision > revision || (pub.revision == revision && pub.revoked)
-		if pub.authority != authority || admittedSince {
+		// A held publication forwards nothing and stays gated by the revoked lease, so the
+		// owner's mute is not undone by closing the track it will resume.
+		if pub.authority != authority || admittedSince || pub.held.Load() {
 			continue
 		}
 		delete(s.published, mid)
@@ -336,10 +338,6 @@ func (s *Session) refreshSource(authority *sourceAuthority) {
 	}
 	s.mu.Unlock()
 	for _, pub := range pubs {
-		for index := range pub.layers {
-			if pub.layer(index) != nil {
-				pub.requestKeyframe(index)
-			}
-		}
+		pub.requestKeyframes()
 	}
 }

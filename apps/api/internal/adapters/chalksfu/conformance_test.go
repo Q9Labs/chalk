@@ -91,7 +91,7 @@ func TestConformanceSignaling(t *testing.T) {
 
 	aliceConn, joined := join(t, service, alice)
 	capabilities, _ := joined.ClientPayload["capabilities"].(map[string]any)
-	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != true || capabilities["subscriptionState"] != true || capabilities["iceRestart"] != true || capabilities["pullPublished"] != true {
+	if joined.ClientPayload["provider"] != "chalk_sfu" || capabilities["serverLayerAdaptation"] != true || capabilities["subscriptionState"] != true || capabilities["iceRestart"] != true || capabilities["pullPublished"] != true || capabilities["muteInPlace"] != false {
 		t.Fatalf("join payload advertises the wrong provider or capabilities: %+v", joined.ClientPayload)
 	}
 	bobConn, _ := join(t, service, bob)
@@ -206,6 +206,17 @@ func TestConformanceSignaling(t *testing.T) {
 			t.Fatalf("resumed subscription = %+v", after)
 		}
 		eventually(t, "media to resume", 10*time.Second, func() bool { return subscriber.received.Load() >= held+20 })
+	})
+
+	t.Run("a hold of a publication the node does not hold is a track error with no SDP", func(t *testing.T) {
+		paused := true
+		held, err := service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{
+			ConnectionID: aliceConn, Scope: alice,
+			Tracks: []mediaplane.Track{{Location: "local", Mid: "99", TrackName: "alice-mic", Source: "microphone", Paused: &paused}},
+		})
+		if err != nil || held.SessionDescription != nil || held.RequiresImmediateRenegotiation || len(held.TrackErrors) != 1 || held.TrackErrors[0].Code != "track_not_found" {
+			t.Fatalf("hold of a missing publication = %+v, %v", held, err)
+		}
 	})
 
 	t.Run("inspect sees own and peer sessions and a gone one as absent", func(t *testing.T) {

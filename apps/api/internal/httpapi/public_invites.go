@@ -991,6 +991,7 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
 				"pullPublished":         grant.ClientPayload.Capabilities.PullPublished,
 				"unifiedSignaling":      grant.ClientPayload.Capabilities.UnifiedSignaling,
+				"muteInPlace":           grant.ClientPayload.Capabilities.MuteInPlace,
 			},
 		}
 

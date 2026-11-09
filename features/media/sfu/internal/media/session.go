@@ -700,18 +700,24 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 	return response, nil
 }
 
-// UpdateTracks changes the layer policy of existing subscriptions without SDP. A layer change
-// takes effect at the next keyframe of the new layer. A track that is not a live subscription of
-// this session is a per-track error.
+// UpdateTracks changes existing tracks without SDP. A remote track changes its subscription's
+// layer policy or pause; a layer change takes effect at the next keyframe of the new layer. A
+// local track parks or resumes the participant's own publication for a mute: it keeps its MID
+// and transceiver, forwards nothing while parked and resumes at the next keyframe. A track that
+// is not live in this session is a per-track error.
 func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksRequest) (protocol.TracksResponse, error) {
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
 		return protocol.TracksResponse{}, fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
 	for index, track := range request.Tracks {
-		if track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "" {
+		switch {
+		case track.Location == protocol.LocationLocal:
+			if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
+				return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
+			}
+		case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
 			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
-		}
-		if track.Simulcast != nil && track.Simulcast.PreferredRID == "" {
+		case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
 			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
 		}
 	}
@@ -720,8 +726,19 @@ func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksR
 	return once(s, request.OperationID, request, func() (protocol.TracksResponse, error) {
 		var response protocol.TracksResponse
 		updated := make([]*subscription, len(request.Tracks))
+		parked := make([]*publication, len(request.Tracks))
 		s.mu.Lock()
 		for index, track := range request.Tracks {
+			if track.Location == protocol.LocationLocal {
+				pub := s.published[track.Mid]
+				if pub == nil || pub.name != track.TrackName {
+					response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: s.id, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such publication"})
+					continue
+				}
+				parked[index] = pub
+				response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: pub.source, Paused: track.Paused})
+				continue
+			}
 			subscription := s.subscribed[track.Mid]
 			if subscription == nil || subscription.pub.name != track.TrackName || subscription.pub.session.id != track.SessionID {
 				response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such subscription"})
@@ -731,6 +748,11 @@ func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksR
 			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast, Paused: track.Paused})
 		}
 		s.mu.Unlock()
+		for index, pub := range parked {
+			if pub != nil {
+				pub.setHeld(request.Tracks[index].Paused)
+			}
+		}
 		for index, subscription := range updated {
 			if subscription == nil {
 				continue

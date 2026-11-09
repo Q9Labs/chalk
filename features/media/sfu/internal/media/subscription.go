@@ -335,7 +335,7 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 		return false
 	}
 	packet := egressPacket{
-		binding: binding, authority: s.pub.authority, arrival: p.arrival,
+		binding: binding, authority: s.pub.authority, sub: s, resumes: s.pub.resumes.Load(), arrival: p.arrival,
 		class: class, marker: p.marker, padding: p.paddingSize,
 		seq: out.seq, timestamp: out.timestamp, payload: p.payload,
 		audioLevel: p.audioLevel, hasAudioLevel: p.hasAudioLevel,
@@ -520,6 +520,18 @@ func (s *subscription) detach() bool {
 		s.owner.node.releaseCapture(s.owner, s.lease)
 	}
 	return true
+}
+
+// release ends the subscription and forgets it in its owner's session, as the owner's close
+// of its MID does, so the owner can pull the same publication again. The owner's next offer
+// carries the stopped transceiver.
+func (s *subscription) release() {
+	s.owner.mu.Lock()
+	if s.owner.subscribed[s.mid] == s {
+		delete(s.owner.subscribed, s.mid)
+	}
+	s.owner.mu.Unlock()
+	s.close()
 }
 
 // close detaches the subscription and stops its transceiver and sender. That ends the RTCP

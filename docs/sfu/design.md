@@ -530,6 +530,25 @@ Any later poll, a replaced connection and every Cloudflare join use the list rou
 The nightly latency sidecar leaves `join.sfu_publications` empty for a combined join, and
 `join.sfu_tracks` then carries the list and the pull.
 
+**Mute in place:** when the own SFU advertises the `muteInPlace` capability, a user
+mute of the camera or microphone parks the publication instead of closing it. The
+SDK detaches the track locally and sends `PUT tracks/update` with `paused: true` for
+the local track, so no SDP and no `tracks/close` run and the transceiver and MID
+stay. The node stops forwarding that publication at once and drops what was queued for
+its subscriptions, so a muted track forwards no media within the same bound as a close.
+The subscriptions stay attached and read as an idle source with a new revision, and a
+viewer that subscribes during the mute gets its layer when the publication resumes. The API
+records the publication as disabled with its ID unchanged. A source revoke from Sync
+does not close a parked publication, and a grant keeps its lease. Unmute re-attaches the
+track and resumes with `paused: false`; the node asks for a keyframe and media flows
+again on the subscriptions a receiver still holds, so a receiver that missed the mute
+needs no new pull. A receiver that saw the mute closes its subscription and pulls the
+publication again from the next snapshot, as for any enabled publication. If the SFU no longer holds the parked publication, the SDK closes it
+and publishes a new one. Cloudflare and older SDKs never see the flag, so they keep
+the close path. Receivers that see the muted snapshot still tear down and rebuild
+their subscription; keeping them subscribed needs a Sync and schema change that this does
+not make.
+
 **Node loss:** all sessions, packets and retransmission caches disappear. A new
 boot uses a new incarnation; reject old handles with normalized gone responses.
 Clients replace sessions, republish authorized wanted sources and re-pull from
