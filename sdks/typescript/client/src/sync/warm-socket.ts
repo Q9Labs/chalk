@@ -32,6 +32,7 @@ export class WarmSocketSlot {
   readonly #host: WarmSocketHost;
   #slot: Slot = { state: "empty" };
   #keepUntil = 0;
+  #keepUrl: string | null = null;
 
   constructor(host: WarmSocketHost) {
     this.#host = host;
@@ -43,6 +44,9 @@ export class WarmSocketSlot {
 
   /** Makes sure a socket for `url` is upgrading or open. `keepMs` also re-opens it as it ages out, up to `MAX_KEEP_WARM_MS`. */
   warm(url: string, keepMs = 0): void {
+    // The keep window belongs to one URL: a call for another URL starts its own, so a default caller never inherits it.
+    if (this.#keepUrl !== url) this.#keepUntil = 0;
+    this.#keepUrl = url;
     this.#keepUntil = Math.max(this.#keepUntil, Date.now() + Math.min(Math.max(keepMs, 0), MAX_KEEP_WARM_MS));
     const slot = this.#slot;
     if (slot.state !== "empty") {

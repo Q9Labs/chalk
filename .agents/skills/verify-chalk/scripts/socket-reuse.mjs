@@ -48,12 +48,13 @@ let failure;
 const shot = (name) => page.screenshot({ path: join(out, "screenshots", `${name}.png`) });
 const joins = [];
 const call = async (label) => {
+  // The baseline comes before the click, so a socket the click itself opens counts as a post-press upgrade.
+  const before = sockets.length;
+  const pressedAt = Date.now() - started;
   await page
     .getByRole("button", { name: "Join call", exact: true })
     .or(page.getByRole("button", { name: "Rejoin", exact: true }))
     .click();
-  const pressedAt = Date.now() - started;
-  const before = sockets.length;
   mark(`${label}: Join pressed`);
   await page.getByRole("button", { name: `Video tile for ${name}`, exact: true }).waitFor({ timeout: 60_000 });
   mark(`${label}: in the call`);

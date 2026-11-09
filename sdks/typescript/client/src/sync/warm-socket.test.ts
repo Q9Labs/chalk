@@ -159,6 +159,15 @@ it("keeps one socket for one URL: another URL replaces it", () => {
   expect(slot.adopt(url)).toBeUndefined();
 });
 
+it("scopes the keep window to its URL: a default call for another URL opens one socket, not a series", () => {
+  slot.warm(url, 15_000);
+  slot.warm(`${url}&other=1`);
+  sockets[1]?.open();
+  vi.advanceTimersByTime(60_000);
+  expect(sockets).toHaveLength(2);
+  expect(slot.state).toBe("empty");
+});
+
 it("stays empty when the page cannot open a socket", () => {
   const blocked = new WarmSocketSlot({ open: () => undefined, visible: () => true });
   blocked.warm(url, 10_000);
