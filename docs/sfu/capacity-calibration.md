@@ -77,6 +77,8 @@ before cutover, not M12's post-cutover checks. Production serves no `chalk_sfu` 
 
 For the separate staging proof, run `TestLiveSmokeClasses` for 5 hours at 3 classes (budget 22,000),
 covering the :00 and :30 marks, and require no microphone stall over 500 ms.
-Record 10 s steal and own CPU. If M11 needs capacity above 15 participants toward
+Record 10 s steal and own CPU. The test fails a run that breaks the stall rule, reports another budget
+or lacks the marks or the node's 10 s capture, and writes the numbers to a JSON result file; the
+[SFU README](../../features/media/sfu/README.md#tests) has the command. If M11 needs capacity above 15 participants toward
 36,000 packets/s, measure it on the shared production node under the bench rules:
 short-lived bench droplets, at most USD 1, delete by ID.
