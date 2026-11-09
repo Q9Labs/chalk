@@ -31,21 +31,27 @@ export function installLatencyTrace() {
     if (frame?.type === "projection_event") return `projection_event:${frame.stream}`;
     return ["welcome", "entered_ack", "live_target_result", "pong"].includes(frame?.type) ? frame.type : null;
   };
+  // Each socket gets a number, so a join can tell the socket it used from a lobby socket that expired.
+  const socketIds = new WeakMap();
+  let socketCount = 0;
+  const idOf = (socket) => socketIds.get(socket);
   const nativeSend = WebSocket.prototype.send;
   WebSocket.prototype.send = function send(data) {
     const frame = parse(data);
     const name = sentName(frame);
-    if (name) log("ws_out", name);
+    if (name) log("ws_out", name, { s: idOf(this) });
     return nativeSend.call(this, data);
   };
   function observeSocket(socket) {
-    log("ws_new");
-    socket.addEventListener("open", () => log("ws_open"));
+    socketIds.set(socket, (socketCount += 1));
+    const s = idOf(socket);
+    log("ws_new", undefined, { s });
+    socket.addEventListener("open", () => log("ws_open", undefined, { s }));
     socket.addEventListener("message", (event) => {
       const frame = parse(event.data);
       const name = receivedName(frame);
       if (!name) return;
-      log("ws_in", name);
+      log("ws_in", name, { s });
     });
     return socket;
   }
