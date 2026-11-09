@@ -78,7 +78,7 @@ const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
 const RECEIVER_RETIREMENT_ATTEMPTS = 3;
 const RECEIVER_RETIREMENT_LIMIT = 64;
 // The SFU rejects a close that names more tracks than this.
-const CLOSE_TRACKS_PER_REQUEST = 16;
+const TRACKS_PER_REQUEST = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.
@@ -132,6 +132,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #viewerPaused = new Set<string>();
   // Dropped remote tracks whose receive m-line is not closed yet, with the failed closes so far.
   readonly #unretiredReceivers = new Map<CloudflareSFURemoteTrack, number>();
+  // A stopped transceiver keeps its mid until the next negotiation, so a later retirement would find it and close it a second time.
+  readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
   #viewerLayerUpdating = false;
@@ -1361,7 +1363,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!this.#unretiredReceivers.size) return;
     try {
       await this.#serializeSDP(async () => {
-        for (const batch of chunks([...this.#unretiredReceivers.keys()], CLOSE_TRACKS_PER_REQUEST)) {
+        for (const batch of chunks([...this.#unretiredReceivers.keys()], TRACKS_PER_REQUEST)) {
           this.#requireGeneration(generation);
           const receivers = this.#receiversOf(batch);
           try {
@@ -1386,7 +1388,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #receiversOf(publications: readonly CloudflareSFURemoteTrack[]) {
     return publications.flatMap((publication) => {
       const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
-      return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+      return transceiver?.mid && !this.#closedReceiverTracks.has(publication.track) ? [{ publication, transceiver, mid: transceiver.mid }] : [];
     });
   }
   #forgetViewerPauses(kept: Iterable<CloudflareSFURemoteTrack>): void {
@@ -1571,7 +1573,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const publication of stalled) this.#receiveProgress.reserveRepull(publication.publicationId);
     const retired = await this.#retireStalledReceivers(stalled, generation);
     if (!retired.length) return [];
-    const pulled = await this.#pullBatch(retired, generation);
+    const pulled = await this.#pullInRequests(retired, generation, (batch) => this.#pullBatch(batch, generation));
     if (pulled?.length !== retired.length) throw new CloudflareSFUError("Stalled receive subscriptions were not restored", "media_failed");
     for (const publication of retired) this.#receiveProgress.restarted(publication.publicationId);
     return pulled;
@@ -1594,9 +1596,15 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #closeReceivers(receivers: readonly { readonly publication: Pick<CloudflareSFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
     const connectionId = this.#bootstrap.connectionId;
-    await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: receivers.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
-    this.#requireGeneration(generation);
-    for (const { transceiver } of receivers) transceiver.stop();
+    // The SFU rejects a request of more than 16 tracks. A forced close of a closed track answers alreadyClosed, so a retry after a partial failure is safe.
+    for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
+      await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
+      this.#requireGeneration(generation);
+      for (const { transceiver } of batch) {
+        this.#closedReceiverTracks.add(transceiver.receiver.track);
+        transceiver.stop();
+      }
+    }
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
@@ -1624,6 +1632,26 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pull(publications: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     const eligible = publications.filter((publication) => this.#canSubscribeToRemotePublication(publication));
+    return this.#pullInRequests(eligible, generation, (batch) => this.#pullWithFallback(batch, generation));
+  }
+  // One request pulls at most 16 tracks. A later batch that fails keeps what the earlier batches already pulled; the roster pulls the rest on the next poll.
+  async #pullInRequests(publications: readonly CloudflareSFUPublication[], generation: number, pullBatch: (batch: readonly CloudflareSFUPublication[]) => Promise<readonly CloudflareSFURemoteTrack[]>): Promise<readonly CloudflareSFURemoteTrack[]> {
+    const pulled: CloudflareSFURemoteTrack[] = [];
+    for (const [index, batch] of [...chunks(publications, TRACKS_PER_REQUEST)].entries()) {
+      try {
+        pulled.push(...(await pullBatch(batch)));
+      } catch (error) {
+        this.#requireGeneration(generation);
+        // The failed batch is already deferred. Later batches wait out the same error instead of hitting a refusing SFU at once.
+        this.#deferRemotePulls(publications.slice((index + 1) * TRACKS_PER_REQUEST), error);
+        if (!pulled.length) throw error;
+        this.#reportError(error);
+        break;
+      }
+    }
+    return pulled;
+  }
+  async #pullWithFallback(eligible: readonly CloudflareSFUPublication[], generation: number): Promise<readonly CloudflareSFURemoteTrack[]> {
     try {
       return await this.#pullBatch(eligible, generation);
     } catch (error) {
