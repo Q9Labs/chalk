@@ -55,14 +55,15 @@ export function installStallProbe() {
   })();
 }
 
-/** Two guests join, a third joins `JOIN_STALL_LATE_MS` later (0 for all at once), and every guest records its media for `JOIN_STALL_HOLD_MS` after the last join. */
+/** `JOIN_STALL_GUESTS` guests (default 3) join, the last one `JOIN_STALL_LATE_MS` after the others (0 for all at once), and every guest records its media for `JOIN_STALL_HOLD_MS` after the last join. */
 export async function joinStallProof(run, receiver) {
   const lateMs = Number(process.env.JOIN_STALL_LATE_MS ?? 25000);
   const holdMs = Number(process.env.JOIN_STALL_HOLD_MS ?? 60000);
+  const guestCount = Number(process.env.JOIN_STALL_GUESTS ?? 3);
   const space = await createSpace(run, mediaPlane);
   const { episode, end } = await createEpisode(run, space);
   run.episodeId = episode.id;
-  const guests = await launchGuests(run, space, episode, "", receiver.origin, true, 3, { diagnostics: true, deferJoin: true });
+  const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestCount, { diagnostics: true, deferJoin: true });
   for (const page of guests.pages) await page.evaluate(installStallProbe);
   const joins = [];
   const join = async (index) => {
@@ -71,11 +72,12 @@ export async function joinStallProof(run, receiver) {
     await guests.pages[index].evaluate(({ slug, api, name }) => window.proofJoin(slug, api, name), { slug: space.slug, api: run.config.api_url, name: `Proof guest ${index + 1}` });
     entry.resolvedAt = Date.now();
   };
-  if (lateMs === 0) await Promise.all([join(0), join(1), join(2)]);
+  const indexes = Array.from({ length: guestCount }, (_, index) => index);
+  if (lateMs === 0) await Promise.all(indexes.map(join));
   else {
-    await Promise.all([join(0), join(1)]);
+    await Promise.all(indexes.slice(0, -1).map(join));
     await run.wait(lateMs);
-    await join(2);
+    await join(guestCount - 1);
   }
   await run.wait(holdMs);
   const evidence = { lateMs, holdMs, joins, guests: [] };
