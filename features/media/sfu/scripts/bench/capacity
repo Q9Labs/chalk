@@ -90,8 +90,8 @@ run() {
   node="$(node_address "$role")"
   dest="${out}/${name}-${role}"
   mkdir -p "$dest"
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -f '[/]tmp/capacity-sampler' || true; cat > /tmp/capacity-sampler; chmod +x /tmp/capacity-sampler; : > /tmp/capacity-host.log
-    nohup /tmp/capacity-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true; cat > /tmp/cap-sampler; chmod +x /tmp/cap-sampler; : > /tmp/capacity-host.log
+    nohup /tmp/cap-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
   # The test exits non-zero when a run breaks its own rules; the logs are the result either way.
   # The test runs detached on the generator and leaves a done file, so a dropped SSH link from this
   # machine does not end the run; the poll below reconnects.
@@ -101,7 +101,7 @@ run() {
       SFU_LIVE_DIAGNOSTICS=/opt/load/runs/${name}.diag.jsonl SFU_LIVE_SAMPLE=10s ${settings[*]} \
       ./sfu-live.test -test.run '^TestLiveSmokeClasses\\\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1; echo \\\$? >/opt/load/runs/${name}.done\" >/dev/null 2>&1 </dev/null &"
   until ssh "${ssh_options[@]}" -o ConnectTimeout=20 "root@${generator}" "test -f /opt/load/runs/${name}.done" 2>/dev/null; do sleep 20; done
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -f '[/]tmp/capacity-sampler' || true"
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -x cap-sampler || true"
   scp -q "${ssh_options[@]}" "root@${generator}:/opt/load/runs/${name}.*" "$dest/"
   scp -q "${ssh_options[@]}" "root@${node}:/tmp/capacity-host.log" "${dest}/host.log"
   mv "${dest}/${name}.log" "${dest}/test.log"

@@ -31,6 +31,7 @@ def host_series(path):
         nic = [int(v) for v in parts[2].split(":", 1)[1].split()]
         rss = int(parts[3]) if parts[3].strip().isdigit() else None
         rows.append((int(parts[0]), cpu, nic[1], nic[9], rss))
+    rows = sorted({row[0]: row for row in rows}.values())  # one row per second, in case two samplers ran
     series = {"rx_pps": [], "tx_pps": [], "cpu_percent": [], "steal_percent": [], "rss_mib": []}
     start = rows[0][0] if rows else 0
     for before, after in zip(rows, rows[1:]):
