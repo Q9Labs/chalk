@@ -216,6 +216,12 @@ node scripts/prod-proof/integrator.mjs
    revoke the proof key, and stop the server. Close both browser contexts before
    starting the next proof. If interrupted, use the run-ID cleanup command below.
 
+The proof bundle that every guest runs is built by `sdk-bundle.mjs`. The Leave proof builds it against the published 5.2.6 baseline client, so only
+the current client may import what that release lacks (the lobby `preconnect` helper, behind the `lobby` option). Gate's `proof-bundle` lane runs
+`sdk-bundle.test.mjs` whenever `scripts/prod-proof` or the client source changes: it bundles a client entry with and without `preconnect`, the
+current source, and the real 5.2.6 package fetched from npm and checked against its published integrity, so a bundle that breaks a nightly cut fails
+the pull request that causes it.
+
 The offline ordering regression runs with `node --test
 scripts/prod-proof/integrator-session.test.mjs`, in `pnpm test`, and in Gate's
 required `self-test` lane. It covers setup longer than the three-minute empty
