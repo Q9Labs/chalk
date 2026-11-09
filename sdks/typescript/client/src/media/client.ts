@@ -1637,11 +1637,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // One request pulls at most 16 tracks. A later batch that fails keeps what the earlier batches already pulled; the roster pulls the rest on the next poll.
   async #pullInRequests(publications: readonly CloudflareSFUPublication[], generation: number, pullBatch: (batch: readonly CloudflareSFUPublication[]) => Promise<readonly CloudflareSFURemoteTrack[]>): Promise<readonly CloudflareSFURemoteTrack[]> {
     const pulled: CloudflareSFURemoteTrack[] = [];
-    for (const batch of chunks(publications, TRACKS_PER_REQUEST)) {
+    for (const [index, batch] of [...chunks(publications, TRACKS_PER_REQUEST)].entries()) {
       try {
         pulled.push(...(await pullBatch(batch)));
       } catch (error) {
         this.#requireGeneration(generation);
+        // The failed batch is already deferred. Later batches wait out the same error instead of hitting a refusing SFU at once.
+        this.#deferRemotePulls(publications.slice((index + 1) * TRACKS_PER_REQUEST), error);
         if (!pulled.length) throw error;
         this.#reportError(error);
         break;

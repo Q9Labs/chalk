@@ -151,6 +151,19 @@ describe("pulling many remote publications", () => {
     });
   });
 
+  it("does not request the later batches while the SFU refuses the first with 429", async () => {
+    await withTimedHarness(async (h) => {
+      h.transport.uniqueRemoteMids = true;
+      await h.client.start(fakeStream());
+      h.transport.snapshot = crowd(20);
+      h.transport.remotePullFailures.push(new CloudflareSFUError("rate limited", "signaling_failed", { status: 429 }));
+      await expect(h.client.refreshRemotePublications()).rejects.toThrow("rate limited");
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(remotePulls(h)).toHaveLength(1);
+    });
+  });
+
   it("keeps the tracks an earlier request pulled when a later request fails", async () => {
     await withTimedHarness(async (h) => {
       h.transport.uniqueRemoteMids = true;
