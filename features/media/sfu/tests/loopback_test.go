@@ -68,10 +68,17 @@ func op() string { return fmt.Sprintf("op-%d", operations.Add(1)) }
 // lets them publish. The default test lease outlasts any test, so nothing renews.
 func (s *service) grantSources(t *testing.T, scopes ...protocol.Scope) {
 	t.Helper()
+	s.grantSourcesAt(t, 1, scopes...)
+}
+
+// grantSourcesAt grants every source at one revision. A later revision renews a lease that
+// a short TTL would otherwise end.
+func (s *service) grantSourcesAt(t *testing.T, revision int64, scopes ...protocol.Scope) {
+	t.Helper()
 	for _, scope := range scopes {
 		var controls []protocol.SourceControl
 		for _, source := range []string{"microphone", "camera", "screen", "screen_audio"} {
-			controls = append(controls, protocol.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: protocol.SourceGrant, Revision: 1})
+			controls = append(controls, protocol.SourceControl{ParticipantID: scope.ParticipantID, Source: source, Action: protocol.SourceGrant, Revision: revision})
 		}
 		var response protocol.SourceControlResponse
 		s.mustCall(t, "/v1/episodes/sources", protocol.SourceControlRequest{TenantID: scope.TenantID, EpisodeID: scope.EpisodeID, Controls: controls}, &response)
@@ -336,6 +343,103 @@ func (r *receiver) snapshot(kind webrtc.RTPCodecType) []*rtp.Packet {
 	return append([]*rtp.Packet(nil), r.packets[kind]...)
 }
 
+// publication is a peer that pushes known audio and video RTP to a session.
+type publication struct {
+	peer                 *peer
+	audio, video         *webrtc.TrackLocalStaticRTP
+	audioMid, videoMid   string
+	audioSent, videoSent atomic.Int64
+	stopSending          context.CancelFunc
+	senders              sync.WaitGroup
+}
+
+// stop ends the senders and waits for them.
+func (p *publication) stop() { p.stopSending(); p.senders.Wait() }
+
+// publishKnownMedia pushes a microphone and a camera track on connection conn and starts
+// sending known RTP on both, as the SDK does.
+func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope) *publication {
+	t.Helper()
+	alice := newPeer(t)
+	audio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "mic", scope.ParticipantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	video, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "cam", scope.ParticipantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, track := range []*webrtc.TrackLocalStaticRTP{audio, video} {
+		if _, err := alice.pc.AddTrack(track); err != nil {
+			t.Fatal(err)
+		}
+	}
+	offer, err := alice.pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pushOffer := alice.complete(t, offer)
+	audioMid, videoMid := alice.mid(t, audio), alice.mid(t, video)
+
+	var pushed protocol.TracksResponse
+	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{OperationID: op(),
+		Scope:              scope,
+		SessionDescription: &pushOffer,
+		Tracks: []protocol.Track{
+			{Location: protocol.LocationLocal, Mid: audioMid, TrackName: audioName, Source: "microphone"},
+			{Location: protocol.LocationLocal, Mid: videoMid, TrackName: videoName, Source: "camera"},
+		},
+	}, &pushed)
+	if pushed.SessionDescription == nil || pushed.SessionDescription.Type != "answer" || len(pushed.Tracks) != 2 || len(pushed.TrackErrors) != 0 {
+		t.Fatalf("push response: %+v", pushed)
+	}
+	if err := alice.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+
+	sendCtx, stopSending := context.WithCancel(context.Background())
+	pub := &publication{peer: alice, audio: audio, video: video, audioMid: audioMid, videoMid: videoMid, stopSending: stopSending}
+	sendLoop(sendCtx, audio, 'a', 111, &pub.audioSent, &pub.senders)
+	sendLoop(sendCtx, video, 'v', 96, &pub.videoSent, &pub.senders)
+	return pub
+}
+
+// subscribeKnownMedia pulls the publisher's two tracks on connection conn and answers the SFU's
+// offer through Renegotiate. The returned receiver records what arrives.
+func subscribeKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope, publisherConn string) (*peer, *receiver) {
+	t.Helper()
+	bob := newPeer(t)
+	received := collect(bob)
+	var pulled protocol.TracksResponse
+	svc.mustCall(t, "/v1/sessions/"+conn+"/tracks", protocol.TracksRequest{OperationID: op(),
+		Scope: scope,
+		Tracks: []protocol.Track{
+			{Location: protocol.LocationRemote, SessionID: publisherConn, TrackName: audioName},
+			{Location: protocol.LocationRemote, SessionID: publisherConn, TrackName: videoName, Simulcast: &protocol.Simulcast{PreferredRID: "h", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}},
+		},
+	}, &pulled)
+	if pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" || !pulled.RequiresImmediateRenegotiation || len(pulled.Tracks) != 2 || len(pulled.TrackErrors) != 0 {
+		t.Fatalf("pull response: %+v", pulled)
+	}
+	mids := map[string]bool{}
+	for _, track := range pulled.Tracks {
+		if track.Location != protocol.LocationRemote || track.SessionID != publisherConn || track.Mid == "" || mids[track.Mid] {
+			t.Fatalf("pulled track identity: %+v", track)
+		}
+		mids[track.Mid] = true
+	}
+	if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := bob.pc.CreateAnswer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	answerSDP := bob.complete(t, answer)
+	svc.mustCall(t, "/v1/sessions/"+conn+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scope, SessionDescription: answerSDP}, nil)
+	return bob, received
+}
+
 func eventually(t *testing.T, what string, timeout time.Duration, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -426,81 +530,10 @@ func TestLoopback(t *testing.T) {
 	connB := svc.createSession(t, "create-bob", scopeB)
 	connC := svc.createSession(t, "create-carol", scopeC)
 
-	// Peer A pushes known audio and video RTP.
-	alice := newPeer(t)
-	audio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "mic", "alice")
-	if err != nil {
-		t.Fatal(err)
-	}
-	video, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "cam", "alice")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, track := range []*webrtc.TrackLocalStaticRTP{audio, video} {
-		if _, err := alice.pc.AddTrack(track); err != nil {
-			t.Fatal(err)
-		}
-	}
-	offer, err := alice.pc.CreateOffer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pushOffer := alice.complete(t, offer)
-	audioMid, videoMid := alice.mid(t, audio), alice.mid(t, video)
-
-	var pushed protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connA+"/tracks", protocol.TracksRequest{OperationID: op(),
-		Scope:              scopeA,
-		SessionDescription: &pushOffer,
-		Tracks: []protocol.Track{
-			{Location: protocol.LocationLocal, Mid: audioMid, TrackName: audioName, Source: "microphone"},
-			{Location: protocol.LocationLocal, Mid: videoMid, TrackName: videoName, Source: "camera"},
-		},
-	}, &pushed)
-	if pushed.SessionDescription == nil || pushed.SessionDescription.Type != "answer" || len(pushed.Tracks) != 2 || len(pushed.TrackErrors) != 0 {
-		t.Fatalf("push response: %+v", pushed)
-	}
-	if err := alice.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-
-	sendCtx, stopSending := context.WithCancel(context.Background())
-	var senders sync.WaitGroup
-	var audioSent, videoSent atomic.Int64
-	sendLoop(sendCtx, audio, 'a', 111, &audioSent, &senders)
-	sendLoop(sendCtx, video, 'v', 96, &videoSent, &senders)
-	defer func() { stopSending(); senders.Wait() }()
-
-	// Peer B pulls both tracks and answers the SFU's offer through Renegotiate.
-	bob := newPeer(t)
-	received := collect(bob)
-	var pulled protocol.TracksResponse
-	svc.mustCall(t, "/v1/sessions/"+connB+"/tracks", protocol.TracksRequest{OperationID: op(),
-		Scope: scopeB,
-		Tracks: []protocol.Track{
-			{Location: protocol.LocationRemote, SessionID: connA, TrackName: audioName},
-			{Location: protocol.LocationRemote, SessionID: connA, TrackName: videoName, Simulcast: &protocol.Simulcast{PreferredRID: "h", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}},
-		},
-	}, &pulled)
-	if pulled.SessionDescription == nil || pulled.SessionDescription.Type != "offer" || !pulled.RequiresImmediateRenegotiation || len(pulled.Tracks) != 2 || len(pulled.TrackErrors) != 0 {
-		t.Fatalf("pull response: %+v", pulled)
-	}
-	mids := map[string]bool{}
-	for _, track := range pulled.Tracks {
-		if track.Location != protocol.LocationRemote || track.SessionID != connA || track.Mid == "" || mids[track.Mid] {
-			t.Fatalf("pulled track identity: %+v", track)
-		}
-		mids[track.Mid] = true
-	}
-	if err := bob.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: pulled.SessionDescription.SDP}); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := bob.pc.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	answerSDP := bob.complete(t, answer)
-	svc.mustCall(t, "/v1/sessions/"+connB+"/renegotiate", protocol.RenegotiateRequest{OperationID: op(), Scope: scopeB, SessionDescription: answerSDP}, nil)
+	// Peer A pushes known audio and video RTP; peer B pulls both tracks.
+	alice := publishKnownMedia(t, svc, connA, scopeA)
+	defer alice.stop()
+	bob, received := subscribeKnownMedia(t, svc, connB, scopeB, connA)
 
 	t.Run("audio and video arrive in order", func(t *testing.T) {
 		eventually(t, "30 audio and 30 video packets", 20*time.Second, func() bool {
@@ -538,30 +571,30 @@ func TestLoopback(t *testing.T) {
 
 	t.Run("close stops forwarding and inspect marks the track gone", func(t *testing.T) {
 		var closed protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &closed)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: alice.videoMid}}}, &closed)
 		if len(closed.Tracks) != 1 || closed.Tracks[0].AlreadyClosed {
 			t.Fatalf("close response: %+v", closed)
 		}
 		for _, track := range svc.inspect(t, connA, scopeA) {
-			if track.Mid == videoMid {
+			if track.Mid == alice.videoMid {
 				t.Fatalf("closed track still listed: %+v", track)
 			}
 		}
 		time.Sleep(300 * time.Millisecond) // packets already in flight
 		videoAfterClose, audioAfterClose := received.count(webrtc.RTPCodecTypeVideo), received.count(webrtc.RTPCodecTypeAudio)
-		sentAfterClose := videoSent.Load()
+		sentAfterClose := alice.videoSent.Load()
 		time.Sleep(600 * time.Millisecond)
 		if got := received.count(webrtc.RTPCodecTypeVideo); got != videoAfterClose {
 			t.Fatalf("video kept arriving after close: %d then %d", videoAfterClose, got)
 		}
-		if videoSent.Load() <= sentAfterClose {
+		if alice.videoSent.Load() <= sentAfterClose {
 			t.Fatal("the publisher stopped sending, so this proves nothing")
 		}
 		if received.count(webrtc.RTPCodecTypeAudio) <= audioAfterClose {
 			t.Fatal("closing video stopped the audio")
 		}
 		var again protocol.CloseTracksResponse
-		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: videoMid}}}, &again)
+		svc.mustCall(t, "/v1/sessions/"+connA+"/tracks/close", protocol.CloseTracksRequest{OperationID: op(), Scope: scopeA, Force: true, Tracks: []protocol.CloseTrack{{Mid: alice.videoMid}}}, &again)
 		if !again.Tracks[0].AlreadyClosed {
 			t.Fatal("closing an absent track was not idempotent")
 		}
@@ -589,9 +622,8 @@ func TestLoopback(t *testing.T) {
 	udpPort := svc.server.UDPPort()
 
 	// Everything closes: peers, the service and every goroutine.
-	stopSending()
-	senders.Wait()
-	_ = alice.pc.Close()
+	alice.stop()
+	_ = alice.peer.pc.Close()
 	_ = bob.pc.Close()
 	received.readersWG.Wait()
 	svc.stop()

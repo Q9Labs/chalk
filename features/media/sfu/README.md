@@ -192,6 +192,8 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
 
    `scripts/gate.sh` runs these with format, tidy and vet checks. The repo gate runs it as the `sfu` lane when anything under `features/media/sfu` changes.
 
+   **Live smoke** (`scripts/live-smoke <staging|production> --confirm <env>`) runs `TestLiveSmoke` against a deployed node instead of an in-process one: the operator certificate and an SSH tunnel reach the control API, a publisher sends audio and video RTP, a second participant must receive it and keep receiving, and the Episode's end must return `/readyz` to its earlier load. It prints `<env>-live-smoke: PASS` or `FAIL: <reason>` and no address. Production's run is the M7 hard condition; staging runs hold the staging lease. `TestLiveSmokeScenario` runs the same scenario in process, so the gate keeps it correct.
+
 2. **Chromium check** builds and starts the service, then drives headless Chromium with a fake camera and microphone. Connection A pushes with the SDK's shape (max-bundle, sendonly transceivers, camera simulcast `h`/`l`). Connection B pulls and answers the server offer. It passes when B decodes video frames and receives audio packets. With simulcast, connection C pulls `l` while B pulls `h`; the check stops and restarts each encoding twice and asserts that both keep decoding on the expected layer with their MIDs and no new SDP. It then prints each encoding's resolution and encode time. It needs Playwright's Chromium, so it is not part of the CI gate.
 
    ```sh
