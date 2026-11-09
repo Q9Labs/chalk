@@ -1,6 +1,7 @@
 // Turns the page traces of one action into stage durations (see features/scorecard/stages.mjs for what each stage covers).
 // Pure functions over events {t, k, d} with t in ms on the host clock; the latency kit records them with latency-trace.mjs.
 import { AUDIO_KEYS, RTT_KEYS, STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
+import { iceSummary } from "./latency-ice.mjs";
 import { summarize } from "./latency-stats.mjs";
 
 const find = (events, from, match) => events.find((event) => event.t >= from && match(event))?.t ?? null;
@@ -47,8 +48,12 @@ export function toggleStages(group, { t0, sender, receiver, command, visibleAt, 
     ["sync_fanout", () => frame],
     ["roster_apply", () => visibleAt],
     ["list_publications", (previous) => httpEnd(receiver, frame ?? previous, "publications")],
-    turningOn ? ["pull", afterPrevious("tracks")] : ["close_tracks", afterPrevious("tracks/close")],
-    ["renegotiate", afterPrevious("renegotiate")],
+    ...(turningOn
+      ? [
+          ["pull", afterPrevious("tracks")],
+          ["renegotiate", afterPrevious("renegotiate")],
+        ]
+      : []),
     [turningOn ? "first_media" : "track_removed", () => finalAt],
   ]);
   return {
@@ -131,7 +136,7 @@ export function audioPath(before, after, rtt) {
 /**
  * diagnosticsOf is the summary of the diagnostics sidecar: n, p50 and p95 of every round trip and stage over the kept cycles.
  * It returns undefined when no cycle carries a trace, so a run without tracing writes no sidecar.
- * @param {{ trace?: { rtt: Record<string, number | null>, stages: Record<string, number | null>, audio?: Record<string, number | null> } }[]} cycles
+ * @param {{ trace?: { rtt: Record<string, number | null>, stages: Record<string, number | null>, audio?: Record<string, number | null>, ice?: import("./latency-ice.mjs").IceReading } }[]} cycles
  */
 export function diagnosticsOf(cycles) {
   const traced = cycles.flatMap((cycle) => (cycle.trace ? [cycle.trace] : []));
@@ -142,6 +147,7 @@ export function diagnosticsOf(cycles) {
     return Object.fromEntries(keys.filter((key) => summary[key]).map((key) => [key, stat(summary[key])]));
   };
   const audio = traced.flatMap((trace) => (trace.audio ? [trace.audio] : []));
+  const ice = iceSummary(traced.map((trace) => trace.ice));
   const stageIds = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
   return {
     rtt: block(
@@ -153,5 +159,6 @@ export function diagnosticsOf(cycles) {
       stageIds,
     ),
     ...(audio.length ? { audio: block(audio, AUDIO_KEYS) } : {}),
+    ...(ice ? { ice } : {}),
   };
 }

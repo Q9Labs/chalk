@@ -23,6 +23,7 @@ import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
+import { icePairOf } from "./latency-ice.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
@@ -153,7 +154,17 @@ async function cycle(run, origin, plane, headed, ending) {
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
   ]);
   Object.assign(sample, second.delays);
-  const stages = await observe("join", async () => joinStages({ t0: second.acted.at, events: await takeTrace(pages[1], second.acted.at) }), {});
+  // The pair is read now, after the join's measured stages and before the next measured action, never inside either.
+  await observe("ice pair", () => pages[1].evaluate(() => window.proofTrace.readIce()), undefined);
+  const joined = await observe(
+    "join",
+    async () => {
+      const events = await takeTrace(pages[1], second.acted.at);
+      return { stages: joinStages({ t0: second.acted.at, events }), ice: icePairOf(events, second.acted.at) };
+    },
+    { stages: {}, ice: null },
+  );
+  const stages = joined.stages;
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
   for (const step of toggles(sender)) {
     await sleep(settleMs);
@@ -179,7 +190,12 @@ async function cycle(run, origin, plane, headed, ending) {
   ]);
   const ack = left.acted.leaveAckAt;
   Object.assign(sample, left.delays, { "action.leave_ack_ms": ack === null ? null : Math.round(ack - left.acted.at) });
-  return { sample, trace: { rtt, stages, ...(audio ? { audio } : {}) }, browser: `chromium/${pages[0].context().browser()?.version()}`, parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady } };
+  return {
+    sample,
+    trace: { rtt, stages, ...(audio ? { audio } : {}), ...(joined.ice ? { ice: joined.ice } : {}) },
+    browser: `chromium/${pages[0].context().browser()?.version()}`,
+    parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady },
+  };
 }
 
 const reason = (error) => (error instanceof Error ? error.message : String(error));

@@ -484,21 +484,34 @@ wishlist:
   - id: media.custom_sfu
     title: Custom SFU
     area: media
-    state: unknown
+    state: in_progress
     summary: >-
-      Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It is one
-      task in two parts: the SFU itself, then its integration into Chalk.
+      Chalk has its own Pion SFU, the chalk_sfu media plane, built through milestones M1 to M6 behind
+      a default-off switch. Staging and production nodes are live in sgp1, and Cloudflare SFU still
+      carries all Chalk media.
     priority: P1
     size: XL
     remaining:
       - >-
-        Part 1, the SFU: build the server that receives and forwards audio, video and screen share.
+        M7: run the internal canary, including a live audio and video smoke against the production
+        node, before production turns own SFU on.
       - >-
-        Part 2, the integration: add a MediaPlane adapter, web and native clients, credential
-        renewal and Recording capture on top of it.
-    uncertainty: The SFU design and scope are not defined yet.
+        M10: implement Recording capture for the own provider, then remove the own-provider capture
+        rejection.
+      - >-
+        M11: add primary-first placement, degraded standby admission and drain, with the capacity proof.
+      - >-
+        M12: move every Tenant and Space to the own SFU and reach monitoring parity. M8 visible-tile
+        subscriptions must land first; M13 retires Cloudflare SFU after that.
+    uncertainty: >-
+      No live media has run through the production node yet, and the design lists workload
+      combinations that do not fit the initial capacity budgets.
     theory: theory.md#constraints
     code:
+      - docs/sfu/milestones.md
+      - docs/sfu/design.md
+      - features/media/sfu
+      - apps/api/internal/adapters/chalksfu/adapter.go
       - apps/api/internal/mediaplane/service.go
       - sdks/typescript/client/src/media
       - sdks/typescript/react-native/src/space-client/create-native-space-client.ts

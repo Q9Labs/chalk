@@ -7,17 +7,31 @@ import test from "node:test";
 import { gatedActionIds, readBudgets } from "./budgets.mjs";
 import { DIAGNOSTICS_SCHEMA, diagnosticsFileName, diagnosticsReport, problemOf } from "./diagnostics.mjs";
 import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
-import { AUDIO_KEYS, STAGE_IDS } from "./stages.mjs";
+import { AUDIO_KEYS, RETIRED_STAGE_IDS, STAGE_IDS } from "./stages.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
 const actionIds = Object.keys(METRICS).filter((id) => id.startsWith("action."));
 const stat = { n: 20, p50: 120, p95: 180 };
-const summary = { rtt: { sfu_ms: stat, sync_ms: stat }, stages: { "mic_on.sync_fanout": stat, "join.sfu_tracks": { n: 0, p50: null, p95: null } }, audio: { "media.network_jitter_one_way_ms": stat } };
+const summary = {
+  rtt: { sfu_ms: stat, sync_ms: stat },
+  stages: { "mic_on.sync_fanout": stat, "join.sfu_tracks": { n: 0, p50: null, p95: null } },
+  audio: { "media.network_jitter_one_way_ms": stat },
+  ice: { pairs: { "host/srflx": 18, "relay/host": 2 }, unanswered_checks: { n: 20, p50: 0, p95: 3 } },
+};
 const sidecar = (overrides = {}) => ({
   schema: DIAGNOSTICS_SCHEMA,
   plane: "chalk_sfu",
-  cycles: [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", rtt: { sfu_ms: 201.5, sync_ms: null }, stages: { "mic_on.prepare": 12, "mic_on.sync_ack": null }, audio: { "media.network_jitter_one_way_ms": 61.5, "media.playout_ms": null } }],
+  cycles: [
+    {
+      cycle: 1,
+      timestamp: "2026-11-08T00:00:01.000Z",
+      rtt: { sfu_ms: 201.5, sync_ms: null },
+      stages: { "mic_on.prepare": 12, "mic_on.sync_ack": null },
+      audio: { "media.network_jitter_one_way_ms": 61.5, "media.playout_ms": null },
+      ice: { local_type: "host", remote_type: "srflx", requests_sent: 7, responses_received: null, read_after_ms: 412.5 },
+    },
+  ],
   summary,
   ...overrides,
 });
@@ -48,6 +62,17 @@ const hostile = {
   "unknown audio part": sidecar({ cycles: [{ cycle: 1, audio: { network_jitter_one_way_ms: 1 } }] }),
   "null audio container": sidecar({ cycles: [{ cycle: 1, audio: null }] }),
   "audio p50 above p95": sidecar({ summary: { audio: { "media.network_jitter_one_way_ms": { n: 3, p50: 9, p95: 4 } } } }),
+  "null ice container": sidecar({ cycles: [{ cycle: 1, ice: null }] }),
+  "unknown candidate type": sidecar({ cycles: [{ cycle: 1, ice: { local_type: "carrier-pigeon" } }] }),
+  "address in ice": sidecar({ cycles: [{ cycle: 1, ice: { local_type: "host", address: "192.0.2.10" } }] }),
+  "negative request count": sidecar({ cycles: [{ cycle: 1, ice: { requests_sent: -1 } }] }),
+  "negative ice read time": sidecar({ cycles: [{ cycle: 1, ice: { read_after_ms: -1 } }] }),
+  "fractional reply count": sidecar({ cycles: [{ cycle: 1, ice: { responses_received: 1.5 } }] }),
+  "null ice summary": sidecar({ summary: { ice: null } }),
+  "unknown pair type": sidecar({ summary: { ice: { pairs: { "carrier-pigeon/host": 1 } } } }),
+  "negative pair count": sidecar({ summary: { ice: { pairs: { "host/host": -1 } } } }),
+  "ice summary p50 above p95": sidecar({ summary: { ice: { unanswered_checks: { n: 3, p50: 9, p95: 4 } } } }),
+  "unknown ice summary field": sidecar({ summary: { ice: { host: "sfu.example.com" } } }),
   "unknown stage": sidecar({ cycles: [{ cycle: 1, stages: { "mic_on.unknown": 1 } }] }),
   "a host name": sidecar({ summary: { host: "sfu.example.com" } }),
   "wrong schema": sidecar({ schema: "other" }),
@@ -72,8 +97,31 @@ test("the report lists measured stages", () => {
   assert.match(text, /\| `sfu_tracks` \| call \| 0 \| – \| – \|/);
   assert.doesNotMatch(text, /Camera on/);
   assert.match(text, /\*\*Audio delay a listener adds\*\*/);
+  assert.match(text, /Selected pairs: host\/srflx 18, relay\/host 2\./);
+  assert.match(text, /Checks sent without a reply on that pair: 0 \/ 3 \(n=20\)/);
   assert.match(text, /\| `media.network_jitter_one_way_ms` \| 20 \| 120 \| 180 \| one-way network time plus listener jitter-buffer delay; capture, encode, SFU forwarding and playout are excluded \|/);
   assert.doesNotMatch(diagnosticsReport(JSON.stringify(sidecar({ summary: { ...summary, audio: undefined } }))), /Audio delay/);
+});
+
+test("a sidecar written before the turn-off stages were retired still validates and shows the remaining stages", () => {
+  const empty = { n: 0, p50: null, p95: null };
+  const retiredNull = Object.fromEntries(RETIRED_STAGE_IDS.map((id) => [id, null]));
+  const retiredSummary = Object.fromEntries(RETIRED_STAGE_IDS.map((id, index) => [id, index % 2 ? empty : stat]));
+  assert.equal(RETIRED_STAGE_IDS.length, 6);
+  assert.ok(RETIRED_STAGE_IDS.every((id) => !STAGE_IDS.includes(id)));
+  const legacy = sidecar({
+    cycles: [
+      { cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", stages: { "camera_off.prepare": 592, "camera_off.track_removed": 2, ...retiredNull } },
+      { cycle: 2, stages: { "mic_off.close_tracks": 150, "screen_stop.renegotiate": 30 } },
+    ],
+    summary: { stages: { "camera_off.track_removed": stat, "camera_off.sfu_close": stat, ...retiredSummary } },
+  });
+  assert.equal(problemOf(legacy), undefined);
+  const report = diagnosticsReport(JSON.stringify(legacy));
+  assert.doesNotMatch(report, /invalid, not shown/);
+  assert.match(report, /`track_removed`/);
+  assert.match(report, /`sfu_close`/);
+  assert.doesNotMatch(report, /close_tracks/);
 });
 
 test("the audio parts are unique and no budget names them", async () => {

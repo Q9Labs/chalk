@@ -26,6 +26,10 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - **Admission** reserves, per Episode with `n` live Participants (at least 2), `m` cameras each, microphone cost `a` and screen cost `s`: `n·(m·u + a) + n·(n-1)·(m·d + a) + n·(s + a)` packets/s. `u` is a camera's uplink (`SFU_CAMERA_UPLINK_COST`, every simulcast layer, because publishers keep sending all of them) and `d` its downlink to one subscriber (`SFU_VIDEO_STREAM_COST`, one layer). The defaults come from the SDK's camera encodings: `h` at 2.5 Mbit/s and `l` at 650 kbit/s, 30 frames/s, a frame needing `ceil(bytes/1150)` packets. That is 300 for `h` and 90 for `l`, so `d` is 300 and `u` is 390, which matches what real SDK cameras sent on a deployed node. `SFU_CAMERAS_PER_PARTICIPANT` (2 by default) is `m`: a push of one more camera gets the track error `limit_exceeded`. At the defaults a 3-person class with 2 cameras each reserves 7170 packets/s, so a 16000 budget holds two such classes and refuses the third class's first join with 429 `capacity_exceeded`; a 4-person class already reaches the 11520 Episode ceiling. A create that would push the node past `SFU_PACKET_BUDGET` is refused the same way, and the node logs a `refused` line naming the reason. `SFU_MAX_EPISODE_PARTICIPANTS` is a separate safety cap, 16 by default. A reconnect replaces its own session and is not counted twice. `/readyz` reports the budget and the reserved packets.
   - **One screen share** per Episode. A second screen publication gets the per-track error `screen_share_active`.
 - **Capture sessions** (M10) give the recorder a receive-only connection to an Episode the node hosts.
+  - The API reaches capture sessions only when `CHALK_SFU_CAPTURE_ENABLED=true` (default `false`, needs
+    `CHALK_SFU_ENABLED=true`) and its recorder fleet is configured (`CHALK_RECORDING_ENABLED=true` with the provider
+    bridge). With the flag off, an Episode on `chalk_sfu` refuses to start a Recording. Keep it off in production
+    until M10 recording parity passes. See [infrastructure/sfu/README.md](../../../infrastructure/sfu/README.md#connect-the-api).
   - `POST /v1/sessions` with `"kind":"capture"` creates one. `scope.participantId` names the capture and
     `scope.generation` is its capture epoch: a newer epoch replaces the older session and an older epoch is
     refused, as for a Participant. A capture never shares a name or a fence with a Participant. The Episode
@@ -192,6 +196,8 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
 
    `scripts/gate.sh` runs these with format, tidy and vet checks. The repo gate runs it as the `sfu` lane when anything under `features/media/sfu` changes.
 
+   **Live smoke** (`scripts/live-smoke <staging|production> --confirm <env>`) runs `TestLiveSmoke` against a deployed node instead of an in-process one: the operator certificate and an SSH tunnel reach the control API, a publisher sends audio and video RTP, a second participant must receive it and keep receiving, and the Episode's end must return `/readyz` to its earlier load. It prints `<env>-live-smoke: PASS` or `FAIL: <reason>` and no address. Production's run is the M7 hard condition; staging runs hold the staging lease. `TestLiveSmokeScenario` runs the same scenario in process, so the gate keeps it correct.
+
 2. **Chromium check** builds and starts the service, then drives headless Chromium with a fake camera and microphone. Connection A pushes with the SDK's shape (max-bundle, sendonly transceivers, camera simulcast `h`/`l`). Connection B pulls and answers the server offer. It passes when B decodes video frames and receives audio packets. With simulcast, connection C pulls `l` while B pulls `h`; the check stops and restarts each encoding twice and asserts that both keep decoding on the expected layer with their MIDs and no new SDP. It then prints each encoding's resolution and encode time. It needs Playwright's Chromium, so it is not part of the CI gate.
 
    ```sh
@@ -201,3 +207,17 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
    SIMULCAST=0 node tests/browser/chromium-check.mjs   # single-encoding camera
    ENCODINGS=3 node tests/browser/chromium-check.mjs   # adds a quarter-size "q" encoding
    ```
+
+3. **Live staging soak** (`tests/live_smoke_test.go`, `TestLiveSmokeClasses`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/sfu/capacity-calibration.md#soak-acceptance). Each Participant publishes simulcast cameras, a microphone and, for the first of a class, stretches of screen share, and everyone pulls everyone. It skips without `SFU_LIVE_URL`. The defaults are the staging soak: 3 classes of 3 Participants with 2 cameras each, 5 hours, a sample every 10 s, and a node that reports a 22,000 packets/s budget. The run fails on any microphone stall over 500 ms, a screen stall, receive-buffer drops, a wrong budget or a lost session. From a 1 hour hold it also needs the `:00` and `:30` marks inside the window and the node's 10 s CPU capture. It writes the acceptance numbers to `SFU_LIVE_RESULT`. `SFU_LIVE_SHORT=1` holds 5 minutes and skips the evidence only a long run can give. The knobs are listed above the test.
+
+   The run is a staging run, so it goes through the lease wrapper, and `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the 10 s steal and own-CPU file the test reads:
+
+   ```sh
+   ssh root@<node> 'bash -s -- 10' < features/media/sfu/scripts/node-cpu-capture > cpu.jsonl &
+   scripts/staging-sfu/staging-lock --holder soak --purpose staging-soak --run-id <label> --ttl 600 -- \
+     env SFU_LIVE_URL=<control URL> SFU_LIVE_CA=<ca> SFU_LIVE_CERT=<api cert> SFU_LIVE_KEY=<api key> \
+       SFU_LIVE_NODE_CPU=cpu.jsonl SFU_LIVE_RESULT=result.json \
+     go -C features/media/sfu test ./tests -run '^TestLiveSmokeClasses$' -count=1 -v -timeout 5h45m
+   ```
+
+   `TestLiveHarnessHoldsAClassOnALoopbackNode` runs the same driver against an in-process node in the normal gate.

@@ -8,8 +8,11 @@ export function installLatencyTrace() {
   const now = () => performance.timeOrigin + performance.now();
   const MAX_EVENTS = 4000;
   const events = [];
-  const log = (k, d) => {
-    if (events.length < MAX_EVENTS) events.push({ t: now(), k, d });
+  const log = (k, d, extra) => {
+    if (events.length >= MAX_EVENTS) return null;
+    const event = { t: now(), k, d, ...extra };
+    events.push(event);
+    return event;
   };
   const parse = (data) => {
     try {
@@ -68,12 +71,37 @@ export function installLatencyTrace() {
     );
   };
 
+  // The selected ICE candidate pair: candidate types and the pair's check counters. A reading the browser does not give is null.
+  // getStats is never called while the SDK or a measured interval runs: a connection only leaves a marker (see below), and the harness
+  // asks for the readings with proofTrace.readIce() between measured intervals.
+  const CANDIDATE_TYPES = ["host", "srflx", "prflx", "relay"];
+  const candidateType = (report, id) => {
+    const type = typeof id === "string" ? report.get(id)?.candidateType : undefined;
+    return CANDIDATE_TYPES.includes(type) ? type : null;
+  };
+  const counter = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
+  async function selectedPair(peer) {
+    const report = await peer.getStats();
+    let pair;
+    for (const row of report.values()) if (row.type === "transport" && row.selectedCandidatePairId) pair = report.get(row.selectedCandidatePairId);
+    if (!pair) for (const row of report.values()) if (row.type === "candidate-pair" && row.nominated && row.state === "succeeded") pair = row;
+    if (!pair) return null;
+    return { local: candidateType(report, pair.localCandidateId), remote: candidateType(report, pair.remoteCandidateId), requestsSent: counter(pair.requestsSent), responsesReceived: counter(pair.responsesReceived) };
+  }
+
+  const READ_TIMEOUT_MS = 2000;
+  let peerCount = 0;
+  const unread = new Map();
   const NativePeer = window.RTCPeerConnection;
   window.RTCPeerConnection = new Proxy(NativePeer, {
     construct(target, args, newTarget) {
       const peer = Reflect.construct(target, args, newTarget);
+      const token = ++peerCount;
       peer.addEventListener("connectionstatechange", () => {
-        if (peer.connectionState === "connected") log("ice_connected");
+        if (peer.connectionState !== "connected") return;
+        // Only a marker with this page's unique token for the connection: browser timestamps are not unique, so the token is what ties a reading to it.
+        const connected = log("ice_connected", undefined, { peer: token });
+        if (connected) unread.set(token, { peer, connectedAt: connected.t });
       });
       return peer;
     },
@@ -81,6 +109,24 @@ export function installLatencyTrace() {
 
   window.proofTrace = {
     take: (from) => events.filter((event) => event.t >= from),
+
+    // Reads the selected pair of every connection that connected since the last call and records it as an "ice_pair" event with the
+    // connection's token and how long after connecting it was read. The counters only grow, so a reading taken a little after connect still
+    // shows checks that went unanswered early on. A failed or slow read leaves no event for that connection and never throws.
+    async readIce() {
+      for (const [token, { peer, connectedAt }] of [...unread]) {
+        unread.delete(token);
+        let timer;
+        try {
+          const pair = await Promise.race([selectedPair(peer), new Promise((_, stop) => (timer = setTimeout(() => stop(new Error("getStats timed out")), READ_TIMEOUT_MS)))]);
+          if (pair) log("ice_pair", JSON.stringify({ peer: token, readAfterMs: Math.max(0, Math.round(now() - connectedAt)), ...pair }));
+        } catch {
+          // The sidecar reading is best effort: this connection has no ice_pair event and its cycle records no pair.
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+    },
 
     // The selected candidate pair's current round trip to the SFU, lowest across connected peer connections, in ms. A pair without a current reading stays missing: its lifetime average is not a current round trip.
     async sfuRtt() {

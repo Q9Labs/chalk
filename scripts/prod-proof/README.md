@@ -19,7 +19,7 @@ pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
-CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts # three guests, automatic Recording and Transcript
+CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts # three guests, scripted call, automatic Recording and Transcript (about 2 minutes of call; CHALK_PROOF_CAPTURE_RESTART_COMMAND adds a capture-node restart)
 pnpm prod:proof leave
 pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
@@ -99,7 +99,7 @@ or Space ids. With the `action.*` budgets in [`perf/budgets.json`](../../perf/bu
 the run fails on a p95 over budget, on any timeout, or when a plane has fewer
 kept cycles than `--samples`.
 
-Each cycle also records the runner's round trip to the SFU and to Sync (read from the SDK's own pings, with no probe traffic), a one-way audio estimate (`media.network_jitter_one_way_ms`: network plus jitter buffer, not mouth to ear), and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the sidecar `latency-diagnostics-<plane>.json` beside the card, never in the card, a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
+Each cycle also records the runner's round trip to the SFU and to Sync (read from the SDK's own pings, with no probe traffic), a one-way audio estimate (`media.network_jitter_one_way_ms`: network plus jitter buffer, not mouth to ear), the selected ICE pair of the join (candidate types and check counters), and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the sidecar `latency-diagnostics-<plane>.json` beside the card, never in the card, a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
 
 Other checks cover parts of the same journey:
 
@@ -187,26 +187,35 @@ for the own SFU's call alone and `call-artifacts` for its Recording and Transcri
 
 `pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
 `transcription_policy=automatic` on `CHALK_PROOF_MEDIA_PLANE` (default `cf_sfu`) and joins three
-headless Chromium guests with a fake camera and microphone. Each guest has its own camera colour
-and speaks its own phrase in its own 12-second slot of a looping 36-second cycle, so no speech
-overlaps. The call lasts `CHALK_PROOF_CALL_SECONDS` (default 60, minimum 40). The proof then ends
-the Episode with the SDK and requests nothing else except the MP4 export. The Recording and
-Transcript must appear on their own.
+headless Chromium guests with a fake camera and microphone. Each guest has its own camera colour.
+The call then plays a script (`call-script.mjs` holds its constants and the checks, `call-play.mjs`
+plays it) and the Recording must contain it:
+
+1. **Turns.** All three pages start their audio loop from one wall-clock instant, 3 s after every guest is live and the Capture is recording. Each page schedules its sounds on its own `AudioContext` clock anchored on that instant, logs its loop start (`Guest N loop starts at ... (+x ms from the shared start)`), and the proof fails when a page starts more than 150 ms away from it or its clock is late. Two 24-second cycles follow. In its 8-second slot a guest sounds a 0.5 s marker tone (1500, 2000 or 2500 Hz, one per guest), shows a full white picture for 0.4 s at the same instant, and speaks its phrase 1 s later.
+2. **Mute and screen share.** Guest 2 holds a 2000 Hz tone for 12 s and then mutes its microphone. Guest 1 shares a tab that plays a 3200 Hz tone (screen audio) and a green square for 24 s, then stops.
+3. **Capture-node restart (optional).** When `CHALK_PROOF_CAPTURE_RESTART_COMMAND` is set, the proof runs that shell command once, waits 30 s, and plays one more round of markers for guests 1 and 3. The command is operator-supplied (the capture nodes belong to the recorder fleet controller, not to the proof's Tenant key) and its output is never printed. When unset, the console and the evidence say the restart was skipped.
+4. **Host stop.** Guest 3 holds a 2500 Hz tone and the host stops the Recording 10 s later; the tone keeps playing for 18 s more.
 
 The `export` proof downloads the Recording MP4. The `call-artifacts` proof then fails unless:
 
-- `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the call;
+- `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the scripted call (first marker to host stop);
 - `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
 - each guest's camera colour is visible and moving in all three sampled frames of the composite;
 - each guest's own tile is live in a clear majority of the whole Recording. The proof decodes the composite at two frames per second and, for every sampled interval, takes the largest connected patch of the guest's camera colour, plus any piece of it that a label or border across the tile cut off, as that guest's tile (so another guest's animation in the same colour cannot widen it), checks that the tile fills at least 3% of the frame (so a black tile never counts) and that the picture inside moved since the previous sample (so a frozen tile never counts). A tile with no live interval fails, and so does one live in fewer than 60% of the intervals, so "3/3 guests on camera" proves each guest's video and not the total;
+- every guest's marker tone is found, anchored on guest 1's first marker, within 1.5 s of the time the script gives, with speech after it (per-guest audio completeness: tone and phrase for every cycle). Markers inside the restart window are excused;
+- the longest silence (`silencedetect` threshold -50 dB, at least 0.5 s) is no longer than the script's own longest gap between sounds plus 2.5 s, which is about 6.6 s for the default phrases. The 8 Nov proof had four silences of 10.9 to 15.7 s because each guest looped on its own clock, so its pauses were never aligned; one shared start and the derived bound catch that;
+- each marker's white flash and beep are less than 300 ms apart in the Recording (the A/V sync check; this bound is a first estimate and the first live run calibrates it);
+- guest 2's tone ends within 15 s of the mute, the screen's tone and green square within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` (the "bounded mute-enforcement window"); the console prints the measured values;
+- when `CHALK_PROOF_RECORDER_TRACKS_COMMAND` is set, every guest's markers are also checked in that guest's own recorder track, and the console prints a `Verdict:` line for each. A marker absent from the guest's own track was lost at capture. A marker in its own track but absent from the mix was lost by the mixer. A mix silence longer than the bound that a track covers was lost by the mixer; one that no track covers and the script does not cover is a gap in the script itself. The public API serves only the mixed MP4 and keeps the encrypted bundles behind a key the proof never holds, so the operator supplies the command: it runs once with `CHALK_PROOF_TRACKS_DIR` (an empty private folder in the run's encrypted evidence), `CHALK_PROOF_RECORDING_ID` and `CHALK_PROOF_PARTICIPANT_IDS` (comma separated, in guest order), and writes each participant's decrypted audio to a WAV file named after the participant id. It may leave the bundle and manifest in the folder too; everything there is uploaded only inside the encrypted evidence. Without the command the proof prints that the per-track check was skipped and judges the mix alone;
+- the Recording source is `available` (the public API sets that only after Capture completion, so it stands for the sealed encrypted bundles and manifest; the API exposes no bundle objects), has an R2 storage key, did not stop early, and its export is `ready`;
 - the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
 
-Known limits of the tile check. It attributes a tile to a guest by that guest's camera colour, and the fixture cameras are flat-colour backgrounds with moving squares, so it does not work for real camera pictures. A tile with a thin border that is frozen, next to a larger moving square of the same colour in another tile, can still pass. The earlier three-frame camera check (visible and moving) is unchanged and shares that limit: it boxes every pixel of the guest's colour.
+Known limits of the tile check. It attributes a tile to a guest by that guest's camera colour, and the fixture cameras are flat-colour backgrounds with moving squares, so it does not work for real camera pictures. A tile with a thin border that is frozen, next to a larger moving square of the same colour in another tile, can still pass. The earlier three-frame camera check (visible and moving) is unchanged and shares that limit: it boxes every pixel of the guest's colour. The flash check reads whole-frame brightness, so it assumes the composite shows the flashing guest's tile.
 
 The private run folder `.private/prod-proof/<run>/` has the Recording evidence file (duration, bytes, codecs,
 decoded frames, audio samples and levels, black, freeze and silence intervals, per-guest camera
-checks, and per-guest tile counts: sampled intervals, visible frames, live frames and live share), the Transcript evidence file (first 300 characters, word count, speaker names, matched
-words per guest), the export contact sheet, and the console prints the same summary lines.
+checks, and per-guest tile counts: sampled intervals, visible frames, live frames and live share), the script (call-script.json: every guest's loop start and each milestone time) and its measurements (script-evidence.json: marker, flash and tone times, silences, measured end times), the Transcript evidence file (first 300 characters, word count, speaker names, matched
+words per guest), the export contact sheet, the recorder's own tracks (the recorder-tracks folder, when the command is set), and the console prints the same summary lines.
 Speaker names in the Transcript are reported but not required to match the guests.
 
 ### One-time webhook setup (each environment)

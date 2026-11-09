@@ -4,17 +4,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { callSeconds, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
+import { bundleFailures, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
 import { parseVolume, recordingEvidence, recordingFailures } from "./recording-evidence.mjs";
 import { decodeFrames, tileEvidence } from "./tile-frames.mjs";
 
 const hasFfmpeg = ["ffmpeg", "ffprobe"].every((program) => spawnSync(program, ["-version"]).status === 0);
 
-test("the call must last long enough for every guest to speak", () => {
-  assert.equal(callSeconds({}), 60);
-  assert.equal(callSeconds({ CHALK_PROOF_CALL_SECONDS: "45" }), 45);
-  assert.throws(() => callSeconds({ CHALK_PROOF_CALL_SECONDS: "20" }), /at least 40/);
-  assert.throws(() => callSeconds({ CHALK_PROOF_CALL_SECONDS: "abc" }), /at least 40/);
+test("a Recording whose Capture did not complete, or whose object or export is missing, fails", () => {
+  const recording = { source: { status: "available" }, storage_provider: "r2", storage_key: "k", export: { status: "ready" } };
+  assert.deepEqual(bundleFailures(recording), []);
+  assert.deepEqual(bundleFailures({ ...recording, source: { status: "pending" } }), ["Recording source is pending, not available"]);
+  assert.deepEqual(bundleFailures({ ...recording, source: { status: "available", stop_reason: "duration_limit" } }), ["Recording source stopped early: duration_limit"]);
+  assert.deepEqual(bundleFailures({ ...recording, storage_key: null }), ["Recording has no encrypted storage object"]);
+  assert.deepEqual(bundleFailures({ ...recording, export: { status: "pending" } }), ["Recording export is pending, not ready"]);
 });
 
 const header = "chalk-proof:run · 8 Nov 2026 · 1 min\nLanguages: English\n\n";

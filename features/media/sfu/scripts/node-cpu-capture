@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Prints one JSON line per interval (default 10 s) with the node's CPU steal and the SFU
+# process's own CPU, both as a percent of the whole node. The staging soak reads the file as
+# SFU_LIVE_NODE_CPU. It runs on the node and needs no other tooling:
+#
+#   ssh root@<node> 'bash -s -- 10' < features/media/sfu/scripts/node-cpu-capture > cpu.jsonl
+#
+# It exits non-zero when the SFU process goes away, so a restart during a soak is not hidden.
+set -euo pipefail
+
+interval="${1:-10}"
+pid="$(pgrep -xo chalk-sfu)" || { echo "node-cpu-capture: chalk-sfu is not running" >&2; exit 1; }
+
+# host_ticks prints the host's cumulative steal ticks and total ticks; own_ticks the process's user plus system ticks.
+host_ticks() { awk '/^cpu /{ total = 0; for (i = 2; i <= NF; i++) total += $i; print $9, total; exit }' /proc/stat; }
+own_ticks() { awk '{ print $14 + $15 }' "/proc/${pid}/stat"; }
+
+read -r steal total < <(host_ticks)
+own="$(own_ticks)"
+while true; do
+  sleep "$interval"
+  [[ -d "/proc/${pid}" ]] || { echo "node-cpu-capture: chalk-sfu (pid ${pid}) exited" >&2; exit 1; }
+  read -r next_steal next_total < <(host_ticks)
+  next_own="$(own_ticks)"
+  awk -v at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" -v steal="$((next_steal - steal))" -v own="$((next_own - own))" -v total="$((next_total - total))" \
+    'BEGIN { if (total > 0) printf "{\"at\":\"%s\",\"stealPercent\":%.2f,\"ownPercent\":%.2f}\n", at, 100 * steal / total, 100 * own / total }'
+  steal="$next_steal" total="$next_total" own="$next_own"
+done

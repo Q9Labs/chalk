@@ -146,7 +146,9 @@ test("postflight metric failure preserves measurements as unobservable and fails
 
 test("the diagnostics sidecar travels from the latency run to the summary and the artifact, outside the card", (t) => {
   const stat = { n: 20, p50: 120, p95: 180 };
-  const sidecar = { schema: DIAGNOSTICS_SCHEMA, plane: "chalk_sfu", cycles: [], summary: { rtt: { sfu_ms: stat, sync_ms: stat }, stages: { "mic_on.sync_fanout": stat } } };
+  const pair = { local_type: "host", remote_type: "srflx", requests_sent: 8, responses_received: 5 };
+  const iceSummary = { pairs: { "host/srflx": 20 }, unanswered_checks: { n: 20, p50: 3, p95: 3 } };
+  const sidecar = { schema: DIAGNOSTICS_SCHEMA, plane: "chalk_sfu", cycles: [{ cycle: 1, ice: pair }], summary: { rtt: { sfu_ms: stat, sync_ms: stat }, stages: { "mic_on.sync_fanout": stat }, ice: iceSummary } };
   const root = resolve(import.meta.dirname, "../..");
   const collect = ({ directory }) => {
     const artifacts = join(directory, "artifacts");
@@ -168,6 +170,10 @@ test("the diagnostics sidecar travels from the latency run to the summary and th
   assert.equal(out.carried, true);
   assert.match(out.collected.stdout, /Action latency diagnostics/);
   assert.match(out.collected.stdout, /Microphone on/);
+  assert.match(out.collected.stdout, /Selected pairs: host\/srflx 20\./);
+  const uploaded = JSON.parse(readFileSync(join(out.artifacts, diagnosticsFileName("chalk_sfu")), "utf8"));
+  assert.deepEqual(uploaded.cycles[0].ice, pair);
+  assert.deepEqual(uploaded.summary.ice, iceSummary);
   assert.ok(existsSync(join(out.artifacts, diagnosticsFileName("chalk_sfu"))));
   assert.ok(existsSync(join(out.artifacts, "scorecard-chalk_sfu.json")));
 });

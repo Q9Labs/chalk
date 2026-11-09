@@ -9,6 +9,17 @@ budgets leave the initial 16,000 and 32,000. It sets what `deploy/deploy` render
 | Production `s-2vcpu-2gb` ($18) | 36,000              | 5 (35,850 reserved)           | 40%                          |
 | Staging `s-1vcpu-1gb` ($6)     | 22,000              | 3 (21,510 reserved)           | 25%                          |
 
+## Deployed values
+
+`deploy/deploy` picks the budget from the node's vCPU count (22,000 on 1, 36,000 on 2, an error on any other size) and the steal guard from the environment (40% in production, 25% elsewhere). It writes them into the node's `sfu.env`, so a redeploy cannot drift from this table. On 9 November 2026 the staging and production nodes were read, read-only over the operator SSH key, and both matched:
+
+| Node       | vCPUs | `SFU_PACKET_BUDGET` | `SFU_GUARD_MAX_STEAL_PERCENT` | `GOMEMLIMIT` | Container `--memory` |
+| ---------- | ----- | ------------------- | ----------------------------- | ------------ | -------------------- |
+| Production | 2     | 36,000              | 40                            | 768 MiB      | 1400m                |
+| Staging    | 1     | 22,000              | 25                            | 384 MiB      | 700m                 |
+
+To check again, read the same four keys from `~/.config/chalk-sfu/sfu.env` of the `chalk-sfu` user on the node (`SFU_PACKET_BUDGET`, `SFU_GUARD_MAX_STEAL_PERCENT`, `GOMEMLIMIT`, `SFU_UDP_RECEIVE_BUFFER`). The code default of 16,000 in `internal/config` applies only when the variable is unset, which no deployed node does.
+
 A class is three Participants with two cameras each, which reserves 7,170 packets/s
 ([design](design.md#workload-and-packet-rate-math)). The 22,000 and 36,000 figures are
 a model fitted to the runs below. The production soak proves five-class media
@@ -77,7 +88,7 @@ calls ride out a burst on the headroom above.
 
 - The five-hour, three-class staging soak at budget 22,000 remains unproved. Its capacity figure comes from the model above.
 - Production's five-class, three-hour result is proved only at the measured traffic below 36,000 packets/s. Capacity above 15 participants, toward the 36,000 packet budget, remains unproved.
-- The soak C summary does not establish the requested 40% production guard setting or paired 10 s steal and own-CPU samples.
+- The soak C summary does not hold paired 10 s steal and own-CPU samples. Its 40% guard setting is now confirmed from the node (see Deployed values).
 - The 06:47Z event is unexplained by steal.
 - The per-SKU bench ran each shape for 10 to 15 minutes, off the Pakistan and Dubai evening peak, with one shape at a time on each node. Capture cost was not measured (see the M10 capture reports), and the 16- and 20-person Episodes belong to the capacity run on the production-size node.
 - Reservations stay at the M2 costs. The 2 vCPU figure holds for the class shape above, not for other mixes.
@@ -85,9 +96,10 @@ calls ride out a burst on the headroom above.
 ## Soak acceptance
 
 Soak C meets the production duration (at least 3 hours), class count (5) and
-no-microphone-stall-over-500-ms criteria. Production acceptance is partial: the
-40% guard setting and paired 10 s steal and own-CPU samples still need evidence.
+no-microphone-stall-over-500-ms criteria. Production acceptance is partial: paired 10 s steal and own-CPU samples still need evidence.
 The run does not prove sustained throughput at 36,000 packets/s or staging capacity.
+
+**What the canary still needs.** The 40% guard setting no longer needs a run: the node's environment shows it, and the canary only reads it again at the start as a one-line check, because a redeploy could change it. Paired 10 s steal and own-CPU samples are genuinely needed. The whole sizing model is the ratio `own / (1 - steal)` against the 75% level where staging stalled, and soak C kept only separate aggregates (own CPU never paired with steal, steal p99 36%, maximum 68%), so nobody can say whether five classes stayed under 75% in the bursts. Only paired samples answer that, and the canary already runs three hours at five classes, so it costs nothing extra to record them.
 
 The SFU lead owns the production canary on the production node under the existing
 bench/canary rules. Its guard-setting and paired CPU/steal evidence must meet the
@@ -96,6 +108,8 @@ before cutover, not M12's post-cutover checks. Production serves no `chalk_sfu` 
 
 For the separate staging proof, run `TestLiveSmokeClasses` for 5 hours at 3 classes (budget 22,000),
 covering the :00 and :30 marks, and require no microphone stall over 500 ms.
-Record 10 s steal and own CPU. If M11 needs capacity above 15 participants toward
+Record 10 s steal and own CPU. The test fails a run that breaks the stall rule, reports another budget
+or lacks the marks or the node's 10 s capture, and writes the numbers to a JSON result file; the
+[SFU README](../../features/media/sfu/README.md#tests) has the command. If M11 needs capacity above 15 participants toward
 36,000 packets/s, measure it on the shared production node under the bench rules:
 short-lived bench droplets, at most USD 1, delete by ID.
