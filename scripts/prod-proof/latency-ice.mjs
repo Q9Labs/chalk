@@ -10,7 +10,7 @@ const candidateType = (value) => (ICE_CANDIDATE_TYPES.includes(value) ? value : 
 const counter = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
 
 /** The pair key counted in the summary: both candidate types, or "unknown" when either is missing. */
-export const pairKey = (ice) => (ice.local_type && ice.remote_type ? `${ice.local_type}/${ice.remote_type}` : "unknown");
+const pairKey = (ice) => (ice.local_type && ice.remote_type ? `${ice.local_type}/${ice.remote_type}` : "unknown");
 
 /**
  * icePairOf reads the selected pair of the first peer connection that connected at or after t0 (the one join.ice_connected times).
