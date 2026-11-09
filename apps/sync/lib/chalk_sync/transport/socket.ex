@@ -126,6 +126,15 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   def handle_info(:heartbeat_check, state), do: {:ok, %{state | heartbeat_timer: nil}}
 
+  def handle_info(:renew_presence, %{phase: :live, identity: identity} = state) do
+    case Stateholder.renew_presence(identity) do
+      :ok -> {:ok, state}
+      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
+    end
+  end
+
+  def handle_info(:renew_presence, state), do: {:ok, state}
+
   def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
     do:
       stop(
@@ -611,10 +620,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame(:ping, %{phase: :live} = state) do
     state = %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}
 
-    case Stateholder.renew_presence(state.identity) do
-      :ok -> {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
-      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
-    end
+    # The pong leaves before the Postgres renewal so the client-measured ping is not
+    # inflated by a database round trip. The renewal runs from the mailbox next.
+    send(self(), :renew_presence)
+    {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
   end
 
   defp handle_frame(:ping, state),
