@@ -485,7 +485,9 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
 - `subscription paused for congestion` and `subscription resumed after a congestion pause`
   (info) identify the subscriber by its media `connectionId` and subscription `mid`,
   with the allocated `rid`, `reason` (`insufficient_bandwidth` or `bandwidth_recovered`),
-  `estimateBps`, `provenBps`, `deliveredShare`, `probing` and `hostPressure`.
+  `estimateBps`, `provenBps`, `deliveredShare`, `probing` and `hostPressure`, and the evidence behind the estimate:
+  `ackedBps`, `lossShare` (the latest loss window), `lossy` (heavy loss reported in the last 2 s), `trend` (`normal`, `overuse` or `underuse`)
+  and the latest estimate decrease (`decreaseCause` `overuse` or `loss`, empty before the first; `decreaseAgoMs`, `decreaseFromBps`, `decreaseToBps`, `decreaseAckedBps`).
   The connection ID and MID together correlate one subscription across transitions;
   no track names or participant identities are logged.
 

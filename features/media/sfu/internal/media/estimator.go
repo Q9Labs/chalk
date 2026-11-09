@@ -53,6 +53,17 @@ const (
 	signalUnderuse
 )
 
+func (s delaySignal) String() string {
+	switch s {
+	case signalOveruse:
+		return "overuse"
+	case signalUnderuse:
+		return "underuse"
+	default:
+		return "normal"
+	}
+}
+
 // packetAck is one sent packet as the receiver's feedback reports it.
 type packetAck struct {
 	sent     int64 // node monotonic nanoseconds
@@ -74,13 +85,17 @@ type trendline struct {
 	points, next          int
 	deltas                int
 
-	threshold     float64
-	thresholdAt   int64
-	overuseSince  int64
-	overuseRuns   int
-	previousTrend float64
-	signal        delaySignal
-	modifiedTrend float64
+	threshold    float64
+	thresholdAt  int64
+	overuseSince int64
+	overuseRuns  int
+	// hotSince is the receiver time of the first update of the current run of
+	// updates whose trend stays over the threshold, and hotFor how long that run
+	// has lasted. One blip never lasts.
+	hotSince, hotFor int64
+	previousTrend    float64
+	signal           delaySignal
+	modifiedTrend    float64
 }
 
 func (t *trendline) add(sent, arrival int64) {
@@ -146,6 +161,14 @@ func (t *trendline) detect(trend float64, now int64) {
 		t.threshold = thresholdStart
 	}
 	t.modifiedTrend = trend
+	if trend > t.threshold {
+		if t.hotSince == 0 {
+			t.hotSince = now
+		}
+		t.hotFor = now - t.hotSince
+	} else {
+		t.hotSince, t.hotFor = 0, 0
+	}
 	switch {
 	case trend > t.threshold:
 		if t.overuseSince == 0 {
@@ -212,6 +235,32 @@ type ackedReport struct {
 	bytes       int
 }
 
+// decreaseCause names what last lowered an estimate.
+type decreaseCause string
+
+const (
+	causeOveruse decreaseCause = "overuse"
+	causeLoss    decreaseCause = "loss"
+)
+
+// decrease is the evidence behind the estimator's latest decrease, kept for the logs.
+type decrease struct {
+	at        int64 // node monotonic
+	cause     decreaseCause
+	from, to  float64
+	acked     float64 // bits/s the receiver acknowledged when it decreased
+	lossShare float64
+	trend     float64
+}
+
+// agoMs is how long before now the decrease happened, or 0 when there was none.
+func (d decrease) agoMs(now int64) int64 {
+	if d.at == 0 {
+		return 0
+	}
+	return time.Duration(now - d.at).Milliseconds()
+}
+
 // probeCluster is what the packets sent during one probe delivered.
 type probeCluster struct {
 	id                        uint32
@@ -256,6 +305,11 @@ type bandwidthEstimator struct {
 	// lossAt is when the receiver last reported heavy loss. A stalled node delays
 	// packets but does not lose them, so heavy loss is the path's own evidence.
 	lossAt int64
+
+	// lastDecrease is why the estimate last fell. lossShare is the packet loss of
+	// the latest loss window. Both only explain the estimate in logs.
+	lastDecrease decrease
+	lossShare    float64
 }
 
 func newBandwidthEstimator() bandwidthEstimator {
@@ -316,25 +370,30 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.overusingSince = now
 	}
 	// A queue that grows means the path is full: back off below what got through.
-	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) {
+	// The trend must stay over its threshold for decreaseSpan, the span a decrease
+	// reads, so one blip of jitter never cuts the estimate. Without acknowledged
+	// traffic to read there is no rate to back off to, so the estimate holds.
+	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) &&
+		e.trend.hotFor >= int64(decreaseSpan) {
 		acked := e.ackedOver(decreaseSpan)
 		if acked == 0 {
 			acked = e.acked()
 		}
-		e.estimate = math.Max(decreaseFactor*math.Max(acked, minEstimate), minEstimate)
-		e.decreased, e.holding = now, true
+		if acked > 0 {
+			e.lower(causeOveruse, math.Max(decreaseFactor*acked, minEstimate), acked, now)
+		}
 		e.trend.signal = signalNormal
 		e.overusingSince = 0
 	}
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)
+		e.lossShare = loss
 		if loss > lossHigh {
 			e.lossAt = now
 		}
 		switch {
 		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
-			e.estimate = math.Max(e.estimate*(1-0.5*loss), minEstimate)
-			e.decreased, e.holding = now, true
+			e.lower(causeLoss, math.Max(e.estimate*(1-0.5*loss), minEstimate), e.acked(), now)
 		case loss > lossLow:
 			e.holding = true
 		default:
@@ -350,6 +409,13 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.estimate = math.Min(e.estimate*math.Pow(increasePerSec, elapsed), maxEstimate)
 	}
 	e.increased = now
+}
+
+// lower sets the estimate to target and remembers why.
+func (e *bandwidthEstimator) lower(cause decreaseCause, target, acked float64, now int64) {
+	e.lastDecrease = decrease{at: now, cause: cause, from: e.estimate, to: target, acked: acked, lossShare: e.lossShare, trend: e.trend.modifiedTrend}
+	e.estimate = target
+	e.decreased, e.holding = now, true
 }
 
 // acked is the bits/s the receiver acknowledged over the last second of its clock, or 0.
