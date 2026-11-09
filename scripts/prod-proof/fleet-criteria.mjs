@@ -35,7 +35,7 @@ export function stalledSources(before, after, state) {
   return expectedSources(state, after.self).filter((stream) => !grew(stream, before, after));
 }
 
-// A headless page does not play audio out, so the browser reports no audio energy: audio is judged by bytes per second.
+// The byte rate is a quick pre-check of a leak. The decisive judgment is the tone at the listener (audio-decode.mjs).
 // The generated tone is about 4 kB/s; a muted microphone sends nothing or DTX comfort noise, far under this line.
 const audioLeakBytesPerSecond = 1500;
 

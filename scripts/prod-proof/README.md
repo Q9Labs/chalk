@@ -139,18 +139,18 @@ the two commands the run refuses to start; `--fault-interval-seconds 0` turns fa
 
 A P1 is one of these, printed as `P1 <reason> <call>` when it happens:
 
-| Reason                  | What it means                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                         |
-| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                     |
-| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                 |
-| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                        |
-| `mute_leak`             | A muted microphone's audio energy, or a disabled camera's frames, kept reaching another guest.                |
-| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests. |
-| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                            |
+| Reason                  | What it means                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                                               |
+| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                                           |
+| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                                       |
+| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                                              |
+| `mute_leak`             | A muted microphone's tone was still heard (or its byte rate kept going), or a disabled camera's frames kept reaching another guest. |
+| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests.                       |
+| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                                                  |
 
 `cross_tenant` is the closest check one Tenant allows: it catches media or roster entries that cross between calls of
-the same fleet, not between two Tenants. Other findings (`action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
+the same fleet, not between two Tenants. Other findings (`audio_not_decoded` (a guest with its microphone on was not heard as its tone at another guest, though its bytes advanced; checked after the join, a microphone turn-on, a rejoin and each recovery, see `audio-decode.mjs`), `action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
 an errored call such as a failed admission or an Episode that did not end) fail the run without being a P1. A
 join time includes a loaded generator: each finding carries the load per core, and the fleet starts no new call while
 the load per core is above `--max-load` (0.85). Add machines, not concurrency, when it stays high.

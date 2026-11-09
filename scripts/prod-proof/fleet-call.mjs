@@ -6,6 +6,7 @@ import { cpus, loadavg } from "node:os";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { launchGuests } from "./media.mjs";
+import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 import { createSpace, episodeEnd } from "./proofs.mjs";
 import { captureReady } from "./call-artifacts.mjs";
 import { mediaPlane, save, waitFor } from "./runtime.mjs";
@@ -69,6 +70,18 @@ async function firstRender(call, startedAt) {
   }
 }
 
+/**
+ * Bytes advancing is not audio. Every guest whose microphone is on must be decoded as its tone at every other guest
+ * (audio_not_decoded), and every muted guest must be silent there (mute_leak, a P1).
+ */
+async function checkAudio(call, label) {
+  const everyone = call.pages.map((_, guest) => guest);
+  const speaking = everyone.filter((guest) => call.state[call.participants[guest]].microphone);
+  const pairs = speaking.flatMap((speaker) => everyone.filter((listener) => listener !== speaker).map((listener) => ({ listener, speaker })));
+  if (pairs.length) await proveAudioDecoded(call.guests, { pairs }).catch((error) => call.add("audio_not_decoded", `${label}: ${error.message}`));
+  for (const speaker of everyone.filter((guest) => !speaking.includes(guest))) await proveSilenceFrom(call.guests, speaker).catch((error) => call.add("mute_leak", `${label}: ${error.message}`));
+}
+
 /** True when nothing of `participants` in `off` reaches any other page across a two-second window. */
 async function checkOff(call, guest, off, label) {
   await sleep(settleMs);
@@ -77,6 +90,7 @@ async function checkOff(call, guest, off, label) {
   const after = await sampleAll(call.pages);
   const leaks = call.pages.flatMap((_, index) => (index === guest ? [] : leakedSources(before[index], after[index], call.participants[guest], off).map((source) => `${source} of guest ${guest + 1} reached guest ${index + 1}`)));
   if (leaks.length) call.add("mute_leak", `${label}: ${leaks.join("; ")}`);
+  if (off.includes("microphone")) await proveSilenceFrom(call.guests, guest).catch((error) => call.add("mute_leak", `${label}: ${error.message}`));
 }
 
 const setLocal = (page, source, enabled) => page.evaluate(({ source, enabled }) => (source === "microphone" ? window.proofClient.media.setMicrophoneEnabled(enabled) : window.proofClient.media.setCameraEnabled(enabled)), { source, enabled });
@@ -102,6 +116,7 @@ async function toggle(call, guest, source) {
   call.state[call.participants[guest]][source] = true;
   const ms = await advancesWithin(call, joinLimitMs);
   if (ms === null) call.add("action_failed", `${source} of guest ${guest + 1} did not render again within ${joinLimitMs / 1000} s after it was turned on`);
+  else if (source === "microphone") await checkAudio(call, "microphone back on");
   call.record.actions.push({ kind: `${source}-toggle`, ms });
 }
 
@@ -126,6 +141,7 @@ async function rejoin(call, guest) {
   call.state[call.participants[guest]] = on();
   const ms = await advancesWithin(call, joinLimitMs);
   if (ms === null) call.add("action_failed", `Guest ${guest + 1} did not render again within ${joinLimitMs / 1000} s after it rejoined`);
+  else await checkAudio(call, "after the rejoin");
   call.record.actions.push({ kind: "rejoin", ms });
 }
 
@@ -184,6 +200,7 @@ async function checkpoint(call) {
     if (total > recoveryLimitMs) call.add("recovery_over_limit", `Media rendered again ${total} ms after the path came back`);
   }
   await consentHolds(call);
+  await checkAudio(call, "after recovery");
 }
 
 async function hold(call, seconds) {
@@ -226,7 +243,10 @@ async function joinAll(call) {
   // Joins are timed from the last guest's join call, so browser startup and the earlier guests' joins are outside it.
   const ms = await firstRender(call, lastStart);
   if (ms === null) call.add("join_not_rendered", `Not every guest rendered the others within ${(joinLimitMs + 15_000) / 1000} s`);
-  else if (ms > joinLimitMs) call.add("join_over_limit", `The call rendered ${ms} ms after the last guest joined`);
+  else {
+    if (ms > joinLimitMs) call.add("join_over_limit", `The call rendered ${ms} ms after the last guest joined`);
+    await checkAudio(call, "after the join");
+  }
   return ms;
 }
 
