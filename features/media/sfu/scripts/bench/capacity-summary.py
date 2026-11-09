@@ -42,8 +42,9 @@ def host_series(path):
         if total <= 0:
             continue
         idle = (after[1][3] + after[1][4]) - (before[1][3] + before[1][4])
-        series["cpu_percent"].append(100 * (total - idle) / total)
-        series["steal_percent"].append(100 * (after[1][7] - before[1][7]) / total)
+        steal = after[1][7] - before[1][7]
+        series["cpu_percent"].append(100 * (total - idle - steal) / total)  # our own use of the node's vCPUs
+        series["steal_percent"].append(100 * steal / total)
         series["rx_pps"].append((after[2] - before[2]) / seconds)
         series["tx_pps"].append((after[3] - before[3]) / seconds)
         if after[4]:
