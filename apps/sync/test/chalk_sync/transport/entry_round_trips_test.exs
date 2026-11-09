@@ -56,11 +56,11 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
 
   defp traced_entry(port, identity) do
     {:ok, client} = Client.connect(port, "/v1/sync")
-    collector = start_collector()
-    :dbg.tracer(:process, {fn message, state -> collect(message, state, collector) end, %{}})
-    :dbg.p(:all, [:call, :timestamp])
-    :dbg.tpl(Postgrex, :query, 4, [{:_, [], [{:return_trace}]}])
-    :dbg.tpl(DBConnection, :transaction, 3, [{:_, [], [{:return_trace}]}])
+    tracer = spawn_link(fn -> collect_loop([]) end)
+    :erlang.trace(:all, true, [:call, :timestamp, {:tracer, tracer}])
+    trace_pattern = [{:_, [], [{:return_trace}]}]
+    :erlang.trace_pattern({Postgrex, :query, 4}, trace_pattern, [:global])
+    :erlang.trace_pattern({DBConnection, :transaction, 3}, trace_pattern, [:global])
 
     client =
       Client.send_json(client, %{
@@ -72,20 +72,18 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
       })
 
     assert {:json, %{"type" => "welcome"}, _client} = Client.recv(client)
-    :dbg.stop()
-    send(collector, {:done, self()})
+    :erlang.trace(:all, false, [:call])
+    :erlang.trace_pattern({Postgrex, :query, 4}, false, [:global])
+    :erlang.trace_pattern({DBConnection, :transaction, 3}, false, [:global])
+    send(tracer, {:done, self()})
     assert_receive {:statements, statements}, 2_000
     statements
   end
 
-  defp start_collector do
-    spawn_link(fn -> collect_loop([]) end)
-  end
-
   defp collect_loop(acc) do
     receive do
-      {:call, entry} -> collect_loop([entry | acc])
       {:done, from} -> send(from, {:statements, summarize(Enum.reverse(acc))})
+      event -> collect_loop([event | acc])
     end
   end
 
@@ -93,55 +91,33 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
   defp summarize(events) do
     events
     |> Enum.reduce({[], %{}}, fn
-      {:call, pid, kind, sql, at}, {done, open} ->
-        {done, Map.update(open, {pid, kind}, [{sql, at}], &[{sql, at} | &1])}
+      {:trace_ts, pid, :call, {Postgrex, :query, [_conn, sql | _]}, ts}, {done, open} ->
+        {done, push(open, {pid, :query}, {label(sql), micros(ts)})}
 
-      {:return, pid, kind, at}, {done, open} ->
-        case Map.get(open, {pid, kind}) do
-          [{sql, started} | rest] ->
-            {[{sql, at - started} | done], Map.put(open, {pid, kind}, rest)}
+      {:trace_ts, pid, :call, {DBConnection, :transaction, _args}, ts}, {done, open} ->
+        {done, push(open, {pid, :transaction}, {"BEGIN..COMMIT", micros(ts)})}
 
-          _unmatched ->
-            {done, open}
-        end
+      {:trace_ts, pid, :return_from, {Postgrex, :query, 4}, _value, ts}, acc ->
+        pop(acc, {pid, :query}, micros(ts))
+
+      {:trace_ts, pid, :return_from, {DBConnection, :transaction, 3}, _value, ts}, acc ->
+        pop(acc, {pid, :transaction}, micros(ts))
+
+      _other, acc ->
+        acc
     end)
     |> elem(0)
     |> Enum.reverse()
   end
 
-  defp collect(
-         {:trace_ts, pid, :call, {Postgrex, :query, [_conn, sql | _]}, ts},
-         state,
-         collector
-       ) do
-    send(collector, {:call, {:call, pid, :query, label(sql), micros(ts)}})
-    state
-  end
+  defp push(open, key, entry), do: Map.update(open, key, [entry], &[entry | &1])
 
-  defp collect({:trace_ts, pid, :call, {DBConnection, :transaction, _args}, ts}, state, collector) do
-    send(collector, {:call, {:call, pid, :transaction, "BEGIN..COMMIT", micros(ts)}})
-    state
+  defp pop({done, open}, key, finished_at) do
+    case Map.get(open, key) do
+      [{sql, started} | rest] -> {[{sql, finished_at - started} | done], Map.put(open, key, rest)}
+      _unmatched -> {done, open}
+    end
   end
-
-  defp collect(
-         {:trace_ts, pid, :return_from, {Postgrex, :query, 4}, _value, ts},
-         state,
-         collector
-       ) do
-    send(collector, {:call, {:return, pid, :query, micros(ts)}})
-    state
-  end
-
-  defp collect(
-         {:trace_ts, pid, :return_from, {DBConnection, :transaction, 3}, _value, ts},
-         state,
-         collector
-       ) do
-    send(collector, {:call, {:return, pid, :transaction, micros(ts)}})
-    state
-  end
-
-  defp collect(_message, state, _collector), do: state
 
   defp label(sql) when is_binary(sql),
     do: sql |> String.split() |> Enum.take(12) |> Enum.join(" ")
