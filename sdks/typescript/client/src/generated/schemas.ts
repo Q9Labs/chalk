@@ -267,6 +267,7 @@ export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateRe
 
 export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
+    publications: Schema.optional(Schema.NullOr(CloudflareSFUPublicationsResponseSchema)),
     requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
     sessionDescription: Schema.optional(
       Schema.NullOr(
@@ -316,6 +317,7 @@ export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIRespon
 export const CloudflareSFUTracksRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     connection_id: Schema.String.check(Schema.isMinLength(1)),
+    pull_published_audio: Schema.optional(Schema.Boolean),
     session_description: Schema.optional(
       Schema.NullOr(
         Schema.Struct({

@@ -989,6 +989,7 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 				"serverLayerAdaptation": grant.ClientPayload.Capabilities.ServerLayerAdaptation,
 				"subscriptionState":     grant.ClientPayload.Capabilities.SubscriptionState,
 				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
+				"pullPublished":         grant.ClientPayload.Capabilities.PullPublished,
 			},
 		}
 

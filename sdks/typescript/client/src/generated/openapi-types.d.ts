@@ -1486,6 +1486,7 @@ export interface components {
     CloudflareSFUTracksAPIResponse: components["schemas"]["CloudflareSFUUpdateTracksAPIResponse"];
     CloudflareSFUTracksRequest: {
       connection_id: string;
+      pull_published_audio?: boolean;
       session_description?: {
         sdp: string;
         type: string;
@@ -1506,6 +1507,7 @@ export interface components {
       }[];
     };
     CloudflareSFUUpdateTracksAPIResponse: {
+      publications?: components["schemas"]["CloudflareSFUPublicationsResponse"] | null;
       requiresImmediateRenegotiation?: boolean;
       sessionDescription?: {
         sdp: string;

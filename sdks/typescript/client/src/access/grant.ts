@@ -27,6 +27,8 @@ export type ChalkSFUCapabilities = {
   /** The SFU reports whether it delivers each remote video, and pauses one in place on request. */
   readonly subscriptionState: boolean;
   readonly iceRestart: boolean;
+  /** The API reads the publication list and pulls the other Participants' audio in the first `tracks` request. */
+  readonly pullPublished: boolean;
 };
 export type CloudflareSFUClientPayload = {
   readonly connectionId: string;
@@ -212,7 +214,7 @@ function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): Chalk
 }
 function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
   const flags = isRecord(value) ? value : {};
-  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true };
+  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true, pullPublished: flags.pullPublished === true };
 }
 function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
   if (!Array.isArray(value)) throw new AccessGrantError();

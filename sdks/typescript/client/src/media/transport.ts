@@ -61,20 +61,11 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       if (input.allowPartialRemoteTracks) query.set("allow_partial_remote_tracks", "true");
       if (input.replacementCause) query.set("replacement_cause", input.replacementCause);
       const path = query.size ? `tracks?${query}` : "tracks";
-      const response = await request<{
-        readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
-        readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
-          readonly publication_id?: string;
-        })[];
-        readonly requiresImmediateRenegotiation?: boolean;
-      }>(path, {
+      const response = await request<TracksWireResponse>(path, {
         method: "POST",
         body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks }),
       });
-      return {
-        ...response,
-        tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })),
-      };
+      return tracksResponse(response);
     },
     closeTracks: async (input) =>
       request<CloudflareSFUTracksResponse>("tracks/close", {
@@ -137,27 +128,46 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
       });
     },
-    listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => {
-      const response = await request<{
-        incarnation: number;
-        sequence: number;
-        publications: readonly {
-          participant_id?: string;
-          participant_session_id?: string;
-          source: MediaPublicationSource;
-          publication_id: string;
-        }[];
-      }>("publications");
-      return {
-        incarnation: response.incarnation,
-        sequence: response.sequence,
-        publications: response.publications.map((publication) => ({
-          participantId: publication.participant_id ?? publication.participant_session_id ?? "",
-          source: publication.source,
-          publicationId: publication.publication_id,
-        })),
-      };
+    listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
+    pullPublishedAudio: async (input) => {
+      const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks?allow_partial_remote_tracks=true", {
+        method: "POST",
+        body: JSON.stringify({ connection_id: input.connectionId, pull_published_audio: true }),
+      });
+      if (!publications) throw new CloudflareSFUError("The pull-published response carried no publications", "signaling_failed");
+      return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };
     },
+  };
+}
+type TracksWireResponse = {
+  readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
+  readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
+    readonly publication_id?: string;
+  })[];
+  readonly requiresImmediateRenegotiation?: boolean;
+};
+type WirePublicationList = {
+  readonly incarnation: number;
+  readonly sequence: number;
+  readonly publications: readonly {
+    readonly participant_id?: string;
+    readonly participant_session_id?: string;
+    readonly source: MediaPublicationSource;
+    readonly publication_id: string;
+  }[];
+};
+function tracksResponse(response: TracksWireResponse): CloudflareSFUTracksResponse {
+  return { ...response, tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })) };
+}
+function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublicationSnapshot {
+  return {
+    incarnation: response.incarnation,
+    sequence: response.sequence,
+    publications: response.publications.map((publication) => ({
+      participantId: publication.participant_id ?? publication.participant_session_id ?? "",
+      source: publication.source,
+      publicationId: publication.publication_id,
+    })),
   };
 }
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {

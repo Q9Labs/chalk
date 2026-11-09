@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import type { CloudflareSFUBootstrap, CloudflareSFUCloseTrackRequest, CloudflareSFULocalOfferDiagnostic, CloudflareSFUPublicationSnapshot, CloudflareSFUSessionDescription, CloudflareSFUSignalingTransport, CloudflareSFUTrackRequest, CloudflareSFUTracksResponse } from "./cloudflare-sfu";
@@ -50,6 +50,65 @@ it("starts ICE candidate gathering when the peer connection is created", () => {
   expect(peerConnectionFactory).toHaveBeenCalledWith(expect.objectContaining({ bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 }));
 });
 
+describe("pull-published first poll", () => {
+  const pullPublished: CloudflareSFUBootstrap = { connectionId: "connection-1", iceServers: [], capabilities: { serverLayerAdaptation: true, subscriptionState: true, iceRestart: true, pullPublished: true } };
+  const room = (): CloudflareSFUPublicationSnapshot => ({
+    incarnation: 1,
+    sequence: 1,
+    publications: [
+      { participantId: "participant-2", source: "microphone", publicationId: versionedPublicationID("remote-1", "0", "microphone-a") },
+      { participantId: "participant-2", source: "camera", publicationId: versionedPublicationID("remote-1", "1", "camera-a") },
+    ],
+  });
+
+  it("lists and pulls the audio in one request, then pulls only the video", async () => {
+    const remote: string[] = [];
+    await withTimedHarness(
+      async (h) => {
+        h.transport.snapshot = room();
+        await h.client.start(fakeStream());
+        await h.client.refreshRemotePublications();
+
+        expect(h.transport.pullPublishedCalls).toBe(1);
+        expect(h.transport.listPublicationCalls).toBe(0);
+        expect(h.transport.renegotiateInputs.map((input) => input.sessionDescription.type)).toEqual(["answer"]);
+        const remoteSources = h.transport.addInputs.flatMap((input) => input.tracks.filter((track) => track.location === "remote").map((track) => track.trackName));
+        expect(remoteSources).toEqual(["microphone-a", "camera-a"]);
+        expect(remote.sort()).toEqual(["camera", "microphone"]);
+
+        await h.client.refreshRemotePublications();
+        expect(h.transport.pullPublishedCalls).toBe(1);
+        expect(h.transport.listPublicationCalls).toBe(1);
+      },
+      { bootstrap: pullPublished, onRemoteTrack: (publication) => remote.push(publication.source) },
+    );
+  });
+
+  it("lists the publications when the plane does not advertise the capability", async () => {
+    await withTimedHarness(async (h) => {
+      h.transport.snapshot = room();
+      await h.client.start(fakeStream());
+      await h.client.refreshRemotePublications();
+      expect(h.transport.pullPublishedCalls).toBe(0);
+      expect(h.transport.listPublicationCalls).toBe(1);
+    });
+  });
+
+  it("answers the offer and pulls nothing when the room has no audio", async () => {
+    await withTimedHarness(
+      async (h) => {
+        h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [room().publications[1]!] };
+        await h.client.start(fakeStream());
+        await h.client.refreshRemotePublications();
+        expect(h.transport.pullPublishedCalls).toBe(1);
+        expect(h.transport.listPublicationCalls).toBe(0);
+        expect(h.transport.addInputs.filter((input) => input.tracks.some((track) => track.trackName === "camera-a"))).toHaveLength(1);
+      },
+      { bootstrap: pullPublished },
+    );
+  });
+});
+
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {
   return { connectionId, stunServer: "stun:example.test" };
 }
@@ -80,6 +139,7 @@ function createHarness(
     readonly unreportedVideoTileWaitMs?: number;
     readonly onReceiveHealth?: (event: ConnectionReportTransportEvent) => void;
     readonly bootstrap?: CloudflareSFUBootstrap;
+    readonly onRemoteTrack?: (publication: { readonly source: string }) => void;
   } = {},
 ) {
   const peers: FakePeerConnection[] = [];
@@ -101,6 +161,7 @@ function createHarness(
     onDiagnostic: options.onDiagnostic,
     onScreenEnded: options.onScreenEnded,
     onReceiveHealth: options.onReceiveHealth,
+    onRemoteTrack: options.onRemoteTrack,
     peerConnectionFactory,
   });
   return { client, peers, transport, peerConnectionFactory };
@@ -243,11 +304,26 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
     this.renegotiateInputs.push(input);
     if (this.failRenegotiation) throw new CloudflareSFUError("renegotiation failed", "signaling_failed");
   }
+  pullPublishedCalls = 0;
+  async pullPublishedAudio(input: { readonly connectionId: string }): ReturnType<NonNullable<CloudflareSFUSignalingTransport["pullPublishedAudio"]>> {
+    this.pullPublishedCalls++;
+    const snapshot = this.#currentSnapshot();
+    const audio = snapshot.publications.filter((publication) => publication.participantId !== "participant-1" && (publication.source === "microphone" || publication.source === "screen_audio"));
+    if (audio.length === 0) return { snapshot, response: {} };
+    const tracks = audio.map((publication): CloudflareSFUTrackRequest => {
+      const { connectionId, trackName } = parseCloudflareSFUPublicationID(publication.publicationId);
+      return { location: "remote", sessionId: connectionId, trackName };
+    });
+    return { snapshot, response: await this.addTracks({ connectionId: input.connectionId, tracks, allowPartialRemoteTracks: true }) };
+  }
   async listPublications(): Promise<CloudflareSFUPublicationSnapshot> {
     this.listPublicationCalls++;
     const next = this.publicationListSnapshots.shift();
     if (this.blockPublicationList) await new Promise<void>((resolve) => this.#publicationListResolvers.push(resolve));
-    return next ?? { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
+    return next ?? this.#currentSnapshot();
+  }
+  #currentSnapshot(): CloudflareSFUPublicationSnapshot {
+    return { ...this.snapshot, sequence: this.snapshot.sequence + this.#localPublicationRevision, publications: [...this.snapshot.publications, ...this.localPublications.values()] };
   }
   blockConnection(connectionId: string): void {
     this.#blockedConnections.set(connectionId, () => undefined);

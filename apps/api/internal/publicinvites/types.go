@@ -396,6 +396,7 @@ type PublicAccessCapabilities struct {
 	ServerLayerAdaptation bool
 	SubscriptionState     bool
 	ICERestart            bool
+	PullPublished         bool
 }
 
 type SpacePublicInvite = ManagedInvite
