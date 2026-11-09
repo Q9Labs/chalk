@@ -134,6 +134,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // Bumped when the remote participants or tile visibility change, so a reconcile that raced the change pulls again.
   #remotePullInputRevision = 0;
   readonly #subscribedPublicationIds = new Set<string>();
+  #syncPublications: readonly MediaPublication[] = [];
   readonly #videoTiles: VideoTileSubscriptions;
   readonly #stopObservingVideoTiles: () => void;
   #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
@@ -218,6 +219,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
+    if (projectionState === "unavailable") this.#syncPublications = [];
+    else if (publications) this.#syncPublications = publications;
     if (projectionState === "unavailable") this.#receiveHealth.projection([]);
     else if (publications) this.#receiveHealth.projection(publications);
     if (projectionState === "unavailable") this.#receiveProgress.suspend();
@@ -321,6 +324,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#pollFailedPull = false;
     try {
       const transport = this.#requireTransport();
+      await this.#pullSyncAdvertisedPublications(generation);
       const authoritative = await this.#listOrPullPublications(transport, generation);
       this.#requireGeneration(generation);
       this.#republishUnlistedLocalPublications(authoritative);
@@ -348,6 +352,46 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       // owns every recovery (a gone connection, a retryable pull) exactly as it does for a later poll.
       return this.#signal(() => transport.listPublications());
     }
+  }
+  // A Sync media item already names the publication, and a publication ID carries the session and track a pull needs, so a
+  // new one is pulled before the registry listing confirms it. The listing that follows stays the authority: it prunes,
+  // recovers and retries. A failed early pull only leaves the publication to that listing.
+  async #pullSyncAdvertisedPublications(generation: number): Promise<void> {
+    if (!this.#started || !this.#capabilities().subscriptionState) return;
+    const advertised = desiredRemotePublications(
+      this.#syncPublications.flatMap(({ participantId, source, enabled, publicationId }) => (enabled && publicationId !== null ? [{ participantId, source, publicationId }] : [])).filter((publication) => this.#canSubscribeToRemotePublication(publication)),
+      this.#participantId,
+    );
+    const fresh = new Map([...this.#visibleRemotePublications(advertised)].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId));
+    const pending = this.#pendingRemotePulls(fresh);
+    if (pending.length === 0) return;
+    const epoch = this.#connectionEpoch;
+    let pulled: readonly CloudflareSFURemoteTrack[] | null;
+    try {
+      pulled = await this.#pull(pending, generation);
+    } catch (error) {
+      if (generation !== this.#generation || this.#stopped) throw error;
+      // The listing owns retry and recovery; do not let this attempt's backoff delay it.
+      for (const publication of pending) this.#remotePullRetries.delete(publication.publicationId);
+      return;
+    }
+    this.#requireGeneration(generation);
+    if (pulled === null) return;
+    if (epoch !== this.#connectionEpoch) {
+      for (const publication of pulled) safeStopTrack(publication.track, this.#reportError.bind(this));
+      return;
+    }
+    const next = new Map(this.#remoteTracks);
+    for (const publication of pulled) next.set(publicationKey(publication), publication);
+    stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
+    this.#remoteTracks.clear();
+    for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
+    for (const publication of pulled) {
+      this.#subscribedPublicationIds.add(publication.publicationId);
+      this.#invokeListener(() => this.#onRemoteTrack?.(publication));
+    }
+    this.#publishSnapshot();
+    this.#emitRemote();
   }
   // The registry drops a publication when listeners keep failing to pull it.
   // A publisher that still believes it is sending must publish again, so
