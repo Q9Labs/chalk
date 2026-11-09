@@ -11,7 +11,7 @@ const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.j
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: sdkEntry, observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: sdkEntry, camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
@@ -19,7 +19,13 @@ function checkMediaPlane(grant, guest, plane) {
   check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
 }
 
-async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
+// A run builds the bundle once per entry: the source cannot change under it, and a fleet joins hundreds of calls.
+const bundles = new Map();
+function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
+  if (!bundles.has(entry)) bundles.set(entry, buildSdkBundle(entry));
+  return bundles.get(entry);
+}
+async function buildSdkBundle(entry) {
   const result = await build({
     stdin: {
       contents: `import {createSpaceClient} from ${JSON.stringify(entry)};
@@ -93,7 +99,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
       // An array of speech tracks gives each guest its own voice at equal volume.
       const ownVoice = Array.isArray(speech);
-      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined, turns: ownVoice });
+      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined, turns: ownVoice, camera: options.camera });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       if (options.trace) await context.addInitScript(installLatencyTrace); // After the fixture: it wraps the fixture's RTCPeerConnection.
       const page = await context.newPage();

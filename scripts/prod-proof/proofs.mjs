@@ -10,7 +10,8 @@ import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
-export async function prepareIntegration(run, webhooks) {
+// Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
+export async function createProofKey(run) {
   run.signal.throwIfAborted();
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
     name: run.label,
@@ -21,6 +22,10 @@ export async function prepareIntegration(run, webhooks) {
   run.apiKey = key.secret;
   await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, run.signal);
+  return key.api_key.id;
+}
+export async function prepareIntegration(run, webhooks) {
+  await createProofKey(run);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),

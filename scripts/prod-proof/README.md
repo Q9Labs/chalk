@@ -111,6 +111,66 @@ Other checks cover parts of the same journey:
 | Leave plan (`pnpm prod:proof leave`)                                                    | The `leave()` median until the Sync acknowledgement, from five samples, against the published 5.2.6 client | the Space's plane, Cloudflare by default | `action.leave_ack_ms` uses the same acknowledgement probe (`leave-observation.mjs`), per plane with N samples. The plan keeps its relative gate for promote. |
 | `publisher-leaves` in `pnpm prod:sfu-e2e`                                               | One sample of leave until the others drop the publisher                                                    | one plane per run                        | The same definition as `action.leave_ms`, as a pass or fail check.                                                                                           |
 
+## Canary fleet
+
+`pnpm prod:fleet` is the volume half of the M7 canary exit in
+[`docs/sfu/milestones.md`](../../docs/sfu/milestones.md#m7--internal-canary-and-live-verification): scripted joins and
+fault trials pass, plus at least 200 calls and 50 call-hours with no P1. `pnpm prod:canary` proves the thresholds with
+two guests at a time; the fleet runs many 2-to-6-guest calls in parallel on one machine and counts what it ran.
+
+Every call is a new Episode (in a new Space, or in one of the `--spaces` you list) with real SDK clients in headless
+Chromium and generated camera and tones. A call joins its guests, then works through a shuffled script: a microphone
+mute and unmute, usually a camera off and on, a screen share in `--screen-fraction` of the calls, a hard leave and
+rejoin of one guest in `--rejoin-fraction` of them, and holds between them. Half of the calls end with one guest muted.
+`--recording-fraction` of the calls use a Space with an automatic Recording and check afterwards that a Recording
+source became available; it needs fresh Spaces, only one such call runs at a time, and it stays at 0 until the Capture pool is
+known to be free.
+
+Fault trials are fleet-wide, because every call on the machine shares its media path. Every `--fault-interval-seconds`
+the fleet waits until all running calls reach a checkpoint, runs `CHALK_CANARY_FAULT_DOWN`, holds the fault for
+`--fault-seconds`, has every call prove that its camera video stalled, runs `CHALK_CANARY_FAULT_UP`, and times how long
+each call takes to render again. Each call in a pulse is one fault trial, and no call joins during a pulse. Without
+the two commands the run refuses to start; `--fault-interval-seconds 0` turns faults off.
+
+A P1 is one of these, printed as `P1 <reason> <call>` when it happens:
+
+| Reason                  | What it means                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                         |
+| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                     |
+| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                 |
+| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                        |
+| `mute_leak`             | A muted microphone's audio energy, or a disabled camera's frames, kept reaching another guest.                |
+| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests. |
+| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                            |
+
+`cross_tenant` is the closest check one Tenant allows: it catches media or roster entries that cross between calls of
+the same fleet, not between two Tenants. Other findings (`action_failed`, `fault_not_stalled`, `recording_failed`, and
+an errored call such as a failed admission or an Episode that did not end) fail the run without being a P1. A
+join time includes a loaded generator: each finding carries the load per core, and the fleet starts no new call while
+the load per core is above `--max-load` (0.85). Add machines, not concurrency, when it stays high.
+
+The fleet never picks a target. `--allow-host` names the API host a run may use and must match the proof configuration, so a
+configuration that points at production fails unless you named it on purpose. It reads `CHALK_PROOF_*` like every proof,
+or a file with `--env-file`. It stops starting calls at the first P1 unless you pass `--no-stop-on-p1`, lets the running
+calls end, and writes a summary file and a calls file under `.private/prod-proof/<run>/`. The summary has call
+and call-hour counts, join and recovery percentiles, fault trials, findings by reason and `meetsVolumeExit`. Runs on
+several machines are one result:
+
+```sh
+CHALK_PROOF_CONFIG_SOURCE=env CHALK_PROOF_MEDIA_PLANE=chalk_sfu \
+  CHALK_CANARY_FAULT_DOWN='iptables -I OUTPUT -p udp ! --dport 53 -j DROP' \
+  CHALK_CANARY_FAULT_UP='iptables -D OUTPUT -p udp ! --dport 53 -j DROP' \
+  pnpm prod:fleet --allow-host <api host> --concurrency 6
+pnpm prod:fleet --dry-run --calls 20 --call-hours 2   # no API and no browsers: scheduler and summary only
+pnpm prod:fleet --merge machine-1/fleet-calls.json machine-2/fleet-calls.json
+```
+
+On Instabox, a call of 4 guests costs about one vCPU of the generator, and the camera is 640x360 (`--camera`) to keep
+that down. One 8 vCPU, 16 GiB machine ($0.068 an hour) fits about 6 concurrent calls; 50 call-hours then take about 8 hours
+of wall time. Take the staging lease (`scripts/staging-sfu/staging-lock`) before a run against staging, and release it
+afterwards. Fault commands need root on the machine; the example blocks all outgoing UDP except DNS, which stops the media path without naming a node address.
+
 ## Manual hosted integrator proof
 
 Run the integrator proof alone. Finish and clean it up before starting any other
