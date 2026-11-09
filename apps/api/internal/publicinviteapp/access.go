@@ -423,6 +423,7 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			ServerLayerAdaptation: flags["serverLayerAdaptation"] == true,
 			SubscriptionState:     flags["subscriptionState"] == true,
 			ICERestart:            flags["iceRestart"] == true,
+			UnifiedSignaling:      flags["unifiedSignaling"] == true,
 		}
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 	case mediaplane.ProviderCloudflareSFU:

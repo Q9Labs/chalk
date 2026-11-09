@@ -6,8 +6,9 @@
 /**
  * @typedef {object} StageSpec
  * @property {string} id  Short name, unique inside its action group.
- * @property {"previous" | "call"} from  "previous": time since the last stage of the chain that was reached (the first one counts from the call).
+ * @property {"previous" | "call" | "span"} from  "previous": time since the last stage of the chain that was reached (the first one counts from the call).
  *   "call": time since the call started, for a step that runs beside the chain.
+ *   "span": time spent inside one SDK step, not time since a point.
  * @property {string} description
  */
 /**
@@ -82,6 +83,9 @@ export const STAGE_GROUPS = [
       { id: "sfu_tracks", from: "call", description: "join() until the first tracks reply (publish or pull)" },
       { id: "sfu_renegotiate", from: "call", description: "join() until the first renegotiate reply" },
       { id: "ice_connected", from: "call", description: "join() until the first peer connection is connected" },
+      { id: "credential_publications", from: "span", description: "time inside the media credential provider for the first listPublications call (a network round trip here means the provider is not cached)" },
+      { id: "credential_tracks", from: "span", description: "time inside the media credential provider for the first tracks call" },
+      { id: "credential_renegotiate", from: "span", description: "time inside the media credential provider for the first renegotiate call" },
     ],
   },
 ];

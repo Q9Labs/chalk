@@ -72,9 +72,11 @@ type Adapter struct {
 	client        *http.Client
 	applicationID string
 	iceServers    []mediaplane.ICEServer
-	relay         RelaySource
-	backoff       time.Duration
-	captureReplay *captureplane.ReplayCache
+	// unifiedSignaling is advertised in each join so the SDK uses the single signalling URL.
+	unifiedSignaling bool
+	relay            RelaySource
+	backoff          time.Duration
+	captureReplay    *captureplane.ReplayCache
 	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
 	// join the node answers for another incarnation is refused as stale.
 	incarnation string
@@ -158,13 +160,14 @@ func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFU
 		return nil, fmt.Errorf("%w: node ID %q", ErrMissingConfig, node.ID)
 	}
 	return &Adapter{
-		node:          node.ID,
-		base:          base,
-		client:        client,
-		applicationID: config.ApplicationID,
-		iceServers:    iceServersOf(config.STUNURLs),
-		backoff:       retryBackoff,
-		captureReplay: captureplane.NewReplayCache(captureReplayCapacity),
+		node:             node.ID,
+		base:             base,
+		client:           client,
+		applicationID:    config.ApplicationID,
+		iceServers:       iceServersOf(config.STUNURLs),
+		unifiedSignaling: config.UnifiedSignaling,
+		backoff:          retryBackoff,
+		captureReplay:    captureplane.NewReplayCache(captureReplayCapacity),
 	}, nil
 }
 
@@ -377,7 +380,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "unifiedSignaling": a.unifiedSignaling},
 		},
 		Metadata: a.metadata(),
 	}

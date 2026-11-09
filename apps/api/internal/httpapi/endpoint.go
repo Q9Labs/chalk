@@ -28,6 +28,10 @@ type Endpoint[Request any, Response any] struct {
 	middlewares    []func(http.Handler) http.Handler
 	afterRateLimit []func(http.Handler) http.Handler
 	write          EndpointWriter[Response]
+	// limitFor picks the quota for a decoded request. A route that serves several
+	// operations from one URL uses it so each operation keeps its own policy.
+	limitFor func(Request) (ratelimit.Policy, bool)
+	limits   RateLimitOptions
 }
 
 func Get[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
@@ -79,6 +83,15 @@ func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
 
 func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint[Request, Response] {
 	e.contract.RateLimit = policy
+	return e
+}
+
+// RateLimitFor documents policy as the route's quota and charges each request
+// the policy limitFor returns for it, or nothing when it reports false. The
+// quota is checked after the body decodes, because the request names its policy.
+func (e Endpoint[Request, Response]) RateLimitFor(policy ratelimit.Policy, limitFor func(Request) (ratelimit.Policy, bool)) Endpoint[Request, Response] {
+	e.contract.RateLimit = policy
+	e.limitFor = limitFor
 	return e
 }
 
@@ -158,11 +171,12 @@ func (e Endpoint[Request, Response]) WriteWith(writer EndpointWriter[Response]) 
 }
 
 func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions) {
+	e.limits = limits
 	var handler http.Handler = e
 	for i := len(e.afterRateLimit) - 1; i >= 0; i-- {
 		handler = e.afterRateLimit[i](handler)
 	}
-	if e.contract.RateLimit.Name != "" {
+	if e.contract.RateLimit.Name != "" && e.limitFor == nil {
 		handler = rateLimit(limits, e.contract.RateLimit)(handler)
 	}
 	for i := len(e.middlewares) - 1; i >= 0; i-- {
@@ -180,6 +194,15 @@ func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		e.writeFailure(w, r, err)
 		return
+	}
+
+	if e.limitFor != nil {
+		if policy, limited := e.limitFor(request); limited {
+			if err := checkRateLimit(e.limits, policy, w, r); err != nil {
+				writeRateLimitError(w, err)
+				return
+			}
+		}
 	}
 
 	response, err := e.handle(r.Context(), request)

@@ -265,6 +265,145 @@ export const CloudflareSFURenegotiateResponseSchema = /* @__PURE__ */ (() =>
   }))();
 export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
 
+export const CloudflareSFUSignalAPIResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    accepted: Schema.optional(Schema.Boolean),
+    incarnation: Schema.optional(Schema.Number),
+    publications: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          participant_id: ParticipantIdSchema,
+          publication_id: Schema.String,
+          source: Schema.String,
+        }),
+      ),
+    ),
+    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+    sequence: Schema.optional(Schema.Number),
+    sessionDescription: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String,
+          type: Schema.String,
+        }),
+      ),
+    ),
+    subscriptions: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          effective_rid: Schema.optional(Schema.String),
+          mid: Schema.String,
+          reason: Schema.optional(Schema.String),
+          requested_rid: Schema.optional(Schema.String),
+          revision: Schema.Number,
+          session_id: UUIDSchema,
+          state: Schema.String,
+          track_name: Schema.String,
+        }),
+      ),
+    ),
+    trackErrors: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          code: Schema.String,
+          connectionId: Schema.String,
+          trackName: Schema.String,
+        }),
+      ),
+    ),
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          location: Schema.optional(Schema.String),
+          mid: Schema.optional(Schema.String),
+          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+          publication_id: Schema.optional(Schema.String),
+          sessionId: Schema.optional(Schema.String),
+          simulcast: Schema.optional(
+            Schema.NullOr(
+              Schema.Struct({
+                preferredRid: Schema.String,
+                priorityOrdering: Schema.String,
+                ridNotAvailable: Schema.String,
+              }),
+            ),
+          ),
+          source: Schema.optional(Schema.String),
+          trackName: Schema.optional(Schema.String),
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUSignalAPIResponse = typeof CloudflareSFUSignalAPIResponseSchema.Type;
+
+export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+    close_tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          mid: Schema.String.check(Schema.isMinLength(1)),
+          publication_id: Schema.String.check(Schema.isMinLength(1)),
+          source: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    connection_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    force: Schema.optional(Schema.Boolean),
+    op: Schema.Literals(["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"]),
+    receive_only: Schema.optional(Schema.Boolean),
+    replacement_cause: Schema.optional(
+      Schema.Literals([
+        "user_pause",
+        "moderation_pause",
+        "sync_recovery_loss",
+        "discovery_absent",
+        "capture_cleanup",
+        "consent_revoked",
+        "publish_failure",
+        "enable_failure",
+        "projection_mismatch",
+        "forced_pause",
+        "local_signaling_failure",
+        "remote_signaling_failure",
+        "dormant_connection",
+        "access_refresh",
+        "receive_stalled",
+      ]),
+    ),
+    session_description: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String.check(Schema.isMinLength(1)),
+          type: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          location: Schema.String.check(Schema.isMinLength(1)),
+          mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+          publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          simulcast: Schema.optional(
+            Schema.NullOr(
+              Schema.Struct({
+                preferredRid: Schema.String.check(Schema.isMinLength(1)),
+                priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
+                ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
+              }),
+            ),
+          ),
+          source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          trackName: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUSignalRequest = typeof CloudflareSFUSignalRequestSchema.Type;
+
 export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
@@ -3825,6 +3964,29 @@ export const SetEpisodeDeadline429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type SetEpisodeDeadline429ResponseHeaders = typeof SetEpisodeDeadline429ResponseHeadersSchema.Type;
+
+export const SignalCloudflareSFUPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type SignalCloudflareSFUPathParams = typeof SignalCloudflareSFUPathParamsSchema.Type;
+
+export const SignalCloudflareSFURequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUSignalRequestSchema)();
+export type SignalCloudflareSFURequestBody = typeof SignalCloudflareSFURequestBodySchema.Type;
+
+export const SignalCloudflareSFUResponseSchema = /* @__PURE__ */ (() => CloudflareSFUSignalAPIResponseSchema)();
+export type SignalCloudflareSFUResponse = typeof SignalCloudflareSFUResponseSchema.Type;
+
+export const SignalCloudflareSFU429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type SignalCloudflareSFU429ResponseHeaders = typeof SignalCloudflareSFU429ResponseHeadersSchema.Type;
 
 export const TestWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -7409,6 +7571,24 @@ export const SetEpisodeDeadlineErrorSchema = Schema.Union([
 ]);
 export type SetEpisodeDeadlineError = typeof SetEpisodeDeadlineErrorSchema.Type;
 
+export const SignalCloudflareSFUErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type SignalCloudflareSFUError = typeof SignalCloudflareSFUErrorSchema.Type;
+
 export const TestWebhookEndpointErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7622,6 +7802,7 @@ export const ChalkOperationPolicies = {
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   sendProblemReport: { maxBodyBytes: 37024, rateLimit: { limit: 3, policy: "problem_reports.participant", windowSeconds: 3600 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  signalCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

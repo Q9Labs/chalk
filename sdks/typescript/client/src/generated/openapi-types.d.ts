@@ -831,6 +831,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Signal cloudflare s f u */
+    post: operations["signalCloudflareSFU"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions": {
     parameters: {
       query?: never;
@@ -1482,6 +1499,98 @@ export interface components {
     };
     CloudflareSFURenegotiateResponse: {
       accepted: boolean;
+    };
+    CloudflareSFUSignalAPIResponse: {
+      accepted?: boolean;
+      incarnation?: number;
+      publications?: {
+        participant_id: components["schemas"]["ParticipantId"];
+        publication_id: string;
+        source: string;
+      }[];
+      requiresImmediateRenegotiation?: boolean;
+      sequence?: number;
+      sessionDescription?: {
+        sdp: string;
+        type: string;
+      } | null;
+      subscriptions?: {
+        effective_rid?: string;
+        mid: string;
+        reason?: string;
+        requested_rid?: string;
+        revision: number;
+        session_id: components["schemas"]["UUID"];
+        state: string;
+        track_name: string;
+      }[];
+      trackErrors?: {
+        code: string;
+        connectionId: string;
+        trackName: string;
+      }[];
+      tracks?: {
+        location?: string;
+        mid?: string;
+        paused?: boolean | null;
+        publication_id?: string;
+        sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
+        source?: string;
+        trackName?: string;
+      }[];
+    };
+    CloudflareSFUSignalRequest: {
+      allow_partial_remote_tracks?: boolean;
+      close_tracks?: {
+        mid: string;
+        publication_id: string;
+        source: string;
+      }[];
+      connection_id?: string;
+      force?: boolean;
+      /** @enum {string} */
+      op: "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
+      receive_only?: boolean;
+      /** @enum {string} */
+      replacement_cause?:
+        | "user_pause"
+        | "moderation_pause"
+        | "sync_recovery_loss"
+        | "discovery_absent"
+        | "capture_cleanup"
+        | "consent_revoked"
+        | "publish_failure"
+        | "enable_failure"
+        | "projection_mismatch"
+        | "forced_pause"
+        | "local_signaling_failure"
+        | "remote_signaling_failure"
+        | "dormant_connection"
+        | "access_refresh"
+        | "receive_stalled";
+      session_description?: {
+        sdp: string;
+        type: string;
+      } | null;
+      tracks?: {
+        location: string;
+        mid?: string;
+        paused?: boolean | null;
+        publication_id?: string;
+        sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
+        source?: string;
+        trackName: string;
+      }[];
     };
     CloudflareSFUTracksAPIResponse: components["schemas"]["CloudflareSFUUpdateTracksAPIResponse"];
     CloudflareSFUTracksRequest: {
@@ -8313,6 +8422,110 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CloudflareSFURenegotiateResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  signalCloudflareSFU: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloudflareSFUSignalRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CloudflareSFUSignalAPIResponse"];
         };
       };
       /** @description Bad Request */

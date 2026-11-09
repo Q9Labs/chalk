@@ -90,3 +90,21 @@ func TestChalkSFUClientSunset(t *testing.T) {
 		}
 	}
 }
+
+func TestChalkSFUUnifiedSignalingIsOnUnlessSwitchedOff(t *testing.T) {
+	setChalkSFUEnv(t, "sfu-a=https://a.chalk.test:8443")
+	config, err := loadChalkSFUConfig()
+	if err != nil || !config.UnifiedSignaling {
+		t.Fatalf("unified signaling %v, err %v, want on by default", config.UnifiedSignaling, err)
+	}
+
+	t.Setenv(ChalkSFUUnifiedSignaling, "false")
+	if config, err = loadChalkSFUConfig(); err != nil || config.UnifiedSignaling {
+		t.Fatalf("unified signaling %v, err %v, want off", config.UnifiedSignaling, err)
+	}
+
+	t.Setenv(ChalkSFUUnifiedSignaling, "maybe")
+	if _, err := loadChalkSFUConfig(); err == nil || !strings.Contains(err.Error(), ChalkSFUUnifiedSignaling) {
+		t.Fatalf("error %v, want the setting named", err)
+	}
+}

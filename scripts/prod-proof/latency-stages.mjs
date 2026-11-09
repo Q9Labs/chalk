@@ -25,6 +25,12 @@ function chain(group, start, steps) {
   return durations;
 }
 
+// The SDK traces each credential read as a "credential <op> <ms>" event: the time spent inside the provider for one signaling call.
+const credentialMs = (events, from, op) => {
+  const read = events.find((event) => event.t >= from && event.k === "credential" && event.d.split(" ")[0] === op);
+  return read ? Number(read.d.split(" ")[1]) : null;
+};
+
 // A stage that runs beside the chain counts from the call.
 const sinceCall = (start, at) => (at === null ? null : Math.max(0, Math.round(at - start)));
 
@@ -79,6 +85,9 @@ export function joinStages({ t0, events }) {
       t0,
       find(events, t0, (event) => event.k === "ice_connected"),
     ),
+    "join.credential_publications": credentialMs(events, t0, "publications"),
+    "join.credential_tracks": credentialMs(events, t0, "tracks"),
+    "join.credential_renegotiate": credentialMs(events, t0, "renegotiate"),
   };
 }
 

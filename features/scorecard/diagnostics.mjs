@@ -8,6 +8,7 @@ export const DIAGNOSTICS_SCHEMA = "chalk.latency-diagnostics/v1";
 export const diagnosticsFileName = (plane) => `latency-diagnostics-${plane}.json`;
 
 const LABELS = { sfu_ms: "SFU", sync_ms: "Sync" };
+const SINCE = { call: "call", previous: "previous stage", span: "(time inside the step)" };
 const MAX_CYCLES = 60;
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const isMilliseconds = (value) => value === null || (Number.isFinite(value) && value >= 0);
@@ -100,7 +101,7 @@ export function diagnosticsMarkdown(summary) {
     lines.push(`**${group.title}** (${group.metrics})`, "", "| Stage | Since | n | p50 | p95 | What it covers |", "|---|---|---|---|---|---|");
     for (const stage of rows) {
       const value = summary.stages?.[`${group.id}.${stage.id}`];
-      lines.push(`| \`${stage.id}\` | ${stage.from === "call" ? "call" : "previous stage"} | ${value?.n} | ${value?.p50 ?? "–"} | ${value?.p95 ?? "–"} | ${stage.description} |`);
+      lines.push(`| \`${stage.id}\` | ${SINCE[stage.from]} | ${value?.n} | ${value?.p50 ?? "–"} | ${value?.p95 ?? "–"} | ${stage.description} |`);
     }
     lines.push("");
   }

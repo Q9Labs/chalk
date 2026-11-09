@@ -110,8 +110,9 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
 function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
+  const bootstrap = mediaBootstrap(input.access.media);
   const client = new CloudflareSFUClient({
-    bootstrap: mediaBootstrap(input.access.media),
+    bootstrap,
     participantId: subject.participantId,
     replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     transport: createCloudflareSFUHTTPTransport({
@@ -123,6 +124,8 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
+      // The grant decides, so an older API without the capability keeps the per-operation routes.
+      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
     }),
     onError: input.onFailure,
     // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.

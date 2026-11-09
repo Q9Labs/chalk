@@ -81,6 +81,9 @@ test("join splits the Sync connect and notes the SFU steps from the call", () =>
     "join.sfu_tracks": 800,
     "join.sfu_renegotiate": 900,
     "join.ice_connected": 700,
+    "join.credential_publications": null,
+    "join.credential_tracks": null,
+    "join.credential_renegotiate": null,
   });
 });
 
@@ -158,6 +161,7 @@ test("the page trace records wire events, sends no frame of its own and leaves t
     socket.send(JSON.stringify({ type: "live_target", name: "set_microphone_enabled", enabled: true }));
     await globalThis.fetch("https://api.invalid/v1/tenants/t/media/sfu/tracks?replacement_cause=x", { method: "POST" });
     await globalThis.fetch("https://api.invalid/v1/tenants/t/media/sfu/publications");
+    await globalThis.fetch("https://api.invalid/v1/tenants/t/media/sfu/signal", { method: "POST", body: JSON.stringify({ op: "tracks_close" }) });
     await globalThis.fetch("https://api.invalid/v1/other");
     const peer = new globalThis.RTCPeerConnection();
     peer.connectionState = "connected";
@@ -176,9 +180,11 @@ test("the page trace records wire events, sends no frame of its own and leaves t
       "http_end POST tracks",
       "http_start GET publications",
       "http_end GET publications",
+      "http_start POST tracks/close",
+      "http_end POST tracks/close",
       "ice_connected",
     ]);
-    assert.equal(fetched.length, 3);
+    assert.equal(fetched.length, 4);
     assert.equal(sent.length, 1);
     assert.equal(await globalThis.proofTrace.sfuRtt(), 205);
     assert.deepEqual(await globalThis.proofTrace.audioStats(), { emitted: 100, jitterBufferDelay: 4, samples: 4800, playoutDelay: 24, playoutReported: true }, "audio rows only");
@@ -246,4 +252,13 @@ test("the card bytes are identical with and without the one-way estimate", () =>
   );
   assert.deepEqual(withEstimate.sidecar.summary.audio["media.network_jitter_one_way_ms"], { n: 3, p50: 72, p95: 72 });
   assert.equal(without.sidecar.summary.audio, undefined);
+});
+
+test("join records the time the credential provider took for the first call of each operation", () => {
+  const events = [at(50, "credential", "publications 4.5"), at(300, "credential", "publications 9"), at(310, "credential", "tracks 120.4"), at(900, "credential", "renegotiate 3"), at(5, "credential", "tracks 77")];
+  const stages = joinStages({ t0: 10, events });
+  assert.equal(stages["join.credential_publications"], 4.5);
+  assert.equal(stages["join.credential_tracks"], 120.4, "a read before the join started is not counted");
+  assert.equal(stages["join.credential_renegotiate"], 3);
+  assert.equal(joinStages({ t0: 10, events: [] })["join.credential_tracks"], null);
 });

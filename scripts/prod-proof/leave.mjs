@@ -33,14 +33,21 @@ async function createEpisode(run) {
   return { space, episode };
 }
 
+// The SDK lists publications with GET publications, or with POST signal {op: "publications"} when the API advertises the unified route.
+function isPublicationsPoll(request) {
+  const { pathname } = new URL(request.url());
+  if (pathname.endsWith("/media/sfu/publications")) return request.method() === "GET";
+  return pathname.endsWith("/media/sfu/signal") && request.method() === "POST" && request.postDataJSON()?.op === "publications";
+}
+
 async function armPublications(page, reject) {
   let acceptPoll;
   const poll = new Promise((accept) => {
     acceptPoll = accept;
   });
   let held;
-  await page.route("**/media/sfu/publications*", (route) => {
-    if (held || route.request().method() !== "GET") return route.continue();
+  await page.route(/\/media\/sfu\/(publications|signal)(\?.*)?$/, (route) => {
+    if (held || !isPublicationsPoll(route.request())) return route.continue();
     held = route;
     acceptPoll();
   });

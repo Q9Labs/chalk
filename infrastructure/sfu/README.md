@@ -86,6 +86,13 @@ take starts on Cloudflare when its Tenant has a Cloudflare application. Set it t
 `false` to refuse that Episode with a retryable `503 media.unavailable` instead.
 An Episode already bound to a node never moves either way.
 
+`CHALK_SFU_UNIFIED_SIGNALING` defaults to `true`: the join grant tells the SDK it may send
+every SFU signaling call to the one `media/sfu/signal` route, so a join pays one CORS
+preflight instead of one per call. Set it to `false` to stop advertising it; SDKs then use
+the per-operation routes again on their next join, with no web deploy. The `signal` route
+itself stays mounted. Deploy the API before the web build, because an SDK uses the route
+only when the grant advertises it.
+
 The switch lets a Space choose `chalk_sfu`, and the allowlist decides which
 Spaces may:
 

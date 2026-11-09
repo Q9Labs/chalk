@@ -85,11 +85,7 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := checkRateLimit(options, policy, w, r); err != nil {
-				apiErr, ok := errorAsAPIError(err)
-				if !ok {
-					apiErr = apiErrorInternal
-				}
-				writeAPIError(w, apiErr)
+				writeRateLimitError(w, err)
 				return
 			}
 			ctx := context.WithValue(r.Context(), writeBudgetContextKey{}, func() error {
@@ -98,6 +94,14 @@ func rateLimit(options RateLimitOptions, policy ratelimit.Policy) func(http.Hand
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func writeRateLimitError(w http.ResponseWriter, err error) {
+	apiErr, ok := errorAsAPIError(err)
+	if !ok {
+		apiErr = apiErrorInternal
+	}
+	writeAPIError(w, apiErr)
 }
 
 func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.ResponseWriter, r *http.Request) error {
