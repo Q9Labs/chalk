@@ -45,6 +45,92 @@ it("does not publish a microphone muted during remote connection replacement", a
   );
 });
 
+function remoteMicrophoneRoster(sequence: number, trackName?: string): CloudflareSFUPublicationSnapshot {
+  const publications = trackName ? [{ participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", trackName) }] : [];
+  return { incarnation: 1, sequence, publications };
+}
+
+it("closes the receiver of a remote publication that is withdrawn or replaced, so remote toggles do not grow the session", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    let sequence = 0;
+    const refresh = async (trackName?: string) => {
+      h.transport.snapshot = remoteMicrophoneRoster(++sequence, trackName);
+      await h.client.refreshRemotePublications();
+    };
+
+    for (let toggle = 0; toggle < 8; toggle++) {
+      await refresh(`microphone-${toggle}`);
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(peer.liveRemoteTransceiverCount()).toBe(1);
+      // The remote guest mutes: the publication is withdrawn.
+      await refresh();
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(0);
+      expect(peer.liveRemoteTransceiverCount()).toBe(0);
+    }
+
+    // The remote guest mutes and unmutes between two polls: the same source comes back as a new publication.
+    await refresh("microphone-replaced-0");
+    for (let toggle = 1; toggle < 8; toggle++) {
+      await refresh(`microphone-replaced-${toggle}`);
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(peer.liveRemoteTransceiverCount()).toBe(1);
+    }
+
+    const closes = h.transport.closeInputs.filter((input) => input.force);
+    expect(closes).toHaveLength(8 + 7);
+    expect(closes.every((input) => input.tracks.length === 1)).toBe(true);
+  });
+});
+
+it("retires the receiver of a withdrawn remote publication on a later poll when its close failed", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    let sequence = 0;
+    const refresh = async (trackName?: string) => {
+      h.transport.snapshot = remoteMicrophoneRoster(++sequence, trackName);
+      await h.client.refreshRemotePublications();
+    };
+
+    await refresh("microphone-0");
+    h.transport.failCloseCount = 1;
+    await refresh();
+    const afterFailedClose = peer.liveRemoteTransceiverCount();
+    await refresh();
+    const afterRetry = peer.liveRemoteTransceiverCount();
+    await refresh("microphone-1");
+
+    expect([afterFailedClose, afterRetry, peer.liveRemoteTransceiverCount()]).toEqual([1, 0, 1]);
+  });
+});
+
+it("closes at most 16 receivers per request when many remote publications leave at once", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    const crowd = (sequence: number, size: number): CloudflareSFUPublicationSnapshot => ({
+      incarnation: 1,
+      sequence,
+      publications: Array.from({ length: size }, (_, index) => ({ participantId: `participant-${index + 2}`, source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", `microphone-${index}`) })),
+    });
+
+    h.transport.snapshot = crowd(1, 20);
+    await h.client.refreshRemotePublications();
+    expect(peer.liveRemoteTransceiverCount()).toBe(20);
+    h.transport.snapshot = crowd(2, 0);
+    await h.client.refreshRemotePublications();
+
+    const closes = h.transport.closeInputs.filter((input) => input.force);
+    expect(closes.map((input) => input.tracks.length)).toEqual([16, 4]);
+    expect(peer.liveRemoteTransceiverCount()).toBe(0);
+  });
+});
+
 const CAMERA_ON = { operationId: "camera-on", participantId: "participant-1", source: "camera", enabled: true } as const;
 
 async function startDormantWithCamera(h: ReturnType<typeof createHarness>): Promise<FakeTrack> {
@@ -450,6 +536,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   readonly #withdrawnLocalPublications = new Set<string>();
   reverseRemoteTracks = false;
   failRemotePullCount = 0;
+  failCloseCount = 0;
   readonly remotePullFailures: unknown[] = [];
   readonly renegotiateInputs: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }[] = [];
   failRenegotiation = false;
@@ -529,6 +616,10 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
   }
   async closeTracks(input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean }): Promise<CloudflareSFUTracksResponse> {
     this.closeInputs.push(input);
+    if (this.failCloseCount > 0) {
+      this.failCloseCount--;
+      throw new CloudflareSFUError("close unavailable", "signaling_failed", { status: 503 });
+    }
     if (input.tracks.some((track) => this.#withdrawnLocalPublications.has(track.publicationId))) {
       throw new CloudflareSFUError("publication is no longer available", "signaling_failed", { status: 410 });
     }
@@ -695,6 +786,11 @@ class FakePeerConnection extends EventTarget {
   receiveDTX = false;
   readonly #receivers = new Map<string, RTCRtpReceiver>();
   readonly #remoteTransceivers: RTCRtpTransceiver[] = [];
+  readonly #stoppedRemoteMids = new Set<string>();
+  /** The receive m-lines still live in the session: a stopped transceiver is rejected in the next negotiation. */
+  liveRemoteTransceiverCount(): number {
+    return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
+  }
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];
   }
@@ -751,7 +847,14 @@ class FakePeerConnection extends EventTarget {
   }
   emitTrack(mid: string, track: FakeTrack): void {
     this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
-    this.#remoteTransceivers.push({ mid, receiver: this.#receivers.get(mid), stop: () => track.stop() } as unknown as RTCRtpTransceiver);
+    this.#remoteTransceivers.push({
+      mid,
+      receiver: this.#receivers.get(mid),
+      stop: () => {
+        track.stop();
+        this.#stoppedRemoteMids.add(mid);
+      },
+    } as unknown as RTCRtpTransceiver);
     const event = new Event("track");
     Object.defineProperties(event, {
       track: { value: track as unknown as MediaStreamTrack },
