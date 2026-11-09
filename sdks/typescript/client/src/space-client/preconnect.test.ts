@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBrowserWebSocketFactory } from "../sync/browser";
-import { preconnect } from "./preconnect";
+import { preconnect, releasePreconnect } from "./preconnect";
 
 type FakeLink = { rel: string; href: string; crossOrigin: string };
 
 class FakeWebSocket extends EventTarget {
   static readonly instances: FakeWebSocket[] = [];
   readyState = 0;
+  readonly sent: string[] = [];
   readonly closed: { code?: number; reason?: string }[] = [];
   constructor(readonly url: string) {
     super();
@@ -18,6 +19,9 @@ class FakeWebSocket extends EventTarget {
   }
   fail(): void {
     this.dispatchEvent(new Event("error"));
+  }
+  send(data: string): void {
+    this.sent.push(data);
   }
   close(code?: number, reason?: string): void {
     this.readyState = 3;
@@ -44,6 +48,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  releasePreconnect();
   vi.runAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -81,6 +86,51 @@ it("lets a socket that is still upgrading finish for the client", () => {
   FakeWebSocket.instances[0]?.open();
   expect(FakeWebSocket.instances).toHaveLength(1);
   expect(opened).toHaveBeenCalledTimes(1);
+});
+
+it("carries the join on the lobby's socket: one socket takes the hello and every later frame", async () => {
+  preconnect({ syncUrl });
+  FakeWebSocket.instances[0]?.open();
+  const socket = createBrowserWebSocketFactory().connect(dialed);
+  socket.onopen = () => {
+    socket.send('{"type":"hello"}');
+  };
+  await Promise.resolve();
+  socket.send('{"type":"ping"}');
+  expect(FakeWebSocket.instances).toHaveLength(1);
+  expect(FakeWebSocket.instances[0]?.sent).toEqual(['{"type":"hello"}', '{"type":"ping"}']);
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([]);
+});
+
+it("does not take a second upgrade while the lobby socket is healthy, however often it is called", () => {
+  preconnect({ syncUrl, keepWarmMs: 10_000 });
+  FakeWebSocket.instances[0]?.open();
+  for (let call = 0; call < 20; call++) preconnect({ syncUrl, keepWarmMs: 10_000 });
+  expect(FakeWebSocket.instances).toHaveLength(1);
+});
+
+it("keeps a socket ready for a slow lobby and has the next call's socket ready after a leave", () => {
+  preconnect({ syncUrl, keepWarmMs: 10_000 });
+  FakeWebSocket.instances[0]?.open();
+  vi.advanceTimersByTime(4000);
+  FakeWebSocket.instances[1]?.open();
+  const first = createBrowserWebSocketFactory().connect(dialed);
+  first.onopen = vi.fn();
+  expect(FakeWebSocket.instances).toHaveLength(2);
+  // The call ends on the Sync side and closes that socket; the leave screen warms the next one.
+  preconnect({ syncUrl, keepWarmMs: 10_000 });
+  FakeWebSocket.instances[2]?.open();
+  createBrowserWebSocketFactory().connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(3);
+});
+
+it("closes the lobby socket on release, as sign-out does", () => {
+  preconnect({ syncUrl, keepWarmMs: 10_000 });
+  FakeWebSocket.instances[0]?.open();
+  releasePreconnect();
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([{ code: 1000, reason: "unused" }]);
+  vi.advanceTimersByTime(30_000);
+  expect(FakeWebSocket.instances).toHaveLength(1);
 });
 
 it("dials a new socket when the parked one is used, closed or for another URL", () => {

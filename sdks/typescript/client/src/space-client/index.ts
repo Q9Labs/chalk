@@ -1,6 +1,6 @@
 export { SpaceClientError } from "./errors";
 export { createSpaceClient } from "./space-client";
-export { preconnect, type PreconnectOptions } from "./preconnect";
+export { preconnect, releasePreconnect, type PreconnectOptions } from "./preconnect";
 export type { AccessGrant } from "../access/grant";
 export type {
   AccessContext,
