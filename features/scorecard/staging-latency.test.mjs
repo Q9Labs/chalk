@@ -4,11 +4,13 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { DIAGNOSTICS_SCHEMA, diagnosticsFileName } from "./diagnostics.mjs";
 
-function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false, foreignJoin = true } = {}) {
+function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false, foreignJoin = true, sidecar } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "staging-observation-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, ".private"));
+  if (sidecar) writeFileSync(join(directory, "sidecar.json"), JSON.stringify(sidecar));
   writeFileSync(join(directory, ".private/staging-lease.json"), JSON.stringify({ acquired: true, lost: false }));
   const preload = join(directory, "boundaries.cjs");
   // Run the real orchestrator; replace only external I/O, workload spawning and time.
@@ -36,6 +38,8 @@ cp.spawn = (program, args, options) => {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "episodes.jsonl"), JSON.stringify(episode) + "\n");
   fs.writeFileSync(path.join(dir, "scorecard-chalk_sfu.json"), JSON.stringify({ schema: "chalk.scorecard/v1", run: { id, commit: "a".repeat(40), tier: "nightly", environment: "staging", startedAt: new Date(clock).toISOString(), client: { kind: "browser", browser: "test", region: "test", size: "test" } }, mediaPlane: "chalk_sfu", metrics: [{ id: "action.leave_ms", unit: "ms", n: 20, p50: 200, p95: 300, source: "latency-kit" }], dropped: [] }));
+  // The latency kit writes its diagnostics sidecar beside its card.
+  if (process.env.TEST_SIDECAR) fs.copyFileSync(process.env.TEST_SIDECAR, path.join(dir, "latency-diagnostics-chalk_sfu.json"));
   activeStart = clock;
   events.push({ time: clock + 1000, episode_id: episode, session_id: "own-session" });
   clock += 300000;
@@ -87,6 +91,7 @@ globalThis.fetch = async (_url, options) => {
       TEST_METRICS_FAILURE: fail === true ? "yes" : fail || "no",
       TEST_PREFLIGHT_SESSION: preflightSession ? "yes" : "no",
       TEST_FOREIGN_JOIN: foreignJoin ? "yes" : "no",
+      TEST_SIDECAR: sidecar ? join(directory, "sidecar.json") : "",
     },
   });
   return { result, card: JSON.parse(readFileSync(join(directory, ".private/latency-scorecard/scorecard-chalk_sfu.json"), "utf8")), summary: join(directory, "summary.md"), directory };
@@ -137,4 +142,32 @@ test("postflight metric failure preserves measurements as unobservable and fails
   const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "own-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), join(directory, "artifacts")], { cwd: root, encoding: "utf8" });
   assert.equal(collected.status, 1, collected.stderr);
   assert.match(collected.stdout, /unavailable/);
+});
+
+test("the diagnostics sidecar travels from the latency run to the summary and the artifact, outside the card", (t) => {
+  const stat = { n: 20, p50: 120, p95: 180 };
+  const sidecar = { schema: DIAGNOSTICS_SCHEMA, plane: "chalk_sfu", cycles: [], summary: { rtt: { sfu_ms: stat, sync_ms: stat }, stages: { "mic_on.sync_fanout": stat } } };
+  const root = resolve(import.meta.dirname, "../..");
+  const collect = ({ directory }) => {
+    const artifacts = join(directory, "artifacts");
+    const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "own-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), artifacts], { cwd: root, encoding: "utf8" });
+    return { collected, artifacts, carried: existsSync(join(directory, ".private/latency-scorecard", diagnosticsFileName("chalk_sfu"))) };
+  };
+
+  const plain = run(t, { foreignJoin: false });
+  const withSidecar = run(t, { foreignJoin: false, sidecar });
+  const plainOut = collect(plain);
+  const out = collect(withSidecar);
+
+  assert.equal(withSidecar.result.status, plain.result.status, withSidecar.result.stderr);
+  for (const { card } of [plain, withSidecar]) delete card.run.startedAt;
+  assert.deepEqual(withSidecar.card, plain.card);
+  assert.equal(out.collected.status, plainOut.collected.status);
+  assert.equal(plainOut.carried, false);
+  assert.match(plainOut.collected.stdout, /diagnostics: none recorded/);
+  assert.equal(out.carried, true);
+  assert.match(out.collected.stdout, /Action latency diagnostics/);
+  assert.match(out.collected.stdout, /Microphone on/);
+  assert.ok(existsSync(join(out.artifacts, diagnosticsFileName("chalk_sfu"))));
+  assert.ok(existsSync(join(out.artifacts, "scorecard-chalk_sfu.json")));
 });

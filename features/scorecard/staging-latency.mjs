@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // The parent owns the shared lease; the child measures and retries under that lease.
 import { execFileSync, spawn } from "node:child_process";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { contention, signal } from "./contention.mjs";
 import { readLogs } from "./staging-logs.mjs";
 import { readNodeMetrics } from "./staging-metrics.mjs";
+import { diagnosticsFileName } from "./diagnostics.mjs";
 import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
 
 const evidence = resolve(".private/latency-scorecard");
@@ -37,6 +38,18 @@ async function emptyCard() {
 async function save(card) {
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await writeFile(output, `${JSON.stringify(parseScorecard(card), null, 2)}\n`, { mode: 0o600 });
+}
+
+// The latency run writes its diagnostics sidecar beside its card. Carry it to the evidence directory next to the saved card,
+// and drop an earlier attempt's copy so the pair always comes from one attempt. Only the run summary reads it.
+async function carrySidecar(directory) {
+  const name = diagnosticsFileName("chalk_sfu");
+  await rm(resolve(evidence, name), { force: true });
+  try {
+    await copyFile(resolve(directory, name), resolve(evidence, name));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
 }
 
 async function logs(start, end) {
@@ -135,6 +148,7 @@ async function measure() {
     // A skipped attempt or missing boundary readout cannot be accepted as an isolated run.
     if (!before.events || before.events.length > 0 || !after || (card.metrics.length === 0 && !card.contention.unobservable)) card.contention.contended = true;
     await save(card);
+    await carrySidecar(directory);
     await writeFile(resolve(evidence, `attempt-${attempt}.json`), JSON.stringify(card));
     if (card.contention.contended) continue;
     if (card.contention.unobservable) {
