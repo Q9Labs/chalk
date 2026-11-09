@@ -81,9 +81,18 @@ test("a job that appears after the early check fails at the timeout", async () =
   );
 });
 
-test("readiness before the early check never reads the pool", async () => {
-  const { result, reads } = run({ pool: pool({ held: [nightlyHold] }) }, { ready: () => true });
-  await result;
+test("readiness at the early check never reads the pool", async () => {
+  const time = fakeTime();
+  const reads = [];
+  await waitForCapture({
+    recordingId: ours,
+    ready: () => time.now() >= 27_000,
+    readPool: async () => {
+      reads.push(time.now());
+      return { pool: pool({ held: [nightlyHold] }) };
+    },
+    time,
+  });
   assert.deepEqual(reads, []);
 });
 

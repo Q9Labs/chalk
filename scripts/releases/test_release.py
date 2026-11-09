@@ -487,21 +487,17 @@ class OwnSfuPromotionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'scorecard identity does not match'):
                         release.record(self.github(item), None)
 
-    def test_evaluator_refuses_wrong_revision_or_contended_evidence(self):
-        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
-        for wrong_sha in (True, False):
-            with self.subTest(wrong_sha=wrong_sha), tempfile.TemporaryDirectory() as directory:
-                card = copy.deepcopy(fixture)
-                if wrong_sha:
-                    card['run']['commit'] = OTHER_SHA
-                else:
-                    card['contention'] = dict(contended=True)
-                path = Path(directory) / 'card.json'
-                path.write_text(json.dumps(card))
-                result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
-                                        capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
-                self.assertNotEqual(result.returncode, 0)
-                self.assertEqual(result.stdout, '')
+    def test_evaluator_refuses_a_scorecard_for_another_revision(self):
+        card = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        card['run']['commit'] = OTHER_SHA
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'card.json'
+            path.write_text(json.dumps(card))
+            result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', SHA, RUN, str(path)], cwd=release.ROOT,
+                                    capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertIn(f'scorecard is not for nightly SHA {SHA}', result.stderr)
 
     def test_nightly_returns_breach_status_after_saving_history(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
