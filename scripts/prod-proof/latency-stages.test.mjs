@@ -114,6 +114,14 @@ test("join splits the Sync connect and notes the SFU steps from the call", () =>
   });
 });
 
+test("a join that lists and pulls in one request leaves sfu_publications empty, and sfu_tracks carries the cost", () => {
+  const events = [at(1010, "ws_new"), at(1100, "ws_open"), at(1300, "ws_in", "welcome"), at(1500, "pull_published"), at(1900, "http_end", "POST tracks"), at(2200, "http_end", "GET publications"), at(2400, "http_end", "POST renegotiate")];
+  const stages = joinStages({ t0: 1000, events });
+  assert.equal(stages["join.sfu_publications"], null);
+  assert.equal(stages["join.sfu_tracks"], 900);
+  assert.equal(stages["join.sfu_renegotiate"], 1400);
+});
+
 test("the kit records exactly the stages the registry lists", () => {
   for (const group of STAGE_GROUPS.filter((entry) => entry.id !== "join")) {
     assert.deepEqual(Object.keys(toggleStages(group.id, trace)).sort(), group.stages.map((stage) => `${group.id}.${stage.id}`).sort(), group.id);

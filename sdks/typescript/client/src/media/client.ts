@@ -340,7 +340,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return this.#signal(() => transport.listPublications());
     }
     this.#pullPublishedTried = true;
-    return this.#pullPublishedAudio(pull, generation);
+    try {
+      return await this.#pullPublishedAudio(pull, generation);
+    } catch (error) {
+      if (generation !== this.#generation || this.#stopped) throw error;
+      // The combined request is an optimisation. After a failure, list and pull the old way, so the reconcile
+      // owns every recovery (a gone connection, a retryable pull) exactly as it does for a later poll.
+      return this.#signal(() => transport.listPublications());
+    }
   }
   // The registry drops a publication when listeners keep failing to pull it.
   // A publisher that still believes it is sending must publish again, so
@@ -1503,9 +1510,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }),
     );
     if (!listed.snapshot) throw new CloudflareSFUError("The pull-published request returned no publications", "signaling_failed");
-    const roster = reconcileRemoteTracks(desiredRemotePublications(pulled, this.#participantId), pulled, this.#remoteTracks);
+    // The server pulled every listed audio track. The roster still decides which ones this client keeps.
+    const kept = pulled.filter((publication) => this.#canSubscribeToRemotePublication(publication));
+    for (const publication of pulled) if (!kept.includes(publication)) safeStopTrack(publication.track, this.#reportError.bind(this));
+    const roster = reconcileRemoteTracks(desiredRemotePublications(kept, this.#participantId), kept, this.#remoteTracks);
     for (const [key, publication] of roster) this.#remoteTracks.set(key, publication);
-    for (const publication of pulled) {
+    for (const publication of kept) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     }

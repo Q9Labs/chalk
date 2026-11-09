@@ -132,7 +132,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     pullPublishedAudio: async (input) => {
       const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks?allow_partial_remote_tracks=true", {
         method: "POST",
-        body: JSON.stringify({ connection_id: input.connectionId, pull_published_audio: true }),
+        body: JSON.stringify({ connection_id: input.connectionId, tracks: [], pull_published_audio: true }),
       });
       if (!publications) throw new CloudflareSFUError("The pull-published response carried no publications", "signaling_failed");
       return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };

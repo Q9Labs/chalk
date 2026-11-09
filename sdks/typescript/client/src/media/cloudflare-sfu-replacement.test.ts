@@ -107,6 +107,57 @@ describe("pull-published first poll", () => {
       { bootstrap: pullPublished },
     );
   });
+
+  for (const combined of [false, true]) {
+    const options: CloudflareSFUBootstrap = { ...pullPublished, capabilities: { ...pullPublished.capabilities!, pullPublished: combined } };
+    const audioRoom = (...tracks: readonly [participantId: string, connectionId: string, trackName: string][]): CloudflareSFUPublicationSnapshot => ({
+      incarnation: 1,
+      sequence: 1,
+      publications: tracks.map(([participantId, connectionId, trackName]) => ({ participantId, source: "microphone", publicationId: versionedPublicationID(connectionId, "0", trackName) })),
+    });
+
+    it(`does not subscribe to a participant absent from the roster (combined=${combined})`, async () => {
+      await withTimedHarness(
+        async (h) => {
+          h.transport.snapshot = audioRoom(["participant-2", "remote-1", "microphone-a"]);
+          h.client.remoteParticipantsChanged([]);
+          await h.client.start(fakeStream());
+          await h.client.refreshRemotePublications();
+          expect(h.client.getSnapshot().remoteTracks).toHaveLength(0);
+        },
+        { bootstrap: options },
+      );
+    });
+
+    it(`recovers a gone connection during the first pull (combined=${combined})`, async () => {
+      const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
+      await withTimedHarness(
+        async (h) => {
+          h.transport.snapshot = audioRoom(["participant-2", "remote-1", "microphone-a"]);
+          h.transport.remotePullFailures.push(new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true }));
+          await h.client.start(fakeStream());
+          await expect(h.client.refreshRemotePublications()).resolves.toBeUndefined();
+          expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+          // The combined request fails alone and the list-and-pull retry succeeds; the old path replaces the connection.
+          expect(replaceMediaConnection).toHaveBeenCalledTimes(combined ? 0 : 1);
+        },
+        { bootstrap: options, replaceMediaConnection },
+      );
+    });
+
+    it(`keeps the healthy audio when another track fails to pull (combined=${combined})`, async () => {
+      await withTimedHarness(
+        async (h) => {
+          h.transport.snapshot = audioRoom(["participant-2", "remote-1", "microphone-a"], ["participant-3", "remote-2", "microphone-b"]);
+          h.transport.failedRemoteTrackNames.set("microphone-b", "track_not_found");
+          await h.client.start(fakeStream());
+          await h.client.refreshRemotePublications();
+          expect(h.client.getSnapshot().remoteTracks.map((publication) => publication.participantId)).toEqual(["participant-2"]);
+        },
+        { bootstrap: options },
+      );
+    });
+  }
 });
 
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {

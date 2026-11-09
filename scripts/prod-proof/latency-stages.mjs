@@ -77,7 +77,9 @@ export function joinStages({ t0, events }) {
   ]);
   return {
     ...stages,
-    "join.sfu_publications": sinceCall(t0, httpEnd(events, t0, "publications")),
+    // The combined pull-published request lists the publications inside the first tracks reply, so no list request
+    // precedes it. A later GET publications (the video poll) is not the join's list, and the tracks stage carries the cost.
+    "join.sfu_publications": events.some((event) => event.k === "pull_published" && event.t >= t0) ? null : sinceCall(t0, httpEnd(events, t0, "publications")),
     "join.sfu_tracks": sinceCall(t0, httpEnd(events, t0, "tracks")),
     "join.sfu_renegotiate": sinceCall(t0, httpEnd(events, t0, "renegotiate")),
     "join.ice_connected": sinceCall(
