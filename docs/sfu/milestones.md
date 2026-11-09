@@ -639,7 +639,7 @@ The SFU lead owns the production calibration canary, run on the production node
 under the existing bench/canary rules before package 4 expands the flag.
 The named pass line, `production-calibration-canary: PASS`, requires at least
 3 hours with five classes (15 participants), the 36,000 packets/s budget configured,
-the 40% guard setting confirmed, paired 10 s own-CPU and steal samples, and no
+the 40% guard setting read from the node at the start, paired 10 s own-CPU and steal samples, and no
 microphone stall over 500 ms. Record actual packet rates; the configured budget
 does not prove sustained throughput at 36,000 packets/s. This gate is independent
 of Promote's scorecard and the post-cutover checks below. The five-hour,
