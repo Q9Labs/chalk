@@ -186,6 +186,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     participants,
     admissions,
     tones, // True when each guest publishes its own tone (audio-decode.mjs), false when all play speech.
+    refreshes,
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);
