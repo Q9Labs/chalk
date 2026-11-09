@@ -3,60 +3,23 @@ package sfu
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
-const maxProviderMessageRunes = 240
-
-var (
-	providerCodePattern    = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
-	providerURLPattern     = regexp.MustCompile(`https?://\S+`)
-	providerUUIDPattern    = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b`)
-	providerTokenPattern   = regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`)
-	providerNumberPattern  = regexp.MustCompile(`[0-9]+`)
-	providerUnicodePattern = regexp.MustCompile(`[^\x00-\x7F]+`)
-	providerWordPattern    = regexp.MustCompile(`[A-Za-z]+`)
-)
-
-var observableProviderWords = map[string]struct{}{
-	"a": {}, "add": {}, "already": {}, "and": {}, "answer": {}, "are": {}, "at": {}, "bad": {}, "because": {},
-	"cannot": {}, "closed": {}, "close": {}, "connected": {}, "connecting": {}, "connection": {}, "create": {},
-	"description": {}, "duplicate": {}, "duplicated": {}, "error": {}, "expired": {}, "failed": {}, "for": {},
-	"found": {}, "has": {}, "in": {}, "internal": {}, "invalid": {}, "is": {}, "media": {}, "missing": {},
-	"not": {}, "offer": {}, "operation": {}, "provider": {}, "rate": {}, "ready": {}, "redacted": {}, "rejected": {}, "request": {},
-	"required": {}, "response": {}, "session": {}, "state": {}, "the": {}, "this": {}, "timeout": {}, "too": {},
-	"track": {}, "tracks": {}, "unavailable": {}, "unauthorized": {}, "unknown": {}, "unsupported": {}, "was": {},
-}
-
-// transportCause is bounded; the original transport error is never retained in telemetry.
-type transportCause string
-
-const (
-	transportCauseTimeout           transportCause = "timeout"
-	transportCauseCallerCanceled    transportCause = "caller_canceled"
-	transportCauseConnectionReset   transportCause = "connection_reset"
-	transportCauseConnectionRefused transportCause = "connection_refused"
-	transportCauseDNS               transportCause = "dns"
-	transportCauseTLS               transportCause = "tls"
-	transportCauseOther             transportCause = "other"
-)
+var providerCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
 
 func newTransportFailure(ctx context.Context, operation string, statusCode int, err error) providerFailure {
-	cause := classifyTransportCause(ctx, err)
+	cause := mediaplane.ClassifyTransportCause(ctx, err)
 	code := "transport_error"
-	if cause == transportCauseTimeout {
+	if cause == mediaplane.TransportCauseTimeout {
 		code = "timeout"
-	} else if cause == transportCauseCallerCanceled {
+	} else if cause == mediaplane.TransportCauseCallerCanceled {
 		code = "client_canceled"
 	}
 	failure := newProviderFailure(operation, failureStageTransport, statusCode, code)
@@ -64,45 +27,9 @@ func newTransportFailure(ctx context.Context, operation string, statusCode int, 
 	return failure
 }
 
-func classifyTransportCause(ctx context.Context, err error) transportCause {
-	// The parent context distinguishes caller cancellation/deadline from the
-	// HTTP client's own timeout, whose parent remains live.
-	if ctx.Err() != nil {
-		return transportCauseCallerCanceled
-	}
-	var netError net.Error
-	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netError) && netError.Timeout()) {
-		return transportCauseTimeout
-	}
-	if errors.Is(err, syscall.ECONNRESET) {
-		return transportCauseConnectionReset
-	}
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return transportCauseConnectionRefused
-	}
-	var dnsError *net.DNSError
-	if errors.As(err, &dnsError) {
-		return transportCauseDNS
-	}
-	var certificateError *tls.CertificateVerificationError
-	var recordError tls.RecordHeaderError
-	var authorityError x509.UnknownAuthorityError
-	var invalidError x509.CertificateInvalidError
-	var hostnameError x509.HostnameError
-	var rootsError x509.SystemRootsError
-	var alertError tls.AlertError
-	if errors.As(err, &certificateError) || errors.As(err, &recordError) ||
-		errors.As(err, &authorityError) || errors.As(err, &invalidError) ||
-		errors.As(err, &hostnameError) || errors.As(err, &rootsError) || errors.As(err, &alertError) {
-		return transportCauseTLS
-	}
-	return transportCauseOther
-}
-
 type providerFailureDetails struct {
 	rawCode            string
 	trackErrorCode     string
-	message            string
 	messageFingerprint string
 	responseBytes      int
 	responseSnapshot   string
@@ -117,13 +44,12 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 	failure := newProviderFailure(operation, stage, statusCode, providerRejectionCode(rawCode, message))
 	failure.details = providerFailureDetails{
 		rawCode:            observableProviderCode(rawCode, failure.providerCode),
-		message:            observableProviderMessage(message),
 		messageFingerprint: providerMessageFingerprint(message),
 		responseTrackCount: responseTrackCount,
 		failedTrackCount:   failedTrackCount,
 	}
 	if operation == "close_tracks" && stage == failureStageTrack {
-		failure.details.rawCode = observableProviderMessage(rawCode)
+		failure.details.rawCode = observableTrackErrorCode(rawCode)
 	} else if stage == failureStageTrack {
 		failure.details.trackErrorCode = observableTrackErrorCode(rawCode)
 	}
@@ -260,30 +186,9 @@ func observableHTTPProviderCode(payload []byte) string {
 	}
 }
 
-func observableProviderMessage(message string) string {
-	message = strings.Join(strings.Fields(message), " ")
-	if message == "" {
-		return ""
-	}
-	message = providerURLPattern.ReplaceAllString(message, "[redacted]")
-	message = providerUUIDPattern.ReplaceAllString(message, "[redacted]")
-	message = providerTokenPattern.ReplaceAllString(message, "[redacted]")
-	message = providerNumberPattern.ReplaceAllString(message, "[redacted]")
-	message = providerUnicodePattern.ReplaceAllString(message, "[redacted]")
-	message = providerWordPattern.ReplaceAllStringFunc(message, func(word string) string {
-		if _, ok := observableProviderWords[strings.ToLower(word)]; ok {
-			return word
-		}
-		return "[redacted]"
-	})
-	message = strings.Join(strings.Fields(message), " ")
-	runes := []rune(message)
-	if len(runes) > maxProviderMessageRunes {
-		message = string(runes[:maxProviderMessageRunes]) + "…"
-	}
-	return message
-}
-
+// providerMessageFingerprint stands in for the provider's free-text description. The text can
+// echo a failed dial, with its host and address, so it is never logged or exported; the hash
+// still lets two incidents be matched.
 func providerMessageFingerprint(message string) string {
 	message = strings.TrimSpace(message)
 	if message == "" {

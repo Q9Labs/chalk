@@ -224,12 +224,13 @@ checks, including an Episode end that adopts the stop (#618).
 
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
-failure code. `provider_raw_code` and `provider_message` retain the rejected
-code and message with the existing diagnostic-word allowlist. URLs, identifiers,
-numbers, token-like strings and unknown words are redacted. Each field is capped
-at 240 characters plus a truncation marker. The active API span receives the same
-values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
-`cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
+failure code. `provider_raw_code` carries only a known Cloudflare code, an upper-case code of at
+most 64 characters, or `other`. The provider's free-text description is never
+logged, returned or exported, because it can echo a failed dial's host or address:
+only `provider_message_fingerprint`, a hash of it, identifies the message, and the
+response snapshot replaces each description with `redacted-<fingerprint>`. The
+active API span receives the same values as `chalk.provider.raw_error_code` and
+`chalk.provider.message_fingerprint` on `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
 HTTP 200 acceptance rules are unchanged.
 
@@ -276,7 +277,9 @@ because the API stops renewing a lease once the Episode moves or ends. Three sig
 the gauges `chalk.sfu.retirement_debts` (count) and `chalk.sfu.retirement_debt_oldest_age` (seconds,
 unit `s`), each reported by every API replica from the same table; the `sfu_retirement_debts` object
 (`count`, `oldest_age_seconds`) in the `/readyz` body, which never fails readiness; and the warning logs
-`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed),
+`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed; both
+carry `tenant_id` and `episode_id`, and the API log handler adds the trace and journey IDs when the move
+that owed the debt ran inside a request, so a try by the worker has none),
 `chalk_sfu.retire_debts_unread` and `chalk_sfu.retire_backlog_unread` (the table could not be read).
 The production alert collector reads the table itself, so the age is the same for every replica, and
 pages when the oldest unpaid debt is above 15 minutes in four of five minute samples (the
@@ -284,8 +287,17 @@ pages when the oldest unpaid debt is above 15 minutes in four of five minute sam
 has been silent through many backoff cycles: check that node, and restart it if it is up but not
 answering control calls.
 
+The own SFU counts each control call that ends in a provider failure, after the adapter's
+retries, in the API metric `chalk.api.chalk_sfu.failures`. Its attributes are
+`chalk.media_plane.provider`, `chalk.provider.operation` (the route without the session ID,
+such as `episodes/retire` or `sessions/tracks`), `chalk.provider.failure_stage` (`transport`,
+`http_status` or `decode`) and, by stage, `chalk.provider.transport_cause` or
+`http.response.status_class`. It carries no node, Tenant, Episode or Participant identity.
+A caller that cancels is not counted, and an answer such as a gone session or a refused
+request is not a failure. The own SFU has no failure span: the call has no span of its own.
+
 SFU transport failures retain only the bounded `transport_cause` log field and
-`chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
+`chalk.provider.transport_cause` span/metric attribute, for both providers: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
 error text is not retained. A canceled or expired caller context produces
 `cloudflare_sfu.client_canceled`, does not increment the provider-failure counter

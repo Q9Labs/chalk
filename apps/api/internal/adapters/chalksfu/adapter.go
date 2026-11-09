@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,22 @@ var turnMintFailures, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/
 	"chalk.sfu.turn_mint_failures",
 	metric.WithDescription("Joins that got STUN only because minting TURN credentials failed"),
 	metric.WithUnit("{join}"),
+)
+
+// failures counts control calls that ended in a provider failure after the adapter's retries.
+// Attributes are bounded: the operation is the route with the session ID cut out, the stage
+// is transport, http_status or decode, and the detail is a transport cause or a status class.
+// No node, Tenant, Episode or Participant identity is attached, and no error text.
+var callFailures, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
+	"chalk.api.chalk_sfu.failures",
+	metric.WithDescription("Chalk SFU control call failures by bounded operation, stage and cause"),
+	metric.WithUnit("{failure}"),
+)
+
+const (
+	stageTransport  = "transport"
+	stageHTTPStatus = "http_status"
+	stageDecode     = "decode"
 )
 
 // Adapter is the media plane of one SFU node. Fleet builds one per configured node.
@@ -176,7 +193,8 @@ func newOperationID() (string, error) {
 
 // call posts one JSON body and decodes the reply. Transport failures and 502, 503
 // and 504 replies retry with the same body, so the operation ID inside it makes
-// the retry safe. Any other status is the answer.
+// the retry safe. Any other status is the answer. A transport error's text holds the
+// node's control URL and IP, so only its cause leaves this function.
 func (a *Adapter) call(ctx context.Context, path string, request, response any) error {
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -184,6 +202,7 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 	}
 	endpoint := a.base.JoinPath(path).String()
 	var lastErr error
+	var lastFailure []attribute.KeyValue
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if attempt > 1 {
 			select {
@@ -195,25 +214,62 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 		status, payload, err := a.send(ctx, endpoint, body)
 		switch {
 		case err != nil:
-			lastErr = fmt.Errorf("%w: transport: %v", mediaplane.ErrProviderFailed, err)
+			cause := mediaplane.ClassifyTransportCause(ctx, err)
+			lastErr = fmt.Errorf("%w: transport: %s", mediaplane.ErrProviderFailed, cause)
+			lastFailure = failureAttributes(path, stageTransport, attribute.String("chalk.provider.transport_cause", string(cause)))
+			if cause == mediaplane.TransportCauseCallerCanceled {
+				lastFailure = nil
+			}
 		case status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout:
 			lastErr = classify(status, payload)
+			lastFailure = failureAttributes(path, stageHTTPStatus, attribute.String("http.response.status_class", statusClass(status)))
 		case status >= 200 && status < 300:
 			if response == nil {
 				return nil
 			}
 			if err := json.Unmarshal(payload, response); err != nil {
+				recordFailure(ctx, failureAttributes(path, stageDecode))
 				return fmt.Errorf("%w: decode response", mediaplane.ErrProviderFailed)
 			}
 			return nil
 		default:
-			return classify(status, payload)
+			err := classify(status, payload)
+			if errors.Is(err, mediaplane.ErrProviderFailed) {
+				recordFailure(ctx, failureAttributes(path, stageHTTPStatus, attribute.String("http.response.status_class", statusClass(status))))
+			}
+			return err
 		}
 		if ctx.Err() != nil {
-			return lastErr
+			break
 		}
 	}
+	recordFailure(ctx, lastFailure)
 	return lastErr
+}
+
+// failureAttributes labels one failure. The operation is the route with a session ID cut out.
+func failureAttributes(path, stage string, detail ...attribute.KeyValue) []attribute.KeyValue {
+	operation := strings.TrimPrefix(path, "/v1/")
+	if rest, ok := strings.CutPrefix(operation, "sessions/"); ok {
+		_, action, _ := strings.Cut(rest, "/")
+		operation = "sessions/" + action
+	}
+	attributes := []attribute.KeyValue{
+		attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU)),
+		attribute.String("chalk.provider.operation", operation),
+		attribute.String("chalk.provider.failure_stage", stage),
+	}
+	return append(attributes, detail...)
+}
+
+func recordFailure(ctx context.Context, attributes []attribute.KeyValue) {
+	if attributes != nil {
+		callFailures.Add(ctx, 1, metric.WithAttributes(attributes...))
+	}
+}
+
+func statusClass(status int) string {
+	return strconv.Itoa(status/100) + "xx"
 }
 
 // ready reads the node's readiness: its packet budget and the part live Episodes

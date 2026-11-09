@@ -1,9 +1,11 @@
 package chalksfu_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
@@ -139,9 +141,26 @@ func TestEpisodeEndConfirmsOnTheDurableDebtNotTheNodeAndTheWorkerPaysItAfterTheH
 	if err := registry.EndRetiredAllocations(context.Background(), recoveringTenant.ID, recoveringEpisode); err != nil {
 		t.Fatalf("the end must confirm on the durable debt while the node is unreachable: %v", err)
 	}
+	logs := &bytes.Buffer{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 	registry.PayRetirements(context.Background())
+	slog.SetDefault(previous)
 	if owed, sessions := store.owed(), stateOf(t, primary).Sessions; owed != 1 || sessions != 1 {
 		t.Fatalf("behind the partition: %d debts and %d stale sessions, want 1 and 1", owed, sessions)
+	}
+	// The unpaid retire names its Tenant and Episode, and the transport error behind it
+	// reaches the log as a cause, never as the node's address.
+	pending := logs.String()
+	relayHost := strings.TrimPrefix(relay.url(), "https://")
+	if !strings.Contains(pending, `"event":"chalk_sfu.retire_pending"`) ||
+		!strings.Contains(pending, `"tenant_id":"`+recoveringTenant.ID.String()+`"`) ||
+		!strings.Contains(pending, `"episode_id":"`+recoveringEpisode.String()+`"`) {
+		t.Fatalf("retire_pending log lacks its event, Tenant or Episode: %s", pending)
+	}
+	if strings.Contains(pending, relayHost) || strings.Contains(pending, "https://") {
+		t.Fatalf("retire_pending log leaks the node address %q: %s", relayHost, pending)
 	}
 	if backlog, observed := registry.RetirementBacklog(); !observed || backlog.Count != 1 {
 		t.Fatalf("the unpaid debt is not visible: %+v observed %v", backlog, observed)

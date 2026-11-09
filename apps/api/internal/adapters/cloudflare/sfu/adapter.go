@@ -71,7 +71,7 @@ type providerFailure struct {
 	statusCode                 int
 	statusClass                string
 	providerCode               string
-	transportCause             transportCause
+	transportCause             mediaplane.TransportCause
 	trackCode                  string
 	details                    providerFailureDetails
 	missingRemoteTracks        []mediaplane.RemoteTrackIdentity
@@ -92,8 +92,8 @@ func (e providerFailure) Error() string {
 	if e.details.rawCode != "" {
 		message += " provider_raw_code=" + e.details.rawCode
 	}
-	if e.details.message != "" {
-		message += fmt.Sprintf(" provider_message=%q provider_message_fingerprint=%s", e.details.message, e.details.messageFingerprint)
+	if e.details.messageFingerprint != "" {
+		message += " provider_message_fingerprint=" + e.details.messageFingerprint
 	}
 	return message
 }
@@ -102,7 +102,7 @@ func (e providerFailure) ProviderFailureCode() string { return e.providerCode }
 
 func (e providerFailure) Unwrap() error {
 	switch {
-	case e.transportCause == transportCauseCallerCanceled:
+	case e.transportCause == mediaplane.TransportCauseCallerCanceled:
 		return context.Canceled
 	case e.providerCode == "plane_unavailable":
 		return mediaplane.ErrPlaneUnavailable
@@ -1039,7 +1039,7 @@ func traceFailed(err error) bool {
 		return false
 	}
 	var failure providerFailure
-	return !errors.As(err, &failure) || failure.transportCause != transportCauseCallerCanceled
+	return !errors.As(err, &failure) || failure.transportCause != mediaplane.TransportCauseCallerCanceled
 }
 
 func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
@@ -1062,7 +1062,7 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 	logEvent := "cloudflare_sfu.request_failed"
 	message := "Cloudflare SFU request failed"
 	level := slog.LevelWarn
-	if failure.transportCause == transportCauseCallerCanceled {
+	if failure.transportCause == mediaplane.TransportCauseCallerCanceled {
 		event, logEvent, message = "cloudflare_sfu.client_canceled", "cloudflare_sfu.client_canceled", "Cloudflare SFU request canceled by caller"
 		level = slog.LevelInfo
 	} else {
@@ -1076,7 +1076,6 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		trace.WithAttributes(
 			attribute.String("chalk.provider.raw_error_code", failure.details.rawCode),
 			attribute.String("chalk.provider.track_error_code", failure.details.trackErrorCode),
-			attribute.String("chalk.provider.message", failure.details.message),
 			attribute.String("chalk.provider.message_fingerprint", failure.details.messageFingerprint),
 			attribute.Int("chalk.provider.response_bytes", failure.details.responseBytes),
 			attribute.String("chalk.provider.response_snapshot", failure.details.responseSnapshot),
@@ -1098,7 +1097,6 @@ func recordProviderFailure(ctx context.Context, span trace.Span, err error) {
 		"transport_cause", string(failure.transportCause),
 		"provider_raw_code", failure.details.rawCode,
 		"provider_track_error_code", failure.details.trackErrorCode,
-		"provider_message", failure.details.message,
 		"provider_message_fingerprint", failure.details.messageFingerprint,
 		"provider_response_bytes", failure.details.responseBytes,
 		"provider_response_snapshot", failure.details.responseSnapshot,

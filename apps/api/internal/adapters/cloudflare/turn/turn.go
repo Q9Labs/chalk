@@ -132,6 +132,7 @@ func (t *Credentials) mintAndStore(ctx context.Context, client HTTPClient, endpo
 }
 
 func (t *Credentials) mint(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
+	parent := ctx
 	ctx, cancel := context.WithTimeout(ctx, turnMintTimeout)
 	defer cancel()
 
@@ -149,12 +150,12 @@ func (t *Credentials) mint(ctx context.Context, client HTTPClient, endpoint stri
 
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("request TURN credentials: %w", withoutRequestURL(err))
+		return nil, transportFailure(parent, "request", err)
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 1<<16))
 	if err != nil {
-		return nil, fmt.Errorf("read TURN credentials: %w", err)
+		return nil, transportFailure(parent, "read", err)
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, fmt.Errorf("TURN credential request returned status %d", response.StatusCode)
@@ -171,9 +172,16 @@ func (t *Credentials) mint(ctx context.Context, client HTTPClient, endpoint stri
 	return decoded.ICEServers, nil
 }
 
-// withoutRequestURL unwraps a transport error to its cause, such as a timeout
-// or a refused connection. The wrapper's text carries the request URL, which
-// holds the private TURN key ID, and these errors are logged on every join.
+// transportFailure reports a failed TURN call by its bounded cause. A transport error's text
+// holds the peer's address, the request URL (which holds the private TURN key ID) and resolver
+// or TLS detail, and these errors are logged on every join. The cause is classified against the
+// caller's context, so the mint's own timeout reads as a timeout.
+func transportFailure(parent context.Context, step string, err error) error {
+	return fmt.Errorf("%s TURN credentials: transport: %s", step, mediaplane.ClassifyTransportCause(parent, err))
+}
+
+// withoutRequestURL unwraps a request-building error to its cause. Nothing was sent, so the
+// cause holds no peer address.
 func withoutRequestURL(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {

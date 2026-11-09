@@ -93,12 +93,12 @@ func (r Registry) settle(ctx context.Context, debt mediaplane.RetirementDebt) {
 	settled, err := r.chalk.RetireAllocation(ctx, debt.Allocation, debt.TenantID.String(), debt.EpisodeID.String(), debt.Generation)
 	if !settled {
 		slog.WarnContext(ctx, "chalk sfu retired allocation not retired yet", "event", "chalk_sfu.retire_pending",
-			"episode_id", debt.EpisodeID.String(), "node", debt.Allocation.Node, "generation", debt.Generation, "error", err.Error())
+			"tenant_id", debt.TenantID.String(), "episode_id", debt.EpisodeID.String(), "node", debt.Allocation.Node, "generation", debt.Generation, "error", err.Error())
 		return
 	}
 	if err := r.recovery.SettleRetirementDebt(ctx, debt); err != nil {
 		slog.WarnContext(ctx, "chalk sfu retirement debt not cleared", "event", "chalk_sfu.retire_debt_unsettled",
-			"episode_id", debt.EpisodeID.String(), "node", debt.Allocation.Node, "error", err.Error())
+			"tenant_id", debt.TenantID.String(), "episode_id", debt.EpisodeID.String(), "node", debt.Allocation.Node, "error", err.Error())
 	}
 }
 
