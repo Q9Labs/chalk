@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,12 @@ const (
 	// taken before the join does not show it. The counter is a burst guard: the SFU's
 	// admission at first join stays the authority.
 	inflightTTL = 30 * time.Second
+	// minNodeProtocol is the lowest SFU wire protocol this API can send to. The API puts
+	// allocationGeneration in its create, reserve, move and source-control bodies, and a node
+	// below protocol 2 refuses a body with a field it does not know (400 invalid_request). The
+	// API places no Episode on such a node, so deploying the API before the SFU degrades
+	// placement visibly and fails no call.
+	minNodeProtocol = 2
 )
 
 // ErrUnknownNode means an Episode's binding names a node this process does not
@@ -65,6 +72,7 @@ type nodeLoad struct {
 	room        int  // packets/s of budget left at the probe, below the standby cap on a standby
 	episode     int  // packets/s a new Episode reserves
 	hostGuard   bool // the node's host guard refuses new Episodes, whatever budget is left
+	protocol    int  // the wire protocol the node reported; 0 when it reports none
 	incarnation string
 	NodeHealth
 	at time.Time
@@ -73,6 +81,9 @@ type nodeLoad struct {
 // fits reports whether the room left holds one more new Episode after the in-flight
 // ones, which the probe may not include yet.
 func (l nodeLoad) fits(inflight int) bool { return l.room >= (inflight+1)*l.episode }
+
+// tooOld reports whether the node decodes an older wire protocol than this API sends.
+func (l nodeLoad) tooOld() bool { return l.protocol < minNodeProtocol }
 
 // NodeHealth is what a node's last answered probe said about its drain.
 type NodeHealth struct {
@@ -177,7 +188,7 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var answering, full, guarded bool // a node answered; a serving node was full; a serving node's host guard refused
+	var answering, full, guarded, tooOld bool // a node answered; a serving node was full; a serving node's host guard refused; a node's protocol is below minNodeProtocol
 	for _, standby := range []bool{false, true} {
 		for _, node := range f.nodes {
 			if f.standbys[node.node] != standby {
@@ -213,6 +224,8 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 		first.Reason = mediaplane.PlacementOverflowNoRoom
 	case guarded:
 		first.Reason = mediaplane.PlacementOverflowHostGuard
+	case tooOld:
+		first.Reason = mediaplane.PlacementOverflowNodeProtocol
 	case answering:
 		first.Reason = mediaplane.PlacementOverflowDraining
 	default:
@@ -309,6 +322,9 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 	}
 	now := time.Now()
 	load := f.loadOf(node.node, ready, now)
+	if load.tooOld() && !(known && before.tooOld()) {
+		f.logTransition(ctx, slog.LevelWarn, "chalk sfu node is out of placement", node.node, "reason", NodeProtocolTooOld, "protocol", ready.Protocol, "minProtocol", minNodeProtocol, "revision", boundedRevision(ready.Revision))
+	}
 	f.loads[node.node] = load
 	f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
 }
@@ -329,10 +345,23 @@ func (f *Fleet) loadOf(node string, ready wireReady, at time.Time) nodeLoad {
 		room:        budget - ready.ReservedPackets,
 		episode:     ready.NewEpisodePackets,
 		hostGuard:   ready.Host.AdmissionReason != "",
+		protocol:    ready.Protocol,
 		incarnation: incarnation,
 		NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
 		at:          at,
 	}
+}
+
+// NodeProtocolTooOld is the bounded reason a node is out of placement: it decodes an older wire
+// protocol than this API sends. The same words name the placement reason overflow_node_protocol_too_old.
+const NodeProtocolTooOld = "node_protocol_too_old"
+
+// boundedRevision keeps a node-reported value out of the log unless it is a commit id.
+func boundedRevision(revision string) string {
+	if len(revision) != 40 || strings.Trim(revision, "0123456789abcdef") != "" {
+		return ""
+	}
+	return revision
 }
 
 func (f *Fleet) logTransition(ctx context.Context, level slog.Level, message, node string, attrs ...any) {

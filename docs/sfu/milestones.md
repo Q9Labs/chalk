@@ -535,6 +535,17 @@ binding gains optional fields only, so the previous release still reads it.
 Bench Droplets are deleted by tag; nothing in production changes until the SFU
 lead deploys.
 
+**Release order:** an SFU node reports its wire protocol and build commit on
+`/readyz`, and the API places no Episode on a node below the protocol it sends
+(the placement reason `overflow_node_protocol_too_old`). That guard covers new
+Episodes only: a live Episode bound to an older node still gets the API's calls
+with `allocationGeneration`, which the older node's strict decoder refuses. So no
+production Promote of a commit that contains #965 happens until the production
+SFU runs a build that accepts `allocationGeneration` and reports its protocol on
+`/readyz`. Production deploys the SFU before the API (expand, then contract), or
+the API deploy refuses when `/readyz` reports an older protocol than the API's
+minimum.
+
 **Needs the owner:** nothing in this plan. A production standby, a larger primary
 or an always-on second node is a money decision and is not assumed.
 
@@ -549,6 +560,9 @@ standby role "production failover" would be false while production has one node.
 inventory, SDK version policy, monitoring and dashboards start now and run in
 parallel. M9 is optional. Production deploys and the flag flips belong to the SFU
 lead.
+Rollout also requires the production SFU to run a build that accepts
+`allocationGeneration` and reports its protocol on `/readyz`, and production deploys
+that SFU before the API (see M11 release order).
 
 **Work packages**
 

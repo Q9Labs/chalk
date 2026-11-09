@@ -40,7 +40,7 @@ func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[s
 		if a == nil {
 			continue
 		}
-		reply := wireReady{NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode, Draining: a.draining}
+		reply := wireReady{Protocol: minNodeProtocol, NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode, Draining: a.draining}
 		reply.Host.AdmissionReason = a.guard
 		at := time.Now()
 		if a.stale {
@@ -165,7 +165,7 @@ func TestPlaceKeepsAnEpisodeInFlightAcrossAProbeThatDoesNotShowIt(t *testing.T) 
 	}
 	// A fresh probe replaces the load record with the same room: the Episode has not joined.
 	fleet.mu.Lock()
-	fleet.loads["p"] = fleet.loadOf("p", wireReady{PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
+	fleet.loads["p"] = fleet.loadOf("p", wireReady{Protocol: minNodeProtocol, PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
 	fleet.mu.Unlock()
 	if placed, room := fleet.Place(); room || placed.Reason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("after a probe that does not show the Episode: placed %+v with room %t, want the slot still taken", placed, room)

@@ -45,6 +45,19 @@ To replace a broken node, taint the Droplet, apply, update `CHALK_SFU_NODES` in
 the API's settings if the address changed, and deploy. The node ID the API
 records stays the same, so bound Episodes still name it.
 
+## Upgrade order
+
+The SFU decodes requests strictly, so a field the API adds is refused as
+`400 invalid_request` by a node that predates it. Each node reports its wire
+protocol and build commit on `/readyz`, and the API places no new Episode on a node
+below the protocol it sends: the Episode starts on Cloudflare, or is refused with
+overflow off, under the placement reason `overflow_node_protocol_too_old`, and the
+API logs `node_protocol_too_old` once per node. A live Episode already bound to an
+older node is not protected by that guard. So an environment's SFU nodes run the new
+build before its API does: deploy the node (`deploy <env> <address>`), check
+`/readyz` through the deploy tunnel for the protocol, then release the API. The
+managed release deploys the API and Sync only, never the SFU.
+
 ## Connect the API
 
 The API reaches a node with its provider-bridge certificate, reissued by

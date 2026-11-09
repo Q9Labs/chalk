@@ -79,6 +79,11 @@ const (
 	PlacementOverflowHostGuard       PlacementReason = "overflow_host_guard"
 	PlacementOverflowDraining        PlacementReason = "overflow_draining"
 	PlacementOverflowNodeUnavailable PlacementReason = "overflow_node_unavailable"
+	// PlacementOverflowNodeProtocol: every node that answered speaks an older wire protocol than
+	// this API sends, so none may take an Episode. A binding stores it as
+	// PlacementOverflowNodeUnavailable (see Placed); the decision's telemetry and a refusal keep
+	// this reason.
+	PlacementOverflowNodeProtocol PlacementReason = "overflow_node_protocol_too_old"
 	// PlacementNoCapacity keeps the Episode on the first node although no node had
 	// room, because the Tenant has no Cloudflare application to take it. The
 	// node's admission then refuses the join.
@@ -114,6 +119,11 @@ func NewBinding(provider, source, applicationID string) (Binding, error) {
 // fingerprint: it locates the Episode inside the application, it does not pick one.
 func (binding Binding) Placed(placement Placement) (Binding, error) {
 	binding.Node, binding.NodeIncarnation, binding.PlacementReason = placement.Node, placement.Incarnation, placement.Reason
+	if binding.PlacementReason == PlacementOverflowNodeProtocol {
+		// The release one step back rejects a reason it does not know, so a rollback would
+		// strand this Episode. The node was not usable by this API, which is what unavailable says.
+		binding.PlacementReason = PlacementOverflowNodeUnavailable
+	}
 	if binding.Node != "" && !ValidNodeID(binding.Node) {
 		return Binding{}, ErrInvalidBinding
 	}

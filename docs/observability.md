@@ -535,12 +535,15 @@ The API counts own-SFU placement decisions for new Episodes as
 `chalk.api.media_plane.placement_decisions`, with `chalk.media_plane.provider`,
 `chalk.media_plane.node_role` (`primary`, `standby`, `overflow`) and
 `chalk.media_plane.placement_reason` (`primary`, `standby`, `overflow_no_room`,
-`overflow_host_guard`, `overflow_draining`, `overflow_node_unavailable`, `no_capacity`).
+`overflow_host_guard`, `overflow_draining`, `overflow_node_unavailable`, `overflow_node_protocol_too_old`, `no_capacity`).
 `standby` means every primary was silent, draining, host-guard closed or out of budget. `overflow_no_room` means a node that takes new Episodes was out of
 packet budget, `overflow_host_guard` means a node's host guard refused new Episodes
 (CPU or scheduler pressure) whatever budget was left, `overflow_draining`
 means every node that answered was draining (a planned state, not a capacity shortage),
-and `overflow_node_unavailable` means no node answered ready. It counts decisions, not
+`overflow_node_unavailable` means no node answered ready, and `overflow_node_protocol_too_old` means
+the nodes that answered report an older SFU wire protocol than the API sends (the SFU was not deployed before the API; the
+API logs `chalk sfu node is out of placement` with `reason=node_protocol_too_old`, the node's protocol and its build commit).
+The binding of an Episode that overflowed for this reason reads `overflow_node_unavailable`. It counts decisions, not
 committed Episodes: placement runs inside the creation transaction, so a request that
 later rolls back (for example an Episode already live in the Space) still counts once.
 Read it as a rate of placement attempts by outcome. The binding frozen on a committed

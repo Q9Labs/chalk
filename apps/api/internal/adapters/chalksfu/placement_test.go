@@ -399,7 +399,7 @@ func TestConformanceAHostGuardRefusalIsNotReportedAsFull(t *testing.T) {
 	clients.AppendCertsFromPEM(ca.pem)
 	guarded := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"nodeIncarnation":"guarded-1","packetBudget":100000,"reservedPackets":0,"newEpisodePackets":600,"host":{"admissionReason":"cpu_busy"}}`))
+		_, _ = w.Write([]byte(`{"protocol":2,"nodeIncarnation":"guarded-1","packetBudget":100000,"reservedPackets":0,"newEpisodePackets":600,"host":{"admissionReason":"cpu_busy"}}`))
 	}))
 	guarded.TLS = &tls.Config{Certificates: []tls.Certificate{pair}, ClientCAs: clients, ClientAuth: tls.RequireAndVerifyClientCert}
 	guarded.StartTLS()

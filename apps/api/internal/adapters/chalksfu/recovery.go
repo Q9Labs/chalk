@@ -130,7 +130,7 @@ type candidate struct {
 }
 
 // recoveryCandidates lists the nodes that may take a recovering Episode, in the order Place
-// uses: every primary that answered within the freshness window and is not draining, then the
+// uses: every primary that answered within the freshness window, is not draining and speaks a wire protocol this API can send, then the
 // same standbys. It does not guess at capacity from the probe: the probe's totals do not show
 // what the Episode already holds on a node, and a standby's degraded budget is enforced by the
 // node's own reserve (see wireReserveRequest.PacketCeiling), so the node's answer decides. It
@@ -145,7 +145,7 @@ func (f *Fleet) recoveryCandidates() []candidate {
 				continue
 			}
 			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness || load.Draining {
+			if !probed || time.Since(load.at) > probeFreshness || load.Draining || load.tooOld() {
 				continue
 			}
 			candidates = append(candidates, candidate{adapter: node, standby: standby})

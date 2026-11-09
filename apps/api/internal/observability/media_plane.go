@@ -74,7 +74,7 @@ func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) 
 		return "primary", string(reason)
 	case mediaplane.PlacementStandby:
 		return "standby", string(reason)
-	case mediaplane.PlacementOverflowNoRoom, mediaplane.PlacementOverflowHostGuard, mediaplane.PlacementOverflowDraining, mediaplane.PlacementOverflowNodeUnavailable:
+	case mediaplane.PlacementOverflowNoRoom, mediaplane.PlacementOverflowHostGuard, mediaplane.PlacementOverflowDraining, mediaplane.PlacementOverflowNodeUnavailable, mediaplane.PlacementOverflowNodeProtocol:
 		return "overflow", string(reason)
 	default:
 		return "unknown", "unknown"
