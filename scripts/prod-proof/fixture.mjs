@@ -27,7 +27,7 @@ export async function generateTurnVoices(directory, signal) {
 }
 
 // Browser-side generator: animated, distinguishable camera; repeatable spoken audio.
-export function installFixture({ speech, guest, tones = false, voiceGain, turns = false }) {
+export function installFixture({ speech, guest, tones = false, voiceGain, turns = false, camera: size = { width: 1280, height: 720 } }) {
   const NativePC = window.RTCPeerConnection;
   window.proofConnections = [];
   window.RTCPeerConnection = class extends NativePC {
@@ -52,8 +52,8 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
   const nativeCapture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   function cameraTrack() {
     const canvas = document.createElement("canvas");
-    canvas.width = 1280;
-    canvas.height = 720;
+    canvas.width = size.width;
+    canvas.height = size.height;
     const context = canvas.getContext("2d");
     let frame = 0;
     const backgrounds = { before: ["#1b365d", "#613c69", "#5d2a1b"], after: ["#185d45", "#69461d", "#5d1b45"] };
@@ -62,18 +62,18 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       if ((window.proofFlashes ?? []).some((start) => clock >= start && clock < start + window.proofFlashSeconds)) {
         // The A/V marker: the whole picture goes white while this guest's marker tone sounds.
         context.fillStyle = "white";
-        context.fillRect(0, 0, 1280, 720);
+        context.fillRect(0, 0, size.width, size.height);
         return;
       }
       context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest % 3];
-      context.fillRect(0, 0, 1280, 720);
+      context.fillRect(0, 0, size.width, size.height);
       context.fillStyle = "white";
       context.font = "64px sans-serif";
       context.fillText(`Proof guest ${guest + 1}`, 60, 100);
       context.fillText(`${window.proofPhase ?? "before"}: Frame ${frame++}`, 60, 200);
       for (let n = 0; n < 30; n++) {
         context.fillStyle = `hsl(${(frame * 7 + n * 12) % 360} 70% 60%)`;
-        context.fillRect((frame * 11 + n * 61) % 1280, 250 + (n % 5) * 80, 70, 60);
+        context.fillRect((frame * 11 + n * 61) % size.width, 250 + (n % 5) * 80, 70, 60);
       }
     }, 1000 / 15);
     const camera = canvas.captureStream(15).getVideoTracks()[0];
