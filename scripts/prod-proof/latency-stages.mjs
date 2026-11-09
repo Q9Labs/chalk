@@ -47,8 +47,7 @@ export function toggleStages(group, { t0, sender, receiver, command, visibleAt, 
     ["sync_fanout", () => frame],
     ["roster_apply", () => visibleAt],
     ["list_publications", (previous) => httpEnd(receiver, frame ?? previous, "publications")],
-    turningOn ? ["pull", afterPrevious("tracks")] : ["close_tracks", afterPrevious("tracks/close")],
-    ["renegotiate", afterPrevious("renegotiate")],
+    ...(turningOn ? [["pull", afterPrevious("tracks")], ["renegotiate", afterPrevious("renegotiate")]] : []),
     [turningOn ? "first_media" : "track_removed", () => finalAt],
   ]);
   return {
