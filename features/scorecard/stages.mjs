@@ -44,6 +44,7 @@ const turnOn = (id, title, metrics, source) => ({
 });
 
 /** @param {string} id @param {string} title @param {string} metrics */
+// The receiver sends no tracks/close or renegotiate when a remote track turns off: only the sender closes on the SFU (sfu_close).
 const turnOff = (id, title, metrics) => ({
   id,
   title,
@@ -53,9 +54,7 @@ const turnOff = (id, title, metrics) => ({
     syncFanout,
     rosterApply,
     listPublications,
-    { id: "close_tracks", from: "previous", description: "previous reply until the receiver's tracks/close reply" },
-    renegotiate,
-    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track" },
+    { id: "track_removed", from: "previous", description: "last reached stage until the receiver holds no live track (the receiver drops the track locally and makes no SFU call)" },
     syncAck,
     { id: "sfu_close", from: "call", description: "call until the sender's tracks/close reply" },
   ],
@@ -77,7 +76,7 @@ export const STAGE_GROUPS = [
       { id: "prepare", from: "previous", description: "join() until the Sync socket is created" },
       { id: "sync_connect", from: "previous", description: "socket created until it is open (TCP, TLS, upgrade)" },
       { id: "sync_welcome", from: "previous", description: "socket open until Sync's welcome frame" },
-      { id: "sync_entered", from: "previous", description: "welcome until Sync's entered_ack" },
+      { id: "sync_entered", from: "previous", description: "welcome until Sync's entered_ack; Sync sends it only when entry confirmation is negotiated (sync_entry_rollout enforced), so it stays empty while the rollout is in compatibility mode" },
       { id: "sfu_publications", from: "call", description: "join() until the first listPublications reply" },
       { id: "sfu_tracks", from: "call", description: "join() until the first tracks reply (publish or pull)" },
       { id: "sfu_renegotiate", from: "call", description: "join() until the first renegotiate reply" },
@@ -88,6 +87,12 @@ export const STAGE_GROUPS = [
 
 /** Every stage id the schema accepts, as "<group>.<stage>". */
 export const STAGE_IDS = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
+
+/**
+ * Stage ids earlier versions of the kit wrote and no longer record. The validator still accepts them so a sidecar written
+ * before the change is shown, but nothing emits or displays them.
+ */
+export const RETIRED_STAGE_IDS = ["mic_off", "camera_off", "screen_stop"].flatMap((group) => ["close_tracks", "renegotiate"].map((stage) => `${group}.${stage}`));
 
 /**
  * The audio delay a listener adds, estimated from the receiver's WebRTC stats while a call is steady. Informational, like every

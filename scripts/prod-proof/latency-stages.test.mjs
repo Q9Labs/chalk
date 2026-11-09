@@ -56,18 +56,48 @@ test("a roster frame stamped just before the send, from the other page's clock, 
   assert.equal(skewed["mic_on.sync_fanout"], 0);
 });
 
-test("a turn-off uses the close stages", () => {
+test("a camera turn-off splits into the stages the SDK really runs: the receiver reads publications and drops the track, the sender closes on the SFU", () => {
   const off = toggleStages("camera_off", {
     t0: 1000,
     command: "live_target:set_camera_enabled:false",
     visibleAt: 1100,
     finalAt: 1400,
-    sender: [at(1020, "ws_out", "live_target:set_camera_enabled:false"), at(1090, "http_end", "PUT tracks/close")],
-    receiver: [at(1090, "ws_in", "projection_event:media"), at(1250, "http_end", "PUT tracks/close")],
+    sender: [at(1020, "ws_out", "live_target:set_camera_enabled:false"), at(1090, "http_end", "PUT tracks/close"), at(1500, "ws_in", "live_target_result")],
+    receiver: [at(1090, "ws_in", "projection_event:media"), at(1250, "http_end", "GET publications")],
   });
-  assert.equal(off["camera_off.close_tracks"], 150);
-  assert.equal(off["camera_off.track_removed"], 150);
-  assert.equal(off["camera_off.sfu_close"], 90);
+  assert.deepEqual(off, {
+    "camera_off.prepare": 20,
+    "camera_off.sync_fanout": 70,
+    "camera_off.roster_apply": 10,
+    "camera_off.list_publications": 150,
+    "camera_off.track_removed": 150,
+    "camera_off.sync_ack": 500,
+    "camera_off.sfu_close": 90,
+  });
+});
+
+test("a turn-off ignores a receiver-side tracks/close, which only a hidden or stalled receiver makes", () => {
+  const micOff = "live_target:set_microphone_enabled:false";
+  const off = toggleStages("mic_off", {
+    t0: 1000,
+    command: micOff,
+    visibleAt: 1160,
+    finalAt: 1700,
+    sender: [at(1040, "ws_out", micOff), at(1090, "http_end", "PUT tracks/close"), at(1250, "ws_in", "live_target_result")],
+    receiver: [at(1150, "ws_in", "projection_event:media"), at(1380, "http_end", "GET publications"), at(1600, "http_end", "PUT tracks/close")],
+  });
+  assert.equal("mic_off.close_tracks" in off, false);
+  assert.equal("mic_off.renegotiate" in off, false);
+  assert.equal(off["mic_off.track_removed"], 320);
+  assert.equal(off["mic_off.sfu_close"], 90);
+});
+
+test("join leaves sync_entered empty when Sync negotiates no entry confirmation, and still records the rest", () => {
+  const events = [at(1010, "ws_new"), at(1100, "ws_open"), at(1300, "ws_in", "welcome"), at(1400, "http_end", "GET publications")];
+  const stages = joinStages({ t0: 1000, events });
+  assert.equal(stages["join.sync_entered"], null);
+  assert.equal(stages["join.sync_welcome"], 200);
+  assert.equal(stages["join.sfu_publications"], 400);
 });
 
 test("join splits the Sync connect and notes the SFU steps from the call", () => {
