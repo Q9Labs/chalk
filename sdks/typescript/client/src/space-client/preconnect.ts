@@ -1,4 +1,5 @@
-import { parkBrowserSyncSocket } from "../sync/browser";
+import { releaseWarmBrowserSyncSocket, warmBrowserSyncSocket } from "../sync/browser";
+import { MAX_KEEP_WARM_MS } from "../sync/warm-socket";
 import { syncEntryUrl } from "../sync/entry-url";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "./urls";
 
@@ -7,6 +8,12 @@ export type PreconnectOptions = {
   readonly baseUrl?: string;
   /** The Sync URL, when it is not the default derived from `baseUrl`. */
   readonly syncUrl?: string;
+  /**
+   * How long to keep a socket ready after this call, in ms (0 to 16000, default 0). Sync closes an unused socket after 5 s, so
+   * a socket that ages out is replaced by a new one until this window ends. A failed upgrade ends the window. Use it for a
+   * screen where the person may take several seconds to press Join, and call `preconnect` again as they act.
+   */
+  readonly keepWarmMs?: number;
 };
 
 /**
@@ -14,8 +21,10 @@ export type PreconnectOptions = {
  * its TCP and TLS connection to the API, and the Sync WebSocket upgrade runs, so `join()` finds both ready. The first
  * Sync client built in a browser for the same Sync URL adopts the socket. It asks for no grant, holds no seat, sends
  * no frame and starts no media, so there is nothing to cancel when the person leaves. Sync closes a socket that gets
- * no hello within 5 s, so the socket is dropped after 4 s unused and calling `preconnect` again opens a new one: call it
- * again as the person acts (typing a name, pressing Join). It does nothing outside a browser page.
+ * no hello within 5 s, so the socket is dropped after 4 s unused: pass `keepWarmMs` to have a new one opened until that
+ * window ends, and call `preconnect` again as the person acts (typing a name, pressing Join). Calling it while a socket is
+ * upgrading or open never starts a second upgrade. The socket is not tied to a Space, so it serves a join in any Space of the
+ * tab, including the next call after a leave. It does nothing outside a browser page.
  */
 export function preconnect(options: PreconnectOptions = {}): void {
   if (typeof document === "undefined") return;
@@ -29,5 +38,13 @@ export function preconnect(options: PreconnectOptions = {}): void {
     link.crossOrigin = "anonymous";
     document.head.appendChild(link);
   }
-  parkBrowserSyncSocket(syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true));
+  warmBrowserSyncSocket(syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true), Math.min(options.keepWarmMs ?? 0, MAX_KEEP_WARM_MS));
+}
+
+/**
+ * Closes the socket `preconnect` holds and stops keeping one. Call it at sign-out. The socket carries no credential, so this
+ * ends a resource rather than revoking access.
+ */
+export function releasePreconnect(): void {
+  releaseWarmBrowserSyncSocket();
 }

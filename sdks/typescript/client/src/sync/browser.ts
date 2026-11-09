@@ -1,5 +1,6 @@
 import { SyncBrowserCapabilityError } from "./errors";
 import type { SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
+import { WarmSocketSlot } from "./warm-socket";
 
 export type BrowserWebSocketConstructor = new (url: string) => WebSocket;
 
@@ -9,41 +10,23 @@ export type BrowserLifecycleEnvironment = {
 };
 
 const WEBSOCKET_OPEN = 1;
-// Sync closes a socket that sends no hello within 5 s, so a parked socket gives up first.
-const PARKED_SOCKET_TTL_MS = 4000;
-const parkedSockets = new Map<string, { readonly socket: WebSocket; readonly expire: ReturnType<typeof setTimeout> }>();
+const warmSlot = new WarmSocketSlot({
+  open: (url) => (globalThis.WebSocket ? new globalThis.WebSocket(url) : undefined),
+  visible: () => typeof document === "undefined" || document.visibilityState !== "hidden",
+});
 
 /**
- * Opens a Sync socket ahead of the join so the upgrade finishes before the client dials. The default factory hands it to
- * the first `connect` for the same URL. The socket carries no credential and sends nothing: the token goes in the hello.
- * Best effort: a socket that cannot open is dropped, and `connect` then dials as usual and reports the real failure.
+ * Has a Sync socket for `url` upgrading or open before the join, so the first client that dials the same URL adopts it
+ * instead of paying the upgrade. See `WarmSocketSlot` for the states and the bounds. Best effort: a socket that cannot open is
+ * dropped, and `connect` then dials as usual and reports the real failure.
  */
-export function parkBrowserSyncSocket(url: string): void {
-  if (parkedSockets.has(url) || !globalThis.WebSocket) return;
-  let socket: WebSocket;
-  try {
-    socket = new globalThis.WebSocket(url);
-  } catch {
-    return;
-  }
-  const release = () => {
-    if (parkedSockets.get(url)?.socket === socket) parkedSockets.delete(url);
-  };
-  const expire = setTimeout(() => {
-    release();
-    socket.close(1000, "unused");
-  }, PARKED_SOCKET_TTL_MS);
-  parkedSockets.set(url, { socket, expire });
-  socket.addEventListener("close", release);
-  socket.addEventListener("error", release);
+export function warmBrowserSyncSocket(url: string, keepMs?: number): void {
+  warmSlot.warm(url, keepMs);
 }
 
-function takeParkedSocket(url: string): WebSocket | undefined {
-  const parked = parkedSockets.get(url);
-  if (!parked) return undefined;
-  parkedSockets.delete(url);
-  clearTimeout(parked.expire);
-  return parked.socket.readyState <= WEBSOCKET_OPEN ? parked.socket : undefined;
+/** Closes the warm socket, if any, and stops keeping one: call it at sign-out. */
+export function releaseWarmBrowserSyncSocket(): void {
+  warmSlot.release();
 }
 
 export function createBrowserWebSocketFactory(WebSocketConstructor?: BrowserWebSocketConstructor): SyncWebSocketFactory {
@@ -53,7 +36,7 @@ export function createBrowserWebSocketFactory(WebSocketConstructor?: BrowserWebS
       if (!Constructor) {
         throw new SyncBrowserCapabilityError("WebSocket");
       }
-      const parked = WebSocketConstructor ? undefined : takeParkedSocket(url);
+      const parked = WebSocketConstructor ? undefined : warmSlot.adopt(url);
       return new BrowserSyncSocket(parked ?? new Constructor(url));
     },
   };

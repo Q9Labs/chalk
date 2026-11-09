@@ -15,13 +15,16 @@ const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
+// A visitor on the lobby or the leave screen usually presses Join within seconds. Sync closes an idle socket after 5 s, so the
+// SDK replaces it for this long after the last action: about four short-lived sockets at most, then none.
+const LOBBY_KEEP_WARM_MS = 15_000;
 /**
  * Opens the API connection and the Sync WebSocket upgrade before Join, so joining skips both. The call UI stays unloaded
- * until Join: the call-performance route budget guards that. The socket lives 4 s, so call this again as the visitor acts.
+ * until Join: the call-performance route budget guards that. Call this again as the visitor acts to extend the window.
  */
 function warmCall(): void {
   const apiBaseURL = publicAPIBaseURL();
-  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
+  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL), keepWarmMs: LOBBY_KEEP_WARM_MS });
 }
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
@@ -134,6 +137,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   useEffect(() => {
     if (!reloadMarker) warmCall();
   }, [reloadMarker]);
+  // Sync closes the socket of a call that ended, so the next call's socket is warmed while the visitor reads the leave screen.
+  const exitPhase = terminal?.phase;
+  useEffect(() => {
+    if (exitPhase === "left" || exitPhase === "failed") warmCall();
+  }, [exitPhase]);
   useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;
     reloadAttempted.current = true;

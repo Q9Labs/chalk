@@ -8,7 +8,7 @@ export async function buildSdkBundle(entry, { lobby = false } = {}) {
   const result = await build({
     stdin: {
       contents: `import {createSpaceClient${lobby ? ", preconnect" : ""}} from ${JSON.stringify(entry)};
-${lobby ? "window.proofLobby=async(baseUrl,dwellMs)=>{preconnect({baseUrl});await new Promise((done)=>setTimeout(done,dwellMs));};\n" : ""}window.proofJoin=async(space,baseUrl,displayName)=>{
+${lobby ? "window.proofLobby=async(baseUrl,dwellMs)=>{preconnect({baseUrl,keepWarmMs:dwellMs+1000});await new Promise((done)=>setTimeout(done,dwellMs));};\n" : ""}window.proofJoin=async(space,baseUrl,displayName)=>{
  const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
  window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
 };`,
