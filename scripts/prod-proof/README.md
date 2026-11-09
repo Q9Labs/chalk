@@ -139,18 +139,18 @@ the two commands the run refuses to start; `--fault-interval-seconds 0` turns fa
 
 A P1 is one of these, printed as `P1 <reason> <call>` when it happens:
 
-| Reason                  | What it means                                                                                                 |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                         |
-| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                     |
-| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                 |
-| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                        |
-| `mute_leak`             | A muted microphone's audio energy, or a disabled camera's frames, kept reaching another guest.                |
-| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests. |
-| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                            |
+| Reason                  | What it means                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                                               |
+| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                                           |
+| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                                       |
+| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                                              |
+| `mute_leak`             | A muted microphone's tone was still heard (or its byte rate kept going), or a disabled camera's frames kept reaching another guest. |
+| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests.                       |
+| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                                                  |
 
 `cross_tenant` is the closest check one Tenant allows: it catches media or roster entries that cross between calls of
-the same fleet, not between two Tenants. Other findings (`action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
+the same fleet, not between two Tenants. Other findings (`audio_not_decoded` (a guest with its microphone on was not heard as its tone at another guest, though its bytes advanced; checked after the join, a microphone turn-on, a rejoin and each recovery, see `audio-decode.mjs`), `action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
 an errored call such as a failed admission or an Episode that did not end) fail the run without being a P1. A
 join time includes a loaded generator: each finding carries the load per core, and the fleet starts no new call while
 the load per core is above `--max-load` (0.85). Add machines, not concurrency, when it stays high.
@@ -392,6 +392,8 @@ or Recordings; ended/archived history and Recording artifacts follow the product
 retention policy. The provisioned Tenant and bootstrap API key are retained.
 
 ## What counts as proof
+
+**Audio is decoded, not just received.** `inbound-rtp` bytes keep growing for silence, garbage and for audio that headless Chromium never plays out (`totalAudioEnergy` stays 0 without playout), so a byte counter cannot judge audio. `audio-decode.mjs` adds the further condition every call proof that publishes tones now also meets: guest _n_ publishes a WebAudio oscillator at `toneHz(n)` (440 Hz times _n_), and every other guest feeds the remote microphone track into an `AnalyserNode`, which runs headless without an output device. The tone passes when its FFT bins (the peak of three bins around it) hold at least -50 dBFS, stand at least 25 dB above the median of the other bins, and do so for ten consecutive 100 ms frames. A muted sender passes only when the newest ten frames at those bins are at or below -70 dBFS. Speech calls (`camera-share`, which plays a synthesized voice) have no tone, so they pass when the 100 Hz to 4 kHz band reaches -60 dBFS in at least ten frames. The failure names each listener and speaker with the peak dB, bin, noise floor and sustained frames, and the evidence JSON keeps them (`audio-decode-*.json`, and `audio` in the `sfu-e2e` report). The thresholds are `decodeCriteria`; `audio-decode.test.mjs` runs the rules against a fake analyser built from a real FFT. The `pnpm prod:sfu-e2e audio` scenario is the direct proof: tone in, tone detected at both other guests, mute, silence, unmute, tone back. Wired in: `camera-share` (after setup and after the credential refresh), `sfu-e2e` (every scenario), `sfu-canary` (each join, each fault recovery, the muted round) and `sfu-classes`.
 
 - **offreason:** Sync's off-reason extension (`media_off_reason`) over the WebSocket
   protocol, with no browser or media. It admits a host and two guests, then for each

@@ -7,6 +7,7 @@ import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
+import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
@@ -235,6 +236,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   );
   await Promise.all(pages.map((page) => page.evaluate(playProofMedia)));
   await save(`${run.directory}/media-agreement.json`, await assertAgreement(pages));
+  await save(`${run.directory}/audio-decode-initial.json`, await proveAudioDecoded(guests));
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
@@ -247,6 +249,8 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
   checkMediaProgress(refreshedBefore, refreshedAfter);
+  // Bytes advancing after the refresh is not audio: each guest must still decode the other's.
+  await save(`${run.directory}/audio-decode-refreshed.json`, await proveAudioDecoded(guests));
   // End the active Episode once; its lifecycle stops any Capture and finalizes the Recording.
   console.log("Ending own Episode");
   await end();
