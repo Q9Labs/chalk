@@ -267,7 +267,8 @@ describe("independent r7 ordering", () => {
       await Promise.all([off, on]);
       expect(close).toHaveBeenCalledExactlyOnceWith(source, "user_pause");
       expect(local).not.toHaveBeenCalled();
-      expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, true]);
+      // The off reaches Sync beside the close, so the second On is the third command.
+      expect(command.mock.calls.map(([enabled]) => enabled)).toEqual([true, false, true]);
     } finally {
       pause.release();
       client.dispose();

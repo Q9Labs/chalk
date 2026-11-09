@@ -18,6 +18,9 @@ describe("production whiteboard adapter", () => {
 describe("production media adapter", () => {
   it("forwards privacy controls and projection notifications with the source binding", async () => {
     const source = {
+      prepareLocalPublicationTarget: vi.fn(async function (this: object) {
+        expect(this).toBe(source);
+      }),
       setLocalPublicationTarget: vi.fn(),
       setLocalSourceIntent: vi.fn(function (this: object) {
         expect(this).toBe(source);
@@ -43,12 +46,15 @@ describe("production media adapter", () => {
     } as unknown as Parameters<typeof bindConnectionMediaClient>[0];
     const restart = vi.fn() as unknown as Parameters<typeof bindConnectionMediaClient>[1];
     const adapter = bindConnectionMediaClient(source, restart);
+    const target = { source: "camera", enabled: true } as unknown as Parameters<typeof adapter.prepareLocalPublicationTarget>[0];
 
+    await adapter.prepareLocalPublicationTarget(target);
     adapter.setLocalSourceIntent?.("camera", false);
     await adapter.closeForcedLocalPublication?.("camera");
     adapter.remotePublicationsChanged?.();
     adapter.remotePublicationResumed?.("publication-1");
 
+    expect(source.prepareLocalPublicationTarget).toHaveBeenCalledWith(target);
     expect(source.setLocalSourceIntent).toHaveBeenCalledWith("camera", false);
     expect(source.closeForcedLocalPublication).toHaveBeenCalledWith("camera");
     expect(source.remotePublicationsChanged).toHaveBeenCalledOnce();

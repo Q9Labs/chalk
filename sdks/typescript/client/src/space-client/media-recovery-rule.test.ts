@@ -266,9 +266,10 @@ describe("recovery keeps a wanted-on source unless Sync turned it off", () => {
     });
 
     // The cutoff judges the intent that existed when recovery began, so a tap during the drop is the user's new word.
+    // Sync takes an enable only while the call is live, so the tap that follows the off lands the moment the recovered snapshot arrives.
     const offThenOn = async (setEnabled: Scenario["setEnabled"]) => {
       await setEnabled(false);
-      await setEnabled(true).catch(() => undefined);
+      await vi.waitFor(() => setEnabled(true));
     };
 
     it.each(sources.flatMap((source) => [longDropMs - 100, longDropMs, longDropMs * 2].map((downMs) => ({ source, downMs }))))("$source: a turn-off and turn-on during a drop of $downMs ms keeps the new on and applies it once", async ({ source, downMs }) => {
