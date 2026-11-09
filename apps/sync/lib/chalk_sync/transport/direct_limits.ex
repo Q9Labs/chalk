@@ -101,21 +101,19 @@ defmodule ChalkSync.Transport.DirectLimits do
   end
 
   def handle_call({:register, pid, ip}, _from, state) do
-    cond do
-      Map.get(state.by_ip, ip, 0) >= state.config[:max_sockets_per_ip] or
-          Map.get(state.unauthenticated_by_ip, ip, 0) >= state.config[:max_unauthenticated_per_ip] ->
-        {:reply, {:error, :ip_limit}, state}
+    if Map.get(state.by_ip, ip, 0) >= state.config[:max_sockets_per_ip] or
+         Map.get(state.unauthenticated_by_ip, ip, 0) >= state.config[:max_unauthenticated_per_ip] do
+      {:reply, {:error, :ip_limit}, state}
+    else
+      monitor = Process.monitor(pid)
 
-      true ->
-        monitor = Process.monitor(pid)
-
-        {:reply, :ok,
-         %{
-           state
-           | sockets: Map.put(state.sockets, pid, %{monitor: monitor, ip: ip, tenant_id: nil}),
-             by_ip: increment(state.by_ip, ip),
-             unauthenticated_by_ip: increment(state.unauthenticated_by_ip, ip)
-         }}
+      {:reply, :ok,
+       %{
+         state
+         | sockets: Map.put(state.sockets, pid, %{monitor: monitor, ip: ip, tenant_id: nil}),
+           by_ip: increment(state.by_ip, ip),
+           unauthenticated_by_ip: increment(state.unauthenticated_by_ip, ip)
+       }}
     end
   end
 

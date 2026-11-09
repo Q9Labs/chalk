@@ -3,9 +3,10 @@ defmodule ChalkSync.Transport.DirectSyncTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.TestWSClient, as: Client
   alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.SocketV1
-  alias ChalkSync.TestWSClient, as: Client
 
   @marker [{"x-chalk-ingress", "direct"}, {"cf-connecting-ip", "203.0.113.7"}]
 
@@ -73,7 +74,7 @@ defmodule ChalkSync.Transport.DirectSyncTest do
           "participant_generation" => 1,
           "admission_lifecycle_intent_id" => "55555555-5555-4555-8555-555555555555",
           "role" => "owner",
-          "capabilities" => ChalkSync.Episodes.Reducer.new("e").role_capabilities["owner"],
+          "capabilities" => Reducer.new("e").role_capabilities["owner"],
           "issued_at" => 1,
           "expires_at" => 4_102_444_800
         })
