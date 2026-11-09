@@ -21,6 +21,7 @@ import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
+import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
