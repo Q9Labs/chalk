@@ -10,17 +10,27 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.Transaction
+  alias ChalkSync.Telemetry
   alias ChalkSync.UUID
 
   # Episode authority is always acquired before Episode, participant, and seat.
   def admit_entry(connection, identity, requested) do
-    Transaction.configure(connection)
-    {identity, requested} = socket_request(connection, identity, requested)
-    Authority.lock_control(connection, identity.episode)
-    policy = Authority.lock_episode(connection, identity.episode)
+    {identity, requested} =
+      stage(:admit_configure, fn ->
+        Transaction.configure(connection)
+        socket_request(connection, identity, requested)
+      end)
 
-    participant =
-      Authority.lock_participant(connection, identity.episode, identity.participant_id)
+    {policy, participant} =
+      stage(:admit_locks, fn ->
+        Authority.lock_control(connection, identity.episode)
+        policy = Authority.lock_episode(connection, identity.episode)
+
+        participant =
+          Authority.lock_participant(connection, identity.episode, identity.participant_id)
+
+        {policy, participant}
+      end)
 
     if participant && participant.generation != identity.participant_generation do
       Postgrex.rollback(connection, {:error, :stale_participant_generation})
@@ -28,18 +38,22 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
     if policy.status == "active" && participant &&
          participant.status in ["joining", "active", "leaving"] do
-      ensure_seat(connection, identity, participant.status)
-      reconcile_applied_join(connection, identity)
-
       admitted =
-        allocate_requested_entry(
-          connection,
-          %{identity | identity_id: participant.identity_id},
-          requested
-        )
+        stage(:admit_seat, fn ->
+          ensure_seat(connection, identity, participant.status)
+          reconcile_applied_join(connection, identity)
 
-      remember_device(connection, admitted)
-      Presence.renew(connection, admitted)
+          allocate_requested_entry(
+            connection,
+            %{identity | identity_id: participant.identity_id},
+            requested
+          )
+        end)
+
+      stage(:admit_presence, fn ->
+        remember_device(connection, admitted)
+        Presence.renew(connection, admitted)
+      end)
 
       admitted
     else
@@ -47,6 +61,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       identity
     end
   end
+
+  defp stage(name, fun), do: Telemetry.timed([:entry, :stage], name, fun)
 
   defp remember_device(connection, identity) do
     Postgrex.query!(

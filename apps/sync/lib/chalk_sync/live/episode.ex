@@ -535,20 +535,7 @@ defmodule ChalkSync.Live.Episode do
     {state, live_result(target, reported)}
   end
 
-  # Per-stage wall time of the enable path, which runs before the sender may
-  # publish on the SFU. Labels are the fixed stage atoms only.
-  defp timed(stage, fun) do
-    started = System.monotonic_time(:microsecond)
-    result = fun.()
-
-    Telemetry.execute(
-      [:live_target, :stage],
-      %{duration_us: System.monotonic_time(:microsecond) - started},
-      %{outcome: :success, stage: stage}
-    )
-
-    result
-  end
+  defp timed(stage, fun), do: Telemetry.timed([:live_target, :stage], stage, fun)
 
   defp grant(module, adapter, state, authority, source, operation_id, reservation) do
     adapter = with_control_revision(module, adapter, reservation.control_revision)

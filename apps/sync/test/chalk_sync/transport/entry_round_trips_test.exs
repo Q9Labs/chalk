@@ -109,7 +109,11 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     |> Enum.reverse()
   end
 
-  defp collect({:trace_ts, pid, :call, {Postgrex, :query, [_conn, sql | _]}, ts}, state, collector) do
+  defp collect(
+         {:trace_ts, pid, :call, {Postgrex, :query, [_conn, sql | _]}, ts},
+         state,
+         collector
+       ) do
     send(collector, {:call, {:call, pid, :query, label(sql), micros(ts)}})
     state
   end
@@ -119,7 +123,11 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     state
   end
 
-  defp collect({:trace_ts, pid, :return_from, {Postgrex, :query, 4}, _value, ts}, state, collector) do
+  defp collect(
+         {:trace_ts, pid, :return_from, {Postgrex, :query, 4}, _value, ts},
+         state,
+         collector
+       ) do
     send(collector, {:call, {:return, pid, :query, micros(ts)}})
     state
   end

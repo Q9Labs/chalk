@@ -18,7 +18,8 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :webhook, :production],
     [:chalk, :sync, :webhook, :fanout],
     [:chalk, :sync, :retention, :cleanup],
-    [:chalk, :sync, :live_target, :stage]
+    [:chalk, :sync, :live_target, :stage],
+    [:chalk, :sync, :entry, :stage]
   ]
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
@@ -33,6 +34,10 @@ defmodule ChalkSync.Operations.Metrics do
     start_recording stop_recording
   )
   @live_target_stages ~w(reserve grant complete clear_pause reconcile)a
+  @entry_stages ~w(
+    admit confirm recover negotiate begin_recovery activate
+    admit_configure admit_locks admit_seat admit_presence
+  )a
   @handler_id __MODULE__
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -148,6 +153,11 @@ defmodule ChalkSync.Operations.Metrics do
 
   defp metric_labels([:chalk, :sync, :live_target, :stage], %{stage: stage})
        when stage in @live_target_stages do
+    [Atom.to_string(stage)]
+  end
+
+  defp metric_labels([:chalk, :sync, :entry, :stage], %{stage: stage})
+       when stage in @entry_stages do
     [Atom.to_string(stage)]
   end
 
