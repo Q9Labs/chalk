@@ -3,6 +3,7 @@ import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
 import { offReasonProof } from "./off-reason.mjs";
+import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -57,8 +58,15 @@ const plans = {
     webhooks: false,
     proofs: ["export", "call-artifacts"],
   },
+  // Three guests held across media-access refreshes for at least ten minutes, with mic and camera toggles on a schedule. Opt-in: nightly only.
+  "long-call": {
+    media: false,
+    longCall: true,
+    webhooks: false,
+    proofs: ["long-call"],
+  },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|leave|offreason] [--force-layer-switch|--no-layer-switch]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|offreason] [--force-layer-switch|--no-layer-switch] [long-call --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -67,9 +75,10 @@ offreason needs no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the pa
 Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password or environment variables; API readiness checks capabilities.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
-const known = new Set([...Object.keys(plans), "--force-layer-switch", "--no-layer-switch"]);
-const invalid = [!plans[mode], args.some((arg) => !known.has(arg)), args.filter((arg) => Object.hasOwn(plans, arg)).length > 1, args.includes("--force-layer-switch") && args.includes("--no-layer-switch")].some(Boolean);
+const known = new Set([...Object.keys(plans), "--force-layer-switch", "--no-layer-switch", "--dry-run"]);
+const invalid = [!plans[mode], args.some((arg) => !known.has(arg)), args.filter((arg) => Object.hasOwn(plans, arg)).length > 1, args.includes("--force-layer-switch") && args.includes("--no-layer-switch"), args.includes("--dry-run") && mode !== "long-call"].some(Boolean);
 if (args.includes("--help")) console.log(usage);
+else if (!invalid && args.includes("--dry-run")) console.log(longCallPlan());
 else if (mode === "cleanup") {
   try {
     check(args.length === 2, "cleanup requires one run ID");
@@ -100,7 +109,9 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     receiver = await prepareIntegration(run, plan.webhooks);
     call = await captureCall(run, receiver);
   }
+  if (plan.longCall) receiver = await prepareIntegration(run, false);
   const actions = {
+    "long-call": () => longCallProof(run, receiver),
     leave: () => leaveProof(run),
     offreason: () => offReasonProof(run),
     "camera-share": async () => {

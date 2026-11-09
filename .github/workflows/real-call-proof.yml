@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share and call-artifacts
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share, call-artifacts and long-call
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -48,7 +48,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share and call-artifacts
+        description: Media provider of the proof Space; chalk_sfu runs only camera-share, call-artifacts and long-call
         type: string
         default: cf_sfu
       latency:
@@ -184,7 +184,7 @@ jobs:
           echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
         if: ${{ success() && !inputs.latency_only }}
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 40 }}
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 65 || 40 }}
         env:
           GH_TOKEN: ${{ github.token }}
           STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
@@ -213,12 +213,12 @@ jobs:
           esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|leave) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
-            # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof and is in no default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ]; then
-              echo "chalk_sfu supports only camera-share and call-artifacts" >&2
+            # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ]; then
+              echo "chalk_sfu supports only camera-share, call-artifacts and long-call" >&2
               exit 1
             fi
           done

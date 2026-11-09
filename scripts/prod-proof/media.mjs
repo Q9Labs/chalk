@@ -178,6 +178,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     pages,
     participants,
     admissions,
+    refreshes,
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);

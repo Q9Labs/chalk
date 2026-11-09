@@ -218,6 +218,24 @@ checks, and per-guest tile counts: sampled intervals, visible frames, live frame
 words per guest), the export contact sheet, the recorder's own tracks (the recorder-tracks folder, when the command is set), and the console prints the same summary lines.
 Speaker names in the Transcript are reported but not required to match the guests.
 
+### A call held across media-access refreshes (`long-call`)
+
+Short-call proofs never outlive a media-access grant, so a bug that appears only when the SDK renews access (a guest loses the call with `access.invalid`, or a microphone stops publishing while the UI shows it on) passes them. `pnpm prod:proof long-call` holds one call of three headless Chromium guests (synthetic camera and a continuous tone) on `CHALK_PROOF_MEDIA_PLANE` (`chalk_sfu` or `cf_sfu`) for the longer of 10 minutes and two grant lifetimes. A grant lives 5 minutes and the SDK renews it 60 seconds early, so each guest sees a refresh about every 240 seconds, twice in the default 10 minutes. `long-call-criteria.mjs` holds those numbers, and its test fails if either constant in the API or the SDK moves.
+
+The schedule turns guests 1 and 2's microphone and camera off for 6 seconds at fixed times, and within 8 seconds before and 2 to 6 seconds after each predicted refresh, so every refresh has a toggle on both sides of it. The proof predicts the first refresh from the credential expiry the first grant carries. It samples every guest every 2 seconds from the SDK snapshot and the page's `getStats`. It fails when:
+
+- a guest's connection status is `failed` or `left`, its last error is `access.invalid`, or an access refresh answers with anything but 201;
+- a guest is not `live`, or has no connected peer connection, for more than 10 seconds (a closed peer connection with a connected successor is the normal replacement);
+- a guest's outbound audio bytes stand still for more than 8 seconds while its microphone shows on;
+- a remote tile's inbound audio or video bytes stand still, or the tile is missing, for more than 10 seconds while its sender is on;
+- fewer than two refreshes were seen, or a refresh had no toggle within 10 seconds of it, because then the call did not test what it must.
+
+It prints one line, `Long call: <guests> guests, <seconds>s, <n> access refreshes seen, <n> mic/camera toggles, <n> failures`, then one `Long call failure:` line per failure, and saves every sample in the run's private evidence folder. Its pass or fail is the proof's result in the job and the nightly; it has no scorecard metric and no budget, because it is a gate, not a measurement.
+
+`pnpm prod:proof long-call --dry-run` prints the duration, thresholds and toggle schedule without configuration or network.
+
+Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `own-sfu` job, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
+
 ### One-time webhook setup (each environment)
 
 Using the existing bootstrap key, create **one** disabled endpoint named after
