@@ -77,11 +77,13 @@ export function toggleStages(group, { t0, sender, receiver, command, visibleAt, 
  */
 export function joinStages({ t0, events }) {
   const frame = (name) => (previous) => find(events, previous, (event) => event.k === "ws_in" && event.d === name);
-  // A socket opened in the lobby is already open when join() starts, so the two socket stages cost nothing on the join path.
-  const adopted = events.some((event) => event.k === "ws_open" && event.t < t0);
+  // The join's socket is the one that carries its hello. A lobby socket that expired and was replaced after t0 is not the
+  // join's socket, so only a socket opened before t0 and used for the hello counts as adopted: its two stages cost nothing.
+  const hello = events.find((event) => event.t >= t0 && event.k === "ws_out" && event.d === "hello");
+  const ownSocket = (kind) => (previous) => (hello === undefined ? find(events, previous, (event) => event.k === kind) : find(events, 0, (event) => event.k === kind && event.s === hello.s));
   const stages = chain("join", t0, [
-    ["prepare", (previous) => (adopted ? previous : find(events, previous, (event) => event.k === "ws_new"))],
-    ["sync_connect", (previous) => (adopted ? previous : find(events, previous, (event) => event.k === "ws_open"))],
+    ["prepare", ownSocket("ws_new")],
+    ["sync_connect", ownSocket("ws_open")],
     ["sync_welcome", frame("welcome")],
     ["sync_entered", frame("entered_ack")],
   ]);

@@ -16,6 +16,9 @@ class FakeWebSocket extends EventTarget {
     this.readyState = 1;
     this.dispatchEvent(new Event("open"));
   }
+  fail(): void {
+    this.dispatchEvent(new Event("error"));
+  }
   close(code?: number, reason?: string): void {
     this.readyState = 3;
     this.closed.push({ code, reason });
@@ -98,6 +101,72 @@ it("closes an unused socket before Sync's hello timeout, and a later call opens 
   expect(FakeWebSocket.instances[0]?.closed).toEqual([{ code: 1000, reason: "unused" }]);
   preconnect({ syncUrl });
   expect(FakeWebSocket.instances).toHaveLength(2);
+});
+
+it("hands the socket over up to the last millisecond before it expires, and dials fresh from then on", () => {
+  const factory = createBrowserWebSocketFactory();
+  preconnect({ syncUrl });
+  vi.advanceTimersByTime(3999);
+  factory.connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(1);
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([]);
+  vi.advanceTimersByTime(1);
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([]);
+
+  preconnect({ syncUrl });
+  vi.advanceTimersByTime(4000);
+  factory.connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(3);
+  expect(FakeWebSocket.instances[1]?.closed).toEqual([{ code: 1000, reason: "unused" }]);
+  expect(FakeWebSocket.instances[2]?.url).toBe(dialed);
+});
+
+it("does not close the socket after the client adopted it", () => {
+  preconnect({ syncUrl });
+  createBrowserWebSocketFactory().connect(dialed);
+  vi.advanceTimersByTime(10_000);
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([]);
+});
+
+it("dials a new socket when the parked one is already closing", () => {
+  preconnect({ syncUrl });
+  const parked = FakeWebSocket.instances[0];
+  if (parked) parked.readyState = 2;
+  createBrowserWebSocketFactory().connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(2);
+  expect(FakeWebSocket.instances[1]?.url).toBe(dialed);
+});
+
+it("drops a socket that errors, so the client dials its own and a later call parks a new one", () => {
+  preconnect({ syncUrl });
+  FakeWebSocket.instances[0]?.fail();
+  createBrowserWebSocketFactory().connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(2);
+  preconnect({ syncUrl });
+  expect(FakeWebSocket.instances).toHaveLength(3);
+});
+
+it("drops a socket the server closes before the client dials", () => {
+  preconnect({ syncUrl });
+  FakeWebSocket.instances[0]?.close(1008, "hello timeout");
+  createBrowserWebSocketFactory().connect(dialed);
+  expect(FakeWebSocket.instances).toHaveLength(2);
+});
+
+it("keeps one socket and one hint when the page mounts twice and the name is edited many times", () => {
+  for (let call = 0; call < 12; call += 1) preconnect({ baseUrl: "https://api.example.test", syncUrl });
+  expect(FakeWebSocket.instances).toHaveLength(1);
+  expect(links).toHaveLength(1);
+});
+
+it("parks a new socket for a call after the client adopted the first, and that one expires on its own", () => {
+  preconnect({ syncUrl });
+  createBrowserWebSocketFactory().connect(dialed);
+  preconnect({ syncUrl });
+  expect(FakeWebSocket.instances).toHaveLength(2);
+  vi.advanceTimersByTime(4000);
+  expect(FakeWebSocket.instances[1]?.closed).toEqual([{ code: 1000, reason: "unused" }]);
+  expect(FakeWebSocket.instances[0]?.closed).toEqual([]);
 });
 
 it("leaves a socket from a custom WebSocket constructor alone", () => {

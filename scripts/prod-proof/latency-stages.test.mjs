@@ -131,13 +131,30 @@ test("a join that lists and pulls in one request leaves sfu_publications empty, 
   assert.equal(stages["join.sfu_renegotiate"], 1400);
 });
 
+const socket = (s, k, t, d) => ({ t, k, d, s });
+
 test("join counts the Sync socket stages as zero when the lobby already opened the socket", () => {
-  const events = [at(200, "ws_new"), at(850, "ws_open"), at(1300, "ws_in", "welcome"), at(1350, "ws_in", "entered_ack")];
+  const events = [socket(1, "ws_new", 200), socket(1, "ws_open", 850), socket(1, "ws_out", 1020, "hello"), socket(1, "ws_in", 1300, "welcome"), socket(1, "ws_in", 1350, "entered_ack")];
   const stages = joinStages({ t0: 1000, events });
   assert.equal(stages["join.prepare"], 0);
   assert.equal(stages["join.sync_connect"], 0);
   assert.equal(stages["join.sync_welcome"], 300);
   assert.equal(stages["join.sync_entered"], 50);
+});
+
+test("a lobby socket that expired does not make its replacement count as adopted", () => {
+  // Socket 1 opened in the lobby and expired. The join dialed socket 2 at 1010 and its upgrade took 600 ms.
+  const events = [socket(1, "ws_new", 200), socket(1, "ws_open", 850), socket(2, "ws_new", 1010), socket(2, "ws_open", 1610), socket(2, "ws_out", 1620, "hello"), socket(2, "ws_in", 1900, "welcome"), socket(2, "ws_in", 1950, "entered_ack")];
+  const stages = joinStages({ t0: 1000, events });
+  assert.equal(stages["join.prepare"], 10);
+  assert.equal(stages["join.sync_connect"], 600);
+});
+
+test("a lobby socket still upgrading when the join starts counts only the time left", () => {
+  const events = [socket(1, "ws_new", 900), socket(1, "ws_open", 1250), socket(1, "ws_out", 1260, "hello"), socket(1, "ws_in", 1500, "welcome")];
+  const stages = joinStages({ t0: 1000, events });
+  assert.equal(stages["join.prepare"], 0);
+  assert.equal(stages["join.sync_connect"], 250);
 });
 
 test("the kit records exactly the stages the registry lists", () => {
@@ -236,6 +253,8 @@ test("the page trace records wire events, sends no frame of its own and leaves t
     ]);
     assert.equal(fetched.length, 3);
     assert.equal(sent.length, 1);
+    const wire = globalThis.proofTrace.take(0).filter((event) => event.k.startsWith("ws_"));
+    assert.ok(wire.length > 0 && wire.every((event) => event.s === 1), "every socket event carries the number of its socket");
     assert.equal(await globalThis.proofTrace.sfuRtt(), 205);
     assert.deepEqual(await globalThis.proofTrace.audioStats(), { emitted: 100, jitterBufferDelay: 4, samples: 4800, playoutDelay: 24, playoutReported: true }, "audio rows only");
     // The SDK pings and its pong is dropped: the trace has nothing to answer it with, sends nothing, and reads no round trip.
