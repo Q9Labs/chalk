@@ -43,19 +43,35 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     {:ok, seed: seed}
   end
 
-  test "a first socket entry stays within its Postgres round trip budget", ctx do
-    [identity | _] = ctx.seed.identities
-    statements = traced_entry(ctx.port, identity)
+  # The URL the production SDK opens: it asks Sync to own the entry, so confirmation
+  # happens later on `entered` and not inside hello.
+  @production_path "/v1/sync?participant_devices=1&participant_device_admissions=2&media_off_reason=1&entry_generation=new&entry_confirmation=1"
 
-    if System.get_env("CHALK_SYNC_ENTRY_TRACE") do
-      for {sql, micros} <- statements, do: IO.puts("ENTRY_TRACE #{micros}us #{sql}")
-    end
+  test "a production socket entry stays within its Postgres round trip budget", ctx do
+    [identity | _] = ctx.seed.identities
+    statements = traced_entry(ctx.port, @production_path, identity)
+    print_trace("production", statements)
 
     assert length(statements) <= 64
   end
 
-  defp traced_entry(port, identity) do
-    {:ok, client} = Client.connect(port, "/v1/sync")
+  test "a legacy socket entry also confirms the admission in hello", ctx do
+    [identity | _] = ctx.seed.identities
+    statements = traced_entry(ctx.port, "/v1/sync", identity)
+    print_trace("legacy", statements)
+
+    assert length(statements) <= 64
+  end
+
+  defp print_trace(label, statements) do
+    if System.get_env("CHALK_SYNC_ENTRY_TRACE") do
+      IO.puts("ENTRY_TRACE #{label} statements=#{length(statements)}")
+      for {sql, micros} <- statements, do: IO.puts("ENTRY_TRACE #{label} #{micros}us #{sql}")
+    end
+  end
+
+  defp traced_entry(port, path, identity) do
+    {:ok, client} = Client.connect(port, path)
     tracer = spawn_link(fn -> collect_loop([]) end)
     :erlang.trace(:all, true, [:call, :timestamp, {:tracer, tracer}])
     trace_pattern = [{:_, [], [{:return_trace}]}]
