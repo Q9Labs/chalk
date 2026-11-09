@@ -334,3 +334,118 @@ func TestTenantOriginPreflightCachesForTenMinutesAndStillRefusesOtherOrigins(t *
 		t.Errorf("refused origin got %d, allow-origin %q, max-age %q; want 403 and neither header", refused.Code, refused.Header().Get("Access-Control-Allow-Origin"), refused.Header().Get("Access-Control-Max-Age"))
 	}
 }
+
+// A browser may hold a cached preflight for ten minutes after the Tenant removes
+// an origin, but every real request repeats the origin check: the removed origin
+// gets no allow headers on its POST, so the browser withholds the response.
+func TestSignalPostFromOriginRemovedAfterPreflightGetsNoAllowHeaders(t *testing.T) {
+	origins := signalOrigins{"https://customer.example": true}
+	handler := allowCORS(CORSOptions{TenantOrigins: origins}, RateLimitOptions{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	post := func() *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, signalPath("signal"), strings.NewReader(`{"op":"publications"}`))
+		request.Header.Set("Origin", "https://customer.example")
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	if before := post(); before.Header().Get("Access-Control-Allow-Origin") != "https://customer.example" {
+		t.Fatalf("allowed origin POST got allow-origin %q, want its origin", before.Header().Get("Access-Control-Allow-Origin"))
+	}
+	delete(origins, "https://customer.example")
+	after := post()
+	if after.Header().Get("Access-Control-Allow-Origin") != "" || after.Header().Get("Access-Control-Allow-Credentials") != "" || after.Header().Get("Access-Control-Max-Age") != "" {
+		t.Errorf("removed origin POST got allow-origin %q, credentials %q, max-age %q; want none", after.Header().Get("Access-Control-Allow-Origin"), after.Header().Get("Access-Control-Allow-Credentials"), after.Header().Get("Access-Control-Max-Age"))
+	}
+}
+
+type signalVerifier struct {
+	subject accessgrants.Subject
+	err     error
+}
+
+func (v signalVerifier) Verify(context.Context, string) (accessgrants.Subject, error) {
+	return v.subject, v.err
+}
+
+type signalAuthorizer struct {
+	active bool
+	err    error
+}
+
+func (a signalAuthorizer) AuthorizeActiveParticipant(context.Context, accessgrants.Subject) (bool, error) {
+	return a.active, a.err
+}
+
+// The unified route sits behind the same participant credential and active
+// participant checks as the per-operation routes, so every refusal is the same
+// on both: no credential, a rejected one, a subject for another participant,
+// Episode or connection, a stale generation, an inactive participant, and a
+// verifier or authorizer that fails.
+func TestSFUSignalRefusesTheSameCredentialsAsPerOperationRoutes(t *testing.T) {
+	foreign := func(change func(*accessgrants.Subject)) accessgrants.Subject {
+		subject := signalSubject(t)
+		change(&subject)
+		return subject
+	}
+	another := mustSignalID("55555555-5555-4555-8555-555555555555")
+	cases := []struct {
+		name       string
+		header     string
+		verifier   signalVerifier
+		authorizer signalAuthorizer
+		want       int
+	}{
+		{"missing credential", "", signalVerifier{subject: signalSubject(t)}, signalAuthorizer{active: true}, http.StatusUnauthorized},
+		{"not a bearer credential", "Basic abc", signalVerifier{subject: signalSubject(t)}, signalAuthorizer{active: true}, http.StatusUnauthorized},
+		{"invalid signature", "Bearer token", signalVerifier{err: accessgrants.ErrInvalidSignature}, signalAuthorizer{active: true}, http.StatusUnauthorized},
+		{"expired credential", "Bearer token", signalVerifier{err: accessgrants.ErrExpired}, signalAuthorizer{active: true}, http.StatusUnauthorized},
+		{"verifier unavailable", "Bearer token", signalVerifier{err: context.DeadlineExceeded}, signalAuthorizer{active: true}, http.StatusServiceUnavailable},
+		{"another participant", "Bearer token", signalVerifier{subject: foreign(func(s *accessgrants.Subject) { s.ParticipantID = another })}, signalAuthorizer{active: true}, http.StatusForbidden},
+		{"another Episode", "Bearer token", signalVerifier{subject: foreign(func(s *accessgrants.Subject) { s.EpisodeID = another })}, signalAuthorizer{active: true}, http.StatusForbidden},
+		{"another Tenant", "Bearer token", signalVerifier{subject: foreign(func(s *accessgrants.Subject) { s.TenantID = another })}, signalAuthorizer{active: true}, http.StatusForbidden},
+		{"another connection", "Bearer token", signalVerifier{subject: foreign(func(s *accessgrants.Subject) { s.ConnectionID = "connection-other" })}, signalAuthorizer{active: true}, http.StatusForbidden},
+		{"stale generation", "Bearer token", signalVerifier{subject: signalSubject(t)}, signalAuthorizer{err: accessgrants.ErrGenerationMismatch}, http.StatusForbidden},
+		{"inactive participant", "Bearer token", signalVerifier{subject: signalSubject(t)}, signalAuthorizer{active: false}, http.StatusForbidden},
+		{"authorizer unavailable", "Bearer token", signalVerifier{subject: signalSubject(t)}, signalAuthorizer{err: context.DeadlineExceeded}, http.StatusServiceUnavailable},
+	}
+	for _, c := range cases {
+		for _, operation := range signalCases {
+			t.Run(c.name+"/"+operation.name, func(t *testing.T) {
+				call := func(method, path, body string) (int, string) {
+					service := mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, signalPlane{})
+					router := chi.NewRouter()
+					router.Route("/v1", func(v1 chi.Router) {
+						mountParticipantMediaRoutes(v1, signalSpaces{}, signalEpisodes{}, signalTenants{}, signalResolver{service: &service}, signalRegistry{}, c.verifier, c.authorizer, RateLimitOptions{Limiter: &signalLimiter{exhaustAfter: 1000}, Now: time.Now})
+					})
+					request := httptest.NewRequest(method, path, strings.NewReader(body))
+					request.Header.Set("Content-Type", "application/json")
+					if c.header != "" {
+						request.Header.Set("Authorization", c.header)
+					}
+					recorder := httptest.NewRecorder()
+					router.ServeHTTP(recorder, request)
+					return recorder.Code, strings.TrimSpace(recorder.Body.String())
+				}
+				legacyStatus, legacyBody := call(operation.method, signalPath(operation.suffix), operation.legacy)
+				unifiedStatus, unifiedBody := call(http.MethodPost, signalPath("signal"), operation.unified)
+				if legacyStatus != c.want {
+					t.Fatalf("per-operation route answered %d %s, want %d", legacyStatus, legacyBody, c.want)
+				}
+				if unifiedStatus != legacyStatus || unifiedBody != legacyBody {
+					t.Errorf("unified route answered %d %s, per-operation route %d %s", unifiedStatus, unifiedBody, legacyStatus, legacyBody)
+				}
+			})
+		}
+	}
+}
+
+func mustSignalID(value string) utilities.ID {
+	parsed, err := utilities.ParseID(value)
+	if err != nil {
+		panic(err)
+	}
+	return parsed
+}
