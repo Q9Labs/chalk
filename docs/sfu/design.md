@@ -516,6 +516,20 @@ or missing session gets a fresh bootstrap, generation and PeerConnection. Never 
 across a node incarnation change. Prove Wi-Fi/mobile-style address changes and
 TURN/TLS-only recovery independently of the Sync reconnect tests.
 
+**Pull-published join:** a join used to pay a `publications` request, a `tracks` pull and a
+`renegotiate` answer in sequence. When the own SFU advertises `pullPublished`, the SDK's first
+poll sends one `tracks` request with `pull_published_audio` and no tracks. The API reads the
+Episode's publication list, pulls every other Participant's enabled microphone and screen audio
+(at most 16), and returns the SFU offer together with the list under `publications`. Video stays
+out of it because the SDK waits for the UI's tile reports before pulling video, so the normal
+reconcile pulls video next. The answer still goes out as `renegotiate`: it depends on the offer.
+The SDK keeps only the audio of Participants on its roster and stops the rest, as the list route
+does. If the combined request fails, the SDK lists and pulls the old way, so the normal recovery
+(for example a replaced connection after a 410) handles the failure.
+Any later poll, a replaced connection and every Cloudflare join use the list route as before.
+The nightly latency sidecar leaves `join.sfu_publications` empty for a combined join, and
+`join.sfu_tracks` then carries the list and the pull.
+
 **Node loss:** all sessions, packets and retransmission caches disappear. A new
 boot uses a new incarnation; reject old handles with normalized gone responses.
 Clients replace sessions, republish authorized wanted sources and re-pull from

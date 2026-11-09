@@ -17,6 +17,7 @@ export function mediaBootstrap(media: ParticipantMediaAccess): CloudflareSFUBoot
           serverLayerAdaptation: media.clientPayload.capabilities.serverLayerAdaptation,
           subscriptionState: media.clientPayload.capabilities.subscriptionState,
           iceRestart: media.clientPayload.capabilities.iceRestart,
+          pullPublished: media.clientPayload.capabilities.pullPublished,
         },
       };
     default:

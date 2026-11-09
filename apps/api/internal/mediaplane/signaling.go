@@ -45,6 +45,9 @@ type Track struct {
 	Paused *bool `json:"paused,omitempty"`
 }
 
+// MaxTracksPerRequest bounds the tracks one add-tracks request can carry.
+const MaxTracksPerRequest = 16
+
 type TracksRequest struct {
 	ConnectionID       string
 	Scope              Scope
@@ -60,6 +63,21 @@ type TracksResponse struct {
 	Tracks                         []Track             `json:"tracks,omitempty"`
 	TrackErrors                    []TrackError        `json:"trackErrors,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+	// Publications is the Episode's publication list a pull-published request read. Planes never set it.
+	Publications *PublicationList `json:"publications,omitempty"`
+}
+
+// PublicationList is the Episode's enabled publications at one registry position. It is also the body of the list route.
+type PublicationList struct {
+	Incarnation  int64               `json:"incarnation"`
+	Sequence     int64               `json:"sequence"`
+	Publications []ListedPublication `json:"publications"`
+}
+
+type ListedPublication struct {
+	ParticipantID string `json:"participant_id"`
+	Source        string `json:"source"`
+	PublicationID string `json:"publication_id"`
 }
 
 type TrackError struct {
@@ -280,7 +298,7 @@ func (s Service) restartICE(ctx context.Context, input TracksRequest) (TracksRes
 
 func requireTracksRequest(input *TracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
-	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > MaxTracksPerRequest {
 		return ErrInvalidSignalRequest
 	}
 	input.ConnectionID = connectionID
@@ -320,7 +338,7 @@ func requireTracksRequest(input *TracksRequest) error {
 // publications cannot change.
 func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
-	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > MaxTracksPerRequest {
 		return ErrInvalidSignalRequest
 	}
 	input.ConnectionID = connectionID

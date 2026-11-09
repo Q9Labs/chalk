@@ -14392,6 +14392,9 @@
             "minLength": 1,
             "type": "string"
           },
+          "pull_published_audio": {
+            "type": "boolean"
+          },
           "session_description": {
             "additionalProperties": false,
             "properties": {
@@ -14470,6 +14473,16 @@
       "CloudflareSFUUpdateTracksAPIResponse": {
         "additionalProperties": false,
         "properties": {
+          "publications": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CloudflareSFUPublicationsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "requiresImmediateRenegotiation": {
             "type": "boolean"
           },

@@ -59,6 +59,8 @@ export function installLatencyTrace() {
     if (!step) return Reflect.apply(nativeFetch, this, [input, init]);
     const label = `${(init?.method ?? input?.method ?? "GET").toUpperCase()} ${step}`;
     log("http_start", label);
+    // The join's combined request lists the publications and pulls the audio; the stage split needs to know it ran.
+    if (step === "tracks" && typeof init?.body === "string" && init.body.includes('"pull_published_audio":true')) log("pull_published");
     return Reflect.apply(nativeFetch, this, [input, init]).then(
       (response) => {
         log("http_end", label);

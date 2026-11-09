@@ -377,7 +377,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true},
 		},
 		Metadata: a.metadata(),
 	}

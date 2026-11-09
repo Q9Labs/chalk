@@ -29,6 +29,8 @@ export type SFUMediaCapabilities = {
   readonly subscriptionState: boolean;
   /** The SFU answers an ICE restart offer on the existing session, so a lost path recovers without a new session. */
   readonly iceRestart: boolean;
+  /** One `tracks` request lists the publications and pulls the other Participants' audio, so a join skips the list request. */
+  readonly pullPublished: boolean;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -99,6 +101,12 @@ export type CloudflareSFUSignalingTransport = {
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /**
+   * One request that lists the publications and pulls the other Participants' microphone and screen audio.
+   * The response carries the SFU's offer for those tracks, which the caller must answer with `renegotiate`.
+   * Only a plane with the `pullPublished` capability answers it.
+   */
+  readonly pullPublishedAudio?: (input: { readonly connectionId: string }) => Promise<{ readonly snapshot: CloudflareSFUPublicationSnapshot; readonly response: CloudflareSFUTracksResponse }>;
   /** Reads the delivery state of this connection's remote videos. Only a plane with `subscriptionState` answers it. */
   readonly listSubscriptions?: () => Promise<readonly SFUSubscriptionState[]>;
   /**

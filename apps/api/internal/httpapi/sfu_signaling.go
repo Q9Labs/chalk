@@ -22,6 +22,8 @@ type sfuTracksRequest struct {
 	ConnectionID       string                         `json:"connection_id"`
 	SessionDescription *mediaplane.SessionDescription `json:"session_description,omitempty"`
 	Tracks             []mediaplane.Track             `json:"tracks"`
+	// PullPublishedAudio asks the API to read the publication list and pull the other Participants' microphone and screen audio in this one request, so a joining client skips the list round trip. It carries no tracks.
+	PullPublishedAudio bool `json:"pull_published_audio,omitempty"`
 }
 
 type sfuUpdateTracksRequest struct {
@@ -93,17 +95,7 @@ type sfuPublicationsEndpointRequest struct {
 	ParticipantID utilities.ID
 }
 
-type sfuPublicationResponse struct {
-	ParticipantID string `json:"participant_id"`
-	Source        string `json:"source"`
-	PublicationID string `json:"publication_id"`
-}
-
-type sfuPublicationsResponse struct {
-	Incarnation  int64                    `json:"incarnation"`
-	Sequence     int64                    `json:"sequence"`
-	Publications []sfuPublicationResponse `json:"publications"`
-}
+type sfuPublicationsResponse = mediaplane.PublicationList
 
 type sfuSubscriptionResponse struct {
 	Mid          string `json:"mid"`
@@ -179,6 +171,72 @@ func signalSFUTracks(ctx context.Context, request sfuTracksEndpointRequest, spac
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
+	if !request.Body.PullPublishedAudio {
+		return pullOrPushTracks(ctx, request, subject, service, publications)
+	}
+	list, err := expandPullPublishedAudio(ctx, &request, service, publications)
+	if err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	if len(request.Body.Tracks) == 0 {
+		return mediaplane.TracksResponse{Publications: &list}, nil
+	}
+	response, err := pullOrPushTracks(ctx, request, subject, service, publications)
+	if err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	response.Publications = &list
+	return response, nil
+}
+
+// expandPullPublishedAudio turns a pull-published-audio request into the remote tracks the SDK's first poll would
+// pull: every enabled microphone and screen audio publication of another Participant. Video waits for the UI's
+// tile reports, so it is never part of this request.
+func expandPullPublishedAudio(ctx context.Context, request *sfuTracksEndpointRequest, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.PublicationList, error) {
+	body := request.Body
+	if service.Provider() != mediaplane.ProviderChalkSFU || len(body.Tracks) > 0 || body.SessionDescription != nil {
+		return mediaplane.PublicationList{}, mediaplane.ErrInvalidSignalRequest
+	}
+	list, err := listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
+	if err != nil {
+		return mediaplane.PublicationList{}, err
+	}
+	self := request.ParticipantID.String()
+	for _, publication := range list.Publications {
+		if publication.ParticipantID == self || (publication.Source != "microphone" && publication.Source != "screen_audio") {
+			continue
+		}
+		reference, err := mediapublications.ParseReference(publication.PublicationID)
+		if err != nil {
+			continue
+		}
+		if len(request.Body.Tracks) == mediaplane.MaxTracksPerRequest {
+			break
+		}
+		request.Body.Tracks = append(request.Body.Tracks, mediaplane.Track{Location: "remote", SessionID: reference.ConnectionID, TrackName: reference.TrackName})
+	}
+	request.AllowPartialRemoteTracks = true
+	return list, nil
+}
+
+func listEnabledPublications(ctx context.Context, publications mediapublications.Registry, tenantID, episodeID utilities.ID) (mediaplane.PublicationList, error) {
+	if publications == nil {
+		return mediaplane.PublicationList{}, mediapublications.ErrUnavailable
+	}
+	snapshot, err := publications.Latest(ctx, tenantID, episodeID)
+	if err != nil {
+		return mediaplane.PublicationList{}, err
+	}
+	list := mediaplane.PublicationList{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]mediaplane.ListedPublication, 0, len(snapshot.Publications))}
+	for _, publication := range snapshot.Publications {
+		if publication.Enabled && publication.PublicationID != "" {
+			list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
+		}
+	}
+	return list, nil
+}
+
+func pullOrPushTracks(ctx context.Context, request sfuTracksEndpointRequest, subject accessgrants.Subject, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
 	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
 	var capture mediapublications.ListenerPullCapture
 	for _, track := range request.Body.Tracks {
@@ -544,20 +602,7 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 			if _, err := resolveSFUSignalingPlane(ctx, spaces, episodeLookup, tenants, media, request.TenantID, request.SpaceID, request.EpisodeID); err != nil {
 				return sfuPublicationsResponse{}, err
 			}
-			if publications == nil {
-				return sfuPublicationsResponse{}, mediapublications.ErrUnavailable
-			}
-			snapshot, err := publications.Latest(ctx, request.TenantID, request.EpisodeID)
-			if err != nil {
-				return sfuPublicationsResponse{}, err
-			}
-			response := sfuPublicationsResponse{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]sfuPublicationResponse, 0, len(snapshot.Publications))}
-			for _, publication := range snapshot.Publications {
-				if publication.Enabled && publication.PublicationID != "" {
-					response.Publications = append(response.Publications, sfuPublicationResponse{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID})
-				}
-			}
-			return response, nil
+			return listEnabledPublications(ctx, publications, request.TenantID, request.EpisodeID)
 		},
 	).
 		Auth(APIAuthParticipantMedia).
