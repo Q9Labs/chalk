@@ -183,8 +183,9 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 // takes new Episodes was full, else a node's host guard refused them (spare budget
 // or not), else a node reported a wire protocol below minNodeProtocol, else every answering node
 // was draining, else none answered.
-// Before the first probe it reports the first primary with room, whose admission
-// then answers the join. It reads the last probes and does no I/O, because
+// A node with no probe answer is not eligible, so before the first probe round finishes nothing
+// has room and the reason is overflow_node_unavailable: an Episode is never bound to a node
+// that has not said which protocol it speaks. It reads the last probes and does no I/O, because
 // Episode creation calls it inside a database transaction.
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
@@ -219,9 +220,6 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 		}
 	}
 	first := mediaplane.Placement{Node: f.firstPrimary(), Reason: mediaplane.PlacementPrimary}
-	if !f.probed {
-		return first, true
-	}
 	switch {
 	case full:
 		first.Reason = mediaplane.PlacementOverflowNoRoom

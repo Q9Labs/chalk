@@ -51,23 +51,26 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 		var room bool
 		placement, room = r.chalk.Place()
 		if !room {
-			// Every node would refuse a new Episode. It starts on Cloudflare when
-			// the Tenant can run it there and overflow is on. With overflow off it
-			// is refused with the capacity error a full node gives a join. Without a
-			// Cloudflare application it stays on the node placed, whose admission
-			// refuses the join.
+			// No node can take a new Episode. It starts on Cloudflare when the Tenant
+			// can run it there and overflow is on. With overflow off it is refused with
+			// the capacity error a full node gives a join. Without a Cloudflare
+			// application it stays on the node placed only when that node was verified
+			// and its admission refuses the join; when no node was verified (silent,
+			// not yet probed, or speaking an older protocol) it is refused too, because
+			// a binding there would fail every join.
 			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU)
+			cloudflare := err == nil && fallback != nil
 			switch {
-			case err != nil || fallback == nil:
-				placement.Reason = mediaplane.PlacementNoCapacity
-			case !r.chalk.CloudflareOverflow():
+			case cloudflare && r.chalk.CloudflareOverflow():
+				resolved, resolution = fallback, fallbackResolution
+				placement.Node, placement.Incarnation = "", ""
+			case cloudflare || !placement.Reason.NodeAdmits():
 				// The refusal keeps the reason nothing had room, so a host guard
 				// reads differently from a full pool or a drain.
 				r.recordPlacement(ctx, resolution.Provider, placement.Reason)
 				return nil, fmt.Errorf("%w: %w: %w: %s", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused, placement.Reason)
 			default:
-				resolved, resolution = fallback, fallbackResolution
-				placement.Node, placement.Incarnation = "", ""
+				placement.Reason = mediaplane.PlacementNoCapacity
 			}
 		}
 	}

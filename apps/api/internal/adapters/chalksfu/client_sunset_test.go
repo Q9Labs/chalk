@@ -22,6 +22,7 @@ import (
 // the allowlist, nothing changes.
 func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T) {
 	fleet := startSFU(t, nil).fleet(t)
+	fleet.Probe(context.Background())
 	sunset := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 
@@ -88,6 +89,7 @@ func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T)
 // only the allowlist entry * covers it.
 func TestConformanceRefuseClientBeforeASpaceExists(t *testing.T) {
 	fleet := startSFU(t, nil).fleet(t)
+	fleet.Probe(context.Background())
 	sunset := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
 	newSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	otherSpace, err := utilities.NewID()

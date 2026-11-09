@@ -543,7 +543,12 @@ means every node that answered was draining (a planned state, not a capacity sho
 `overflow_node_unavailable` means no node answered ready, and `overflow_node_protocol_too_old` means
 the nodes that answered report an older SFU wire protocol than the API sends (the SFU was not deployed before the API; the
 API logs `chalk sfu node is out of placement` with `reason=node_protocol_too_old`, the node's protocol and its build commit).
-The binding of an Episode that overflowed for this reason reads `overflow_node_unavailable`. It counts decisions, not
+The binding of an Episode that overflowed for this reason reads `overflow_node_unavailable`.
+A node with no probe answer is not placed on, so until an API process finishes its first probe round
+(it finishes before the server takes requests) new Episodes count under `overflow_node_unavailable`.
+Without a Cloudflare application, a new Episode is refused (`503 media.unavailable`, nothing bound) when
+no verified node could admit it: the reasons `overflow_node_unavailable` and `overflow_node_protocol_too_old`.
+Only a full, host-guard-closed or draining node that answered keeps the Episode bound as `no_capacity`. It counts decisions, not
 committed Episodes: placement runs inside the creation transaction, so a request that
 later rolls back (for example an Episode already live in the Space) still counts once.
 Read it as a rate of placement attempts by outcome. The binding frozen on a committed

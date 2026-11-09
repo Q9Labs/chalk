@@ -462,6 +462,7 @@ func (e episodeBindings) GetEpisode(context.Context, utilities.ID, utilities.ID,
 func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 	box := startSFU(t, nil)
 	adapter := box.fleet(t)
+	adapter.Probe(context.Background())
 	process := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	cloudflareSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderCloudflareSFU)}
@@ -506,9 +507,11 @@ func TestConformanceSelectionFlipPinsLiveEpisodes(t *testing.T) {
 // the own SFU, because Chalk runs both providers in that mode.
 func TestConformanceChalkManagedTenantLetsTheSpacePickTheOwnSFU(t *testing.T) {
 	box := startSFU(t, nil)
+	fleet := box.fleet(t)
+	fleet.Probe(context.Background())
 	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
 		ProcessConfig:   runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second},
-		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: box.fleet(t), ChalkSFUSpaces: everySpace,
+		DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, ChalkSFUSpaces: everySpace,
 	})
 	tenant := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"provider":"cf_sfu","mode":"chalk_managed"}`)}
 	binding, err := registry.ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}, ownSFUClients)

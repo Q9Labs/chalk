@@ -32,14 +32,27 @@ type oldNode struct {
 	url      string
 	accepted atomic.Int32
 	refused  atomic.Int32
+	// readyGate, when set, holds every /readyz answer until it is closed, so a test can
+	// keep the first readiness probe in flight.
+	readyGate chan struct{}
 }
 
-func startOldNode(t *testing.T, ca *authority, real *sfu) *oldNode {
+// posts is every request body the node received: creates, reserves and controls.
+func (o *oldNode) posts() int32 { return o.accepted.Load() + o.refused.Load() }
+
+func startOldNode(t *testing.T, ca *authority, real *sfu, readyGate chan struct{}) *oldNode {
 	t.Helper()
 	upstream := real.httpClient(t, real.ca, clientIdentity)
-	old := &oldNode{}
+	old := &oldNode{readyGate: readyGate}
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		if r.URL.Path == "/readyz" && old.readyGate != nil {
+			select {
+			case <-old.readyGate:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if r.Method == http.MethodPost {
 			var fields map[string]json.RawMessage
 			if json.Unmarshal(body, &fields) == nil {
@@ -122,7 +135,7 @@ func tryJoin(service mediaplane.Service, scope mediaplane.Scope) error {
 func TestPlacementRefusesANodeThatPredatesTheWireProtocolAndSaysWhy(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	real := startSFUUnder(t, ca, map[string]string{"SFU_VERSION": buildCommit})
-	old := startOldNode(t, ca, real)
+	old := startOldNode(t, ca, real, nil)
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
 	ctx := context.Background()
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
@@ -176,7 +189,7 @@ func TestPlacementSkipsAnOldNodeAndUsesACurrentOne(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	real := startSFUUnder(t, ca, nil)
 	current := startSFUUnder(t, ca, nil)
-	old := startOldNode(t, ca, real)
+	old := startOldNode(t, ca, real, nil)
 	fleet := real.fleetOf(t, ca, clientIdentity,
 		runtimeconfig.ChalkSFUNode{ID: "sfu-old", ControlURL: old.url},
 		runtimeconfig.ChalkSFUNode{ID: "sfu-current", ControlURL: current.controlURL})
@@ -223,9 +236,10 @@ func TestPlacementUsesACurrentNodeAndItAcceptsRequestsWithAndWithoutAllocationGe
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, unbound), scopeOf("ep-without", "alice"))
 }
 
-// The #965 regression: an API replica started after the deploy, with no memory of the node, finds
-// the live node by its first probe and places on it, and an Episode the previous replica created
-// there still works through the new one.
+// The #965 regression: an API replica started after the deploy, with no memory of the node, places
+// nothing until its first probe round has verified a node, then finds the live node by that round
+// and places on it at the same incarnation, and an Episode the previous replica created there
+// still works through the new one.
 func TestARedeployedAPIFindsTheLiveNodeAndItsEpisodes(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	box := startSFUUnder(t, ca, nil)
@@ -242,8 +256,8 @@ func TestARedeployedAPIFindsTheLiveNodeAndItsEpisodes(t *testing.T) {
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, bound), scopeOf("ep-live", "alice"))
 
 	after := box.fleet(t)
-	if placement, room := after.Place(); !room || placement.Node != "sfu-a" {
-		t.Fatalf("before its first probe the new replica placed %+v with room %t, want the first primary", placement, room)
+	if placement, room := after.Place(); room || placement.Reason != mediaplane.PlacementOverflowNodeUnavailable {
+		t.Fatalf("before its first probe the new replica placed %+v with room %t, want no room (%s)", placement, room, mediaplane.PlacementOverflowNodeUnavailable)
 	}
 	after.Probe(context.Background())
 	placement, room := after.Place()
@@ -255,4 +269,75 @@ func TestARedeployedAPIFindsTheLiveNodeAndItsEpisodes(t *testing.T) {
 		t.Fatal(err)
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, rebound), scopeOf("ep-live", "bob"))
+}
+
+// A new API process has probed nothing. A node it has not heard from may predate the protocol, and
+// a binding made now is never repaired by a later probe, so the Episode must not be bound to the
+// node: with Cloudflare configured it starts there, with overflow off it is refused, and the old
+// node gets no request either way. The same holds while the first readiness probe is still in flight.
+func TestReviewColdStartMustNotBindAnUnverifiedOldNode(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	real := startSFUUnder(t, ca, nil)
+	gate := make(chan struct{})
+	old := startOldNode(t, ca, real, gate)
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
+	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	ctx := context.Background()
+
+	check := func(stage string, fleet *chalksfu.Fleet) {
+		t.Helper()
+		started, err := registryOn(fleet, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		if err != nil || started == nil || started.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || started.Node != "" {
+			t.Fatalf("%s: binding %+v, %v, want an Episode on Cloudflare and none on the node", stage, started, err)
+		}
+		if old.posts() != 0 {
+			t.Fatalf("%s: the old node received %d requests, want none", stage, old.posts())
+		}
+	}
+
+	cold := real.fleetWithOverflow(t, ca, clientIdentity, true, nodes...)
+	check("before any probe", cold)
+	refusing := real.fleetWithOverflow(t, ca, clientIdentity, false, nodes...)
+	if refused, err := registryOn(refusing, withCloudflare, nil, nil).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients); refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+		t.Fatalf("overflow off before any probe: %+v, %v, want the placement refusal", refused, err)
+	}
+
+	probing := make(chan struct{})
+	go func() {
+		defer close(probing)
+		cold.Probe(ctx)
+	}()
+	check("while the first probe is blocked", cold)
+	close(gate)
+	<-probing
+	check("after the old node answered", cold)
+}
+
+// A node known to predate the protocol, in a deployment where the Tenant has no Cloudflare
+// application, leaves nowhere to start the Episode: it is refused with the bounded protocol reason
+// and no binding, whether overflow is on or off. Binding it to the node would fail every join with
+// the node's 400.
+func TestReviewKnownOldNodeWithoutCloudflareMustBeRefused(t *testing.T) {
+	ca := newAuthority(t, "pool CA")
+	real := startSFUUnder(t, ca, nil)
+	old := startOldNode(t, ca, real, nil)
+	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-old", ControlURL: old.url}}
+	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	ctx := context.Background()
+
+	for _, overflow := range []bool{true, false} {
+		fleet := real.fleetWithOverflow(t, ca, clientIdentity, overflow, nodes...)
+		fleet.Probe(ctx)
+		telemetry := &placements{}
+		binding, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+		if binding != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) || !strings.Contains(err.Error(), string(mediaplane.PlacementOverflowNodeProtocol)) {
+			t.Fatalf("overflow %t: %+v, %v, want no binding and the placement refusal naming %s", overflow, binding, err, mediaplane.PlacementOverflowNodeProtocol)
+		}
+		if want := "chalk_sfu/overflow_node_protocol_too_old"; len(telemetry.got) != 1 || telemetry.got[0] != want {
+			t.Fatalf("overflow %t: placement counter saw %v, want [%s]", overflow, telemetry.got, want)
+		}
+	}
+	if old.posts() != 0 {
+		t.Fatalf("the old node received %d requests, want none", old.posts())
+	}
 }

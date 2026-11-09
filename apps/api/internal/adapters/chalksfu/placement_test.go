@@ -45,8 +45,12 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 		return place(asked)
 	}
 
+	if placed, room := place(fleet); room {
+		t.Fatalf("before any probe: placed on %q with room, want no node until the first probe round", placed)
+	}
+	fleet.Probe(ctx)
 	if placed, room := place(fleet); placed != "sfu-primary" || !room {
-		t.Fatalf("before any probe: placed on %q with room %t, want the primary", placed, room)
+		t.Fatalf("after the first probe: placed on %q with room %t, want the primary", placed, room)
 	}
 	if placed, _ := placeNow(); placed != "sfu-primary" {
 		t.Fatalf("two nodes with room: placed on %q, want the primary", placed)
@@ -131,6 +135,7 @@ func TestConformancePlacementNeedsTheServiceIdentity(t *testing.T) {
 func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1200"})
 	fleet := box.fleet(t)
+	fleet.Probe(context.Background())
 	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	registry := func(process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
@@ -284,9 +289,9 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 		return *binding
 	}
 
-	// Before any probe no incarnation is known.
-	if before := resolve(); before.Node != "sfu-primary" || before.PlacementReason != mediaplane.PlacementPrimary || before.NodeIncarnation != "" {
-		t.Fatalf("before a probe: %+v, want the primary without an incarnation", before)
+	// Before the first probe round no node is verified, so the Episode is not bound to one.
+	if before := resolve(); before.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || before.Node != "" || before.PlacementReason != mediaplane.PlacementOverflowNodeUnavailable {
+		t.Fatalf("before a probe: %+v, want Cloudflare overflow_node_unavailable", before)
 	}
 
 	fleet.Probe(ctx)
@@ -326,7 +331,7 @@ func TestConformancePlacementRecordsWhyAnEpisodeWentWhereItDid(t *testing.T) {
 		t.Fatalf("no node answers: %+v, %v, want Cloudflare overflow_node_unavailable", down, err)
 	}
 
-	want := []string{"chalk_sfu/primary", "chalk_sfu/primary", "chalk_sfu/standby", "cf_sfu/overflow_no_room", "cf_sfu/overflow_node_unavailable"}
+	want := []string{"cf_sfu/overflow_node_unavailable", "chalk_sfu/primary", "chalk_sfu/standby", "cf_sfu/overflow_no_room", "cf_sfu/overflow_node_unavailable"}
 	if !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}

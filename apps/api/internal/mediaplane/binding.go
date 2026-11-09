@@ -90,6 +90,18 @@ const (
 	PlacementNoCapacity PlacementReason = "no_capacity"
 )
 
+// NodeAdmits reports whether a verified node's own admission can answer a join the reason
+// left without room: the node was full, host-guard closed or draining. The other overflow
+// reasons mean no node was verified as able to take the Episode, so binding to one would
+// only fail every join.
+func (reason PlacementReason) NodeAdmits() bool {
+	switch reason {
+	case PlacementOverflowNoRoom, PlacementOverflowHostGuard, PlacementOverflowDraining:
+		return true
+	}
+	return false
+}
+
 // ErrPlacementRefused means a new Episode was refused because no own-SFU node had
 // room and Cloudflare overflow is off. The wrapping error names the overflow
 // placement reason. It is a bounded reason, safe to log.
