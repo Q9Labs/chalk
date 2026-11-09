@@ -69,9 +69,11 @@ export function toggleStages(group, { t0, sender, receiver, command, visibleAt, 
  */
 export function joinStages({ t0, events }) {
   const frame = (name) => (previous) => find(events, previous, (event) => event.k === "ws_in" && event.d === name);
+  // A socket opened in the lobby is already open when join() starts, so the two socket stages cost nothing on the join path.
+  const adopted = events.some((event) => event.k === "ws_open" && event.t < t0);
   const stages = chain("join", t0, [
-    ["prepare", (previous) => find(events, previous, (event) => event.k === "ws_new")],
-    ["sync_connect", (previous) => find(events, previous, (event) => event.k === "ws_open")],
+    ["prepare", (previous) => (adopted ? previous : find(events, previous, (event) => event.k === "ws_new"))],
+    ["sync_connect", (previous) => (adopted ? previous : find(events, previous, (event) => event.k === "ws_open"))],
     ["sync_welcome", frame("welcome")],
     ["sync_entered", frame("entered_ack")],
   ]);

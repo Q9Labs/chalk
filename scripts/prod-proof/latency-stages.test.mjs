@@ -122,6 +122,15 @@ test("a join that lists and pulls in one request leaves sfu_publications empty, 
   assert.equal(stages["join.sfu_renegotiate"], 1400);
 });
 
+test("join counts the Sync socket stages as zero when the lobby already opened the socket", () => {
+  const events = [at(200, "ws_new"), at(850, "ws_open"), at(1300, "ws_in", "welcome"), at(1350, "ws_in", "entered_ack")];
+  const stages = joinStages({ t0: 1000, events });
+  assert.equal(stages["join.prepare"], 0);
+  assert.equal(stages["join.sync_connect"], 0);
+  assert.equal(stages["join.sync_welcome"], 300);
+  assert.equal(stages["join.sync_entered"], 50);
+});
+
 test("the kit records exactly the stages the registry lists", () => {
   for (const group of STAGE_GROUPS.filter((entry) => entry.id !== "join")) {
     assert.deepEqual(Object.keys(toggleStages(group.id, trace)).sort(), group.stages.map((stage) => `${group.id}.${stage.id}`).sort(), group.id);

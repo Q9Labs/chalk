@@ -44,6 +44,7 @@ function options() {
       environment: { type: "string" },
       region: { type: "string", default: "unknown" },
       size: { type: "string", default: "unknown" },
+      "lobby-dwell-ms": { type: "string", default: "0" },
     },
   });
   const samples = Number(values.samples);
@@ -51,8 +52,10 @@ function options() {
   check(Number.isInteger(samples) && samples > 0 && samples <= 60, "--samples must be a whole number from 1 to 60", "configuration");
   for (const plane of planes) check(plane in providers, `Unknown media plane ${plane}`, "configuration");
   check(values.environment, "--environment must name where the API runs: ci, staging or production", "configuration");
+  const lobbyDwellMs = Number(values["lobby-dwell-ms"]);
+  check(Number.isInteger(lobbyDwellMs) && lobbyDwellMs >= 0 && lobbyDwellMs <= 3500, "--lobby-dwell-ms must be a whole number from 0 to 3500 (Sync closes a socket with no hello after 5 s)", "configuration");
   const { tier, environment, region, size, headed } = values;
-  return { samples, planes, headed, scorecard: { tier, environment, region, size } };
+  return { samples, planes, headed, lobbyDwellMs, scorecard: { tier, environment, region, size } };
 }
 
 // measure arms the receiver's watches, runs the action on the sender, and returns each watch's delay in ms.
@@ -127,7 +130,7 @@ async function shareSteps(origin, pages, participantId, sample, stages) {
   }
 }
 
-async function cycle(run, origin, plane, headed, ending) {
+async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   const space = await createSpace(run, plane);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const createdAt = clock();
@@ -149,6 +152,10 @@ async function cycle(run, origin, plane, headed, ending) {
   const first = await measure(pages[0], pages[0], "join", join(0), [{ name: "firstReady", kind: "ready" }]);
   const sample = { "action.spinup_ms": first.delays.firstReady === null ? null : Math.round(createMs + guests.admissions[0].ms + first.delays.firstReady) };
   const sender = participants[0];
+  // A person reaches the call from a lobby. The second guest models that when asked: its page starts the Sync upgrade, waits, and
+  // only then joins, so the join timer starts after the dwell. Without the flag the join starts cold, as before.
+  const lobbyStartedAt = clock();
+  if (lobbyDwellMs > 0) await pages[1].evaluate(({ api, dwell }) => window.proofLobby(api, dwell), { api: run.config.api_url, dwell: lobbyDwellMs });
   const second = await measure(pages[1], pages[1], "join", join(1), [
     { name: "action.join.first_audio_ms", kind: "frame", participantId: sender, source: "microphone" },
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
@@ -159,7 +166,7 @@ async function cycle(run, origin, plane, headed, ending) {
   const joined = await observe(
     "join",
     async () => {
-      const events = await takeTrace(pages[1], second.acted.at);
+      const events = await takeTrace(pages[1], lobbyStartedAt);
       return { stages: joinStages({ t0: second.acted.at, events }), ice: icePairOf(events, second.acted.at) };
     },
     { stages: {}, ice: null },
@@ -210,13 +217,13 @@ async function endEpisode(run, ending) {
   }
 }
 
-async function attempt(run, origin, plane, headed) {
+async function attempt(run, origin, plane, headed, lobbyDwellMs) {
   const mark = run.resources.length;
   const ending = { current: null };
   const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, ending)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, ending)) };
   } catch (error) {
     outcome = { plane, timestamp, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
@@ -230,7 +237,7 @@ async function attempt(run, origin, plane, headed) {
 }
 
 // Planes take turns, so a slow minute on the network or the host lands on both.
-async function measureAll(run, origin, { samples, planes, headed }, report) {
+async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs }, report) {
   const kept = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const tries = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const limit = samples + 10;
@@ -239,7 +246,7 @@ async function measureAll(run, origin, { samples, planes, headed }, report) {
     if (!open.length) return;
     const plane = open[turn % open.length];
     tries[plane]++;
-    const outcome = await attempt(run, origin, plane, headed);
+    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs);
     report.cycles.push(outcome);
     if (!outcome.dropped) kept[plane]++;
     console.log(`${plane} cycle ${tries[plane]}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);
