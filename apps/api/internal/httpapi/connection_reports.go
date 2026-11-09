@@ -207,6 +207,27 @@ func rejectConnectionReport(r *http.Request, reason string) error {
 	return apiErrorInvalidRequest
 }
 
+// provider comes from the verified media credential, as in sdk.call_stats, so an
+// old client reports it too and a join_failed alert can name the failing provider.
+func logConnectionReport(ctx context.Context, subject accessgrants.Subject, report connectionReport) error {
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		return apiErrorInternal
+	}
+	level := slog.LevelWarn
+	message := "SDK connection failure"
+	if report.Trigger == "audio_receive_summary" {
+		level = slog.LevelInfo
+		message = "SDK audio receive summary"
+	}
+	observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
+		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
+		"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
+		"provider", subject.Provider,
+		"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
+	return nil
+}
+
 // A still-valid signed credential is enough: a failed join or expired presence
 // must be able to report without active-participant or readiness authorization.
 func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connectionReportRequest, struct{}] {
@@ -226,22 +247,7 @@ func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connec
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
-			report := request.Report
-			encoded, err := json.Marshal(report)
-			if err != nil {
-				return struct{}{}, apiErrorInternal
-			}
-			level := slog.LevelWarn
-			message := "SDK connection failure"
-			if report.Trigger == "audio_receive_summary" {
-				level = slog.LevelInfo
-				message = "SDK audio receive summary"
-			}
-			observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
-				"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
-				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
-			return struct{}{}, nil
+			return struct{}{}, logConnectionReport(ctx, subject, request.Report)
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(connectionReportParticipantLimit).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("ConnectionReportRequest", connectionReport{}, ConnectionReportBodyLimit).

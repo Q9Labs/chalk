@@ -143,6 +143,33 @@ Add `by ['attributes.country']` to compare regions. Field paths follow the
 dataset's log mapping, so match them to how `sdk.connection_report` appears there.
 Add `| where ['session.id'] == "<session-id>"` to read one device's call.
 
+### Compare call quality by provider
+
+The same `sdk.call_stats` lines carry `provider`, so one query compares the two
+providers while Cloudflare SFU and the own SFU run side by side. It is a saved
+query, not an alarm: nothing pages on it. Keep it as the Axiom saved query
+`call-quality-by-provider` and read it after a cutover step or when a
+provider-tagged connection report points at one provider. A sample window holds
+about ten seconds, so compare `samples` before trusting a percentile.
+
+```apl
+['<api-log-dataset>']
+| where ['attributes.event'] == "sdk.call_stats"
+| extend provider = iff(tostring(['attributes.provider']) in ("cloudflare_sfu", "chalk_sfu"), tostring(['attributes.provider']), "unknown")
+| summarize
+    samples = count(),
+    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
+    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
+    send_loss_p95 = percentile(todouble(['attributes.send_loss_pct']), 95),
+    recv_loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
+    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count(),
+    freeze_ms_p95 = percentile(todouble(['attributes.freeze_ms']), 95)
+  by provider
+```
+
+Add `by provider, bin(_time, 1h)` for a trend, or `by provider, ['attributes.connection_type']`
+to separate relayed calls from direct ones.
+
 ### Own-SFU video paused for network
 
 On the own SFU (`chalk_sfu`), the SFU picks each viewer's simulcast layer under
@@ -888,8 +915,9 @@ element observation, playback rejection/cleanup, and API validation/log levels.
 It does not constitute a real-browser audible-playback proof. The production
 alert query in
 `infrastructure/observability/production-alerts/connection-reports.apl` selects
-only `join_failed`, `recovery_exhausted`, and `media_projection_mismatch` triggers;
-neither receive-health trigger currently matches it.
+only `join_failed`, `recovery_exhausted`, `media_projection_mismatch` and
+`audio_receive_stuck` triggers; `audio_receive_summary` never matches it. The
+alert message names the report's provider.
 
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
@@ -897,7 +925,8 @@ Tenant. It deliberately does not require an active participant or passing Sync
 readiness: those can be the failure being reported. Identity comes exclusively
 from that verified credential. The `sdk.connection_report` log (Info for
 `audio_receive_summary`, Warn for other triggers) includes
-`tenant_id`, `space_id`, `episode_id`, SHA-256 `participant_id_hash` (the same
+`tenant_id`, `space_id`, `episode_id`, `provider` (`cloudflare_sfu` or `chalk_sfu`,
+read from the verified media credential, so old SDKs report it too), SHA-256 `participant_id_hash` (the same
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.

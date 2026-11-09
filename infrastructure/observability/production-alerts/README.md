@@ -213,6 +213,7 @@ The API/Sync traffic monitor's thresholds and five-positive-run delay are unchan
 | `media_start_failed`        | Trigger `join_failed`, with a `media_start_failed` diagnostic                                                                                  | At least one affected participant in ten minutes |
 | `media_recovery_exhausted`  | Trigger `recovery_exhausted`, with a `media_recovery_exhausted` diagnostic                                                                     | At least one affected participant in ten minutes |
 | `media_projection_mismatch` | Trigger and diagnostic event `media_projection_mismatch`, source `microphone` or `camera`, publication/projection states opposite (`on`/`off`) | At least one affected participant in ten minutes |
+| `audio_receive_stuck`       | Trigger and diagnostic event `audio_receive_stuck`, source `microphone` or `screen_audio`                                                      | At least one affected participant in ten minutes |
 
 Each rule groups by Tenant ID, Episode ID and failure. Repeated uploads and
 multiple matching diagnostics count once per participant within that group.
@@ -241,6 +242,14 @@ of the notification group; its first-report time stays fixed while that first
 report remains in the window. A continuing incident can open a new group when
 the oldest report ages out or the Tenant name changes. Threshold closure is not
 proof that anyone recovered or rejoined.
+
+Messages name the provider (`cloudflare_sfu` or `chalk_sfu`) from the participant's
+media credential, so a page says which provider failed. Anything else, including
+logs written before the field existed, shows `unknown`. An `audio_receive_stuck`
+message shows the source and the furthest receive state the SDK reached. The SDK
+sends that report only after a publication stayed unhealthy for more than ten
+seconds, once per unhealthy episode and at most eight per media session, so the
+rule needs no extra duration.
 
 Messages also show `media_error_kind` and `media_error_step` from the latest
 affected participant report, selecting that report's last diagnostic with either
