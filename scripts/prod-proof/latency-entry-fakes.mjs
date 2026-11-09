@@ -27,7 +27,11 @@ globalThis.proofLatency = {
 };
 // Each audio read is a window later: 100 packets, 2 s of jitter buffer over them, and 50 ms of playout over 4800 samples.
 globalThis.proofTrace = {
-  take: () => [],
+  // A guest that connected 10 ms after the call, over a host to server-reflexive pair that sent 6 checks and got 4 replies.
+  take: (from) => [
+    { t: from + 10, k: "ice_connected" },
+    { t: from + 11, k: "ice_pair", d: JSON.stringify({ since: from + 10, local: "host", remote: "srflx", requestsSent: 6, responsesReceived: 4 }) },
+  ],
   sfuRtt: async () => 40,
   async audioStats() {
     packets += 100;

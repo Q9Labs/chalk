@@ -99,7 +99,7 @@ or Space ids. With the `action.*` budgets in [`perf/budgets.json`](../../perf/bu
 the run fails on a p95 over budget, on any timeout, or when a plane has fewer
 kept cycles than `--samples`.
 
-Each cycle also records the runner's round trip to the SFU and to Sync (read from the SDK's own pings, with no probe traffic), a one-way audio estimate (`media.network_jitter_one_way_ms`: network plus jitter buffer, not mouth to ear), and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the sidecar `latency-diagnostics-<plane>.json` beside the card, never in the card, a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
+Each cycle also records the runner's round trip to the SFU and to Sync (read from the SDK's own pings, with no probe traffic), a one-way audio estimate (`media.network_jitter_one_way_ms`: network plus jitter buffer, not mouth to ear), the selected ICE pair of the join (candidate types and check counters), and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the sidecar `latency-diagnostics-<plane>.json` beside the card, never in the card, a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
 
 Other checks cover parts of the same journey:
 

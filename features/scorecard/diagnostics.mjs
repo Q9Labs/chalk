@@ -7,6 +7,12 @@ import { AUDIO_KEYS, AUDIO_PARTS, RETIRED_STAGE_IDS, RTT_KEYS, STAGE_GROUPS, STA
 export const DIAGNOSTICS_SCHEMA = "chalk.latency-diagnostics/v1";
 export const diagnosticsFileName = (plane) => `latency-diagnostics-${plane}.json`;
 
+/** The candidate types a selected ICE pair reports (RTCIceCandidateStats.candidateType). */
+export const ICE_CANDIDATE_TYPES = ["host", "srflx", "prflx", "relay"];
+const PAIR_KEYS = ["unknown", ...ICE_CANDIDATE_TYPES.flatMap((local) => ICE_CANDIDATE_TYPES.map((remote) => `${local}/${remote}`))];
+const ICE_TYPE_FIELDS = ["local_type", "remote_type"];
+const ICE_COUNT_FIELDS = ["requests_sent", "responses_received"];
+
 const LABELS = { sfu_ms: "SFU", sync_ms: "Sync" };
 const MAX_CYCLES = 60;
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -35,10 +41,39 @@ function unknownField(value, allowed, where) {
 
 const ACCEPTED_STAGE_IDS = [...STAGE_IDS, ...RETIRED_STAGE_IDS];
 
+const isCount = (value) => Number.isSafeInteger(value) && value >= 0;
+
+function iceProblem(ice, where) {
+  if (!isObject(ice)) return `${where} must be an object`;
+  const unknown = unknownField(ice, [...ICE_TYPE_FIELDS, ...ICE_COUNT_FIELDS], where);
+  if (unknown) return unknown;
+  for (const field of ICE_TYPE_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !ICE_CANDIDATE_TYPES.includes(ice[field])) return `${where}.${field} must be a candidate type or null`;
+  for (const field of ICE_COUNT_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !isCount(ice[field])) return `${where}.${field} must be a count or null`;
+  return undefined;
+}
+
+function iceSummaryProblem(ice) {
+  if (!isObject(ice)) return "summary.ice must be an object";
+  const unknown = unknownField(ice, ["pairs", "unanswered_checks"], "summary.ice");
+  if (unknown) return unknown;
+  if (ice.pairs !== undefined) {
+    if (!isObject(ice.pairs)) return "summary.ice.pairs must be an object";
+    for (const [key, count] of Object.entries(ice.pairs)) {
+      if (!PAIR_KEYS.includes(key)) return `summary.ice.pairs has unknown field ${key}`;
+      if (!isCount(count)) return `summary.ice.pairs.${key} must be a count`;
+    }
+  }
+  return ice.unanswered_checks === undefined ? undefined : statProblem(ice.unanswered_checks, "summary.ice.unanswered_checks");
+}
+
 function summaryProblem(summary) {
   if (!isObject(summary)) return "summary must be an object";
-  const unknown = unknownField(summary, ["rtt", "stages", "audio"], "summary");
+  const unknown = unknownField(summary, ["rtt", "stages", "audio", "ice"], "summary");
   if (unknown) return unknown;
+  if (summary.ice !== undefined) {
+    const problem = iceSummaryProblem(summary.ice);
+    if (problem) return problem;
+  }
   for (const [group, keys] of [
     ["rtt", RTT_KEYS],
     ["stages", ACCEPTED_STAGE_IDS],
@@ -67,12 +102,13 @@ export function problemOf(file) {
   if (!Array.isArray(file.cycles) || file.cycles.length > MAX_CYCLES) return `cycles must be a list of at most ${MAX_CYCLES}`;
   for (const [index, cycle] of file.cycles.entries()) {
     if (!isObject(cycle)) return `cycles[${index}] must be an object`;
-    const extra = unknownField(cycle, ["cycle", "timestamp", "rtt", "stages", "audio"], `cycles[${index}]`);
+    const extra = unknownField(cycle, ["cycle", "timestamp", "rtt", "stages", "audio", "ice"], `cycles[${index}]`);
     if (extra) return extra;
     const problem =
       (cycle.rtt === undefined ? undefined : mapProblem(cycle.rtt, RTT_KEYS, `cycles[${index}].rtt`)) ??
       (cycle.stages === undefined ? undefined : mapProblem(cycle.stages, ACCEPTED_STAGE_IDS, `cycles[${index}].stages`)) ??
-      (cycle.audio === undefined ? undefined : mapProblem(cycle.audio, AUDIO_KEYS, `cycles[${index}].audio`));
+      (cycle.audio === undefined ? undefined : mapProblem(cycle.audio, AUDIO_KEYS, `cycles[${index}].audio`)) ??
+      (cycle.ice === undefined ? undefined : iceProblem(cycle.ice, `cycles[${index}].ice`));
     if (problem) return problem;
   }
   return summaryProblem(file.summary);
@@ -80,7 +116,7 @@ export function problemOf(file) {
 
 /**
  * diagnosticsMarkdown renders the summary of a valid sidecar.
- * @param {{ rtt?: Record<string, {n: number, p50: number | null, p95: number | null}>, stages?: Record<string, {n: number, p50: number | null, p95: number | null}>, audio?: Record<string, {n: number, p50: number | null, p95: number | null}> }} summary
+ * @param {{ rtt?: Record<string, {n: number, p50: number | null, p95: number | null}>, stages?: Record<string, {n: number, p50: number | null, p95: number | null}>, audio?: Record<string, {n: number, p50: number | null, p95: number | null}>, ice?: { pairs?: Record<string, number>, unanswered_checks?: {n: number, p50: number | null, p95: number | null} } }} summary
  */
 export function diagnosticsMarkdown(summary) {
   const stat = (value) => (value && value.n > 0 ? `${value.p50} / ${value.p95} ms (n=${value.n})` : "no samples");
@@ -95,6 +131,17 @@ export function diagnosticsMarkdown(summary) {
       lines.push(`| \`${part.id}\` | ${value?.n} | ${value?.p50 ?? "–"} | ${value?.p95 ?? "–"} | ${part.description} |`);
     }
     lines.push("");
+  }
+  if (summary.ice) {
+    const pairs = Object.entries(summary.ice.pairs ?? {}).map(([pair, count]) => `${pair} ${count}`);
+    const checks = summary.ice.unanswered_checks;
+    lines.push(
+      "**ICE pair when the join connected** (local/remote candidate type of the selected pair; a relay pair means TURN carries the media)",
+      "",
+      `Selected pairs: ${pairs.length ? pairs.join(", ") : "none"}.`,
+      `Checks sent without a reply on that pair: ${checks && checks.n > 0 ? `${checks.p50} / ${checks.p95} (n=${checks.n})` : "no samples"}. Well above zero means the first ICE checks were lost.`,
+      "",
+    );
   }
   for (const group of STAGE_GROUPS) {
     const rows = group.stages.filter((stage) => summary.stages?.[`${group.id}.${stage.id}`]);
