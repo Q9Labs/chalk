@@ -83,7 +83,10 @@ test("a sidecar written before the turn-off stages were retired still validates 
   assert.equal(RETIRED_STAGE_IDS.length, 6);
   assert.ok(RETIRED_STAGE_IDS.every((id) => !STAGE_IDS.includes(id)));
   const legacy = sidecar({
-    cycles: [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", stages: { "camera_off.prepare": 592, "camera_off.track_removed": 2, ...retiredNull } }, { cycle: 2, stages: { "mic_off.close_tracks": 150, "screen_stop.renegotiate": 30 } }],
+    cycles: [
+      { cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", stages: { "camera_off.prepare": 592, "camera_off.track_removed": 2, ...retiredNull } },
+      { cycle: 2, stages: { "mic_off.close_tracks": 150, "screen_stop.renegotiate": 30 } },
+    ],
     summary: { stages: { "camera_off.track_removed": stat, "camera_off.sfu_close": stat, ...retiredSummary } },
   });
   assert.equal(problemOf(legacy), undefined);
