@@ -1,36 +1,88 @@
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-const DEFAULT_DEADLINE_MS = 90_000;
-const DEFAULT_RETRY_DELAY_MS = 5_000;
+const DEFAULT_DEADLINE_MS = 300_000;
+const DEFAULT_INITIAL_DELAY_MS = 2_000;
+const DEFAULT_MAX_DELAY_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const APP_LINK_FILES = ["/.well-known/apple-app-site-association", "/.well-known/assetlinks.json"];
 const SMART_APP_BANNER = /<meta\b[^>]*\bname=["']apple-itunes-app["']/i;
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com", expectedEnvironment }) {
+class CommitMismatchError extends Error {
+  constructor(deployedSHA, expectedSHA) {
+    super(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
+    this.deployedSHA = deployedSHA;
+  }
+}
+
+export async function verifyWebDeploy({
+  baseURL,
+  expectedSHA,
+  deadlineMs = DEFAULT_DEADLINE_MS,
+  initialDelayMs = DEFAULT_INITIAL_DELAY_MS,
+  maxDelayMs = DEFAULT_MAX_DELAY_MS,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  apiBaseURL = "https://api.chalkmeet.com",
+  expectedEnvironment,
+  environment = process.env,
+  now = Date.now,
+  sleep = delay,
+}) {
   const origin = normalizeBaseURL(baseURL);
   const apiOrigin = normalizeBaseURL(apiBaseURL);
   const normalizedSHA = normalizeSHA(expectedSHA);
-  const deadline = Date.now() + deadlineMs;
+  const startedAt = now();
+  const deadline = startedAt + deadlineMs;
   const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineMs));
   let attempt = 0;
+  let retryDelayMs = initialDelayMs;
   let lastError;
+  let lastSeenSHA;
+  let lastPagesNote = "";
 
-  while (Date.now() <= deadline) {
+  while (now() <= deadline) {
     attempt += 1;
     try {
-      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal);
+      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal, `${attempt}-${now()}`);
       console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
+      console.log(`web propagation: ${Math.round((now() - startedAt) / 1000)} s, attempts ${attempt}`);
       return;
     } catch (error) {
       lastError = error;
-      if (Date.now() + retryDelayMs > deadline) break;
-      console.warn(`Verification attempt ${attempt} failed: ${errorMessage(error)}. Retrying...`);
-      await delay(retryDelayMs);
+      if (error instanceof CommitMismatchError) {
+        lastSeenSHA = error.deployedSHA;
+        lastPagesNote = await describePagesDeployment(environment, normalizedSHA);
+      }
+      const remainingMs = deadline - now();
+      if (remainingMs <= 0) break;
+      console.warn(`Verification attempt ${attempt} failed: ${errorMessage(error)}${lastPagesNote}. Retrying in ${Math.min(retryDelayMs, remainingMs) / 1000} s...`);
+      await sleep(Math.min(retryDelayMs, remainingMs));
+      retryDelayMs = Math.min(retryDelayMs * 2, maxDelayMs);
     }
   }
 
-  throw new Error(`Web deployment verification failed at ${origin.origin} after ${attempt} attempts: ${errorMessage(lastError)}`);
+  const elapsedSeconds = Math.round((now() - startedAt) / 1000);
+  throw new Error(`Web deployment verification failed at ${origin.origin} after ${attempt} attempts in ${elapsedSeconds} s: expected commit ${normalizedSHA}, last seen ${lastSeenSHA ?? "none"}: ${errorMessage(lastError)}${lastPagesNote}`);
+}
+
+// Tells "Pages has not promoted the deployment yet" from "Pages serves it but the alias still shows old content".
+// Best effort: the verifier still works without Cloudflare credentials, such as in a local release.
+async function describePagesDeployment(environment, expectedSHA) {
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token, PAGES_PROJECT: project } = environment;
+  if (!account || !token || !project) return "";
+  try {
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/${encodeURIComponent(project)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return ` [Pages API returned ${response.status}]`;
+    const deployment = (await response.json())?.result?.canonical_deployment;
+    const commit = deployment?.deployment_trigger?.metadata?.commit_hash?.toLowerCase();
+    const live = commit === expectedSHA;
+    return ` [Pages production deployment ${deployment?.id ?? "unknown"} has commit ${commit ?? "unknown"}, ${live ? "so Pages has the new deployment live and the alias serves stale content" : "so the new deployment is not live at Pages yet"}]`;
+  } catch (error) {
+    return ` [Pages API lookup failed: ${errorMessage(error)}]`;
+  }
 }
 
 export function parseArguments(arguments_) {
@@ -44,10 +96,10 @@ export function parseArguments(arguments_) {
   return { baseURL: positionals[0], expectedSHA: normalizeSHA(positionals[1]), production: values.production, apiBaseURL: values["api-base-url"], expectedEnvironment: values.environment };
 }
 
-async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal) {
-  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
+async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal, cacheBuster) {
+  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal, cacheBuster);
   await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
-  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
+  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal, cacheBuster);
   await verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal);
   if (expectedEnvironment === "nightly") await verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal);
 }
@@ -59,23 +111,19 @@ async function verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal) {
   if (session?.error?.code !== "sign_in_required") throw new Error("dashboard did not report the signed-out state");
 }
 
-async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {
-  const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
+async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal, cacheBuster) {
+  const response = await request(endpointURL(baseURL, "/release.json", cacheBuster), requestTimeoutMs, deadlineSignal);
   requireStatus(response, 200, "release marker");
   const marker = await readJSON(response, "release marker");
   if (!marker || marker.environment !== expectedEnvironment || marker.commit !== expectedSHA) throw new Error("served web release mismatch");
 }
 
-async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal) {
-  const serviceWorkerURL = endpointURL(baseURL, "/sw.js");
-  serviceWorkerURL.searchParams.set("cb", expectedSHA);
-  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs, deadlineSignal);
+async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal, cacheBuster) {
+  const serviceWorker = await request(endpointURL(baseURL, "/sw.js", cacheBuster), requestTimeoutMs, deadlineSignal);
   requireStatus(serviceWorker, 200, "service worker");
   const serviceWorkerSource = await serviceWorker.text();
   const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{40})"/i)?.[1]?.toLowerCase();
-  if (deployedSHA !== expectedSHA) {
-    throw new Error(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
-  }
+  if (deployedSHA !== expectedSHA) throw new CommitMismatchError(deployedSHA, expectedSHA);
 }
 
 // iOS and Android open call links in the app only after these files verify it.
@@ -104,7 +152,7 @@ async function verifyAPIHealth(baseURL, requestTimeoutMs, deadlineSignal) {
 async function request(url, timeoutMs, deadlineSignal) {
   return fetch(url, {
     cache: "no-store",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" },
     signal: AbortSignal.any([deadlineSignal, AbortSignal.timeout(timeoutMs)]),
   });
 }
@@ -155,8 +203,10 @@ function normalizeSHA(rawSHA) {
   return sha;
 }
 
-function endpointURL(baseURL, pathname) {
-  return new URL(pathname, baseURL);
+function endpointURL(baseURL, pathname, cacheBuster) {
+  const url = new URL(pathname, baseURL);
+  if (cacheBuster) url.searchParams.set("cb", cacheBuster);
+  return url;
 }
 
 function errorMessage(error) {
