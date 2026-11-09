@@ -696,7 +696,9 @@ func run() error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if chalkSFU != nil {
-		// Placement reads node load from these probes.
+		// Placement reads node load from these probes. The first round finishes, within the probe
+		// timeout, before the server takes a request; a node with no answer is not placed on.
+		chalkSFU.Probe(signalCtx)
 		go chalkSFU.Watch(signalCtx)
 		// Own SFU nodes forward a source only while the API renews its grant.
 		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)

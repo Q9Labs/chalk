@@ -58,7 +58,7 @@ func (s *Server) ready(w http.ResponseWriter, _ *http.Request) error {
 	if state.Draining {
 		status = http.StatusServiceUnavailable
 	}
-	writeJSON(w, status, protocol.ReadyResponse{NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host(), SessionKinds: s.node.SessionKinds(), DrainState: state})
+	writeJSON(w, status, protocol.ReadyResponse{Protocol: protocol.WireProtocol, Revision: s.cfg.Telemetry.Version, NodeIncarnation: s.node.Incarnation(), Sessions: s.node.SessionCount(), PacketBudget: budget, ReservedPackets: reserved, NewEpisodePackets: s.node.NewEpisodePackets(), Host: s.node.Host(), SessionKinds: s.node.SessionKinds(), DrainState: state})
 	return nil
 }
 

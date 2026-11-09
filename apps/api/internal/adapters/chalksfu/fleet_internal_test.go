@@ -29,7 +29,7 @@ func ready(budget, reserved int) *answer { return &answer{budget: budget, reserv
 // poolOf builds a Fleet whose last probes are the given answers, in configuration order.
 // Place reads only those records, so no node is dialled.
 func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[string]*answer) *Fleet {
-	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, seen: map[string]sighting{}, inflight: map[string][]time.Time{}, probed: true, firstRound: time.Now().Add(-2 * probeFreshness)}
+	fleet := &Fleet{standbys: map[string]bool{}, standbyBudget: standbyBudget, loads: map[string]nodeLoad{}, seen: map[string]sighting{}, verdicts: map[string]verdict{}, inflight: map[string][]time.Time{}, probed: true, firstRound: time.Now().Add(-2 * probeFreshness)}
 	for _, node := range nodes {
 		fleet.nodes = append(fleet.nodes, &Adapter{node: node.ID})
 		if node.Role == runtimeconfig.ChalkSFURoleStandby {
@@ -37,16 +37,18 @@ func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[s
 		}
 	}
 	for id, a := range answers {
-		if a == nil {
+		if a == nil { // went silent after an earlier answer: still known to be compatible
+			fleet.verdicts[id] = verdictCompatible
 			continue
 		}
-		reply := wireReady{NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode, Draining: a.draining}
+		reply := wireReady{Protocol: minNodeProtocol, NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode, Draining: a.draining}
 		reply.Host.AdmissionReason = a.guard
 		at := time.Now()
 		if a.stale {
 			at = at.Add(-2 * probeFreshness)
 		}
 		fleet.loads[id] = fleet.loadOf(id, reply, at)
+		fleet.verdicts[id] = verdictOf(reply.Protocol)
 		fleet.seen[id] = sighting{at: at, incarnation: reply.NodeIncarnation}
 	}
 	return fleet
@@ -91,11 +93,11 @@ func TestPlaceChoosesNodesByRole(t *testing.T) {
 		{"every primary out leaves the standby", []runtimeconfig.ChalkSFUNode{primary("p1"), primary("p2"), standby("s")},
 			map[string]*answer{"p1": nil, "p2": {budget: testPrimaryBudget, draining: true}, "s": roomy}, "s", true, mediaplane.PlacementStandby},
 		{"primary and standby both full is no room, full", []runtimeconfig.ChalkSFUNode{primary("p"), standby("s")},
-			map[string]*answer{"p": ready(testPrimaryBudget, testPrimaryBudget), "s": ready(testPrimaryBudget, testStandbyBudget)}, "p", false, mediaplane.PlacementOverflowNoRoom},
+			map[string]*answer{"p": ready(testPrimaryBudget, testPrimaryBudget), "s": ready(testPrimaryBudget, testStandbyBudget)}, "", false, mediaplane.PlacementOverflowNoRoom},
 		{"a draining standby is not used", []runtimeconfig.ChalkSFUNode{primary("p"), standby("s")},
-			map[string]*answer{"p": nil, "s": {budget: testStandbyBudget, draining: true}}, "p", false, mediaplane.PlacementOverflowDraining},
+			map[string]*answer{"p": nil, "s": {budget: testStandbyBudget, draining: true}}, "", false, mediaplane.PlacementOverflowDraining},
 		{"no node answering", []runtimeconfig.ChalkSFUNode{primary("p"), standby("s")},
-			map[string]*answer{"p": nil, "s": nil}, "p", false, mediaplane.PlacementOverflowNodeUnavailable},
+			map[string]*answer{"p": nil, "s": nil}, "", false, mediaplane.PlacementOverflowNodeUnavailable},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -165,7 +167,7 @@ func TestPlaceKeepsAnEpisodeInFlightAcrossAProbeThatDoesNotShowIt(t *testing.T) 
 	}
 	// A fresh probe replaces the load record with the same room: the Episode has not joined.
 	fleet.mu.Lock()
-	fleet.loads["p"] = fleet.loadOf("p", wireReady{PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
+	fleet.loads["p"] = fleet.loadOf("p", wireReady{Protocol: minNodeProtocol, PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
 	fleet.mu.Unlock()
 	if placed, room := fleet.Place(); room || placed.Reason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("after a probe that does not show the Episode: placed %+v with room %t, want the slot still taken", placed, room)

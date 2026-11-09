@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,12 @@ const (
 	// taken before the join does not show it. The counter is a burst guard: the SFU's
 	// admission at first join stays the authority.
 	inflightTTL = 30 * time.Second
+	// minNodeProtocol is the lowest SFU wire protocol this API can send to. The API puts
+	// allocationGeneration in its create, reserve, move and source-control bodies, and a node
+	// below protocol 2 refuses a body with a field it does not know (400 invalid_request). The
+	// API places no Episode on such a node, so deploying the API before the SFU degrades
+	// placement visibly and fails no call.
+	minNodeProtocol = 2
 )
 
 // ErrUnknownNode means an Episode's binding names a node this process does not
@@ -45,6 +52,7 @@ type Fleet struct {
 	mu          sync.Mutex
 	loads       map[string]nodeLoad
 	seen        map[string]sighting    // when each node last answered a probe; a failed probe leaves it alone
+	verdicts    map[string]verdict     // what each node's last answer said about its wire protocol; a failed probe leaves it alone
 	inflight    map[string][]time.Time // when this process placed each recent Episode, by node; a probe leaves it alone
 	probed      bool                   // a probe round has finished, so a node without a load record has none
 	firstRound  time.Time              // when the first probe round finished
@@ -57,6 +65,25 @@ type Fleet struct {
 type sighting struct {
 	at          time.Time
 	incarnation string
+}
+
+// verdict is whether a node can take this API's requests, learned from the protocol in its last
+// answered /readyz. It is a fact about the node's build and survives a failed probe, unlike its
+// load, so a node that falls silent stays known as compatible or as too old. A node with no
+// verdict has never answered.
+type verdict int
+
+const (
+	verdictUnknown verdict = iota
+	verdictCompatible
+	verdictTooOld
+)
+
+func verdictOf(protocol int) verdict {
+	if protocol < minNodeProtocol {
+		return verdictTooOld
+	}
+	return verdictCompatible
 }
 
 // nodeLoad is a node's last answered probe. A silent node has none. A draining node has one with
@@ -104,6 +131,7 @@ func NewFleet(config runtimeconfig.ChalkSFUConfig, log *slog.Logger) (*Fleet, er
 		log:           log,
 		loads:         map[string]nodeLoad{},
 		seen:          map[string]sighting{},
+		verdicts:      map[string]verdict{},
 		inflight:      map[string][]time.Time{},
 	}
 	for _, node := range config.Nodes {
@@ -159,28 +187,38 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 
 // Place picks the node for a new Episode. Primaries are tried first, in
 // configuration order, and a standby only when no primary can take it (silent,
-// draining, host-guard closed or out of budget). A node qualifies when its last
-// probe is fresh, ready and has packet budget left for a new Episode, after the
-// Episodes this process placed there in the last inflightTTL, so concurrent creations
-// do not all pin to the last slot, even across a probe that does not show them yet. A standby counts only the
-// degraded budget it is configured with. The first qualifying node wins and room
-// is true. The placement then records the node, its boot incarnation from that
-// probe and whether it is a primary or a standby. When no node qualifies after a
-// probe, every node would refuse the Episode, so room is false and the caller may
-// start it on another provider. The placement then names the first primary, the
-// fallback when there is no other provider, and why nothing had room: a node that
-// takes new Episodes was full, else a node's host guard refused them (spare budget
-// or not), else every answering node was draining, else none answered.
-// Before the first probe it reports the first primary with room, whose admission
-// then answers the join. It reads the last probes and does no I/O, because
-// Episode creation calls it inside a database transaction.
+// draining, host-guard closed or out of budget). Only a node whose last answer showed a wire
+// protocol of at least minNodeProtocol is eligible, so no Episode is bound to a node that is old
+// or has not answered yet. A node qualifies when that holds, its last probe is fresh and ready,
+// and it has packet budget left for a new Episode, after the Episodes this process placed there
+// in the last inflightTTL, so concurrent creations do not all pin to the last slot, even across
+// a probe that does not show them yet. A standby counts only the degraded budget it is configured
+// with. The first qualifying node wins and room is true. The placement then records the node,
+// its boot incarnation from that probe and whether it is a primary or a standby.
+//
+// A node whose protocol is below minNodeProtocol, or that has not yet answered a probe, never
+// takes a new Episode. When no node qualifies, every node would refuse the Episode, so room is
+// false, no node is named, and the caller starts the Episode on another provider or refuses it.
+// The reason says why: a node that takes new Episodes was full, else a node's host guard refused
+// them (spare budget or not), else every answering node was draining, else
+// overflow_node_protocol_too_old when some node is known to be old, else overflow_node_unavailable.
+//
+// It reads the last probes and does no I/O, because Episode creation calls it inside a database
+// transaction.
 func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var answering, full, guarded bool // a node answered; a serving node was full; a serving node's host guard refused
+	var answering, full, guarded, tooOld bool // a compatible node answered; one was full; one's host guard refused; some node is known to be old
 	for _, standby := range []bool{false, true} {
 		for _, node := range f.nodes {
 			if f.standbys[node.node] != standby {
+				continue
+			}
+			switch f.verdicts[node.node] {
+			case verdictTooOld:
+				tooOld = true
+				continue
+			case verdictUnknown:
 				continue
 			}
 			load, probed := f.loads[node.node]
@@ -204,21 +242,18 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 			}
 		}
 	}
-	first := mediaplane.Placement{Node: f.firstPrimary(), Reason: mediaplane.PlacementPrimary}
-	if !f.probed {
-		return first, true
-	}
+	none := mediaplane.Placement{Reason: mediaplane.PlacementOverflowNodeUnavailable}
 	switch {
 	case full:
-		first.Reason = mediaplane.PlacementOverflowNoRoom
+		none.Reason = mediaplane.PlacementOverflowNoRoom
 	case guarded:
-		first.Reason = mediaplane.PlacementOverflowHostGuard
+		none.Reason = mediaplane.PlacementOverflowHostGuard
 	case answering:
-		first.Reason = mediaplane.PlacementOverflowDraining
-	default:
-		first.Reason = mediaplane.PlacementOverflowNodeUnavailable
+		none.Reason = mediaplane.PlacementOverflowDraining
+	case tooOld:
+		none.Reason = mediaplane.PlacementOverflowNodeProtocol
 	}
-	return first, false
+	return none, false
 }
 
 // inflightOn returns the Episodes placed on a node less than inflightTTL ago and
@@ -227,17 +262,6 @@ func (f *Fleet) inflightOn(node string) []time.Time {
 	live := slices.DeleteFunc(f.inflight[node], func(at time.Time) bool { return time.Since(at) > inflightTTL })
 	f.inflight[node] = live
 	return live
-}
-
-// firstPrimary names the first primary in configuration order. NewFleet
-// guarantees there is one.
-func (f *Fleet) firstPrimary() string {
-	for _, node := range f.nodes {
-		if !f.standbys[node.node] {
-			return node.node
-		}
-	}
-	return ""
 }
 
 // Watch probes every node's readiness until ctx ends.
@@ -292,13 +316,16 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 	defer f.mu.Unlock()
 	before, known := f.loads[node.node]
 	if err != nil {
-		switch {
-		case known && before.Draining:
-			f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
-		case known:
-			f.logTransition(ctx, slog.LevelWarn, "chalk sfu node left placement", node.node)
+		// A missed probe keeps the last sample: it stays usable until probeFreshness
+		// passes, so one lost probe neither removes a working node from placement nor
+		// forgets whether it speaks the protocol. Only the first misses are logged.
+		if known && time.Since(before.at) <= probeFreshness {
+			if before.Draining {
+				f.logTransition(ctx, slog.LevelInfo, "chalk sfu draining node stopped answering", node.node)
+			} else {
+				f.logTransition(ctx, slog.LevelWarn, "chalk sfu node missed a probe", node.node)
+			}
 		}
-		delete(f.loads, node.node)
 		return
 	}
 	switch {
@@ -309,6 +336,11 @@ func (f *Fleet) probeNode(ctx context.Context, node *Adapter) {
 	}
 	now := time.Now()
 	load := f.loadOf(node.node, ready, now)
+	seen := verdictOf(ready.Protocol)
+	if seen == verdictTooOld && f.verdicts[node.node] != verdictTooOld {
+		f.logTransition(ctx, slog.LevelWarn, "chalk sfu node is out of placement", node.node, "reason", NodeProtocolTooOld, "protocol", ready.Protocol, "minProtocol", minNodeProtocol, "revision", boundedRevision(ready.Revision))
+	}
+	f.verdicts[node.node] = seen
 	f.loads[node.node] = load
 	f.seen[node.node] = sighting{at: now, incarnation: load.incarnation}
 }
@@ -333,6 +365,18 @@ func (f *Fleet) loadOf(node string, ready wireReady, at time.Time) nodeLoad {
 		NodeHealth:  NodeHealth{Draining: ready.Draining, Allocations: ready.Allocations, CleanupDebt: ready.CleanupDebt},
 		at:          at,
 	}
+}
+
+// NodeProtocolTooOld is the bounded reason a node is out of placement: it decodes an older wire
+// protocol than this API sends. The same words name the placement reason overflow_node_protocol_too_old.
+const NodeProtocolTooOld = "node_protocol_too_old"
+
+// boundedRevision keeps a node-reported value out of the log unless it is a commit id.
+func boundedRevision(revision string) string {
+	if len(revision) != 40 || strings.Trim(revision, "0123456789abcdef") != "" {
+		return ""
+	}
+	return revision
 }
 
 func (f *Fleet) logTransition(ctx context.Context, level slog.Level, message, node string, attrs ...any) {

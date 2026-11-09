@@ -185,6 +185,11 @@ type wireError struct {
 }
 
 type wireReady struct {
+	// Protocol is the request-body revision the node decodes (see the SFU's protocol.WireProtocol).
+	// A node that predates it omits it, which reads as 0.
+	Protocol int `json:"protocol"`
+	// Revision is the commit the node was built from.
+	Revision        string `json:"revision"`
 	NodeIncarnation string `json:"nodeIncarnation"`
 	Sessions        int    `json:"sessions"`
 	PacketBudget    int    `json:"packetBudget"`

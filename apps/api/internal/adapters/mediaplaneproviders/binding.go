@@ -51,24 +51,20 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 		var room bool
 		placement, room = r.chalk.Place()
 		if !room {
-			// Every node would refuse a new Episode. It starts on Cloudflare when
-			// the Tenant can run it there and overflow is on. With overflow off it
-			// is refused with the capacity error a full node gives a join. Without a
-			// Cloudflare application it stays on the node placed, whose admission
-			// refuses the join.
+			// No node can take a new Episode. It starts on Cloudflare when the Tenant
+			// can run it there and overflow is on. With overflow off it is refused with
+			// the capacity error a full node gives a join. Without a Cloudflare
+			// application it is refused too: Place names a node only when it can take
+			// the Episode, and a binding to any other would fail every join.
 			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU)
-			switch {
-			case err != nil || fallback == nil:
-				placement.Reason = mediaplane.PlacementNoCapacity
-			case !r.chalk.CloudflareOverflow():
+			if err != nil || fallback == nil || !r.chalk.CloudflareOverflow() {
 				// The refusal keeps the reason nothing had room, so a host guard
 				// reads differently from a full pool or a drain.
 				r.recordPlacement(ctx, resolution.Provider, placement.Reason)
 				return nil, fmt.Errorf("%w: %w: %w: %s", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused, placement.Reason)
-			default:
-				resolved, resolution = fallback, fallbackResolution
-				placement.Node, placement.Incarnation = "", ""
 			}
+			resolved, resolution = fallback, fallbackResolution
+			placement.Node, placement.Incarnation = "", ""
 		}
 	}
 	binding, err := mediaplane.NewBinding(string(resolution.Provider), resolution.ConfigurationSource, r.applicationID(resolved))
