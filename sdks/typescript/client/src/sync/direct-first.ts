@@ -44,7 +44,9 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
       const downgrade = url.protocol === "wss:" && direct.protocol !== "wss:";
       if (downgrade || (memory.get(direct.host) ?? 0) > clock.now()) return options.inner.connect(tunnelUrl);
       url.protocol = direct.protocol;
-      url.host = direct.host;
+      // The direct host is its own origin: assigning `host` alone would keep the Tunnel URL's port.
+      url.hostname = direct.hostname;
+      url.port = direct.port;
       const markFailed = () => {
         const now = clock.now();
         for (const [host, until] of memory) if (until <= now) memory.delete(host);

@@ -84,6 +84,12 @@ describe("direct-first Sync socket", () => {
     expect(sockets[0]!.sent).toEqual(["hello"]);
   });
 
+  it("takes the port of the direct URL, not the Tunnel URL's", () => {
+    const { factory, urls } = harness();
+    factory().connect("wss://tunnel.example.test:8443/v1/sync?entry_generation=new");
+    expect(urls()).toEqual(["wss://direct.example.test/v1/sync?entry_generation=new"]);
+  });
+
   it("falls back to the Tunnel when the direct socket errors before it opens", () => {
     const { sockets, factory, urls } = harness();
     const socket = factory().connect(TUNNEL);
