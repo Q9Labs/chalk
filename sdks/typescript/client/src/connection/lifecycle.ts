@@ -504,11 +504,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
+                    // as a lost connection. A refresh then would race the server's own Leave and replace a connection
+                    // that is about to go.
                     replaceMediaConnection: () =>
-                      toPromise(access.refresh("media_recovery", true)).then((replacement) => {
-                        if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
-                        return replacement.media;
-                      }),
+                      model.closed || model.state === "leaving" || model.state === "left"
+                        ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
+                        : toPromise(access.refresh("media_recovery", true)).then((replacement) => {
+                            if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
+                            return replacement.media;
+                          }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
                     onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),

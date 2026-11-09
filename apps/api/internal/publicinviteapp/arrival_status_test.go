@@ -76,6 +76,22 @@ func TestLostConnectionReplacementStillRejectsStaleProof(t *testing.T) {
 	}
 }
 
+func TestRefreshDuringLeaveIsArrivalUnavailable(t *testing.T) {
+	fixture, access := newArrivalStatusFixture(t, mediaplane.ProviderChalkSFU)
+	fixture.arrival.ProviderSubject = "superseded-connection"
+	fixture.findErr = fmt.Errorf("find public participant: %w", episodes.ErrParticipantNotActive)
+	_, err := access.RefreshPublicAccess(context.Background(), publicinvites.PublicAccessInput{
+		Arrival: fixture.arrival, MediaProof: "media-proof", ReplaceMediaConnection: true,
+		MediaClients: mediaplane.AllClientProviders(),
+	})
+	if !errors.Is(err, publicinvites.ErrArrivalUnavailable) {
+		t.Fatalf("refresh of a leaving participant = %v; want arrival unavailable", err)
+	}
+	if fixture.creates != 0 {
+		t.Fatal("refresh of a leaving participant created a connection")
+	}
+}
+
 type arrivalStatusFixture struct {
 	publicinvites.Repository
 	publicinvites.Space
@@ -87,6 +103,7 @@ type arrivalStatusFixture struct {
 	arrival   publicinvites.Arrival
 	media     mediaplane.Service
 	resumeErr error
+	findErr   error
 	creates   int
 }
 
@@ -124,6 +141,9 @@ func (f *arrivalStatusFixture) GetTenant(context.Context, utilities.ID) (tenants
 	return tenants.Tenant{ID: f.arrival.TenantID}, nil
 }
 func (f *arrivalStatusFixture) FindPublic(context.Context, episodes.PublicAccessInput) (episodes.PublicJoinResult, error) {
+	if f.findErr != nil {
+		return episodes.PublicJoinResult{}, f.findErr
+	}
 	return f.ready(), nil
 }
 func (f *arrivalStatusFixture) WaitPublicParticipantReady(context.Context, episodes.PublicParticipantKey) (episodes.PublicJoinResult, error) {

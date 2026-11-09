@@ -214,6 +214,11 @@ func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvite
 		ParticipantID: arrival.ParticipantID, ParticipantGeneration: arrival.ParticipantGeneration,
 		AccountID: arrival.AccountID, IdentityMode: string(arrival.IdentityMode),
 	})
+	if errors.Is(err, episodes.ErrParticipantNotActive) {
+		// A refresh that overlaps Leave finds the participant already leaving. The arrival is about to be Left, so
+		// answer as the arrival will a moment later instead of a 500.
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
+	}
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
