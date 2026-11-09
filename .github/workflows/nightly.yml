@@ -82,7 +82,8 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: nightly
-      proofs: camera-share
+      # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
+      proofs: camera-share long-call
       media_plane: chalk_sfu
       latency: true
       release_sha: ${{ needs.plan.outputs.target_sha }}
