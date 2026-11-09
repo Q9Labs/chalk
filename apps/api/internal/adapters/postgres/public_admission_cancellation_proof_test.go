@@ -19,7 +19,7 @@ func proveAdmissionCancellation(t *testing.T, ctx context.Context, pool *pgxpool
 	ctx = proof.start(ctx, journeyID)
 	ctx, span := otel.Tracer("proof").Start(ctx, "guest.cancel")
 	arrival, _ := newKnock("Cancelled guest")
-	runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repository), admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, &terminalAdmissionAccess{}, admissionProofAccounts{}, admissionProofLinks{})
+	runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repository), admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, &outcomeProofAccess{}, outcomeProofAccounts{}, admissionProofLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}

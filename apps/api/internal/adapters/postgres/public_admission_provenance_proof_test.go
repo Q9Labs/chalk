@@ -57,7 +57,7 @@ func proveAdmissionProvenanceCollection(t *testing.T, ctx context.Context, pool 
 				t.Fatal(err)
 			}
 			ready, commit := make(chan struct{}), make(chan struct{})
-			access := &terminalAdmissionAccess{}
+			access := &outcomeProofAccess{}
 			access.grant = func(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 				binding := input.Admission
 				if binding == nil {
@@ -75,7 +75,7 @@ func proveAdmissionProvenanceCollection(t *testing.T, ctx context.Context, pool 
 				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "policy-race", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "policy-race", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}, nil
 			}
 			repository := NewPublicInviteRepositoryWithPool(collector)
-			runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repository), admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, admissionProofAccounts{}, admissionProofLinks{})
+			runtime, err := publicinvites.NewRuntime(publicinvites.NewService(repository), admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, outcomeProofAccounts{}, admissionProofLinks{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -174,11 +174,11 @@ func proveExpiredPendingArrivalRetry(t *testing.T, ctx context.Context, pool *pg
 	if err != nil {
 		t.Fatal(err)
 	}
-	access := &terminalAdmissionAccess{grant: func(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+	access := &outcomeProofAccess{grant: func(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 		t.Error("expired retry attempted a grant")
 		return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
 	}}
-	runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, admissionProofAccounts{}, admissionProofLinks{})
+	runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, outcomeProofAccounts{}, admissionProofLinks{})
 	if err != nil {
 		t.Fatal(err)
 	}

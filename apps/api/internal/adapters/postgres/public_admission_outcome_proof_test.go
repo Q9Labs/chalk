@@ -121,18 +121,18 @@ func (s admissionProofSpace) GetPublicSpace(context.Context, utilities.ID, utili
 	return s.value, nil
 }
 
-type admissionProofAccounts struct{ publicinvites.Accounts }
+type outcomeProofAccounts struct{ publicinvites.Accounts }
 type admissionProofLinks struct{ publicinvites.Links }
-type terminalAdmissionAccess struct {
+type outcomeProofAccess struct {
 	publicinvites.Access
 	grant     func(context.Context, publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error)
 	discarded int
 }
 
-func (a *terminalAdmissionAccess) GrantPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
+func (a *outcomeProofAccess) GrantPublicAccess(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 	return a.grant(ctx, input)
 }
-func (a *terminalAdmissionAccess) DiscardPublicAccess(context.Context, publicinvites.PublicAccessGrant) error {
+func (a *outcomeProofAccess) DiscardPublicAccess(context.Context, publicinvites.PublicAccessGrant) error {
 	a.discarded++
 	return nil
 }
@@ -157,7 +157,7 @@ func proveTerminalAdmissionCollection(t *testing.T, ctx context.Context, pool *p
 			}
 			exec(`update participants set status='active', joined_at=now() where tenant_id=$1 and id=(select participant_id from sync_admission_requests where tenant_id=$1 and admission_request_id=$2)`, uuid(tenantID), uuid(request.RequestHandle))
 			exec(`update sync_admission_requests set status='admitted', completed_at=now() where tenant_id=$1 and admission_request_id=$2`, uuid(tenantID), uuid(request.RequestHandle))
-			access := &terminalAdmissionAccess{}
+			access := &outcomeProofAccess{}
 			access.grant = func(ctx context.Context, input publicinvites.PublicAccessInput) (publicinvites.PublicAccessGrant, error) {
 				if input.Admission == nil {
 					t.Fatal("canonical admission binding missing")
@@ -180,7 +180,7 @@ func proveTerminalAdmissionCollection(t *testing.T, ctx context.Context, pool *p
 				}
 				return publicinvites.PublicAccessGrant{TenantID: tenantID, SpaceID: spaceID, EpisodeID: binding.EpisodeID, ParticipantID: binding.ParticipantID, ParticipantGeneration: binding.ParticipantGeneration, Provider: publicinvites.PublicProviderCloudflareSFU, ProviderSubject: "racing-connection", ClientPayload: publicinvites.PublicAccessClientPayload{ConnectionID: "racing-connection", StunServer: "stun:fixture"}, ExpiresAt: time.Now().Add(time.Hour)}, nil
 			}
-			runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, admissionProofAccounts{}, admissionProofLinks{})
+			runtime, err := publicinvites.NewRuntime(service, admissionProofSpace{value: publicinvites.PublicSpace{TenantID: tenantID, SpaceID: spaceID, AdmissionMode: publicinvites.AdmissionKnock}}, repository, access, outcomeProofAccounts{}, admissionProofLinks{})
 			if err != nil {
 				t.Fatal(err)
 			}
