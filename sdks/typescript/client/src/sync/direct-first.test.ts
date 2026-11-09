@@ -149,6 +149,16 @@ describe("direct-first Sync socket", () => {
     expect(urls().at(-1)).toBe(DIRECT_ATTEMPT);
   });
 
+  it("drops expired failed hosts from the memory when another failure is recorded", () => {
+    const { factory, advance, memory } = harness();
+    memory.set("old.example.test", 1_500);
+    advance(1_000);
+    factory().connect(TUNNEL);
+    advance(2_500);
+
+    expect([...memory.keys()]).toEqual(["direct.example.test"]);
+  });
+
   it("does not remember a direct socket that opened and later dropped", () => {
     const { sockets, factory, urls } = harness();
     const connect = factory();

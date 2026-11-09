@@ -7,7 +7,7 @@ export const DIRECT_SYNC_FAILURE_MEMORY_MS = 10 * 60_000;
 
 type Clock = Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
 
-/** Host to the time until which its direct path is skipped. Shared by every client in the page. */
+/** Host to the time until which its direct path is skipped, shared by every client in the page. Expired entries are dropped on the next failure. */
 export type DirectPathMemory = Map<string, number>;
 
 const sharedMemory: DirectPathMemory = new Map();
@@ -45,7 +45,11 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
       if (downgrade || (memory.get(direct.host) ?? 0) > clock.now()) return options.inner.connect(tunnelUrl);
       url.protocol = direct.protocol;
       url.host = direct.host;
-      const markFailed = () => memory.set(direct.host, clock.now() + (options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS));
+      const markFailed = () => {
+        const now = clock.now();
+        for (const [host, until] of memory) if (until <= now) memory.delete(host);
+        memory.set(direct.host, now + (options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS));
+      };
       return new DirectFirstSocket(options.inner, url.toString(), tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed);
     },
   };
