@@ -1,8 +1,8 @@
-// The latency kit writes its round trips and stage timings to a sidecar file next to the scorecard, not into the card. The card
+// The latency kit writes its round trips, stage timings and audio-delay estimate to a sidecar file next to the scorecard, not into the card. The card
 // keeps the shape every reader already knows, so the gate, the diff, the history and the baseline never parse these numbers and
 // no value here can change a verdict. The run summary is the only reader, and it never throws: a file that is missing or
 // invalid becomes one line of text.
-import { RTT_KEYS, STAGE_GROUPS, STAGE_IDS } from "./stages.mjs";
+import { AUDIO_KEYS, AUDIO_PARTS, RTT_KEYS, STAGE_GROUPS, STAGE_IDS } from "./stages.mjs";
 
 export const DIAGNOSTICS_SCHEMA = "chalk.latency-diagnostics/v1";
 export const diagnosticsFileName = (plane) => `latency-diagnostics-${plane}.json`;
@@ -35,11 +35,12 @@ function unknownField(value, allowed, where) {
 
 function summaryProblem(summary) {
   if (!isObject(summary)) return "summary must be an object";
-  const unknown = unknownField(summary, ["rtt", "stages"], "summary");
+  const unknown = unknownField(summary, ["rtt", "stages", "audio"], "summary");
   if (unknown) return unknown;
   for (const [group, keys] of [
     ["rtt", RTT_KEYS],
     ["stages", STAGE_IDS],
+    ["audio", AUDIO_KEYS],
   ]) {
     const stats = summary[group];
     if (stats === undefined) continue;
@@ -64,9 +65,12 @@ export function problemOf(file) {
   if (!Array.isArray(file.cycles) || file.cycles.length > MAX_CYCLES) return `cycles must be a list of at most ${MAX_CYCLES}`;
   for (const [index, cycle] of file.cycles.entries()) {
     if (!isObject(cycle)) return `cycles[${index}] must be an object`;
-    const extra = unknownField(cycle, ["cycle", "timestamp", "rtt", "stages"], `cycles[${index}]`);
+    const extra = unknownField(cycle, ["cycle", "timestamp", "rtt", "stages", "audio"], `cycles[${index}]`);
     if (extra) return extra;
-    const problem = (cycle.rtt === undefined ? undefined : mapProblem(cycle.rtt, RTT_KEYS, `cycles[${index}].rtt`)) ?? (cycle.stages === undefined ? undefined : mapProblem(cycle.stages, STAGE_IDS, `cycles[${index}].stages`));
+    const problem =
+      (cycle.rtt === undefined ? undefined : mapProblem(cycle.rtt, RTT_KEYS, `cycles[${index}].rtt`)) ??
+      (cycle.stages === undefined ? undefined : mapProblem(cycle.stages, STAGE_IDS, `cycles[${index}].stages`)) ??
+      (cycle.audio === undefined ? undefined : mapProblem(cycle.audio, AUDIO_KEYS, `cycles[${index}].audio`));
     if (problem) return problem;
   }
   return summaryProblem(file.summary);
@@ -74,13 +78,22 @@ export function problemOf(file) {
 
 /**
  * diagnosticsMarkdown renders the summary of a valid sidecar.
- * @param {{ rtt?: Record<string, {n: number, p50: number | null, p95: number | null}>, stages?: Record<string, {n: number, p50: number | null, p95: number | null}> }} summary
+ * @param {{ rtt?: Record<string, {n: number, p50: number | null, p95: number | null}>, stages?: Record<string, {n: number, p50: number | null, p95: number | null}>, audio?: Record<string, {n: number, p50: number | null, p95: number | null}> }} summary
  */
 export function diagnosticsMarkdown(summary) {
   const stat = (value) => (value && value.n > 0 ? `${value.p50} / ${value.p95} ms (n=${value.n})` : "no samples");
   const lines = ["#### Action latency diagnostics", "", "Informational: no budget, gate or verdict reads these. Times are p50 / p95 per cycle.", ""];
   const rtt = RTT_KEYS.filter((key) => summary.rtt?.[key]).map((key) => `${LABELS[key]} ${stat(summary.rtt?.[key])}`);
   if (rtt.length) lines.push(`Round trip from the runner: ${rtt.join("; ")}.`, "");
+  const audio = AUDIO_PARTS.filter((part) => summary.audio?.[part.id]);
+  if (audio.length) {
+    lines.push("**Audio delay a listener adds** (estimated from the listener's WebRTC stats while the call was steady; not mouth to ear)", "", "| Part | n | p50 | p95 | What it covers |", "|---|---|---|---|---|");
+    for (const part of audio) {
+      const value = summary.audio?.[part.id];
+      lines.push(`| \`${part.id}\` | ${value?.n} | ${value?.p50 ?? "–"} | ${value?.p95 ?? "–"} | ${part.description} |`);
+    }
+    lines.push("");
+  }
   for (const group of STAGE_GROUPS) {
     const rows = group.stages.filter((stage) => summary.stages?.[`${group.id}.${stage.id}`]);
     if (!rows.length) continue;

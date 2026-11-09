@@ -1,6 +1,6 @@
 // Turns the page traces of one action into stage durations (see features/scorecard/stages.mjs for what each stage covers).
 // Pure functions over events {t, k, d} with t in ms on the host clock; the latency kit records them with latency-trace.mjs.
-import { RTT_KEYS, STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
+import { AUDIO_KEYS, RTT_KEYS, STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
 import { summarize } from "./latency-stats.mjs";
 
 const find = (events, from, match) => events.find((event) => event.t >= from && match(event))?.t ?? null;
@@ -102,10 +102,36 @@ export function syncRoundTrip(events) {
   return Math.round(middle * 10) / 10;
 }
 
+const finite = (value) => Number.isFinite(value);
+const tenth = (value) => Math.round(value * 10) / 10;
+
+/**
+ * audioPath estimates the delay a listener adds to audio, from two reads of the receiver's audio counters a steady window
+ * apart and the SFU round trip measured on the sender's and the receiver's side. media.network_jitter_one_way_ms is the network
+ * time plus the jitter buffer; capture, encode, SFU forwarding and playout are not in it, and media.playout_ms is reported beside it.
+ * Every part is null when the window cannot show it: no audio was emitted, the browser reports no playout delay, or no round trip was read.
+ * @param {{ emitted: number, jitterBufferDelay: number, samples: number, playoutDelay: number, playoutReported: boolean }} before
+ * @param {{ emitted: number, jitterBufferDelay: number, samples: number, playoutDelay: number, playoutReported: boolean }} after
+ * @param {{ sender: number | null, receiver: number | null }} rtt  The SFU round trip in ms from each guest.
+ * @returns {Record<string, number | null>}
+ */
+export function audioPath(before, after, rtt) {
+  const emitted = after.emitted - before.emitted;
+  const samples = after.samples - before.samples;
+  const jitterBuffer = emitted > 0 ? ((after.jitterBufferDelay - before.jitterBufferDelay) / emitted) * 1000 : null;
+  const playout = after.playoutReported && samples > 0 ? ((after.playoutDelay - before.playoutDelay) / samples) * 1000 : null;
+  const sender = finite(rtt.sender) ? rtt.sender : rtt.receiver;
+  const receiver = finite(rtt.receiver) ? rtt.receiver : rtt.sender;
+  const network = finite(sender) && finite(receiver) ? (sender + receiver) / 2 : null;
+  const total = finite(network) && finite(jitterBuffer) && jitterBuffer >= 0 ? network + jitterBuffer : null;
+  const round = (value) => (finite(value) && value >= 0 ? tenth(value) : null);
+  return { "media.network_jitter_one_way_ms": round(total), "media.network_ms": round(network), "media.jitter_buffer_ms": round(jitterBuffer), "media.playout_ms": round(playout) };
+}
+
 /**
  * diagnosticsOf is the summary of the diagnostics sidecar: n, p50 and p95 of every round trip and stage over the kept cycles.
  * It returns undefined when no cycle carries a trace, so a run without tracing writes no sidecar.
- * @param {{ trace?: { rtt: Record<string, number | null>, stages: Record<string, number | null> } }[]} cycles
+ * @param {{ trace?: { rtt: Record<string, number | null>, stages: Record<string, number | null>, audio?: Record<string, number | null> } }[]} cycles
  */
 export function diagnosticsOf(cycles) {
   const traced = cycles.flatMap((cycle) => (cycle.trace ? [cycle.trace] : []));
@@ -115,6 +141,7 @@ export function diagnosticsOf(cycles) {
     const summary = summarize(samples);
     return Object.fromEntries(keys.filter((key) => summary[key]).map((key) => [key, stat(summary[key])]));
   };
+  const audio = traced.flatMap((trace) => (trace.audio ? [trace.audio] : []));
   const stageIds = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
   return {
     rtt: block(
@@ -125,5 +152,6 @@ export function diagnosticsOf(cycles) {
       traced.map((trace) => trace.stages),
       stageIds,
     ),
+    ...(audio.length ? { audio: block(audio, AUDIO_KEYS) } : {}),
   };
 }

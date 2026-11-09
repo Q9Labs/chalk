@@ -89,5 +89,19 @@ export const STAGE_GROUPS = [
 /** Every stage id the schema accepts, as "<group>.<stage>". */
 export const STAGE_IDS = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
 
+/**
+ * The audio delay a listener adds, estimated from the receiver's WebRTC stats while a call is steady. Informational, like every
+ * stage: no budget reads it and it is not a card metric. media.network_jitter_one_way_ms is media.network_ms plus
+ * media.jitter_buffer_ms. Capture, encode, SFU forwarding and playout are excluded, so it is not mouth to ear. media.playout_ms
+ * is the stream's own playout counter, reported beside it and never added.
+ */
+export const AUDIO_PARTS = [
+  { id: "media.network_jitter_one_way_ms", description: "one-way network time plus listener jitter-buffer delay; capture, encode, SFU forwarding and playout are excluded" },
+  { id: "media.network_ms", description: "mean of half the sender's SFU round trip and half the listener's, from each side's selected ICE pair; assumes equal delay each way, and uses the one round trip that was read when the other is missing" },
+  { id: "media.jitter_buffer_ms", description: "average time an audio sample waits in the listener's jitter buffer (jitterBufferDelay / jitterBufferEmittedCount)" },
+  { id: "media.playout_ms", description: "the inbound audio stream's own totalPlayoutDelay / totalSamplesCount; not part of the total, absent when the browser does not report it, and the device's media-playout stats are not read" },
+];
+export const AUDIO_KEYS = AUDIO_PARTS.map((part) => part.id);
+
 /** The runner-to-service round trips recorded beside the stages. */
 export const RTT_KEYS = /** @type {const} */ (["sfu_ms", "sync_ms"]);

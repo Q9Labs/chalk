@@ -21,11 +21,11 @@ import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
-import { diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
+import { diagnosticsFile, scorecard } from "./latency-card.mjs";
+import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
-import { DIAGNOSTICS_SCHEMA, diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
+import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
-import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
 const providers = { chalk_sfu: "chalk_sfu", cf_sfu: "cloudflare_sfu" };
 const timeoutMs = 20_000;
@@ -163,17 +163,23 @@ async function cycle(run, origin, plane, headed, ending) {
   }
   await sleep(settleMs);
   await shareSteps(origin, pages, sender, sample, stages);
+  // The call is steady for the settle pause after the actions: the listener's audio counters are read on both sides of it.
+  const audioBefore = await observe("audio counters", () => pages[1].evaluate(() => window.proofTrace.audioStats()), null);
   await sleep(settleMs);
+  const audioAfter = await observe("audio counters", () => pages[1].evaluate(() => window.proofTrace.audioStats()), null);
   // The SFU round trip is read while the call is steady, after the actions and before leave. The Sync round trip is the SDK's own
   // pings and the pongs that answer them, read from the trace afterwards: the kit sends nothing on the Sync socket.
   const rtt = await observe("round trip", async () => ({ sfu_ms: await pages[0].evaluate(() => window.proofTrace.sfuRtt()), sync_ms: syncRoundTrip(await takeTrace(pages[0], 0)) }), { sfu_ms: null, sync_ms: null });
+  const listenerRtt = await observe("listener round trip", () => pages[1].evaluate(() => window.proofTrace.sfuRtt()), null);
+  // The estimate goes to the sidecar only, never into `sample`, so the card is the card it always was. One that could not be made is left out.
+  const audio = audioBefore && audioAfter ? audioPath(audioBefore, audioAfter, { sender: rtt.sfu_ms, receiver: listenerRtt }) : undefined;
   const left = await measure(pages[0], pages[1], "leave", null, [
     { name: "action.leave_ms", kind: "left", participantId: sender },
     { name: "action.leave_media_removed_ms", kind: "silent", participantId: sender },
   ]);
   const ack = left.acted.leaveAckAt;
   Object.assign(sample, left.delays, { "action.leave_ack_ms": ack === null ? null : Math.round(ack - left.acted.at) });
-  return { sample, trace: { rtt, stages }, browser: `chromium/${pages[0].context().browser()?.version()}`, parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady } };
+  return { sample, trace: { rtt, stages, ...(audio ? { audio } : {}) }, browser: `chromium/${pages[0].context().browser()?.version()}`, parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady } };
 }
 
 const reason = (error) => (error instanceof Error ? error.message : String(error));
@@ -236,47 +242,6 @@ async function conclude(report, { samples, planes }) {
     if (kept.length < samples) failures.unshift(`${kept.length} of ${samples} cycles kept`);
     report.planes[plane] = { kept: kept.length, dropped: report.cycles.filter((outcome) => outcome.plane === plane && outcome.dropped).length, summary, failures, warnings };
   }
-}
-
-// scorecard is the public view of one plane: percentiles per metric id, and what was dropped and why.
-function scorecard(report, plane, run) {
-  const { summary } = report.planes[plane];
-  const kept = report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped);
-  const drops = new Map();
-  for (const outcome of report.cycles.filter((cycle) => cycle.plane === plane && cycle.dropped)) {
-    drops.set(`${WHOLE_CYCLE} ${outcome.dropped}`, (drops.get(`${WHOLE_CYCLE} ${outcome.dropped}`) ?? 0) + 1);
-  }
-  for (const [metric, { timeouts }] of Object.entries(summary)) if (timeouts) drops.set(`${metric} timeout`, timeouts);
-  return parseScorecard({
-    schema: SCORECARD_SCHEMA,
-    run,
-    mediaPlane: plane,
-    metrics: Object.keys(METRICS)
-      .filter((id) => summary[id])
-      .map((id) => ({ id, unit: METRICS[id].unit, n: summary[id].n, p50: summary[id].p50, p95: summary[id].p95, source: "latency-kit" })),
-    series: kept.map((cycle, index) => ({
-      cycle: index + 1,
-      timestamp: cycle.timestamp,
-      actions: Object.fromEntries(
-        Object.keys(METRICS)
-          .filter((id) => id.startsWith("action."))
-          .map((id) => [id, cycle.sample[id] ?? null]),
-      ),
-    })),
-    dropped: [...drops].map(([key, count]) => {
-      const [metric, reason] = key.split(" ");
-      return { metric, reason, count };
-    }),
-  });
-}
-
-// diagnosticsFile is the sidecar of one plane: the round trips and stage timings of each kept cycle, and their percentiles. It stays
-// out of the scorecard so every reader of the card sees the card it always saw; only the run summary reads this file.
-function diagnosticsFile(report, plane) {
-  const kept = report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped);
-  const summary = diagnosticsOf(kept);
-  if (!summary) return undefined;
-  return { schema: DIAGNOSTICS_SCHEMA, plane, cycles: kept.map((cycle, index) => ({ cycle: index + 1, timestamp: cycle.timestamp, ...cycle.trace })), summary };
 }
 
 function table(report) {
