@@ -99,6 +99,8 @@ or Space ids. With the `action.*` budgets in [`perf/budgets.json`](../../perf/bu
 the run fails on a p95 over budget, on any timeout, or when a plane has fewer
 kept cycles than `--samples`.
 
+Each cycle also records the runner's round trip to the SFU and to Sync, and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the series and in the card's `diagnostics` block, never in a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
+
 Other checks cover parts of the same journey:
 
 | Check                                                                                   | What it times                                                                                              | Media plane                              | How it relates                                                                                                                                               |

@@ -3,6 +3,7 @@
 // holds no host, IP, URL, Tenant, Space or other resource id.
 
 import { FAMILY_METRICS } from "./metrics.mjs";
+import { RTT_KEYS, STAGE_IDS } from "./stages.mjs";
 
 export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
 
@@ -47,6 +48,7 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {MediaPlane} mediaPlane
  * @property {ScorecardMetric[]} metrics
  * @property {ScorecardSeriesCycle[]} [series] Per-cycle action latency, with at most 60 cycles and no resource identifiers.
+ * @property {ScorecardDiagnostics} [diagnostics] Round trips and stage timings behind the action metrics. Informational: no budget, gate or verdict reads it.
  * @property {ScorecardDrop[]} dropped
  * @property {object} [contention] Isolation evidence with per-signal provenance; no resource identifiers.
  */
@@ -55,6 +57,19 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {number} cycle  One-based cycle index, with no other run or resource identifiers.
  * @property {string} timestamp  UTC ISO 8601 cycle start time.
  * @property {Record<string, number | null>} actions  The fixed action metric ids and their milliseconds for this cycle.
+ * @property {Partial<Record<(typeof RTT_KEYS)[number], number | null>>} [rtt]  Runner-to-SFU and runner-to-Sync round trips in milliseconds.
+ * @property {Record<string, number | null>} [stages]  Stage ids from stages.mjs and their milliseconds for this cycle.
+ */
+/**
+ * @typedef {object} ScorecardStat
+ * @property {number} n
+ * @property {number | null} p50
+ * @property {number | null} p95
+ */
+/**
+ * @typedef {object} ScorecardDiagnostics
+ * @property {Partial<Record<(typeof RTT_KEYS)[number], ScorecardStat>>} [rtt]
+ * @property {Record<string, ScorecardStat>} [stages]
  */
 
 // Units a metric may use. A metric's unit is fixed by its entry in METRICS. A pass value is a share from 0 to 1 and
@@ -115,11 +130,12 @@ function scorecardProblems(value) {
   const fail = (/** @type {string} */ problem) => problems.push(problem);
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
-  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "series", "dropped", "contention"], "scorecard", fail);
+  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "series", "diagnostics", "dropped", "contention"], "scorecard", fail);
   runProblems(card?.run, fail);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
   if (card?.series !== undefined) seriesProblems(card.series, fail);
+  if (card?.diagnostics !== undefined) diagnosticsProblems(card.diagnostics, fail);
   dropProblems(card?.dropped, fail);
   if (card?.contention !== undefined) contentionProblems(card.contention, fail);
   leakProblems(card, fail);
@@ -136,7 +152,7 @@ function seriesProblems(series, fail) {
   if (series.length > 60) return fail("series must contain at most 60 cycles");
   const actionIds = Object.keys(ACTION_METRICS);
   series.forEach((entry, index) => {
-    exactKeys(entry, ["cycle", "timestamp", "actions"], `series[${index}]`, fail);
+    exactKeys(entry, ["cycle", "timestamp", "actions", "rtt", "stages"], `series[${index}]`, fail);
     if (!Number.isInteger(entry?.cycle) || entry.cycle !== index + 1) fail(`series[${index}].cycle must be ${index + 1}`);
     if (typeof entry?.timestamp !== "string" || !isoTime.test(entry.timestamp) || Number.isNaN(Date.parse(entry.timestamp))) fail(`series[${index}].timestamp must be a UTC ISO time`);
     exactKeys(entry?.actions, actionIds, `series[${index}].actions`, fail);
@@ -152,7 +168,47 @@ function seriesProblems(series, fail) {
       const value = entry.actions[id];
       if (value !== null && (!Number.isFinite(value) || value < 0)) fail(`series[${index}].actions.${id} must be non-negative milliseconds or null`);
     }
+    if (entry.rtt !== undefined) millisecondsProblems(entry.rtt, RTT_KEYS, `series[${index}].rtt`, fail);
+    if (entry.stages !== undefined) millisecondsProblems(entry.stages, STAGE_IDS, `series[${index}].stages`, fail);
   });
+}
+
+/**
+ * millisecondsProblems checks an optional map from a fixed set of keys to non-negative milliseconds or null.
+ * @param {any} map
+ * @param {readonly string[]} keys
+ * @param {string} where
+ * @param {(problem: string) => void} fail
+ */
+function millisecondsProblems(map, keys, where, fail) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return fail(`${where} must be an object`);
+  exactKeys(map, [...keys], where, fail);
+  for (const [key, value] of Object.entries(map)) if (value !== null && (!Number.isFinite(value) || value < 0)) fail(`${where}.${key} must be non-negative milliseconds or null`);
+}
+
+/**
+ * @param {any} diagnostics
+ * @param {(problem: string) => void} fail
+ */
+function diagnosticsProblems(diagnostics, fail) {
+  if (!diagnostics || typeof diagnostics !== "object" || Array.isArray(diagnostics)) return fail("diagnostics must be an object");
+  exactKeys(diagnostics, ["rtt", "stages"], "diagnostics", fail);
+  for (const [group, keys] of [
+    ["rtt", RTT_KEYS],
+    ["stages", STAGE_IDS],
+  ]) {
+    const stats = diagnostics[group];
+    if (stats === undefined) continue;
+    if (!stats || typeof stats !== "object" || Array.isArray(stats)) {
+      fail(`diagnostics.${group} must be an object`);
+      continue;
+    }
+    exactKeys(stats, [...keys], `diagnostics.${group}`, fail);
+    for (const [key, stat] of Object.entries(stats)) {
+      exactKeys(stat, ["n", "p50", "p95"], `diagnostics.${group}.${key}`, fail);
+      sampleProblems(`diagnostics.${group}.${key}`, stat, fail);
+    }
+  }
 }
 
 function contentionProblems(value, fail) {

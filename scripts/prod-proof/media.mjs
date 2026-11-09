@@ -5,12 +5,13 @@ import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mj
 import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
+import { installLatencyTrace } from "./latency-trace.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: sdkEntry, observeLeave, plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: sdkEntry, observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
@@ -94,6 +95,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const ownVoice = Array.isArray(speech);
       await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
+      if (options.trace) await context.addInitScript(installLatencyTrace); // After the fixture: it wraps the fixture's RTCPeerConnection.
       const page = await context.newPage();
       const network = [];
       networks[guest] = network;

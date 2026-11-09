@@ -21,7 +21,9 @@ import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
+import { diagnosticsOf, joinStages, toggleStages } from "./latency-stages.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
+import { diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
@@ -58,35 +60,67 @@ async function measure(sender, receiver, action, value, specs) {
   await receiver.evaluate((watch) => window.proofLatency.arm(watch.id, watch.specs, watch.timeoutMs), { id, specs, timeoutMs });
   const acted = await sender.evaluate((step) => window.proofLatency.act(step.action, step.value), { action, value });
   const seen = await receiver.evaluate((watch) => window.proofLatency.result(watch), id);
-  return { acted, delays: Object.fromEntries(seen.map(({ name, at }) => [name, at === null ? null : Math.round(at - acted.at)])) };
+  return { acted, delays: Object.fromEntries(seen.map(({ name, at }) => [name, at === null ? null : Math.round(at - acted.at)])), ats: Object.fromEntries(seen.map(({ name, at }) => [name, at])) };
+}
+
+// observe reads the wire trace. The trace explains the action metrics and never gates them, so a failed read
+// leaves its numbers null and says so, and the cycle still counts.
+async function observe(what, read, fallback) {
+  try {
+    return await read();
+  } catch (error) {
+    console.warn(`trace: ${what} skipped: ${reason(error)}`);
+    return fallback;
+  }
+}
+
+const takeTrace = (page, from) => page.evaluate((since) => window.proofTrace.take(since), from);
+
+// toggleTrace splits a finished toggle. The first spec is the receiver's roster change and the second its media change.
+async function toggleTrace(pages, step, result) {
+  const [roster, media] = step.specs;
+  const t0 = result.acted.at;
+  return observe(step.group, async () => toggleStages(step.group, { t0, sender: await takeTrace(pages[0], t0), receiver: await takeTrace(pages[1], t0), command: step.command, visibleAt: result.ats[roster.name], finalAt: result.ats[media.name] }), {});
 }
 
 function toggles(participantId) {
   const signal = (name, field, value) => ({ name, kind: "roster", participantId, field, value });
   return [
-    { action: "camera", value: false, specs: [signal("action.camera_toggle.off_ms", "camera", "inactive"), { name: "action.unpublish.removed_ms", kind: "gone", participantId, source: "camera" }] },
-    { action: "camera", value: true, specs: [signal("action.camera_toggle.on_ms", "camera", "active"), { name: "action.publish.first_frame_ms", kind: "frame", participantId, source: "camera" }] },
-    { action: "microphone", value: false, specs: [signal("action.mic_toggle.off_ms", "microphone", "inactive"), { name: "action.unpublish.audio_removed_ms", kind: "gone", participantId, source: "microphone" }] },
-    { action: "microphone", value: true, specs: [signal("action.mic_toggle.on_ms", "microphone", "active"), { name: "action.publish.first_audio_ms", kind: "frame", participantId, source: "microphone" }] },
+    { action: "camera", value: false, group: "camera_off", command: "live_target:set_camera_enabled:false", specs: [signal("action.camera_toggle.off_ms", "camera", "inactive"), { name: "action.unpublish.removed_ms", kind: "gone", participantId, source: "camera" }] },
+    { action: "camera", value: true, group: "camera_on", command: "live_target:set_camera_enabled:true", specs: [signal("action.camera_toggle.on_ms", "camera", "active"), { name: "action.publish.first_frame_ms", kind: "frame", participantId, source: "camera" }] },
+    { action: "microphone", value: false, group: "mic_off", command: "live_target:set_microphone_enabled:false", specs: [signal("action.mic_toggle.off_ms", "microphone", "inactive"), { name: "action.unpublish.audio_removed_ms", kind: "gone", participantId, source: "microphone" }] },
+    { action: "microphone", value: true, group: "mic_on", command: "live_target:set_microphone_enabled:true", specs: [signal("action.mic_toggle.on_ms", "microphone", "active"), { name: "action.publish.first_audio_ms", kind: "frame", participantId, source: "microphone" }] },
   ];
 }
 
-async function shareSteps(origin, pages, participantId, sample) {
+async function shareSteps(origin, pages, participantId, sample, stages) {
   const share = await pages[0].context().newPage();
   try {
     await share.goto(`${origin}/share`);
     await pages[0].bringToFront();
-    const started = await measure(pages[0], pages[1], "screen", true, [
-      { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
-      { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
-    ]);
+    const start = {
+      group: "screen_start",
+      command: "live_target:set_screen_share_enabled:true",
+      specs: [
+        { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
+        { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
+      ],
+    };
+    const started = await measure(pages[0], pages[1], "screen", true, start.specs);
     Object.assign(sample, started.delays);
+    Object.assign(stages, await toggleTrace(pages, start, started));
     await sleep(settleMs);
-    const stopped = await measure(pages[0], pages[1], "screen", false, [
-      { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
-      { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
-    ]);
+    const stop = {
+      group: "screen_stop",
+      command: "live_target:set_screen_share_enabled:false",
+      specs: [
+        { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
+        { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
+      ],
+    };
+    const stopped = await measure(pages[0], pages[1], "screen", false, stop.specs);
     Object.assign(sample, stopped.delays);
+    Object.assign(stages, await toggleTrace(pages, stop, stopped));
   } finally {
     await share.close();
   }
@@ -101,7 +135,7 @@ async function cycle(run, origin, plane, headed, ending) {
   ending.path = `${path}/${episode.id}`;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
-  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true });
+  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true });
   const landed = guests.admissions.map((admission) => admission.provider);
   check(
     landed.every((provider) => provider === providers[plane]),
@@ -119,21 +153,26 @@ async function cycle(run, origin, plane, headed, ending) {
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
   ]);
   Object.assign(sample, second.delays);
+  const stages = await observe("join", async () => joinStages({ t0: second.acted.at, events: await takeTrace(pages[1], second.acted.at) }), {});
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
   for (const step of toggles(sender)) {
     await sleep(settleMs);
-    Object.assign(sample, (await measure(pages[0], pages[1], step.action, step.value, step.specs)).delays);
+    const result = await measure(pages[0], pages[1], step.action, step.value, step.specs);
+    Object.assign(sample, result.delays);
+    Object.assign(stages, await toggleTrace(pages, step, result));
   }
   await sleep(settleMs);
-  await shareSteps(origin, pages, sender, sample);
+  await shareSteps(origin, pages, sender, sample, stages);
   await sleep(settleMs);
+  // Both round trips are read while the call is steady, after the actions and before leave.
+  const rtt = await observe("round trip", async () => ({ sfu_ms: await pages[0].evaluate(() => window.proofTrace.sfuRtt()), sync_ms: await pages[0].evaluate(() => window.proofTrace.syncRtt()) }), { sfu_ms: null, sync_ms: null });
   const left = await measure(pages[0], pages[1], "leave", null, [
     { name: "action.leave_ms", kind: "left", participantId: sender },
     { name: "action.leave_media_removed_ms", kind: "silent", participantId: sender },
   ]);
   const ack = left.acted.leaveAckAt;
   Object.assign(sample, left.delays, { "action.leave_ack_ms": ack === null ? null : Math.round(ack - left.acted.at) });
-  return { sample, browser: `chromium/${pages[0].context().browser()?.version()}`, parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady } };
+  return { sample, trace: { rtt, stages }, browser: `chromium/${pages[0].context().browser()?.version()}`, parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady } };
 }
 
 const reason = (error) => (error instanceof Error ? error.message : String(error));
@@ -207,6 +246,7 @@ function scorecard(report, plane, run) {
     drops.set(`${WHOLE_CYCLE} ${outcome.dropped}`, (drops.get(`${WHOLE_CYCLE} ${outcome.dropped}`) ?? 0) + 1);
   }
   for (const [metric, { timeouts }] of Object.entries(summary)) if (timeouts) drops.set(`${metric} timeout`, timeouts);
+  const diagnostics = diagnosticsOf(kept);
   return parseScorecard({
     schema: SCORECARD_SCHEMA,
     run,
@@ -222,7 +262,9 @@ function scorecard(report, plane, run) {
           .filter((id) => id.startsWith("action."))
           .map((id) => [id, cycle.sample[id] ?? null]),
       ),
+      ...cycle.trace,
     })),
+    ...(diagnostics ? { diagnostics } : {}),
     dropped: [...drops].map(([key, count]) => {
       const [metric, reason] = key.split(" ");
       return { metric, reason, count };
@@ -269,6 +311,10 @@ async function main() {
   const identity = { id: runId, commit, tier: settings.scorecard.tier, environment: settings.scorecard.environment, startedAt: report.startedAt, client };
   for (const plane of settings.planes) await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
   console.log(table(report));
+  for (const plane of settings.planes) {
+    const block = diagnosticsMarkdown(diagnosticsOf(report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped)));
+    if (block) console.log(`\n${plane}\n${block}`);
+  }
   for (const [plane, { failures, warnings }] of Object.entries(report.planes)) {
     for (const failure of failures) console.log(`${plane}: ${failure}`);
     for (const warning of warnings) console.log(`${plane}: warning, ${warning}`);

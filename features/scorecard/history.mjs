@@ -57,6 +57,7 @@ export function baselineCard(history, plane) {
   const latest = runs.at(-1);
   const baseline = { ...latest, run: { ...latest.run, id: `median-of-${runs.length}` }, metrics, dropped: [] };
   delete baseline.series;
+  delete baseline.diagnostics;
   return baseline;
 }
 

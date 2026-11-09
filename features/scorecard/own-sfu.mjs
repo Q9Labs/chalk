@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { planeBudgets, readBudgets } from "./budgets.mjs";
 import { WHOLE_CYCLE, parseScorecard } from "./schema.mjs";
 import { contentionMarkdown } from "./contention.mjs";
+import { diagnosticsMarkdown } from "./diagnostics.mjs";
 
 const [evidence, plane, revision, artifacts] = process.argv.slice(2);
 if (!artifacts) throw new Error("usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
@@ -62,4 +63,5 @@ const rows = card.metrics.map((metric) => {
 });
 const drops = card.dropped.map((drop) => `${drop.metric === WHOLE_CYCLE ? "whole cycle" : drop.metric}: ${drop.reason} ×${drop.count}`);
 summarize([`### ${title}`, "", `Plane \`${card.mediaPlane}\`, revision \`${card.run.commit}\`, ${card.metrics.length} metrics.`, "", "| Metric | n | p50 | p95 | Budget | |", "|---|---|---|---|---|---|", ...rows, ...(drops.length > 0 ? ["", `Dropped: ${drops.join("; ")}.`] : []), ""].join("\n"));
+if (card.diagnostics) summarize(diagnosticsMarkdown(card.diagnostics));
 if (card.contention?.contended || card.contention?.unobservable) process.exitCode = 1;
