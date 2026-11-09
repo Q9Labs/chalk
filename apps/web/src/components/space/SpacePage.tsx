@@ -4,7 +4,7 @@ import type { ThemeMode } from "../../lib/theme";
 import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { publicAPIBaseURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
@@ -24,7 +24,7 @@ const LOBBY_KEEP_WARM_MS = 15_000;
  */
 function warmCall(): void {
   const apiBaseURL = publicAPIBaseURL();
-  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL), keepWarmMs: LOBBY_KEEP_WARM_MS });
+  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL), syncDirectUrl: publicSyncDirectURL().syncDirectURL, keepWarmMs: LOBBY_KEEP_WARM_MS });
 }
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */

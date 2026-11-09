@@ -1,5 +1,6 @@
 import { releaseWarmBrowserSyncSocket, warmBrowserSyncSocket } from "../sync/browser";
 import { MAX_KEEP_WARM_MS } from "../sync/warm-socket";
+import { directFirstWarmUrl } from "../sync/direct-first";
 import { syncEntryUrl } from "../sync/entry-url";
 import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "./urls";
 
@@ -8,6 +9,8 @@ export type PreconnectOptions = {
   readonly baseUrl?: string;
   /** The Sync URL, when it is not the default derived from `baseUrl`. */
   readonly syncUrl?: string;
+  /** The direct Sync URL, when the client is built with `syncDirectUrl`: the warm socket then opens where that client dials first, so it is adopted. */
+  readonly syncDirectUrl?: string | undefined;
   /**
    * How long to keep a socket ready after this call, in ms (0 to 16000, default 0). Sync closes an unused socket after 5 s, so
    * a socket that ages out is replaced by a new one until this window ends. A failed upgrade ends the window. Use it for a
@@ -38,7 +41,7 @@ export function preconnect(options: PreconnectOptions = {}): void {
     link.crossOrigin = "anonymous";
     document.head.appendChild(link);
   }
-  warmBrowserSyncSocket(syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true), Math.min(options.keepWarmMs ?? 0, MAX_KEEP_WARM_MS));
+  warmBrowserSyncSocket(directFirstWarmUrl(options.syncDirectUrl, syncEntryUrl(options.syncUrl ?? defaultSyncUrl(baseUrl), null, true)), Math.min(options.keepWarmMs ?? 0, MAX_KEEP_WARM_MS));
 }
 
 /**

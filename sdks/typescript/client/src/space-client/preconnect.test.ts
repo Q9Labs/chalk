@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createBrowserWebSocketFactory } from "../sync/browser";
+import { createDirectFirstWebSocketFactory } from "../sync/direct-first";
 import { preconnect, releasePreconnect } from "./preconnect";
 
 type FakeLink = { rel: string; href: string; crossOrigin: string };
@@ -230,4 +231,24 @@ it("does nothing outside a browser page", () => {
   vi.stubGlobal("document", undefined);
   preconnect({ syncUrl });
   expect(FakeWebSocket.instances).toHaveLength(0);
+});
+
+const directUrl = "wss://direct.example.test/v1/sync";
+const dialedDirect = dialed.replace("sync.example.test", "direct.example.test");
+
+it("opens the lobby socket at the direct URL, where a direct-first client dials, and that client adopts it", async () => {
+  preconnect({ syncUrl, syncDirectUrl: directUrl });
+  expect(FakeWebSocket.instances.map((socket) => socket.url)).toEqual([dialedDirect]);
+  FakeWebSocket.instances[0]?.open();
+  const socket = createDirectFirstWebSocketFactory({ directUrl, inner: createBrowserWebSocketFactory(), memory: new Map() }).connect(dialed);
+  const opened = vi.fn();
+  socket.onopen = opened;
+  await Promise.resolve();
+  expect(FakeWebSocket.instances).toHaveLength(1);
+  expect(opened).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the Tunnel URL for the lobby socket when the client would not dial the direct URL first", () => {
+  preconnect({ syncUrl, syncDirectUrl: "ws://direct.example.test/v1/sync" });
+  expect(FakeWebSocket.instances.map((socket) => socket.url)).toEqual([dialed]);
 });

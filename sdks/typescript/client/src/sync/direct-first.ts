@@ -39,22 +39,33 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
   const memory = options.memory ?? sharedMemory;
   return {
     connect(tunnelUrl) {
-      const url = new URL(tunnelUrl);
-      // The hello frame carries the token, so a secure Tunnel URL never falls to a plain direct one.
-      const downgrade = url.protocol === "wss:" && direct.protocol !== "wss:";
-      if (downgrade || (memory.get(direct.host) ?? 0) > clock.now()) return options.inner.connect(tunnelUrl);
-      url.protocol = direct.protocol;
-      // The direct host is its own origin: assigning `host` alone would keep the Tunnel URL's port.
-      url.hostname = direct.hostname;
-      url.port = direct.port;
+      const attempt = directAttemptUrl(direct, tunnelUrl, memory, clock.now());
+      if (!attempt) return options.inner.connect(tunnelUrl);
       const markFailed = () => {
         const now = clock.now();
         for (const [host, until] of memory) if (until <= now) memory.delete(host);
         memory.set(direct.host, now + (options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS));
       };
-      return new DirectFirstSocket(options.inner, url.toString(), tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed);
+      return new DirectFirstSocket(options.inner, attempt, tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed);
     },
   };
+}
+
+/** The direct URL a connection dials first, with the Tunnel URL's path and query, or null when it uses the Tunnel straight away. */
+function directAttemptUrl(direct: URL, tunnelUrl: string, memory: DirectPathMemory, now: number): string | null {
+  const url = new URL(tunnelUrl);
+  // The hello frame carries the token, so a secure Tunnel URL never falls to a plain direct one.
+  if ((url.protocol === "wss:" && direct.protocol !== "wss:") || (memory.get(direct.host) ?? 0) > now) return null;
+  url.protocol = direct.protocol;
+  // The direct host is its own origin: assigning `host` alone would keep the Tunnel URL's port.
+  url.hostname = direct.hostname;
+  url.port = direct.port;
+  return url.toString();
+}
+
+/** The URL a socket opened ahead of `connect` must have to be adopted: what `connect` dials first for this direct URL. */
+export function directFirstWarmUrl(directUrl: string | null | undefined, tunnelUrl: string): string {
+  return (directUrl ? directAttemptUrl(new URL(directUrl), tunnelUrl, sharedMemory, Date.now()) : null) ?? tunnelUrl;
 }
 
 /** Spread into the sync client options: empty (today's behaviour) unless a direct URL is configured. */
