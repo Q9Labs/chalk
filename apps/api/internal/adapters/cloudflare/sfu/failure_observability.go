@@ -22,6 +22,7 @@ var (
 	providerNumberPattern  = regexp.MustCompile(`[0-9]+`)
 	providerUnicodePattern = regexp.MustCompile(`[^\x00-\x7F]+`)
 	providerWordPattern    = regexp.MustCompile(`[A-Za-z]+`)
+	providerChunkPattern   = regexp.MustCompile(`\S+`)
 )
 
 var observableProviderWords = map[string]struct{}{
@@ -214,6 +215,7 @@ func observableProviderMessage(message string) string {
 		return ""
 	}
 	message = providerURLPattern.ReplaceAllString(message, "[redacted]")
+	message = providerChunkPattern.ReplaceAllStringFunc(message, redactHostLike)
 	message = providerUUIDPattern.ReplaceAllString(message, "[redacted]")
 	message = providerTokenPattern.ReplaceAllString(message, "[redacted]")
 	message = providerNumberPattern.ReplaceAllString(message, "[redacted]")
@@ -230,6 +232,16 @@ func observableProviderMessage(message string) string {
 		message = string(runes[:maxProviderMessageRunes]) + "…"
 	}
 	return message
+}
+
+// redactHostLike drops a whitespace-delimited chunk as a unit when, after its edge punctuation,
+// it still holds a dot, colon, slash, bracket or at sign: a host, host:port, IP or path. The word
+// filter below works per word, so it would keep the allowed words of "media.internal" and leak the name.
+func redactHostLike(chunk string) string {
+	if strings.ContainsAny(strings.Trim(chunk, `"'()<>,;.!?:`), `.:/[]@\`) && chunk != "[redacted]" {
+		return "[redacted]"
+	}
+	return chunk
 }
 
 func providerMessageFingerprint(message string) string {
