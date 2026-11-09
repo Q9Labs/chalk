@@ -421,15 +421,18 @@ are sampled, so a newly visible pair normally logs roughly 15–25 seconds later
 #### Alarm
 
 The [listener audio check](../infrastructure/listener-audio-alert/README.md)
-runs every five minutes against a ten-minute Axiom window. At least one
-`media.listener_publication_unpulled` event (Cloudflare SFU only) or one
+runs every five minutes against a ten-minute Axiom window. One
+`media.listener_publication_unpulled` event (Cloudflare SFU only) pages Oncall. An
 `sdk.connection_report` with `['attributes.trigger'] == 'audio_receive_stuck'` (both
-providers, signal `client_audio_stuck:<provider>`) pages Oncall, with one incident
-per Episode and per-signal counts. The client report is the provider-neutral signal:
-it stays when M13 removes Cloudflare and its sampler. The stable `listener-audio:chalk:<episode_id>`
+providers, signal `client_audio_stuck:<provider>`) pages only when at least two
+distinct participants (`attributes.participant_id_hash`) reported it on the Episode in
+the window, the count `connection-reports.apl` uses; reports without a hash never
+count. Each page is one incident per Episode with per-signal counts. The client
+report is the provider-neutral signal: it stays when M13 removes Cloudflare and its
+sampler. The stable `listener-audio:chalk:<episode_id>`
 key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
-contain only aggregate counts; the query projects only `episode_id`, `signal` and
-`events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
+contain only aggregate counts; the query projects only `episode_id`, `signal`, `events`
+and the distinct `participants` count, and validated UUIDs go only in the Oncall POST body. The workflow requires
 `CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` and the existing
 `ONCALL_WEBHOOK_URL`. `CHALK_AXIOM_LOG_DATASET` must be the production API log
 dataset, the same one the production Axiom monitors use as `LOG_DATASET`.

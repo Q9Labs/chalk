@@ -6,9 +6,10 @@
       "fields": [
         { "name": "episode_id", "type": "string" },
         { "name": "signal", "type": "string" },
-        { "name": "events", "type": "integer" }
+        { "name": "events", "type": "integer" },
+        { "name": "participants", "type": "integer" }
       ],
-      "columns": [[], [], []]
+      "columns": [[], [], [], []]
     }
   ]
 }

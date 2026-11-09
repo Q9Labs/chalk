@@ -12,7 +12,7 @@ const ok = (body) => ({ ok: true, json: async () => body });
 
 test("parses recorded-shape empty, one and several Episode tables by field name", async () => {
   assert.deepEqual(parseTabular(await fixture("empty")), []);
-  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: "api_unpulled", events: 1 }]);
+  assert.deepEqual(parseTabular(await fixture("one")), [{ episode_id: id, signal: "api_unpulled", events: 1, participants: 0 }]);
   const rows = parseTabular(await fixture("several"));
   assert.equal(rows.length, 3);
   const merged = mergeEpisodes(rows);
@@ -21,7 +21,7 @@ test("parses recorded-shape empty, one and several Episode tables by field name"
   assert.equal(merged[0].total, 3);
   assert.equal(evaluate(rows, window).length, 2);
   assert.deepEqual(mergeEpisodes([]), []);
-  assert.deepEqual(mergeEpisodes([{ episode_id: "injection", signal: "api_unpulled", events: 1 }]), []);
+  assert.deepEqual(mergeEpisodes([{ episode_id: "injection", signal: "api_unpulled", events: 1, participants: 0 }]), []);
   assert.deepEqual(mergeEpisodes([...rows, rows[0]])[0].counts, { api_unpulled: 2, synthetic_second: 2 });
 });
 
@@ -30,19 +30,32 @@ test("rejects malformed, partial and invalid events results without leaking body
   for (const body of [null, {}, { tables: [] }, await fixture("malformed"), { ...one, status: { isPartial: true } }, { ...one, status: { isEstimate: true } }]) {
     assert.throws(() => parseTabular(body), /malformed tabular/);
   }
-  for (const events of [-1, 1.5, "1", null]) {
+  for (const [column, value] of [
+    [2, -1],
+    [2, 1.5],
+    [2, "1"],
+    [2, null],
+    [3, -1],
+    [3, 1.5],
+    [3, "1"],
+    [3, null],
+  ]) {
     const body = structuredClone(one);
-    body.tables[0].columns[2][0] = events;
+    body.tables[0].columns[column][0] = value;
     assert.throws(() => parseTabular(body), /malformed tabular/);
   }
+  const threeColumns = structuredClone(one);
+  threeColumns.tables[0].fields.pop();
+  threeColumns.tables[0].columns.pop();
+  assert.throws(() => parseTabular(threeColumns), /malformed tabular/);
 });
 
 test("threshold is one; stable Episode keys merge signals across overlapping windows", () => {
   assert.equal(EPISODE_THRESHOLD, 1);
-  assert.deepEqual(evaluate([{ episode_id: id, signal: "api_unpulled", events: 0 }], window), []);
+  assert.deepEqual(evaluate([{ episode_id: id, signal: "api_unpulled", events: 0, participants: 0 }], window), []);
   const rows = [
-    { episode_id: id, signal: "api_unpulled", events: 1 },
-    { episode_id: id.toUpperCase(), signal: "synthetic_second", events: 2 },
+    { episode_id: id, signal: "api_unpulled", events: 1, participants: 0 },
+    { episode_id: id.toUpperCase(), signal: "synthetic_second", events: 2, participants: 0 },
   ];
   const first = evaluate(rows, window);
   const second = evaluate(rows, { startTime: "2026-10-31T11:55:00.000Z", endTime: "2026-10-31T12:05:00.000Z" });
@@ -75,11 +88,11 @@ test("posts exact payload, requests a ten-minute APL window and logs aggregates 
   assert.equal(new Date(body.endTime) - new Date(body.startTime), 600000);
   assert.ok(body.apl.includes(env.CHALK_AXIOM_LOG_DATASET));
   assert.ok(body.apl.includes("media.listener_publication_unpulled"));
-  assert.match(body.apl, /project episode_id, signal, events$/);
-  assert.doesNotMatch(body.apl, /participant|publication_id|tenant|space/);
+  assert.match(body.apl, /project episode_id, signal, events, participants$/);
+  assert.doesNotMatch(body.apl, /publication_id|tenant|space/);
   assert.deepEqual(SIGNALS, [
     { name: "api_unpulled", event: "media.listener_publication_unpulled" },
-    { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck" },
+    { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck", minParticipants: 2 },
   ]);
   assert.equal(calls[1].url, env.ONCALL_WEBHOOK_URL);
   const payload = JSON.parse(calls[1].options.body);
@@ -193,16 +206,91 @@ test("the provider-neutral audio_receive_stuck client report is a signal, tagged
   assert.deepEqual(PROVIDERS, ["cloudflare_sfu", "chalk_sfu"]);
   assert.ok(apl.includes("tostring(['attributes.provider']) in ('cloudflare_sfu', 'chalk_sfu')"));
   assert.ok(apl.includes("strcat(signal, ':', provider)"));
-  assert.match(apl, /project episode_id, signal, events$/);
+  assert.match(apl, /project episode_id, signal, events, participants$/);
 });
 
-test("a stuck client report alone pages one Episode incident and merges with the Cloudflare sampler", () => {
-  const stuck = { episode_id: id, signal: "client_audio_stuck:chalk_sfu", events: 1 };
-  const alone = evaluate([stuck], window);
-  assert.equal(alone.length, 1);
-  assert.equal(alone[0].key, `listener-audio:chalk:${id}`);
-  assert.match(alone[0].detail, /client_audio_stuck:chalk_sfu: 1/);
-  const both = evaluate([stuck, { episode_id: id, signal: "api_unpulled", events: 2 }], window);
+test("the query counts distinct non-empty participant hashes and never projects them", () => {
+  const apl = query("synthetic-private-dataset");
+  assert.ok(apl.includes("extend participant=tostring(['attributes.participant_id_hash'])"));
+  assert.ok(apl.includes("summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant"));
+  assert.ok(apl.includes("summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal"));
+  assert.doesNotMatch(apl.split("| project")[1], /participant_id_hash|participant\b/);
+  assert.ok(query("a'b\\c").startsWith("['a\\'b\\\\c']"));
+});
+
+const client = "client_audio_stuck:chalk_sfu";
+const row = (signal, events, participants, episode = id) => ({ episode_id: episode, signal, events, participants });
+
+test("one client participant, however many reports, does not page", () => {
+  assert.deepEqual(evaluate([row(client, 1, 1)], window), []);
+  assert.deepEqual(evaluate([row(client, 8, 1)], window), []);
+  assert.deepEqual(evaluate([row(client, 3, 0)], window), []);
+});
+
+test("two distinct client participants page one Episode incident that names both counts", () => {
+  const paged = evaluate([row(client, 2, 2)], window);
+  assert.equal(paged.length, 1);
+  assert.equal(paged[0].key, `listener-audio:chalk:${id}`);
+  assert.match(paged[0].detail, /client_audio_stuck:chalk_sfu: 2 \(participants: 2\)/);
+});
+
+test("the query counts only non-empty hashes, so hashless reports never make two participants", () => {
+  // Five reports where one carries a hash: the query returns participants=1 and nothing pages.
+  assert.deepEqual(evaluate([row(client, 5, 1)], window), []);
+  assert.deepEqual(evaluate([row(client, 5, 0)], window), []);
+  assert.ok(query("d").includes("participants=countif(isnotempty(participant))"));
+});
+
+test("run posts to Oncall only when the signal rule is met", async () => {
+  const table = (rows) => ({
+    status: { isPartial: false },
+    tables: [{ fields: ["episode_id", "signal", "events", "participants"].map((name) => ({ name })), columns: [0, 1, 2, 3].map((c) => rows.map((r) => Object.values(r)[c])) }],
+  });
+  for (const [rows, expected, posts] of [
+    [[row(client, 6, 1)], 0, 0],
+    [[row(client, 6, 2)], 1, 1],
+    [[row("api_unpulled", 1, 0), row(client, 1, 1)], 1, 1],
+  ]) {
+    let webhook = 0;
+    const result = await run({
+      env,
+      now,
+      log: () => {},
+      fetchImpl: async (url) => {
+        if (url === env.ONCALL_WEBHOOK_URL) {
+          webhook++;
+          return ok({});
+        }
+        return ok(table(rows));
+      },
+    });
+    assert.deepEqual([result, webhook], [expected, posts]);
+  }
+});
+
+test("mixed Episode: api_unpulled alone pages, one client participant alone does not", () => {
+  assert.equal(evaluate([row("api_unpulled", 1, 0)], window).length, 1);
+  assert.deepEqual(evaluate([row(client, 1, 1)], window), []);
+  const mixed = evaluate([row("api_unpulled", 1, 0), row(client, 1, 1)], window);
+  assert.equal(mixed.length, 1);
+  assert.match(mixed[0].detail, /api_unpulled: 1, client_audio_stuck:chalk_sfu: 1 \(participants: 1\)/);
+  const both = evaluate([row("api_unpulled", 2, 0), row(client, 4, 2)], window);
   assert.equal(both.length, 1);
-  assert.match(both[0].detail, /api_unpulled: 2, client_audio_stuck:chalk_sfu: 1/);
+  assert.match(both[0].detail, /api_unpulled: 2, client_audio_stuck:chalk_sfu: 4 \(participants: 2\)/);
+});
+
+test("the participant rule applies per provider signal and per Episode", () => {
+  const other = "22222222-2222-4222-8222-222222222222";
+  const paged = evaluate([row(client, 1, 1), row(client, 2, 2, other), row("client_audio_stuck:unknown", 1, 1, id)], window);
+  assert.deepEqual(
+    paged.map((p) => p.key),
+    [`listener-audio:chalk:${other}`],
+  );
+});
+
+test("merging duplicate rows never adds distinct counts", () => {
+  const merged = mergeEpisodes([row(client, 1, 1), row(client, 1, 1)]);
+  assert.deepEqual(merged[0].counts, { [client]: 2 });
+  assert.deepEqual(merged[0].participants, { [client]: 1 });
+  assert.deepEqual(evaluate([row(client, 1, 1), row(client, 1, 1)], window), []);
 });
