@@ -153,7 +153,9 @@ time.sleep(120)
 
     def run_cut_acquire(self, wait, cf_ownership_seconds):
         """A cut-side acquire against a Cloudflare-style holder that releases after cf_ownership_seconds, on a mocked clock."""
-        sha, lease, _ = self.store.acquire("nightly-cf-latency", "action-latency", "cf-run", 60)
+        # The holder's lease runs on the real clock while the wait runs on the mocked one, so a TTL a slow
+        # runner can outlast lets the cut take the lease over and the release below then conflicts.
+        sha, lease, _ = self.store.acquire("nightly-cf-latency", "action-latency", "cf-run", 3600)
         started = Path(self.directory.name) / "child-started"
         clock = [0.0]
         released = []
