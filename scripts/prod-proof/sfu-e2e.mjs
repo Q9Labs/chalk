@@ -9,6 +9,7 @@
 //   background        the SDK sees a hidden tab (visibilitychange), then a visible one; media comes back without a manual toggle.
 //                     Automated Chromium cannot make a tab natively hidden (tested: focus emulation, tab switch, minimize,
 //                     lifecycle freeze), so this drives the SDK's visibility handling; native backgrounding is a manual pass.
+//   audio             every client decodes the other clients' known tones (not only bytes); a muted client is silent at the others; unmuting brings the tone back
 //   impair            CHALK_E2E_IMPAIR_DOWN / _UP run around a hold, as a tc loss or bandwidth cap; media keeps moving
 //   node-restart      CHALK_E2E_RESTART runs mid-call; clients recover, by themselves or by an explicit rejoin
 // Screen share, join and leave on two clients are covered by `pnpm prod:proof camera-share`.
@@ -21,6 +22,7 @@ import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publi
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 
 const shell = (script) => command("sh", ["-c", script]);
 
@@ -66,13 +68,15 @@ async function openCall(run, receiver, guestCount) {
 }
 
 const everyone = (count) => [...Array(count).keys()];
+// Bytes advancing is not audio: the others must also decode each member's tone (audio-decode.mjs). The report keeps the dB and bin per pair.
+const decoded = async (guests, members) => ({ audio: (await proveAudioDecoded(guests, { members })).map(({ listener, speaker, peakDb, floorDb, bin }) => ({ listener, speaker, peakDb, floorDb, bin })) });
 const rosterSize = (page) => page.evaluate(() => window.proofClient.getSnapshot().participants.roster.length);
 
 const scenarios = {
   async ten({ guests }) {
     const { pages } = guests;
     const joined = await waitForMovement(pages, everyone(10), 9, 60_000, "ten");
-    return { ...joined, guests: 10 };
+    return { ...joined, guests: 10, ...(await decoded(guests, everyone(10))) };
   },
 
   async "publisher-leaves"({ guests, useSDK }) {
@@ -98,7 +102,7 @@ const scenarios = {
     const rest = await waitForMovement(pages, [1, 2], 1, 30_000, "after the leave");
     const owners = await Promise.all([remoteOwners(pages[1]), remoteOwners(pages[2])]);
     check(owners[0].includes(guests.participants[2]) && owners[1].includes(guests.participants[1]), "A survivor lost the other survivor's media");
-    return { dropMs, restMs: rest.ms, seen: rest.seen };
+    return { dropMs, restMs: rest.ms, seen: rest.seen, ...(await decoded(guests, [1, 2])) };
   },
 
   async background({ guests }) {
@@ -117,7 +121,20 @@ const scenarios = {
     const back = await waitForMovement(pages, everyone(3), 2, 30_000, "after the tab came back");
     // Each of the others hears two microphones: the hidden guest and the other one.
     check(whileHidden[0].microphones >= 2 && whileHidden[2].microphones >= 2, "The others stopped hearing the hidden guest while its tab was hidden");
-    return { emulatedVisibility: true, hiddenSeconds: 65, whileHidden, backMs: back.ms };
+    return { emulatedVisibility: true, hiddenSeconds: 65, whileHidden, backMs: back.ms, ...(await decoded(guests, everyone(3))) };
+  },
+
+  // Tone in => tone detected at the other guests; mute => silence there; unmute => the tone is back.
+  async audio({ guests }) {
+    const { pages } = guests;
+    await waitForMovement(pages, everyone(3), 2, 30_000, "before the audio check");
+    const heard = await decoded(guests, everyone(3));
+    await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
+    const silenced = await proveSilenceFrom(guests, 0);
+    await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(true));
+    const back = await proveAudioDecoded(guests, { members: [0, 1] });
+    const pick = ({ listener, speaker, peakDb, floorDb, bin, lastDb }) => ({ listener, speaker, peakDb, floorDb, bin, lastDb });
+    return { ...heard, mutedGuest: 1, silence: silenced.map(pick), unmuted: back.filter((verdict) => verdict.speaker === 1).map(pick) };
   },
 
   async impair({ guests }) {
@@ -138,7 +155,7 @@ const scenarios = {
       `Media stopped under the impairment: ${JSON.stringify(held)}`,
     );
     const restored = await waitForMovement(pages, everyone(3), 2, 30_000, "after the impairment");
-    return { held, restoredMs: restored.ms };
+    return { held, restoredMs: restored.ms, ...(await decoded(guests, everyone(3))) };
   },
 
   async "node-restart"({ guests, useSDK }) {
@@ -150,14 +167,14 @@ const scenarios = {
     await shell(restart);
     try {
       await waitForMovement(pages, everyone(3), 2, 90_000, "after the node restart");
-      return { recovery: "by itself", ms: Math.round(performance.now() - restartedAt) };
+      return { recovery: "by itself", ms: Math.round(performance.now() - restartedAt), ...(await decoded(guests, everyone(3))) };
     } catch {
       // The brief accepts an explicit rejoin after a node restart.
     }
     await guests.rejoinAll();
     useSDK(guests.pages[0]);
     const recovered = await waitForMovement(guests.pages, everyone(3), 2, 60_000, "after the explicit rejoin");
-    return { recovery: "by explicit rejoin", ms: Math.round(performance.now() - restartedAt), seen: recovered.seen };
+    return { recovery: "by explicit rejoin", ms: Math.round(performance.now() - restartedAt), seen: recovered.seen, ...(await decoded(guests, everyone(3))) };
   },
 };
 
@@ -168,7 +185,7 @@ function impairment() {
 }
 
 const guestCounts = { ten: 10 };
-const defaults = ["ten", "publisher-leaves", "background"];
+const defaults = ["ten", "publisher-leaves", "background", "audio"];
 
 const reason = (error) => (error instanceof Error ? error.message : String(error));
 
