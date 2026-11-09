@@ -7,24 +7,16 @@ import { withRequestContext } from "../session";
 import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
-const CREDENTIAL_MEASURE = "chalk.sfu.credential";
 /** One SFU signaling call. The per-operation routes carry it in the URL; the unified `signal` route carries it in the body. */
 type SignalOp = "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
-const LEGACY_ROUTES: Readonly<Record<SignalOp, { readonly method: "GET" | "POST" | "PUT"; readonly path: string }>> = {
-  publications: { method: "GET", path: "publications" },
-  subscriptions: { method: "GET", path: "subscriptions" },
-  tracks: { method: "POST", path: "tracks" },
-  tracks_close: { method: "PUT", path: "tracks/close" },
-  tracks_update: { method: "PUT", path: "tracks/update" },
-  renegotiate: { method: "POST", path: "renegotiate" },
-};
-const SIGNALING_STEPS: Readonly<Record<SignalOp, MediaFailureStep>> = {
-  publications: "sfu_publications",
-  subscriptions: "sfu_subscriptions",
-  tracks: "sfu_tracks",
-  tracks_close: "sfu_close_tracks",
-  tracks_update: "sfu_tracks",
-  renegotiate: "sfu_renegotiate",
+/** Method, per-operation path and failure step of each call. */
+const ROUTES: Readonly<Record<SignalOp, readonly ["GET" | "POST" | "PUT", string, MediaFailureStep]>> = {
+  publications: ["GET", "publications", "sfu_publications"],
+  subscriptions: ["GET", "subscriptions", "sfu_subscriptions"],
+  tracks: ["POST", "tracks", "sfu_tracks"],
+  tracks_close: ["PUT", "tracks/close", "sfu_close_tracks"],
+  tracks_update: ["PUT", "tracks/update", "sfu_tracks"],
+  renegotiate: ["POST", "renegotiate", "sfu_renegotiate"],
 };
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
@@ -43,7 +35,14 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       lastToken = token;
       return token;
     } finally {
-      if (op) traceCredentialRead(op, startedAt);
+      // A user-timing entry shows in a latency run whether the credential provider waits on a network round trip.
+      if (op) {
+        try {
+          performance.measure("chalk.sfu.credential", { start: startedAt, detail: { op } });
+        } catch {
+          /* Observers cannot interrupt signaling. */
+        }
+      }
     }
   };
   /**
@@ -53,10 +52,10 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const request = async <T>(op: SignalOp, body?: Readonly<Record<string, unknown>>, query: Readonly<Record<string, string | true>> = {}): Promise<T> => {
     try {
       const token = await freshToken(op);
-      const route = LEGACY_ROUTES[op];
+      const [method, path] = ROUTES[op];
       const target = options.unifiedSignaling
         ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
-        : { url: `${mediaPath}/${route.path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method: route.method, body: body && JSON.stringify(body) };
+        : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };
       return await withDeadline(timeoutMs, async (signal) => {
         const startedAt = performance.now();
         const response = await fetch(target.url, {
@@ -82,7 +81,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         return (await response.json()) as T;
       });
     } catch (error) {
-      markMediaFailure(error, SIGNALING_STEPS[op]);
+      markMediaFailure(error, ROUTES[op][2]);
       throw error;
     }
   };
@@ -190,14 +189,6 @@ function unifiedBody(op: SignalOp, body: Readonly<Record<string, unknown>> | und
   if (op !== "tracks_close" || !body) return body;
   const { tracks, ...rest } = body;
   return { ...rest, close_tracks: tracks };
-}
-/** Marks the time spent inside the credential provider as a user-timing entry, so a latency run can show whether it waits on a network round trip. */
-function traceCredentialRead(op: SignalOp, startedAt: number): void {
-  try {
-    performance.measure(CREDENTIAL_MEASURE, { start: startedAt, end: performance.now(), detail: { op } });
-  } catch {
-    /* Observers cannot interrupt signaling. */
-  }
 }
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {
   const controller = new AbortController();
