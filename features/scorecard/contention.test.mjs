@@ -7,7 +7,7 @@ import test from "node:test";
 import { gatedActionIds, readBudgets } from "./budgets.mjs";
 import { contention, contentionMarkdown } from "./contention.mjs";
 import { baselineCard, trendsMarkdown } from "./history.mjs";
-import { parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
+import { METRICS, parseScorecard, SCORECARD_SCHEMA } from "./schema.mjs";
 import { sectionComment } from "./comment.mjs";
 import { readLogs } from "./staging-logs.mjs";
 
@@ -25,6 +25,27 @@ function card(evidence, value = 300, id = "nightly-1") {
     contention: evidence,
   });
 }
+
+const actionIds = Object.keys(METRICS).filter((id) => id.startsWith("action."));
+function cardWithSeries(evidence, value = 300, series = []) {
+  const base = card(evidence, value);
+  return parseScorecard({
+    ...base,
+    metrics: actionIds.map((id) => ({ id, unit: "ms", n: series.length, p50: value, p95: value, source: "latency-kit" })),
+    series,
+  });
+}
+
+test("scorecard series is optional for old cards and validates bounded per-cycle action samples", () => {
+  const legacy = card(contention(input()));
+  assert.equal(Object.hasOwn(legacy, "series"), false);
+  const actions = Object.fromEntries(actionIds.map((id) => [id, 250]));
+  const measured = cardWithSeries(contention(input()), 250, [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", actions }]);
+  assert.equal(measured.series.length, 1);
+  assert.deepEqual(Object.keys(measured.series[0].actions), actionIds);
+  assert.throws(() => cardWithSeries(contention(input()), 250, Array(61).fill({ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", actions })), /at most 60 cycles/);
+  assert.throws(() => cardWithSeries(contention(input()), 250, [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", actions: { ...actions, episode_id: "episode-private" } }]), /unknown field episode_id/);
+});
 
 test("idle fake node readouts and only own Episode events produce a clean card", () => {
   const result = contention({ ...input(), nodeBefore: [idle], nodeAfter: [idle] });
@@ -94,6 +115,15 @@ test("contended and unobservable values never enter the regression baseline or t
   const unavailable = spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), "diff", "--current", unavailablePath, "--fail-on-gate"], { encoding: "utf8" });
   assert.equal(unavailable.status, 0, unavailable.stderr);
   assert.match(unavailable.stdout, /UNOBSERVABLE/);
+});
+
+test("history baselines and trends use aggregates, not the diagnostic cycle series", () => {
+  const actions = Object.fromEntries(actionIds.map((id) => [id, 20_000]));
+  const cardWithLargeSeries = cardWithSeries(contention(input()), 300, [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", actions }]);
+  const baseline = baselineCard([cardWithLargeSeries], "chalk_sfu");
+  assert.equal(baseline.metrics[0].p95, 300);
+  assert.equal(Object.hasOwn(baseline, "series"), false);
+  assert.ok(!trendsMarkdown([cardWithLargeSeries], {}).includes("20000"));
 });
 
 test("contention schema rejects resource identifiers, extra fields, and fabricated unavailable values", () => {

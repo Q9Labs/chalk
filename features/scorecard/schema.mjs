@@ -46,8 +46,15 @@ export const SCORECARD_SCHEMA = "chalk.scorecard/v1";
  * @property {ScorecardRun} run
  * @property {MediaPlane} mediaPlane
  * @property {ScorecardMetric[]} metrics
+ * @property {ScorecardSeriesCycle[]} [series] Per-cycle action latency, with at most 60 cycles and no resource identifiers.
  * @property {ScorecardDrop[]} dropped
  * @property {object} [contention] Isolation evidence with per-signal provenance; no resource identifiers.
+ */
+/**
+ * @typedef {object} ScorecardSeriesCycle
+ * @property {number} cycle  One-based cycle index, with no other run or resource identifiers.
+ * @property {string} timestamp  UTC ISO 8601 cycle start time.
+ * @property {Record<string, number | null>} actions  The fixed action metric ids and their milliseconds for this cycle.
  */
 
 // Units a metric may use. A metric's unit is fixed by its entry in METRICS. A pass value is a share from 0 to 1 and
@@ -108,14 +115,44 @@ function scorecardProblems(value) {
   const fail = (/** @type {string} */ problem) => problems.push(problem);
   const card = /** @type {any} */ (value); // Shape is unknown until checked here, field by field.
   if (card?.schema !== SCORECARD_SCHEMA) fail(`schema must be ${SCORECARD_SCHEMA}`);
-  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "dropped", "contention"], "scorecard", fail);
+  exactKeys(card, ["schema", "run", "mediaPlane", "metrics", "series", "dropped", "contention"], "scorecard", fail);
   runProblems(card?.run, fail);
   if (!planes.includes(card?.mediaPlane)) fail(`mediaPlane must be one of ${planes.join(", ")}`);
   metricProblems(card?.metrics, fail);
+  if (card?.series !== undefined) seriesProblems(card.series, fail);
   dropProblems(card?.dropped, fail);
   if (card?.contention !== undefined) contentionProblems(card.contention, fail);
   leakProblems(card, fail);
   return problems;
+}
+
+/**
+ * @param {any} series
+ * @param {any} metrics
+ * @param {(problem: string) => void} fail
+ */
+function seriesProblems(series, fail) {
+  if (!Array.isArray(series)) return fail("series must be an array");
+  if (series.length > 60) return fail("series must contain at most 60 cycles");
+  const actionIds = Object.keys(ACTION_METRICS);
+  series.forEach((entry, index) => {
+    exactKeys(entry, ["cycle", "timestamp", "actions"], `series[${index}]`, fail);
+    if (!Number.isInteger(entry?.cycle) || entry.cycle !== index + 1) fail(`series[${index}].cycle must be ${index + 1}`);
+    if (typeof entry?.timestamp !== "string" || !isoTime.test(entry.timestamp) || Number.isNaN(Date.parse(entry.timestamp))) fail(`series[${index}].timestamp must be a UTC ISO time`);
+    exactKeys(entry?.actions, actionIds, `series[${index}].actions`, fail);
+    if (!entry?.actions || typeof entry.actions !== "object" || Array.isArray(entry.actions)) {
+      fail(`series[${index}].actions must be an object`);
+      return;
+    }
+    for (const id of actionIds) {
+      if (!Object.hasOwn(entry.actions, id)) {
+        fail(`series[${index}].actions must include ${id}`);
+        continue;
+      }
+      const value = entry.actions[id];
+      if (value !== null && (!Number.isFinite(value) || value < 0)) fail(`series[${index}].actions.${id} must be non-negative milliseconds or null`);
+    }
+  });
 }
 
 function contentionProblems(value, fail) {

@@ -45,7 +45,7 @@ function options() {
   });
   const samples = Number(values.samples);
   const planes = values.planes.split(",");
-  check(Number.isInteger(samples) && samples > 0, "--samples must be a positive whole number", "configuration");
+  check(Number.isInteger(samples) && samples > 0 && samples <= 60, "--samples must be a whole number from 1 to 60", "configuration");
   for (const plane of planes) check(plane in providers, `Unknown media plane ${plane}`, "configuration");
   check(values.environment, "--environment must name where the API runs: ci, staging or production", "configuration");
   const { tier, environment, region, size, headed } = values;
@@ -151,16 +151,17 @@ async function endEpisode(run, ending) {
 async function attempt(run, origin, plane, headed) {
   const mark = run.resources.length;
   const ending = { current: null };
+  const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, ...(await cycle(run, origin, plane, headed, ending)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, ending)) };
   } catch (error) {
-    outcome = { plane, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
+    outcome = { plane, timestamp, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
-  if (ending.current) await endEpisode(run, ending).catch((error) => (outcome = { plane, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));
+  if (ending.current) await endEpisode(run, ending).catch((error) => (outcome = { plane, timestamp, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));
   for (const resource of run.resources.slice(mark)) {
     const failures = await disposeResource(run, resource, disposeTimeoutMs);
-    if (failures.length) outcome = { plane, dropped: "teardown_failed", error: `dispose: ${reason(failures[0])}` };
+    if (failures.length) outcome = { plane, timestamp, dropped: "teardown_failed", error: `dispose: ${reason(failures[0])}` };
     run.resources.splice(run.resources.indexOf(resource), 1);
   }
   return outcome;
@@ -200,6 +201,7 @@ async function conclude(report, { samples, planes }) {
 // scorecard is the public view of one plane: percentiles per metric id, and what was dropped and why.
 function scorecard(report, plane, run) {
   const { summary } = report.planes[plane];
+  const kept = report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped);
   const drops = new Map();
   for (const outcome of report.cycles.filter((cycle) => cycle.plane === plane && cycle.dropped)) {
     drops.set(`${WHOLE_CYCLE} ${outcome.dropped}`, (drops.get(`${WHOLE_CYCLE} ${outcome.dropped}`) ?? 0) + 1);
@@ -212,6 +214,15 @@ function scorecard(report, plane, run) {
     metrics: Object.keys(METRICS)
       .filter((id) => summary[id])
       .map((id) => ({ id, unit: METRICS[id].unit, n: summary[id].n, p50: summary[id].p50, p95: summary[id].p95, source: "latency-kit" })),
+    series: kept.map((cycle, index) => ({
+      cycle: index + 1,
+      timestamp: cycle.timestamp,
+      actions: Object.fromEntries(
+        Object.keys(METRICS)
+          .filter((id) => id.startsWith("action."))
+          .map((id) => [id, cycle.sample[id] ?? null]),
+      ),
+    })),
     dropped: [...drops].map(([key, count]) => {
       const [metric, reason] = key.split(" ");
       return { metric, reason, count };
