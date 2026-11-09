@@ -244,7 +244,8 @@ it("re-pulls only a stalled publication and retires its previous receiver", asyn
       expect(replacements).toBe(0);
       expect(original.readyState).toBe("ended");
       expect(h.client.getSnapshot().remoteTracks.find((track) => track.source === "camera")!.track).toBe(healthy);
-      expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ source: "microphone" })] })]);
+      // The re-pull closes the stalled receiver, and the retirement of the dropped receiver closes it once more (#1062).
+      expect(h.transport.closeInputs).toEqual(Array(2).fill(expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ source: "microphone" })] })));
       const currentConnectionId = "connection-1";
       const livePulls = h.transport.addInputs.filter((input) => input.connectionId === currentConnectionId).flatMap((input) => input.tracks.filter((track) => track.location === "remote"));
       expect(livePulls.map((track) => track.trackName).sort()).toEqual(["camera", "microphone", "microphone"]);
@@ -333,8 +334,9 @@ it.each([false, true])("recovers connected receive stalls through the existing p
       expect(original.closed).toBe(false);
       const causes = harness.transport.addInputs.slice(originalPulls).filter((input) => input.replacementCause !== undefined);
       expect(causes).toEqual([]);
-      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: expect.any(Array) })]);
-      expect(harness.transport.closeInputs[0]!.tracks).toHaveLength(all ? 2 : 1);
+      // The re-pull closes the stalled receiver, and the retirement of the dropped receiver closes it once more (#1062).
+      expect(harness.transport.closeInputs).toEqual(Array(2).fill(expect.objectContaining({ receiveOnly: true, tracks: expect.any(Array) })));
+      for (const close of harness.transport.closeInputs) expect(close.tracks).toHaveLength(all ? 2 : 1);
       if (!all) {
         expect(harness.transport.addInputs).toHaveLength(originalPulls + 1);
         expect((harness.client.getSnapshot().receiveStalls ?? []).at(-1)).toMatchObject({ event: "receive_stalled", scope: "partial" });
@@ -358,7 +360,8 @@ it.each(["audio", "video", "dtx-audio"] as const)("handles a pull before its fir
       expect(harness.peers).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(5000);
       expect(harness.peers).toHaveLength(1);
-      expect(harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true })]);
+      // The re-pull closes the stalled receiver, and the retirement of the dropped receiver closes it once more (#1062).
+      expect(harness.transport.closeInputs).toEqual(Array(2).fill(expect.objectContaining({ receiveOnly: true })));
       await vi.advanceTimersByTimeAsync(25_000);
       expect(harness.peers.length).toBeGreaterThan(1);
     },
@@ -4199,7 +4202,8 @@ describe("layer switching with receive-stall recovery", () => {
       const newMid = h.peers[0]!.getTransceivers().find((t) => t.receiver.track === replacement.track)!.mid;
       expect(replacement.track).not.toBe(original.track);
       expect(newMid).not.toBe(oldMid);
-      expect(h.transport.closeInputs).toMatchObject([{ receiveOnly: true, tracks: [{ mid: oldMid }] }]);
+      // The re-pull closes the stalled receiver, and the retirement of the dropped receiver closes it once more (#1062).
+      expect(h.transport.closeInputs).toMatchObject(Array(2).fill({ receiveOnly: true, tracks: [{ mid: oldMid }] }));
       expect(h.transport.addInputs.at(-1)!.tracks).toMatchObject([{ simulcast: { preferredRid: "h" } }]);
       expect(h.transport.updateInputs).toMatchObject([{ tracks: [{ mid: oldMid, simulcast: { preferredRid: "l" } }] }, { tracks: [{ mid: newMid, simulcast: { preferredRid: "l" } }] }]);
       expect(h.peers).toHaveLength(1);
@@ -4270,7 +4274,8 @@ describe("layer switching with receive-stall recovery", () => {
       h.client.remotePublicationsChanged(reviewPublications().map((p) => ({ ...p, enabled: true })));
       await vi.advanceTimersByTimeAsync(24_000);
       expect(h.client.getSnapshot().receiveStalls).toEqual([expect.objectContaining({ scope: "partial" })]);
-      expect(h.transport.closeInputs).toHaveLength(1);
+      // The re-pull closes the stalled receiver, and the retirement of the dropped receiver closes it once more (#1062).
+      expect(h.transport.closeInputs).toHaveLength(2);
     });
   });
 
