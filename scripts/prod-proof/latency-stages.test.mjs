@@ -77,10 +77,19 @@ test("a camera turn-off splits into the stages the SDK really runs: the receiver
 });
 
 test("a turn-off ignores a receiver-side tracks/close, which only a hidden or stalled receiver makes", () => {
-  const off = toggleStages("mic_off", { ...trace, command, finalAt: 1700, receiver: [...receiver, at(1600, "http_end", "PUT tracks/close")] });
+  const micOff = "live_target:set_microphone_enabled:false";
+  const off = toggleStages("mic_off", {
+    t0: 1000,
+    command: micOff,
+    visibleAt: 1160,
+    finalAt: 1700,
+    sender: [at(1040, "ws_out", micOff), at(1090, "http_end", "PUT tracks/close"), at(1250, "ws_in", "live_target_result")],
+    receiver: [at(1150, "ws_in", "projection_event:media"), at(1380, "http_end", "GET publications"), at(1600, "http_end", "PUT tracks/close")],
+  });
   assert.equal("mic_off.close_tracks" in off, false);
   assert.equal("mic_off.renegotiate" in off, false);
   assert.equal(off["mic_off.track_removed"], 320);
+  assert.equal(off["mic_off.sfu_close"], 90);
 });
 
 test("join leaves sync_entered empty when Sync negotiates no entry confirmation, and still records the rest", () => {

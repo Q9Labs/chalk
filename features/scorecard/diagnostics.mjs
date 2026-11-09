@@ -2,7 +2,7 @@
 // keeps the shape every reader already knows, so the gate, the diff, the history and the baseline never parse these numbers and
 // no value here can change a verdict. The run summary is the only reader, and it never throws: a file that is missing or
 // invalid becomes one line of text.
-import { AUDIO_KEYS, AUDIO_PARTS, RTT_KEYS, STAGE_GROUPS, STAGE_IDS } from "./stages.mjs";
+import { AUDIO_KEYS, AUDIO_PARTS, RETIRED_STAGE_IDS, RTT_KEYS, STAGE_GROUPS, STAGE_IDS } from "./stages.mjs";
 
 export const DIAGNOSTICS_SCHEMA = "chalk.latency-diagnostics/v1";
 export const diagnosticsFileName = (plane) => `latency-diagnostics-${plane}.json`;
@@ -33,13 +33,15 @@ function unknownField(value, allowed, where) {
   return key === undefined ? undefined : `${where} has unknown field ${key}`;
 }
 
+const ACCEPTED_STAGE_IDS = [...STAGE_IDS, ...RETIRED_STAGE_IDS];
+
 function summaryProblem(summary) {
   if (!isObject(summary)) return "summary must be an object";
   const unknown = unknownField(summary, ["rtt", "stages", "audio"], "summary");
   if (unknown) return unknown;
   for (const [group, keys] of [
     ["rtt", RTT_KEYS],
-    ["stages", STAGE_IDS],
+    ["stages", ACCEPTED_STAGE_IDS],
     ["audio", AUDIO_KEYS],
   ]) {
     const stats = summary[group];
@@ -69,7 +71,7 @@ export function problemOf(file) {
     if (extra) return extra;
     const problem =
       (cycle.rtt === undefined ? undefined : mapProblem(cycle.rtt, RTT_KEYS, `cycles[${index}].rtt`)) ??
-      (cycle.stages === undefined ? undefined : mapProblem(cycle.stages, STAGE_IDS, `cycles[${index}].stages`)) ??
+      (cycle.stages === undefined ? undefined : mapProblem(cycle.stages, ACCEPTED_STAGE_IDS, `cycles[${index}].stages`)) ??
       (cycle.audio === undefined ? undefined : mapProblem(cycle.audio, AUDIO_KEYS, `cycles[${index}].audio`));
     if (problem) return problem;
   }
