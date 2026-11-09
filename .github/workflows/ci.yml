@@ -960,6 +960,8 @@ jobs:
       - name: Build selected public endpoints
         env:
           WEB_TARGET: ${{ matrix.target }}
+          # Nightly only; the production artifact never receives a direct Sync URL from this job.
+          CHALK_WEB_SYNC_DIRECT_URL: ${{ matrix.target == 'nightly' && vars.CHALK_NIGHTLY_SYNC_DIRECT_URL || '' }}
         run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --source-root "$GITHUB_WORKSPACE/build-source"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

@@ -194,6 +194,33 @@ describe("direct-first Sync socket", () => {
     expect(sockets[0]!.closed).toBe(true);
   });
 
+  it("still reports the close event after the client closes the socket, as a heartbeat timeout does", () => {
+    const { sockets, factory, urls } = harness();
+    const socket = factory().connect(TUNNEL);
+    const closes: number[] = [];
+    socket.onclose = (event) => closes.push(event.code);
+
+    sockets[0]!.onopen?.();
+    socket.close(4000, "heartbeat timeout");
+    sockets[0]!.onclose?.({ code: 4000, wasClean: true });
+
+    expect(closes).toEqual([4000]);
+    expect(urls()).toEqual([DIRECT_ATTEMPT]);
+  });
+
+  it("reports the close of a pending direct attempt the client already gave up on, without a fallback", () => {
+    const { sockets, factory, urls } = harness();
+    const socket = factory().connect(TUNNEL);
+    const closes: number[] = [];
+    socket.onclose = (event) => closes.push(event.code);
+
+    socket.close(1000, "done");
+    sockets[0]!.onclose?.({ code: 1006, wasClean: false });
+
+    expect(closes).toEqual([1006]);
+    expect(urls()).toEqual([DIRECT_ATTEMPT]);
+  });
+
   it("reports a closed Tunnel socket when both paths fail", () => {
     const { sockets, factory } = harness();
     const socket = factory().connect(TUNNEL);

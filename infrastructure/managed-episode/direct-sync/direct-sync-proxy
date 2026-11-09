@@ -44,7 +44,8 @@ install_proxy() {
 
   local work archive
   work="$(mktemp -d)"
-  trap 'rm -rf "$work"' EXIT
+  # Expand $work now: it is local and out of scope when the EXIT trap runs.
+  trap "rm -rf '${work}'" EXIT
   archive="caddy_${caddy_version}_linux_${arch}.tar.gz"
   curl --fail --silent --show-error --location --output "${work}/${archive}" \
     "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}"

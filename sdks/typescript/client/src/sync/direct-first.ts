@@ -143,7 +143,12 @@ class DirectFirstSocket implements SyncSocket {
       else this.onerror?.();
     };
     socket.onclose = (event) => {
-      if (!live()) return;
+      if (this.#active !== socket) return;
+      // After close() the client still needs the close event, for example to reconnect after a heartbeat timeout.
+      if (this.#state === "closed") {
+        this.onclose?.(event);
+        return;
+      }
       if (this.#state === "trying_direct") {
         this.#fallBack();
         return;
