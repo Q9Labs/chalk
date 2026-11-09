@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import test from "node:test";
 import { STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
-import { SCORECARD_SCHEMA, parseScorecard } from "../../features/scorecard/schema.mjs";
-import { diagnosticsOf, joinStages, toggleStages } from "./latency-stages.mjs";
+import { problemOf, DIAGNOSTICS_SCHEMA } from "../../features/scorecard/diagnostics.mjs";
+import { diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { installLatencyTrace } from "./latency-trace.mjs";
 
 const at = (t, k, d) => ({ t, k, d });
@@ -95,13 +95,26 @@ test("diagnostics are the percentiles of the traced cycles, and absent without a
   const found = diagnosticsOf(cycles);
   assert.deepEqual(found.rtt, { sfu_ms: { n: 4, p50: 200, p95: 400 }, sync_ms: { n: 0, p50: null, p95: null } });
   assert.deepEqual(found.stages, { "mic_on.prepare": { n: 4, p50: 20, p95: 40 } });
-  const run = { id: "run-1", commit: "a".repeat(40), tier: "manual", environment: "ci", startedAt: "2026-11-08T00:00:00.000Z", client: { kind: "browser", browser: "chromium/151", region: "github-hosted", size: "ubuntu-24-04" } };
-  assert.doesNotThrow(() => parseScorecard({ schema: SCORECARD_SCHEMA, run, mediaPlane: "chalk_sfu", metrics: [], dropped: [], diagnostics: found }));
+  assert.equal(problemOf({ schema: DIAGNOSTICS_SCHEMA, plane: "chalk_sfu", cycles: [], summary: found }), undefined);
 });
 
-// The page trace runs against fakes: it must record frames, replies and connection state, measure a ping's round trip,
-// and still pass every frame and request through unchanged.
-test("the page trace records wire events, measures the Sync ping and leaves traffic untouched", async () => {
+test("the Sync round trip pairs the SDK's own pings and pongs and invents none", () => {
+  const ping = (t) => at(t, "ws_out", "ping");
+  const pong = (t) => at(t, "ws_in", "pong");
+  assert.equal(syncRoundTrip([]), null);
+  assert.equal(syncRoundTrip([ping(100)]), null, "an unanswered ping gives no round trip");
+  assert.equal(syncRoundTrip([pong(100)]), null, "a pong with no ping in flight pairs with nothing");
+  assert.equal(syncRoundTrip([ping(100), pong(150), ping(1000), pong(1090), ping(2000), pong(2200)]), 90);
+  // The first pong answers the oldest ping, like the SDK's link watch, so a lost pong makes later round trips longer, never shorter.
+  assert.equal(syncRoundTrip([ping(100), ping(1000), pong(1050)]), 950);
+  // A new socket forgets the pings of the old one.
+  assert.equal(syncRoundTrip([ping(100), at(500, "ws_new"), ping(1000), pong(1040)]), 40);
+});
+
+// The page trace runs against fakes: it must record frames, replies and connection state, send nothing of its own, and still
+// pass every frame and request through unchanged. A frame the trace sent would be one the SDK's pong handler could not tell
+// from its own, so the test counts every frame that reaches the socket.
+test("the page trace records wire events, sends no frame of its own and leaves traffic untouched", async () => {
   const saved = { window: globalThis.window, WebSocket: globalThis.WebSocket, fetch: globalThis.fetch, RTCPeerConnection: globalThis.RTCPeerConnection, proofConnections: globalThis.proofConnections };
   const sent = [];
   class FakeSocket extends EventTarget {
@@ -109,7 +122,6 @@ test("the page trace records wire events, measures the Sync ping and leaves traf
     readyState = 1;
     send(data) {
       sent.push(data);
-      if (JSON.parse(data).type === "ping") setTimeout(() => this.dispatchEvent(new MessageEvent("message", { data: '{"type":"pong"}' })), 20);
     }
   }
   class FakePeer extends EventTarget {
@@ -164,9 +176,12 @@ test("the page trace records wire events, measures the Sync ping and leaves traf
     assert.equal(fetched.length, 3);
     assert.equal(sent.length, 1);
     assert.equal(await globalThis.proofTrace.sfuRtt(), 205);
-    const rtt = await globalThis.proofTrace.syncRtt();
-    assert.ok(rtt >= 15 && rtt < 200, `ping round trip ${rtt}`);
-    assert.equal(sent.filter((data) => data === '{"type":"ping"}').length, 3);
+    // The SDK pings and its pong is dropped: the trace has nothing to answer it with, sends nothing, and reads no round trip.
+    socket.send('{"type":"ping"}');
+    await sleep(50);
+    assert.equal(sent.length, 2, "only the page's own frames reached the socket");
+    assert.equal(globalThis.proofTrace.syncRtt, undefined, "the trace has no Sync probe");
+    assert.equal(syncRoundTrip(globalThis.proofTrace.take(0)), null);
   } finally {
     await sleep(0);
     Object.assign(globalThis, saved);

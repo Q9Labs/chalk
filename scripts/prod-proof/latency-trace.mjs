@@ -6,7 +6,6 @@
 // host's clock and compare across pages to within the browser's clock resolution (about 0.1 ms).
 export function installLatencyTrace() {
   const now = () => performance.timeOrigin + performance.now();
-  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
   const MAX_EVENTS = 4000;
   const events = [];
   const log = (k, d) => {
@@ -20,10 +19,7 @@ export function installLatencyTrace() {
     }
   };
 
-  // Sync frames. A pong answers the oldest ping in flight, so the trace counts pings to keep its own probe from overlapping the SDK's.
-  const waiters = [];
-  let outstanding = 0;
-  let syncSocket = null;
+  // Sync frames. The trace only watches them: it never sends on a socket, so nothing it does can reach the SDK's liveness checks.
   const sentName = (frame) => {
     if (frame?.type === "live_target") return `live_target:${frame.name}:${frame.enabled}`;
     return ["ping", "hello", "entered"].includes(frame?.type) ? frame.type : null;
@@ -37,7 +33,6 @@ export function installLatencyTrace() {
     const frame = parse(data);
     const name = sentName(frame);
     if (name) log("ws_out", name);
-    if (frame?.type === "ping") outstanding++;
     return nativeSend.call(this, data);
   };
   function observeSocket(socket) {
@@ -48,11 +43,6 @@ export function installLatencyTrace() {
       const name = receivedName(frame);
       if (!name) return;
       log("ws_in", name);
-      if (frame.type === "welcome") syncSocket = socket;
-      if (frame.type === "pong") {
-        outstanding = Math.max(0, outstanding - 1);
-        for (const done of waiters.splice(0)) done(now());
-      }
     });
     return socket;
   }
@@ -89,11 +79,10 @@ export function installLatencyTrace() {
     },
   });
 
-  const median = (values) => (values.length ? values.toSorted((left, right) => left - right)[Math.floor(values.length / 2)] : null);
   window.proofTrace = {
     take: (from) => events.filter((event) => event.t >= from),
 
-    // The selected candidate pair's round trip to the SFU, lowest across connected peer connections, in ms.
+    // The selected candidate pair's current round trip to the SFU, lowest across connected peer connections, in ms. A pair without a current reading stays missing: its lifetime average is not a current round trip.
     async sfuRtt() {
       const values = [];
       for (const peer of window.proofConnections ?? []) {
@@ -102,28 +91,10 @@ export function installLatencyTrace() {
         let pair;
         for (const row of report.values()) if (row.type === "transport" && row.selectedCandidatePairId) pair = report.get(row.selectedCandidatePairId);
         if (!pair) for (const row of report.values()) if (row.type === "candidate-pair" && row.nominated && row.state === "succeeded") pair = row;
-        const seconds = pair?.currentRoundTripTime ?? (pair?.responsesReceived ? pair.totalRoundTripTime / pair.responsesReceived : undefined);
+        const seconds = pair?.currentRoundTripTime;
         if (Number.isFinite(seconds)) values.push(seconds * 1000);
       }
       return values.length ? Math.round(Math.min(...values) * 10) / 10 : null;
-    },
-
-    // One Sync ping and its pong, the median of three, in ms. A ping goes out only while none is in flight.
-    async syncRtt() {
-      const samples = [];
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (!syncSocket || syncSocket.readyState !== WebSocket.OPEN) break;
-        for (let waited = 0; outstanding > 0 && waited < 1000; waited += 20) await pause(20);
-        if (outstanding > 0) break;
-        const answered = new Promise((done) => waiters.push(done));
-        const sentAt = now();
-        syncSocket.send('{"type":"ping"}');
-        const pongAt = await Promise.race([answered, pause(2000).then(() => null)]);
-        if (pongAt !== null) samples.push(pongAt - sentAt);
-        await pause(100);
-      }
-      const value = median(samples);
-      return value === null ? null : Math.round(value * 10) / 10;
     },
   };
 }

@@ -83,8 +83,28 @@ export function joinStages({ t0, events }) {
 }
 
 /**
- * diagnosticsOf is the card's diagnostics block: n, p50 and p95 of every round trip and stage over the kept cycles.
- * It returns undefined when no cycle carries a trace, so a run without tracing writes a card without the block.
+ * syncRoundTrip is the median round trip, in ms, of the SDK's own Sync pings that were answered. A pong answers the oldest ping in
+ * flight, the way the SDK pairs them, and a new socket forgets the pings of the old one. A ping that is never answered pairs with
+ * nothing, so the result is null when no ping was answered. The trace sends no ping of its own.
+ * @param {{t: number, k: string, d?: string}[]} events
+ * @returns {number | null}
+ */
+export function syncRoundTrip(events) {
+  const inFlight = [];
+  const trips = [];
+  for (const event of events) {
+    if (event.k === "ws_new") inFlight.length = 0;
+    else if (event.k === "ws_out" && event.d === "ping") inFlight.push(event.t);
+    else if (event.k === "ws_in" && event.d === "pong" && inFlight.length > 0) trips.push(event.t - inFlight.shift());
+  }
+  if (trips.length === 0) return null;
+  const middle = trips.toSorted((left, right) => left - right)[Math.floor(trips.length / 2)];
+  return Math.round(middle * 10) / 10;
+}
+
+/**
+ * diagnosticsOf is the summary of the diagnostics sidecar: n, p50 and p95 of every round trip and stage over the kept cycles.
+ * It returns undefined when no cycle carries a trace, so a run without tracing writes no sidecar.
  * @param {{ trace?: { rtt: Record<string, number | null>, stages: Record<string, number | null> } }[]} cycles
  */
 export function diagnosticsOf(cycles) {

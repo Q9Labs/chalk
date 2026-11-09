@@ -21,9 +21,9 @@ import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
-import { diagnosticsOf, joinStages, toggleStages } from "./latency-stages.mjs";
+import { diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
-import { diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
+import { DIAGNOSTICS_SCHEMA, diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
 import { METRICS, SCORECARD_SCHEMA, WHOLE_CYCLE, parseScorecard } from "../../features/scorecard/schema.mjs";
 
@@ -164,8 +164,9 @@ async function cycle(run, origin, plane, headed, ending) {
   await sleep(settleMs);
   await shareSteps(origin, pages, sender, sample, stages);
   await sleep(settleMs);
-  // Both round trips are read while the call is steady, after the actions and before leave.
-  const rtt = await observe("round trip", async () => ({ sfu_ms: await pages[0].evaluate(() => window.proofTrace.sfuRtt()), sync_ms: await pages[0].evaluate(() => window.proofTrace.syncRtt()) }), { sfu_ms: null, sync_ms: null });
+  // The SFU round trip is read while the call is steady, after the actions and before leave. The Sync round trip is the SDK's own
+  // pings and the pongs that answer them, read from the trace afterwards: the kit sends nothing on the Sync socket.
+  const rtt = await observe("round trip", async () => ({ sfu_ms: await pages[0].evaluate(() => window.proofTrace.sfuRtt()), sync_ms: syncRoundTrip(await takeTrace(pages[0], 0)) }), { sfu_ms: null, sync_ms: null });
   const left = await measure(pages[0], pages[1], "leave", null, [
     { name: "action.leave_ms", kind: "left", participantId: sender },
     { name: "action.leave_media_removed_ms", kind: "silent", participantId: sender },
@@ -246,7 +247,6 @@ function scorecard(report, plane, run) {
     drops.set(`${WHOLE_CYCLE} ${outcome.dropped}`, (drops.get(`${WHOLE_CYCLE} ${outcome.dropped}`) ?? 0) + 1);
   }
   for (const [metric, { timeouts }] of Object.entries(summary)) if (timeouts) drops.set(`${metric} timeout`, timeouts);
-  const diagnostics = diagnosticsOf(kept);
   return parseScorecard({
     schema: SCORECARD_SCHEMA,
     run,
@@ -262,14 +262,21 @@ function scorecard(report, plane, run) {
           .filter((id) => id.startsWith("action."))
           .map((id) => [id, cycle.sample[id] ?? null]),
       ),
-      ...cycle.trace,
     })),
-    ...(diagnostics ? { diagnostics } : {}),
     dropped: [...drops].map(([key, count]) => {
       const [metric, reason] = key.split(" ");
       return { metric, reason, count };
     }),
   });
+}
+
+// diagnosticsFile is the sidecar of one plane: the round trips and stage timings of each kept cycle, and their percentiles. It stays
+// out of the scorecard so every reader of the card sees the card it always saw; only the run summary reads this file.
+function diagnosticsFile(report, plane) {
+  const kept = report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped);
+  const summary = diagnosticsOf(kept);
+  if (!summary) return undefined;
+  return { schema: DIAGNOSTICS_SCHEMA, plane, cycles: kept.map((cycle, index) => ({ cycle: index + 1, timestamp: cycle.timestamp, ...cycle.trace })), summary };
 }
 
 function table(report) {
@@ -309,11 +316,15 @@ async function main() {
   const commit = (await command("git", ["rev-parse", "HEAD"])).trim();
   const client = { kind: "browser", browser, region: settings.scorecard.region, size: settings.scorecard.size };
   const identity = { id: runId, commit, tier: settings.scorecard.tier, environment: settings.scorecard.environment, startedAt: report.startedAt, client };
-  for (const plane of settings.planes) await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
+  for (const plane of settings.planes) {
+    await save(`${directory}/scorecard-${plane}.json`, scorecard(report, plane, identity));
+    const diagnostics = diagnosticsFile(report, plane);
+    if (diagnostics) await save(`${directory}/${diagnosticsFileName(plane)}`, diagnostics);
+  }
   console.log(table(report));
   for (const plane of settings.planes) {
-    const block = diagnosticsMarkdown(diagnosticsOf(report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped)));
-    if (block) console.log(`\n${plane}\n${block}`);
+    const summary = diagnosticsOf(report.cycles.filter((cycle) => cycle.plane === plane && !cycle.dropped));
+    if (summary) console.log(`\n${plane}\n${diagnosticsMarkdown(summary)}`);
   }
   for (const [plane, { failures, warnings }] of Object.entries(report.planes)) {
     for (const failure of failures) console.log(`${plane}: ${failure}`);
