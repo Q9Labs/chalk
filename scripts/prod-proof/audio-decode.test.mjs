@@ -108,13 +108,16 @@ test("every guest hears every other guest", () => {
 
 // A fake call: each page returns the readings its listener would have analysed for each speaker.
 const fixedCriteria = { ...decodeCriteria, intervalMs: 1 };
-function fakeCall(tones, readingsOf) {
+function fakeCall(tones, readingsOf, publishes = true) {
   const participants = ["a", "b"];
   return {
     tones,
     participants,
     pages: [0, 1].map((listener) => ({
-      evaluate: async (script, argument) => (typeof script === "string" ? undefined : readingsOf(listener, argument.speaker)),
+      evaluate: async (script, argument) => {
+        if (typeof script === "string") return undefined;
+        return "since" in argument ? readingsOf(listener, argument.speaker) : publishes;
+      },
     })),
   };
 }
@@ -144,4 +147,24 @@ test("a muted guest that is still audible fails; a silent one passes", async () 
   const call = (readings) => fakeCall(true, () => readings);
   assert.equal((await proveSilenceFrom(call(silentFrames), 0, { criteria: fixedCriteria, timeoutMs: 20 })).length, 1);
   await assert.rejects(proveSilenceFrom(call(toneFrames), 0, { criteria: fixedCriteria, timeoutMs: 20 }), (error) => error.reason === "audio-not-silent");
+});
+
+test("a muted guest whose remote track is gone passes as removed; a track that stays but yields too few frames fails", async () => {
+  const gone = await proveSilenceFrom(
+    fakeCall(true, () => [], false),
+    0,
+    { criteria: fixedCriteria, timeoutMs: 20 },
+  );
+  assert.deepEqual(
+    gone.map((verdict) => verdict.track),
+    ["removed"],
+  );
+  await assert.rejects(
+    proveSilenceFrom(
+      fakeCall(true, () => [], true),
+      0,
+      { criteria: fixedCriteria, timeoutMs: 20 },
+    ),
+    (error) => error.reason === "audio-not-silent",
+  );
 });

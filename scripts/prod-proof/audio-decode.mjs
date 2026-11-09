@@ -126,11 +126,14 @@ export async function readingsOf(page, speaker, sinceMs) {
 export const pairsOf = (members) => members.flatMap((listener) => members.filter((speaker) => speaker !== listener).map((speaker) => ({ listener, speaker })));
 const allGuests = (guests) => guests.pages.map((_, index) => index);
 
+/** True while the page holds a live remote microphone track of this speaker. */
+const hearsTrack = (page, speaker) => page.evaluate(({ speaker: id }) => window.proofClient.getSnapshot().media.remote.some((entry) => entry.participantId === id && entry.source === "microphone" && entry.track.readyState === "live"), { speaker });
+
 const windowMs = (criteria) => criteria.sustainFrames * criteria.intervalMs;
 
 /**
  * Polls one pair until `judge` passes or the timeout ends; the last verdict is returned either way, and it says what was measured.
- * @param {(readings: object[]) => object} judge
+ * @param {(readings: object[], page: object, speaker: string) => object|Promise<object>} judge
  */
 async function settle(guests, { listener, speaker }, judge, timeoutMs, criteria) {
   const page = guests.pages[listener];
@@ -138,7 +141,7 @@ async function settle(guests, { listener, speaker }, judge, timeoutMs, criteria)
   const deadline = Date.now() + timeoutMs;
   let verdict;
   for (;;) {
-    verdict = judge(await readingsOf(page, id, Date.now() - windowMs(criteria) - criteria.intervalMs * 5));
+    verdict = await judge(await readingsOf(page, id, Date.now() - windowMs(criteria) - criteria.intervalMs * 5), page, id);
     if (verdict.pass || Date.now() >= deadline) return { listener: listener + 1, speaker: speaker + 1, ...verdict };
     await new Promise((resolve) => setTimeout(resolve, criteria.intervalMs * 2));
   }
@@ -164,7 +167,14 @@ export async function proveAudioDecoded(guests, { members = allGuests(guests), p
 /** After guest `speaker` mutes, every other member hears silence from that guest. */
 export async function proveSilenceFrom(guests, speaker, { members = allGuests(guests), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {
   const pairs = pairsOf(members).filter((pair) => pair.speaker === speaker);
-  const verdicts = await Promise.all(pairs.map((pair) => settle(guests, pair, (readings) => judgeSilence(readings, criteria), timeoutMs, criteria)));
+  // The SDK drops a muted speaker's remote track, so the listener may have nothing left to analyse: that is silence too.
+  // A caller proves the speaker was heard (proveAudioDecoded) before muting, so a removed track is not a vacuous pass.
+  const judge = async (readings, page, id) => {
+    const verdict = judgeSilence(readings, criteria);
+    if (verdict.pass || (await hearsTrack(page, id))) return { ...verdict, track: "live" };
+    return { pass: true, track: "removed", frames: readings.length };
+  };
+  const verdicts = await Promise.all(pairs.map((pair) => settle(guests, pair, judge, timeoutMs, criteria)));
   const failed = verdicts.filter((verdict) => !verdict.pass);
   check(failed.length === 0, `A muted guest ${speaker + 1} is still audible: ${describe(failed)}`, "audio-not-silent");
   return verdicts;
