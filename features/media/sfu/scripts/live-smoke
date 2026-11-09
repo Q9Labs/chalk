@@ -83,6 +83,7 @@ if CHALK_SFU_LIVE_ENV="$environment" CHALK_SFU_LIVE_CONFIRM="$environment" CHALK
   CHALK_SFU_LIVE_URL="https://127.0.0.1:${port}" CHALK_SFU_LIVE_SECONDS="$seconds" \
   go test -count=1 -v -run '^TestLiveSmoke$' ./tests >"$log" 2>&1; then
   grep -q -- '--- PASS: TestLiveSmoke ' "$log" || fail "the smoke test did not run"
+  grep -E '^[[:space:]]+live_test\.go:[0-9]+: live smoke: ' "$log" | sed -E 's/^[[:space:]]+[a-z_]+\.go:[0-9]+: /evidence: /' >&2 || true
   echo "${label}: PASS"
 else
   # Only the test's own failure lines, never the raw output, which can carry addresses.

@@ -161,8 +161,10 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	if audioEnd-audioStart < floor || videoEnd-videoStart < floor {
 		t.Fatalf("media did not keep advancing: audio %d to %d, video %d to %d, want at least %d more of each", audioStart, audioEnd, videoStart, videoEnd, floor)
 	}
-	assertKnownStream(t, "audio", received.snapshot(webrtc.RTPCodecTypeAudio), 'a')
-	assertKnownStream(t, "video", received.snapshot(webrtc.RTPCodecTypeVideo), 'v')
+	// The internet reorders UDP and the subscriber NACKs, so some packets arrive late or twice; a changed payload or sequence is not allowed.
+	audioPackets, videoPackets := received.snapshot(webrtc.RTPCodecTypeAudio), received.snapshot(webrtc.RTPCodecTypeVideo)
+	audioLate := assertKnownStreamWithin(t, "audio", audioPackets, 'a', len(audioPackets)/10)
+	videoLate := assertKnownStreamWithin(t, "video", videoPackets, 'v', len(videoPackets)/10)
 	if audioSent, videoSent := published.audioSent.Load(), published.videoSent.Load(); audioSent == 0 || videoSent == 0 {
 		t.Fatalf("the publisher sent audio %d and video %d packets", audioSent, videoSent)
 	}
@@ -185,6 +187,6 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	if status, code := svc.call(t, "/v1/sessions/"+connA+"/inspect", protocol.InspectRequest{Scope: alice}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
 		t.Fatalf("the publisher's session survived the end of its Episode: status %d code %q", status, code)
 	}
-	t.Logf("live smoke: revision %s, audio +%d, video +%d over %s, sessions %d, allocations %d, cleanup debt %d", after.Revision,
-		audioEnd-audioStart, videoEnd-videoStart, duration, after.Sessions, after.Allocations, after.CleanupDebt)
+	t.Logf("live smoke: revision %s, audio +%d (%d late), video +%d (%d late) over %s, sessions %d, allocations %d, cleanup debt %d", after.Revision,
+		audioEnd-audioStart, audioLate, videoEnd-videoStart, videoLate, duration, after.Sessions, after.Allocations, after.CleanupDebt)
 }
