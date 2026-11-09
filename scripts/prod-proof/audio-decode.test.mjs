@@ -99,6 +99,15 @@ test("speech without a tone: broadband energy passes, empty audio does not", () 
   assert.equal(judgeSpeech(frames(12, () => read(silent(), null))).pass, false);
 });
 
+test("speech from the quiet fixture guest passes: words peak near -54 dB and pauses read lower", () => {
+  // Measured on the fixture's voice at guest 2's gain of 0.08 (fixture.mjs): in any 1.5 s window at most 6 frames reach -60 dB and 13 reach -70 dB.
+  const reading = (bandDb) => ({ bin: -1, toneDb: null, floorDb: -135, marginDb: null, bandDb });
+  const window = [-54, -56, -58, -54, -57, -59, -66, -68, -67, -69, -66, -68, -69, -90, -95].map(reading);
+  assert.equal(judgeSpeech(window).pass, true);
+  assert.equal(judgeSpeech(window.map(() => reading(-140))).pass, false, "digital silence still fails");
+  assert.equal(judgeSpeech(window.map(() => reading(-85))).pass, false, "a faint hiss is not speech");
+});
+
 test("every guest hears every other guest", () => {
   assert.deepEqual(
     pairsOf([0, 1, 2]).map(({ listener, speaker }) => `${listener}<${speaker}`),

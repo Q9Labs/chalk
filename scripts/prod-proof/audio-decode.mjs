@@ -19,7 +19,7 @@ export const decodeCriteria = {
   toneMinDb: -50, // dBFS at the tone's bins. The fixture sends 0.15 amplitude, about -25 dB at a bin.
   marginDb: 25, // The tone must also stand this far above the median of every other bin.
   silenceMaxDb: -70, // A silenced sender leaves the tone's bins at or below this.
-  speechMinDb: -60, // Speech has no tone: the loudest bin between 100 Hz and 4 kHz must reach this.
+  speechMinDb: -70, // Speech has no tone: the loudest bin between 100 Hz and 4 kHz must reach this. The fixture plays guest 2 at gain 0.08, 20 dB under guest 1: its words peak near -54 dB and no 1.5 s window holds ten frames at -60 dB, while digital silence reads -140 dB.
   floorDb: -140, // What an empty bin (-Infinity from the analyser) counts as.
 };
 
