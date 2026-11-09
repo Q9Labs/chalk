@@ -171,7 +171,7 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 // Place picks the node for a new Episode. Primaries are tried first, in
 // configuration order, and a standby only when no primary can take it (silent,
 // draining, host-guard closed or out of budget). A node qualifies when its last
-// probe is fresh, ready and has packet budget left for a new Episode, after the
+// probe is fresh, ready, speaks at least minNodeProtocol and has packet budget left for a new Episode, after the
 // Episodes this process placed there in the last inflightTTL, so concurrent creations
 // do not all pin to the last slot, even across a probe that does not show them yet. A standby counts only the
 // degraded budget it is configured with. The first qualifying node wins and room
@@ -181,7 +181,8 @@ func (f *Fleet) CapturePlane(id, incarnation string, generation int64) (capturep
 // start it on another provider. The placement then names the first primary, the
 // fallback when there is no other provider, and why nothing had room: a node that
 // takes new Episodes was full, else a node's host guard refused them (spare budget
-// or not), else every answering node was draining, else none answered.
+// or not), else a node reported a wire protocol below minNodeProtocol, else every answering node
+// was draining, else none answered.
 // Before the first probe it reports the first primary with room, whose admission
 // then answers the join. It reads the last probes and does no I/O, because
 // Episode creation calls it inside a database transaction.
@@ -200,6 +201,8 @@ func (f *Fleet) Place() (placement mediaplane.Placement, room bool) {
 			}
 			answering = true
 			switch {
+			case load.tooOld():
+				tooOld = true
 			case load.Draining:
 			case load.hostGuard:
 				guarded = true

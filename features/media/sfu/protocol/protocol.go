@@ -423,8 +423,8 @@ const WireProtocol = 2
 type ReadyResponse struct {
 	// Protocol is WireProtocol. Absent on a node that predates the field.
 	Protocol int `json:"protocol,omitempty"`
-	// Revision is the source commit the node was built from, as set at deploy. It is empty on a
-	// local run. Proofs record it next to the API's commit.
+	// Revision is the source commit the node was built from, as set at deploy (SFU_VERSION).
+	// It is "dev" on a local run.
 	Revision        string `json:"revision,omitempty"`
 	NodeIncarnation string `json:"nodeIncarnation"`
 	Sessions        int    `json:"sessions"`
