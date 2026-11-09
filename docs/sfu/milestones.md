@@ -325,8 +325,15 @@ drains, and a live own-SFU Episode stays pinned when the selector changes.
 
 **Hard condition before production turns own SFU on:** before the production API
 gets `CHALK_SFU_ENABLED` or any configured node, for any Space, run a live media
-smoke against the production node (`TestLiveSmokeClasses` or an equivalent media
-probe that sends and receives real audio and video) and record the result.
+smoke against the production node and record the result. The smoke is
+`features/media/sfu/scripts/live-smoke production --confirm production`: it
+sends real audio and video RTP through the node's signalling endpoint, checks a
+second participant receives it and that packets keep advancing, ends the Episode
+and checks the node returns to its earlier load. It prints
+`production-live-smoke: PASS` or a `FAIL` line with the reason. The same code
+runs against staging (`live-smoke staging --confirm staging`, under the staging
+lease), where it is rehearsed first. It sends synthetic RTP, so it proves the
+node forwards media, not that a browser decodes it.
 `TestLoopback` does not count: it starts its own in-process service and never
 reaches a deployed node. Until that smoke is recorded, the production node is
 proven only to be healthy, on protocol 2, at the deployed revision.
