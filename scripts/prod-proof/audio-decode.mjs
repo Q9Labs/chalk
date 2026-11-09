@@ -76,7 +76,7 @@ export function judgeSpeech(readings, criteria = decodeCriteria) {
  * intervalMs and keeps the newest readings per speaker in window.proofTone.readings (speaker = participant id).
  * `reading` is spectrumReading's source; `hzOf` maps a speaker's participant id to the tone it publishes.
  */
-export function startToneProbe({ hzOf, fftSize, intervalMs, keep }, reading) {
+function startToneProbe({ hzOf, fftSize, intervalMs, keep }, reading) {
   if (window.proofTone) return;
   const context = new AudioContext();
   const listeners = new Map();
@@ -112,13 +112,13 @@ export function startToneProbe({ hzOf, fftSize, intervalMs, keep }, reading) {
 }
 
 /** Starts the probe on a page for the given speakers (`hzOf`: participant id to tone, or an empty object for speech). */
-export async function startProbe(page, hzOf, criteria = decodeCriteria) {
+async function startProbe(page, hzOf, criteria = decodeCriteria) {
   const options = { hzOf, fftSize: criteria.fftSize, intervalMs: criteria.intervalMs, keep: 300 };
   await page.evaluate(`(${startToneProbe})(${JSON.stringify(options)}, ${spectrumReading})`);
 }
 
 /** The readings of one speaker taken since `sinceMs` (epoch). */
-export async function readingsOf(page, speaker, sinceMs) {
+async function readingsOf(page, speaker, sinceMs) {
   return page.evaluate(({ speaker: id, since }) => (window.proofTone?.readings[id] ?? []).filter((row) => row.at >= since), { speaker, since: sinceMs });
 }
 
