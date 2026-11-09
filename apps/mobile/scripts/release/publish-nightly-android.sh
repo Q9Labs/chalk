@@ -37,12 +37,9 @@ if jq -e --arg name "$release_name" 'any(.releases[]?; .name == $name and .statu
   echo "Internal track already contains $release_name."
   exit 0
 fi
-bundles_json=$(gplay bundles list --package "$package" --edit "$edit")
-apks_json=$(gplay apks list --package "$package" --edit "$edit")
-version_code=$(jq -nr --argjson bundles "$bundles_json" --argjson apks "$apks_json" \
-  '([$bundles.bundles[]?.versionCode, $apks.apks[]?.versionCode] | max // 0) + 1')
 gplay edits delete --package "$package" --edit "$edit" --confirm >/dev/null
 edit=''
+version_code=$(bash apps/mobile/scripts/release/next-play-version-code.sh "$package")
 
 export CHALK_APP_VARIANT=nightly CHALK_ANDROID_VERSION_CODE="$version_code" SIGNED_OUTPUT_DIR="$work/output"
 bash apps/mobile/scripts/release/build-signed-android.sh
