@@ -181,7 +181,7 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUAllowlist(cfg.ChalkSFU.AllowedSpaces)
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUAllowlist(cfg.ChalkSFU.AllowedSpaces).WithNewSpaceDefaults(cfg.NewSpace, tenantRepository)
 	var chalkSFU *chalksfu.Fleet
 	if cfg.ChalkSFU.Enabled {
 		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
