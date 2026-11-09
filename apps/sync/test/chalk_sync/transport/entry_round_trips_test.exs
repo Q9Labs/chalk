@@ -59,7 +59,7 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     tracer = spawn_link(fn -> collect_loop([]) end)
     :erlang.trace(:all, true, [:call, :timestamp, {:tracer, tracer}])
     trace_pattern = [{:_, [], [{:return_trace}]}]
-    :erlang.trace_pattern({Postgrex, :query, 4}, trace_pattern, [:global])
+    :erlang.trace_pattern({Postgrex, :query, 4}, trace_pattern, [:local])
     :erlang.trace_pattern({DBConnection, :transaction, 3}, trace_pattern, [:global])
 
     client =
@@ -73,7 +73,7 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
 
     assert {:json, %{"type" => "welcome"}, _client} = Client.recv(client)
     :erlang.trace(:all, false, [:call])
-    :erlang.trace_pattern({Postgrex, :query, 4}, false, [:global])
+    :erlang.trace_pattern({Postgrex, :query, 4}, false, [:local])
     :erlang.trace_pattern({DBConnection, :transaction, 3}, false, [:global])
     send(tracer, {:done, self()})
     assert_receive {:statements, statements}, 2_000
