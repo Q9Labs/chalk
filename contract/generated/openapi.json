@@ -14573,23 +14573,9 @@
             "type": "integer"
           },
           "publications": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "participant_id": {
-                  "$ref": "#/components/schemas/ParticipantId"
-                },
-                "publication_id": {
-                  "type": "string"
-                },
-                "source": {
-                  "type": "string"
-                }
-              },
-              "required": ["participant_id", "publication_id", "source"],
-              "type": "object"
-            },
-            "type": "array"
+            "additionalProperties": true,
+            "items": {},
+            "type": ["object", "array", "string", "number", "boolean", "null"]
           },
           "requiresImmediateRenegotiation": {
             "type": "boolean"
@@ -14751,6 +14737,9 @@
           "op": {
             "enum": ["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"],
             "type": "string"
+          },
+          "pull_published_audio": {
+            "type": "boolean"
           },
           "receive_only": {
             "type": "boolean"

@@ -102,6 +102,7 @@ describe("credential read trace", () => {
 
     await expect(transport.listPublications()).resolves.toMatchObject({ incarnation: 1 });
   });
+});
 
 function pullTransportWith(body: unknown) {
   const fetch = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
@@ -138,7 +139,7 @@ it("sends one tracks request that lists the publications and pulls the audio", a
 it("rejects a pull-published response without the publication list", async () => {
   const { transport } = pullTransportWith({});
   await expect(transport.pullPublishedAudio?.({ connectionId: "connection" })).rejects.toMatchObject({ code: "signaling_failed" });
-||||||| parent of 73849e353 (feat(sfu): serve every SFU signaling call from one signal route)
+});
 
 it("sends the combined pull to the one signal route when the API advertised it", async () => {
   const fetch = vi.fn(async () => new Response(JSON.stringify({ sessionDescription: { type: "offer", sdp: "offer" }, publications: { incarnation: 2, sequence: 5, publications: [] } }), { status: 200 }));
@@ -150,5 +151,4 @@ it("sends the combined pull to the one signal route when the API advertised it",
   expect(url).toBe("https://api.test/v1/tenants/tenant/spaces/space/episodes/episode/participants/participant/media/sfu/signal");
   expect(JSON.parse(String(init.body))).toEqual({ op: "tracks", connection_id: "connection", tracks: [], pull_published_audio: true, allow_partial_remote_tracks: true });
   expect(pulled?.snapshot).toEqual({ incarnation: 2, sequence: 5, publications: [] });
-});
 });

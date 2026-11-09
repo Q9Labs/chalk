@@ -269,15 +269,7 @@ export const CloudflareSFUSignalAPIResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     accepted: Schema.optional(Schema.Boolean),
     incarnation: Schema.optional(Schema.Number),
-    publications: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          participant_id: ParticipantIdSchema,
-          publication_id: Schema.String,
-          source: Schema.String,
-        }),
-      ),
-    ),
+    publications: Schema.optional(Schema.Unknown),
     requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
     sequence: Schema.optional(Schema.Number),
     sessionDescription: Schema.optional(
@@ -351,6 +343,7 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
     connection_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
     force: Schema.optional(Schema.Boolean),
     op: Schema.Literals(["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"]),
+    pull_published_audio: Schema.optional(Schema.Boolean),
     receive_only: Schema.optional(Schema.Boolean),
     replacement_cause: Schema.optional(
       Schema.Literals([

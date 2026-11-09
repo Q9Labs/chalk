@@ -1503,11 +1503,15 @@ export interface components {
     CloudflareSFUSignalAPIResponse: {
       accepted?: boolean;
       incarnation?: number;
-      publications?: {
-        participant_id: components["schemas"]["ParticipantId"];
-        publication_id: string;
-        source: string;
-      }[];
+      publications?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
       requiresImmediateRenegotiation?: boolean;
       sequence?: number;
       sessionDescription?: {
@@ -1555,6 +1559,7 @@ export interface components {
       force?: boolean;
       /** @enum {string} */
       op: "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
+      pull_published_audio?: boolean;
       receive_only?: boolean;
       /** @enum {string} */
       replacement_cause?:
