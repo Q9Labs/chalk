@@ -57,6 +57,24 @@ class WebDirectSyncConfigTests(unittest.TestCase):
         url = 'wss://direct.example.test/v1/sync'
         self.assertEqual(self.config(CHALK_WEB_SYNC_DIRECT_URL=url)['VITE_CHALK_SYNC_DIRECT_URL'], url)
 
+    def test_a_production_build_refuses_a_direct_url(self):
+        with patch.dict(os.environ, CHALK_WEB_SYNC_DIRECT_URL='wss://direct.example.test/v1/sync'):
+            with self.assertRaises(ValueError):
+                web.public_config('production', SHA)
+        with patch.dict(os.environ):
+            os.environ.pop('CHALK_WEB_SYNC_DIRECT_URL', None)
+            self.assertNotIn('VITE_CHALK_SYNC_DIRECT_URL', web.public_config('production', SHA))
+
+    def test_a_production_bundle_that_names_a_direct_host_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = Path(directory)
+            (client / 'assets').mkdir()
+            (client / 'assets/app.js').write_text('connect("wss://sync.chalkmeet.com/v1/sync")')
+            web.reject_direct_sync_url(client)
+            (client / 'assets/leak.js').write_text('connect("wss://nightly-sync-direct.chalkmeet.com/v1/sync")')
+            with self.assertRaises(ValueError):
+                web.reject_direct_sync_url(client)
+
     def test_a_malformed_direct_url_fails_the_release(self):
         for url in ('ws://direct.example.test/v1/sync', 'wss://direct.example.test/other', 'wss://direct.example.test/v1/sync?x=1', 'direct.example.test'):
             with self.subTest(url=url), self.assertRaises(ValueError):
