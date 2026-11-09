@@ -519,16 +519,15 @@ class MediaControllerRuntime implements MediaControllerEffects {
       return Effect.gen({ self: this }, function* () {
         // A turn-on republishes, so the SFU must be done with the old publication first. A turn-off tells Sync
         // beside the SFU close: the close is a network round trip, and receivers learn of the off from Sync.
-        let paused = intent.enabled ? yield* joinPause : null;
+        if (intent.enabled) yield* joinPause;
         if (state.desired.revision !== intent.revision) return;
-        if (state.awaitingLive === intent.revision) return yield* paused ?? (yield* joinPause);
+        if (state.awaitingLive === intent.revision) return yield* yield* joinPause;
         const ports = this.#ports;
         const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
         if (state.desired.revision !== intent.revision) return;
         if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
         else rejectOffline(state, intent);
-        paused ??= yield* joinPause;
-        yield* paused;
+        yield* yield* joinPause;
         yield* cleanup;
       }).pipe(Effect.ensuring(Effect.ignore(joinPause))); // The next revision never starts while this pause is in flight.
     });
