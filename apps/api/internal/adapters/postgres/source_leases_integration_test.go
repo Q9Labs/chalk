@@ -167,3 +167,12 @@ func TestRenewableSourceGrantsFollowDurableAuthorization(t *testing.T) {
 		t.Fatalf("renewable grants = %+v, want %+v", got, want)
 	}
 }
+
+func newTestID(t *testing.T) utilities.ID {
+	t.Helper()
+	id, err := utilities.NewID()
+	if err != nil {
+		t.Fatalf("generate integration id: %v", err)
+	}
+	return id
+}
