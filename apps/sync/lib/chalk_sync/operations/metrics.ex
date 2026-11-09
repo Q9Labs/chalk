@@ -17,7 +17,8 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :external_operation, :poll],
     [:chalk, :sync, :webhook, :production],
     [:chalk, :sync, :webhook, :fanout],
-    [:chalk, :sync, :retention, :cleanup]
+    [:chalk, :sync, :retention, :cleanup],
+    [:chalk, :sync, :live_target, :stage]
   ]
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
@@ -31,6 +32,7 @@ defmodule ChalkSync.Operations.Metrics do
     end_episode tenant_end_episode maximum_duration_expired
     start_recording stop_recording
   )
+  @live_target_stages ~w(reserve grant complete clear_pause reconcile)a
   @handler_id __MODULE__
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -142,6 +144,11 @@ defmodule ChalkSync.Operations.Metrics do
     else
       ["other"]
     end
+  end
+
+  defp metric_labels([:chalk, :sync, :live_target, :stage], %{stage: stage})
+       when stage in @live_target_stages do
+    [Atom.to_string(stage)]
   end
 
   defp metric_labels(_event, _metadata) do
