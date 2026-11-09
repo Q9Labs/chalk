@@ -33,6 +33,8 @@ export type SFUMediaCapabilities = {
   readonly pullPublished: boolean;
   /** The API serves every signaling call from one URL, so a join pays one CORS preflight instead of one per call. */
   readonly unifiedSignaling: boolean;
+  /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute keeps the track and moves no SDP. */
+  readonly muteInPlace: boolean;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -62,7 +64,7 @@ export type CloudflareSFUTrackRequest = {
   };
   readonly source?: MediaPublicationSource;
   readonly publicationId?: string;
-  /** On an update only: stops or resumes a remote video in place. Only a plane with `subscriptionState` accepts it. */
+  /** On an update only: stops or resumes a remote video in place (a plane with `subscriptionState`), or parks or resumes the caller's own local track (a plane with `muteInPlace`). */
   readonly paused?: boolean;
 };
 export type CloudflareSFUCloseTrackRequest = {

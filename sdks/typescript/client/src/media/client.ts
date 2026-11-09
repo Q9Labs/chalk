@@ -41,13 +41,13 @@ type LocalTrackState = {
   clearing: Promise<void> | null;
 };
 type OwnedLocalPublication = {
-  readonly state: LocalTrackState;
+  state: LocalTrackState;
   transceiver: RTCRtpTransceiver;
   readonly trackName: string;
   readonly connection: RTCPeerConnection;
   readonly connectionId: string;
   detachedAt: number | null;
-  lifecycle: { kind: "pending" } | { kind: "confirmed"; handle: LocalPublicationHandle } | { kind: "retiring"; handle: LocalPublicationHandle | null; detached: boolean; cause: LocalPublicationRetirementCause } | { kind: "retired" };
+  lifecycle: { kind: "pending" } | { kind: "confirmed"; handle: LocalPublicationHandle } | { kind: "held"; handle: LocalPublicationHandle } | { kind: "retiring"; handle: LocalPublicationHandle | null; detached: boolean; cause: LocalPublicationRetirementCause } | { kind: "retired" };
 };
 type LocalPublicationHandle = { readonly publicationId: string; readonly mid: string };
 type IceRestart = { readonly connection: RTCPeerConnection; readonly connectionEpoch: number; state: "running" | "succeeded" | "failed" };
@@ -65,7 +65,7 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 type RemoteTrackEntry = readonly [string, CloudflareSFURemoteTrack];
-const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false });
+const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false });
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
@@ -242,12 +242,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireActive();
     validateTrackSource(source, track);
     if (this.#localTracks.has(source)) throw new CloudflareSFUError(`A ${source} track is already prepared`, "media_failed");
-    const reusable = [...this.#ownedPublications].find((item) => item.state.source === source && item.connection === this.#connection && item.lifecycle.kind === "confirmed");
+    const reusable = [...this.#ownedPublications].find((item) => item.state.source === source && item.connection === this.#connection && (item.lifecycle.kind === "confirmed" || item.lifecycle.kind === "held"));
     const state: LocalTrackState = {
       source,
       track,
       transceiver: reusable?.transceiver ?? null,
-      providerPublicationId: reusable?.lifecycle.kind === "confirmed" ? reusable.lifecycle.handle.publicationId : null,
+      providerPublicationId: reusable && (reusable.lifecycle.kind === "confirmed" || reusable.lifecycle.kind === "held") ? reusable.lifecycle.handle.publicationId : null,
       desiredEnabled: false,
       enabled: false,
       endedListener: null,
@@ -608,6 +608,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       await this.pauseLocalCapture(target.source);
       return { outcome, errorCode: null };
     }
+    // Sync's off acknowledgment reaches a publication the user's mute already parked; closing it would undo the park.
+    if (this.#heldPublication(target.source)) return { outcome, errorCode: null };
     this.#pauseLocalSource(target.source);
     try {
       await this.#retireOwnedPublications();
@@ -717,6 +719,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #retireUnavailableLocalPublication(state: LocalTrackState): Promise<void> {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
+    // The publication list leaves out a parked publication, so absence there is not loss.
+    if (this.#heldPublication(state.source)?.handle.publicationId === publicationId) return;
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     if (state.providerPublicationId !== publicationId || this.#localRecoveries.has(state.source)) return;
@@ -773,7 +777,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #markPublicationRetiring(publication: OwnedLocalPublication, cause: LocalPublicationRetirementCause = "publish_failure"): void {
     const phase = publication.lifecycle;
-    if (phase.kind === "pending" || phase.kind === "confirmed") publication.lifecycle = { kind: "retiring", handle: phase.kind === "confirmed" ? phase.handle : null, detached: false, cause };
+    // A parked publication is already what a user pause wants.
+    if (phase.kind === "held" && cause === "user_pause") return;
+    if (phase.kind === "pending" || phase.kind === "confirmed" || phase.kind === "held") {
+      publication.lifecycle = { kind: "retiring", handle: phase.kind === "pending" ? null : phase.handle, detached: false, cause };
+    }
   }
   #carriesBundleTransport(publication: OwnedLocalPublication): boolean {
     const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
@@ -816,17 +824,60 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (publication.lifecycle.kind === "retiring") this.#retiredLocalCause = publication.lifecycle.cause;
     }
   }
+  #canHoldOnUserPause(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>): boolean {
+    const { source } = publication.state;
+    return (
+      phase.cause === "user_pause" &&
+      (source === "microphone" || source === "camera") &&
+      this.#capabilities().muteInPlace &&
+      this.#transport?.updateTracks !== undefined &&
+      publication.connection === this.#connection &&
+      publication.connectionId === this.#bootstrap.connectionId &&
+      !connectionIsClosed(publication.connection)
+    );
+  }
+  // A user mute parks the track on the SFU and keeps its transceiver, so it moves no SDP and
+  // the next unmute resumes it. False means the SFU refused the park; the caller then closes it.
+  async #holdOwnedPublication(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<boolean> {
+    if (!phase.detached) {
+      await this.#boundPeerOperation(publication.transceiver.sender.replaceTrack(null));
+      phase.detached = true;
+    }
+    if (!(await this.#setLocalPublicationHeld(publication, handle, true))) return false;
+    publication.lifecycle = { kind: "held", handle };
+    publication.detachedAt = null;
+    return true;
+  }
+  async #setLocalPublicationHeld(publication: OwnedLocalPublication, handle: LocalPublicationHandle, paused: boolean): Promise<boolean> {
+    try {
+      const response = await this.#updateTracks([{ location: "local", mid: handle.mid, trackName: publication.trackName, source: publication.state.source, publicationId: handle.publicationId, paused }]);
+      return !response.trackErrors?.length;
+    } catch {
+      // A failed park or resume is recoverable: the caller closes or republishes through the normal path, which reports its own failure.
+      return false;
+    }
+  }
+  #heldPublication(source: MediaPublicationSource): { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle } | undefined {
+    for (const publication of this.#ownedPublications) {
+      const { lifecycle } = publication;
+      if (lifecycle.kind === "held" && publication.state.source === source && publication.connection === this.#connection) return { publication, handle: lifecycle.handle };
+    }
+    return undefined;
+  }
+  // A user mute leaves the SDP alone: parked on the SFU when it can hold, else closed over the kept BUNDLE transport.
+  async #retireWithoutRenegotiation(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<boolean> {
+    if (this.#canHoldOnUserPause(publication, phase) && (await this.#holdOwnedPublication(publication, phase, handle))) return true;
+    if (!this.#shouldKeepBundleTransportOnUserPause(publication, connectionIsClosed(publication.connection))) return false;
+    await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
+    return true;
+  }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
     const { connection, connectionId, transceiver, state } = publication;
-    const keepBundleTransport = this.#shouldKeepBundleTransportOnUserPause(publication, connectionIsClosed(connection));
     try {
-      if (keepBundleTransport) {
-        await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
-        return;
-      }
+      if (await this.#retireWithoutRenegotiation(publication, phase, handle)) return;
       this.#markBundledTransportRetiring(publication);
       let closed = connection.connectionState === "closed";
       if (!phase.detached && !closed) {
@@ -958,6 +1009,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (this.#locallyPausedSources.has(state.source)) return false;
       state.desiredEnabled = true;
       state.track.enabled = true;
+      const held = this.#heldPublication(state.source);
+      if (held && !state.transceiver) {
+        state.transceiver = held.publication.transceiver;
+        state.providerPublicationId = held.handle.publicationId;
+      }
       if (state.providerPublicationId && state.transceiver) return await this.#reattachLocalTrack(state, state.transceiver);
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
@@ -995,6 +1051,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #reattachLocalTrack(state: LocalTrackState, transceiver: RTCRtpTransceiver): Promise<boolean> {
     await this.#boundPeerOperation(transceiver.sender.replaceTrack(state.track));
+    const held = this.#heldPublication(state.source);
+    if (held?.publication.transceiver === transceiver && !(await this.#resumeHeldPublication(held.publication, held.handle, state))) return await this.#republishAfterFailedResume(held.publication, state);
     const cause = this.#locallyPausedSources.get(state.source);
     state.enabled = cause === undefined;
     state.desiredEnabled = state.enabled;
@@ -1008,6 +1066,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#publishSnapshot();
     this.#emitLocal();
+    return state.enabled;
+  }
+  async #resumeHeldPublication(publication: OwnedLocalPublication, handle: LocalPublicationHandle, state: LocalTrackState): Promise<boolean> {
+    if (!(await this.#setLocalPublicationHeld(publication, handle, false))) return false;
+    publication.lifecycle = { kind: "confirmed", handle };
+    publication.state = state;
+    publication.detachedAt = null;
+    return true;
+  }
+  // The SFU no longer holds the parked track (for example after it lost the session), so publish a new one.
+  async #republishAfterFailedResume(publication: OwnedLocalPublication, state: LocalTrackState): Promise<boolean> {
+    this.#markPublicationRetiring(publication, "enable_failure");
+    state.transceiver = null;
+    state.providerPublicationId = null;
+    await this.#retireOwnedPublications().catch(() => {});
+    await this.#publishPreparedTracks([state], this.#generation);
     return state.enabled;
   }
   async #disablePreparedTrack(state: LocalTrackState): Promise<void> {

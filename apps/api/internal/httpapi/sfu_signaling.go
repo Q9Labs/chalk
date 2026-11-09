@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -129,7 +130,7 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 	return []RouteEndpoint{
 		sfuAddTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuCloseTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
-		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media),
+		sfuUpdateTracksEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuRenegotiateEndpoint(spaces, episodeLookup, tenants, media),
 		sfuListPublicationsEndpoint(spaces, episodeLookup, tenants, media, publications),
 		sfuListSubscriptionsEndpoint(spaces, episodeLookup, tenants, media),
@@ -578,14 +579,14 @@ func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLook
 
 // legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
 // No new behaviour lands here: the unified signal route serves the same operation.
-func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
+func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
 		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
 		"updateCloudflareSFUTracks",
 		decodeSFUUpdateTracksRequest,
 		func(ctx context.Context, request sfuUpdateTracksEndpointRequest) (mediaplane.TracksResponse, error) {
-			return signalSFUUpdateTracks(ctx, request, spaces, episodeLookup, tenants, media)
+			return signalSFUUpdateTracks(ctx, request, spaces, episodeLookup, tenants, media, publications)
 		},
 	).
 		Auth(APIAuthParticipantMedia).
@@ -595,6 +596,59 @@ func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, t
 		Responds(http.StatusOK, "CloudflareSFUUpdateTracksAPIResponse", mediaplane.TracksResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
 		MapErrors(episodeLifecycleEndpointAPIError)
+}
+
+// holdLocalTracks parks or resumes the caller's own publications for a mute that keeps the
+// track and its MID. The node changes first, so media stops before any viewer is told, and the
+// publication keeps its identity in the registry with only its visibility changed. A record that
+// fails after the node changed leaves a parked publication listed as live; the caller answers
+// that error by closing the publication, which settles both.
+func holdLocalTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest, service *mediaplane.Service, publications mediapublications.Registry, update mediaplane.UpdateTracksRequest) (mediaplane.TracksResponse, error) {
+	if publications == nil {
+		return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
+	}
+	subject, ok := accessgrants.SubjectFromContext(ctx)
+	if !ok {
+		return mediaplane.TracksResponse{}, apiErrorUnauthenticated
+	}
+	for _, track := range update.Tracks {
+		if track.Location != "local" {
+			return mediaplane.TracksResponse{}, mediaplane.ErrInvalidSignalRequest
+		}
+	}
+	held := func(track mediaplane.Track) mediapublications.CloseInput {
+		return mediapublications.CloseInput{
+			TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
+			ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID,
+			MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
+		}
+	}
+	for _, track := range update.Tracks {
+		decision, err := publications.PrepareClose(ctx, held(track))
+		if err != nil {
+			return mediaplane.TracksResponse{}, err
+		}
+		if !decision.ProviderCloseRequired {
+			return mediaplane.TracksResponse{}, mediapublications.ErrInvalidPublication
+		}
+	}
+	response, err := service.UpdateTracks(ctx, update)
+	if err != nil {
+		return response, err
+	}
+	for _, track := range update.Tracks {
+		// A partly applied batch still moved the tracks that did not fail on the node, so the registry follows them.
+		if slices.ContainsFunc(response.TrackErrors, func(failed mediaplane.TrackError) bool { return failed.TrackName == track.TrackName }) {
+			continue
+		}
+		if err := publications.RecordPublicationAvailability(ctx, mediapublications.AvailabilityInput{
+			TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
+			Source: track.Source, PublicationID: track.PublicationID, Enabled: track.Paused == nil || !*track.Paused,
+		}); err != nil {
+			return mediaplane.TracksResponse{}, err
+		}
+	}
+	return response, nil
 }
 
 // legacy: remove once no supported SDK or mobile build uses it (Android/iOS 3.0.6 use it today); see https://github.com/Q9Labs/chalk/issues/1026.
@@ -832,7 +886,7 @@ func listSFUSubscriptions(ctx context.Context, request sfuPublicationsEndpointRe
 	return response, nil
 }
 
-func signalSFUUpdateTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) (mediaplane.TracksResponse, error) {
+func signalSFUUpdateTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
 	if err := authorizeSFURequest(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.ParticipantID, request.Body.ConnectionID); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
@@ -840,7 +894,11 @@ func signalSFUUpdateTracks(ctx context.Context, request sfuUpdateTracksEndpointR
 	if err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
-	return service.UpdateTracks(ctx, mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx), Tracks: request.Body.Tracks})
+	update := mediaplane.UpdateTracksRequest{ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx), Tracks: request.Body.Tracks}
+	if !slices.ContainsFunc(request.Body.Tracks, func(track mediaplane.Track) bool { return track.Location == "local" }) {
+		return service.UpdateTracks(ctx, update)
+	}
+	return holdLocalTracks(ctx, request, service, publications, update)
 }
 
 func signalSFURenegotiate(ctx context.Context, request sfuRenegotiateEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) (sfuRenegotiateResponse, error) {

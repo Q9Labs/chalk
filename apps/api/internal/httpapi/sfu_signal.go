@@ -143,7 +143,7 @@ func signalSFU(ctx context.Context, request sfuSignalEndpointRequest, spaces Spa
 		return nilOnError(signalSFUUpdateTracks(ctx, sfuUpdateTracksEndpointRequest{
 			TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
 			Body: sfuUpdateTracksRequest{ConnectionID: body.ConnectionID, Tracks: body.Tracks},
-		}, spaces, episodeLookup, tenants, media))
+		}, spaces, episodeLookup, tenants, media, publications))
 	case sfuSignalOpRenegotiate:
 		return nilOnError(signalSFURenegotiate(ctx, sfuRenegotiateEndpointRequest{
 			TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
