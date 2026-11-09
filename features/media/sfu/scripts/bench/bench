@@ -25,7 +25,8 @@
 #
 # Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
 # for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
-# control. BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets (32000 and
+# control, and BENCH_SSH_ADDRESSES also reaches SSH (a jump host that survives this machine's address changing).
+# BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets (32000 and
 # 16000), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings; `capacity` uses them to
 # measure each size at the budget `deploy` renders for it. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
 set -euo pipefail
@@ -171,12 +172,16 @@ up() {
   key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
 
-  local operator control_addresses
+  local operator control_addresses ssh_addresses
   operator="$(operator_cidr)"
   control_addresses="$operator"
+  ssh_addresses="$operator"
   local extra
   for extra in $(tr ',' ' ' <<<"${BENCH_CONTROL_ADDRESSES:-}"); do
     control_addresses+=",$(host_cidr "$extra")"
+  done
+  for extra in $(tr ',' ' ' <<<"${BENCH_SSH_ADDRESSES:-}"); do
+    ssh_addresses+=",$(host_cidr "$extra")"
   done
 
   # From here a Droplet may exist, so any failure deletes the fleet rather than leave it billing.
@@ -191,7 +196,7 @@ up() {
   "${sfu_root}/deploy/certs" bench operator >/dev/null
 
   echo "==> creating Droplets in ${region}"
-  render_cloud_init "$control_addresses" "$operator" >"${dir}/cloud-init.yaml"
+  render_cloud_init "$control_addresses" "$ssh_addresses" >"${dir}/cloud-init.yaml"
   local spec role slug pids=() failed=0 pid
   for spec in "${nodes[@]}"; do
     read -r role _ slug _ <<<"$spec"
@@ -205,7 +210,7 @@ up() {
 
   local droplet_ids
   droplet_ids="$(jq -rs '[.[][0].id] | join(",")' "${dir}"/*.json)"
-  local inbound="protocol:tcp,ports:22,address:${operator} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
+  local inbound="protocol:tcp,ports:22,address:${ssh_addresses//,/,address:} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
   local control_rule="protocol:tcp,ports:${control_port}"
   for extra in ${control_addresses//,/ }; do
     control_rule+=",address:${extra}"

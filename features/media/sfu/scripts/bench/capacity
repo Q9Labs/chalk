@@ -90,15 +90,18 @@ run() {
   node="$(node_address "$role")"
   dest="${out}/${name}-${role}"
   mkdir -p "$dest"
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -f /tmp/capacity-sampler || true; cat > /tmp/capacity-sampler; chmod +x /tmp/capacity-sampler; : > /tmp/capacity-host.log
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -f '[/]tmp/capacity-sampler' || true; cat > /tmp/capacity-sampler; chmod +x /tmp/capacity-sampler; : > /tmp/capacity-host.log
     nohup /tmp/capacity-sampler >> /tmp/capacity-host.log 2>/dev/null </dev/null &" <<<"$sampler"
   # The test exits non-zero when a run breaks its own rules; the logs are the result either way.
+  # The test runs detached on the generator and leaves a done file, so a dropped SSH link from this
+  # machine does not end the run; the poll below reconnects.
   ssh "${ssh_options[@]}" "root@${generator}" "cd /opt/load/tests && rm -f /opt/load/runs/${name}.* &&
-    env SFU_LIVE_URL=https://${node}:8443 SFU_LIVE_CA=/opt/load/certs/ca.crt SFU_LIVE_CERT=/opt/load/certs/operator.crt \
+    nohup sh -c \"env SFU_LIVE_URL=https://${node}:8443 SFU_LIVE_CA=/opt/load/certs/ca.crt SFU_LIVE_CERT=/opt/load/certs/operator.crt \
       SFU_LIVE_KEY=/opt/load/certs/operator.key SFU_LIVE_SAMPLES=/opt/load/runs/${name}.jsonl \
       SFU_LIVE_DIAGNOSTICS=/opt/load/runs/${name}.diag.jsonl SFU_LIVE_SAMPLE=10s ${settings[*]} \
-      ./sfu-live.test -test.run '^TestLiveSmokeClasses\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1" || echo "capacity: the test exited non-zero; see ${dest}/test.log"
-  ssh "${ssh_options[@]}" "root@${node}" "pkill -f /tmp/capacity-sampler || true"
+      ./sfu-live.test -test.run '^TestLiveSmokeClasses\\\$' -test.v -test.timeout 3h >/opt/load/runs/${name}.log 2>&1; echo \\\$? >/opt/load/runs/${name}.done\" >/dev/null 2>&1 </dev/null &"
+  until ssh "${ssh_options[@]}" -o ConnectTimeout=20 "root@${generator}" "test -f /opt/load/runs/${name}.done" 2>/dev/null; do sleep 20; done
+  ssh "${ssh_options[@]}" "root@${node}" "pkill -f '[/]tmp/capacity-sampler' || true"
   scp -q "${ssh_options[@]}" "root@${generator}:/opt/load/runs/${name}.*" "$dest/"
   scp -q "${ssh_options[@]}" "root@${node}:/tmp/capacity-host.log" "${dest}/host.log"
   mv "${dest}/${name}.log" "${dest}/test.log"
