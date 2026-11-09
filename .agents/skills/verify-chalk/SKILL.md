@@ -41,6 +41,7 @@ Read-only. It prints JSON `{ "ok": true|false, "checks": [...] }` and exits 0 on
 Use the existing harness. Pick the journey in [features/README.md](features/README.md).
 
 - **Join a call (real path).** `node .agents/skills/verify-chalk/scripts/join-call.mjs <run-id>`. Two Chromium contexts arrive through the seeded invite, publish the fake camera and microphone from `scripts/web-proof/media.mjs` (`webMediaFixture`), see each other's video advance through the Cloudflare SFU, and leave. Exit 0 means every step passed.
+- **Sync socket reuse.** `node .agents/skills/verify-chalk/scripts/socket-reuse.mjs <run-id> [--web <origin>] [--lobby-ms N] [--leave-ms N]`. One browser tab waits in the lobby, joins, leaves and rejoins, and the script counts the Sync WebSocket upgrades it made and how many started after each Join press (zero means the join used a socket that was already open).
 - **Existing Playwright specs.** `tests/call.e2e.ts` and `tests/board.e2e.ts` run against a deployed proof tenant through `pnpm test:e2e`. Their selectors are the source for the feature files. They need proof-tenant credentials that this skill does not hold.
 - **UI-only previews.** `pnpm --dir apps/web exec vite --config vite.call-states.config.ts` serves `http://127.0.0.1:3071/call-states.html?state=<id>` with no API and no SFU. Use it for layout and state checks only, never as proof of a real call.
 
