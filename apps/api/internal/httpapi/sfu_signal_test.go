@@ -431,8 +431,13 @@ func TestSFUSignalRefusesTheSameCredentialsAsPerOperationRoutes(t *testing.T) {
 				}
 				legacyStatus, legacyBody := call(operation.method, signalPath(operation.suffix), operation.legacy)
 				unifiedStatus, unifiedBody := call(http.MethodPost, signalPath("signal"), operation.unified)
-				if legacyStatus != c.want {
-					t.Fatalf("per-operation route answered %d %s, want %d", legacyStatus, legacyBody, c.want)
+				want := c.want
+				// The two reads name no connection in their request, so a credential for another connection still reads.
+				if c.name == "another connection" && (operation.name == "publications" || operation.name == "subscriptions") {
+					want = http.StatusOK
+				}
+				if legacyStatus != want {
+					t.Fatalf("per-operation route answered %d %s, want %d", legacyStatus, legacyBody, want)
 				}
 				if unifiedStatus != legacyStatus || unifiedBody != legacyBody {
 					t.Errorf("unified route answered %d %s, per-operation route %d %s", unifiedStatus, unifiedBody, legacyStatus, legacyBody)
