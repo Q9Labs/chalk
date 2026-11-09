@@ -81,7 +81,10 @@ omits `media_plane`, instead of `CHALK_DEFAULT_MEDIA_PLANE`. It changes new
 Spaces only: a Space or Tenant that stores no plane still resolves to the
 deployment default. `chalk_sfu` is accepted only with `CHALK_SFU_ENABLED=true`
 and `CHALK_SFU_ALLOWED_SPACES=*`, because a new Space's ID is not known ahead of
-time; startup fails otherwise. An Episode still starts on Cloudflare when the
+time; startup fails otherwise. A Tenant that names its own plane does not get
+it: one with `tenant_managed` or disabled provider credentials, or with a default
+media plane, keeps the deployment default for its new Spaces, and those Spaces
+get no `CHALK_NEW_SPACE_*_POLICY` default. An Episode still starts on Cloudflare when the
 client SDK does not declare `chalk_sfu` (older than 5.5.0) or no node has room.
 To turn it off, unset the variable (or set `cf_sfu`) and restart; Spaces that
 already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
@@ -92,11 +95,13 @@ instead, so that setting moves them separately.
 `CHALK_NEW_SPACE_RECORDING_POLICY` (`disabled`, `manual`, `automatic`) and
 `CHALK_NEW_SPACE_TRANSCRIPTION_POLICY` (`disabled`, `on_demand`, `automatic`) set
 the `recording_policy` and `transcription_policy` a Create Space request gets
-when it omits them. Unset, an omitted policy keeps the database default. A
+when it omits them. Unset, an omitted policy keeps the database default
+(`automatic` for both). A
 request that names a policy always wins, and a Tenant's transcription ceiling
-still clamps the effective mode. When `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu`, a
-policy other than `disabled` also needs `CHALK_SFU_CAPTURE_ENABLED=true`; startup
-fails otherwise. Turning the policies off only affects Spaces created afterwards:
+still clamps the effective mode. When `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu`,
+unless both effective policies (the configured one, else the database default)
+are `disabled`, `CHALK_SFU_CAPTURE_ENABLED=true` is also required; startup fails
+otherwise. Turning the policies off only affects Spaces created afterwards:
 existing Spaces keep the policies they stored. Spaces that public invites create
 are not covered.
 

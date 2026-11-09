@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -695,7 +696,7 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 // omits. A new Space has a random ID that no allowlist can name in advance, so
 // the own SFU as the new-Space plane needs every Space allowed. Automatic capture
 // defaults on the own SFU need capture, or new Spaces would promise artifacts
-// that no node produces.
+// that no node produces. An omitted policy is the database default, so it counts.
 func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
 	var defaults spaces.NewSpaceDefaults
 	if value := strings.TrimSpace(os.Getenv(NewSpaceMediaPlane)); value != "" {
@@ -723,10 +724,11 @@ func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, err
 	if !chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1 {
 		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s=%s requires %s=true and %s=*", NewSpaceMediaPlane, defaults.MediaPlane, ChalkSFUEnabled, ChalkSFUAllowedSpaces)
 	}
-	capturing := defaults.RecordingPolicy != "" && defaults.RecordingPolicy != artifactpolicy.RecordingDisabled ||
-		defaults.TranscriptionPolicy != "" && defaults.TranscriptionPolicy != artifactpolicy.TranscriptionDisabled
+	recording := cmp.Or(defaults.RecordingPolicy, spaces.DatabaseDefaultRecordingPolicy)
+	transcription := cmp.Or(defaults.TranscriptionPolicy, spaces.DatabaseDefaultTranscriptionPolicy)
+	capturing := recording != artifactpolicy.RecordingDisabled || transcription != artifactpolicy.TranscriptionDisabled
 	if capturing && !chalkSFU.CaptureEnabled {
-		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s and %s other than disabled need %s=true when %s=%s", NewSpaceRecordingPolicy, NewSpaceTranscriptionPolicy, ChalkSFUCaptureEnabled, NewSpaceMediaPlane, defaults.MediaPlane)
+		return spaces.NewSpaceDefaults{}, fmt.Errorf("new Spaces get recording %s and transcription %s (%s and %s default to %s and %s); unless both are disabled they need %s=true when %s=%s", recording, transcription, NewSpaceRecordingPolicy, NewSpaceTranscriptionPolicy, spaces.DatabaseDefaultRecordingPolicy, spaces.DatabaseDefaultTranscriptionPolicy, ChalkSFUCaptureEnabled, NewSpaceMediaPlane, defaults.MediaPlane)
 	}
 	return defaults, nil
 }

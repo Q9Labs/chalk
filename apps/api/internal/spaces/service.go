@@ -1,11 +1,13 @@
 package spaces
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"regexp"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
+	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -145,8 +148,23 @@ type Service struct {
 	repository        Repository
 	defaultMediaPlane MediaPlaneProvider
 	newSpace          NewSpaceDefaults
+	tenants           TenantReader
 	chalkSFUAllowed   ChalkSFUAllowlist
 }
+
+// TenantReader gives Create Space the Tenant's media plane settings, so a new
+// Space never defaults to a plane its Tenant cannot serve.
+type TenantReader interface {
+	GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error)
+}
+
+// The column defaults of spaces.recording_policy and spaces.transcription_policy
+// (migrations 20261003120000 and 20261024120000). A new Space that omits a policy
+// and gets no configured default stores these.
+const (
+	DatabaseDefaultRecordingPolicy     = artifactpolicy.RecordingAutomatic
+	DatabaseDefaultTranscriptionPolicy = artifactpolicy.TranscriptionAutomatic
+)
 
 // NewSpaceDefaults are the values a Create Space request gets for the fields it
 // omits. A zero field leaves that field to the deployment default, or to the
@@ -253,20 +271,56 @@ func (s Service) WithChalkSFUAllowlist(allowed ChalkSFUAllowlist) Service {
 
 // WithNewSpaceDefaults sets what a Create Space request gets for the fields it
 // omits. It changes new Spaces only: Spaces and Tenants that store no plane keep
-// resolving to the deployment default.
-func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults) Service {
+// resolving to the deployment default. The Tenant reader decides per Tenant
+// whether the new-Space plane applies.
+func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults, tenants TenantReader) Service {
 	s.newSpace = defaults
+	s.tenants = tenants
 	return s
 }
 
-func (s Service) planeForNewSpace() (MediaPlaneProvider, error) {
+// planeForNewSpace returns the plane for a Space whose request names none, and
+// whether it is the configured new-Space plane. A Tenant that pins its own
+// provider keeps the deployment default.
+func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (plane MediaPlaneProvider, newSpacePlane bool, err error) {
 	if s.newSpace.MediaPlane != "" {
-		return s.newSpace.MediaPlane, nil
+		tenant, err := s.tenants.GetTenant(ctx, tenantID)
+		if err != nil {
+			return "", false, fmt.Errorf("read Tenant for the new Space plane: %w", err)
+		}
+		if tenantServesNewSpacePlane(tenant) {
+			return s.newSpace.MediaPlane, true, nil
+		}
 	}
 	if s.defaultMediaPlane != "" && s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
-		return "", ErrInvalidMediaPlane
+		return "", false, ErrInvalidMediaPlane
 	}
-	return s.defaultMediaPlane, nil
+	return s.defaultMediaPlane, false, nil
+}
+
+// tenantModeChalkManaged is mediaplaneproviders.ModeChalkManaged, which this
+// package cannot import because that package imports this one.
+const tenantModeChalkManaged = "chalk_managed"
+
+// tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
+// and the Tenant names no plane of its own. A Tenant with its own credentials
+// serves only that provider, and a Tenant default plane is its own choice.
+func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
+	if tenant.DefaultMediaPlane != nil {
+		return false
+	}
+	raw := bytes.TrimSpace(tenant.MediaPlaneProviderConfig)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return true
+	}
+	var config struct {
+		Enabled *bool  `json:"enabled"`
+		Mode    string `json:"mode"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return false
+	}
+	return (config.Enabled == nil || *config.Enabled) && strings.TrimSpace(config.Mode) == tenantModeChalkManaged
 }
 
 func (s Service) selectable(provider string, spaceID utilities.ID) bool {
@@ -279,17 +333,18 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 		return Space{}, err
 	}
 	input.ID = id
+	newSpacePlane := false
 	if !input.MediaPlaneSet && input.MediaPlane == "" {
-		plane, err := s.planeForNewSpace()
+		plane, isNewSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
 		if err != nil {
 			return Space{}, err
 		}
-		input.MediaPlane = string(plane)
+		input.MediaPlane, newSpacePlane = string(plane), isNewSpacePlane
 	}
-	if !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
+	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
 		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
 	}
-	if !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
+	if newSpacePlane && !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
 		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
