@@ -158,6 +158,11 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 	if layer.audioLevelID != 0 {
 		p.readAudioLevel(layer, header, &packet)
 	}
+	if history := layer.history.Load(); history != nil {
+		if !history.store(&packet) {
+			return
+		}
+	}
 	resumed := !layer.active(packet.arrival)
 	if resumed {
 		// The monitor may have missed the gap, so end the live segments while
@@ -165,9 +170,6 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 		p.reselect()
 	}
 	layer.lastRTP.Store(packet.arrival)
-	if history := layer.history.Load(); history != nil {
-		history.store(&packet)
-	}
 	if resumed {
 		p.reselect()
 	}
