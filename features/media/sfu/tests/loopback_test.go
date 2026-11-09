@@ -455,10 +455,22 @@ func eventually(t *testing.T, what string, timeout time.Duration, condition func
 // sequence number is the one the sender gave that payload, and that sequences increase.
 func assertKnownStream(t *testing.T, label string, packets []*rtp.Packet, kind byte) {
 	t.Helper()
+	if late := countLate(t, label, packets, kind); late > 0 {
+		t.Fatalf("%s: %d packets arrived late or twice", label, late)
+	}
+}
+
+// countLate checks every packet carries the sender's payload for kind under the sequence number the
+// sender gave it, and returns how many arrived after a higher sequence number or a second time. Over
+// the internet that happens: UDP reorders, and the subscriber's NACKs make the SFU retransmit.
+func countLate(t *testing.T, label string, packets []*rtp.Packet, kind byte) int {
+	t.Helper()
 	if len(packets) == 0 {
 		t.Fatalf("%s: no packets", label)
 	}
-	var previous uint16
+	seen := map[uint16]bool{}
+	var highest uint16
+	late := 0
 	for position, packet := range packets {
 		if len(packet.Payload) != len(payloadFor(kind, 0)) {
 			t.Fatalf("%s: packet %d has payload %v", label, position, packet.Payload)
@@ -470,11 +482,15 @@ func assertKnownStream(t *testing.T, label string, packets []*rtp.Packet, kind b
 		if packet.SequenceNumber != uint16(firstSequence+index) {
 			t.Fatalf("%s: packet %d has sequence %d for payload index %d", label, position, packet.SequenceNumber, index)
 		}
-		if position > 0 && int16(packet.SequenceNumber-previous) <= 0 {
-			t.Fatalf("%s: sequence went %d then %d", label, previous, packet.SequenceNumber)
+		repeated := seen[packet.SequenceNumber]
+		seen[packet.SequenceNumber] = true
+		if repeated || (position > 0 && int16(packet.SequenceNumber-highest) < 0) {
+			late++
+			continue
 		}
-		previous = packet.SequenceNumber
+		highest = packet.SequenceNumber
 	}
+	return late
 }
 
 func TestLoopback(t *testing.T) {
