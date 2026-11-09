@@ -145,7 +145,7 @@ A P1 is one of these, printed as `P1 <reason> <call>` when it happens:
 | `cross_tenant`          | A guest's roster or media included a participant outside its call.                                            |
 
 `cross_tenant` is the closest check one Tenant allows: it catches media or roster entries that cross between calls of
-the same fleet, not between two Tenants. Other findings (`action_failed`, `fault_not_stalled`, `recording_failed`, and
+the same fleet, not between two Tenants. Other findings (`action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
 an errored call such as a failed admission or an Episode that did not end) fail the run without being a P1. A
 join time includes a loaded generator: each finding carries the load per core, and the fleet starts no new call while
 the load per core is above `--max-load` (0.85). Add machines, not concurrency, when it stays high.

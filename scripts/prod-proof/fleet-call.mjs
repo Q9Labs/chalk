@@ -81,8 +81,18 @@ async function checkOff(call, guest, off, label) {
 
 const setLocal = (page, source, enabled) => page.evaluate(({ source, enabled }) => (source === "microphone" ? window.proofClient.media.setMicrophoneEnabled(enabled) : window.proofClient.media.setCameraEnabled(enabled)), { source, enabled });
 
+// A leak check that never fires proves nothing: before a source is turned off, its energy or frames must visibly reach another guest.
+async function detectorSees(call, guest, source) {
+  const before = await sampleAll(call.pages);
+  await sleep(1000);
+  const after = await sampleAll(call.pages);
+  const seen = call.pages.some((_, index) => index !== guest && leakedSources(before[index], after[index], call.participants[guest], [source]).includes(source));
+  if (!seen) call.add("detector_blind", `The ${source} of guest ${guest + 1} showed no audio energy or video frames at any other guest before it was turned off`);
+}
+
 async function toggle(call, guest, source) {
   const page = () => call.pages[guest];
+  await detectorSees(call, guest, source);
   await setLocal(page(), source, false);
   call.state[call.participants[guest]][source] = false;
   await checkOff(call, guest, [source], `${source} off`);
