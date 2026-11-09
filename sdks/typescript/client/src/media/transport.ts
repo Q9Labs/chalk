@@ -38,7 +38,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       // A user-timing entry shows in a latency run whether the credential provider waits on a network round trip.
       if (op) {
         try {
-          performance.measure("chalk.sfu.credential", { start: startedAt, detail: { op } });
+          performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } });
         } catch {
           /* Observers cannot interrupt signaling. */
         }
