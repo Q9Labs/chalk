@@ -15,6 +15,8 @@ export type PlatformConnectionAccess = (request?: ConnectionAccessRequest) => Ac
 export type SpaceClientPlatform = {
   readonly apiBaseUrl?: string;
   readonly syncUrl?: string;
+  /** Direct Sync URL tried before `syncUrl`, with fallback. Unset (the default) keeps today's single path. */
+  readonly syncDirectUrl?: string;
   readonly whiteboardUrl?: string | null;
   readonly dependencies?: Partial<ConnectionDependencies>;
   /** Private adapter seam for runtimes that need the full refresh request. */
@@ -31,7 +33,7 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
+  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
     access: async (request) => requireParsedAccessGrant(await fetchAccessGrant({ request, options, platform })),

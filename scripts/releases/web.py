@@ -27,7 +27,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def public_config(target, sha):
     nightly = target == 'nightly'
+    # Off unless the release environment names a direct Sync URL; see docs/operators/direct-sync-path.md.
+    direct = os.environ.get('CHALK_WEB_SYNC_DIRECT_URL', '').strip()
+    if direct:
+        parts = urlsplit(direct)
+        require(parts.scheme == 'wss' and parts.hostname and parts.path == '/v1/sync' and not parts.query,
+                'CHALK_WEB_SYNC_DIRECT_URL must be a wss:// URL ending in /v1/sync')
     return {'CHALK_ENVIRONMENT': target, 'CHALK_COMMIT_SHA': sha,
+            **({'VITE_CHALK_SYNC_DIRECT_URL': direct} if direct else {}),
             'VITE_API_URL': 'https://nightly-api.chalkmeet.com' if nightly else 'https://api.chalkmeet.com',
             'VITE_CHALK_SYNC_URL': 'wss://nightly-sync.chalkmeet.com/v1/sync' if nightly else 'wss://sync.chalkmeet.com/v1/sync',
             'VITE_PUBLIC_APP_URL': 'https://nightly.chalkmeet.com' if nightly else 'https://chalkmeet.com'}

@@ -4,6 +4,7 @@ import {
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
   createChalkWhiteboardV1FileDownloadTransport,
+  createDirectFirstWebSocketFactory,
   createCloudflareSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
@@ -32,6 +33,8 @@ export type NativeSpaceClientOptions = {
   readonly getAccess: GetAccess;
   readonly baseUrl?: string;
   readonly syncUrl?: string;
+  /** Direct Sync URL tried before `syncUrl`, with fallback. Unset (the default) keeps today's single path. */
+  readonly syncDirectUrl?: string;
   readonly whiteboardURL?: string | null;
   readonly microphone?: boolean;
   readonly camera?: boolean;
@@ -56,6 +59,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
+  const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
   const dependencies: PlatformDependencies = {
     clock: {
       now: () => Date.now(),
@@ -73,7 +77,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
-    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage, syncDialTimeoutMs),
+    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncDialTimeoutMs),
     subscribeForeground: (listener) => {
