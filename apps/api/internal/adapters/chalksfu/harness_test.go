@@ -1,6 +1,7 @@
 package chalksfu_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -18,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -143,17 +145,43 @@ type sfu struct {
 	binary     string
 	env        []string
 	stop       func()
+	// release frees the ports reserved for the first start. Only launch calls it,
+	// just before the process starts; a restart reuses the same ports unreserved.
+	release func()
 }
 
+// freePort returns a loopback TCP port nothing listens on, for a node that must look down.
 func freePort(t *testing.T) string {
 	t.Helper()
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	_, port, _ := net.SplitHostPort(listener.Addr().String())
+	port, release := reservePort(t, "tcp4")
+	release()
 	return port
+}
+
+// reservePort holds a free loopback port on network ("tcp4" or "udp4") until release
+// runs. A UDP port is reserved on UDP because another process can hold it while its
+// TCP twin stays free.
+func reservePort(t *testing.T, network string) (port string, release func()) {
+	t.Helper()
+	var addr net.Addr
+	switch network {
+	case "tcp4":
+		listener, err := net.Listen(network, "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr, release = listener.Addr(), func() { _ = listener.Close() }
+	case "udp4":
+		conn, err := net.ListenPacket(network, "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr, release = conn.LocalAddr(), func() { _ = conn.Close() }
+	default:
+		t.Fatalf("reserve port: unsupported network %q", network)
+	}
+	_, port, _ = net.SplitHostPort(addr.String())
+	return port, release
 }
 
 func startSFU(t *testing.T, settings map[string]string) *sfu {
@@ -168,7 +196,8 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 	binary := sfuBinary(t)
 	dir := t.TempDir()
 	serverCert, serverKey := ca.issue(t, "localhost", x509.ExtKeyUsageServerAuth)
-	controlPort, udpPort := freePort(t), freePort(t)
+	controlPort, releaseControl := reservePort(t, "tcp4")
+	udpPort, releaseUDP := reservePort(t, "udp4")
 	env := append(os.Environ(),
 		"SFU_CONTROL_ADDR=127.0.0.1:"+controlPort,
 		"SFU_UDP_ADDR=127.0.0.1:"+udpPort,
@@ -195,7 +224,8 @@ func startSFUUnder(t *testing.T, ca *authority, settings map[string]string) *sfu
 	for key, value := range settings {
 		env = append(env, key+"="+value)
 	}
-	service := &sfu{ca: ca, controlURL: "https://127.0.0.1:" + controlPort, dir: dir, binary: binary, env: env}
+	service := &sfu{ca: ca, controlURL: "https://127.0.0.1:" + controlPort, dir: dir, binary: binary, env: env,
+		release: func() { releaseControl(); releaseUDP() }}
 	service.launch(t)
 	return service
 }
@@ -205,6 +235,12 @@ func (s *sfu) launch(t *testing.T) {
 	t.Helper()
 	command := exec.Command(s.binary)
 	command.Env = s.env
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	if s.release != nil {
+		s.release()
+		s.release = nil
+	}
 	if err := command.Start(); err != nil {
 		t.Fatalf("start sfu: %v", err)
 	}
@@ -235,7 +271,7 @@ func (s *sfu) launch(t *testing.T) {
 		}
 		select {
 		case <-exited:
-			t.Fatal("sfu exited before it was ready")
+			t.Fatalf("sfu exited before it was ready: %s", tail(stderr.String(), 2000))
 		default:
 		}
 		if time.Now().After(deadline) {
@@ -243,6 +279,15 @@ func (s *sfu) launch(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// tail keeps the last n bytes of text, where a process says why it stopped.
+func tail(text string, n int) string {
+	text = strings.TrimSpace(text)
+	if len(text) > n {
+		return text[len(text)-n:]
+	}
+	return text
 }
 
 func (s *sfu) httpClient(t *testing.T, clientCA *authority, identity string) *http.Client {
