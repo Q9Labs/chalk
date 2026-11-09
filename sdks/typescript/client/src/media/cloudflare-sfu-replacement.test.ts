@@ -108,6 +108,29 @@ it("retires the receiver of a withdrawn remote publication on a later poll when 
   });
 });
 
+it("closes at most 16 receivers per request when many remote publications leave at once", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    const crowd = (sequence: number, size: number): CloudflareSFUPublicationSnapshot => ({
+      incarnation: 1,
+      sequence,
+      publications: Array.from({ length: size }, (_, index) => ({ participantId: `participant-${index + 2}`, source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", `microphone-${index}`) })),
+    });
+
+    h.transport.snapshot = crowd(1, 20);
+    await h.client.refreshRemotePublications();
+    expect(peer.liveRemoteTransceiverCount()).toBe(20);
+    h.transport.snapshot = crowd(2, 0);
+    await h.client.refreshRemotePublications();
+
+    const closes = h.transport.closeInputs.filter((input) => input.force);
+    expect(closes.map((input) => input.tracks.length)).toEqual([16, 4]);
+    expect(peer.liveRemoteTransceiverCount()).toBe(0);
+  });
+});
+
 const CAMERA_ON = { operationId: "camera-on", participantId: "participant-1", source: "camera", enabled: true } as const;
 
 async function startDormantWithCamera(h: ReturnType<typeof createHarness>): Promise<FakeTrack> {

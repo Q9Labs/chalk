@@ -77,6 +77,8 @@ const NEGOTIATION_TIMEOUT_MS = 35000;
 const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
 const RECEIVER_RETIREMENT_ATTEMPTS = 3;
 const RECEIVER_RETIREMENT_LIMIT = 64;
+// The SFU rejects a close that names more tracks than this.
+const CLOSE_TRACKS_PER_REQUEST = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.
@@ -1258,7 +1260,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#publishSnapshot();
     this.#emitRemote();
-    for (const publication of dropped) this.#unretiredReceivers.set(publication, 0);
+    for (const publication of dropped) {
+      if (this.#unretiredReceivers.size >= RECEIVER_RETIREMENT_LIMIT) break;
+      this.#unretiredReceivers.set(publication, 0);
+    }
     await this.#retireDroppedReceivers(generation);
   }
   #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): readonly CloudflareSFURemoteTrack[] {
@@ -1280,27 +1285,29 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // again on the next poll, a few times, because the roster no longer lists the track and would never ask for it.
   async #retireDroppedReceivers(generation: number): Promise<void> {
     if (!this.#unretiredReceivers.size) return;
-    const batch = [...this.#unretiredReceivers.keys()];
     try {
       await this.#serializeSDP(async () => {
-        this.#requireGeneration(generation);
-        const receivers = this.#receiversOf(batch);
-        if (receivers.length) await this.#closeReceivers(receivers, generation);
+        for (const batch of chunks([...this.#unretiredReceivers.keys()], CLOSE_TRACKS_PER_REQUEST)) {
+          this.#requireGeneration(generation);
+          const receivers = this.#receiversOf(batch);
+          try {
+            if (receivers.length) await this.#closeReceivers(receivers, generation);
+          } catch (error) {
+            for (const publication of batch) this.#countFailedRetirement(publication);
+            throw error;
+          }
+          for (const publication of batch) this.#unretiredReceivers.delete(publication);
+        }
       });
-      for (const publication of batch) this.#unretiredReceivers.delete(publication);
     } catch (error) {
       this.#requireGeneration(generation);
       this.#reportError(error);
-      for (const publication of batch) {
-        const failures = (this.#unretiredReceivers.get(publication) ?? 0) + 1;
-        if (failures >= RECEIVER_RETIREMENT_ATTEMPTS) this.#unretiredReceivers.delete(publication);
-        else this.#unretiredReceivers.set(publication, failures);
-      }
-      for (const publication of this.#unretiredReceivers.keys()) {
-        if (this.#unretiredReceivers.size <= RECEIVER_RETIREMENT_LIMIT) break;
-        this.#unretiredReceivers.delete(publication);
-      }
     }
+  }
+  #countFailedRetirement(publication: CloudflareSFURemoteTrack): void {
+    const failures = (this.#unretiredReceivers.get(publication) ?? 0) + 1;
+    if (failures >= RECEIVER_RETIREMENT_ATTEMPTS) this.#unretiredReceivers.delete(publication);
+    else this.#unretiredReceivers.set(publication, failures);
   }
   #receiversOf(publications: readonly CloudflareSFURemoteTrack[]) {
     return publications.flatMap((publication) => {
@@ -2399,6 +2406,9 @@ function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublica
       return [[key, track] as const];
     }),
   );
+}
+function* chunks<T>(items: readonly T[], size: number): Generator<readonly T[]> {
+  for (let index = 0; index < items.length; index += size) yield items.slice(index, index + size);
 }
 function stopReplacedRemoteTracks(current: ReadonlyMap<string, CloudflareSFURemoteTrack>, next: ReadonlyMap<string, CloudflareSFURemoteTrack>, onError: (error: unknown) => void): readonly CloudflareSFURemoteTrack[] {
   const dropped = [...current].filter(([key, previous]) => next.get(key) !== previous).map(([, previous]) => previous);
