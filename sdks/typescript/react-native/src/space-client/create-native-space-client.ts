@@ -135,6 +135,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
   return {
+    prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
