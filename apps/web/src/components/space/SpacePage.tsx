@@ -139,7 +139,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           setError(
             cause instanceof AccessMediaProofRejectedError
               ? { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" }
-              : { message: "Could not return to the Episode. Check your access before joining again.", retryable: true },
+              : cause instanceof MediaUnavailableError
+                ? neutralMessage(cause)
+                : { message: "Could not return to the Episode. Check your access before joining again.", retryable: true },
           );
       })
       .finally(() => {

@@ -33,7 +33,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
-async function entry(code: string, slug: string | undefined = "design-lab") {
+async function entry(code: string, slug: string | undefined = "design-lab", status = 401) {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const path = new URL(request.url).pathname;
@@ -44,7 +44,7 @@ async function entry(code: string, slug: string | undefined = "design-lab") {
     if (path === "/v1/public/space-invite-arrival/access-grants") {
       requests.push("replace");
       expect(await request.json()).toMatchObject({ replace_media_connection: true });
-      return Response.json({ error: { code, message: "Media proof was rejected" } }, { status: 401 });
+      return Response.json({ error: { code, message: "Media proof was rejected" } }, { status });
     }
     if (path === "/v1/public/space-invite-arrivals") {
       requests.push("fresh");
@@ -88,6 +88,13 @@ it.each([
   await act(async () => button?.click());
   await expectMessage("Asking to join Design Lab");
   expect(requests).toEqual(["restore", "replace", "fresh"]);
+});
+
+it("says calls are unavailable when resuming after a reload returns 503 media.unavailable", async () => {
+  writeReloadRejoin(sessionStorage, marker);
+  await entry("media.unavailable", "design-lab", 503);
+  await expectMessage("Calls are unavailable right now. Try again in a few minutes.");
+  expect(requests).toEqual(["restore", "replace"]);
 });
 
 async function expectMessage(message: string) {
