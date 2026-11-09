@@ -240,7 +240,7 @@ it("opens the lobby socket at the direct URL, where a direct-first client dials,
   preconnect({ syncUrl, syncDirectUrl: directUrl });
   expect(FakeWebSocket.instances.map((socket) => socket.url)).toEqual([dialedDirect]);
   FakeWebSocket.instances[0]?.open();
-  const socket = createDirectFirstWebSocketFactory({ directUrl, inner: createBrowserWebSocketFactory(), memory: new Map() }).connect(dialed);
+  const socket = createDirectFirstWebSocketFactory({ directUrl, inner: createBrowserWebSocketFactory() }).connect(dialed);
   const opened = vi.fn();
   socket.onopen = opened;
   await Promise.resolve();
@@ -251,4 +251,28 @@ it("opens the lobby socket at the direct URL, where a direct-first client dials,
 it("keeps the Tunnel URL for the lobby socket when the client would not dial the direct URL first", () => {
   preconnect({ syncUrl, syncDirectUrl: "ws://direct.example.test/v1/sync" });
   expect(FakeWebSocket.instances.map((socket) => socket.url)).toEqual([dialed]);
+});
+
+it.each([undefined, ""])("opens the same socket as before when the direct URL is %j", (syncDirectUrl) => {
+  preconnect({ baseUrl: "https://api.example.test/", syncUrl, syncDirectUrl });
+  expect(FakeWebSocket.instances.map((socket) => socket.url)).toEqual([dialed]);
+});
+
+it("opens the lobby socket at the Tunnel URL after a failed direct attempt, and the join adopts it", async () => {
+  const blocked = "wss://blocked.example.test/v1/sync";
+  // The shared failed-host memory is what both the join and preconnect read: fail one direct attempt through it.
+  createDirectFirstWebSocketFactory({ directUrl: blocked, inner: createBrowserWebSocketFactory() }).connect(dialed);
+  FakeWebSocket.instances[0]?.fail();
+  const afterFailure = FakeWebSocket.instances.length;
+
+  preconnect({ syncUrl, syncDirectUrl: blocked });
+  expect(FakeWebSocket.instances.slice(afterFailure).map((socket) => socket.url)).toEqual([dialed]);
+  FakeWebSocket.instances[afterFailure]?.open();
+
+  const socket = createDirectFirstWebSocketFactory({ directUrl: blocked, inner: createBrowserWebSocketFactory() }).connect(dialed);
+  const opened = vi.fn();
+  socket.onopen = opened;
+  await Promise.resolve();
+  expect(FakeWebSocket.instances).toHaveLength(afterFailure + 1);
+  expect(opened).toHaveBeenCalledTimes(1);
 });
