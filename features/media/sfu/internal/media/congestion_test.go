@@ -1,6 +1,7 @@
 package media
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -90,7 +91,9 @@ func (s *pathSim) feedback() {
 func (s *pathSim) run(d time.Duration) (paused bool) {
 	for end := s.now + int64(d); s.now < end; {
 		s.now += int64(5 * time.Millisecond)
-		s.sent += s.sendBps / 8 * 0.005
+		if !s.state.paused {
+			s.sent += s.sendBps / 8 * 0.005
+		}
 		for s.sent >= float64(s.size) {
 			s.sent -= float64(s.size)
 			s.send()
@@ -138,12 +141,71 @@ func TestAppLimitedSenderDoesNotPauseForADelayHump(t *testing.T) {
 	}
 }
 
-// Two flows' worth of video onto a path that carries a third of it: the queue
-// grows, packets drop, and the tile must still pause.
-func TestRealCongestionStillPauses(t *testing.T) {
-	sim := newPathSim(300_000, simLayers)
-	sim.capacity, sim.maxQueue = 100_000, 300*time.Millisecond
-	if !sim.run(20 * time.Second) {
-		t.Fatalf("no pause on a path of 100 kbps carrying 300 kbps; estimate %.0f, lost %d, last decrease %+v", sim.estimate(), sim.lost, sim.tr.estimator.lastDecrease)
+// A sender ramps from 150 kbps to 600 kbps on a path that carries far more, and
+// one blip of receiver jitter reads as overuse in the middle of it. One blip is
+// no evidence of a full path: the estimate must hold, never fall under the rate
+// the path already carried, and the tile must never pause.
+func TestRampWithOneOveruseBlipNeverPausesOrCutsTheEstimate(t *testing.T) {
+	sim := newPathSim(150_000, simLayers)
+	floor, lowest := 0.0, math.MaxFloat64
+	step := func(d time.Duration) {
+		t.Helper()
+		if sim.run(d) {
+			t.Fatalf("the tile paused at %v, sending %.0f bps, estimate %.0f", time.Duration(sim.now), sim.sendBps, sim.estimate())
+		}
+		floor = max(floor, sim.sendBps)
+		lowest = min(lowest, sim.estimate()-floor)
+	}
+	step(3 * time.Second)
+	for _, rate := range []float64{250_000, 400_000, 600_000} {
+		sim.sendBps = rate
+		step(time.Second)
+	}
+	// The blip: for 100 ms the receiver holds each packet longer, up to 100 ms, then catches up.
+	blip := sim.now
+	sim.extra = func(at int64) time.Duration {
+		if at < blip || at > blip+int64(100*time.Millisecond) {
+			return 0
+		}
+		return time.Duration(float64(at-blip) / float64(100*time.Millisecond) * float64(100*time.Millisecond))
+	}
+	cuts := sim.tr.estimator.lastDecrease
+	step(10 * time.Second)
+	if sim.tr.estimator.lastDecrease != cuts {
+		t.Errorf("one blip cut the estimate: %+v", sim.tr.estimator.lastDecrease)
+	}
+	if lowest < 0 {
+		t.Errorf("the estimate fell %.0f bps under the rate the path had carried (%.0f bps)", -lowest, floor)
+	}
+}
+
+// A sender at 600 kbps onto a path of 300 kbps loses packets for as long as it
+// sends. The tile, whose lowest layer needs more than the path carries, must
+// pause within 10 s, and resume once the path carries it and a probe
+// has proved that.
+func TestSustainedCongestionPausesAndResumes(t *testing.T) {
+	layers := []layerRate{{rid: "m", bps: 600_000}, {rid: "l", bps: 400_000}}
+	sim := newPathSim(600_000, layers)
+	sim.capacity, sim.maxQueue = 300_000, 300*time.Millisecond
+	start := sim.now
+	for !sim.state.paused && time.Duration(sim.now-start) < 10*time.Second {
+		sim.run(100 * time.Millisecond)
+	}
+	if !sim.state.paused {
+		t.Fatalf("no pause within 10 s of 600 kbps onto 300 kbps; estimate %.0f, lost %d, decrease %+v", sim.estimate(), sim.lost, sim.tr.estimator.lastDecrease)
+	}
+	t.Logf("paused after %v, estimate %.0f, lost %d, decrease %+v", time.Duration(sim.now-start), sim.estimate(), sim.lost, sim.tr.estimator.lastDecrease)
+
+	// The path clears. A proved probe stands in for the padding the node would send.
+	sim.capacity = 0
+	sim.tr.estimator.probeFloor, sim.tr.estimator.probeUntil = 2_000_000, sim.now+int64(time.Minute)
+	sim.tr.estimator.estimate = 2_000_000
+	resumed := sim.now
+	// Pauses back off up to backoffMax, and a resume needs resumeHold of fit.
+	for sim.state.paused && time.Duration(sim.now-resumed) < backoffMax+resumeHold+time.Second {
+		sim.run(100 * time.Millisecond)
+	}
+	if sim.state.paused {
+		t.Fatalf("no resume within the backoff and hold of a clear path and a proved probe")
 	}
 }

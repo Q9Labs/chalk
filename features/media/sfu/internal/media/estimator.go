@@ -88,13 +88,17 @@ type trendline struct {
 	points, next          int
 	deltas                int
 
-	threshold     float64
-	thresholdAt   int64
-	overuseSince  int64
-	overuseRuns   int
-	previousTrend float64
-	signal        delaySignal
-	modifiedTrend float64
+	threshold    float64
+	thresholdAt  int64
+	overuseSince int64
+	overuseRuns  int
+	// hotSince is the receiver time of the first update of the current run of
+	// updates whose trend stays over the threshold, and hotFor how long that run
+	// has lasted. One blip never lasts.
+	hotSince, hotFor int64
+	previousTrend    float64
+	signal           delaySignal
+	modifiedTrend    float64
 }
 
 func (t *trendline) add(sent, arrival int64) {
@@ -160,6 +164,14 @@ func (t *trendline) detect(trend float64, now int64) {
 		t.threshold = thresholdStart
 	}
 	t.modifiedTrend = trend
+	if trend > t.threshold {
+		if t.hotSince == 0 {
+			t.hotSince = now
+		}
+		t.hotFor = now - t.hotSince
+	} else {
+		t.hotSince, t.hotFor = 0, 0
+	}
 	switch {
 	case trend > t.threshold:
 		if t.overuseSince == 0 {
@@ -384,9 +396,12 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.overusingSince = now
 	}
 	// A queue that grows means the path is full: back off below what got through.
-	// Arrivals that keep the pace of the sends show no queue, whatever the delay
-	// trend reads: a sender that sends little cannot tell its path is full.
-	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) {
+	// The trend must stay over its threshold for decreaseSpan, the span a decrease
+	// reads, so one blip of jitter never cuts the estimate. Arrivals that keep the
+	// pace of the sends show no queue either, whatever the trend reads: what a
+	// sender that sends little got through says nothing about what the path carries.
+	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) &&
+		e.trend.hotFor >= int64(decreaseSpan) {
 		if window := e.window(decreaseSpan); window.backlogged() {
 			acked := window.rate()
 			e.lower(causeOveruse, math.Max(decreaseFactor*acked, minEstimate), acked, now)
