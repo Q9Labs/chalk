@@ -76,6 +76,13 @@ CHALK_SFU_CLIENT_KEY_FILE=/run/chalk/provider-bridge/server.key
 CHALK_SFU_STUN_URLS=stun:stun.cloudflare.com:3478
 ```
 
+`CHALK_SFU_CAPTURE_ENABLED` (default `false`) lets the recorder pull from the nodes
+through capture sessions. It needs `CHALK_SFU_ENABLED=true`. While it is off, an
+Episode bound to `chalk_sfu` refuses to start a Recording. Recording also needs the
+recorder fleet: `CHALK_RECORDING_ENABLED=true` and the private provider bridge, because
+the API only registers the own-SFU capture provider when it builds the recorder fleet.
+Nightly (staging) runs with it on. Keep it off in production until M10 recording parity passes.
+
 `CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` entry is a primary;
 `standby:id=url` marks a standby, which takes a new Episode only when every primary is
 silent, draining, host-guard closed or full, and admits at most
