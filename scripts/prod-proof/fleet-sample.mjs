@@ -22,6 +22,7 @@ export function sampleRemote() {
       }
     }
     return {
+      at: performance.now(),
       self: snapshot.self.participantId,
       status: snapshot.connection.status,
       roster: snapshot.participants.roster.map((participant) => participant.participantId),

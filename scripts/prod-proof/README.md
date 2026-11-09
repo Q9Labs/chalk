@@ -166,9 +166,11 @@ pnpm prod:fleet --dry-run --calls 20 --call-hours 2   # no API and no browsers: 
 pnpm prod:fleet --merge machine-1/fleet-calls.json machine-2/fleet-calls.json
 ```
 
-On Instabox, a call of 4 guests costs about one vCPU of the generator, and the camera is 640x360 (`--camera`) to keep
-that down. One 8 vCPU, 16 GiB machine ($0.068 an hour) fits about 6 concurrent calls; 50 call-hours then take about 8 hours
-of wall time. Take the staging lease (`scripts/staging-sfu/staging-lock`) before a run against staging, and release it
+On Instabox, three concurrent three-guest calls measured a load of 0.4 to 0.65 per core on a 4 vCPU machine, so a guest costs
+about 0.2 vCPU and a call of 4 guests about one. The camera is 640x360 (`--camera`) to keep that down. The fleet stops
+starting calls above `--max-load`, so a machine that is too small runs fewer calls rather than failing. By that measure an
+8 vCPU, 16 GiB machine ($0.068 an hour) should fit about 6 calls of 4 guests, and 50 call-hours would take about 8 hours of
+wall time; that scale has not been measured. Take the staging lease (`scripts/staging-sfu/staging-lock`) before a run against staging, and release it
 afterwards. Fault commands need root on the machine; the example blocks all outgoing UDP except DNS, which stops the media path without naming a node address.
 
 ## Manual hosted integrator proof

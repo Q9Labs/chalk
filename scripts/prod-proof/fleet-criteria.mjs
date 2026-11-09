@@ -35,13 +35,18 @@ export function stalledSources(before, after, state) {
   return expectedSources(state, after.self).filter((stream) => !grew(stream, before, after));
 }
 
-// A silent source is a tone at gain 0.15; a muted one must add (almost) no audio energy.
-const leakEnergy = 0.0005;
+// A headless page does not play audio out, so the browser reports no audio energy: audio is judged by bytes per second.
+// The generated tone is about 4 kB/s; a muted microphone sends nothing or DTX comfort noise, far under this line.
+export const audioLeakBytesPerSecond = 1500;
 
-/** Sources of `participantId` that still reach this page after they were turned off: audio energy or camera frames kept growing. */
+const rate = (row, earlier, seconds) => (row.bytes - earlier.bytes) / seconds;
+
+/** Sources of `participantId` that still reach this page after they were turned off: audio bytes or camera frames kept coming. */
 export function leakedSources(before, after, participantId, off) {
   const leaks = [];
-  if (off.includes("microphone") && find(after, [participantId, "microphone", "audio"]).some((row) => find(before, [participantId, "microphone", "audio"]).some((earlier) => earlier.key === row.key && row.energy - earlier.energy > leakEnergy))) leaks.push("microphone");
+  const seconds = Math.max(0.5, (after.at - before.at) / 1000);
+  const audio = [participantId, "microphone", "audio"];
+  if (off.includes("microphone") && find(after, audio).some((row) => find(before, audio).some((earlier) => earlier.key === row.key && rate(row, earlier, seconds) > audioLeakBytesPerSecond))) leaks.push("microphone");
   if (off.includes("camera") && grew([participantId, "camera", "video"], before, after)) leaks.push("camera");
   return leaks;
 }

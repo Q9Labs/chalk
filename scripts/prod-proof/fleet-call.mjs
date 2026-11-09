@@ -87,7 +87,9 @@ async function detectorSees(call, guest, source) {
   await sleep(1000);
   const after = await sampleAll(call.pages);
   const seen = call.pages.some((_, index) => index !== guest && leakedSources(before[index], after[index], call.participants[guest], [source]).includes(source));
-  if (!seen) call.add("detector_blind", `The ${source} of guest ${guest + 1} showed no audio energy or video frames at any other guest before it was turned off`);
+  if (seen) return;
+  call.add("detector_blind", `The ${source} of guest ${guest + 1} showed no audio flow or video frames at any other guest before it was turned off`);
+  await save(join(call.run.directory, `blind-${source}-guest-${guest + 1}.json`), { before, after });
 }
 
 async function toggle(call, guest, source) {
@@ -128,16 +130,26 @@ async function rejoin(call, guest) {
 }
 
 async function provesStall(call) {
-  await sleep(800);
-  const before = await sampleAll(call.pages);
-  await sleep(1500);
-  const after = await sampleAll(call.pages);
   // Camera video is the signal that cannot hide in a jitter buffer: it stalls for every guest or the fault did not bite.
+  // Packets already queued at the provider can keep arriving for a moment, so the stall may start late: poll until the hold is nearly over.
   const cameras = Object.fromEntries(Object.entries(call.state).map(([id, state]) => [id, { microphone: false, camera: state.camera, screen: false }]));
-  return after.every((entry, index) => {
-    const expected = expectedSources(cameras, entry.self).length;
-    return expected === 0 || stalledSources(before[index], entry, cameras).length === expected;
-  });
+  const stalledAt = (before, after) =>
+    after.every((entry, index) => {
+      const expected = expectedSources(cameras, entry.self).length;
+      return expected === 0 || stalledSources(before[index], entry, cameras).length === expected;
+    });
+  const deadline = performance.now() + call.pulse.holdMs - 700;
+  let before = await sampleAll(call.pages);
+  for (;;) {
+    await sleep(1200);
+    const after = await sampleAll(call.pages);
+    if (stalledAt(before, after)) return true;
+    if (performance.now() > deadline) {
+      await save(join(call.run.directory, `not-stalled-${call.record.id}.json`), { state: call.state, before, after });
+      return false;
+    }
+    before = after;
+  }
 }
 
 async function consentHolds(call) {

@@ -3,7 +3,7 @@ import test from "node:test";
 import { callHours, finding, foreignParticipants, leakedSources, missingSources, stalledSources, summarizeFleet, wantsMoreCalls } from "./fleet-criteria.mjs";
 
 const row = (participantId, source, kind, counters, key = `0:${participantId}${source}`) => ({ key, participantId, source, kind, bytes: 0, frames: 0, energy: 0, ...counters });
-const page = (self, rows, extra = {}) => ({ self, roster: ["a", "b"], remote: [], rows, ...extra });
+const page = (self, rows, extra = {}) => ({ at: 0, self, roster: ["a", "b"], remote: [], rows, ...extra });
 const both = { a: { microphone: true, camera: true, screen: false }, b: { microphone: true, camera: true, screen: false } };
 
 test("a call has rendered when every other guest's microphone moved bytes and its camera decoded a frame", () => {
@@ -32,11 +32,13 @@ test("a source is stalled when its counters stay the same, or when it is new bet
   assert.equal(stalledSources(before, replaced, both).length, 2);
 });
 
-test("a muted microphone leaks when its audio energy keeps growing at a receiver", () => {
-  const before = page("a", [row("b", "microphone", "audio", { energy: 1 })]);
-  assert.deepEqual(leakedSources(before, page("a", [row("b", "microphone", "audio", { energy: 1.0001 })]), "b", ["microphone"]), []);
-  assert.deepEqual(leakedSources(before, page("a", [row("b", "microphone", "audio", { energy: 1.4 })]), "b", ["microphone"]), ["microphone"]);
-  assert.deepEqual(leakedSources(before, page("a", []), "b", ["microphone"]), []);
+test("a muted microphone leaks when audio keeps arriving faster than comfort noise", () => {
+  const before = page("a", [row("b", "microphone", "audio", { bytes: 1000 })], { at: 0 });
+  const later = (bytes, at = 1000) => page("a", [row("b", "microphone", "audio", { bytes })], { at });
+  assert.deepEqual(leakedSources(before, later(1400), "b", ["microphone"]), []);
+  assert.deepEqual(leakedSources(before, later(5000), "b", ["microphone"]), ["microphone"]);
+  assert.deepEqual(leakedSources(before, later(5000, 4000), "b", ["microphone"]), []);
+  assert.deepEqual(leakedSources(before, page("a", [], { at: 1000 }), "b", ["microphone"]), []);
 });
 
 test("a camera that is off leaks when frames keep decoding", () => {
