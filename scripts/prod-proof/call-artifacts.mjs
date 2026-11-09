@@ -1,13 +1,12 @@
 import { checkCaptureSlotFree, readCapturePool, waitForCapture } from "./capture-pool.mjs";
-import { generateTurnVoices, turnPhrases } from "./fixture.mjs";
+import { playCall } from "./call-play.mjs";
+import { guestCount, judgeScript } from "./call-script.mjs";
+import { generateTurnVoices } from "./fixture.mjs";
 import { launchGuests } from "./media.mjs";
 import { availableSource, createEpisode, createSpace } from "./proofs.mjs";
-import { checkRecording, recordingEvidence } from "./recording-evidence.mjs";
+import { recordingEvidence, recordingFailures, recordingSignals } from "./recording-evidence.mjs";
 import { check, mediaPlane, save, waitFor } from "./runtime.mjs";
 
-const guestCount = turnPhrases.length;
-// A looping voice cycle is 36 seconds, so a shorter call can end before every guest has spoken.
-const minimumCallSeconds = 40;
 const automatic = { recording: "automatic", transcription: "automatic" };
 // Two distinctive words per guest phrase; one match proves that guest's speech reached the Transcript.
 const keywords = [
@@ -16,12 +15,6 @@ const keywords = [
   ["green falcon", "silver harbor"],
 ];
 
-export function callSeconds(environment = process.env) {
-  const seconds = Number(environment.CHALK_PROOF_CALL_SECONDS ?? 60);
-  check(Number.isFinite(seconds) && seconds >= minimumCallSeconds, `CHALK_PROOF_CALL_SECONDS must be at least ${minimumCallSeconds}`, "configuration");
-  return seconds;
-}
-
 /** Whether the automatic Capture is recording; a failed one throws with the failure code the SDK reports. */
 export function captureReady(current) {
   if (!current) return false;
@@ -29,16 +22,26 @@ export function captureReady(current) {
   return current.status === "recording";
 }
 
-// Three headless Chromium guests each publish a camera and a voice that speaks only in its own slot.
-// The Space's automatic policies must start the Recording and the Transcript without any request.
+/** The public API shows no bundle objects; a Recording source is "available" only once its Capture completed, so these fields stand for the sealed bundles and manifest. */
+export function bundleFailures(recording) {
+  const failures = [];
+  if (recording.source.status !== "available") failures.push(`Recording source is ${recording.source.status}, not available`);
+  if (recording.source.stop_reason) failures.push(`Recording source stopped early: ${recording.source.stop_reason}`);
+  if (recording.storage_provider !== "r2" || !recording.storage_key) failures.push("Recording has no encrypted storage object");
+  if (recording.export.status !== "ready") failures.push(`Recording export is ${recording.export.status}, not ready`);
+  return failures;
+}
+
+// Three headless Chromium guests play the script in call-script.mjs (turns with markers, a mute, a screen share, an optional capture-node restart, a host stop).
+// The Space's automatic policies must start the Recording and the Transcript without any request other than the host's stop.
 export async function captureCall(run, receiver) {
-  const seconds = callSeconds();
   await checkCaptureSlotFree(run);
   const space = await createSpace(run, mediaPlane, automatic);
   const { episode, end, useSDK } = await createEpisode(run, space, automatic);
   run.episodeId = episode.id;
   console.log(`Joining ${guestCount} synthetic camera/voice guests on ${mediaPlane}`);
-  const guests = await launchGuests(run, space, episode, await generateTurnVoices(run.directory, run.signal), receiver.origin, false, guestCount);
+  const { voices, phraseSeconds } = await generateTurnVoices(run.directory, run.signal);
+  const guests = await launchGuests(run, space, episode, voices, receiver.origin, false, guestCount);
   useSDK(guests.pages[0]);
   const others = (guestCount - 1) * 2;
   await waitFor("every guest receives the other guests' camera and microphone", async () =>
@@ -54,8 +57,9 @@ export async function captureCall(run, receiver) {
     readPool: () => readCapturePool(run),
     signal: run.signal,
   });
-  console.log(`All guests connected and Capture ready; holding the call for ${seconds}s`);
-  await run.wait(seconds * 1000);
+  console.log("All guests connected and Capture ready; playing the scripted call");
+  const script = await playCall(run, guests, receiver.origin, phraseSeconds, process.env.CHALK_PROOF_CAPTURE_RESTART_COMMAND);
+  await save(`${run.directory}/call-script.json`, script);
   console.log("Ending own Episode");
   await end();
   for (const page of guests.pages) await page.context().close();
@@ -72,7 +76,7 @@ export async function captureCall(run, receiver) {
   run.recordingId = listed.id;
   const recording = await availableSource(run);
   check(recording.transcription_policy === "automatic", "Recording effective transcription policy is not automatic");
-  return { callSeconds: seconds, recordingId: run.recordingId };
+  return { script, recordingId: run.recordingId };
 }
 
 async function transcriptText(run, transcriptId) {
@@ -132,14 +136,27 @@ async function automaticTranscript(run) {
 
 // The Recording is the MP4 that the export proof downloaded to export.mp4.
 export async function callArtifactsProof(run, captured) {
+  const { script } = captured;
   const checkedRecording = async () => {
-    const evidence = await recordingEvidence(`${run.directory}/export.mp4`, guestCount);
+    const file = `${run.directory}/export.mp4`;
+    const evidence = await recordingEvidence(file, guestCount);
     await save(`${run.directory}/recording-evidence.json`, evidence);
     const { video, audio, durationSeconds, bytes, guests } = evidence;
     console.log(
       `Recording: ${durationSeconds.toFixed(1)}s, ${bytes} bytes, ${video?.decodedFrames ?? 0} decoded frames, audio mean ${audio?.meanDb ?? "none"} dB, guests on camera: ${guests.filter(({ camera }) => camera?.visible).length}/${guestCount}, live tile frames per guest: ${guests.map(({ tile }) => (tile ? `${tile.liveFrames}/${tile.intervals}` : "none")).join(" ")}`,
     );
-    checkRecording(evidence, captured.callSeconds * 0.8);
+    const signals = await recordingSignals(file);
+    const judged = judgeScript(script, signals, durationSeconds);
+    await save(`${run.directory}/script-evidence.json`, { ...judged.measurements, flashes: signals.flashes, silences: signals.silences, tones: signals.tones, failures: judged.failures });
+    console.log(
+      `Script: longest silence ${judged.measurements.longestSilenceMs ?? "unknown"} ms of ${judged.measurements.silenceBoundMs ?? "unknown"} ms allowed; ${judged.measurements.markers?.length ?? 0} markers checked; media ended after mute, unshare, host stop: ${judged.measurements.holds?.map((hold) => `${hold.endedAfterMs} ms`).join(", ") ?? "unknown"}`,
+    );
+    const span = (script.stop.stopMs - script.rounds[0].guests[0].startMs) / 1000;
+    const failures = [...recordingFailures(evidence, span * 0.8), ...judged.failures];
+    const source = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
+    await save(`${run.directory}/recording.json`, source);
+    failures.push(...bundleFailures(source));
+    check(!failures.length, failures.join("; "));
     return evidence;
   };
   // Run both so one failure never hides the other's evidence.

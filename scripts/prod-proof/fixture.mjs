@@ -2,9 +2,8 @@ import { readFile, unlink } from "node:fs/promises";
 import { command } from "./runtime.mjs";
 
 const spokenWords = "The purple lantern shines beside the quiet river. We are testing camera, screen sharing, recording, export, and transcription.";
-// One phrase per guest, spoken in the guest's own slot of a looping three-slot cycle, so the call has no overlapping speech to transcribe.
+// One phrase per guest, spoken in the guest's own slot of a repeating three-slot cycle (call-script.mjs), so the call has no overlapping speech to transcribe.
 export const turnPhrases = ["The purple lantern shines beside the quiet river.", "Seven copper kettles are boiling on the mountain.", "A green falcon crosses the silver harbor at dawn."];
-const turnSlotSeconds = 12;
 async function synthesize(directory, signal, name, words) {
   const target = `${directory}/${name}.wav`;
   if (process.platform === "darwin") {
@@ -20,21 +19,15 @@ async function synthesize(directory, signal, name, words) {
 export async function generateVoice(directory, signal) {
   return (await readFile(await synthesize(directory, signal, "voice", spokenWords))).toString("base64");
 }
-// One looping track per guest: the guest's phrase inside its own slot, silence in the others.
+// One recording per guest: just its phrase. The page schedules every repetition, so all guests share one clock (see installFixture).
 export async function generateTurnVoices(directory, signal) {
-  const cycle = turnPhrases.length * turnSlotSeconds;
-  return Promise.all(
-    turnPhrases.map(async (words, guest) => {
-      const phrase = await synthesize(directory, signal, `turn-${guest + 1}-phrase`, words);
-      const target = `${directory}/turn-${guest + 1}.wav`;
-      await command("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-i", phrase, "-af", `adelay=${guest * turnSlotSeconds * 1000}:all=1,apad=whole_dur=${cycle}`, "-ar", "48000", "-ac", "1", target], { signal });
-      return (await readFile(target)).toString("base64");
-    }),
-  );
+  const phrases = await Promise.all(turnPhrases.map((words, guest) => synthesize(directory, signal, `turn-${guest + 1}`, words)));
+  const phraseSeconds = await Promise.all(phrases.map(async (target) => Number((await command("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target], { signal })).trim())));
+  return { voices: await Promise.all(phrases.map(async (target) => (await readFile(target)).toString("base64"))), phraseSeconds };
 }
 
 // Browser-side generator: animated, distinguishable camera; repeatable spoken audio.
-export function installFixture({ speech, guest, tones = false, voiceGain }) {
+export function installFixture({ speech, guest, tones = false, voiceGain, turns = false }) {
   const NativePC = window.RTCPeerConnection;
   window.proofConnections = [];
   window.RTCPeerConnection = class extends NativePC {
@@ -65,6 +58,13 @@ export function installFixture({ speech, guest, tones = false, voiceGain }) {
     let frame = 0;
     const backgrounds = { before: ["#1b365d", "#613c69", "#5d2a1b"], after: ["#185d45", "#69461d", "#5d1b45"] };
     window.proofCameraTimer = setInterval(() => {
+      const clock = window.proofAudio?.context.currentTime ?? 0;
+      if ((window.proofFlashes ?? []).some((start) => clock >= start && clock < start + window.proofFlashSeconds)) {
+        // The A/V marker: the whole picture goes white while this guest's marker tone sounds.
+        context.fillStyle = "white";
+        context.fillRect(0, 0, 1280, 720);
+        return;
+      }
       context.fillStyle = backgrounds[window.proofPhase ?? "before"][guest % 3];
       context.fillRect(0, 0, 1280, 720);
       context.fillStyle = "white";
@@ -100,7 +100,58 @@ export function installFixture({ speech, guest, tones = false, voiceGain }) {
     }
     return window.proofAudio.destination.stream.getAudioTracks()[0].clone();
   }
-  const audioTrack = tones ? toneVoiceTrack : voiceTrack;
+  const audioTrack = tones ? toneVoiceTrack : turns ? turnTrack : voiceTrack;
+  // Silent until proofStartTurns: the guest publishes its microphone before the scripted call begins.
+  async function turnTrack() {
+    if (!window.proofAudio) {
+      const context = new AudioContext();
+      await context.resume();
+      const bytes = Uint8Array.from(atob(speech), (character) => character.charCodeAt(0));
+      const phrase = await context.decodeAudioData(bytes.buffer);
+      const destination = context.createMediaStreamDestination();
+      window.proofAudio = { context, phrase, destination };
+      // Schedules every marker and phrase of one round on this page's audio clock, anchored on the shared wall-clock start.
+      window.proofStartTurns = ({ loopStartMs, slotSeconds, cycleSeconds, cycles, markerHz, markerSeconds, phraseDelaySeconds, flashSeconds }) => {
+        const wallNow = Date.now();
+        const loopStart = context.currentTime + (loopStartMs - wallNow) / 1000;
+        const markers = Array.from({ length: cycles }, (_, cycle) => loopStart + guest * slotSeconds + cycle * cycleSeconds);
+        for (const marker of markers) {
+          const oscillator = context.createOscillator();
+          oscillator.frequency.value = markerHz[guest];
+          const beep = context.createGain();
+          beep.gain.value = 0.3;
+          oscillator.connect(beep);
+          beep.connect(destination);
+          oscillator.start(marker);
+          oscillator.stop(marker + markerSeconds);
+          const source = context.createBufferSource();
+          source.buffer = phrase;
+          const voice = context.createGain();
+          voice.gain.value = voiceGain ?? 0.8;
+          source.connect(voice);
+          voice.connect(destination);
+          source.start(marker + phraseDelaySeconds);
+        }
+        window.proofFlashSeconds = flashSeconds;
+        window.proofFlashes = [...(window.proofFlashes ?? []), ...markers];
+        // The wall-clock instant at which the loop begins on this page; the proof logs it per guest.
+        return { loopStartMs: Date.now() + (loopStart - context.currentTime) * 1000, lateByMs: Math.max(0, wallNow - loopStartMs), contextState: context.state };
+      };
+      // A continuous tone for the mute and stop checks.
+      window.proofHoldTone = (hz) => {
+        const oscillator = context.createOscillator();
+        oscillator.frequency.value = hz;
+        const level = context.createGain();
+        level.gain.value = 0.2;
+        oscillator.connect(level);
+        level.connect(destination);
+        oscillator.start();
+        window.proofHoldStop = () => oscillator.stop();
+        return Date.now();
+      };
+    }
+    return window.proofAudio.destination.stream.getAudioTracks()[0].clone();
+  }
   async function voiceTrack() {
     if (!window.proofAudio) {
       const context = new AudioContext();
@@ -135,7 +186,10 @@ export function installFixture({ speech, guest, tones = false, voiceGain }) {
   };
 }
 
+// With ?audio=HZ the page also plays that tone, so a shared tab carries screen audio.
 export const shareHTML = `<!doctype html><title>Chalk proof screen share</title><canvas width="1920" height="1080"></canvas><script>
+const hz=Number(new URLSearchParams(location.search).get('audio'));
+if(hz){const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.frequency.value=hz;g.gain.value=0.2;o.connect(g);g.connect(a.destination);o.start();a.resume()}
 const c=document.querySelector('canvas').getContext('2d');let n=0;
 setInterval(()=>{c.fillStyle='#102a43';c.fillRect(0,0,1920,1080);c.fillStyle='#ffffff';c.font='80px sans-serif';c.fillText('Synthetic screen share',80,160);c.fillText('Frame '+n++,80,320);c.fillStyle='#22c55e';c.fillRect((n*20)%1600,500,200,200)},1000/15);
 </script>`;

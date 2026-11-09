@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { analyzeAudio, findFlashes, frameRate, markerHz, screenHz } from "./call-script.mjs";
 import { cameraEvidence, frameSize } from "./recording-rejoin.mjs";
 import { check } from "./runtime.mjs";
 import { decodeFrames, tileEvidence, tileFailure } from "./tile-frames.mjs";
@@ -68,6 +69,31 @@ export async function recordingEvidence(file, guestCount) {
     frameMeans: frames.map(meanChannel),
     guests: Array.from({ length: guestCount }, (_, guest) => ({ guest: guest + 1, camera: frames.length === 3 ? cameraEvidence(frames, "before", guest) : null, tile: tiles[guest] ?? null })),
   };
+}
+
+const audioRate = 16_000;
+const thumbnail = { width: 96, height: 54 };
+const screenGreen = [34, 197, 94]; // The proof's shared screen draws a green square on a dark blue page.
+
+/** The script's marks as found in the Recording: tones, silences and levels from the audio, flashes and the shared screen from the picture. */
+export async function recordingSignals(file) {
+  const { stdout: pcm } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-vn", "-ac", "1", "-ar", String(audioRate), "-f", "f32le", "pipe:1"], { encoding: "buffer" });
+  const audio = analyzeAudio(new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.length - (pcm.length % 4))), audioRate, [...markerHz, screenHz]);
+  const { stdout: raw } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-an", "-vf", `fps=${frameRate},scale=${thumbnail.width}:${thumbnail.height}`, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { encoding: "buffer" });
+  const pixels = thumbnail.width * thumbnail.height;
+  const lumas = [];
+  const green = [];
+  for (let offset = 0; offset + pixels * 3 <= raw.length; offset += pixels * 3) {
+    let luma = 0;
+    let match = 0;
+    for (let index = offset; index < offset + pixels * 3; index += 3) {
+      luma += raw[index] * 0.299 + raw[index + 1] * 0.587 + raw[index + 2] * 0.114;
+      if (Math.abs(raw[index] - screenGreen[0]) + Math.abs(raw[index + 1] - screenGreen[1]) + Math.abs(raw[index + 2] - screenGreen[2]) < 90) match++;
+    }
+    lumas.push(luma / pixels);
+    green.push({ time: green.length / frameRate, share: match / pixels });
+  }
+  return { ...audio, flashes: findFlashes(lumas), green };
 }
 
 export function recordingFailures(evidence, minimumSeconds) {

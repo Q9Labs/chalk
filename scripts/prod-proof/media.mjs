@@ -93,7 +93,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
       // An array of speech tracks gives each guest its own voice at equal volume.
       const ownVoice = Array.isArray(speech);
-      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined });
+      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined, turns: ownVoice });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
       if (options.trace) await context.addInitScript(installLatencyTrace); // After the fixture: it wraps the fixture's RTCPeerConnection.
       const page = await context.newPage();
