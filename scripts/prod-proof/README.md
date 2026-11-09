@@ -82,7 +82,7 @@ xvfb-run -a pnpm prod:latency --environment staging --headed
 timer starts, the way a person waits in a lobby. The Sync socket opened then is already open when `join()` runs, so
 `join.prepare` and `join.sync_connect` read 0. Without the flag the join starts cold. Compare runs only with the same
 setting. Sync closes a socket that gets no hello within 5 s, so `preconnect` replaces an unused socket every 4 s for
-`keepWarmMs` (the proof asks for N + 1 s); the join counts as adopting a socket only when it dialed none of its own.
+`keepWarmMs` (the proof asks for N + 1 s); the join counts as adopting a socket only when its hello went out on a socket opened before the join started.
 Use `--lobby-dwell-ms 10000` to see the keep-warm window: without it the socket from the first second is gone by the join
 and `join.sync_connect` reads a full upgrade.
 
