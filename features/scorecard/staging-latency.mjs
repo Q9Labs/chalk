@@ -75,19 +75,27 @@ function workload(program, args, options = {}) {
 }
 
 async function measure() {
+  let retryPreflight = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     let before = await quietWindow();
     if (attempt === 2) {
-      console.log("Contended attempt; waiting up to 10 minutes for a quiet staging API-log window before one retry.");
-      const deadline = Date.now() + 600_000;
-      while ((!before.events || before.events.length > 0) && Date.now() < deadline) {
-        await delay(Math.min(15_000, deadline - Date.now()));
+      if (retryPreflight) {
+        console.log("Node metrics unavailable before load; retrying the preflight once without starting another workload.");
+        await delay(2_000);
         before = await quietWindow();
+      } else {
+        console.log("Contended attempt; waiting up to 10 minutes for a quiet staging API-log window before one retry.");
+        const deadline = Date.now() + 600_000;
+        while ((!before.events || before.events.length > 0) && Date.now() < deadline) {
+          await delay(Math.min(15_000, deadline - Date.now()));
+          before = await quietWindow();
+        }
       }
     }
     const boundary = before.end;
     const nodeBeforeResult = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
     const nodeBefore = nodeBeforeResult ?? [];
+    const preflightMetricsUnavailable = nodeBeforeResult === null || nodeBefore.length === 0;
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);
@@ -128,7 +136,15 @@ async function measure() {
     if (!before.events || before.events.length > 0 || !after || (card.metrics.length === 0 && !card.contention.unobservable)) card.contention.contended = true;
     await save(card);
     await writeFile(resolve(evidence, `attempt-${attempt}.json`), JSON.stringify(card));
-    if (!card.contention.contended) return status;
+    if (card.contention.contended) continue;
+    if (card.contention.unobservable) {
+      if (attempt === 1 && preflightMetricsUnavailable) {
+        retryPreflight = true;
+        continue;
+      }
+      return 1;
+    }
+    return status;
   }
   return 1;
 }

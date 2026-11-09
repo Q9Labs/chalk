@@ -68,12 +68,16 @@ test("the API-only source never fabricates node readings or accepts zero-event c
   assert.equal(contention({ ...input(), lease: { ...lease, lost: true } }).contended, true);
 });
 
-test("contended values never enter the regression baseline or trends but remain clearly marked in comments", (t) => {
+test("contended and unobservable values never enter the regression baseline or trends", (t) => {
   const clean = card(contention(input()));
   const dirty = card(contention({ ...input(), lease: { ...lease, lost: true } }), 10000, "nightly-2");
-  assert.equal(baselineCard([clean, dirty, { ...dirty, run: { ...dirty.run, id: "nightly-3" } }], "chalk_sfu").metrics[0].p95, 300);
+  const unobservable = card({ ...contention(input()), unobservable: true }, 20000, "nightly-unobservable");
+  assert.equal(baselineCard([clean, dirty, unobservable, { ...dirty, run: { ...dirty.run, id: "nightly-3" } }], "chalk_sfu").metrics[0].p95, 300);
   assert.equal(baselineCard([dirty], "chalk_sfu"), undefined);
-  assert.ok(!trendsMarkdown([clean, dirty], {}).includes("10000"));
+  assert.equal(baselineCard([unobservable], "chalk_sfu"), undefined);
+  const trends = trendsMarkdown([clean, dirty, unobservable], {});
+  assert.ok(!trends.includes("10000"));
+  assert.ok(!trends.includes("20000"));
   const directory = mkdtempSync(join(tmpdir(), "contention-diff-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   writeFileSync(join(directory, "card.json"), JSON.stringify(dirty));
@@ -85,6 +89,11 @@ test("contended values never enter the regression baseline or trends but remain 
   const cleanBreach = spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), "diff", "--current", join(directory, "card.json"), "--fail-on-gate"], { encoding: "utf8" });
   assert.equal(cleanBreach.status, 1);
   assert.match(cleanBreach.stderr, /over a gated budget/);
+  const unavailablePath = join(directory, "unobservable.json");
+  writeFileSync(unavailablePath, JSON.stringify(card({ ...contention(input()), unobservable: true }, 10000)));
+  const unavailable = spawnSync(process.execPath, [resolve(import.meta.dirname, "scorecard.mjs"), "diff", "--current", unavailablePath, "--fail-on-gate"], { encoding: "utf8" });
+  assert.equal(unavailable.status, 0, unavailable.stderr);
+  assert.match(unavailable.stdout, /UNOBSERVABLE/);
 });
 
 test("contention schema rejects resource identifiers, extra fields, and fabricated unavailable values", () => {
@@ -92,7 +101,7 @@ test("contention schema rejects resource identifiers, extra fields, and fabricat
   assert.throws(() => card({ ...value, lease_holder_before: { value: "https://private.example", source: "github_lease" } }), /plain label/);
   assert.throws(() => card({ ...value, episode_id: "private" }), /unknown field/);
   assert.throws(() => card({ ...value, steal_max: { value: 0, source: "unavailable" } }), /needs a source/);
-  assert.throws(() => card({ ...value, steal_max: { value: "unavailable", source: "unavailable" } }), /requires a contended card/);
+  assert.throws(() => card({ ...value, steal_max: { value: "unavailable", source: "unavailable" } }), /requires a contended card unless marked unobservable/);
 });
 
 test("the cut-scoped promotion evaluator fails closed on valid contended cards", async (t) => {
@@ -109,6 +118,7 @@ test("the cut-scoped promotion evaluator fails closed on valid contended cards",
     [300, contention(input()), "passed"],
     [10000, contention(input()), "gated-breach"],
     [300, contention({ ...input(), lease: { ...lease, lost: true } }), "contended"],
+    [300, { ...contention(input()), unobservable: true }, "missing"],
   ]) {
     const current = card(isolation, value);
     current.run.commit = revision;
@@ -124,6 +134,7 @@ test("the cut-scoped promotion evaluator fails closed on valid contended cards",
     } else {
       const verdict = JSON.parse(result.stdout);
       assert.equal(verdict.result, expected);
+      if (expected === "missing") assert.deepEqual(verdict.missing_items, ["chalk_sfu scorecard (unobservable: node metrics unavailable)"]);
       assert.equal(verdict.target_sha, revision);
       assert.equal(verdict.budgets_revision, revision);
       assert.equal(verdict.run_id, "123");

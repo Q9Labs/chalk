@@ -13,10 +13,15 @@ validateBudgetEntries(budgets);
 const metrics = new Set();
 const planes = new Set();
 const measured = new Set();
+const missing = new Set();
 for (const path of paths) {
   const card = parseScorecard(JSON.parse(readFileSync(path, "utf8")));
   if (card.run.commit !== revision || card.run.tier !== "nightly") throw new Error(`${path}: scorecard is not for nightly SHA ${revision}`);
   if (card.contention?.contended === true) throw new Error(`${path}: contended measurement is not promotion evidence`);
+  if (card.contention?.unobservable === true) {
+    missing.add(`${card.mediaPlane} scorecard (unobservable: node metrics unavailable)`);
+    continue;
+  }
   if (card.metrics.length === 0) throw new Error(`${path}: scorecard has no metrics`);
   planes.add(card.mediaPlane);
   if (card.mediaPlane === "chalk_sfu") for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
@@ -24,15 +29,15 @@ for (const path of paths) {
 }
 // Every deployed nightly cut runs the own-SFU proof; a Cloudflare card cannot replace its measurements.
 // The latency kit records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
-const missing = planes.has("chalk_sfu")
-  ? gatedActionIds(budgets, "chalk_sfu")
-      .filter((id) => !measured.has(id))
-      .map((id) => `chalk_sfu.${id}`)
-  : ["chalk_sfu scorecard"];
+if (planes.has("chalk_sfu")) {
+  for (const id of gatedActionIds(budgets, "chalk_sfu")) if (!measured.has(id)) missing.add(`chalk_sfu.${id}`);
+} else if (![...missing].some((item) => item.startsWith("chalk_sfu scorecard"))) {
+  missing.add("chalk_sfu scorecard");
+}
 let result = "passed";
-if (missing.length) result = "missing";
+if (missing.size) result = "missing";
 else if (metrics.size) result = "gated-breach";
-const verdict = { target_sha: revision, run_id: runId, budgets_revision: revision, result, gated_metrics: [...metrics].sort(), missing_items: missing };
+const verdict = { target_sha: revision, run_id: runId, budgets_revision: revision, result, gated_metrics: [...metrics].sort(), missing_items: [...missing].sort() };
 const json = JSON.stringify(verdict);
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `result=${json}\n`);
 console.log(json);

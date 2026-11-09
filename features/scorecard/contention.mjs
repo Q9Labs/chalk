@@ -54,7 +54,7 @@ export function contentionMarkdown(value) {
   const headline = value.unobservable
     ? value.contended
       ? "**⚠️ UNOBSERVABLE AND CONTENDED — isolation could not be established; excluded from regression baselines and trends.**"
-      : "**⚠️ UNOBSERVABLE — isolation could not be established; no load is accepted.**"
+      : "**⚠️ UNOBSERVABLE — isolation could not be established; excluded from regression baselines and trends.**"
     : value.contended
       ? "**⚠️ CONTENDED — diagnostic only; excluded from regression baselines and trends.**"
       : "Lease held; no foreign Episodes observed in the API-log window.";
@@ -62,6 +62,7 @@ export function contentionMarkdown(value) {
   lines.push(`Source: \`${value.source}\`. Foreign Episodes: ${value.foreign_episodes_seen.value}; foreign sessions: ${value.foreign_sessions_seen.value}.`);
   lines.push(`Previous lease holder: \`${value.lease_holder_before.value}\` (${value.lease_acquired_at_before.value} to ${value.lease_expires_at_before.value}).`);
   lines.push(`Node steal max: ${value.steal_max.value}; incarnation changes: ${value.incarnation_changes.value}; drain: ${value.drain.value}.`);
+  if (value.unobservable) lines.push("Node-metrics coverage was incomplete; measured latency is diagnostic only.");
   lines.push(`API-log events before / during / after: ${value.events_before.value} / ${value.window_events.value} / ${value.events_after.value}. Active node state is unavailable; quiet logs do not prove an idle node.`);
   if (value.zero_chalk_sfu_events.value === true) lines.push("**Zero chalk_sfu events in the measurement window: idle node or logging gap; isolation is unverified.**");
   else if (value.own_episode_events.value === 0) lines.push("**No events attributed to this measurement's Episodes; API-log coverage is unverified.**");

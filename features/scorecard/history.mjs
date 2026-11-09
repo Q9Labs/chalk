@@ -30,7 +30,7 @@ export function appendCards(directory, cards) {
   return fresh.length;
 }
 
-const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane && !card.contention?.contended);
+const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane && !card.contention?.contended && !card.contention?.unobservable);
 
 /**
  * baselineCard is the real-node baseline: the median over the last 7 nightly cards of a plane, per metric.

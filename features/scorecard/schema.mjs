@@ -126,7 +126,7 @@ function contentionProblems(value, fail) {
   exactKeys(value, ["contended", "unobservable", "source", ...fields], "contention", fail);
   if (typeof value?.contended !== "boolean" || !["axiom_api_logs_and_github_lease", "axiom_api_logs_and_metrics_and_github_lease"].includes(value?.source)) fail("contention: invalid status or source");
   if (value?.unobservable !== undefined && typeof value.unobservable !== "boolean") fail("contention: unobservable must be a boolean");
-  if (value?.source === "axiom_api_logs_and_metrics_and_github_lease" && value?.steal_max?.value === "unavailable" && !value?.contended && !value?.unobservable) fail("contention: unavailable node steal requires a contended or unobservable card");
+  if (value?.source === "axiom_api_logs_and_metrics_and_github_lease" && value?.steal_max?.value === "unavailable" && !value?.contended && !value?.unobservable) fail("contention: unavailable node steal requires a contended card unless marked unobservable");
   for (const field of fields) {
     const item = value?.[field];
     exactKeys(item, ["value", "source"], `contention.${field}`, fail);

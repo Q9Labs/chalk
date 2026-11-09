@@ -1,0 +1,21 @@
+name: Staging SFU latency
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  staging-latency:
+    name: Own-SFU staging latency
+    permissions:
+      contents: write # The staging lease is a git-ref write; this workflow is latency-only.
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      proofs: none
+      media_plane: chalk_sfu
+      latency: true
+      latency_only: true
+      scorecard_label: chalk_sfu
+    secrets: inherit

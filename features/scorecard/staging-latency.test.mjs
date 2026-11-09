@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false } = {}) {
+function run(t, { token = "synthetic-metrics-token", fail = false, preflightSession = false, foreignJoin = true } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "staging-observation-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, ".private"));
@@ -20,7 +20,7 @@ const cp = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const { EventEmitter } = require("node:events");
-let clock = Date.now(), phase = "before", activeStart, sequence = 0, foreignJoined;
+let clock = Date.now(), phase = "before", activeStart, sequence = 0, foreignJoined, workloadStarted = false;
 const events = [];
 Date.now = () => clock;
 require("node:timers/promises").setTimeout = async (ms) => { clock += ms; };
@@ -28,6 +28,7 @@ cp.execFileSync = () => "a".repeat(40);
 cp.spawn = (program, args, options) => {
   assert.equal(program, "timeout");
   assert.equal(options.env.CHALK_AXIOM_METRICS_QUERY_TOKEN, undefined);
+  workloadStarted = true;
   fs.appendFileSync(".private/workloads-started", "workload\n");
   const id = options.env.CHALK_PROOF_RUN_ID;
   const episode = "own-" + sequence;
@@ -47,7 +48,7 @@ require("node:module").syncBuiltinESMExports();
 globalThis.fetch = async (_url, options) => {
   const body = JSON.parse(options.body);
   if (body.mpl) {
-    if (process.env.TEST_METRICS_FAILURE === "yes") throw new Error("sensitive-response-marker");
+    if (process.env.TEST_METRICS_FAILURE === "yes" || (process.env.TEST_METRICS_FAILURE === "after-workload" && workloadStarted)) throw new Error("sensitive-response-marker");
     const metric = body.mpl.match(/:(?:\x60)([^\x60]+)\x60/)[1];
     if (process.env.TEST_PREFLIGHT_SESSION === "yes") {
       // A persistent session joins while the first historical metric request runs.
@@ -61,7 +62,7 @@ globalThis.fetch = async (_url, options) => {
   if (phase === "before") {
     sequence++;
     // Join after the quiet window but before the workload, then remain API-silent.
-    events.push({ time: Date.parse(body.endTime) + 5000, episode_id: "foreign-" + sequence, session_id: "foreign-session" });
+    if (process.env.TEST_FOREIGN_JOIN === "yes") events.push({ time: Date.parse(body.endTime) + 5000, episode_id: "foreign-" + sequence, session_id: "foreign-session" });
     phase = "preflight";
   } else if (phase === "window") phase = "after";
   else if (phase === "after") phase = "before";
@@ -83,8 +84,9 @@ globalThis.fetch = async (_url, options) => {
       CHALK_AXIOM_METRICS_QUERY_TOKEN: token,
       CHALK_AXIOM_STAGING_METRICS_DATASET: "test-metrics",
       CHALK_AXIOM_METRICS_BASE_URL: "https://us-east-1.aws.edge.axiom.co",
-      TEST_METRICS_FAILURE: fail ? "yes" : "no",
+      TEST_METRICS_FAILURE: fail === true ? "yes" : fail || "no",
       TEST_PREFLIGHT_SESSION: preflightSession ? "yes" : "no",
+      TEST_FOREIGN_JOIN: foreignJoin ? "yes" : "no",
     },
   });
   return { result, card: JSON.parse(readFileSync(join(directory, ".private/latency-scorecard/scorecard-chalk_sfu.json"), "utf8")), summary: join(directory, "summary.md"), directory };
@@ -112,12 +114,27 @@ test("metric failures retain bounded redacted reasons without raw exception text
     ["", false, "staging_metrics_configuration_missing"],
     ["synthetic-metrics-token", true, "staging_metrics_query_unavailable"],
   ]) {
-    const { result, card, summary } = run(t, { token, fail });
+    const { result, card, summary, directory } = run(t, { token, fail, foreignJoin: false });
     assert.equal(result.status, 1, result.stderr);
     assert.ok(result.stderr.includes(reason));
     assert.ok(readFileSync(summary, "utf8").includes(reason));
     assert.ok(!result.stderr.includes("sensitive-response-marker"));
     assert.equal(card.contention.steal_max.value, "unavailable");
-    assert.equal(card.contention.contended, true);
+    assert.equal(card.contention.contended, false);
+    assert.equal(card.contention.unobservable, true);
+    assert.equal(existsSync(join(directory, ".private/workloads-started")), false);
   }
+});
+
+test("postflight metric failure preserves measurements as unobservable and fails closed", (t) => {
+  const { result, card, directory } = run(t, { fail: "after-workload", foreignJoin: false });
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(card.metrics.length, 1);
+  assert.equal(card.contention.contended, false);
+  assert.equal(card.contention.unobservable, true);
+  assert.equal(existsSync(join(directory, ".private/workloads-started")), true);
+  const root = resolve(import.meta.dirname, "../..");
+  const collected = spawnSync(process.execPath, [resolve(import.meta.dirname, "own-sfu.mjs"), join(directory, ".private/latency-scorecard"), "chalk_sfu", "a".repeat(40), join(directory, "artifacts")], { cwd: root, encoding: "utf8" });
+  assert.equal(collected.status, 1, collected.stderr);
+  assert.match(collected.stdout, /unavailable/);
 });
