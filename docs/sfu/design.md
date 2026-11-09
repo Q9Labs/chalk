@@ -126,7 +126,7 @@ The SDK is now under `sdks/typescript/`, not `packages/`.
    replacement require `cloudflare_sfu`; bootstrap contains `connectionId`,
    `stunServer`, optional credentialed `iceServers`. Reuse the same media engine
    for additive `chalk_sfu` grants, updating these checks and native consumers.
-   Old SDKs use Cloudflare only during migration. M12 sunsets those cohorts; an
+   Old SDKs use Cloudflare only during migration, and no sunset is planned; an
    unknown provider must not fall through. Public-invite arrivals follow the same
    rule: an arrival, status poll or refresh that declares `chalk_sfu` in
    `X-Chalk-Media-Providers` can bind and join an own-SFU Episode, one that
@@ -1029,12 +1029,12 @@ audible/rendered media, privacy, recovery and resource budgets, not just HTTP.
 
 M12 performs full cutover only after M8, M10 and M11 pass alongside M1–M7.
 Release compatible shared and React Native SDKs and first-party apps first.
-Inventory every Tenant default, Space override, tenant-managed provider config,
-recording/transcription dependency and active SDK cohort. Migrate explicit
-Cloudflare selectors as well as defaults. Announce and enforce a minimum
-compatible SDK/app version; old clients use Cloudflare only during that bounded
-migration window, then receive an explicit upgrade requirement rather than a
-misdecoded own-provider grant or a permanent Cloudflare exception.
+Inventory every Tenant default, Space override, tenant-managed provider config
+and recording/transcription dependency. Migrate explicit
+Cloudflare selectors as well as defaults. A client that
+does not declare `chalk_sfu` gets Cloudflare or an explicit
+`media.client_unsupported` (409), never a misdecoded own-provider grant. Chalk
+has no outside clients, so no client sunset is planned.
 
 Expand the migration flag by cohort, then set the deployment and every Tenant's
 default to `chalk_sfu`, with no forgotten Space override. New Tenants and Spaces

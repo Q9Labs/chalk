@@ -95,13 +95,14 @@ refresh supplies its own declaration and emits the boolean as usual. Issuances
 without declaration context also omit the tag. The issuance duration metric
 keeps only `outcome` and `reason`.
 
-To choose `CHALK_SFU_CLIENT_SUNSET`, filter the production issuance counter to
-`outcome=issued`. Divide the sum of counter increases with
-`chalk_sfu_declared=false` by the sum across both boolean values in the same
-time window. Exclude all series without the tag, including host-approved legacy
-admissions and older series. This measures credential
+To see how many credential issuances come from clients that do not declare
+`chalk_sfu`, filter the issuance counter to `outcome=issued`. Divide the sum of
+counter increases with `chalk_sfu_declared=false` by the sum across both boolean
+values in the same time window. Exclude all series without the tag, including
+host-approved legacy admissions and older series. This measures credential
 issuances, including refreshes, not unique participants or all join attempts:
-requests rejected before credential issuance do not increment this counter.
+requests rejected before credential issuance do not increment this counter. No
+sunset is planned, so no threshold on this share gates anything.
 
 ### Compare call quality by connection type
 
@@ -557,9 +558,10 @@ without the `overflow_*` reason.
 The same reason and the node's boot incarnation are frozen in the Episode binding
 (`placement_reason`, `node_incarnation`), so a past overflow stays findable.
 
-After `CHALK_SFU_CLIENT_SUNSET`, an Episode start that is refused because the client cannot run the own
-SFU logs `chalk_sfu.client_refused` with the bounded reason `client_sunset` and no Tenant or user data
-(see [Client sunset](../infrastructure/sfu/README.md#client-sunset)).
+When `CHALK_SFU_CLIENT_SUNSET` is set, which no deployment plans, an Episode start
+refused because the client cannot run the own SFU logs `chalk_sfu.client_refused`
+with the bounded reason `client_sunset` and no Tenant or user data (see
+[Client sunset](../infrastructure/sfu/README.md#client-sunset)).
 
 A rate from the totals is exact over any window. A stream that closes between two
 100 ms control ticks loses that tick's counts, so totals can run slightly under
