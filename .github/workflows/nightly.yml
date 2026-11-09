@@ -91,9 +91,10 @@ jobs:
   cf-sfu-latency:
     permissions:
       contents: read
-    # Cloudflare's action latency from the same runner and kit as own-sfu, for comparison. It runs after own-sfu so its
-    # API traffic is not in the own-SFU contention window, and it never holds the cut: record does not need it.
-    # The job and step timeouts are the 50 and 25 minutes of every other plane; 20 cycles take about 15.
+    # Warn-only Cloudflare action latency from the same runner and kit as own-sfu. Nothing lists this job in needs, so
+    # its result, timeout or cancellation cannot skip or delay scorecard, record or the verdict. It starts after own-sfu so
+    # its API traffic is not in the own-SFU contention window, and it runs in its own concurrency group.
+    # The 35-minute job and 25-minute step caps bound how long it keeps this run open; 20 cycles take about 15 minutes.
     needs: [plan, release, own-sfu]
     if: always() && needs.release.result == 'success'
     uses: ./.github/workflows/real-call-proof.yml
@@ -105,6 +106,40 @@ jobs:
       release_sha: ${{ needs.plan.outputs.target_sha }}
       scorecard_label: cf_sfu
     secrets: inherit
+  cf-sfu-history:
+    # Adds the Cloudflare card to the history after the fact. Nothing needs this job, the card is in an artifact the gate
+    # never downloads, and the history step never touches the regression issue.
+    needs: [plan, cf-sfu-latency]
+    if: always() && needs.plan.outputs.should_cut == 'true' && needs.cf-sfu-latency.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Download the Cloudflare latency card
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: warn-scorecard-nightly-*
+          path: artifacts/warn
+          merge-multiple: true
+      - name: Add the Cloudflare card to the history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCORECARD_WARN_ONLY: "true"
+        run: |
+          cards=$(find artifacts/warn -name "scorecard-*.json" 2> /dev/null || true)
+          if [ -z "$cards" ]; then
+            echo "No Cloudflare latency card in this run."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          features/scorecard/nightly.sh $cards
   web-e2e:
     needs: [release, proof]
     uses: ./.github/workflows/web-call-proof.yml
@@ -152,7 +187,7 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, own-sfu, cf-sfu-latency]
+    needs: [plan, proof, own-sfu]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     outputs:

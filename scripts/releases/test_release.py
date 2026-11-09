@@ -475,5 +475,33 @@ class OwnSfuPromotionTests(unittest.TestCase):
                 self.assertEqual(json.loads(saved)['run']['commit'], SHA)
 
 
+    def test_warn_only_nightly_saves_history_and_never_touches_the_issue(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            remote = directory / 'history.git'
+            subprocess.run(['git', 'init', '--bare', '--quiet', str(remote)], check=True)
+            bin_dir = directory / 'bin'
+            bin_dir.mkdir()
+            calls = directory / 'gh-calls'
+            gh = bin_dir / 'gh'
+            gh.write_text(f'#!/bin/sh\necho "$@" >> {calls}\nexit 0\n')
+            gh.chmod(0o755)
+            path = directory / 'card.json'
+            path.write_text(json.dumps(fixture))
+            environment = {**os.environ, 'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
+                           'SCORECARD_HISTORY_REMOTE': str(remote), 'GITHUB_REPOSITORY': 'Q9Labs/chalk',
+                           'GITHUB_SERVER_URL': 'https://github.com', 'GITHUB_RUN_ID': RUN,
+                           'GITHUB_STEP_SUMMARY': str(directory / 'summary'), 'GIT_CONFIG_GLOBAL': os.devnull,
+                           'GIT_CONFIG_NOSYSTEM': '1', 'SCORECARD_WARN_ONLY': 'true'}
+            result = subprocess.run(['bash', 'features/scorecard/nightly.sh', str(path)], cwd=release.ROOT,
+                                    env=environment, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            saved = subprocess.check_output(['git', '--git-dir', str(remote), 'show',
+                                             'scorecard-history:history.jsonl'], text=True)
+            self.assertEqual(json.loads(saved)['run']['commit'], SHA)
+            self.assertFalse(calls.exists(), 'a warn-only run must not call gh')
+
+
 if __name__ == '__main__':
     unittest.main()

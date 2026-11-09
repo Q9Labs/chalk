@@ -2,6 +2,7 @@
 # The nightly tier of the scorecard: compare scorecards from a real-node run with the median of the last seven nightly runs,
 # append them to the history branch, and keep one "scorecard regression" issue open while a gated metric is over its budget.
 # Usage: nightly.sh <scorecard.json>...   (run from the repository root; needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY)
+# With SCORECARD_WARN_ONLY=true it only compares and appends to the history: it never opens, edits or closes the regression issue and always exits 0.
 set -euo pipefail
 
 scorecard="node features/scorecard/scorecard.mjs"
@@ -53,6 +54,10 @@ for attempt in 1 2 3; do
   [[ "${attempt}" -eq 3 ]] && { echo "Could not push the scorecard history." >&2; exit 1; }
   clone_history
 done
+
+if [[ "${SCORECARD_WARN_ONLY:-}" == true ]]; then
+  exit 0
+fi
 
 number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label scorecard-regression --state open --json number --jq '.[0].number // empty')"
 if [[ "${regressions}" -eq 1 ]]; then
