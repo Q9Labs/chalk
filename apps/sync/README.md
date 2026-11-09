@@ -243,6 +243,33 @@ PEM file is missing or malformed, and readiness actively verifies the mTLS-only
 bridge endpoint. The seven-second bridge request budget remains shorter than the
 eight-second durable-operation consumer budget.
 
+## Direct connections
+
+A TLS proxy on the host can accept `/v1/sync` upgrades without the Tunnel (see
+[the operator runbook](../../docs/operators/direct-sync-path.md)). The proxy
+overwrites `Cf-Connecting-Ip` with the TCP peer and sets `X-Chalk-Ingress:
+direct`. Sync trusts the marker only to choose stricter bounds, so a client that
+sets it on the Tunnel limits only itself. Without the marker nothing changes.
+
+`ChalkSync.Transport.DirectLimits` keeps the bounds as disposable node-local
+state, with monitors that release a slot when its socket process exits. It does
+not touch the Episode coordinators or Postgres, so the tenant-and-Episode
+authority is unchanged. A restart forgets every count, and the limiter fails
+closed (503) when it cannot answer or tracks too many IPs.
+
+| Bound                                   | Default     | Variable                                       | Result when exceeded                  |
+| --------------------------------------- | ----------- | ---------------------------------------------- | ------------------------------------- |
+| Upgrades per IP in a 10 second window   | 20          | `CHALK_SYNC_DIRECT_UPGRADES_PER_IP_WINDOW`     | 429 before the upgrade                |
+| Sockets per IP                          | 64          | `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_IP`         | 429 before the upgrade, or close 1013 |
+| Sockets per IP that sent no `hello` yet | 8           | `CHALK_SYNC_DIRECT_MAX_UNAUTHENTICATED_PER_IP` | 429 before the upgrade, or close 1013 |
+| Sockets per tenant                      | 512         | `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT`     | close 1013 at `hello`                 |
+| Frame size                              | 65536 bytes | none                                           | close 1009 (Bandit)                   |
+
+The existing 5 second `hello` timeout applies to direct sockets too. The count
+of tracked IPs is bounded (8192). Decisions appear as
+`chalk.sync.direct.admission.<outcome>.<stage>` metrics and as the `ingress`
+attribute on `sync.websocket.handshake`.
+
 ## Observability
 
 `ChalkSync.Observability` provides the observability boundary. It emits stable

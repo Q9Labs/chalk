@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Installs, removes and checks the direct Sync TLS proxy on one managed host.
+#
+#   CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install
+#   direct-sync-proxy status      fails when the proxy is down or its certificate expires within 14 days
+#   direct-sync-proxy remove      stops and removes the proxy; --purge also deletes the certificate store
+#
+# The script changes only this proxy. It never touches the Chalk runtime units, Sync or the Tunnel.
+set -euo pipefail
+
+caddy_version=2.11.9
+caddy_sha512_amd64=0e85544340290a16ce4bfb76fe7d65e9de1bf3a6e67f5ccfff30b30d27ea4c73e078077b7bf3e58ae60b6b12e44327705287059c775bca5782e8ee85ea7edd75
+caddy_sha512_arm64=9e5e76d7888542924de2c25353ae87c5f77e2a22c5b1198633cae13688922282e05383d142599205c88d8d80eee5e967d291214d7abce4835329a191b20dd6e0
+min_certificate_days=14
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+install_dir=/opt/chalk-direct-sync
+config_dir=/etc/chalk-direct-sync
+state_dir=/var/lib/chalk-direct-sync
+unit=chalk-direct-sync-proxy.service
+unit_path="/etc/systemd/system/${unit}"
+
+fail() {
+  printf 'direct-sync-proxy: %s\n' "$*" >&2
+  exit 1
+}
+
+require_root() {
+  [[ "$(id -u)" == 0 ]] || fail 'run as root'
+}
+
+install_proxy() {
+  require_root
+  local host="${CHALK_DIRECT_SYNC_HOST:-}"
+  [[ "$host" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
+    || fail 'set CHALK_DIRECT_SYNC_HOST to a lowercase hostname'
+
+  local arch expected
+  case "$(uname -m)" in
+    x86_64) arch=amd64 expected="$caddy_sha512_amd64" ;;
+    aarch64) arch=arm64 expected="$caddy_sha512_arm64" ;;
+    *) fail "unsupported architecture $(uname -m)" ;;
+  esac
+
+  local work archive
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  archive="caddy_${caddy_version}_linux_${arch}.tar.gz"
+  curl --fail --silent --show-error --location --output "${work}/${archive}" \
+    "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}"
+  [[ "$(sha512sum "${work}/${archive}" | cut -d' ' -f1)" == "$expected" ]] || fail "checksum mismatch for ${archive}"
+  tar -xzf "${work}/${archive}" -C "$work" caddy
+
+  install -d -m 0755 "$install_dir" "$config_dir"
+  install -m 0755 "${work}/caddy" "${install_dir}/caddy.new"
+  mv -f "${install_dir}/caddy.new" "${install_dir}/caddy"
+  install -m 0644 "${here}/Caddyfile" "${config_dir}/Caddyfile"
+  CHALK_DIRECT_SYNC_HOST="$host" "${install_dir}/caddy" validate --config "${config_dir}/Caddyfile" --adapter caddyfile >/dev/null
+  sed "s|__DIRECT_SYNC_HOST__|${host}|" "${here}/chalk-direct-sync-proxy.service.in" >"$unit_path"
+  chmod 0644 "$unit_path"
+
+  systemctl daemon-reload
+  systemctl enable "$unit" >/dev/null
+  systemctl restart "$unit"
+  printf 'installed %s for %s; run "direct-sync-proxy status" once DNS and port 443 reach this host\n' "$unit" "$host"
+}
+
+remove_proxy() {
+  require_root
+  systemctl disable --now "$unit" 2>/dev/null || true
+  rm -f "$unit_path"
+  rm -rf "$install_dir" "$config_dir"
+  if [[ "${1:-}" == --purge ]]; then
+    rm -rf "$state_dir" /var/lib/private/chalk-direct-sync
+  fi
+  systemctl daemon-reload
+  printf 'removed %s\n' "$unit"
+}
+
+served_certificate() {
+  echo | openssl s_client -connect 127.0.0.1:443 -servername "$1" 2>/dev/null | openssl x509 -noout "${@:2}" 2>/dev/null
+}
+
+status_proxy() {
+  systemctl is-active --quiet "$unit" || fail "${unit} is not active (journalctl -u ${unit})"
+  local host not_after
+  host="$(sed -n 's/^Environment=CHALK_DIRECT_SYNC_HOST=//p' "$unit_path")"
+  not_after="$(served_certificate "$host" -enddate | cut -d= -f2)"
+  [[ -n "$not_after" ]] || fail "no certificate served yet: issuance is pending or failing (journalctl -u ${unit} | grep -i acme)"
+  served_certificate "$host" -checkend $((min_certificate_days * 86400)) >/dev/null \
+    || fail "certificate expires within ${min_certificate_days} days (notAfter ${not_after}); renewal is failing"
+  printf 'ok: %s active, certificate valid until %s\n' "$unit" "$not_after"
+}
+
+case "${1:-}" in
+  install) install_proxy ;;
+  remove) remove_proxy "${2:-}" ;;
+  status) status_proxy ;;
+  *) fail 'usage: direct-sync-proxy install | status | remove [--purge]' ;;
+esac

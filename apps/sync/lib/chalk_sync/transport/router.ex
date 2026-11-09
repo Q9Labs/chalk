@@ -92,7 +92,7 @@ defmodule ChalkSync.Transport.Router do
             media_off_reason: conn.query_params["media_off_reason"] == "1",
             participant_self_identity: conn.query_params["participant_device_admissions"] == "2",
             entry_generation: entry_generation(conn.query_params["entry_generation"]),
-            connection_attributes: connection_attributes,
+            connection_attributes: with_ingress(connection_attributes, direct),
             direct: direct
           },
           [timeout: 120_000] ++ direct_upgrade_options(direct)
@@ -112,6 +112,9 @@ defmodule ChalkSync.Transport.Router do
       {:ok, nil}
     end
   end
+
+  defp with_ingress(attributes, nil), do: attributes
+  defp with_ingress(attributes, %{}), do: Map.put(attributes, :ingress, "direct")
 
   defp direct_upgrade_options(nil), do: []
   defp direct_upgrade_options(%{}), do: [max_frame_size: DirectLimits.max_frame_bytes()]
