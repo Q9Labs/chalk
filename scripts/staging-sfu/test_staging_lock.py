@@ -168,7 +168,9 @@ time.sleep(120)
 
         args = SimpleNamespace(remote=self.remote, holder="nightly-proof", purpose="camera-share", run_id="cut-run", wait=wait, ttl=180, evidence=None,
                                command=[sys.executable, "-c", f"open({str(started)!r}, 'w').close()"])
-        with mock.patch.object(lock.time, "monotonic", lambda: clock[0]), mock.patch.object(lock.time, "sleep", sleep), contextlib.redirect_stderr(io.StringIO()):
+        # Swap the lock's own `time` name, not the stdlib module's functions: subprocess polls with time.sleep while a
+        # loaded machine runs git, and a process-wide fake would re-enter the release above with a stale lease.
+        with mock.patch.object(lock, "time", SimpleNamespace(monotonic=lambda: clock[0], sleep=sleep)), contextlib.redirect_stderr(io.StringIO()):
             status = lock.run(args)
         return status, started.exists(), clock[0]
 
