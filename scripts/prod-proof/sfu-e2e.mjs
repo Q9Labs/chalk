@@ -133,7 +133,7 @@ const scenarios = {
     const silenced = await proveSilenceFrom(guests, 0);
     await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(true));
     const back = await proveAudioDecoded(guests, { members: [0, 1] });
-    const pick = ({ listener, speaker, peakDb, floorDb, bin, lastDb }) => ({ listener, speaker, peakDb, floorDb, bin, lastDb });
+    const pick = ({ listener, speaker, peakDb, floorDb, bin, lastDb, track }) => ({ listener, speaker, peakDb, floorDb, bin, lastDb, track });
     return { ...heard, mutedGuest: 1, silence: silenced.map(pick), unmuted: back.filter((verdict) => verdict.speaker === 1).map(pick) };
   },
 
