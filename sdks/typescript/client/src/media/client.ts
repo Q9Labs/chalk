@@ -1995,7 +1995,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #createPeerConnection(bootstrap: CloudflareSFUBootstrap): RTCPeerConnection {
     const create = this.#peerConnectionFactory ?? ((configuration: RTCConfiguration) => new RTCPeerConnection(configuration));
-    return create({ iceServers: iceServersFor(bootstrap), bundlePolicy: "max-bundle" });
+    return create({ iceServers: iceServersFor(bootstrap), bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 });
   }
   #rebuildPeerConnection(bootstrap: CloudflareSFUBootstrap, generation: number, connectionEpoch: number): void {
     try {

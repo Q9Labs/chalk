@@ -45,6 +45,11 @@ it("does not publish a microphone muted during remote connection replacement", a
   );
 });
 
+it("starts ICE candidate gathering when the peer connection is created", () => {
+  const { peerConnectionFactory } = createHarness();
+  expect(peerConnectionFactory).toHaveBeenCalledWith(expect.objectContaining({ bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 }));
+});
+
 function bootstrap(connectionId: string): CloudflareSFUBootstrap {
   return { connectionId, stunServer: "stun:example.test" };
 }
