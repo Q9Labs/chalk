@@ -92,8 +92,10 @@ until the M7 canary.
 ## Client sunset
 
 An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is
-Cloudflare-only. Until the sunset, a new Episode in an allowlisted Space starts on
-Cloudflare for such a client. `CHALK_SFU_CLIENT_SUNSET` sets the end of that:
+Cloudflare-only, and a new Episode in an allowlisted Space starts on Cloudflare
+for such a client. `CHALK_SFU_CLIENT_SUNSET` can end that, but no sunset is
+planned: Chalk has no outside clients, and the only users, our sister companies,
+stay off Chalk until the own SFU is stable. The setting exists and stays unset.
 
 ```sh
 CHALK_SFU_CLIENT_SUNSET=2027-01-15T00:00:00Z
@@ -115,15 +117,13 @@ Each refusal logs `event=chalk_sfu.client_refused reason=client_sunset` with no
 Tenant or user data, because the request log keeps only the 409 status. Count that
 event to see who still runs old builds after the date.
 
-Run the sunset in this order, with no permanent Cloudflare cohort:
+To undo the setting, unset the variable and redeploy. New Episodes of old clients
+return to Cloudflare at once.
 
-1. Release first-party apps and SDKs that declare `chalk_sfu`, and announce the date.
-2. Wait until those builds are in both app stores, then set the date at least 30 days later.
-3. Set `CHALK_SFU_CLIENT_SUNSET` in the private API settings and redeploy. From the date on, old clients get the 409.
-4. To roll back, unset the variable and redeploy. New Episodes of old clients return to Cloudflare at once.
-
-After the date passes, check that the npm release `@q9labsai/chalk-client@5.4.1`, which does not declare `chalk_sfu`, gets the 409
-when it creates an Episode in an allowlisted Space, and that its `ChalkAPIError.code` is `media.client_unsupported`.
+To check the setting in a non-production deployment, set a past instant and
+confirm that the npm release `@q9labsai/chalk-client@5.4.1`, which does not
+declare `chalk_sfu`, gets the 409 when it creates an Episode in an allowlisted
+Space, and that its `ChalkAPIError.code` is `media.client_unsupported`.
 
 ## Run the canary
 

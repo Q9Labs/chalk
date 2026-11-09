@@ -73,8 +73,8 @@ See [admission](design.md#admission-and-the-single-node-envelope).
 
 Advertise capabilities but leave server adaptation/ICE restart false until their
 milestones pass. Reject capture before reserving work until M10 supplies it.
-Keep incompatible SDK cohorts on Cloudflare only during migration; M12 upgrades
-or sunsets them and makes the own provider the default for all Tenants/Spaces.
+Keep SDKs that do not declare `chalk_sfu` on Cloudflare during migration; M12
+makes the own provider the default for all Tenants/Spaces.
 Do not implement multi-node failover or the full-cutover operation in this lane.
 
 **Files:** `apps/api/internal/{adapters/chalksfu,adapters/mediaplaneproviders,
@@ -543,7 +543,7 @@ calls until it is rebuilt. This plan makes that outcome explicit and bounded
 instead of hiding it, and does not claim redundancy. Calling the bench-proved
 standby role "production failover" would be false while production has one node.
 
-## M12 — Full cutover, cohort sunset and monitoring parity
+## M12 — Full cutover and monitoring parity
 
 **Dependencies:** rollout requires M1–M8, M10 and M11 packages 1–6, with package 5's fault proofs passing. The
 inventory, SDK version policy, monitoring and dashboards start now and run in
@@ -557,12 +557,15 @@ lead.
    inactive settings and live bindings by provider, plus recording and
    transcription dependencies. Output is sanitized counts only. Usage and
    count meanings: [provider inventory](provider-inventory.md).
-2. **Client release and sunset (starts now).** Release compatible browser/shared
-   SDKs, React Native SDKs and first-party apps before selection changes.
-   Inventory old releases, set a bounded upgrade window and minimum version, and
-   return an actionable upgrade response at sunset. Never send an unknown grant to
-   an old decoder, and keep no indefinite Cloudflare cohort. `CHALK_SFU_CLIENT_SUNSET` turns the refusal on
-   (see [Client sunset](../../infrastructure/sfu/README.md#client-sunset)).
+2. **Client release (starts now).** Release compatible browser/shared SDKs,
+   React Native SDKs and first-party apps before selection changes. Chalk has no
+   outside clients: the only users are our sister companies, and they stay off
+   Chalk until the own SFU is stable, so no client sunset is planned. Never send
+   an unknown grant to an old decoder. A client that does not declare
+   `chalk_sfu` gets Cloudflare, or `media.client_unsupported` (409) when it joins
+   a live own-SFU Episode. The `CHALK_SFU_CLIENT_SUNSET` setting exists, stays
+   unset, and nothing builds on it (see
+   [Client sunset](../../infrastructure/sfu/README.md#client-sunset)).
 3. **Monitoring parity (starts now).** Provider-aware client stats, rendered-media
    and listener-heal evidence, API/SFU/capture failure alarms, latency/loss/freeze,
    packet admission, node health/drain/repair, and TURN credential and relay
@@ -601,9 +604,10 @@ lead.
    Leave, mic/camera toggle and the rest) has no samples and `gated-breach` when
    one is over budget, and `scripts/releases/release.py` refuses a held cut
    without a passing scorecard unless `scorecard_override` gives a written reason.
-   When counts show every Tenant and Space on the own provider and the last
-   compatible-client check passes, the SFU lead sets `CHALK_SFU_CLOUDFLARE_OVERFLOW`
-   off; that moment starts M13's window.
+   When counts show every Tenant and Space on the own provider, the SFU lead sets
+   `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
+   No production Promote of a commit that contains #965 until the production SFU
+   runs a build that accepts `allocationGeneration`.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 
@@ -625,7 +629,7 @@ Audit counts show every Tenant and Space resolves to the own provider
 for new Episodes, and live bindings and traffic counts agree with the flag. Each
 supported browser and real iOS and Android builds pass join, refresh,
 restart/replacement, every source, relay-only paths and recording/transcription.
-Unsupported versions get the upgrade response. Matched peak cohorts compare
+A client that does not declare `chalk_sfu` gets Cloudflare or the 409 above. Matched peak cohorts compare
 success, rendered latency/freezes, recovery and capacity under M6/M7 gates.
 Injected API, SFU, TURN, capture and cleanup faults fire their alarms with
 journey correlation. Publish sanitized counts and proof, no Tenant identifiers
@@ -635,11 +639,9 @@ or private queries.
 where they are. Rehearsed in package 5 before the flip is called complete.
 
 **Needs the owner:** the production flag flips and deploys are routine for the
-SFU lead. A minimum-client-version cutoff date that shuts out real users is
-direction and needs the owner's date.
+SFU lead.
 
-**Risk:** flipping only a process default leaves explicit Space selectors, old app
-installs, capture and vendor-specific support queries behind. Counts of bindings
+**Risk:** flipping only a process default leaves explicit Space selectors, capture and vendor-specific support queries behind. Counts of bindings
 and actual traffic, not a checked flag, prove full cutover.
 
 ## M13 — Cloudflare SFU retirement and removal
@@ -656,10 +658,10 @@ separate from TURN.
    the audit shows it unused.
 2. **Observation window.** Starts when M12 package 4 finishes. It lasts **7
    consecutive days**, including at least two evening peaks and one matched
-   synthetic peak, with every Tenant, Space and supported client cohort on the
-   own provider. The earlier 30-day figure assumed busy traffic; Chalk has no
-   active users, so a calendar window would add waiting and no evidence. The
-   window extends until the criteria hold, and the owner can lengthen it.
+   synthetic peak, with every Tenant and Space on the
+   own provider. Chalk has no active users, so a longer calendar window would add
+   waiting and no evidence. The window extends until the criteria hold, and the
+   owner can lengthen it.
    Require no unresolved privacy, media, recording or capacity regression,
    passing M11 capacity and drain proofs, zero Cloudflare overflow including
    during deploy and failure drills, zero Cloudflare SFU signaling, and at its end

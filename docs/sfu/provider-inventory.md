@@ -1,7 +1,7 @@
 # Media provider inventory
 
 `apps/api/cmd/media-provider-inventory` is the audited query set for
-[M12](milestones.md#m12--full-cutover-cohort-sunset-and-monitoring-parity)
+[M12](milestones.md#m12--full-cutover-and-monitoring-parity)
 package 1 and the post-cutover checks. It counts Tenants, Spaces, live
 Episodes and recording dependencies by media provider (`cf_sfu`, `chalk_sfu`)
 and prints sanitized counts only.
