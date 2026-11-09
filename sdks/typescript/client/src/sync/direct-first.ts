@@ -4,61 +4,49 @@ import type { SyncClock, SyncSocket, SyncWebSocketFactory } from "./types";
 export const DIRECT_SYNC_ATTEMPT_TIMEOUT_MS = 2_500;
 /** After a failed direct attempt, later connections skip the direct path for this long. */
 export const DIRECT_SYNC_FAILURE_MEMORY_MS = 10 * 60_000;
-const MAX_REMEMBERED_HOSTS = 8;
 
-/** Remembers which direct hosts failed, so a blocked path is not retried on every reconnect. */
-export type DirectPathMemory = {
-  readonly isFailed: (host: string, now: number) => boolean;
-  readonly markFailed: (host: string, until: number) => void;
+type Clock = Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
+
+/** Host to the time until which its direct path is skipped. Shared by every client in the page. */
+export type DirectPathMemory = Map<string, number>;
+
+const sharedMemory: DirectPathMemory = new Map();
+
+const defaultClock: Clock = {
+  now: () => Date.now(),
+  setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
+  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
 };
-
-export function createDirectPathMemory(): DirectPathMemory {
-  const failedUntil = new Map<string, number>();
-  return {
-    isFailed: (host, now) => (failedUntil.get(host) ?? 0) > now,
-    markFailed: (host, until) => {
-      failedUntil.delete(host);
-      failedUntil.set(host, until);
-      for (const oldest of failedUntil.keys()) {
-        if (failedUntil.size <= MAX_REMEMBERED_HOSTS) break;
-        failedUntil.delete(oldest);
-      }
-    },
-  };
-}
-
-// Shared by every client in the page, so a new Episode does not rediscover a blocked path.
-const sharedMemory = createDirectPathMemory();
 
 export type DirectFirstOptions = {
   /** The direct Sync URL; only its scheme and host replace the Tunnel URL's. */
   readonly directUrl: string;
   readonly inner: SyncWebSocketFactory;
-  readonly clock?: Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
+  readonly clock?: Clock;
   readonly attemptTimeoutMs?: number;
   readonly failureMemoryMs?: number;
   readonly memory?: DirectPathMemory;
 };
 
 /**
- * Opens the direct Sync socket first and falls back to the Tunnel URL when the direct
- * attempt fails before it opens (connect error, TLS failure, timeout) or when the direct
- * proxy turns the client away. The fallback is invisible to the client: it sees one socket.
+ * Opens the direct Sync socket first and falls back to the Tunnel URL when the direct attempt fails
+ * before its first server frame (connect error, TLS failure, timeout, a proxy bound). The fallback is
+ * invisible to the client: it sees one socket. A failed direct path is skipped for a bounded time.
  */
 export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): SyncWebSocketFactory {
-  const directHost = new URL(options.directUrl).host;
+  const direct = new URL(options.directUrl);
   const clock = options.clock ?? defaultClock;
   const memory = options.memory ?? sharedMemory;
-  const settings = {
-    attemptTimeoutMs: options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS,
-    failureMemoryMs: options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS,
-  };
   return {
     connect(tunnelUrl) {
+      const url = new URL(tunnelUrl);
       // The hello frame carries the token, so a secure Tunnel URL never falls to a plain direct one.
-      if (downgrades(tunnelUrl, options.directUrl) || memory.isFailed(directHost, clock.now())) return options.inner.connect(tunnelUrl);
-      const markFailed = () => memory.markFailed(directHost, clock.now() + settings.failureMemoryMs);
-      return new DirectFirstSocket(options.inner, directUrlFor(tunnelUrl, options.directUrl), tunnelUrl, clock, settings.attemptTimeoutMs, markFailed);
+      const downgrade = url.protocol === "wss:" && direct.protocol !== "wss:";
+      if (downgrade || (memory.get(direct.host) ?? 0) > clock.now()) return options.inner.connect(tunnelUrl);
+      url.protocol = direct.protocol;
+      url.host = direct.host;
+      const markFailed = () => memory.set(direct.host, clock.now() + (options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS));
+      return new DirectFirstSocket(options.inner, url.toString(), tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed);
     },
   };
 }
@@ -68,24 +56,6 @@ export function directFirstSyncOptions(directUrl: string | null | undefined, inn
   return directUrl ? { webSocket: createDirectFirstWebSocketFactory({ directUrl, inner }) } : {};
 }
 
-function downgrades(tunnelUrl: string, directUrl: string): boolean {
-  return new URL(tunnelUrl).protocol === "wss:" && new URL(directUrl).protocol !== "wss:";
-}
-
-function directUrlFor(tunnelUrl: string, directUrl: string): string {
-  const url = new URL(tunnelUrl);
-  const direct = new URL(directUrl);
-  url.protocol = direct.protocol;
-  url.host = direct.host;
-  return url.toString();
-}
-
-const defaultClock: Pick<SyncClock, "now" | "setTimeout" | "clearTimeout"> = {
-  now: () => Date.now(),
-  setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
-  clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
-};
-
 class DirectFirstSocket implements SyncSocket {
   onopen: (() => void) | null = null;
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
@@ -93,27 +63,27 @@ class DirectFirstSocket implements SyncSocket {
   onerror: (() => void) | null = null;
   #active: SyncSocket | undefined;
   #state: "trying_direct" | "direct" | "tunnel" | "closed" = "trying_direct";
-  #receivedFromDirect = false;
+  #frames = false;
   #timer: unknown;
 
   constructor(
     private readonly inner: SyncWebSocketFactory,
     directUrl: string,
     private readonly tunnelUrl: string,
-    private readonly clock: Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">,
+    private readonly clock: Clock,
     attemptTimeoutMs: number,
-    private readonly markDirectFailed: () => void,
+    private readonly markFailed: () => void,
   ) {
     try {
-      this.#active = this.inner.connect(directUrl);
+      this.#active = inner.connect(directUrl);
     } catch {
       // Nobody listens yet: a Tunnel failure here must reach the caller as a constructor error.
-      this.markDirectFailed();
+      this.markFailed();
       this.#openTunnel();
       return;
     }
     this.#attach(this.#active, "direct");
-    this.#timer = this.clock.setTimeout(() => this.#fallBack(), attemptTimeoutMs);
+    this.#timer = clock.setTimeout(() => this.#fallBack(), attemptTimeoutMs);
   }
 
   send(data: string): void {
@@ -129,6 +99,8 @@ class DirectFirstSocket implements SyncSocket {
 
   #attach(socket: SyncSocket, path: "direct" | "tunnel"): void {
     const live = () => this.#active === socket && this.#state !== "closed";
+    // An upgrade that never delivers a server frame (a proxy bound, a blocked path, a reset after hello) failed the direct attempt.
+    const failedEarly = () => path === "direct" && !this.#frames;
     socket.onopen = () => {
       if (!live()) return;
       this.clock.clearTimeout(this.#timer);
@@ -137,50 +109,38 @@ class DirectFirstSocket implements SyncSocket {
     };
     socket.onmessage = (event) => {
       if (!live()) return;
-      this.#receivedFromDirect = this.#receivedFromDirect || path === "direct";
+      this.#frames ||= path === "direct";
       this.onmessage?.(event);
     };
     socket.onerror = () => {
       if (!live()) return;
-      if (this.#state === "trying_direct") {
-        this.#fallBack();
-        return;
-      }
-      if (this.#failedBeforeFirstFrame(path)) this.markDirectFailed();
+      if (this.#state === "trying_direct") return this.#fallBack();
+      if (failedEarly()) this.markFailed();
       this.onerror?.();
     };
     socket.onclose = (event) => {
       if (this.#active !== socket) return;
       // After close() the client still needs the close event, for example to reconnect after a heartbeat timeout.
-      if (this.#state === "closed") {
-        this.onclose?.(event);
-        return;
-      }
-      if (this.#state === "trying_direct") {
-        this.#fallBack();
-        return;
-      }
-      if (this.#failedBeforeFirstFrame(path)) this.markDirectFailed();
+      if (this.#state === "trying_direct") return this.#fallBack();
+      if (this.#state !== "closed" && failedEarly()) this.markFailed();
       this.onclose?.(event);
     };
   }
 
-  // An upgrade that succeeds but never delivers a server frame (a proxy bound, a blocked path, a reset after
-  // hello) is a failed direct attempt: the next connection takes the Tunnel.
-  #failedBeforeFirstFrame(path: "direct" | "tunnel"): boolean {
-    return path === "direct" && !this.#receivedFromDirect;
-  }
-
   #fallBack(): void {
-    if (this.#state !== "trying_direct") return;
     this.clock.clearTimeout(this.#timer);
-    this.markDirectFailed();
-    abandon(this.#active);
+    this.markFailed();
+    const abandoned = this.#active;
     try {
       this.#openTunnel();
     } catch {
       this.onerror?.();
       this.onclose?.({ code: 1006, wasClean: false });
+    }
+    try {
+      abandoned?.close();
+    } catch {
+      // The abandoned socket may already be closed.
     }
   }
 
@@ -189,18 +149,5 @@ class DirectFirstSocket implements SyncSocket {
     this.#active = undefined;
     this.#active = this.inner.connect(this.tunnelUrl);
     this.#attach(this.#active, "tunnel");
-  }
-}
-
-function abandon(socket: SyncSocket | undefined): void {
-  if (!socket) return;
-  socket.onopen = null;
-  socket.onmessage = null;
-  socket.onerror = null;
-  socket.onclose = null;
-  try {
-    socket.close();
-  } catch {
-    // The abandoned socket may already be closed.
   }
 }

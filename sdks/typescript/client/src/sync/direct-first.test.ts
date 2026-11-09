@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDirectFirstWebSocketFactory, createDirectPathMemory, directFirstSyncOptions } from "./direct-first";
+import { createDirectFirstWebSocketFactory, directFirstSyncOptions } from "./direct-first";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
 
 const TUNNEL = "wss://tunnel.example.test/v1/sync?entry_generation=new&entry_confirmation=1";
@@ -55,7 +55,7 @@ function harness(options: { readonly innerThrowsFor?: (url: string) => boolean }
     }
   };
   const factory = () => createDirectFirstWebSocketFactory({ directUrl: DIRECT, inner, clock, memory });
-  const memory = createDirectPathMemory();
+  const memory = new Map<string, number>();
   return { sockets, advance, factory, memory, urls: () => sockets.map((socket) => socket.url) };
 }
 
@@ -111,7 +111,7 @@ describe("direct-first Sync socket", () => {
     sockets[0]!.onclose?.({ code: 1006, reason: "", wasClean: false });
 
     expect(urls()).toEqual([DIRECT_ATTEMPT, TUNNEL]);
-    expect(memory.isFailed("direct.example.test", 1_001)).toBe(true);
+    expect(memory.get("direct.example.test")).toBeGreaterThan(1_001);
     sockets[1]!.onopen?.();
     socket.close();
   });

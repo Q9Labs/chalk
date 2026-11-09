@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { V1SyncClient } from "./v1-client";
-import { createDirectFirstWebSocketFactory, createDirectPathMemory } from "./direct-first";
+import { createDirectFirstWebSocketFactory } from "./direct-first";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
 class Socket implements SyncSocket {
   onopen: SyncSocket["onopen"] = null;
@@ -27,7 +27,7 @@ for (const wrapped of [false, true]) {
         return s;
       },
     };
-    const factory = wrapped ? createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: createDirectPathMemory() }) : inner;
+    const factory = wrapped ? createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: new Map<string, number>() }) : inner;
     const client = new V1SyncClient({
       url: "wss://tunnel.example.test/v1/sync",
       token: async () => {
@@ -57,7 +57,7 @@ for (const wrapped of [false, true]) {
         return s;
       },
     };
-    const factory = wrapped ? createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: createDirectPathMemory() }) : inner;
+    const factory = wrapped ? createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: new Map<string, number>() }) : inner;
     const client = new V1SyncClient({ url: "wss://tunnel.example.test/v1/sync", token: async () => "test-token", webSocket: factory, reconnectDelayMs: 250 });
     try {
       await client.start();
@@ -82,7 +82,7 @@ it("never sends the token over a plain direct URL when the Tunnel URL is secure"
       return s;
     },
   };
-  const factory = createDirectFirstWebSocketFactory({ directUrl: "ws://direct.example.test/v1/sync", inner, memory: createDirectPathMemory() });
+  const factory = createDirectFirstWebSocketFactory({ directUrl: "ws://direct.example.test/v1/sync", inner, memory: new Map<string, number>() });
   const client = new V1SyncClient({ url: "wss://tunnel.example.test/v1/sync", token: async () => "dummy-review-token", webSocket: factory });
   try {
     await client.start();
@@ -106,7 +106,7 @@ it("uses the healthy Tunnel after repeated direct closes before any server frame
       return s;
     },
   };
-  const factory = createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: createDirectPathMemory() });
+  const factory = createDirectFirstWebSocketFactory({ directUrl: "wss://direct.example.test/v1/sync", inner, memory: new Map<string, number>() });
   const client = new V1SyncClient({ url: "wss://tunnel.example.test/v1/sync", token: async () => "dummy-review-token", webSocket: factory, reconnectDelayMs: 250 });
   try {
     await client.start();
