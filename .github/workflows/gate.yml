@@ -294,7 +294,16 @@ jobs:
         if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
         env:
           LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
+          ROOT_LANES_RESULT: ${{ needs.root-lanes.result }}
         run: |
+          missing=0
+          for shard in 1 2 3; do
+            if [[ ! -f "artifacts/call-leaks-${shard}.json" ]]; then
+              echo "::error::Shard call-leaks-${shard} left no report. Its job was never created, or it failed before it saved one (root lane groups: ${ROOT_LANES_RESULT})."
+              missing=1
+            fi
+          done
+          [[ "${missing}" == "0" ]]
           node --input-type=module <<'JS'
           const shards = JSON.parse(process.env.LEAK_GROUPS).filter((group) => group.startsWith("call-leaks-"));
           if (shards.length && JSON.stringify(shards.sort()) !== JSON.stringify(["call-leaks-1", "call-leaks-2", "call-leaks-3"])) throw new Error("Incomplete leak shard plan");
