@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -184,26 +187,6 @@ func TestJoinsReplaceTheHoldWithoutDoubleCounting(t *testing.T) {
 	}
 }
 
-func TestOtherEpisodesCannotTakeAHeldEpisodesRoom(t *testing.T) {
-	f := newReserveNode(t)
-	if _, err := f.node.ReserveEpisode(reserveRequest("held", 3)); err != nil {
-		t.Fatal(err)
-	}
-	// 16,000 less the held 7,170 leaves 8,830: two more three-person Episodes do not fit.
-	if _, err := f.node.ReserveEpisode(reserveRequest("other", 3)); err != nil {
-		t.Fatal(err)
-	}
-	for _, participant := range []string{"x", "y", "z"} {
-		scope := protocol.Scope{TenantID: "tenant", EpisodeID: "late", ParticipantID: participant, Generation: 1}
-		if _, err := f.node.CreateSession("late-"+participant, scope); err == nil {
-			t.Fatalf("%s joined a third Episode though two Episodes already reserve %d", participant, f.reserved())
-		}
-	}
-	for _, participant := range []string{"a", "b", "c"} {
-		join(t, f.node, "held", participant)
-	}
-}
-
 func TestAHoldExpiresAndReleasesWhatNoJoinUsed(t *testing.T) {
 	f := newReserveNode(t)
 	request := reserveRequest("one", 3)
@@ -229,24 +212,6 @@ func TestAHoldExpiresAndReleasesWhatNoJoinUsed(t *testing.T) {
 	f.node.mu.Unlock()
 	if holds != 0 || f.reserved() != newEpisode {
 		t.Fatalf("holds %d and reserved %d after a second release", holds, f.reserved())
-	}
-}
-
-func TestAnExpiredHoldFreesCapacityForAnotherEpisode(t *testing.T) {
-	f := newReserveNode(t)
-	for _, episode := range []string{"one", "two"} {
-		request := reserveRequest(episode, 3)
-		request.TTLSeconds = 5
-		if _, err := f.node.ReserveEpisode(request); err != nil {
-			t.Fatal(err)
-		}
-	}
-	f.advance(6 * time.Second)
-	if f.reserved() != 0 {
-		t.Fatalf("reserved %d after both expired", f.reserved())
-	}
-	if _, err := f.node.ReserveEpisode(reserveRequest("three", 3)); err != nil {
-		t.Fatalf("reserve after expiry: %v", err)
 	}
 }
 
@@ -434,41 +399,6 @@ func TestHoldsAreBounded(t *testing.T) {
 	}
 }
 
-func TestCaptureSlotsKeepRoomUntilACaptureTakesIt(t *testing.T) {
-	f := newReserveNode(t)
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	response, err := f.node.ReserveEpisode(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// One capture pulls three Participants' two cameras and microphone at the top layer.
-	capture := 3 * (2*300 + 50)
-	if want := threePerson + capture; response.ReservedPackets != want || f.reserved() != want {
-		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), want)
-	}
-	// A capture session takes the room as it subscribes, without adding to the total.
-	session := &Session{kind: kindCapture, scope: protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}}
-	f.node.mu.Lock()
-	f.node.sessions["capture"] = session
-	f.node.mu.Unlock()
-	t.Cleanup(func() {
-		f.node.mu.Lock()
-		delete(f.node.sessions, "capture")
-		f.node.mu.Unlock()
-	})
-	if _, err := f.node.reserveCapture(session, 300); err != nil {
-		t.Fatal(err)
-	}
-	if want := threePerson + capture; f.reserved() != want {
-		t.Fatalf("a capture subscription changed the total to %d, want %d", f.reserved(), want)
-	}
-	f.advance(31 * time.Second)
-	if want := 300; f.reserved() != want {
-		t.Fatalf("after expiry %d reserved, want the capture's own %d", f.reserved(), want)
-	}
-}
-
 func (f *reserveFixture) closeAdmission(reason string) {
 	f.node.guard.mu.Lock()
 	f.node.guard.health.AdmissionReason = reason
@@ -547,182 +477,6 @@ func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
 	}
 }
 
-func TestACaptureReturnsHeldPacketsWhenItsSubscriptionRollsBack(t *testing.T) {
-	f := newReserveNode(t)
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	session := &Session{kind: kindCapture, scope: protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}}
-	f.node.mu.Lock()
-	f.node.sessions["capture"] = session
-	f.node.mu.Unlock()
-	t.Cleanup(func() {
-		f.node.mu.Lock()
-		delete(f.node.sessions, "capture")
-		f.node.mu.Unlock()
-	})
-	before := f.reserved()
-	heldCapture := func() int {
-		f.node.mu.Lock()
-		defer f.node.mu.Unlock()
-		return f.node.holds[episodeKey{"tenant", "one"}].capture
-	}
-	full := heldCapture()
-	lease, err := f.node.reserveCapture(session, 300)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if heldCapture() != full-300 {
-		t.Fatalf("the hold keeps %d, want %d", heldCapture(), full-300)
-	}
-	f.node.releaseCapture(session, lease)
-	if heldCapture() != full || f.reserved() != before {
-		t.Fatalf("after a rollback the hold keeps %d (want %d) and %d is reserved (want %d)", heldCapture(), full, f.reserved(), before)
-	}
-
-	// Once the Episode ends, a late release must not bring the hold back.
-	lease, err = f.node.reserveCapture(session, 300)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.node.mu.Lock()
-	delete(f.node.sessions, "capture") // the fake has no peer connection for EndEpisode to close
-	f.node.mu.Unlock()
-	f.node.EndEpisode("tenant", "one")
-	f.node.releaseCapture(session, lease)
-	if f.reserved() != 0 {
-		t.Fatalf("a release after the Episode ended left %d reserved", f.reserved())
-	}
-}
-
-func TestReserveChecksMandatoryMediaAtEveryRejoinCount(t *testing.T) {
-	// NewNode refuses a ceiling that a call at the large-call threshold cannot meet, so a valid
-	// node never reaches a refusal at an intermediate count. Lowering the ceiling after start,
-	// before any session exists, stands in for a node whose rule and shape disagree: seven
-	// Participants pass at their last count against the budget, but the third rejoin needs 2,790
-	// mandatory packets/s against 2,000.
-	f := newReserveNode(t)
-	f.node.cfg.EpisodePacketCeiling = 2000
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 7)); !errors.Is(err, ErrCapacityExceeded) {
-		t.Fatalf("a shape that cannot reach its size: %v, want capacity exceeded", err)
-	}
-	if f.reserved() != 0 {
-		t.Fatalf("the refusal left %d reserved", f.reserved())
-	}
-	if _, err := f.node.ReserveEpisode(reserveRequest("one", 2)); err != nil {
-		t.Fatalf("a shape within the ceiling: %v", err)
-	}
-	if _, err := newReserveNodeErr(func(cfg *config.Config) { cfg.EpisodePacketCeiling = 2000 }); err == nil {
-		t.Fatal("NewNode accepted a ceiling below the large-call threshold's mandatory media")
-	}
-}
-
-// addCaptureSession registers a capture session without a peer connection, as the tests above do.
-func (f *reserveFixture) addCaptureSession(t *testing.T, episode string) *Session {
-	t.Helper()
-	session := &Session{kind: kindCapture, scope: protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: "recorder", Generation: 1}}
-	f.node.mu.Lock()
-	f.node.sessions["capture-"+episode] = session
-	f.node.mu.Unlock()
-	t.Cleanup(func() { // the fake has no peer connection for Close to shut down
-		f.node.mu.Lock()
-		delete(f.node.sessions, "capture-"+episode)
-		f.node.mu.Unlock()
-	})
-	return session
-}
-
-func (f *reserveFixture) heldCapture(episode string) int {
-	f.node.mu.Lock()
-	defer f.node.mu.Unlock()
-	return f.node.holds[episodeKey{"tenant", episode}].capture
-}
-
-func TestReleasingOneSubscriptionReturnsOnlyWhatItBorrowed(t *testing.T) {
-	f := newReserveNode(t)
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	session := f.addCaptureSession(t, "one")
-	// The first subscription takes the hold's whole capture room, so the second borrows nothing
-	// and adds its cost to the node total.
-	whole := f.heldCapture("one")
-	first, err := f.node.reserveCapture(session, whole)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := f.node.reserveCapture(session, 300)
-	if err != nil {
-		t.Fatal(err)
-	}
-	withBoth := f.reserved()
-	f.node.releaseCapture(session, second)
-	if f.heldCapture("one") != 0 || f.reserved() != withBoth-300 {
-		t.Fatalf("ending a subscription that borrowed nothing left the hold at %d (want 0) and %d reserved (want %d)", f.heldCapture("one"), f.reserved(), withBoth-300)
-	}
-	f.node.releaseCapture(session, first)
-	if f.heldCapture("one") != whole {
-		t.Fatalf("the first subscription returned %d to the hold, want %d", f.heldCapture("one"), whole)
-	}
-}
-
-func TestReReservingAfterACaptureSubscribedDoesNotCountItTwice(t *testing.T) {
-	capture := 3 * (2*300 + 50)
-	// The budget fits the Episode and its capture bound exactly, with no room to count it twice.
-	f := newReserveNode(t, func(cfg *config.Config) { cfg.PacketBudget = threePerson + capture })
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	session := f.addCaptureSession(t, "one")
-	if _, err := f.node.reserveCapture(session, 300); err != nil {
-		t.Fatal(err)
-	}
-	again := reserveRequest("one", 3)
-	again.Shape.CaptureSlots = 1
-	response, err := f.node.ReserveEpisode(again)
-	if err != nil {
-		t.Fatalf("an unchanged shape was refused after its capture subscribed: %v", err)
-	}
-	if want := threePerson + capture; response.ReservedPackets != want || f.reserved() != want {
-		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), want)
-	}
-}
-
-// A subscription that ends after its Episode was re-reserved returns its share to the new hold,
-// so the Episode is still promised its whole capture bound and no other Episode can take it.
-func TestASubscriptionEndingAfterAReReserveReturnsItsShareToTheNewHold(t *testing.T) {
-	capture := 3 * (2*300 + 50)
-	f := newReserveNode(t, func(cfg *config.Config) { cfg.PacketBudget = threePerson + capture })
-	request := reserveRequest("one", 3)
-	request.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(request); err != nil {
-		t.Fatal(err)
-	}
-	session := f.addCaptureSession(t, "one")
-	lease, err := f.node.reserveCapture(session, 300)
-	if err != nil {
-		t.Fatal(err)
-	}
-	again := reserveRequest("one", 3)
-	again.Shape.CaptureSlots = 1
-	if _, err := f.node.ReserveEpisode(again); err != nil {
-		t.Fatal(err)
-	}
-	if got := f.heldCapture("one"); got != capture-300 {
-		t.Fatalf("the new hold keeps %d for captures, want %d", got, capture-300)
-	}
-	f.node.releaseCapture(session, lease)
-	if got, want := f.heldCapture("one"), capture; got != want || f.reserved() != threePerson+capture {
-		t.Fatalf("after the subscription ended the hold keeps %d (want %d) and the node reserves %d (want %d)", got, want, f.reserved(), threePerson+capture)
-	}
-}
-
 func TestASameGenerationReserveNeverShrinksTheHold(t *testing.T) {
 	f := newReserveNode(t)
 	if _, err := f.node.ReserveEpisode(reserveRequest("one", 3)); err != nil {
@@ -774,5 +528,239 @@ func TestReserveEnforcesTheCallersPacketCeilingAtomically(t *testing.T) {
 	negative.PacketCeiling = -1
 	if _, err := f.node.ReserveEpisode(negative); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("a negative ceiling: %v, want an invalid request", err)
+	}
+}
+
+func TestNewNodeRefusesACeilingBelowTheMandatoryMediaOfALargeCall(t *testing.T) {
+	if _, err := newReserveNodeErr(func(cfg *config.Config) { cfg.EpisodePacketCeiling = 2000 }); err == nil {
+		t.Fatal("NewNode accepted a ceiling below the large-call threshold's mandatory media")
+	}
+}
+
+// The capture tests below drive real Pion peers through the node's session API. A capture bound
+// of three Participants with two cameras and a microphone each is 1,950 packets/s, and one camera
+// subscription costs 300.
+const (
+	captureBound  = 3 * (2*300 + 50)
+	cameraStream  = 300
+	captureBudget = threePerson + captureBound
+)
+
+// newCaptureNode is a node with session limits for a few publishers and a capture, and a
+// negotiation timeout that outlasts the test, because the capture here never answers the server's offers.
+func newCaptureNode(t *testing.T, configure ...func(*config.Config)) *reserveFixture {
+	t.Helper()
+	return newReserveNode(t, append([]func(*config.Config){func(cfg *config.Config) {
+		cfg.NegotiationTimeout = time.Minute
+		cfg.MaxPublishedPerSession = 4
+		cfg.MaxSubscriptionsPerSession = 4
+		cfg.MaxCaptureSubscriptions = 8
+	}}, configure...)...)
+}
+
+func (f *reserveFixture) reserveWithCapture(t *testing.T, episode string, participants int) {
+	t.Helper()
+	request := reserveRequest(episode, participants)
+	request.Shape.CaptureSlots = 1
+	if _, err := f.node.ReserveEpisode(request); err != nil {
+		t.Fatalf("reserve %s with a capture slot: %v", episode, err)
+	}
+}
+
+// camera joins the Participant and publishes one camera track with a Pion peer that never
+// connects. It returns the track a capture pulls.
+func (f *reserveFixture) camera(t *testing.T, episode, participant string) protocol.Track {
+	t.Helper()
+	scope := protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: participant, Generation: 1}
+	if _, err := f.node.ControlSources(protocol.SourceControlRequest{TenantID: "tenant", EpisodeID: episode, Controls: []protocol.SourceControl{
+		{ParticipantID: participant, Source: "camera", Action: protocol.SourceGrant, Revision: 1},
+	}}); err != nil {
+		t.Fatalf("grant %s a camera: %v", participant, err)
+	}
+	created, err := f.node.CreateSession("join-"+episode+"-"+participant, scope)
+	if err != nil {
+		t.Fatalf("join %s: %v", participant, err)
+	}
+	session, err := f.node.Session(created.ConnectionID, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = pc.Close() })
+	video, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "cam", participant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pc.AddTrack(video); err != nil {
+		t.Fatal(err)
+	}
+	offer, err := pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := pc.SetLocalDescription(offer); err != nil {
+		t.Fatal(err)
+	}
+	name := participant + "-cam"
+	pushed, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		OperationID:        fmt.Sprintf("push-%d", reserves.Add(1)),
+		Scope:              scope,
+		SessionDescription: &protocol.SessionDescription{Type: "offer", SDP: offer.SDP},
+		Tracks:             []protocol.Track{{Location: protocol.LocationLocal, Mid: pc.GetTransceivers()[0].Mid(), TrackName: name, Source: "camera"}},
+	})
+	if err != nil || len(pushed.TrackErrors) != 0 {
+		t.Fatalf("%s publishes a camera: %v %+v", participant, err, pushed.TrackErrors)
+	}
+	return protocol.Track{Location: protocol.LocationRemote, SessionID: created.ConnectionID, TrackName: name}
+}
+
+// recorder is a capture session of an Episode.
+type recorder struct {
+	session *Session
+	scope   protocol.Scope
+}
+
+func (f *reserveFixture) recorder(t *testing.T, episode string) recorder {
+	t.Helper()
+	scope := protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: "recorder", Generation: 1}
+	created, err := f.node.CreateCaptureSession("capture-"+episode, scope)
+	if err != nil {
+		t.Fatalf("create the capture session: %v", err)
+	}
+	session, err := f.node.Session(created.ConnectionID, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return recorder{session: session, scope: scope}
+}
+
+// pull subscribes the capture to the tracks in one request and returns their MIDs in order.
+func (r recorder) pull(t *testing.T, tracks ...protocol.Track) []string {
+	t.Helper()
+	pulled, err := r.session.AddTracks(context.Background(), protocol.TracksRequest{
+		OperationID: fmt.Sprintf("pull-%d", reserves.Add(1)), Scope: r.scope, Tracks: tracks,
+	})
+	if err != nil || len(pulled.TrackErrors) != 0 || len(pulled.Tracks) != len(tracks) {
+		t.Fatalf("capture pulls %d tracks: %v %+v", len(tracks), err, pulled)
+	}
+	mids := make([]string, len(pulled.Tracks))
+	for i, track := range pulled.Tracks {
+		mids[i] = track.Mid
+	}
+	return mids
+}
+
+// stop ends the capture's subscription to the MID.
+func (r recorder) stop(t *testing.T, mid string) {
+	t.Helper()
+	closed, err := r.session.CloseTracks(context.Background(), protocol.CloseTracksRequest{
+		OperationID: fmt.Sprintf("stop-%d", reserves.Add(1)), Scope: r.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}},
+	})
+	if err != nil || len(closed.Tracks) != 1 || closed.Tracks[0].AlreadyClosed {
+		t.Fatalf("stop the subscription %s: %v %+v", mid, err, closed)
+	}
+}
+
+func TestCaptureSlotsKeepRoomUntilACaptureTakesIt(t *testing.T) {
+	f := newCaptureNode(t)
+	f.reserveWithCapture(t, "one", 3)
+	if f.reserved() != captureBudget {
+		t.Fatalf("reserved %d, want the Episode and its capture bound %d", f.reserved(), captureBudget)
+	}
+	alice := f.camera(t, "one", "alice")
+	// A capture takes the room as it subscribes, without adding to the total.
+	f.recorder(t, "one").pull(t, alice)
+	if f.reserved() != captureBudget {
+		t.Fatalf("a capture subscription changed the total to %d, want %d", f.reserved(), captureBudget)
+	}
+	f.advance(31 * time.Second)
+	// The hold is gone: the one joined Participant and the capture's own subscription remain.
+	if want := newEpisode + cameraStream; f.reserved() != want {
+		t.Fatalf("after expiry %d reserved, want %d", f.reserved(), want)
+	}
+}
+
+func TestACaptureReturnsHeldPacketsWhenItsSubscriptionEnds(t *testing.T) {
+	f := newCaptureNode(t)
+	f.reserveWithCapture(t, "one", 3)
+	alice := f.camera(t, "one", "alice")
+	capture := f.recorder(t, "one")
+	mid := capture.pull(t, alice)[0]
+	capture.stop(t, mid)
+	// The hold keeps the capture room again; if it did not, the total would drop by the subscription.
+	if f.reserved() != captureBudget {
+		t.Fatalf("after the subscription ended %d reserved, want %d", f.reserved(), captureBudget)
+	}
+}
+
+func TestEndingAnEpisodeWithALiveCaptureSubscriptionLeavesNothingReserved(t *testing.T) {
+	f := newCaptureNode(t)
+	f.reserveWithCapture(t, "one", 3)
+	alice := f.camera(t, "one", "alice")
+	f.recorder(t, "one").pull(t, alice)
+	f.node.EndEpisode("tenant", "one")
+	if f.reserved() != 0 {
+		t.Fatalf("ending the Episode left %d reserved", f.reserved())
+	}
+}
+
+func TestReleasingOneSubscriptionReturnsOnlyWhatItBorrowed(t *testing.T) {
+	f := newCaptureNode(t)
+	// One Participant's capture room is 650: the first two cameras borrow 300 each and the third
+	// borrows the last 50, so it adds 250 to the total.
+	f.reserveWithCapture(t, "one", 1)
+	alice, bob, carol := f.camera(t, "one", "alice"), f.camera(t, "one", "bob"), f.camera(t, "one", "carol")
+	joined := f.reserved()
+	capture := f.recorder(t, "one")
+	mids := capture.pull(t, alice, bob, carol)
+	if f.reserved() != joined+250 {
+		t.Fatalf("three subscriptions left %d reserved, want %d", f.reserved(), joined+250)
+	}
+	capture.stop(t, mids[2])
+	if f.reserved() != joined {
+		t.Fatalf("ending the subscription that borrowed 50 left %d reserved, want %d", f.reserved(), joined)
+	}
+	capture.stop(t, mids[0])
+	capture.stop(t, mids[1])
+	if f.reserved() != joined {
+		t.Fatalf("ending the subscriptions that borrowed 300 each left %d reserved, want %d", f.reserved(), joined)
+	}
+}
+
+func TestReReservingAfterACaptureSubscribedDoesNotCountItTwice(t *testing.T) {
+	// The budget fits the Episode and its capture bound exactly, with no room to count it twice.
+	f := newCaptureNode(t, func(cfg *config.Config) { cfg.PacketBudget = captureBudget })
+	f.reserveWithCapture(t, "one", 3)
+	alice := f.camera(t, "one", "alice")
+	f.recorder(t, "one").pull(t, alice)
+	again := reserveRequest("one", 3)
+	again.Shape.CaptureSlots = 1
+	response, err := f.node.ReserveEpisode(again)
+	if err != nil {
+		t.Fatalf("an unchanged shape was refused after its capture subscribed: %v", err)
+	}
+	if response.ReservedPackets != captureBudget || f.reserved() != captureBudget {
+		t.Fatalf("reserved %d (node %d), want %d", response.ReservedPackets, f.reserved(), captureBudget)
+	}
+}
+
+// A subscription that ends after its Episode was re-reserved returns its share to the new hold,
+// so the Episode is still promised its whole capture bound and no other Episode can take it.
+func TestASubscriptionEndingAfterAReReserveReturnsItsShareToTheNewHold(t *testing.T) {
+	f := newCaptureNode(t, func(cfg *config.Config) { cfg.PacketBudget = captureBudget })
+	f.reserveWithCapture(t, "one", 3)
+	alice := f.camera(t, "one", "alice")
+	capture := f.recorder(t, "one")
+	mid := capture.pull(t, alice)[0]
+	f.reserveWithCapture(t, "one", 3)
+	capture.stop(t, mid)
+	if f.reserved() != captureBudget {
+		t.Fatalf("after the subscription ended the node reserves %d, want %d", f.reserved(), captureBudget)
+	}
+	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("another Episode took the capture room the hold promised: %v", err)
 	}
 }

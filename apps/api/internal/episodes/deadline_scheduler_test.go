@@ -46,18 +46,37 @@ func newTestID(t *testing.T) utilities.ID {
 	return id
 }
 
+type scriptedRepository struct {
+	passes []DeadlineCycle
+	calls  int
+	done   context.CancelFunc
+}
+
+func (r *scriptedRepository) EnqueueDueEpisodeDeadlines(context.Context, int32) (DeadlineCycle, error) {
+	r.calls++
+	if r.calls >= len(r.passes) {
+		r.done()
+	}
+	return r.passes[r.calls-1], nil
+}
+
 func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
 	logs := captureLogs(t)
 	stuck, other, tenant := newTestID(t), newTestID(t), newTestID(t)
-	scheduler := NewDeadlineScheduler(nil, 0, 0)
 	busy := SkippedEpisode{TenantID: tenant, EpisodeID: stuck, Phase: "deadline", Err: ErrEpisodeControlBusy}
 	broken := SkippedEpisode{TenantID: tenant, EpisodeID: other, Phase: "empty_linger", Err: errors.New("boom")}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	repository := &scriptedRepository{done: cancel, passes: []DeadlineCycle{
+		{Skipped: []SkippedEpisode{busy, broken}},
+		{Skipped: []SkippedEpisode{busy, {TenantID: tenant, EpisodeID: stuck, Phase: "empty_linger", Err: ErrEpisodeControlBusy}}},
+		{Completed: []EpisodeRef{{TenantID: tenant, EpisodeID: stuck}}},
+		{Skipped: []SkippedEpisode{busy}},
+	}}
 
-	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy, broken}})
-	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy, {TenantID: tenant, EpisodeID: stuck, Phase: "empty_linger", Err: ErrEpisodeControlBusy}}})
-	scheduler.observe(ctx, DeadlineCycle{Completed: []EpisodeRef{{TenantID: tenant, EpisodeID: stuck}}})
-	scheduler.observe(ctx, DeadlineCycle{Skipped: []SkippedEpisode{busy}})
+	if err := NewDeadlineScheduler(repository, time.Millisecond, 0).Run(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	want := []struct {
 		episode, level, reason string
@@ -80,20 +99,6 @@ func TestDeadlineSchedulerCountsConsecutiveFailuresPerEpisode(t *testing.T) {
 			t.Fatalf("record %d = %v, want %+v", index, record, expected)
 		}
 	}
-}
-
-type scriptedRepository struct {
-	passes []DeadlineCycle
-	calls  int
-	done   context.CancelFunc
-}
-
-func (r *scriptedRepository) EnqueueDueEpisodeDeadlines(context.Context, int32) (DeadlineCycle, error) {
-	r.calls++
-	if r.calls >= len(r.passes) {
-		r.done()
-	}
-	return r.passes[r.calls-1], nil
 }
 
 // Another replica can hold an Episode's row, so a pass may not attempt it. That

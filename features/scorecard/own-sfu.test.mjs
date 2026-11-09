@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { planeBudgets, readBudgets } from "./budgets.mjs";
 import { SCORECARD_SCHEMA } from "./schema.mjs";
 import { contention } from "./contention.mjs";
 
@@ -25,14 +26,26 @@ function collect(metrics, isolation) {
   return { result, artifacts, summary: existsSync(summary) ? readFileSync(summary, "utf8") : "" };
 }
 
-test("a card with metrics is copied to the artifact folder and shown against its budgets", () => {
-  const { result, artifacts, summary } = collect([{ id: "action.leave_ms", unit: "ms", n: 20, p50: 305, p95: 456, source: "latency-kit" }]);
+const { budgets } = await readBudgets();
+const leave = planeBudgets(budgets, "chalk_sfu")["action.leave_ms"];
+const leaveMetric = (p95) => ({ id: "action.leave_ms", unit: "ms", n: 20, p50: 305, p95, source: "latency-kit" });
+const rowOf = (summary, id) => summary.split("\n").find((line) => line.includes(`\`${id}\``));
+
+test("a card with metrics is copied to the artifact folder and shown against its budget", () => {
+  const { result, artifacts, summary } = collect([leaveMetric(Math.floor(leave.max_p95 / 2))]);
   assert.equal(result.status, 0, result.stderr);
   assert.ok(existsSync(join(artifacts, "scorecard-chalk_sfu.json")));
   assert.match(summary, /Own SFU nightly: chalk_sfu at abcdef012/);
-  assert.match(summary, /action\.leave_ms/);
-  assert.match(summary, /p95 ≤ 950/);
-  assert.match(summary, /✅/);
+  const row = rowOf(summary, "action.leave_ms");
+  assert.ok(row, summary);
+  assert.ok(row.includes(String(leave.max_p95)), row);
+  assert.doesNotMatch(row, /blocks|warns|diagnostic|unavailable/);
+});
+
+test("a metric over a gated budget is marked as blocking in the summary", () => {
+  assert.equal(leave.gate, true);
+  const { summary } = collect([leaveMetric(leave.max_p95 + 1)]);
+  assert.match(rowOf(summary, "action.leave_ms") ?? "", /blocks/);
 });
 
 test("a card without metrics fails and says so in the summary", () => {

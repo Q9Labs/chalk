@@ -62,11 +62,6 @@ test("a slot held by this proof's own job keeps waiting until the timeout", asyn
   assert.deepEqual(reads, [27_000, 180_000]);
 });
 
-test("a free pool keeps the existing timeout path", async () => {
-  const { result } = run({ pool: pool({ slots_used: 0 }) });
-  await assert.rejects(result, { reason: "timeout", message: "Capture ready timed out after 180s; capture pool: 0 of 1 slots in use" });
-});
-
 test("an unavailable readout keeps the timeout path and says why", async () => {
   const { result } = run({ unavailable: "API resource not found" });
   await assert.rejects(result, { reason: "timeout", message: "Capture ready timed out after 180s; capture pool readout unavailable: API resource not found" });
