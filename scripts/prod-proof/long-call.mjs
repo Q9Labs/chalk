@@ -54,7 +54,10 @@ export async function longCallProof(run, receiver) {
   const { episode, end } = await createEpisode(run, space);
   run.episodeId = episode.id;
   console.log(`Joining ${guestCount} synthetic camera/voice guests on ${mediaPlane}`);
-  const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestCount);
+  const diagnostics = process.env.CHALK_PROOF_DIAGNOSTICS === "1";
+  const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestCount, { diagnostics });
+  const diag = guests.pages.map(() => []);
+  const drain = () => Promise.all(guests.pages.map(async (page, index) => diag[index].push(...(await page.evaluate(() => window.__pcDiag?.splice(0) ?? []).catch(() => [])))));
   const startedAtMs = Date.now();
   const refreshDueMs = guests.refreshes.map(({ initialExpiry }) => initialExpiry - refreshWindowMs - startedAtMs);
   const firstRefreshMs = refreshDueMs.reduce((sum, due) => sum + due, 0) / refreshDueMs.length;
@@ -68,6 +71,7 @@ export async function longCallProof(run, receiver) {
     while (Date.now() - startedAtMs < callDurationMs) {
       const t = Date.now();
       ticks.push({ t, guests: await Promise.all(guests.pages.map(sampleGuest)) });
+      if (diagnostics && ticks.length % 5 === 0) await drain();
       await run.wait(Math.max(0, bounds.sampleIntervalMs - (Date.now() - t)));
     }
   })();
@@ -84,6 +88,11 @@ export async function longCallProof(run, receiver) {
     }
   })();
   await Promise.all([sampling, toggling]);
+  if (diagnostics) {
+    await drain();
+    await save(`${run.directory}/long-call-diagnostics.json`, { startedAtMs, toggles: ran, guests: diag });
+    console.log(`Diagnostics saved to ${run.directory}/long-call-diagnostics.json`);
+  }
 
   const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, startedAtMs });
   failures.push(...judged.failures);
