@@ -14,11 +14,12 @@ export async function proofServer(run) {
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
   const pages = { "/": "<!doctype html><title>Chalk production proof</title>", "/share": shareHTML };
   const server = createServer((request, response) => {
-    if (request.method !== "GET" || !Object.hasOwn(pages, request.url)) {
+    const path = request.url?.split("?")[0] ?? "";
+    if (request.method !== "GET" || !Object.hasOwn(pages, path)) {
       response.writeHead(404).end();
       return;
     }
-    response.writeHead(200, { "Content-Type": "text/html" }).end(pages[request.url]);
+    response.writeHead(200, { "Content-Type": "text/html" }).end(pages[path]);
   });
   server.listen(Number(origin.port), "127.0.0.1");
   await once(server, "listening");
