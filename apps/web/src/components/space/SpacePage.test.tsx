@@ -33,7 +33,7 @@ afterEach(async () => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
-async function entry(code: string) {
+async function entry(code: string, slug: string | undefined = "design-lab") {
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const path = new URL(request.url).pathname;
@@ -55,7 +55,7 @@ async function entry(code: string) {
   const root = createRootRoute({
     component: () => (
       <ThemeProvider>
-        <SpacePage slug="design-lab" />
+        <SpacePage slug={slug} />
       </ThemeProvider>
     ),
   });
@@ -96,3 +96,31 @@ async function expectMessage(message: string) {
     expect(document.body.textContent).toContain(message);
   });
 }
+
+it.each([
+  ["a new call", undefined, "/", "/v1/public/spaces"],
+  ["an invite arrival", "design-lab", "/space/design-lab#spaceInviteToken=cspi1.fixture", "/v1/public/space-invite-arrivals"], // gitleaks:allow - inert invite fixture, not a credential
+])("says calls are unavailable when %s returns 503 media.unavailable", async (_name, slug, url, path) => {
+  window.history.replaceState({}, "", url);
+  localStorage.setItem("chalk.display-name", "Ada");
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.method === "POST" && new URL(request.url).pathname === path) return Response.json({ error: { code: "media.unavailable", message: "Media plane is unavailable" } }, { status: 503 });
+    return Response.json({ error: { code: "auth.unauthorized", message: "Sign in required" } }, { status: 401 });
+  });
+  const root = createRootRoute({
+    component: () => (
+      <ThemeProvider>
+        <SpacePage slug={slug} />
+      </ThemeProvider>
+    ),
+  });
+  const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [url] }) });
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  view = createRoot(container);
+  await act(async () => view?.render(<RouterProvider router={router} />));
+  const join = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === "Join call");
+  await act(async () => join?.click());
+  await expectMessage("Calls are unavailable right now. Try again in a few minutes.");
+});
