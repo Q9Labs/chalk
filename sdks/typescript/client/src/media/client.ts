@@ -357,13 +357,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // new one is pulled before the registry listing confirms it. The listing that follows stays the authority: it prunes,
   // recovers and retries. A failed early pull only leaves the publication to that listing.
   async #pullSyncAdvertisedPublications(generation: number): Promise<void> {
-    if (!this.#started || !this.#capabilities().subscriptionState) return;
-    const advertised = desiredRemotePublications(
-      this.#syncPublications.flatMap(({ participantId, source, enabled, publicationId }) => (enabled && publicationId !== null ? [{ participantId, source, publicationId }] : [])).filter((publication) => this.#canSubscribeToRemotePublication(publication)),
-      this.#participantId,
-    );
-    const fresh = new Map([...this.#visibleRemotePublications(advertised)].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId));
-    const pending = this.#pendingRemotePulls(fresh);
+    const pending = this.#pendingSyncAdvertisedPulls();
     if (pending.length === 0) return;
     const epoch = this.#connectionEpoch;
     let pulled: readonly CloudflareSFURemoteTrack[] | null;
@@ -381,6 +375,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       for (const publication of pulled) safeStopTrack(publication.track, this.#reportError.bind(this));
       return;
     }
+    this.#commitEarlyPulledTracks(pulled);
+  }
+  #pendingSyncAdvertisedPulls(): CloudflareSFUPublication[] {
+    if (!this.#started || !this.#capabilities().subscriptionState) return [];
+    const named = this.#syncPublications.flatMap(({ participantId, source, enabled, publicationId }) => (enabled && publicationId !== null ? [{ participantId, source, publicationId }] : []));
+    const advertised = desiredRemotePublications(
+      named.filter((publication) => this.#canSubscribeToRemotePublication(publication)),
+      this.#participantId,
+    );
+    const fresh = new Map([...this.#visibleRemotePublications(advertised)].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId));
+    return this.#pendingRemotePulls(fresh);
+  }
+  #commitEarlyPulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
     const next = new Map(this.#remoteTracks);
     for (const publication of pulled) next.set(publicationKey(publication), publication);
     stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
