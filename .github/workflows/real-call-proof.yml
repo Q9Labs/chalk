@@ -110,7 +110,7 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
-    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 130 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 150 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
         env:
@@ -228,7 +228,7 @@ jobs:
             run_id="${RUN_PREFIX}-${proof}"
             echo "$run_id" >> .private/proof-run-ids
             if [[ "$STAGING_SFU_PROOF" == true ]]; then
-              scripts/staging-sfu/staging-lock --holder nightly-proof --purpose "$proof" --run-id "$RUN_PREFIX" -- env CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+              scripts/staging-sfu/staging-lock --holder nightly-proof --purpose "$proof" --run-id "$RUN_PREFIX" --wait 1800 -- env CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
             else
               CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
             fi
@@ -237,7 +237,7 @@ jobs:
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
-        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 70 || 25 }}
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 90 || 25 }}
         env:
           CHALK_PROOF_CONFIG_SOURCE: env
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
@@ -280,7 +280,9 @@ jobs:
           # Cloudflare traffic still reaches the nightly API, whose logs the own-SFU proof reads to count foreign Episodes.
           # Hold the staging lease, but never wait for it: when a cut holds it, skip this warn-only measurement.
           status=0
-          scripts/staging-sfu/staging-lock --holder nightly-cf-latency --purpose action-latency --run-id "$GITHUB_RUN_ID" --wait 0 --evidence .private/cf-lease.json -- env CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}" || status=$?
+          # The timeout lets the lease wrapper stop the kit and release the lease inside the 25-minute step cap, and the 60-second
+          # TTL ends the lease soon after the last renewal if the release fails. A cut waits 1800 seconds for the lease, longer than this.
+          timeout --kill-after=30 1440 scripts/staging-sfu/staging-lock --holder nightly-cf-latency --purpose action-latency --run-id "$GITHUB_RUN_ID" --ttl 60 --wait 0 --evidence .private/cf-lease.json -- env CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}" || status=$?
           if ! jq -e '.acquired' .private/cf-lease.json > /dev/null 2>&1; then
             echo "The staging SFU lease is busy or unavailable, so the Cloudflare latency was skipped." >> "$GITHUB_STEP_SUMMARY"
             touch .private/cf-latency-skipped

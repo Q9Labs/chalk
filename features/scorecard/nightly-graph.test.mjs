@@ -103,7 +103,9 @@ exec "$@"
 `,
     );
     writeFileSync(join(dir, "bin/pnpm"), `#!/usr/bin/env bash\ntouch kit-ran\nexit ${kitStatus}\n`);
-    for (const file of [lock, join(dir, "bin/pnpm")]) chmodSync(file, 0o755);
+    // GNU timeout is absent on macOS: the stand-in records its limit and runs the command.
+    writeFileSync(join(dir, "bin/timeout"), `#!/usr/bin/env bash\nwhile [[ "$1" == --* ]]; do shift; done\necho "$1" > timeout-seconds\nshift\nexec "$@"\n`);
+    for (const file of [lock, join(dir, "bin/pnpm"), join(dir, "bin/timeout")]) chmodSync(file, 0o755);
     const result = spawnSync("bash", ["-c", latencyStep.run], {
       cwd: dir,
       encoding: "utf8",
@@ -124,6 +126,7 @@ exec "$@"
       stderr: result.stderr,
       kitRan: existsSync(join(dir, "kit-ran")),
       skipped: existsSync(join(dir, ".private/cf-latency-skipped")),
+      timeoutSeconds: existsSync(join(dir, "timeout-seconds")) ? Number(readFileSync(join(dir, "timeout-seconds"), "utf8")) : 0,
       lockArgs: existsSync(join(dir, "lock-args")) ? readFileSync(join(dir, "lock-args"), "utf8") : "",
     };
   } finally {
@@ -136,7 +139,8 @@ test("the Cloudflare latency run holds the staging lease without waiting", () =>
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.kitRan, true);
   assert.equal(run.skipped, false);
-  assert.match(run.lockArgs, /--holder nightly-cf-latency .*--wait 0 /);
+  assert.match(run.lockArgs, /--holder nightly-cf-latency .*--ttl 60 --wait 0 /);
+  assert.ok(run.timeoutSeconds > 0, "the lease wrapper runs under a hard timeout");
 });
 
 test("a busy lease skips the Cloudflare measurement and succeeds", () => {
@@ -149,4 +153,38 @@ test("a busy lease skips the Cloudflare measurement and succeeds", () => {
 test("a failed Cloudflare measurement under the lease still fails its step", () => {
   const run = runLatencyStep({ leaseBusy: false, kitStatus: 3 });
   assert.equal(run.status, 3);
+});
+
+// A cut must outwait the warn-only Cloudflare run: that run cannot yield the lease, so the cut's wait has to cover all of it.
+// A step's cap is "<nightly chalk_sfu cap> || <any other cap>" in its expression.
+const capMinutes = (step) => {
+  const [, chalk, other] = /chalk_sfu' && (\d+) \|\| (\d+) \}\}$/.exec(step["timeout-minutes"]) ?? [];
+  return { chalk: Number(chalk), other: Number(other) };
+};
+const proofStep = proof.jobs.smoke.steps.find((item) => item.name === "Prove a real call");
+const jobCap = Number(/chalk_sfu' && (\d+) \|\|/.exec(proof.jobs.smoke["timeout-minutes"])?.[1]);
+const cutWaits = {
+  "camera-share proof": Number(/--holder nightly-proof [^\n]*--wait (\d+)/.exec(proofStep.run)?.[1]),
+  "latency retry": Number(/attempt === 1 \? "0" : "(\d+)"/.exec(readFileSync(resolve(root, "features/scorecard/staging-latency.mjs"), "utf8"))?.[1]),
+};
+
+test("every cut-side lease wait is longer than the Cloudflare run can own the lease", () => {
+  const cf = /timeout --kill-after=(\d+) (\d+) scripts\/staging-sfu\/staging-lock .*--ttl (\d+) /.exec(latencyStep.run);
+  assert.ok(cf, "the Cloudflare lease wrapper has a hard timeout and a TTL");
+  const [killAfter, hardTimeout, ttl] = cf.slice(1).map(Number);
+  const stepSeconds = capMinutes(latencyStep).other * 60;
+  assert.ok(hardTimeout + killAfter < stepSeconds, "the wrapper releases inside the step cap");
+  // Worst case: the step cap passes, then a failed release leaves the lease until its TTL after the last renewal.
+  const ownership = stepSeconds + ttl;
+  for (const [name, wait] of Object.entries(cutWaits)) {
+    assert.ok(wait > ownership, `${name} waits ${wait}s, not more than the ${ownership}s a Cloudflare run can own the lease`);
+  }
+});
+
+test("own-sfu's caps fit a full lease wait before the proof and before the latency run", () => {
+  const proofCap = capMinutes(proofStep).chalk;
+  const latencyCap = capMinutes(latencyStep).chalk;
+  assert.ok(cutWaits["camera-share proof"] / 60 < proofCap, "the proof step cap covers the wait");
+  assert.ok(cutWaits["latency retry"] / 60 < latencyCap, "the latency step cap covers the wait");
+  assert.ok(proofCap + latencyCap + 10 <= jobCap, "the job cap covers both steps and about 10 minutes of setup");
 });
