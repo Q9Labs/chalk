@@ -42,25 +42,33 @@ func newHistory(bytes, slots int) *history {
 	return &history{arena: make([]byte, bytes), slots: make([]historySlot, size), mask: uint64(size - 1)}
 }
 
-// store copies one packet in. A packet larger than the arena is not kept.
-func (h *history) store(p *rtpPacket) {
+// store copies a new packet in and reports whether it may be forwarded. A
+// duplicate, or a packet older than its index slot, must not be sent again as
+// primary RTP: SRTP rejects the replay before the receiver can report its TWCC
+// number. A packet larger than the arena still forwards, but is not kept.
+func (h *history) store(p *rtpPacket) bool {
 	length := uint64(len(p.payload))
 	capacity := uint64(len(h.arena))
 	if length > capacity || length > maxPayloadBytes {
-		return
+		return true
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	slot := &h.slots[p.extSeq&h.mask]
+	if slot.used && int64(p.extSeq-slot.extSeq) <= 0 {
+		return false
+	}
 	position := h.written
 	if offset := position % capacity; offset+length > capacity {
 		position += capacity - offset // a payload never straddles the arena's end
 	}
 	copy(h.arena[position%capacity:], p.payload)
 	h.written = position + length
-	h.slots[p.extSeq&h.mask] = historySlot{
+	*slot = historySlot{
 		extSeq: p.extSeq, position: position, length: uint16(length), timestamp: p.timestamp,
 		arrival: p.arrival, marker: p.marker, paddingSize: p.paddingSize, used: true,
 	}
+	return true
 }
 
 // load copies the packet with that extended sequence number into dst and

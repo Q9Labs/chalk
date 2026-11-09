@@ -226,8 +226,12 @@ func TestHistoryEvictsOverwrittenAndOldPackets(t *testing.T) {
 		t.Fatalf("packet 3: %q %v", payload, ok)
 	}
 	store(7, 'd', now) // shares packet 3's slot
+	store(3, 'c', now) // a late old copy must not evict the newer repair
 	if _, ok := load(3, now); ok {
 		t.Fatal("a packet whose slot was reused loaded")
+	}
+	if payload, ok := load(7, now); !ok || !bytes.Equal(payload, bytes.Repeat([]byte{'d'}, 40)) {
+		t.Fatalf("late old packet replaced packet 7: %q %v", payload, ok)
 	}
 	if _, ok := load(7, now+int64(historyAge)+1); ok {
 		t.Fatal("a packet older than the history age loaded")
