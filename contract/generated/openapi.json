@@ -8219,6 +8219,187 @@
         }
       }
     },
+    "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
+      "post": {
+        "operationId": "signalCloudflareSFU",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TenantId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SpaceId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "episode_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/EpisodeId"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ParticipantId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudflareSFUSignalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareSFUSignalAPIResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request",
+            "x-chalk-error-codes": ["episode.invalid_id", "participant.invalid_id", "request.invalid", "space.invalid_id", "tenant.invalid_id"]
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized",
+            "x-chalk-error-codes": ["access.unauthenticated"]
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden",
+            "x-chalk-error-codes": ["access.forbidden"]
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found",
+            "x-chalk-error-codes": ["episode.not_found", "media.connection_not_found"]
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Request Entity Too Large",
+            "x-chalk-error-codes": ["request.payload_too_large"]
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests",
+            "headers": {
+              "Retry-After": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "required": true,
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "x-chalk-error-codes": ["request.rate_limited"]
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error",
+            "x-chalk-error-codes": ["service.internal_error"]
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable",
+            "x-chalk-error-codes": ["media.unavailable", "service.unavailable"]
+          }
+        },
+        "security": [
+          {
+            "participantMediaBearer": []
+          }
+        ],
+        "summary": "Signal cloudflare s f u",
+        "x-chalk-max-body-bytes": 1048576,
+        "x-chalk-rate-limit": {
+          "limit": 60,
+          "name": "v1.authenticated.write",
+          "window_seconds": 60
+        }
+      }
+    },
     "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions": {
       "get": {
         "operationId": "listSFUSubscriptions",
@@ -14380,6 +14561,293 @@
           }
         },
         "required": ["accepted"],
+        "type": "object"
+      },
+      "CloudflareSFUSignalAPIResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "incarnation": {
+            "type": "integer"
+          },
+          "publications": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "participant_id": {
+                  "$ref": "#/components/schemas/ParticipantId"
+                },
+                "publication_id": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": ["participant_id", "publication_id", "source"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "requiresImmediateRenegotiation": {
+            "type": "boolean"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "sessionDescription": {
+            "additionalProperties": false,
+            "properties": {
+              "sdp": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": ["sdp", "type"],
+            "type": ["object", "null"]
+          },
+          "subscriptions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "effective_rid": {
+                  "type": "string"
+                },
+                "mid": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "requested_rid": {
+                  "type": "string"
+                },
+                "revision": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "session_id": {
+                  "$ref": "#/components/schemas/UUID"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "track_name": {
+                  "type": "string"
+                }
+              },
+              "required": ["mid", "revision", "session_id", "state", "track_name"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "trackErrors": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "connectionId": {
+                  "type": "string"
+                },
+                "trackName": {
+                  "type": "string"
+                }
+              },
+              "required": ["code", "connectionId", "trackName"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "tracks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "location": {
+                  "type": "string"
+                },
+                "mid": {
+                  "type": "string"
+                },
+                "paused": {
+                  "type": ["boolean", "null"]
+                },
+                "publication_id": {
+                  "type": "string"
+                },
+                "sessionId": {
+                  "type": "string"
+                },
+                "simulcast": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "preferredRid": {
+                      "type": "string"
+                    },
+                    "priorityOrdering": {
+                      "type": "string"
+                    },
+                    "ridNotAvailable": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["preferredRid", "priorityOrdering", "ridNotAvailable"],
+                  "type": ["object", "null"]
+                },
+                "source": {
+                  "type": "string"
+                },
+                "trackName": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "CloudflareSFUSignalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_partial_remote_tracks": {
+            "type": "boolean"
+          },
+          "close_tracks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "mid": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "publication_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["mid", "publication_id", "source"],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "connection_id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          },
+          "op": {
+            "enum": ["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"],
+            "type": "string"
+          },
+          "receive_only": {
+            "type": "boolean"
+          },
+          "replacement_cause": {
+            "enum": [
+              "user_pause",
+              "moderation_pause",
+              "sync_recovery_loss",
+              "discovery_absent",
+              "capture_cleanup",
+              "consent_revoked",
+              "publish_failure",
+              "enable_failure",
+              "projection_mismatch",
+              "forced_pause",
+              "local_signaling_failure",
+              "remote_signaling_failure",
+              "dormant_connection",
+              "access_refresh",
+              "receive_stalled"
+            ],
+            "type": "string"
+          },
+          "session_description": {
+            "additionalProperties": false,
+            "properties": {
+              "sdp": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["sdp", "type"],
+            "type": ["object", "null"]
+          },
+          "tracks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "location": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "mid": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "paused": {
+                  "type": ["boolean", "null"]
+                },
+                "publication_id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sessionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "simulcast": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "preferredRid": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "priorityOrdering": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ridNotAvailable": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": ["preferredRid", "priorityOrdering", "ridNotAvailable"],
+                  "type": ["object", "null"]
+                },
+                "source": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "trackName": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": ["location", "trackName"],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": ["op"],
         "type": "object"
       },
       "CloudflareSFUTracksAPIResponse": {

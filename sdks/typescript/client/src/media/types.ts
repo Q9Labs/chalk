@@ -31,6 +31,8 @@ export type SFUMediaCapabilities = {
   readonly iceRestart: boolean;
   /** One `tracks` request lists the publications and pulls the other Participants' audio, so a join skips the list request. */
   readonly pullPublished: boolean;
+  /** The API serves every signaling call from one URL, so a join pays one CORS preflight instead of one per call. */
+  readonly unifiedSignaling: boolean;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -192,6 +194,8 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly participantId: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly requestTimeoutMs?: number;
+  /** Send every signaling call to the one `signal` route. Set it only when the API advertised `unifiedSignaling` for this connection. */
+  readonly unifiedSignaling?: boolean;
 };
 export class CloudflareSFUError extends Error {
   constructor(

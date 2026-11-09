@@ -52,11 +52,15 @@ export function installLatencyTrace() {
   window.WebSocket = new Proxy(WebSocket, { construct: (target, args, newTarget) => observeSocket(Reflect.construct(target, args, newTarget)) });
 
   // SFU signaling goes through the API as HTTP; a reply is the response headers arriving.
+  const SIGNAL_STEPS = { publications: "publications", subscriptions: "subscriptions", tracks: "tracks", tracks_close: "tracks/close", tracks_update: "tracks/update", renegotiate: "renegotiate" };
+  const signalOp = (body) => parse(body)?.op;
   const nativeFetch = window.fetch;
   window.fetch = function traced(input, init) {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input?.url ?? "");
-    const step = /\/media\/sfu\/([a-z/]+)(?:\?|$)/.exec(url)?.[1];
-    if (!step) return Reflect.apply(nativeFetch, this, [input, init]);
+    const path = /\/media\/sfu\/([a-z/]+)(?:\?|$)/.exec(url)?.[1];
+    if (!path) return Reflect.apply(nativeFetch, this, [input, init]);
+    // The unified route carries the step in the body; the stages read the per-operation names.
+    const step = path === "signal" ? (SIGNAL_STEPS[signalOp(init?.body)] ?? path) : path;
     const label = `${(init?.method ?? input?.method ?? "GET").toUpperCase()} ${step}`;
     log("http_start", label);
     // The join's combined request lists the publications and pulls the audio; the stage split needs to know it ran.
@@ -72,6 +76,11 @@ export function installLatencyTrace() {
       },
     );
   };
+
+  // The SDK measures each credential read as a "chalk.sfu.credential" user-timing entry, detail {op}.
+  new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) if (entry.name === "chalk.sfu.credential") log("credential", `${entry.detail?.op} ${Math.round(entry.duration * 10) / 10}`);
+  }).observe({ type: "measure", buffered: true });
 
   // The selected ICE candidate pair: candidate types and the pair's check counters. A reading the browser does not give is null.
   // getStats is never called while the SDK or a measured interval runs: a connection only leaves a marker (see below), and the harness

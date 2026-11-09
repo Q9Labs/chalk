@@ -97,6 +97,7 @@ const (
 	ChalkSFUStandbyBudget       = "CHALK_SFU_STANDBY_PACKET_BUDGET"
 	ChalkSFUAllowedSpaces       = "CHALK_SFU_ALLOWED_SPACES"
 	ChalkSFUClientSunset        = "CHALK_SFU_CLIENT_SUNSET"
+	ChalkSFUUnifiedSignaling    = "CHALK_SFU_UNIFIED_SIGNALING"
 	DefaultMediaPlane           = "CHALK_DEFAULT_MEDIA_PLANE"
 	NewSpaceMediaPlane          = "CHALK_NEW_SPACE_MEDIA_PLANE"
 	NewSpaceRecordingPolicy     = "CHALK_NEW_SPACE_RECORDING_POLICY"
@@ -261,6 +262,12 @@ type ChalkSFUConfig struct {
 	// media.client_unsupported instead of Cloudflare. The zero value means never.
 	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
 	ClientSunset time.Time
+
+	// UnifiedSignaling advertises the single-URL signalling route in each own-SFU join, so the
+	// SDK sends every signalling call to one URL and pays one CORS preflight. It is on by
+	// default. Turning it off sends clients back to the per-operation routes without a web
+	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
+	UnifiedSignaling bool
 
 	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
 	// room. It is on by default. When it is off, creating that Episode fails with
@@ -755,8 +762,13 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if standbyBudget <= 0 {
 		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUStandbyBudget)
 	}
+	unifiedSignaling, err := envStrictBool(ChalkSFUUnifiedSignaling, true)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
 		Enabled:            true,
+		UnifiedSignaling:   unifiedSignaling,
 		CaptureEnabled:     envBool(ChalkSFUCaptureEnabled),
 		CloudflareOverflow: overflow,
 		ApplicationID:      strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),

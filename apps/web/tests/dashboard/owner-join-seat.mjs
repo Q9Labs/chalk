@@ -48,7 +48,9 @@ try {
         socket.send(message);
       });
     });
-    await mediaFailurePage.route("**/media/sfu/tracks", async (route) => {
+    // The SDK adds tracks with POST tracks, or with POST signal {op: "tracks"} when the API advertises the unified route.
+    await mediaFailurePage.route(/\/media\/sfu\/(tracks|signal)$/, async (route) => {
+      if (route.request().url().endsWith("/signal") && route.request().postDataJSON()?.op !== "tracks") return route.continue();
       await recovered;
       failedSignaling += 1;
       await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "synthetic SFU startup failure after Sync recovery" }) });

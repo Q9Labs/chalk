@@ -990,6 +990,7 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 				"subscriptionState":     grant.ClientPayload.Capabilities.SubscriptionState,
 				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
 				"pullPublished":         grant.ClientPayload.Capabilities.PullPublished,
+				"unifiedSignaling":      grant.ClientPayload.Capabilities.UnifiedSignaling,
 			},
 		}
 
