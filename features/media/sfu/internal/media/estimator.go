@@ -387,13 +387,13 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 	}
 	if e.total >= lossWindow {
 		loss := float64(e.lost) / float64(e.total)
+		e.lossShare = loss
 		if loss > lossHigh {
 			e.lossAt = now
 		}
 		switch {
 		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
-			e.estimate = math.Max(e.estimate*(1-0.5*loss), minEstimate)
-			e.decreased, e.holding = now, true
+			e.lower(causeLoss, math.Max(e.estimate*(1-0.5*loss), minEstimate), e.acked(), now)
 		case loss > lossLow:
 			e.holding = true
 		default:
