@@ -1,24 +1,20 @@
 defmodule ChalkSync.Stateholder.Postgres.SQL.Recovery do
   @moduledoc false
 
-  def read_control do
+  # One snapshot read of the Episode's control row and its status. A missing row on
+  # either side leaves the status null, which the reader reports as not found.
+  def read_control_and_status do
     """
     select
-      control_revision,
-      folded_state,
-      state_schema_version,
-      state_digest,
-      space_id
-    from sync_episode_control
-    where tenant_id = $1 and space_id = $2 and episode_id = $3
-    """
-  end
-
-  def read_episode_status do
-    """
-    select status
-    from episodes
-    where tenant_id = $1 and space_id = $2 and id = $3
+      c.control_revision,
+      c.folded_state,
+      c.state_schema_version,
+      c.state_digest,
+      e.status
+    from sync_episode_control c
+    left join episodes e
+      on e.tenant_id = c.tenant_id and e.space_id = c.space_id and e.id = c.episode_id
+    where c.tenant_id = $1 and c.space_id = $2 and c.episode_id = $3
     """
   end
 

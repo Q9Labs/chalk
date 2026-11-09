@@ -17,8 +17,7 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   def admit_entry(connection, identity, requested) do
     {identity, requested} =
       stage(:admit_configure, fn ->
-        Transaction.configure(connection)
-        socket_request(connection, identity, requested)
+        socket_request(identity, requested, Transaction.configure(connection))
       end)
 
     {policy, participant} =
@@ -78,15 +77,12 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     )
   end
 
-  defp socket_request(connection, identity, {:socket, requested}) do
-    [[enforced]] =
-      Postgrex.query!(connection, "select enforced from sync_entry_rollout where singleton", []).rows
-
+  defp socket_request(identity, {:socket, requested}, enforced) do
     mode = if enforced, do: :enforced, else: :compatibility
     {%{identity | entry_ownership: mode}, requested}
   end
 
-  defp socket_request(_connection, identity, requested),
+  defp socket_request(identity, requested, _enforced),
     do: {%{identity | entry_ownership: nil}, requested}
 
   defp allocate_requested_entry(
@@ -149,6 +145,36 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     validate_entry_dispatch(connection, identity, requested)
     params = Scope.participant(identity) ++ [identity.participant_generation]
 
+    case issue_new_generation(connection, params, requested) do
+      generation when is_integer(generation) ->
+        %{identity | entry_generation: generation}
+
+      nil ->
+        existing_entry(connection, identity, params, requested)
+    end
+  end
+
+  # A new entry bumps the seat in one statement, which also takes the row lock.
+  defp issue_new_generation(connection, params, :new) do
+    case Postgrex.query!(
+           connection,
+           """
+           update participant_join_seats set issued_entry_generation=issued_entry_generation+1,
+             issued_entry_expires_at=clock_timestamp()+interval '120 seconds'
+           where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
+             and issued_entry_generation < 9007199254740991
+           returning issued_entry_generation
+           """,
+           params
+         ).rows do
+      [[next]] -> next
+      [] -> nil
+    end
+  end
+
+  defp issue_new_generation(_connection, _params, _requested), do: nil
+
+  defp existing_entry(connection, identity, params, requested) do
     case Postgrex.query!(
            connection,
            """
@@ -158,35 +184,11 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
            """,
            params
          ).rows do
-      [] ->
+      [[issued]] when is_integer(requested) and requested > 0 and requested <= issued ->
+        %{identity | entry_generation: requested}
+
+      _missing_or_not_issued ->
         Postgrex.rollback(connection, {:error, :invalid_admission_intent})
-
-      [[issued]] ->
-        generation =
-          case requested do
-            :new when issued < 9_007_199_254_740_991 ->
-              [[next]] =
-                Postgrex.query!(
-                  connection,
-                  """
-                  update participant_join_seats set issued_entry_generation=issued_entry_generation+1,
-                    issued_entry_expires_at=clock_timestamp()+interval '120 seconds'
-                  where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
-                  returning issued_entry_generation
-                  """,
-                  params
-                ).rows
-
-              next
-
-            generation when is_integer(generation) and generation > 0 and generation <= issued ->
-              generation
-
-            _ ->
-              Postgrex.rollback(connection, {:error, :invalid_admission_intent})
-          end
-
-        %{identity | entry_generation: generation}
     end
   end
 

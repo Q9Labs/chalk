@@ -52,7 +52,8 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     statements = traced_entry(ctx.port, @production_path, identity)
     print_trace("production", statements)
 
-    assert length(statements) <= 64
+    # 17 statements plus BEGIN and COMMIT for each of the admit and recovery transactions.
+    assert length(statements) <= 17
   end
 
   test "a legacy socket entry also confirms the admission in hello", ctx do
