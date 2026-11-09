@@ -109,6 +109,57 @@ export function installPcDiagnostics() {
     }
   };
 
+  // Sync frames: type only (Phoenix frames carry [join_ref, ref, topic, event, payload]); never the payload.
+  const NativeWebSocket = window.WebSocket;
+  let sockets = 0;
+  const frameFacts = (data) => {
+    if (typeof data !== "string") return { size: data?.size ?? data?.byteLength ?? null };
+    try {
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed))
+        return {
+          size: data.length,
+          topic: String(parsed[2] ?? "")
+            .replace(/[0-9a-f-]{36}/g, ":id")
+            .slice(0, 60),
+          event: String(parsed[3] ?? "").slice(0, 60),
+        };
+      return {
+        size: data.length,
+        type: String(
+          parsed?.type ??
+            parsed?.t ??
+            Object.keys(parsed ?? {})
+              .slice(0, 4)
+              .join(","),
+        ).slice(0, 60),
+      };
+    } catch {
+      return { size: data.length };
+    }
+  };
+  window.WebSocket = class extends NativeWebSocket {
+    constructor(...args) {
+      super(...args);
+      const id = ++sockets;
+      this.__diagWs = id;
+      log("ws_open", {
+        ws: id,
+        path: String(args[0])
+          .replace(/^wss?:\/\/[^/]+/, "")
+          .replace(/\?.*/, "")
+          .replace(/[0-9a-f-]{36}/g, ":id"),
+      });
+      this.addEventListener("message", (event) => log("ws_in", { ws: id, ...frameFacts(event.data) }));
+      this.addEventListener("close", (event) => log("ws_close", { ws: id, code: event.code, reason: String(event.reason).slice(0, 80), clean: event.wasClean }));
+      this.addEventListener("error", () => log("ws_error", { ws: id }));
+    }
+    send(data) {
+      log("ws_out", { ws: this.__diagWs ?? 0, ...frameFacts(data) });
+      return super.send(data);
+    }
+  };
+
   let last = "";
   setInterval(() => {
     const snapshot = window.proofClient?.getSnapshot?.();
