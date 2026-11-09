@@ -418,8 +418,11 @@ are sampled, so a newly visible pair normally logs roughly 15–25 seconds later
 
 The [listener audio check](../infrastructure/listener-audio-alert/README.md)
 runs every five minutes against a ten-minute Axiom window. At least one
-`media.listener_publication_unpulled` event pages Oncall, with one incident per
-Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
+`media.listener_publication_unpulled` event (Cloudflare SFU only) or one
+`sdk.connection_report` with `['attributes.trigger'] == 'audio_receive_stuck'` (both
+providers, signal `client_audio_stuck:<provider>`) pages Oncall, with one incident
+per Episode and per-signal counts. The client report is the provider-neutral signal:
+it stays when M13 removes Cloudflare and its sampler. The stable `listener-audio:chalk:<episode_id>`
 key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
 contain only aggregate counts; the query projects only `episode_id`, `signal` and
 `events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
@@ -429,12 +432,10 @@ dataset, the same one the production Axiom monitors use as `LOG_DATASET`.
 The query does not filter by environment: pointing it at a dataset that also
 holds nightly logs would page for nightly. A fired alert fails the run so GitHub
 sends a failed-run email. Because `media.listener_publication_unpulled` is
-one-shot per pair, a stuck Episode stops firing roughly ten minutes after its
-last new event. A webhook-only drill never reads Axiom.
+one-shot per pair and `audio_receive_stuck` is sent once per unhealthy episode, a
+stuck Episode stops firing roughly ten minutes after its last new event. A webhook-only drill never reads Axiom.
 The `listener-audio` scope must also be registered for Chalk in Oncall's registry
-outside this repo. #721 will add `sdk.connection_report` with
-`['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not
-included yet. GitHub scheduling can delay the roughly five-minute paging target.
+outside this repo. GitHub scheduling can delay the roughly five-minute paging target.
 
 ### Background-tab and presence-expiry evidence
 
