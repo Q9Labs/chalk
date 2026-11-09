@@ -45,6 +45,46 @@ it("does not publish a microphone muted during remote connection replacement", a
   );
 });
 
+function remoteMicrophone(sequence: number, trackName?: string): CloudflareSFUPublicationSnapshot {
+  const publications = trackName ? [{ participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", trackName) }] : [];
+  return { incarnation: 1, sequence, publications };
+}
+
+it("closes the receiver of a remote publication that is withdrawn or replaced, so remote toggles do not grow the session", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    let sequence = 0;
+    const refresh = async (trackName?: string) => {
+      h.transport.snapshot = remoteMicrophone(++sequence, trackName);
+      await h.client.refreshRemotePublications();
+    };
+
+    for (let toggle = 0; toggle < 8; toggle++) {
+      await refresh(`microphone-${toggle}`);
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(peer.liveRemoteTransceiverCount()).toBe(1);
+      // The remote guest mutes: the publication is withdrawn.
+      await refresh();
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(0);
+      expect(peer.liveRemoteTransceiverCount()).toBe(0);
+    }
+
+    // The remote guest mutes and unmutes between two polls: the same source comes back as a new publication.
+    await refresh("microphone-replaced-0");
+    for (let toggle = 1; toggle < 8; toggle++) {
+      await refresh(`microphone-replaced-${toggle}`);
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(peer.liveRemoteTransceiverCount()).toBe(1);
+    }
+
+    const closes = h.transport.closeInputs.filter((input) => input.force);
+    expect(closes).toHaveLength(8 + 7);
+    expect(closes.every((input) => input.tracks.length === 1)).toBe(true);
+  });
+});
+
 const CAMERA_ON = { operationId: "camera-on", participantId: "participant-1", source: "camera", enabled: true } as const;
 
 async function startDormantWithCamera(h: ReturnType<typeof createHarness>): Promise<FakeTrack> {
@@ -695,6 +735,11 @@ class FakePeerConnection extends EventTarget {
   receiveDTX = false;
   readonly #receivers = new Map<string, RTCRtpReceiver>();
   readonly #remoteTransceivers: RTCRtpTransceiver[] = [];
+  readonly #stoppedRemoteMids = new Set<string>();
+  /** The receive m-lines still live in the session: a stopped transceiver is rejected in the next negotiation. */
+  liveRemoteTransceiverCount(): number {
+    return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
+  }
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];
   }
@@ -751,7 +796,14 @@ class FakePeerConnection extends EventTarget {
   }
   emitTrack(mid: string, track: FakeTrack): void {
     this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
-    this.#remoteTransceivers.push({ mid, receiver: this.#receivers.get(mid), stop: () => track.stop() } as unknown as RTCRtpTransceiver);
+    this.#remoteTransceivers.push({
+      mid,
+      receiver: this.#receivers.get(mid),
+      stop: () => {
+        track.stop();
+        this.#stoppedRemoteMids.add(mid);
+      },
+    } as unknown as RTCRtpTransceiver);
     const event = new Event("track");
     Object.defineProperties(event, {
       track: { value: track as unknown as MediaStreamTrack },

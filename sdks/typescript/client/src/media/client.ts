@@ -1246,18 +1246,19 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#requireGeneration(generation);
     // A replacement during the pull dropped the old receivers, so keeping their entries would keep ended tracks.
     const replaced = epoch !== this.#connectionEpoch;
-    this.#commitRemoteTracks(desired, pulled, replaced ? [] : unclosed, replaced ? [] : parked, cursor, inputRevision);
+    const dropped = this.#commitRemoteTracks(desired, pulled, replaced ? [] : unclosed, replaced ? [] : parked, cursor, inputRevision);
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     }
     this.#publishSnapshot();
     this.#emitRemote();
+    await this.#closeDroppedReceivers(dropped, generation);
   }
-  #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): void {
+  #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): readonly CloudflareSFURemoteTrack[] {
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);
     for (const [key, publication] of [...unclosed, ...parked]) next.set(key, publication);
-    stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
+    const dropped = stopReplacedRemoteTracks(this.#remoteTracks, next, this.#reportError.bind(this));
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     this.#forgetViewerPauses(next.values());
@@ -1266,6 +1267,28 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remotePullIncomplete = inputRevision !== this.#remotePullInputRevision || next.size - parked.length !== desired.size || unclosed.length > 0;
     if (!this.#remotePullIncomplete) this.#remoteRecoveryGeneration = null;
     if (!this.#remotePullIncomplete && this.#hasLiveRemoteTracks()) this.#replacementAttemptedGeneration = null;
+    return dropped;
+  }
+  // A withdrawn or replaced publication leaves its receive-only transceiver in the session. Without this close every remote
+  // toggle adds a live m-line, so the offer and the answer grow for the whole call.
+  async #closeDroppedReceivers(dropped: readonly CloudflareSFURemoteTrack[], generation: number): Promise<void> {
+    if (!dropped.length) return;
+    try {
+      await this.#serializeSDP(async () => {
+        this.#requireGeneration(generation);
+        await this.#closeReceivers(this.#receiversOf(dropped), generation);
+      });
+    } catch (error) {
+      // The tracks are already gone from the roster, so nothing retries this close: the m-lines stay until the connection is replaced.
+      this.#requireGeneration(generation);
+      this.#reportError(error);
+    }
+  }
+  #receiversOf(publications: readonly CloudflareSFURemoteTrack[]) {
+    return publications.flatMap((publication) => {
+      const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
+      return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
+    });
   }
   #forgetViewerPauses(kept: Iterable<CloudflareSFURemoteTrack>): void {
     const ids = new Set([...kept].map((publication) => publication.publicationId));
@@ -1362,10 +1385,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       await this.#serializeSDP(async () => {
         this.#requireGeneration(generation);
-        const receivers = hidden.flatMap(([, publication]) => {
-          const transceiver = this.#connection.getTransceivers().find((item) => item.receiver.track === publication.track);
-          return transceiver?.mid ? [{ publication, transceiver, mid: transceiver.mid }] : [];
-        });
+        const receivers = this.#receiversOf(hidden.map(([, publication]) => publication));
         if (receivers.length) await this.#closeReceivers(receivers, generation);
       });
     } catch (error) {
@@ -2361,10 +2381,10 @@ function reconcileRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublica
     }),
   );
 }
-function stopReplacedRemoteTracks(current: ReadonlyMap<string, CloudflareSFURemoteTrack>, next: ReadonlyMap<string, CloudflareSFURemoteTrack>, onError: (error: unknown) => void): void {
-  for (const [key, previous] of current) {
-    if (next.get(key) !== previous) safeStopTrack(previous.track, onError);
-  }
+function stopReplacedRemoteTracks(current: ReadonlyMap<string, CloudflareSFURemoteTrack>, next: ReadonlyMap<string, CloudflareSFURemoteTrack>, onError: (error: unknown) => void): readonly CloudflareSFURemoteTrack[] {
+  const dropped = [...current].filter(([key, previous]) => next.get(key) !== previous).map(([, previous]) => previous);
+  for (const previous of dropped) safeStopTrack(previous.track, onError);
+  return dropped;
 }
 function observeConnectionState(
   peerState: RTCPeerConnectionState,
