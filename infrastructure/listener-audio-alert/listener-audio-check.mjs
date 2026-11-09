@@ -1,8 +1,13 @@
 export const EPISODE_THRESHOLD = 1;
 const WINDOW_MS = 10 * 60 * 1000;
 const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
-// #721 can add sdk.connection_report with attributes.trigger == audio_receive_stuck here.
-export const SIGNALS = [{ name: "api_unpulled", event: "media.listener_publication_unpulled" }];
+// api_unpulled exists only on Cloudflare SFU and goes away with it. The client report is provider-neutral and
+// carries the provider from the participant's media credential; the query tags it onto the signal name.
+export const PROVIDERS = ["cloudflare_sfu", "chalk_sfu"];
+export const SIGNALS = [
+  { name: "api_unpulled", event: "media.listener_publication_unpulled" },
+  { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck" },
+];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.trigger ? ` and ['attributes.trigger'] == ${literal(signal.trigger)}` : ""})`;
@@ -11,7 +16,9 @@ export function query(dataset) {
   return `[${literal(dataset)}]
 | where ['service.name'] == 'chalk-api' and ['attributes.event'] in (${SIGNALS.map((s) => literal(s.event)).join(", ")})
 | where ${SIGNALS.map(predicate).join(" or ")}
+| extend provider=iff(tostring(['attributes.provider']) in (${PROVIDERS.map(literal).join(", ")}), tostring(['attributes.provider']), 'unknown')
 | extend signal=case(${SIGNALS.map((s) => `${predicate(s)}, ${literal(s.name)}`).join(", ")}, '')
+| extend signal=iff(signal == 'client_audio_stuck', strcat(signal, ':', provider), signal)
 | summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal
 | project episode_id, signal, events`;
 }
