@@ -88,6 +88,23 @@ jobs:
       release_sha: ${{ needs.plan.outputs.target_sha }}
       scorecard_label: chalk_sfu
     secrets: inherit
+  cf-sfu-latency:
+    permissions:
+      contents: read
+    # Cloudflare's action latency from the same runner and kit as own-sfu, for comparison. It runs after own-sfu so its
+    # API traffic is not in the own-SFU contention window, and it never holds the cut: record does not need it.
+    # The job and step timeouts are the 50 and 25 minutes of every other plane; 20 cycles take about 15.
+    needs: [plan, release, own-sfu]
+    if: always() && needs.release.result == 'success'
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      media_plane: cf_sfu
+      latency: true
+      latency_only: true
+      release_sha: ${{ needs.plan.outputs.target_sha }}
+      scorecard_label: cf_sfu
+    secrets: inherit
   web-e2e:
     needs: [release, proof]
     uses: ./.github/workflows/web-call-proof.yml
@@ -135,7 +152,7 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, own-sfu]
+    needs: [plan, proof, own-sfu, cf-sfu-latency]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     outputs:

@@ -16,6 +16,7 @@ import { webMetrics } from "./adapters/web.mjs";
 import { sectionComment, sectionMarker } from "./comment.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
 import { contentionMarkdown } from "./contention.mjs";
+import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
 import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
 
@@ -90,8 +91,9 @@ async function diff(argv) {
     for (const row of result.rows) row.gate = false;
   }
   const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
-  if (values.markdown) writeFileSync(values.markdown, table);
-  console.log(table);
+  const output = planeNoteMarkdown(current.mediaPlane) + table;
+  if (values.markdown) writeFileSync(values.markdown, output);
+  console.log(output);
   if (values["fail-on-gate"] && !current.contention?.contended && !current.contention?.unobservable && result.failures.length > 0) {
     console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
     process.exitCode = 1;

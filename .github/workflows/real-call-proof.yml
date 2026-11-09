@@ -56,7 +56,7 @@ on:
         type: boolean
         default: false
       latency_only:
-        description: Skip real-call proofs and run only the nightly chalk_sfu latency scorecard
+        description: Skip real-call proofs and run only the nightly latency scorecard of one plane (chalk_sfu or cf_sfu)
         type: boolean
         default: false
       release_sha:
@@ -127,8 +127,8 @@ jobs:
           MEDIA_PLANE: ${{ inputs.media_plane }}
           LATENCY: ${{ inputs.latency }}
         run: |
-          [[ "$ENVIRONMENT" == nightly && "$MEDIA_PLANE" == chalk_sfu && "$LATENCY" == true ]] || {
-            echo "Latency-only mode requires nightly, chalk_sfu, and latency=true." >&2
+          [[ "$ENVIRONMENT" == nightly && ( "$MEDIA_PLANE" == chalk_sfu || "$MEDIA_PLANE" == cf_sfu ) && "$LATENCY" == true ]] || {
+            echo "Latency-only mode requires nightly, chalk_sfu or cf_sfu, and latency=true." >&2
             exit 1
           }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -234,7 +234,7 @@ jobs:
             echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
           done
       - name: Measure action latency
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || (inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu')) }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
         timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 70 || 25 }}
         env:
@@ -271,7 +271,7 @@ jobs:
           echo "$run_id" >> .private/proof-run-ids
           CHALK_PROOF_RUN_ID="$run_id" pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04
       - name: Collect the latency scorecard
-        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || (inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu')) }}
+        if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
