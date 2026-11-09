@@ -101,7 +101,16 @@ export function installPcDiagnostics() {
     init?.signal?.addEventListener("abort", () => log("req_abort", { id, afterMs: Math.round(now() - startedAt), reason: String(init.signal.reason?.name ?? init.signal.reason).slice(0, 80) }), { once: true });
     try {
       const response = await nativeFetch(input, init);
-      log("res", { id, status: response.status, ms: Math.round(now() - startedAt) });
+      const body = url.includes("/subscriptions")
+        ? await response
+            .clone()
+            .text()
+            .then(
+              (text) => text.slice(0, 1500),
+              () => null,
+            )
+        : undefined;
+      log("res", { id, status: response.status, ms: Math.round(now() - startedAt), ...(body === undefined ? {} : { body }) });
       return response;
     } catch (error) {
       log("res_error", { id, error: `${error.name}: ${error.message}`.slice(0, 160), ms: Math.round(now() - startedAt) });
