@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 )
 
@@ -22,10 +23,30 @@ func TestReadRSS(t *testing.T) {
 }
 
 func TestReadRuntime(t *testing.T) {
+	// Other goroutines in the test binary can end between the two readings, so start several and
+	// require most of them to show. Each reports in once it is running, so none is still waiting
+	// to be scheduled when the second reading is taken. The cleanup waits for them to finish so
+	// they cannot leak into the baseline of a later run.
+	const started = 32
 	goroutines, _ := readRuntime()
 	stop := make(chan struct{})
-	t.Cleanup(func() { close(stop) })
-	go func() { <-stop }()
+	var finished sync.WaitGroup
+	t.Cleanup(func() {
+		close(stop)
+		finished.Wait()
+	})
+	running := make(chan struct{}, started)
+	for range started {
+		finished.Add(1)
+		go func() {
+			defer finished.Done()
+			running <- struct{}{}
+			<-stop
+		}()
+	}
+	for range started {
+		<-running
+	}
 
 	// A live slice is in the heap whatever the baseline or any collection does, so the reading
 	// must be at least its size.
@@ -36,8 +57,8 @@ func TestReadRuntime(t *testing.T) {
 	}
 	moreGoroutines, heap := readRuntime()
 	runtime.KeepAlive(live)
-	if moreGoroutines <= goroutines {
-		t.Fatalf("goroutines %d then %d after starting one, want a rise", goroutines, moreGoroutines)
+	if moreGoroutines < goroutines+started/2 {
+		t.Fatalf("goroutines %d then %d after starting %d, want a rise of at least %d", goroutines, moreGoroutines, started, started/2)
 	}
 	if heap < size {
 		t.Fatalf("heap in use %d while keeping %d bytes live", heap, size)
