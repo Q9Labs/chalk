@@ -15,6 +15,14 @@ const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
 type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
+/**
+ * Opens the API connection and the Sync WebSocket upgrade before Join, so joining skips both. The call UI stays unloaded
+ * until Join: the call-performance route budget guards that. The socket lives 4 s, so call this again as the visitor acts.
+ */
+function warmCall(): void {
+  const apiBaseURL = publicAPIBaseURL();
+  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
+}
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
 function loadCallSurface(): Promise<typeof CallSurface> {
@@ -123,11 +131,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     entranceAccess.current = prepared;
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
-  // The call UI stays unloaded until Join (the call-performance route budget guards that), but its network paths can open now.
   useEffect(() => {
-    const apiBaseURL = publicAPIBaseURL();
-    preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
-  }, []);
+    if (!reloadMarker) warmCall();
+  }, [reloadMarker]);
   useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;
     reloadAttempted.current = true;
@@ -172,6 +178,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelRequested.current = false;
       setError(null);
       setPreparing(true);
+      warmCall();
       void loadCallSurface().catch(() => undefined);
       const preparation = terminal
         ? terminal.cleanup().then(() => {
@@ -440,6 +447,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               onDisplayNameChange={(name) => {
                 nameEdited.current = true;
                 setDisplayName(name);
+                warmCall();
               }}
               onJoin={() => start()}
             />
