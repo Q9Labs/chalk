@@ -228,9 +228,9 @@ async function main() {
   if (options.merge) return mergeRuns(options.files);
   if (options.envFile) process.loadEnvFile(options.envFile);
   const runId = process.env.CHALK_PROOF_RUN_ID ?? `${Date.now()}-${randomUUID()}`;
-  runLabel(runId);
   const directory = resolve(".private", "prod-proof", runId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  runLabel(runId);
   const startedAt = new Date().toISOString();
   const down = process.env.CHALK_CANARY_FAULT_DOWN;
   const up = process.env.CHALK_CANARY_FAULT_UP;

@@ -1,6 +1,6 @@
 // Browser-side sample of what one guest receives, per sending participant and source. Passed to page.evaluate.
 // A row's key names its connection and track, so a counter only compares with itself: a replaced connection starts at zero.
-export function sampleRemote() {
+function sampleRemote() {
   const snapshot = window.proofClient.getSnapshot();
   const remote = snapshot.media.remote;
   return (async () => {

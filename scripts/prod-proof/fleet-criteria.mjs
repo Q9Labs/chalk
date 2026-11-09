@@ -37,7 +37,7 @@ export function stalledSources(before, after, state) {
 
 // A headless page does not play audio out, so the browser reports no audio energy: audio is judged by bytes per second.
 // The generated tone is about 4 kB/s; a muted microphone sends nothing or DTX comfort noise, far under this line.
-export const audioLeakBytesPerSecond = 1500;
+const audioLeakBytesPerSecond = 1500;
 
 const rate = (row, earlier, seconds) => (row.bytes - earlier.bytes) / seconds;
 
