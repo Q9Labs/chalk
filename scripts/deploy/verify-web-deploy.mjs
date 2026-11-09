@@ -15,74 +15,102 @@ class CommitMismatchError extends Error {
   }
 }
 
-export async function verifyWebDeploy({
-  baseURL,
-  expectedSHA,
-  deadlineMs = DEFAULT_DEADLINE_MS,
-  initialDelayMs = DEFAULT_INITIAL_DELAY_MS,
-  maxDelayMs = DEFAULT_MAX_DELAY_MS,
-  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
-  apiBaseURL = "https://api.chalkmeet.com",
-  expectedEnvironment,
-  environment = process.env,
-  now = Date.now,
-  sleep = delay,
-}) {
-  const origin = normalizeBaseURL(baseURL);
-  const apiOrigin = normalizeBaseURL(apiBaseURL);
-  const normalizedSHA = normalizeSHA(expectedSHA);
-  const startedAt = now();
-  const deadline = startedAt + deadlineMs;
-  const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineMs));
-  let attempt = 0;
-  let retryDelayMs = initialDelayMs;
-  let lastError;
-  let lastSeenSHA;
-  let lastPagesNote = "";
+const DEFAULT_SETTINGS = {
+  deadlineMs: DEFAULT_DEADLINE_MS,
+  initialDelayMs: DEFAULT_INITIAL_DELAY_MS,
+  maxDelayMs: DEFAULT_MAX_DELAY_MS,
+  requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+  apiBaseURL: "https://api.chalkmeet.com",
+  environment: process.env,
+  now: Date.now,
+  sleep: delay,
+};
 
-  while (now() <= deadline) {
-    attempt += 1;
-    try {
-      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal, `${attempt}-${now()}`);
-      console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
-      console.log(`web propagation: ${Math.round((now() - startedAt) / 1000)} s, attempts ${attempt}`);
+export async function verifyWebDeploy(options) {
+  const settings = { ...DEFAULT_SETTINGS, ...options };
+  const target = {
+    origin: normalizeBaseURL(settings.baseURL),
+    apiOrigin: normalizeBaseURL(settings.apiBaseURL),
+    expectedSHA: normalizeSHA(settings.expectedSHA),
+    expectedEnvironment: settings.expectedEnvironment,
+    requestTimeoutMs: settings.requestTimeoutMs,
+    deadlineSignal: AbortSignal.timeout(Math.max(1, settings.deadlineMs)),
+  };
+  const startedAt = settings.now();
+  const deadline = startedAt + settings.deadlineMs;
+  const progress = { attempt: 0, lastError: undefined, lastSeenSHA: undefined, pagesNote: "" };
+  let retryDelayMs = settings.initialDelayMs;
+
+  while (settings.now() <= deadline) {
+    if (await attemptOnce(target, settings, progress)) {
+      console.log(`Web deployment verified at ${target.origin.origin} on attempt ${progress.attempt}.`);
+      console.log(`web propagation: ${elapsedSeconds(settings, startedAt)} s, attempts ${progress.attempt}`);
       return;
-    } catch (error) {
-      lastError = error;
-      if (error instanceof CommitMismatchError) {
-        lastSeenSHA = error.deployedSHA;
-        lastPagesNote = await describePagesDeployment(environment, normalizedSHA);
-      }
-      const remainingMs = deadline - now();
-      if (remainingMs <= 0) break;
-      console.warn(`Verification attempt ${attempt} failed: ${errorMessage(error)}${lastPagesNote}. Retrying in ${Math.min(retryDelayMs, remainingMs) / 1000} s...`);
-      await sleep(Math.min(retryDelayMs, remainingMs));
-      retryDelayMs = Math.min(retryDelayMs * 2, maxDelayMs);
     }
+    const remainingMs = deadline - settings.now();
+    if (remainingMs <= 0) break;
+    const waitMs = Math.min(retryDelayMs, remainingMs);
+    console.warn(`Verification attempt ${progress.attempt} failed: ${errorMessage(progress.lastError)}${progress.pagesNote}. Retrying in ${waitMs / 1000} s...`);
+    await settings.sleep(waitMs);
+    retryDelayMs = Math.min(retryDelayMs * 2, settings.maxDelayMs);
   }
 
-  const elapsedSeconds = Math.round((now() - startedAt) / 1000);
-  throw new Error(`Web deployment verification failed at ${origin.origin} after ${attempt} attempts in ${elapsedSeconds} s: expected commit ${normalizedSHA}, last seen ${lastSeenSHA ?? "none"}: ${errorMessage(lastError)}${lastPagesNote}`);
+  throw new Error(failureMessage(target, progress, elapsedSeconds(settings, startedAt)));
+}
+
+async function attemptOnce(target, settings, progress) {
+  progress.attempt += 1;
+  try {
+    await verifyOnce(target.origin, target.apiOrigin, target.expectedSHA, target.requestTimeoutMs, target.expectedEnvironment, target.deadlineSignal, `${progress.attempt}-${settings.now()}`);
+    return true;
+  } catch (error) {
+    progress.lastError = error;
+    if (error instanceof CommitMismatchError) {
+      progress.lastSeenSHA = error.deployedSHA;
+      progress.pagesNote = await describePagesDeployment(settings.environment, target.expectedSHA);
+    }
+    return false;
+  }
+}
+
+function elapsedSeconds(settings, startedAt) {
+  return Math.round((settings.now() - startedAt) / 1000);
+}
+
+function failureMessage(target, progress, seconds) {
+  const seen = progress.lastSeenSHA ?? "none";
+  return `Web deployment verification failed at ${target.origin.origin} after ${progress.attempt} attempts in ${seconds} s: expected commit ${target.expectedSHA}, last seen ${seen}: ${errorMessage(progress.lastError)}${progress.pagesNote}`;
 }
 
 // Tells "Pages has not promoted the deployment yet" from "Pages serves it but the alias still shows old content".
 // Best effort: the verifier still works without Cloudflare credentials, such as in a local release.
 async function describePagesDeployment(environment, expectedSHA) {
   const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token, PAGES_PROJECT: project } = environment;
-  if (!account || !token || !project) return "";
+  if (![account, token, project].every(Boolean)) return "";
   try {
-    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/${encodeURIComponent(project)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) return ` [Pages API returned ${response.status}]`;
-    const deployment = (await response.json())?.result?.canonical_deployment;
-    const commit = deployment?.deployment_trigger?.metadata?.commit_hash?.toLowerCase();
-    const live = commit === expectedSHA;
-    return ` [Pages production deployment ${deployment?.id ?? "unknown"} has commit ${commit ?? "unknown"}, ${live ? "so Pages has the new deployment live and the alias serves stale content" : "so the new deployment is not live at Pages yet"}]`;
+    return pagesNote(await fetchPagesProject(account, token, project), expectedSHA);
   } catch (error) {
     return ` [Pages API lookup failed: ${errorMessage(error)}]`;
   }
+}
+
+async function fetchPagesProject(account, token, project) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/${encodeURIComponent(project)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Pages API returned ${response.status}`);
+  return response.json();
+}
+
+function pagesNote(project, expectedSHA) {
+  const commit = String(valueAt(project, "result", "canonical_deployment", "deployment_trigger", "metadata", "commit_hash") ?? "unknown").toLowerCase();
+  const verdict = commit === expectedSHA ? "so Pages has the new deployment live and the alias serves stale content" : "so the new deployment is not live at Pages yet";
+  return ` [Pages production deployment has commit ${commit}, ${verdict}]`;
+}
+
+function valueAt(value, ...keys) {
+  return keys.reduce((current, key) => current?.[key], value);
 }
 
 export function parseArguments(arguments_) {

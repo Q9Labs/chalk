@@ -24,23 +24,32 @@ function fakeClock() {
 
 const json = (body, status = 200, contentType = "application/json") => new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers: { "content-type": contentType } });
 
-// The served sw.js shows the old commit until `staleAttempts` requests for it have been answered.
+const ROUTES = {
+  "/healthz": () => json({ status: "ok" }),
+  "/sw.js": (state) => {
+    state.serviceWorkerRequests += 1;
+    // The served sw.js shows the old commit until `staleAttempts` requests for it have been answered.
+    const commit = state.serviceWorkerRequests > state.staleAttempts ? NEW_SHA : OLD_SHA;
+    return json(`self.__build = {"commitHash":"${commit}"}`, 200, "text/javascript");
+  },
+  "/release.json": () => json({ environment: "production", commit: NEW_SHA }),
+  "/.well-known/apple-app-site-association": () => json({}),
+  "/.well-known/assetlinks.json": () => json({}),
+  "/space/": () => json('<meta name="apple-itunes-app" content="app-id=1">', 200, "text/html"),
+};
+
+function respond(url, state) {
+  if (url.hostname === "api.cloudflare.com") return json({ result: { canonical_deployment: { id: "dep-1", deployment_trigger: { metadata: { commit_hash: state.pagesCommit } } } } });
+  return ROUTES[url.pathname]?.(state) ?? json("not found", 404);
+}
+
 function fakeNetwork({ staleAttempts, pagesCommit = NEW_SHA }) {
   const requests = [];
-  let serviceWorkerRequests = 0;
+  const state = { staleAttempts, pagesCommit, serviceWorkerRequests: 0 };
   mock.method(globalThis, "fetch", async (input, init) => {
     const url = new URL(input);
     requests.push({ url, headers: init?.headers ?? {} });
-    if (url.hostname === "api.cloudflare.com") return json({ result: { canonical_deployment: { id: "dep-1", deployment_trigger: { metadata: { commit_hash: pagesCommit } } } } });
-    if (url.pathname === "/healthz") return json({ status: "ok" });
-    if (url.pathname === "/sw.js") {
-      serviceWorkerRequests += 1;
-      return json(`self.__build = {"commitHash":"${serviceWorkerRequests > staleAttempts ? NEW_SHA : OLD_SHA}"}`, 200, "text/javascript");
-    }
-    if (url.pathname === "/release.json") return json({ environment: "production", commit: NEW_SHA });
-    if (url.pathname.startsWith("/.well-known/")) return json({});
-    if (url.pathname === "/space/") return json('<meta name="apple-itunes-app" content="app-id=1">', 200, "text/html");
-    return json("not found", 404);
+    return respond(url, state);
   });
   return requests;
 }
