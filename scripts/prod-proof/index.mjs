@@ -8,9 +8,11 @@ import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createRun, loadConfig, save, check, publicFailure, recordResult, errorEvidence } from "./runtime.mjs";
 import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.mjs";
+import { joinStallProof } from "./join-stall.mjs";
 import { prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = {
+  "join-stall": { media: false, joinStall: true, webhooks: false, proofs: ["join-stall"] },
   leave: { media: false, webhooks: false, proofs: ["leave"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   all: {
@@ -100,7 +102,9 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     receiver = await prepareIntegration(run, plan.webhooks);
     call = await captureCall(run, receiver);
   }
+  if (plan.joinStall) receiver = await prepareIntegration(run, false);
   const actions = {
+    "join-stall": () => joinStallProof(run, receiver),
     leave: () => leaveProof(run),
     offreason: () => offReasonProof(run),
     "camera-share": async () => {
