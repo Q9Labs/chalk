@@ -4,8 +4,6 @@ import type { SyncClock, SyncSocket, SyncWebSocketFactory } from "./types";
 export const DIRECT_SYNC_ATTEMPT_TIMEOUT_MS = 2_500;
 /** After a failed direct attempt, later connections skip the direct path for this long. */
 export const DIRECT_SYNC_FAILURE_MEMORY_MS = 10 * 60_000;
-/** The direct proxy closes with this code when it is over a connection bound. */
-const TRY_AGAIN_LATER = 1013;
 const MAX_REMEMBERED_HOSTS = 8;
 
 /** Remembers which direct hosts failed, so a blocked path is not retried on every reconnect. */
@@ -57,7 +55,8 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
   };
   return {
     connect(tunnelUrl) {
-      if (memory.isFailed(directHost, clock.now())) return options.inner.connect(tunnelUrl);
+      // The hello frame carries the token, so a secure Tunnel URL never falls to a plain direct one.
+      if (downgrades(tunnelUrl, options.directUrl) || memory.isFailed(directHost, clock.now())) return options.inner.connect(tunnelUrl);
       const markFailed = () => memory.markFailed(directHost, clock.now() + settings.failureMemoryMs);
       return new DirectFirstSocket(options.inner, directUrlFor(tunnelUrl, options.directUrl), tunnelUrl, clock, settings.attemptTimeoutMs, markFailed);
     },
@@ -67,6 +66,10 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
 /** Spread into the sync client options: empty (today's behaviour) unless a direct URL is configured. */
 export function directFirstSyncOptions(directUrl: string | null | undefined, inner: SyncWebSocketFactory): { readonly webSocket?: SyncWebSocketFactory } {
   return directUrl ? { webSocket: createDirectFirstWebSocketFactory({ directUrl, inner }) } : {};
+}
+
+function downgrades(tunnelUrl: string, directUrl: string): boolean {
+  return new URL(tunnelUrl).protocol === "wss:" && new URL(directUrl).protocol !== "wss:";
 }
 
 function directUrlFor(tunnelUrl: string, directUrl: string): string {
@@ -139,8 +142,12 @@ class DirectFirstSocket implements SyncSocket {
     };
     socket.onerror = () => {
       if (!live()) return;
-      if (this.#state === "trying_direct") this.#fallBack();
-      else this.onerror?.();
+      if (this.#state === "trying_direct") {
+        this.#fallBack();
+        return;
+      }
+      if (this.#failedBeforeFirstFrame(path)) this.markDirectFailed();
+      this.onerror?.();
     };
     socket.onclose = (event) => {
       if (this.#active !== socket) return;
@@ -153,10 +160,15 @@ class DirectFirstSocket implements SyncSocket {
         this.#fallBack();
         return;
       }
-      // Over a proxy bound before any frame arrived: the next attempt should take the Tunnel.
-      if (path === "direct" && event.code === TRY_AGAIN_LATER && !this.#receivedFromDirect) this.markDirectFailed();
+      if (this.#failedBeforeFirstFrame(path)) this.markDirectFailed();
       this.onclose?.(event);
     };
+  }
+
+  // An upgrade that succeeds but never delivers a server frame (a proxy bound, a blocked path, a reset after
+  // hello) is a failed direct attempt: the next connection takes the Tunnel.
+  #failedBeforeFirstFrame(path: "direct" | "tunnel"): boolean {
+    return path === "direct" && !this.#receivedFromDirect;
   }
 
   #fallBack(): void {

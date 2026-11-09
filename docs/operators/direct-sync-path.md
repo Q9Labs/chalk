@@ -30,13 +30,13 @@ No hostname, address or account identifier is stored in Git. The operator suppli
 
 When `syncDirectUrl` is set, each Sync connection attempt first opens the direct URL with the same path and query as the regular Sync URL. The client treats the attempt as failed when the socket errors or closes before it opens (a refused connection, a DNS failure or a TLS failure all look like this in a browser), or when it has not opened after 2.5 seconds. It then opens the regular Sync URL. The rest of the client sees one socket.
 
-After a failed attempt the client skips the direct URL for 10 minutes, shared by every client in the page, so a blocked path costs at most 2.5 seconds once. A direct socket that opens and later drops is not a failed attempt: the next reconnect tries the direct URL again. If the direct proxy closes a socket with code 1013 (over a bound) before any frame arrives, the client treats that as a failed attempt too.
+After a failed attempt the client skips the direct URL for 10 minutes, shared by every client in the page, so a blocked path costs at most 2.5 seconds once. A direct socket that opens, delivers at least one server frame and later drops is not a failed attempt: the next reconnect tries the direct URL again. A direct socket that errors or closes before its first server frame is a failed attempt, whatever the close code (a proxy bound answers 1013, a broken path resets), so the next connection uses the Tunnel. A direct URL that is `ws://` is ignored when the regular Sync URL is `wss://`, so the token never travels over plain text.
 
 The whiteboard socket does not use the direct path. Only `/v1/sync` is proxied.
 
 ## Turn it on for one environment
 
-Start with nightly. Every step is reversible; see the next section.
+Start with nightly. The OpenTofu root accepts only `environment = "nightly"` and fails validation for anything else, and `build-web` passes the direct URL to the nightly build only. Staging and production each need a reviewed change to both before they can use the path. Every step is reversible; see the next section.
 
 1. **Network.** Apply the OpenTofu root in `infrastructure/managed-episode/direct-sync/opentofu/` with the environment, region, instance id, hostname, zone id and the host's public address as variables. It creates one security group that allows inbound TCP 443 and nothing else, attaches it to the host's network interface, and creates DNS-only A records. The host address must survive stop and start, so use an Elastic IP; the nightly host is a spot instance that stops on interruption.
 2. **Proxy.** On the host, run `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` as root (through the environment's SSM document). It downloads a pinned Caddy release, checks its SHA-512, validates the config and starts `chalk-direct-sync-proxy.service`. The proxy only forwards `/v1/sync` to the local Sync port. It replaces `Cf-Connecting-Ip` with the TCP peer address and sets `X-Chalk-Ingress: direct`, which is how Sync knows to apply its direct bounds. Every other path returns 404.

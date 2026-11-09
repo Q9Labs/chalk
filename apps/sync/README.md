@@ -265,7 +265,7 @@ closed (503) when it cannot answer or tracks too many IPs.
 | Sockets per tenant                      | 512         | `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT`     | close 1013 at `hello`                 |
 | Frame size                              | 65536 bytes | none                                           | close 1009 (Bandit)                   |
 
-The existing 5 second `hello` timeout applies to direct sockets too. The count
+The listener also closes a fragmented message over 256 KiB with 1009 (Bandit defaults to 8 MB; the setting is per listener, so it covers Tunnel sockets too, and 256 KiB is the largest inbound message any Sync socket accepts). The existing 5 second `hello` timeout applies to direct sockets too. The count
 of tracked IPs is bounded (8192). Decisions appear as
 `chalk.sync.direct.admission.<outcome>.<stage>` metrics and as the `ingress`
 attribute on `sync.websocket.handshake`.

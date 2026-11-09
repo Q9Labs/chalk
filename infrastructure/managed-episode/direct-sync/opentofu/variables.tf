@@ -1,10 +1,10 @@
 variable "environment" {
   type        = string
-  description = "Environment this root applies to. The instance must carry the same chalk:environment tag."
+  description = "Environment this root applies to. Only nightly for now; the instance must carry the same chalk:environment tag."
 
   validation {
-    condition     = contains(["nightly", "staging", "production"], var.environment)
-    error_message = "environment must be nightly, staging or production."
+    condition     = var.environment == "nightly"
+    error_message = "This root applies to the nightly environment only. Widen this check in a reviewed change before using it elsewhere."
   }
 }
 

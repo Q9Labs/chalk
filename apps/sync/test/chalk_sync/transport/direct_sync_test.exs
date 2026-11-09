@@ -61,6 +61,28 @@ defmodule ChalkSync.Transport.DirectSyncTest do
     assert {:json, %{"type" => "error"}, _client} = Client.recv(client)
   end
 
+  test "a fragmented message over the listener bound is closed with 1009", ctx do
+    {:ok, tcp} = :gen_tcp.connect({127, 0, 0, 1}, ctx.port, [:binary, active: false])
+
+    :ok =
+      :gen_tcp.send(tcp, [
+        "GET /v1/sync HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n",
+        "Sec-WebSocket-Key: #{Base.encode64(:crypto.strong_rand_bytes(16))}\r\nSec-WebSocket-Version: 13\r\n",
+        "X-Chalk-Ingress: direct\r\nCf-Connecting-Ip: 203.0.113.9\r\n\r\n"
+      ])
+
+    {:ok, "HTTP/1.1 101" <> _upgrade} = :gen_tcp.recv(tcp, 0, 2_000)
+
+    # Eight masked 40 kB fragments (each under the direct frame bound), 320 kB in all, with no final frame.
+    fragment = :binary.copy("a", 40_000)
+    first = <<0x01, 0x80 + 126, 40_000::16, 0::32, fragment::binary>>
+    more = <<0x00, 0x80 + 126, 40_000::16, 0::32, fragment::binary>>
+    :ok = :gen_tcp.send(tcp, [first | List.duplicate(more, 7)])
+
+    assert {:ok, <<0x88, _length, 1009::16, _reason::binary>>} = :gen_tcp.recv(tcp, 0, 2_000)
+    :gen_tcp.close(tcp)
+  end
+
   describe "socket process" do
     @tenant "11111111-1111-4111-8111-111111111111"
 
