@@ -156,7 +156,7 @@ test("a live tile split by a full-width label still counts as live", { skip: !ha
   }
 });
 
-test("a Recording the decoder rejects fails with the tool name and exit code", async () => {
+test("a Recording the decoder rejects fails with the tool name and exit code", { skip: !hasFfmpeg && "ffmpeg is not installed" }, async () => {
   await assert.rejects(tileEvidence(decodeFrames("/nonexistent/missing.mp4"), 3), /ffmpeg failed \(exit \d+\)/);
 });
 
