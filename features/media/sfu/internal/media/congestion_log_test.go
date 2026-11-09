@@ -13,10 +13,13 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 	// The same MID belongs to different subscriptions on different connections.
 	for _, connectionID := range []string{"connection-a", "connection-b"} {
 		sub := &subscription{
-			owner:     &Session{id: connectionID},
-			mid:       "2",
-			alloc:     allocation{decided: true, rid: "l"},
-			transport: &transport{estimator: bandwidthEstimator{estimate: 356_530, probeFloor: 356_530, probeUntil: 1}},
+			owner: &Session{id: connectionID},
+			mid:   "2",
+			alloc: allocation{decided: true, rid: "l"},
+			transport: &transport{estimator: bandwidthEstimator{
+				estimate: 356_530, probeFloor: 356_530, probeUntil: 1, lossShare: 0.04,
+				lastDecrease: decrease{at: 1, cause: causeOveruse, from: 900_000, to: 356_530, acked: 419_447},
+			}},
 		}
 		for _, paused := range []bool{true, false} {
 			node.logCongestionPause(sub, paused, 0)
@@ -35,6 +38,8 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 				"connectionId": connectionID, "mid": "2", "rid": "l", "reason": reason,
 				"estimateBps": float64(356_530), "provenBps": float64(356_530),
 				"deliveredShare": float64(1), "probing": false, "hostPressure": false,
+				"lossShare": 0.04, "lossy": false, "trend": "normal", "ackedBps": float64(0),
+				"decreaseCause": "overuse", "decreaseFromBps": float64(900_000), "decreaseToBps": float64(356_530), "decreaseAckedBps": float64(419_447),
 			} {
 				if got, ok := record[field]; !ok || got != want {
 					t.Errorf("%s: %s = %v (present=%t), want %v", message, field, got, ok, want)

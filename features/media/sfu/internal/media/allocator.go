@@ -192,7 +192,8 @@ func reserveFloors(tiles []tile, budget float64) (waiting float64) {
 // left less the tile's reserve, and returns the bits/s it takes. Before any feedback a tile keeps its
 // layer, because the estimate has nothing to judge by yet. A tile whose lowest
 // layer does not fit pauses only after pauseHold, and only once the path stops
-// delivering.
+// delivering and the receiver reports heavy loss: a byte share alone can fall
+// under deliveredShare with no media lost.
 func hold(t *tile, estimate transportEstimate, room float64, now int64) float64 {
 	warm, state := estimate.warm, t.state
 	if state.backoff == 0 {
@@ -220,7 +221,7 @@ func hold(t *tile, estimate transportEstimate, room float64, now int64) float64 
 		if state.short == 0 {
 			state.short = now
 		}
-		if now-state.short >= int64(pauseHold) && !estimate.delivering {
+		if now-state.short >= int64(pauseHold) && !estimate.delivering && estimate.lossy {
 			state.paused, state.fitSince, state.short = true, 0, 0
 			state.backOff(now)
 			return 0

@@ -587,6 +587,10 @@ type transportEstimate struct {
 	// delivering means the receiver got nearly every byte of the last second,
 	// so whatever the estimate says, the path carries what is being sent.
 	delivering bool
+	// lossy means the receiver reported heavy packet loss lately. The delivered
+	// share counts bytes, so a few large packets the receiver never reports can
+	// lower it on a path that loses no media; loss is the evidence of a full path.
+	lossy      bool
 	probing    bool
 	probeReady bool // a probe may start now
 	// pressured means the node is stalled, so the estimate and the pacer's drops
@@ -604,6 +608,7 @@ func (t *transport) estimate(now int64) transportEstimate {
 		warm:      t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
 		feedback: t.feedback, congested: congested, probing: t.probeID != 0,
 		delivering: t.estimator.warm() && t.estimator.delivered(now) >= deliveredShare,
+		lossy:      t.estimator.lossy(now),
 		probeReady: t.probeID == 0 && now >= t.probeNext && now >= t.pressureUntil && len(t.probeStreams) > 0 && t.queuedBytes == 0,
 	}
 }
@@ -612,14 +617,20 @@ func (t *transport) estimate(now int64) transportEstimate {
 type estimateReading struct {
 	current, proven, delivered float64
 	probing, pressured         bool
+	acked, lossShare           float64
+	lossy                      bool
+	trend                      delaySignal
+	decrease                   decrease
 }
 
 func (t *transport) reading(now int64) estimateReading {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	e := &t.estimator
 	return estimateReading{
-		current: t.estimator.current(), proven: t.estimator.proven(now), delivered: t.estimator.delivered(now),
+		current: e.current(), proven: e.proven(now), delivered: e.delivered(now),
 		probing: t.probeID != 0, pressured: t.stalled(now),
+		acked: e.acked(), lossShare: e.lossShare, lossy: e.lossy(now), trend: e.trend.signal, decrease: e.lastDecrease,
 	}
 }
 
