@@ -8,7 +8,7 @@ function stubDocument(): FakeLink[] {
   vi.stubGlobal("document", {
     createElement: () => ({ rel: "", href: "", crossOrigin: "" }),
     head: {
-      append: (link: FakeLink) => links.push(link),
+      appendChild: (link: FakeLink) => links.push(link),
       querySelector: (selector: string) => links.find((link) => selector === `link[rel="preconnect"][href="${link.href}"]`) ?? null,
     },
   });

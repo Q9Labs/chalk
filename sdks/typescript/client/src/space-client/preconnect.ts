@@ -14,18 +14,17 @@ export type PreconnectOptions = {
  * connection after a few seconds, so a long wait gets only part of the saving. It does nothing outside a browser page.
  */
 export function preconnect(options: PreconnectOptions = {}): void {
-  const head = globalThis.document?.head;
-  if (!head) return;
+  if (typeof document === "undefined") return;
   const baseUrl = options.baseUrl ?? DEFAULT_API_BASE_URL;
   const origins = new Set([new URL(baseUrl).origin, httpOrigin(options.syncUrl ?? defaultSyncUrl(baseUrl))]);
   for (const origin of origins) {
-    if (head.querySelector(`link[rel="preconnect"][href="${origin}"]`)) continue;
-    const link = globalThis.document.createElement("link");
+    if (document.head.querySelector(`link[rel="preconnect"][href="${origin}"]`)) continue;
+    const link = document.createElement("link");
     link.rel = "preconnect";
     link.href = origin;
     // Calls to these origins send an Authorization header, so the browser opens them in CORS mode.
     link.crossOrigin = "anonymous";
-    head.append(link);
+    document.head.appendChild(link);
   }
 }
 
