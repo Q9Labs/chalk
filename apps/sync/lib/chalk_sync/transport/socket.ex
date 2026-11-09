@@ -18,6 +18,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.Telemetry
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
@@ -647,12 +648,12 @@ defmodule ChalkSync.Transport.SocketV1 do
          collaboration_negotiated,
          collaboration_version
        ) do
-    case Coordinator.activate_recovery(
-           coordinator,
-           recovery,
-           self(),
-           recovery_timeout()
-         ) do
+    activated =
+      entry_stage(:activate, fn ->
+        Coordinator.activate_recovery(coordinator, recovery, self(), recovery_timeout())
+      end)
+
+    case activated do
       :ok ->
         Process.cancel_timer(state.hello_timer)
 
@@ -989,41 +990,58 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(true), do: "negotiated"
   defp negotiation_outcome(false), do: "not_requested"
 
+  # Wall time of each hello step, so the nightly `sync_welcome` stage splits into
+  # database work and Episode-coordinator work.
+  defp entry_stage(stage, fun), do: Telemetry.timed([:entry, :stage], stage, fun)
+
+  defp admit_entry(state, identity) do
+    entry_stage(:admit, fn ->
+      Stateholder.admit_socket_entry(
+        %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
+        state.requested_entry_generation
+      )
+    end)
+  end
+
+  defp negotiate_entry(state, identity, recovery, hello) do
+    requested =
+      if recovery.mode == :terminal or recovery.terminal_reason,
+        do: nil,
+        else: Map.get(hello, :collaboration)
+
+    entry_stage(:negotiate, fn ->
+      negotiate_collaboration(identity, requested, state.observability)
+    end)
+  end
+
+  defp begin_entry_recovery(state, identity, protocol_options) do
+    options =
+      protocol_options
+      |> Map.put(:entry_confirmation, state.entry_confirmation)
+      |> Map.put(:media_off_reason, state.media_off_reason)
+      |> Map.put(
+        :entry_generation,
+        state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)
+      )
+
+    entry_stage(:begin_recovery, fn -> Coordinator.begin_recovery(identity, self(), options) end)
+  end
+
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, identity} <-
-           Stateholder.admit_socket_entry(
-             %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
-             state.requested_entry_generation
-           ),
+    with {:ok, identity} <- admit_entry(state, identity),
          state = %{
            state
            | entry_confirmation:
                state.entry_confirmation && identity.entry_ownership != :compatibility
          },
-         :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
-         {:ok, recovery} <- Stateholder.recover(identity, cursor),
+         :ok <-
+           entry_stage(:confirm, fn ->
+             confirm_legacy_entry(identity, state.entry_confirmation)
+           end),
+         {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
-           negotiate_collaboration(
-             identity,
-             if(recovery.mode == :terminal or recovery.terminal_reason,
-               do: nil,
-               else: Map.get(hello, :collaboration)
-             ),
-             state.observability
-           ),
-         {:ok, coordinator} <-
-           Coordinator.begin_recovery(
-             identity,
-             self(),
-             protocol_options
-             |> Map.put(:entry_confirmation, state.entry_confirmation)
-             |> Map.put(:media_off_reason, state.media_off_reason)
-             |> Map.put(
-               :entry_generation,
-               state.requested_entry_generation != :legacy &&
-                 not is_nil(identity.entry_generation)
-             )
-           ) do
+           negotiate_entry(state, identity, recovery, hello),
+         {:ok, coordinator} <- begin_entry_recovery(state, identity, protocol_options) do
       start_registered_recovery(
         state,
         identity,

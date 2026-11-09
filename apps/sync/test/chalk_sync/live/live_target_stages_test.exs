@@ -96,4 +96,17 @@ defmodule ChalkSync.Live.LiveTargetStagesTest do
     assert count >= 1 and total >= 1_500
     refute Enum.any?(Map.keys(metrics), &String.contains?(&1, "caller-chosen"))
   end
+
+  test "a timed socket entry step lands in its own fixed label" do
+    assert :done = ChalkSync.Telemetry.timed([:entry, :stage], :recover, fn -> :done end)
+
+    assert :done =
+             ChalkSync.Telemetry.timed([:entry, :stage], :not_a_stage, fn -> :done end)
+
+    %{metrics: metrics} = Metrics.snapshot()
+
+    assert %{count: count} = metrics["chalk.sync.entry.stage.success.recover"]
+    assert count >= 1
+    refute Enum.any?(Map.keys(metrics), &String.contains?(&1, "not_a_stage"))
+  end
 end
