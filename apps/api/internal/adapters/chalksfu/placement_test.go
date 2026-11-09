@@ -80,8 +80,8 @@ func TestConformancePlacementTakesTheFirstNodeWithRoom(t *testing.T) {
 	if err != nil || found.Found {
 		t.Fatalf("the standby's session on the primary: %+v, %v, want not found", found, err)
 	}
-	if placed, room := placeNow(); placed != "sfu-primary" || room {
-		t.Fatalf("no node with room: placed on %q with room %t, want the primary without room", placed, room)
+	if placed, room := placeNow(); placed != "" || room {
+		t.Fatalf("no node with room: placed on %q with room %t, want no node", placed, room)
 	}
 
 	if _, err := fleet.Node("sfu-gone"); err == nil {
@@ -101,13 +101,13 @@ func TestConformancePlacementSkipsASilentNode(t *testing.T) {
 	}
 	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, first), scopeOf("ep-1", "alice"))
 	fleet.Probe(context.Background())
-	if placed, _ := place(fleet); placed != "sfu-primary" {
-		t.Fatalf("silent standby: placed on %q, want the primary", placed)
+	if placed, _ := place(fleet); placed != "" {
+		t.Fatalf("silent standby, full primary: placed on %q, want no node", placed)
 	}
 }
 
 // A client without the service identity cannot read readiness, so its probes
-// never put a node into placement.
+// never verify a node and placement offers none.
 func TestConformancePlacementNeedsTheServiceIdentity(t *testing.T) {
 	ca := newAuthority(t, "pool CA")
 	first, second := startSFUUnder(t, ca, map[string]string{"SFU_PACKET_BUDGET": "1200"}), startSFUUnder(t, ca, nil)
@@ -125,8 +125,8 @@ func TestConformancePlacementNeedsTheServiceIdentity(t *testing.T) {
 
 	stranger := first.fleetOf(t, ca, "someone-else.test", nodes...)
 	stranger.Probe(context.Background())
-	if placed, room := place(stranger); placed != "sfu-a" || room {
-		t.Fatalf("no readable node: placed on %q with room %t, want the first node without room", placed, room)
+	if placed, room := place(stranger); placed != "" || room {
+		t.Fatalf("no readable node: placed on %q with room %t, want no node, as none is verified", placed, room)
 	}
 }
 
@@ -157,9 +157,9 @@ func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
 	if err != nil || next.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || next.Node != "" || next.PlacementReason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("binding on a full pool: %+v, %v, want Cloudflare", next, err)
 	}
-	stays, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || stays.Provider != string(spaces.MediaPlaneProviderChalkSFU) || stays.Node != "sfu-a" || stays.PlacementReason != mediaplane.PlacementNoCapacity {
-		t.Fatalf("binding on a full pool without Cloudflare: %+v, %v, want chalk_sfu on sfu-a", stays, err)
+	refused, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+		t.Fatalf("binding on a full pool without Cloudflare: %+v, %v, want a refusal and no binding", refused, err)
 	}
 	live, err := registry(withCloudflare, bound).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{})
 	if err != nil || live.Provider() != mediaplane.ProviderChalkSFU {
@@ -473,11 +473,11 @@ func TestConformanceOverflowOffRefusesTheNewEpisodeAndPinsTheBoundOne(t *testing
 	if refused != nil || !errors.Is(err, mediaplane.ErrPlaneUnavailable) || !errors.Is(err, mediaplane.ErrProviderRateLimited) || !errors.Is(err, mediaplane.ErrPlacementRefused) {
 		t.Fatalf("full pool with overflow off: %+v, %v, want the capacity error and no binding", refused, err)
 	}
-	stays, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || stays.Provider != string(spaces.MediaPlaneProviderChalkSFU) || stays.Node != "sfu-a" || stays.PlacementReason != mediaplane.PlacementNoCapacity {
-		t.Fatalf("full pool without a Cloudflare application: %+v, %v, want chalk_sfu on sfu-a", stays, err)
+	none, err := registryOn(fleet, runtimeconfig.CloudflareRealtimeConfig{}, nil, telemetry).ResolveBinding(ctx, tenants.Tenant{}, chalkSpace, ownSFUClients)
+	if none != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
+		t.Fatalf("full pool without a Cloudflare application: %+v, %v, want a refusal and no binding", none, err)
 	}
-	if want := []string{"chalk_sfu/primary", "chalk_sfu/overflow_no_room", "chalk_sfu/no_capacity"}; !slices.Equal(telemetry.got, want) {
+	if want := []string{"chalk_sfu/primary", "chalk_sfu/overflow_no_room", "chalk_sfu/overflow_no_room"}; !slices.Equal(telemetry.got, want) {
 		t.Fatalf("placement counter saw %v, want %v", telemetry.got, want)
 	}
 

@@ -145,7 +145,7 @@ func (f *Fleet) recoveryCandidates() []candidate {
 				continue
 			}
 			load, probed := f.loads[node.node]
-			if !probed || time.Since(load.at) > probeFreshness || load.Draining || load.tooOld() {
+			if !probed || time.Since(load.at) > probeFreshness || load.Draining || f.verdicts[node.node] != verdictCompatible {
 				continue
 			}
 			candidates = append(candidates, candidate{adapter: node, standby: standby})
