@@ -323,6 +323,14 @@ Once the media plane is live, test it end to end, stress it and hunt edge cases
 on the live node: a killed node recovers by explicit rejoin, outstanding cleanup
 drains, and a live own-SFU Episode stays pinned when the selector changes.
 
+**Hard condition before production turns own SFU on:** before the production API
+gets `CHALK_SFU_ENABLED` or any configured node, for any Space, run a live media
+smoke against the production node (`TestLiveSmokeClasses` or an equivalent media
+probe that sends and receives real audio and video) and record the result.
+`TestLoopback` does not count: it starts its own in-process service and never
+reaches a deployed node. Until that smoke is recorded, the production node is
+proven only to be healthy, on protocol 2, at the deployed revision.
+
 **Risk:** a one-node canary can lose all own-SFU calls until replacement. That
 is acceptable only for this internal proof. M11 supplies primary-first placement,
 degraded standby admission and drain/failure proof, and M12 supplies recording/client/monitoring parity
