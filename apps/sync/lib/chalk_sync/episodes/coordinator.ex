@@ -1455,7 +1455,16 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   defp refresh_after_live_target(live, %{"outcome" => outcome} = result)
        when outcome in ["confirmed", "satisfied"] do
-    case LiveEpisode.reconcile(live) do
+    started = System.monotonic_time(:microsecond)
+    reconciled = LiveEpisode.reconcile(live)
+
+    Telemetry.execute(
+      [:live_target, :stage],
+      %{duration_us: System.monotonic_time(:microsecond) - started},
+      %{outcome: :success, stage: :reconcile}
+    )
+
+    case reconciled do
       {:ok, next, frames} ->
         broadcast_live_frames(next, frames)
         {next, result}
