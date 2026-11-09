@@ -123,11 +123,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     entranceAccess.current = prepared;
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
-  // While the person reads the name prompt, open the connections and fetch the call UI that Join will need.
+  // The call UI stays unloaded until Join (the call-performance route budget guards that), but its network paths can open now.
   useEffect(() => {
     const apiBaseURL = publicAPIBaseURL();
     preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
-    void loadCallSurface().catch(() => undefined);
   }, []);
   useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;
