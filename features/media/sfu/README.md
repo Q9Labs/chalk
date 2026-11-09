@@ -207,3 +207,17 @@ Run the heavy runs on Instabox (`box run -- '...'` from the repository root), no
    SIMULCAST=0 node tests/browser/chromium-check.mjs   # single-encoding camera
    ENCODINGS=3 node tests/browser/chromium-check.mjs   # adds a quarter-size "q" encoding
    ```
+
+3. **Live staging soak** (`tests/live_smoke_test.go`, `TestLiveSmokeClasses`) holds classes on a deployed node and judges the run against [Soak acceptance](../../../docs/sfu/capacity-calibration.md#soak-acceptance). Each Participant publishes simulcast cameras, a microphone and, for the first of a class, stretches of screen share, and everyone pulls everyone. It skips without `SFU_LIVE_URL`. The defaults are the staging soak: 3 classes of 3 Participants with 2 cameras each, 5 hours, a sample every 10 s, and a node that reports a 22,000 packets/s budget. The run fails on any microphone stall over 500 ms, a screen stall, receive-buffer drops, a wrong budget or a lost session. From a 1 hour hold it also needs the `:00` and `:30` marks inside the window and the node's 10 s CPU capture. It writes the acceptance numbers to `SFU_LIVE_RESULT`. `SFU_LIVE_SHORT=1` holds 5 minutes and skips the evidence only a long run can give. The knobs are listed above the test.
+
+   The run is a staging run, so it goes through the lease wrapper, and `go test` needs a timeout longer than the hold. `scripts/node-cpu-capture` runs on the node over SSH and writes the 10 s steal and own-CPU file the test reads:
+
+   ```sh
+   ssh root@<node> 'bash -s -- 10' < features/media/sfu/scripts/node-cpu-capture > cpu.jsonl &
+   scripts/staging-sfu/staging-lock --holder soak --purpose staging-soak --run-id <label> --ttl 600 -- \
+     env SFU_LIVE_URL=<control URL> SFU_LIVE_CA=<ca> SFU_LIVE_CERT=<api cert> SFU_LIVE_KEY=<api key> \
+       SFU_LIVE_NODE_CPU=cpu.jsonl SFU_LIVE_RESULT=result.json \
+     go -C features/media/sfu test ./tests -run '^TestLiveSmokeClasses$' -count=1 -v -timeout 5h45m
+   ```
+
+   `TestLiveHarnessHoldsAClassOnALoopbackNode` runs the same driver against an in-process node in the normal gate.
