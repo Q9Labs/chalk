@@ -175,7 +175,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     setStartError(null);
   }, [spaceId]);
   useEffect(() => {
-    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined });
+    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined, syncDirectUrl: import.meta.env.VITE_CHALK_SYNC_DIRECT_URL?.trim() || undefined });
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };

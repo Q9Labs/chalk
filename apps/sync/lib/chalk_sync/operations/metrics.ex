@@ -19,13 +19,15 @@ defmodule ChalkSync.Operations.Metrics do
     [:chalk, :sync, :webhook, :fanout],
     [:chalk, :sync, :retention, :cleanup],
     [:chalk, :sync, :live_target, :stage],
-    [:chalk, :sync, :entry, :stage]
+    [:chalk, :sync, :entry, :stage],
+    [:chalk, :sync, :direct, :admission]
   ]
   @outcomes ~w(
     accepted overloaded server_draining released committed duplicate rejected retryable error
     snapshot replay up_to_date terminal valid malformed event_limit byte_limit age_limit
     replay_page_limit applied already_applied superseded success failure operation_failure queued
     confirmed terminal_failure pending finalization_failure dropped retry_exhausted
+    rate_limited ip_limit tenant_limit
   )
   @external_operations ~w(
     mute_participant stop_participant_camera stop_participant_screen_share
@@ -38,6 +40,7 @@ defmodule ChalkSync.Operations.Metrics do
     admit confirm recover negotiate begin_recovery activate
     admit_configure admit_locks admit_seat admit_presence
   )a
+  @direct_stages ~w(upgrade register authenticated)a
   @handler_id __MODULE__
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -158,6 +161,11 @@ defmodule ChalkSync.Operations.Metrics do
 
   defp metric_labels([:chalk, :sync, :entry, :stage], %{stage: stage})
        when stage in @entry_stages do
+    [Atom.to_string(stage)]
+  end
+
+  defp metric_labels([:chalk, :sync, :direct, :admission], %{stage: stage})
+       when stage in @direct_stages do
     [Atom.to_string(stage)]
   end
 

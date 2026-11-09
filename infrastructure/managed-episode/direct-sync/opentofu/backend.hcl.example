@@ -1,0 +1,6 @@
+# Copy to backend.hcl and fill in. Use the environment's own state bucket; never share production state with nightly.
+bucket       = "__STATE_BUCKET__"
+key          = "direct-sync/__ENVIRONMENT__/terraform.tfstate"
+region       = "__AWS_REGION__"
+encrypt      = true
+use_lockfile = true

@@ -1,0 +1,5 @@
+.terraform/
+*.plan
+*.tfplan
+backend.hcl
+*.tfvars

@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import release
+import web
 from github_release import GitHub, digest, payload
 
 SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
@@ -37,6 +38,29 @@ def held(result='passed', sha=SHA, identity=1):
     if result is not None:
         info['own_sfu_proof_result'] = result
     return dict(id=identity, created_at='2026-11-08T02:00:00Z', latest_status='success', payload=info)
+
+
+class WebDirectSyncConfigTests(unittest.TestCase):
+    """The direct Sync URL reaches the web build only when the release environment sets it."""
+
+    def config(self, **environment):
+        with patch.dict(os.environ):
+            os.environ.pop('CHALK_WEB_SYNC_DIRECT_URL', None)
+            os.environ.update(environment)
+            return web.public_config('nightly', SHA)
+
+    def test_unset_keeps_the_public_config_unchanged(self):
+        self.assertNotIn('VITE_CHALK_SYNC_DIRECT_URL', self.config())
+        self.assertEqual(self.config(CHALK_WEB_SYNC_DIRECT_URL='  '), self.config())
+
+    def test_a_direct_url_is_passed_to_the_build(self):
+        url = 'wss://direct.example.test/v1/sync'
+        self.assertEqual(self.config(CHALK_WEB_SYNC_DIRECT_URL=url)['VITE_CHALK_SYNC_DIRECT_URL'], url)
+
+    def test_a_malformed_direct_url_fails_the_release(self):
+        for url in ('ws://direct.example.test/v1/sync', 'wss://direct.example.test/other', 'wss://direct.example.test/v1/sync?x=1', 'direct.example.test'):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                self.config(CHALK_WEB_SYNC_DIRECT_URL=url)
 
 
 class OwnSfuPromotionTests(unittest.TestCase):
