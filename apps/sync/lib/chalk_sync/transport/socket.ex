@@ -20,6 +20,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Stateholder.Operation
   alias ChalkSync.Telemetry
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
+  alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
   alias ChalkSync.UUID
@@ -34,8 +35,19 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   @impl true
   def init(opts) do
-    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
     opts = Map.new(opts)
+    direct = Map.get(opts, :direct)
+
+    # The router checked the IP before the upgrade; this reserves the slot and closes on a lost race.
+    with %{ip: ip} <- direct, {:error, _denial} <- DirectLimits.register(ip) do
+      send(self(), :direct_denied)
+    end
+
+    {:ok, awaiting_hello_state(opts, direct)}
+  end
+
+  defp awaiting_hello_state(opts, direct) do
+    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
 
     connection_attributes =
       opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
@@ -50,33 +62,33 @@ defmodule ChalkSync.Transport.SocketV1 do
         Map.merge(connection_attributes, %{transport: "websocket", protocol: 1})
       )
 
-    {:ok,
-     %{
-       phase: :awaiting_hello,
-       terminal: nil,
-       hello_timer: timer,
-       heartbeat_timer: nil,
-       entry_timer: nil,
-       entry_confirmation: Map.get(opts, :entry_confirmation, false),
-       participant_self_identity: Map.get(opts, :participant_self_identity, false),
-       media_off_reason: Map.get(opts, :media_off_reason, false),
-       participant_devices: Map.get(opts, :participant_devices, false),
-       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
-       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
-       terminal_ack_timer: nil,
-       terminal_head: nil,
-       missed_heartbeats: 0,
-       opened_at_ms: System.monotonic_time(:millisecond),
-       last_heartbeat_at_ms: nil,
-       identity: nil,
-       coordinator: nil,
-       commands: %{},
-       collaboration_negotiated: false,
-       collaboration_version: nil,
-       collaboration_queue: CollaborationQueue.new(),
-       connection_attributes: connection_attributes,
-       observability: observability
-     }}
+    %{
+      phase: :awaiting_hello,
+      direct: direct,
+      terminal: nil,
+      hello_timer: timer,
+      heartbeat_timer: nil,
+      entry_timer: nil,
+      entry_confirmation: Map.get(opts, :entry_confirmation, false),
+      participant_self_identity: Map.get(opts, :participant_self_identity, false),
+      media_off_reason: Map.get(opts, :media_off_reason, false),
+      participant_devices: Map.get(opts, :participant_devices, false),
+      participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
+      requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
+      terminal_ack_timer: nil,
+      terminal_head: nil,
+      missed_heartbeats: 0,
+      opened_at_ms: System.monotonic_time(:millisecond),
+      last_heartbeat_at_ms: nil,
+      identity: nil,
+      coordinator: nil,
+      commands: %{},
+      collaboration_negotiated: false,
+      collaboration_version: nil,
+      collaboration_queue: CollaborationQueue.new(),
+      connection_attributes: connection_attributes,
+      observability: observability
+    }
   end
 
   @impl true
@@ -95,6 +107,9 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
+
+  def handle_info(:direct_denied, state),
+    do: stop(state, 1013, "try again later", :direct_limit)
 
   def handle_info(:entry_timeout, %{phase: :live, entry_timer: timer, identity: identity} = state)
       when not is_nil(timer) do
@@ -309,6 +324,15 @@ defmodule ChalkSync.Transport.SocketV1 do
     }
   end
 
+  defp admit_direct_tenant(%{direct: nil}, _identity), do: :ok
+
+  defp admit_direct_tenant(_state, identity) do
+    case DirectLimits.authenticated(identity.episode.tenant_id) do
+      :ok -> :ok
+      {:error, _denial} -> {:error, :direct_limit}
+    end
+  end
+
   defp stop(state, close_code, message, reason) do
     {:stop, :normal, {close_code, message},
      %{state | terminal: %{close_code: close_code, reason: reason}}}
@@ -321,9 +345,11 @@ defmodule ChalkSync.Transport.SocketV1 do
     state = merge_hello_observability(state, Map.get(hello, :correlation, %{}))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, identity} <- identity(claims) do
+         {:ok, identity} <- identity(claims),
+         :ok <- admit_direct_tenant(state, identity) do
       authenticated_hello(SocketContext.authenticated(state, identity), identity, cursor, hello)
     else
+      {:error, :direct_limit} -> stop(state, 1013, "try again later", :direct_limit)
       {:error, _reason} -> stop(state, 1008, "invalid token", :admission_rejected)
     end
   end

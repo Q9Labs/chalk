@@ -6,6 +6,7 @@ defmodule ChalkSync.Transport.Router do
   alias ChalkSync.Operations
   alias ChalkSync.Operations.Metrics
   alias ChalkSync.Operations.Readiness
+  alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.SocketContext
 
   get("/healthz") do
@@ -34,33 +35,8 @@ defmodule ChalkSync.Transport.Router do
   get("/v1/sync") do
     if Operations.accepting_connections?() do
       case WebSockAdapter.UpgradeValidation.validate_upgrade(conn) do
-        :ok ->
-          observability = ChalkSync.Observability.context(conn.req_headers)
-          conn = fetch_query_params(conn)
-          # Previous Sync ignores this query; hello itself must stay unchanged for it.
-          entry_confirmation = conn.query_params["entry_confirmation"] == "1"
-
-          conn
-          |> WebSockAdapter.upgrade(
-            ChalkSync.Transport.SocketV1,
-            %{
-              observability: observability,
-              entry_confirmation: entry_confirmation,
-              participant_devices: conn.query_params["participant_devices"] == "1",
-              participant_device_admissions:
-                conn.query_params["participant_device_admissions"] in ["1", "2"],
-              media_off_reason: conn.query_params["media_off_reason"] == "1",
-              participant_self_identity:
-                conn.query_params["participant_device_admissions"] == "2",
-              entry_generation: entry_generation(conn.query_params["entry_generation"]),
-              connection_attributes: SocketContext.request(conn)
-            },
-            timeout: 120_000
-          )
-          |> halt()
-
-        {:error, _reason} ->
-          send_upgrade_error(conn)
+        :ok -> upgrade_sync(conn)
+        {:error, _reason} -> send_upgrade_error(conn)
       end
     else
       send_json(conn, 503, %{"error" => "server_draining"})
@@ -92,6 +68,59 @@ defmodule ChalkSync.Transport.Router do
 
   defp not_found(conn) do
     send_json(conn, 404, %{"error" => "not_found"})
+  end
+
+  defp upgrade_sync(conn) do
+    connection_attributes = SocketContext.request(conn)
+
+    case admit_direct(conn, connection_attributes.client_ip) do
+      {:ok, direct} ->
+        observability = ChalkSync.Observability.context(conn.req_headers)
+        conn = fetch_query_params(conn)
+        # Previous Sync ignores this query; hello itself must stay unchanged for it.
+        entry_confirmation = conn.query_params["entry_confirmation"] == "1"
+
+        conn
+        |> WebSockAdapter.upgrade(
+          ChalkSync.Transport.SocketV1,
+          %{
+            observability: observability,
+            entry_confirmation: entry_confirmation,
+            participant_devices: conn.query_params["participant_devices"] == "1",
+            participant_device_admissions:
+              conn.query_params["participant_device_admissions"] in ["1", "2"],
+            media_off_reason: conn.query_params["media_off_reason"] == "1",
+            participant_self_identity: conn.query_params["participant_device_admissions"] == "2",
+            entry_generation: entry_generation(conn.query_params["entry_generation"]),
+            connection_attributes: connection_attributes,
+            direct: direct
+          },
+          [timeout: 120_000] ++ direct_upgrade_options(direct)
+        )
+        |> halt()
+
+      {:error, denial} ->
+        send_direct_denied(conn, denial)
+    end
+  end
+
+  # Only requests marked by the node's direct proxy are bounded; Tunnel traffic is untouched.
+  defp admit_direct(conn, client_ip) do
+    if DirectLimits.direct?(conn) do
+      with :ok <- DirectLimits.admit_upgrade(client_ip), do: {:ok, %{ip: client_ip}}
+    else
+      {:ok, nil}
+    end
+  end
+
+  defp direct_upgrade_options(nil), do: []
+  defp direct_upgrade_options(%{}), do: [max_frame_size: DirectLimits.max_frame_bytes()]
+
+  defp send_direct_denied(conn, :overloaded),
+    do: send_json(conn, 503, %{"error" => "direct_overloaded"})
+
+  defp send_direct_denied(conn, _denial) do
+    conn |> put_resp_header("retry-after", "10") |> send_json(429, %{"error" => "rate_limited"})
   end
 
   defp entry_generation(nil), do: :legacy
