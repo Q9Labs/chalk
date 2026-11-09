@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { planeBudgets, readBudgets } from "./budgets.mjs";
 import { WHOLE_CYCLE, parseScorecard } from "./schema.mjs";
 import { contentionMarkdown } from "./contention.mjs";
+import { planeNoteMarkdown } from "./plane-note.mjs";
 
 const [evidence, plane, revision, artifacts] = process.argv.slice(2);
 if (!artifacts) throw new Error("usage: own-sfu.mjs <evidence-dir> <plane> <revision> <artifact-dir>");
@@ -52,6 +53,8 @@ if (card.metrics.length === 0 && !card.contention?.contended && !card.contention
 mkdirSync(artifacts, { recursive: true });
 copyFileSync(path, join(artifacts, `scorecard-${plane}.json`));
 if (card.contention) summarize(contentionMarkdown(card.contention));
+const note = planeNoteMarkdown(card.mediaPlane);
+if (note) summarize(note);
 
 const { budgets } = await readBudgets();
 const own = planeBudgets(budgets, card.mediaPlane);
