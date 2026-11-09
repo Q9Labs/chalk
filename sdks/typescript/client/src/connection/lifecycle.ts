@@ -508,7 +508,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     // as a lost connection. A refresh then would race the server's own Leave and replace a connection
                     // that is about to go.
                     replaceMediaConnection: () =>
-                      model.state === "leaving" || model.state === "left"
+                      model.closed || model.state === "leaving" || model.state === "left"
                         ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
                         : toPromise(access.refresh("media_recovery", true)).then((replacement) => {
                             if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
