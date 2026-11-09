@@ -102,11 +102,33 @@ func (s *service) readyOK(t *testing.T) protocol.ReadyResponse {
 	return ready
 }
 
+// liveEvidence is what a run measured, logged on every run, pass or fail, so the allowance for
+// late packets can be tightened from data. A field the run never reached stays at -1.
+type liveEvidence struct {
+	revision                       string
+	audioGain, videoGain           int
+	audioLate, videoLate           int
+	audioPackets, videoPackets     int
+	sessions, allocations, cleanup int
+}
+
+func (e liveEvidence) log(t *testing.T, duration time.Duration) {
+	t.Helper()
+	t.Logf("live smoke: node revision %s, window %s, audio +%d (%d of %d late or repeated), video +%d (%d of %d late or repeated), sessions %d, allocations %d, cleanup debt %d",
+		e.revision, duration, e.audioGain, e.audioLate, e.audioPackets, e.videoGain, e.videoLate, e.videoPackets, e.sessions, e.allocations, e.cleanup)
+}
+
+// lateBudgetPercent is the share of packets that may arrive late or repeated.
+const lateBudgetPercent = 10
+
 // runLiveSmoke is the whole smoke. It uses one random Tenant and Episode, ends that Episode
 // whatever happens, and fails if the node does not return to the load it had before.
 func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	t.Helper()
+	evidence := liveEvidence{revision: "unread", audioGain: -1, videoGain: -1, audioLate: -1, videoLate: -1, audioPackets: -1, videoPackets: -1, sessions: -1, allocations: -1, cleanup: -1}
+	defer func() { evidence.log(t, duration) }()
 	before := svc.readyOK(t)
+	evidence.revision = before.Revision
 	if before.Protocol != protocol.WireProtocol {
 		t.Fatalf("node speaks protocol %d, this build speaks %d", before.Protocol, protocol.WireProtocol)
 	}
@@ -155,16 +177,22 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 		svc.grantSourcesAt(t, revision, alice, bob)
 	}
 	audioEnd, videoEnd := received.count(webrtc.RTPCodecTypeAudio), received.count(webrtc.RTPCodecTypeVideo)
+	evidence.audioGain, evidence.videoGain = audioEnd-audioStart, videoEnd-videoStart
 	// The sender writes 100 packets a second per kind; a fifth of that over the window is far
 	// above what a stalled forwarder delivers and far below what ordinary loss costs.
 	floor := int(duration.Seconds()) * 20
-	if audioEnd-audioStart < floor || videoEnd-videoStart < floor {
+	if evidence.audioGain < floor || evidence.videoGain < floor {
 		t.Fatalf("media did not keep advancing: audio %d to %d, video %d to %d, want at least %d more of each", audioStart, audioEnd, videoStart, videoEnd, floor)
 	}
-	// The internet reorders UDP and the subscriber NACKs, so some packets arrive late or twice; a changed payload or sequence is not allowed.
+	// The internet reorders UDP and the subscriber NACKs, so some packets arrive late or twice;
+	// a changed payload or sequence number is not allowed.
 	audioPackets, videoPackets := received.snapshot(webrtc.RTPCodecTypeAudio), received.snapshot(webrtc.RTPCodecTypeVideo)
-	audioLate := assertKnownStreamWithin(t, "audio", audioPackets, 'a', len(audioPackets)/10)
-	videoLate := assertKnownStreamWithin(t, "video", videoPackets, 'v', len(videoPackets)/10)
+	evidence.audioPackets, evidence.videoPackets = len(audioPackets), len(videoPackets)
+	evidence.audioLate = countLate(t, "audio", audioPackets, 'a')
+	evidence.videoLate = countLate(t, "video", videoPackets, 'v')
+	if evidence.audioLate*100 > lateBudgetPercent*evidence.audioPackets || evidence.videoLate*100 > lateBudgetPercent*evidence.videoPackets {
+		t.Fatalf("more than %d%% of packets arrived late or repeated", lateBudgetPercent)
+	}
 	if audioSent, videoSent := published.audioSent.Load(), published.videoSent.Load(); audioSent == 0 || videoSent == 0 {
 		t.Fatalf("the publisher sent audio %d and video %d packets", audioSent, videoSent)
 	}
@@ -179,6 +207,7 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	var after protocol.ReadyResponse
 	eventually(t, "the node to return to its load from before the smoke", 30*time.Second, func() bool {
 		after = svc.readyOK(t)
+		evidence.sessions, evidence.allocations, evidence.cleanup = after.Sessions, after.Allocations, after.CleanupDebt
 		return after.Sessions == before.Sessions && after.Allocations == before.Allocations && after.CleanupDebt == before.CleanupDebt
 	})
 	if after.Draining || after.Protocol != protocol.WireProtocol {
@@ -187,6 +216,4 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	if status, code := svc.call(t, "/v1/sessions/"+connA+"/inspect", protocol.InspectRequest{Scope: alice}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
 		t.Fatalf("the publisher's session survived the end of its Episode: status %d code %q", status, code)
 	}
-	t.Logf("live smoke: revision %s, audio +%d (%d late), video +%d (%d late) over %s, sessions %d, allocations %d, cleanup debt %d", after.Revision,
-		audioEnd-audioStart, audioLate, videoEnd-videoStart, videoLate, duration, after.Sessions, after.Allocations, after.CleanupDebt)
 }

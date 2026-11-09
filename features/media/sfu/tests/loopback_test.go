@@ -455,14 +455,15 @@ func eventually(t *testing.T, what string, timeout time.Duration, condition func
 // sequence number is the one the sender gave that payload, and that sequences increase.
 func assertKnownStream(t *testing.T, label string, packets []*rtp.Packet, kind byte) {
 	t.Helper()
-	assertKnownStreamWithin(t, label, packets, kind, 0)
+	if late := countLate(t, label, packets, kind); late > 0 {
+		t.Fatalf("%s: %d packets arrived late or twice", label, late)
+	}
 }
 
-// assertKnownStreamWithin is assertKnownStream for a path that may reorder, lose and repair packets,
-// such as the internet with NACK retransmission. Every packet must still carry the sender's payload
-// under the right sequence number, but up to maxLate packets may arrive after a higher sequence
-// number or a second time. It returns how many did.
-func assertKnownStreamWithin(t *testing.T, label string, packets []*rtp.Packet, kind byte, maxLate int) int {
+// countLate checks every packet carries the sender's payload for kind under the sequence number the
+// sender gave it, and returns how many arrived after a higher sequence number or a second time. Over
+// the internet that happens: UDP reorders, and the subscriber's NACKs make the SFU retransmit.
+func countLate(t *testing.T, label string, packets []*rtp.Packet, kind byte) int {
 	t.Helper()
 	if len(packets) == 0 {
 		t.Fatalf("%s: no packets", label)
@@ -485,9 +486,6 @@ func assertKnownStreamWithin(t *testing.T, label string, packets []*rtp.Packet, 
 		seen[packet.SequenceNumber] = true
 		if repeated || (position > 0 && int16(packet.SequenceNumber-highest) < 0) {
 			late++
-			if late > maxLate {
-				t.Fatalf("%s: %d packets arrived late or twice, at most %d allowed (sequence went %d then %d)", label, late, maxLate, highest, packet.SequenceNumber)
-			}
 			continue
 		}
 		highest = packet.SequenceNumber
