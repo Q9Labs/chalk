@@ -27,7 +27,9 @@ test("the gate's scorecard download cannot match the Cloudflare card", () => {
   const glob = /pattern: (scorecard-nightly-\*)/.exec(nightly)?.[1];
   assert.ok(glob, "the scorecard job downloads scorecard-nightly-*");
   assert.match(read(".github/workflows/real-call-proof.yml"), /latency_only && inputs\.media_plane == 'cf_sfu' && 'warn-scorecard' \|\| 'scorecard'/);
-  const gate = new RegExp(`^${glob.replace("*", ".*")}$`);
-  assert.equal(gate.test("scorecard-nightly-chalk_sfu"), true);
-  assert.equal(gate.test("warn-scorecard-nightly-cf_sfu"), false);
+  // The glob is one trailing star, so it matches exactly the names that start with its prefix.
+  assert.equal(glob.indexOf("*"), glob.length - 1);
+  const matches = (name) => name.startsWith(glob.slice(0, -1));
+  assert.equal(matches("scorecard-nightly-chalk_sfu"), true);
+  assert.equal(matches("warn-scorecard-nightly-cf_sfu"), false);
 });
