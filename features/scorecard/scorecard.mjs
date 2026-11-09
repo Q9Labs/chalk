@@ -81,18 +81,18 @@ async function diff(argv) {
   });
   const current = parseScorecard(readJson(values.current));
   const candidate = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
-  const baseline = candidate?.contention?.contended ? undefined : candidate;
+  const baseline = candidate?.contention?.contended || candidate?.contention?.unobservable ? undefined : candidate;
   const { budgets } = await readBudgets();
   validateBudgetEntries(budgets);
   const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
-  if (current.contention?.contended) {
+  if (current.contention?.contended || current.contention?.unobservable) {
     result.failures = [];
     for (const row of result.rows) row.gate = false;
   }
   const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
   if (values.markdown) writeFileSync(values.markdown, table);
   console.log(table);
-  if (values["fail-on-gate"] && !current.contention?.contended && result.failures.length > 0) {
+  if (values["fail-on-gate"] && !current.contention?.contended && !current.contention?.unobservable && result.failures.length > 0) {
     console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
     process.exitCode = 1;
   }

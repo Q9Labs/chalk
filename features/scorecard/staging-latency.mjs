@@ -75,18 +75,27 @@ function workload(program, args, options = {}) {
 }
 
 async function measure() {
+  let retryPreflight = false;
   for (let attempt = 1; attempt <= 2; attempt++) {
     let before = await quietWindow();
     if (attempt === 2) {
-      console.log("Contended attempt; waiting up to 10 minutes for a quiet staging API-log window before one retry.");
-      const deadline = Date.now() + 600_000;
-      while ((!before.events || before.events.length > 0) && Date.now() < deadline) {
-        await delay(Math.min(15_000, deadline - Date.now()));
+      if (retryPreflight) {
+        console.log("Node metrics unavailable before load; retrying the preflight once without starting another workload.");
+        await delay(2_000);
         before = await quietWindow();
+      } else {
+        console.log("Contended attempt; waiting up to 10 minutes for a quiet staging API-log window before one retry.");
+        const deadline = Date.now() + 600_000;
+        while ((!before.events || before.events.length > 0) && Date.now() < deadline) {
+          await delay(Math.min(15_000, deadline - Date.now()));
+          before = await quietWindow();
+        }
       }
     }
     const boundary = before.end;
-    const nodeBefore = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
+    const nodeBeforeResult = await nodeMetrics(boundary - 30_000, boundary, { refreshSessions: true });
+    const nodeBefore = nodeBeforeResult ?? [];
+    const preflightMetricsUnavailable = nodeBeforeResult === null || nodeBefore.length === 0;
     const start = Date.now();
     const runId = `${prefix}-latency-${attempt}`;
     const directory = resolve(".private/prod-proof", runId);
@@ -107,7 +116,9 @@ async function measure() {
     // Include joins while the preflight queries ran, not just events after the kit began.
     const window = await logs(before.end, end);
     const after = await logs(end, Date.now());
-    const [nodeWindow, nodeAfter] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
+    const [nodeWindowResult, nodeAfterResult] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
+    const nodeWindow = nodeWindowResult ?? [];
+    const nodeAfter = nodeAfterResult ?? [];
     const card = await json(resolve(directory, "scorecard-chalk_sfu.json"), await emptyCard());
     let ownEpisodes = [];
     try {
@@ -119,12 +130,21 @@ async function measure() {
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
-    card.contention = contention({ lease: await json(leaseFile), before: before.events, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter });
+    const metricsUnavailable = nodeBeforeResult === null || nodeWindowResult === null || nodeAfterResult === null || nodeBefore.length === 0 || nodeWindow.length === 0 || nodeAfter.length === 0;
+    card.contention = contention({ lease: await json(leaseFile), before: before.events, after, window, ownEpisodes, nodeBefore, nodeWindow, nodeAfter, unobservable: metricsUnavailable });
     // A skipped attempt or missing boundary readout cannot be accepted as an isolated run.
-    if (!before.events || before.events.length > 0 || !after || card.metrics.length === 0) card.contention.contended = true;
+    if (!before.events || before.events.length > 0 || !after || (card.metrics.length === 0 && !card.contention.unobservable)) card.contention.contended = true;
     await save(card);
     await writeFile(resolve(evidence, `attempt-${attempt}.json`), JSON.stringify(card));
-    if (!card.contention.contended) return status;
+    if (card.contention.contended) continue;
+    if (card.contention.unobservable) {
+      if (attempt === 1 && preflightMetricsUnavailable) {
+        retryPreflight = true;
+        continue;
+      }
+      return 1;
+    }
+    return status;
   }
   return 1;
 }
