@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSyncUrl } from "./core";
+import { defaultSyncUrl } from "./urls";
 
 describe("default Sync address", () => {
   it.each([
