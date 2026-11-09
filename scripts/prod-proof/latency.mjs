@@ -154,6 +154,8 @@ async function cycle(run, origin, plane, headed, ending) {
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
   ]);
   Object.assign(sample, second.delays);
+  // The pair is read now, after the join's measured stages and before the next measured action, never inside either.
+  await observe("ice pair", () => pages[1].evaluate(() => window.proofTrace.readIce()), undefined);
   const joined = await observe(
     "join",
     async () => {

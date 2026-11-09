@@ -12,6 +12,7 @@ export const ICE_CANDIDATE_TYPES = ["host", "srflx", "prflx", "relay"];
 const PAIR_KEYS = ["unknown", ...ICE_CANDIDATE_TYPES.flatMap((local) => ICE_CANDIDATE_TYPES.map((remote) => `${local}/${remote}`))];
 const ICE_TYPE_FIELDS = ["local_type", "remote_type"];
 const ICE_COUNT_FIELDS = ["requests_sent", "responses_received"];
+const ICE_TIME_FIELD = "read_after_ms";
 
 const LABELS = { sfu_ms: "SFU", sync_ms: "Sync" };
 const MAX_CYCLES = 60;
@@ -45,10 +46,11 @@ const isCount = (value) => Number.isSafeInteger(value) && value >= 0;
 
 function iceProblem(ice, where) {
   if (!isObject(ice)) return `${where} must be an object`;
-  const unknown = unknownField(ice, [...ICE_TYPE_FIELDS, ...ICE_COUNT_FIELDS], where);
+  const unknown = unknownField(ice, [...ICE_TYPE_FIELDS, ...ICE_COUNT_FIELDS, ICE_TIME_FIELD], where);
   if (unknown) return unknown;
   for (const field of ICE_TYPE_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !ICE_CANDIDATE_TYPES.includes(ice[field])) return `${where}.${field} must be a candidate type or null`;
   for (const field of ICE_COUNT_FIELDS) if (ice[field] !== undefined && ice[field] !== null && !isCount(ice[field])) return `${where}.${field} must be a count or null`;
+  if (ice[ICE_TIME_FIELD] !== undefined && !isMilliseconds(ice[ICE_TIME_FIELD])) return `${where}.${ICE_TIME_FIELD} must be non-negative milliseconds or null`;
   return undefined;
 }
 
