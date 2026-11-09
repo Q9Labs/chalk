@@ -1,8 +1,10 @@
+import contextlib
 import importlib.machinery
 import importlib.util
 from pathlib import Path
 import subprocess
 import sys
+import io
 import json
 import os
 import re
@@ -11,6 +13,8 @@ import signal
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 loader = importlib.machinery.SourceFileLoader("staging_lock", str(Path(__file__).with_name("staging-lock")))
 spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -146,6 +150,42 @@ time.sleep(120)
             if wrapper.poll() is None:
                 wrapper.kill()
             wrapper.communicate()
+
+    def run_cut_acquire(self, wait, cf_ownership_seconds):
+        """A cut-side acquire against a Cloudflare-style holder that releases after cf_ownership_seconds, on a mocked clock."""
+        sha, lease, _ = self.store.acquire("nightly-cf-latency", "action-latency", "cf-run", 60)
+        started = Path(self.directory.name) / "child-started"
+        clock = [0.0]
+        released = []
+
+        def sleep(seconds):
+            clock[0] += seconds
+            if clock[0] >= cf_ownership_seconds and not released:
+                self.store.update(sha, lease)
+                released.append(True)
+
+        args = SimpleNamespace(remote=self.remote, holder="nightly-proof", purpose="camera-share", run_id="cut-run", wait=wait, ttl=180, evidence=None,
+                               command=[sys.executable, "-c", f"open({str(started)!r}, 'w').close()"])
+        with mock.patch.object(lock.time, "monotonic", lambda: clock[0]), mock.patch.object(lock.time, "sleep", sleep), contextlib.redirect_stderr(io.StringIO()):
+            status = lock.run(args)
+        return status, started.exists(), clock[0]
+
+    def test_cut_outwaits_a_cloudflare_latency_run_that_owns_the_lease_for_its_whole_step(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/real-call-proof.yml").read_text()
+        wait = int(re.search(r"--holder nightly-proof [^\n]*--wait (\d+)", workflow).group(1))
+        step_cap_seconds = 25 * 60
+        self.assertIn("|| 25 }}", workflow)
+        # The earlier 600-second wait failed here: the cut gave up while the Cloudflare run still held the lease.
+        status, started, _ = self.run_cut_acquire(600, step_cap_seconds)
+        self.assertEqual((status, started), (75, False))
+        self.reset_remote()
+        status, started, elapsed = self.run_cut_acquire(wait, step_cap_seconds)
+        self.assertEqual((status, started), (0, True))
+        self.assertGreaterEqual(elapsed, step_cap_seconds)
+
+    def reset_remote(self):
+        shutil.rmtree(self.remote)
+        subprocess.run(["git", "init", "--quiet", "--bare", self.remote], check=True)
 
     def test_workflow_cleanup_deletes_own_resources_while_another_lane_holds_lease(self):
         held, _, _ = self.store.acquire("other-lane", "soak", "other-run", 180)

@@ -167,9 +167,9 @@ async function main() {
   if (process.argv.includes("--leased")) return measure();
   let status;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    status = await workload("scripts/staging-sfu/staging-lock", ["--holder", "nightly-latency", "--purpose", "action-latency", "--run-id", process.env.GITHUB_RUN_ID ?? prefix, "--evidence", leaseFile, "--wait", attempt === 1 ? "0" : "600", "--", process.execPath, import.meta.filename, "--leased"]);
+    status = await workload("scripts/staging-sfu/staging-lock", ["--holder", "nightly-latency", "--purpose", "action-latency", "--run-id", process.env.GITHUB_RUN_ID ?? prefix, "--evidence", leaseFile, "--wait", attempt === 1 ? "0" : "1800", "--", process.execPath, import.meta.filename, "--leased"]);
     if ((await json(leaseFile))?.acquired) break;
-    if (attempt === 1) console.log("Staging SFU lease busy; retrying once with a bounded 10-minute wait.");
+    if (attempt === 1) console.log("Staging SFU lease busy; retrying once with a bounded 30-minute wait.");
   }
   const lease = await json(leaseFile);
   const card = await json(output, { ...(await emptyCard()), contention: contention({ lease }) });
