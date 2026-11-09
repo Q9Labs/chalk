@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { analyzeAudio, bounds, expectedSounds, findFlashes, frameRate, judgeScript, longestScriptedSilenceMs, markerHz, markerTimes, phraseDelaySeconds, screenHz, silenceBoundMs } from "./call-script.mjs";
 import { recordingSignals } from "./recording-evidence.mjs";
+import { trackVerdicts } from "./track-verdicts.mjs";
 
 const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
 
@@ -14,7 +15,6 @@ const wall = 1_000_000;
 const lead = 5; // The Recording starts five seconds before the first marker.
 const phraseSeconds = [3, 3.2, 3.4];
 const at = (offsetSeconds) => wall + offsetSeconds * 1000;
-const rec = (offsetSeconds) => lead + offsetSeconds;
 
 function baseScript(overrides = {}) {
   return {
@@ -30,7 +30,8 @@ function baseScript(overrides = {}) {
 }
 
 // Renders the Recording the script should produce, with optional faults, as the signals recordingSignals would find.
-function render(script, { drop = () => false, lingerMs = 300, flashLagSeconds = 0.05, shareFrames = true, hole } = {}) {
+function render(script, { drop = () => false, lingerMs = 300, flashLagSeconds = 0.05, shareFrames = true, hole, only, leadSeconds = lead } = {}) {
+  const rec = (offsetSeconds) => leadSeconds + offsetSeconds;
   const duration = rec((script.stop.stopMs - wall) / 1000 + 4) + lingerMs / 1000;
   const samples = new Float32Array(Math.ceil(duration * rate));
   let seed = 7;
@@ -44,6 +45,7 @@ function render(script, { drop = () => false, lingerMs = 300, flashLagSeconds = 
   const flashes = [];
   script.rounds.forEach((round, roundIndex) => {
     for (const { guest } of round.guests) {
+      if (only !== undefined && guest !== only) continue;
       markerTimes(round, guest).forEach((marker, cycle) => {
         if (drop(guest, roundIndex, cycle)) return;
         const start = rec((marker - wall) / 1000);
@@ -55,9 +57,9 @@ function render(script, { drop = () => false, lingerMs = 300, flashLagSeconds = 
   });
   const lag = lingerMs / 1000;
   const held = (from, to, hz) => tone(rec((from - wall) / 1000), rec((to - wall) / 1000) + lag, hz, 0.2);
-  held(script.hold.startMs, script.hold.muteMs, markerHz[script.hold.guest]);
-  held(script.screen.startMs, script.screen.stopMs, screenHz);
-  held(script.stop.holdStartMs, script.stop.stopMs, markerHz[script.stop.guest]);
+  if (only === undefined || only === script.hold.guest) held(script.hold.startMs, script.hold.muteMs, markerHz[script.hold.guest]);
+  if (only === undefined) held(script.screen.startMs, script.screen.stopMs, screenHz);
+  if (only === undefined || only === script.stop.guest) held(script.stop.holdStartMs, script.stop.stopMs, markerHz[script.stop.guest]);
   if (hole) samples.fill(0, Math.round(rec(hole[0]) * rate), Math.round(rec(hole[1]) * rate));
   const green = Array.from({ length: Math.round(duration * frameRate) }, (_, frame) => {
     const time = frame / frameRate;
@@ -190,4 +192,45 @@ test("recordingSignals finds a beep and a flash in a real MP4", { skip: !hasFfmp
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+// The mix and each guest's own track, rendered from the script; a fault is dropped from the track, the mix, or both.
+function verdictsFor({ lostInTrack = () => false, lostInMix = () => false, hole } = {}) {
+  const script = baseScript();
+  const mix = render(script, { drop: lostInMix, hole }).signals;
+  const tracks = [0, 1, 2].map((guest) => render(script, { only: guest, leadSeconds: 2, drop: (g, round, cycle) => lostInTrack(g, round, cycle) }).signals);
+  return trackVerdicts(script, mix, tracks);
+}
+
+test("a marker in every track and in the mix passes with no verdict against it", () => {
+  const verdicts = verdictsFor();
+  assert.ok(verdicts.length >= 6);
+  assert.deepEqual(
+    verdicts.filter((verdict) => !verdict.ok),
+    [],
+  );
+});
+
+test("a marker missing from its own track is lost at capture, even when the mix has it", () => {
+  const verdicts = verdictsFor({ lostInTrack: (guest, round, cycle) => guest === 1 && cycle === 1 });
+  assert.deepEqual(
+    verdicts.filter((verdict) => !verdict.ok).map((verdict) => verdict.text),
+    ["guest 2's marker 2 of round 1: lost at capture (absent from its own track, yet present in the mix)"],
+  );
+});
+
+test("a marker in its own track but missing from the mix was lost by the mixer", () => {
+  const verdicts = verdictsFor({ lostInMix: (guest, round, cycle) => guest === 2 && cycle === 0 });
+  assert.deepEqual(
+    verdicts.filter((verdict) => !verdict.ok && /marker/.test(verdict.text)).map((verdict) => verdict.text),
+    ["guest 3's marker 1 of round 1: lost by the mixer (in its own track, absent from the mix)"],
+  );
+});
+
+test("a marker missing from both is lost at capture, and a mix silence that a track holds is lost by the mixer", () => {
+  const both = verdictsFor({ lostInTrack: (guest, round, cycle) => guest === 0 && cycle === 1, lostInMix: (guest, round, cycle) => guest === 0 && cycle === 1 });
+  assert.ok(both.some((verdict) => /guest 1's marker 2 of round 1: lost at capture/.test(verdict.text)));
+  // Guest 3's tracked hold tone runs 74 s to 84 s; blanking the mix there leaves a silence that guest 3's track holds.
+  const mixer = verdictsFor({ hole: [75, 83] });
+  assert.ok(mixer.some((verdict) => /silence at .* lost by the mixer \(guest 3's track has sound there\)/.test(verdict.text)));
 });

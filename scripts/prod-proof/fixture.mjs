@@ -3,7 +3,7 @@ import { command } from "./runtime.mjs";
 
 const spokenWords = "The purple lantern shines beside the quiet river. We are testing camera, screen sharing, recording, export, and transcription.";
 // One phrase per guest, spoken in the guest's own slot of a repeating three-slot cycle (call-script.mjs), so the call has no overlapping speech to transcribe.
-export const turnPhrases = ["The purple lantern shines beside the quiet river.", "Seven copper kettles are boiling on the mountain.", "A green falcon crosses the silver harbor at dawn."];
+const turnPhrases = ["The purple lantern shines beside the quiet river.", "Seven copper kettles are boiling on the mountain.", "A green falcon crosses the silver harbor at dawn."];
 async function synthesize(directory, signal, name, words) {
   const target = `${directory}/${name}.wav`;
   if (process.platform === "darwin") {
@@ -110,18 +110,22 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       const phrase = await context.decodeAudioData(bytes.buffer);
       const destination = context.createMediaStreamDestination();
       window.proofAudio = { context, phrase, destination };
+      const tone = (hz, level) => {
+        const oscillator = context.createOscillator();
+        oscillator.frequency.value = hz;
+        const gain = context.createGain();
+        gain.gain.value = level;
+        oscillator.connect(gain);
+        gain.connect(destination);
+        return oscillator;
+      };
       // Schedules every marker and phrase of one round on this page's audio clock, anchored on the shared wall-clock start.
       window.proofStartTurns = ({ loopStartMs, slotSeconds, cycleSeconds, cycles, markerHz, markerSeconds, phraseDelaySeconds, flashSeconds }) => {
         const wallNow = Date.now();
         const loopStart = context.currentTime + (loopStartMs - wallNow) / 1000;
         const markers = Array.from({ length: cycles }, (_, cycle) => loopStart + guest * slotSeconds + cycle * cycleSeconds);
         for (const marker of markers) {
-          const oscillator = context.createOscillator();
-          oscillator.frequency.value = markerHz[guest];
-          const beep = context.createGain();
-          beep.gain.value = 0.3;
-          oscillator.connect(beep);
-          beep.connect(destination);
+          const oscillator = tone(markerHz[guest], 0.3);
           oscillator.start(marker);
           oscillator.stop(marker + markerSeconds);
           const source = context.createBufferSource();
@@ -139,12 +143,7 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       };
       // A continuous tone for the mute and stop checks.
       window.proofHoldTone = (hz) => {
-        const oscillator = context.createOscillator();
-        oscillator.frequency.value = hz;
-        const level = context.createGain();
-        level.gain.value = 0.2;
-        oscillator.connect(level);
-        level.connect(destination);
+        const oscillator = tone(hz, 0.2);
         oscillator.start();
         window.proofHoldStop = () => oscillator.stop();
         return Date.now();

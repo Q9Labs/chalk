@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { analyzeAudio, findFlashes, frameRate, markerHz, screenHz } from "./call-script.mjs";
 import { cameraEvidence, frameSize } from "./recording-rejoin.mjs";
-import { check } from "./runtime.mjs";
 import { decodeFrames, tileEvidence, tileFailure } from "./tile-frames.mjs";
 
 const execute = promisify(execFile);
@@ -76,9 +75,16 @@ const thumbnail = { width: 96, height: 54 };
 const screenGreen = [34, 197, 94]; // The proof's shared screen draws a green square on a dark blue page.
 
 /** The script's marks as found in the Recording: tones, silences and levels from the audio, flashes and the shared screen from the picture. */
-export async function recordingSignals(file) {
+async function audioSignals(file, frequencies) {
   const { stdout: pcm } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-vn", "-ac", "1", "-ar", String(audioRate), "-f", "f32le", "pipe:1"], { encoding: "buffer" });
-  const audio = analyzeAudio(new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.length - (pcm.length % 4))), audioRate, [...markerHz, screenHz]);
+  return analyzeAudio(new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.length - (pcm.length % 4))), audioRate, frequencies);
+}
+
+/** The marker tones, silences and levels of one guest's own recorder track. */
+export const trackSignals = (file) => audioSignals(file, markerHz);
+
+export async function recordingSignals(file) {
+  const audio = await audioSignals(file, [...markerHz, screenHz]);
   const { stdout: raw } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-an", "-vf", `fps=${frameRate},scale=${thumbnail.width}:${thumbnail.height}`, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { encoding: "buffer" });
   const pixels = thumbnail.width * thumbnail.height;
   const lumas = [];
@@ -111,9 +117,4 @@ export function recordingFailures(evidence, minimumSeconds) {
     else if (evidence.video && tileProblem) failures.push(tileProblem);
   }
   return failures;
-}
-
-export function checkRecording(evidence, minimumSeconds) {
-  const failures = recordingFailures(evidence, minimumSeconds);
-  check(!failures.length, failures.join("; "));
 }

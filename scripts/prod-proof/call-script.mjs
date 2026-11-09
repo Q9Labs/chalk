@@ -149,16 +149,36 @@ export function findFlashes(lumas, fps = frameRate, threshold = 8) {
 const seconds = (ms) => ms / 1000;
 const near = (value, target, toleranceSeconds) => Math.abs(value - target) <= toleranceSeconds;
 
-/** Maps a wall-clock time (ms) to Recording time (s), anchored on the first marker of the first guest in the first round. */
-function anchoredClock(script, signals) {
-  const anchorWall = markerTimes(script.rounds[0], script.anchorGuest)[0];
-  const first = signals.tones[markerHz[script.anchorGuest]]?.[0];
-  if (!first) return null;
-  return (wallMs) => first.start + seconds(wallMs - anchorWall);
-}
-
 function excused(script, wallMs) {
   return Boolean(script.restart) && wallMs >= script.restart.startMs && wallMs < script.restart.roundStartMs;
+}
+
+/** The markers a guest is expected to sound, leaving out those inside the capture-node restart window. */
+export function scriptedMarkers(script, guest) {
+  return script.rounds.flatMap((round, roundIndex) =>
+    markerTimes(round, guest)
+      .map((wallMs, cycle) => ({ wallMs, round: roundIndex + 1, cycle: cycle + 1 }))
+      .filter(({ wallMs }) => !excused(script, wallMs)),
+  );
+}
+
+export const heardAt = (signals, guest, recordingSeconds) => signals.tones[markerHz[guest]].some((interval) => near(interval.start, recordingSeconds, seconds(bounds.markerOffsetMs)));
+
+/**
+ * Maps wall-clock ms to a Recording's seconds (rec) and back (wall). The origin of a Recording or track is not known, so its first tone of
+ * the guest is taken for whichever scripted marker makes the most markers line up; a lost first marker cannot shift every later one.
+ */
+export function alignClock(script, signals, guest) {
+  const first = signals.tones[markerHz[guest]]?.[0];
+  if (!first) return null;
+  const markers = scriptedMarkers(script, guest);
+  let best = null;
+  for (const { wallMs: anchorWall } of markers) {
+    const clock = { rec: (wallMs) => first.start + seconds(wallMs - anchorWall), wall: (recordingSeconds) => anchorWall + (recordingSeconds - first.start) * 1000 };
+    const matched = markers.filter((marker) => heardAt(signals, guest, clock.rec(marker.wallMs))).length;
+    if (!best || matched > best.matched) best = { clock, matched };
+  }
+  return best?.clock ?? null;
 }
 
 function markerChecks(script, signals, clock) {
@@ -196,7 +216,7 @@ function heldTone(signals, clock, hz, startMs, endMs) {
 /** Everything measured from the Recording against the script, and the failures. */
 export function judgeScript(script, signals, durationSeconds) {
   const failures = [];
-  const clock = anchoredClock(script, signals);
+  const clock = alignClock(script, signals, script.anchorGuest)?.rec;
   if (!clock) return { failures: [`Recording has no marker tone for guest ${script.anchorGuest + 1}, so nothing in it can be timed`], measurements: {} };
 
   const markers = markerChecks(script, signals, clock);

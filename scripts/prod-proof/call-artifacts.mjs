@@ -5,6 +5,8 @@ import { generateTurnVoices } from "./fixture.mjs";
 import { launchGuests } from "./media.mjs";
 import { availableSource, createEpisode, createSpace } from "./proofs.mjs";
 import { recordingEvidence, recordingFailures, recordingSignals } from "./recording-evidence.mjs";
+import { recorderTracks } from "./recorder-tracks.mjs";
+import { trackVerdicts } from "./track-verdicts.mjs";
 import { check, mediaPlane, save, waitFor } from "./runtime.mjs";
 
 const automatic = { recording: "automatic", transcription: "automatic" };
@@ -76,7 +78,7 @@ export async function captureCall(run, receiver) {
   run.recordingId = listed.id;
   const recording = await availableSource(run);
   check(recording.transcription_policy === "automatic", "Recording effective transcription policy is not automatic");
-  return { script, recordingId: run.recordingId };
+  return { script, recordingId: run.recordingId, participants: guests.participants };
 }
 
 async function transcriptText(run, transcriptId) {
@@ -147,12 +149,16 @@ export async function callArtifactsProof(run, captured) {
     );
     const signals = await recordingSignals(file);
     const judged = judgeScript(script, signals, durationSeconds);
-    await save(`${run.directory}/script-evidence.json`, { ...judged.measurements, flashes: signals.flashes, silences: signals.silences, tones: signals.tones, failures: judged.failures });
+    const tracks = await recorderTracks(run, run.recordingId, captured.participants);
+    const verdicts = tracks ? trackVerdicts(script, signals, tracks) : [];
+    if (tracks) for (const verdict of verdicts) console.log(`Verdict: ${verdict.text}`);
+    else console.log("Per-track check skipped: CHALK_PROOF_RECORDER_TRACKS_COMMAND is not set, so the mix is judged alone");
+    await save(`${run.directory}/script-evidence.json`, { ...judged.measurements, flashes: signals.flashes, silences: signals.silences, tones: signals.tones, failures: judged.failures, verdicts });
     console.log(
       `Script: longest silence ${judged.measurements.longestSilenceMs ?? "unknown"} ms of ${judged.measurements.silenceBoundMs ?? "unknown"} ms allowed; ${judged.measurements.markers?.length ?? 0} markers checked; media ended after mute, unshare, host stop: ${judged.measurements.holds?.map((hold) => `${hold.endedAfterMs} ms`).join(", ") ?? "unknown"}`,
     );
     const span = (script.stop.stopMs - script.rounds[0].guests[0].startMs) / 1000;
-    const failures = [...recordingFailures(evidence, span * 0.8), ...judged.failures];
+    const failures = [...recordingFailures(evidence, span * 0.8), ...judged.failures, ...verdicts.filter((verdict) => !verdict.ok).map((verdict) => verdict.text)];
     const source = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
     await save(`${run.directory}/recording.json`, source);
     failures.push(...bundleFailures(source));
