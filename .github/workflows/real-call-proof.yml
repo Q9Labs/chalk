@@ -96,6 +96,7 @@ on:
 
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
+  # The warn-only Cloudflare latency run has its own group and takes only the lease, without waiting.
   group: ${{ inputs.environment == 'nightly' && inputs.latency_only && inputs.media_plane == 'cf_sfu' && 'chalk-nightly-cf-latency' || inputs.environment == 'nightly' && 'chalk-staging-sfu' || format('real-call-proof-{0}', inputs.environment || 'production') }}
   cancel-in-progress: false
   # The default keeps one pending run, so a timer run would cancel a waiting
@@ -251,7 +252,9 @@ jobs:
           SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'manual' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
-          CHALK_AXIOM_QUERY_TOKEN: ${{ secrets.CHALK_AXIOM_QUERY_TOKEN }}
+          CF_LATENCY_ONLY: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}
+          # The Cloudflare latency-only run never queries the staging API logs, so it does not receive their token.
+          CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && inputs.media_plane == 'cf_sfu') && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
           CHALK_AXIOM_METRICS_QUERY_TOKEN: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && secrets.CHALK_AXIOM_METRICS_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_METRICS_DATASET: ${{ vars.CHALK_AXIOM_STAGING_METRICS_DATASET }}
@@ -269,14 +272,28 @@ jobs:
           fi
           run_id="${RUN_PREFIX}-latency"
           echo "$run_id" >> .private/proof-run-ids
-          CHALK_PROOF_RUN_ID="$run_id" pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04
+          latency=(pnpm prod:latency --planes "$CHALK_PROOF_MEDIA_PLANE" --environment "$SCORECARD_ENVIRONMENT" --tier "$SCORECARD_TIER" --region github-hosted --size ubuntu-24-04)
+          if [[ "$CF_LATENCY_ONLY" != true ]]; then
+            CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}"
+            exit $?
+          fi
+          # Cloudflare traffic still reaches the nightly API, whose logs the own-SFU proof reads to count foreign Episodes.
+          # Hold the staging lease, but never wait for it: when a cut holds it, skip this warn-only measurement.
+          status=0
+          scripts/staging-sfu/staging-lock --holder nightly-cf-latency --purpose action-latency --run-id "$GITHUB_RUN_ID" --wait 0 --evidence .private/cf-lease.json -- env CHALK_PROOF_RUN_ID="$run_id" "${latency[@]}" || status=$?
+          if ! jq -e '.acquired' .private/cf-lease.json > /dev/null 2>&1; then
+            echo "The staging SFU lease is busy or unavailable, so the Cloudflare latency was skipped." >> "$GITHUB_STEP_SUMMARY"
+            touch .private/cf-latency-skipped
+            exit 0
+          fi
+          exit "$status"
       - name: Collect the latency scorecard
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
-          if [ ! -f features/scorecard/own-sfu.mjs ]; then
+          if [ ! -f features/scorecard/own-sfu.mjs ] || [ -f .private/cf-latency-skipped ]; then
             exit 0
           fi
           evidence=.private/prod-proof

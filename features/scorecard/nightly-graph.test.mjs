@@ -1,35 +1,152 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { load } from "js-yaml";
 
 const root = resolve(import.meta.dirname, "../..");
-const read = (path) => readFileSync(resolve(root, path), "utf8");
+const workflow = (name) => load(readFileSync(resolve(root, ".github/workflows", name), "utf8"));
+const needsOf = (job) => [job.needs ?? []].flat();
 
-// The Cloudflare latency job is warn-only, so the workflow graph must keep it out of every job that feeds a verdict.
-test("no job needs the Cloudflare latency job except its own history step", () => {
-  const nightly = read(".github/workflows/nightly.yml");
-  const jobs = new Map([...nightly.matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n|\n)*)/gm)].map((match) => [match[1], match[2]]));
-  const needs = (name) => (jobs.get(name)?.match(/^ {4}needs: \[(.*)\]$/m)?.[1] ?? "").split(",").map((item) => item.trim());
-  assert.ok(jobs.has("cf-sfu-latency") && jobs.has("cf-sfu-history"));
-  for (const name of jobs.keys()) {
-    const cloudflare = needs(name).filter((item) => item.startsWith("cf-sfu"));
-    if (name === "cf-sfu-history") assert.deepEqual(cloudflare, ["cf-sfu-latency"]);
-    else assert.deepEqual(cloudflare, [], `${name} must not need a Cloudflare job`);
+const nightly = workflow("nightly.yml");
+const cloudflare = workflow("nightly-cf-latency.yml");
+const proof = workflow("real-call-proof.yml");
+
+// The Cloudflare latency measurement is warn-only. It lives in its own workflow so it cannot hold the nightly
+// deployment lock, delay the next cut, or change the conclusion of Cut nightly that the Android release reads.
+test("Cut nightly has no Cloudflare job and no job needs one", () => {
+  assert.equal(nightly.concurrency.group, "chalk-environment-nightly");
+  for (const [name, job] of Object.entries(nightly.jobs)) {
+    assert.doesNotMatch(name, /cf[-_]sfu/, `${name} must not be a Cloudflare job`);
+    assert.deepEqual(
+      needsOf(job).filter((need) => /cf[-_]sfu/.test(need)),
+      [],
+      `${name} must not need a Cloudflare job`,
+    );
+    assert.doesNotMatch(JSON.stringify(job), /cf_sfu|warn-scorecard/, `${name} must not mention the Cloudflare plane`);
   }
-  for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(jobs.has(verdict), `${verdict} job exists`);
-  assert.match(jobs.get("cf-sfu-history") ?? "", /^ {4}if: always\(\)/m);
-  assert.match(jobs.get("cf-sfu-history") ?? "", /SCORECARD_WARN_ONLY: "true"/);
+  for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
+});
+
+test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {
+  const trigger = cloudflare.on;
+  assert.deepEqual(Object.keys(trigger), ["workflow_run"]);
+  assert.deepEqual(trigger.workflow_run, { workflows: ["Cut nightly"], types: ["completed"], branches: ["master"] });
+  assert.ok(cloudflare.concurrency.group);
+  assert.notEqual(cloudflare.concurrency.group, nightly.concurrency.group);
+  assert.notEqual(cloudflare.concurrency.group, proof.concurrency.group.match(/'(chalk-nightly-cf-latency)'/)?.[1]);
+  assert.equal(cloudflare.concurrency["cancel-in-progress"], false);
+
+  const { target, latency, history } = cloudflare.jobs;
+  assert.match(target.if, /workflow_run\.conclusion == 'success'/);
+  assert.match(JSON.stringify(target.steps), /nightly-attempt/);
+  assert.deepEqual(needsOf(latency), ["target"]);
+  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
+  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
+  assert.deepEqual(latency.with, {
+    environment: "nightly",
+    media_plane: "cf_sfu",
+    latency: true,
+    latency_only: true,
+    release_sha: "${{ needs.target.outputs.sha }}",
+    scorecard_label: "cf_sfu",
+  });
+  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
+  assert.deepEqual(needsOf(history), ["latency"]);
+  assert.match(history.if, /needs\.latency\.result == 'success'/);
+  const step = history.steps.find((item) => item.env?.SCORECARD_WARN_ONLY);
+  assert.equal(step.env.SCORECARD_WARN_ONLY, "true");
+  assert.match(step.run, /features\/scorecard\/nightly\.sh/);
 });
 
 test("the gate's scorecard download cannot match the Cloudflare card", () => {
-  const nightly = read(".github/workflows/nightly.yml");
-  const glob = /pattern: (scorecard-nightly-\*)/.exec(nightly)?.[1];
-  assert.ok(glob, "the scorecard job downloads scorecard-nightly-*");
-  assert.match(read(".github/workflows/real-call-proof.yml"), /latency_only && inputs\.media_plane == 'cf_sfu' && 'warn-scorecard' \|\| 'scorecard'/);
+  const download = nightly.jobs.scorecard.steps.find((item) => item.with?.pattern);
+  const glob = download.with.pattern;
+  assert.equal(glob, "scorecard-nightly-*");
+  const upload = proof.jobs.smoke.steps.find((item) => item.name === "Upload the scorecard");
+  assert.match(upload.with.name, /latency_only && inputs\.media_plane == 'cf_sfu' && 'warn-scorecard' \|\| 'scorecard'/);
+  const download2 = cloudflare.jobs.history.steps.find((item) => item.with?.pattern);
+  assert.equal(download2.with.pattern, "warn-scorecard-nightly-*");
   // The glob is one trailing star, so it matches exactly the names that start with its prefix.
   assert.equal(glob.indexOf("*"), glob.length - 1);
   const matches = (name) => name.startsWith(glob.slice(0, -1));
   assert.equal(matches("scorecard-nightly-chalk_sfu"), true);
   assert.equal(matches("warn-scorecard-nightly-cf_sfu"), false);
+});
+
+const latencyStep = proof.jobs.smoke.steps.find((item) => item.name === "Measure action latency");
+
+test("the Cloudflare latency step takes no log-query token", () => {
+  assert.match(latencyStep.env.CHALK_AXIOM_QUERY_TOKEN, /!\(inputs\.latency_only && inputs\.media_plane == 'cf_sfu'\) && secrets\.CHALK_AXIOM_QUERY_TOKEN \|\| ''/);
+  assert.equal(latencyStep.env.CF_LATENCY_ONLY, "${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}");
+});
+
+// Runs the real step script in a scratch tree whose lease command is a stub that either runs the workload or reports a busy lease.
+function runLatencyStep({ leaseBusy, kitStatus = 0 }) {
+  const dir = mkdtempSync(join(tmpdir(), "cf-latency-"));
+  try {
+    mkdirSync(join(dir, "features/scorecard"), { recursive: true });
+    mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "bin"));
+    writeFileSync(join(dir, "features/scorecard/own-sfu.mjs"), "");
+    const lock = join(dir, "scripts/staging-sfu/staging-lock");
+    writeFileSync(
+      lock,
+      `#!/usr/bin/env bash
+printf '%s\\n' "$*" > lock-args
+evidence=""; while [ "$1" != -- ]; do [ "$1" = --evidence ] && evidence=$2; shift; done; shift
+if [ "$LEASE_BUSY" = true ]; then echo '{"previous":null,"acquired":false,"lost":false}' > "$evidence"; exit 75; fi
+echo '{"previous":null,"acquired":true,"lost":false}' > "$evidence"
+exec "$@"
+`,
+    );
+    writeFileSync(join(dir, "bin/pnpm"), `#!/usr/bin/env bash\ntouch kit-ran\nexit ${kitStatus}\n`);
+    for (const file of [lock, join(dir, "bin/pnpm")]) chmodSync(file, 0o755);
+    const result = spawnSync("bash", ["-c", latencyStep.run], {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+        CF_LATENCY_ONLY: "true",
+        CHALK_PROOF_MEDIA_PLANE: "cf_sfu",
+        SCORECARD_ENVIRONMENT: "staging",
+        SCORECARD_TIER: "nightly",
+        RUN_PREFIX: "abc",
+        GITHUB_RUN_ID: "42",
+        GITHUB_STEP_SUMMARY: join(dir, "summary"),
+        LEASE_BUSY: String(leaseBusy),
+      },
+    });
+    return {
+      status: result.status,
+      stderr: result.stderr,
+      kitRan: existsSync(join(dir, "kit-ran")),
+      skipped: existsSync(join(dir, ".private/cf-latency-skipped")),
+      lockArgs: existsSync(join(dir, "lock-args")) ? readFileSync(join(dir, "lock-args"), "utf8") : "",
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("the Cloudflare latency run holds the staging lease without waiting", () => {
+  const run = runLatencyStep({ leaseBusy: false });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.kitRan, true);
+  assert.equal(run.skipped, false);
+  assert.match(run.lockArgs, /--holder nightly-cf-latency .*--wait 0 /);
+});
+
+test("a busy lease skips the Cloudflare measurement and succeeds", () => {
+  const run = runLatencyStep({ leaseBusy: true });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.kitRan, false);
+  assert.equal(run.skipped, true);
+});
+
+test("a failed Cloudflare measurement under the lease still fails its step", () => {
+  const run = runLatencyStep({ leaseBusy: false, kitStatus: 3 });
+  assert.equal(run.status, 3);
 });
