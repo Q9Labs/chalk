@@ -17,7 +17,7 @@ type pathSim struct {
 	seq   uint16
 	last  int64 // arrival of the latest packet, so the path keeps order
 	free  int64 // when the bottleneck finishes what it holds
-	queue []simPacket
+	queue []pathPacket
 
 	sendBps  float64
 	size     int
@@ -31,7 +31,7 @@ type pathSim struct {
 	lost  int // packets the bottleneck dropped
 }
 
-type simPacket struct {
+type pathPacket struct {
 	sent, arrival int64
 	size          int
 	dropped       bool
@@ -46,7 +46,7 @@ func newPathSim(sendBps float64, layers []layerRate) *pathSim {
 func (s *pathSim) send() {
 	at := s.now
 	arrival := at + int64(20*time.Millisecond)
-	packet := simPacket{sent: at, size: s.size}
+	packet := pathPacket{sent: at, size: s.size}
 	if s.capacity > 0 {
 		start := max(arrival, s.free)
 		if time.Duration(start-arrival) > s.maxQueue {
@@ -99,7 +99,7 @@ func (s *pathSim) run(d time.Duration) (paused bool) {
 			s.send()
 		}
 		if s.stray > 0 && s.now%int64(s.stray) == 0 {
-			s.queue = append(s.queue, simPacket{sent: s.now, size: 1200, dropped: true})
+			s.queue = append(s.queue, pathPacket{sent: s.now, size: 1200, dropped: true})
 		}
 		if s.now%int64(50*time.Millisecond) == 0 {
 			s.feedback()

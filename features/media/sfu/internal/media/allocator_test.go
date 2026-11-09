@@ -10,8 +10,9 @@ func camera(state *allocation) tile {
 	return tile{layers: []layerRate{{rid: "h", bps: 1_200_000}, {rid: "l", bps: 300_000}}, state: state}
 }
 
+// estimateOf is the estimate of a path that loses what it is sent.
 func estimateOf(current, proven float64) transportEstimate {
-	return transportEstimate{warm: true, current: current, proven: proven}
+	return transportEstimate{warm: true, current: current, proven: proven, lossy: true}
 }
 
 func at(d time.Duration) int64 { return int64(time.Second + d) }
@@ -120,6 +121,19 @@ func TestALowestLayerThePathStillDeliversKeepsFlowing(t *testing.T) {
 	allocate(tiles, estimateOf(250_000, 250_000), 0, 0, at(3*time.Second))
 	if !state.paused {
 		t.Fatal("kept a layer the path no longer delivers")
+	}
+}
+
+func TestAByteShortfallWithoutHeavyPacketLossDoesNotPause(t *testing.T) {
+	state := allocation{decided: true, rid: "l", backoff: backoffMin}
+	tiles := []tile{camera(&state)}
+	quiet := estimateOf(250_000, 250_000)
+	quiet.lossy = false
+	for step := range 100 {
+		allocate(tiles, quiet, 0, 0, at(time.Duration(step)*100*time.Millisecond))
+	}
+	if state.paused {
+		t.Fatal("paused a layer on a byte shortfall alone, with no heavy packet loss reported")
 	}
 }
 

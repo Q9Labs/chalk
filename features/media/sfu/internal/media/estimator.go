@@ -38,9 +38,6 @@ const (
 	ackedMinSpan = 200 * time.Millisecond // shorter spans are too noisy to cap with
 	ackedHeadway = 1.5                    // the most the proven rate may exceed what was acknowledged
 	ackedSlack   = 10_000                 // bits/s, so a near-silent transport may still grow
-	// queueKeepUp is how much slower than it left a window must arrive to count as
-	// queued: arrivals 10% more spread out than the sends mean a queue grew.
-	queueKeepUp = 0.9
 
 	probeHold = 5 * time.Second // how long a probe's result stands in for acknowledged traffic
 	// probeFeedbackWait is how long a probe's verdict waits for feedback that
@@ -234,30 +231,8 @@ func (e *bandwidthEstimator) delivered(now int64) float64 {
 
 // ackedReport summarizes the received packets of one feedback.
 type ackedReport struct {
-	first, last         int64 // receiver clock
-	firstSent, lastSent int64 // node monotonic, when the received packets left
-	bytes               int
-}
-
-// ackedWindow is what the receiver acknowledged over the latest span of arrivals.
-type ackedWindow struct {
-	bytes              int
-	recvSpan, sendSpan int64 // the same packets: when they arrived, when they left
-}
-
-// rate is the acknowledged bits/s, or 0 while the arrivals span less than ackedMinSpan.
-func (w ackedWindow) rate() float64 {
-	if w.recvSpan < int64(ackedMinSpan) {
-		return 0
-	}
-	return float64(w.bytes) * 8 / time.Duration(w.recvSpan).Seconds()
-}
-
-// backlogged reports whether the packets arrived more slowly than they left,
-// which only a queue ahead of them explains. A window whose arrivals keep the
-// pace of its sends says the path carried what was sent, not how much it can carry.
-func (w ackedWindow) backlogged() bool {
-	return w.recvSpan >= int64(ackedMinSpan) && float64(w.recvSpan)*queueKeepUp > float64(w.sendSpan)
+	first, last int64 // receiver clock
+	bytes       int
 }
 
 // decreaseCause names what last lowered an estimate.
@@ -366,7 +341,7 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		return
 	}
 	e.feedbacks++
-	report := ackedReport{first: math.MaxInt64, last: math.MinInt64, firstSent: math.MaxInt64, lastSent: math.MinInt64}
+	report := ackedReport{first: math.MaxInt64, last: math.MinInt64}
 	reported := delivery{at: now}
 	for index := range acks {
 		ack := &acks[index]
@@ -380,7 +355,6 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.trend.add(ack.sent, ack.arrival)
 		report.bytes += ack.size
 		report.first, report.last = min(report.first, ack.arrival), max(report.last, ack.arrival)
-		report.firstSent, report.lastSent = min(report.firstSent, ack.sent), max(report.lastSent, ack.sent)
 	}
 	reported.recv = report.bytes
 	e.deliveries[e.deliveryAt] = reported
@@ -397,13 +371,15 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 	}
 	// A queue that grows means the path is full: back off below what got through.
 	// The trend must stay over its threshold for decreaseSpan, the span a decrease
-	// reads, so one blip of jitter never cuts the estimate. Arrivals that keep the
-	// pace of the sends show no queue either, whatever the trend reads: what a
-	// sender that sends little got through says nothing about what the path carries.
+	// reads, so one blip of jitter never cuts the estimate. Without acknowledged
+	// traffic to read there is no rate to back off to, so the estimate holds.
 	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) &&
 		e.trend.hotFor >= int64(decreaseSpan) {
-		if window := e.window(decreaseSpan); window.backlogged() {
-			acked := window.rate()
+		acked := e.ackedOver(decreaseSpan)
+		if acked == 0 {
+			acked = e.acked()
+		}
+		if acked > 0 {
 			e.lower(causeOveruse, math.Max(decreaseFactor*acked, minEstimate), acked, now)
 		}
 		e.trend.signal = signalNormal
@@ -447,25 +423,24 @@ func (e *bandwidthEstimator) acked() float64 { return e.ackedOver(ackedSpan) }
 
 // ackedOver is the rate the receiver acknowledged over the latest span of
 // arrivals, or 0 while that is shorter than ackedMinSpan.
-func (e *bandwidthEstimator) ackedOver(span time.Duration) float64 { return e.window(span).rate() }
-
-// window folds the feedback reports of the latest span of arrivals.
-func (e *bandwidthEstimator) window(span time.Duration) (w ackedWindow) {
+func (e *bandwidthEstimator) ackedOver(window time.Duration) float64 {
 	if e.reportLen == 0 {
-		return w
+		return 0
 	}
-	newest := e.reports[(e.reportNext-1+len(e.reports))%len(e.reports)]
-	first, firstSent := newest.last, newest.lastSent
+	newest := e.reports[(e.reportNext-1+len(e.reports))%len(e.reports)].last
+	first, bytes := newest, 0
 	for index := range e.reportLen {
 		report := e.reports[(e.reportNext-1-index+2*len(e.reports))%len(e.reports)]
-		if newest.last-report.first > int64(span) {
+		if newest-report.first > int64(window) {
 			break
 		}
-		first, firstSent = min(first, report.first), min(firstSent, report.firstSent)
-		w.bytes += report.bytes
+		first, bytes = min(first, report.first), bytes+report.bytes
 	}
-	w.recvSpan, w.sendSpan = newest.last-first, newest.lastSent-firstSent
-	return w
+	span := newest - first
+	if span < int64(ackedMinSpan) {
+		return 0
+	}
+	return float64(bytes) * 8 / time.Duration(span).Seconds()
 }
 
 // current is the delay- and loss-based estimate. It is optimistic while the
