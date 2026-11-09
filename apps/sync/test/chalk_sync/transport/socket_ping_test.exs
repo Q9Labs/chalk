@@ -1,6 +1,7 @@
 defmodule ChalkSync.Transport.SocketPingTest do
   use ExUnit.Case, async: false
 
+  alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketV1
 
   defmodule RecordingStateholder do
@@ -25,10 +26,14 @@ defmodule ChalkSync.Transport.SocketPingTest do
     end)
 
     {:ok, state} = SocketV1.init([])
-    {:ok, state: %{state | phase: :live, identity: :identity}}
+    identity = %Identity{episode: :episode, participant_id: "p1", participant_generation: 1}
+    {:ok, identity: identity, state: %{state | phase: :live, identity: identity}}
   end
 
-  test "a ping answers with pong before the presence renewal runs", %{state: state} do
+  test "a ping answers with pong before the presence renewal runs", %{
+    state: state,
+    identity: identity
+  } do
     assert {:push, {:text, pong}, state} = ping(state)
 
     assert %{"type" => "pong"} = JSON.decode!(pong)
@@ -36,10 +41,10 @@ defmodule ChalkSync.Transport.SocketPingTest do
     assert_received :renew_presence
 
     assert {:ok, _state} = SocketV1.handle_info(:renew_presence, state)
-    assert_received {:renew_presence, :identity}
+    assert_received {:renew_presence, ^identity}
   end
 
-  test "each ping renews presence exactly once", %{state: state} do
+  test "each ping renews presence exactly once", %{state: state, identity: identity} do
     {:push, _pong, state} = ping(state)
     {:push, _pong, state} = ping(state)
 
@@ -50,8 +55,8 @@ defmodule ChalkSync.Transport.SocketPingTest do
     {:ok, state} = SocketV1.handle_info(:renew_presence, state)
     {:ok, _state} = SocketV1.handle_info(:renew_presence, state)
 
-    assert_received {:renew_presence, :identity}
-    assert_received {:renew_presence, :identity}
+    assert_received {:renew_presence, ^identity}
+    assert_received {:renew_presence, ^identity}
     refute_received {:renew_presence, _identity}
   end
 
