@@ -762,6 +762,11 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	if schemaName == "CallStatsRequest" {
 		return httpapi.CallStatsFieldEnum(fieldName)
 	}
+	if schemaName == "CloudflareSFUSignalRequest" {
+		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
+			return values
+		}
+	}
 	if schemaName == "SFUSubscriptionsResponse" {
 		switch fieldName {
 		case "state":

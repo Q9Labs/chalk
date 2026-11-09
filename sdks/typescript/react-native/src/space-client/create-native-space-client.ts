@@ -111,8 +111,9 @@ const CALL_OPEN_STATUSES: ReadonlySet<string> = new Set(["joining", "live", "rec
 function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch): NativeMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
+  const bootstrap = mediaBootstrap(input.access.media);
   const client = new CloudflareSFUClient({
-    bootstrap: mediaBootstrap(input.access.media),
+    bootstrap,
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
@@ -121,6 +122,8 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
+      // The grant decides, so an older API without the capability keeps the per-operation routes.
+      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       fetch,
     }),
     replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,

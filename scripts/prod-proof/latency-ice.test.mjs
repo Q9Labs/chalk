@@ -56,7 +56,20 @@ class Peer extends EventTarget {
 
 // A guest page with the latency trace installed on a clock the test controls.
 function pageWith(now = () => 100, extra = {}) {
-  const context = vm.createContext({ WebSocket: class extends EventTarget {}, RTCPeerConnection: Peer, fetch: async () => ({}), URL, setTimeout, clearTimeout, performance: { timeOrigin: 0, now }, proofConnections: [], ...extra });
+  const context = vm.createContext({
+    WebSocket: class extends EventTarget {},
+    RTCPeerConnection: Peer,
+    fetch: async () => ({}),
+    URL,
+    setTimeout,
+    clearTimeout,
+    performance: { timeOrigin: 0, now },
+    PerformanceObserver: class {
+      observe() {}
+    },
+    proofConnections: [],
+    ...extra,
+  });
   vm.runInContext(`window = globalThis; ${pageSource("latency-trace")}; installLatencyTrace();`, context);
   return context;
 }
@@ -175,7 +188,20 @@ test("the join sample is identical with and without the ICE diagnostic, and the 
       }
     }
     const snapshot = { getSnapshot: () => ({ connection: { status: live ? "live" : "idle" }, media: { local: { camera: { state: "enabled" }, microphone: { state: "enabled" } } } }) };
-    const context = vm.createContext({ WebSocket: class extends EventTarget {}, RTCPeerConnection: SlowPeer, fetch: async () => ({}), URL, setTimeout, clearTimeout, performance: { timeOrigin: 0, now: () => clock }, proofConnections: [], proofClient: snapshot });
+    const context = vm.createContext({
+      WebSocket: class extends EventTarget {},
+      RTCPeerConnection: SlowPeer,
+      fetch: async () => ({}),
+      URL,
+      setTimeout,
+      clearTimeout,
+      performance: { timeOrigin: 0, now: () => clock },
+      PerformanceObserver: class {
+        observe() {}
+      },
+      proofConnections: [],
+      proofClient: snapshot,
+    });
     vm.runInContext("window = globalThis;", context);
     if (traced) vm.runInContext(`${pageSource("latency-trace")}; installLatencyTrace();`, context);
     context.proofJoin = async () => {

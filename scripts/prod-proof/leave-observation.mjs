@@ -64,7 +64,9 @@ export function installLeaveObservation() {
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args);
     const url = args[0] instanceof Request ? args[0].url : String(args[0]);
-    if (response.status === 403 && new URL(url, location.href).pathname.endsWith("/media/sfu/publications")) {
+    const { pathname } = new URL(url, location.href);
+    const unifiedPublications = pathname.endsWith("/media/sfu/signal") && typeof args[1]?.body === "string" && args[1].body.includes('"op":"publications"');
+    if (response.status === 403 && (pathname.endsWith("/media/sfu/publications") || unifiedPublications)) {
       probe.rejections.push({ at: now(), lifecycle: window.proofClient.getSnapshot().connection.status });
     }
     return response;

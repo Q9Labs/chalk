@@ -29,6 +29,8 @@ export type ChalkSFUCapabilities = {
   readonly iceRestart: boolean;
   /** The API reads the publication list and pulls the other Participants' audio in the first `tracks` request. */
   readonly pullPublished: boolean;
+  /** The API serves every signaling call from the single `signal` route. */
+  readonly unifiedSignaling: boolean;
 };
 export type CloudflareSFUClientPayload = {
   readonly connectionId: string;
@@ -214,7 +216,7 @@ function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): Chalk
 }
 function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
   const flags = isRecord(value) ? value : {};
-  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true, pullPublished: flags.pullPublished === true };
+  return { serverLayerAdaptation: flags.serverLayerAdaptation === true, subscriptionState: flags.subscriptionState === true, iceRestart: flags.iceRestart === true, pullPublished: flags.pullPublished === true, unifiedSignaling: flags.unifiedSignaling === true };
 }
 function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {
   if (!Array.isArray(value)) throw new AccessGrantError();
