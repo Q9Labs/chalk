@@ -202,12 +202,13 @@ checks, including an Episode end that adopts the stop (#618).
 
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
-failure code. `provider_raw_code` and `provider_message` retain the rejected
-code and message with the existing diagnostic-word allowlist. URLs, identifiers,
-numbers, token-like strings and unknown words are redacted. Each field is capped
-at 240 characters plus a truncation marker. The active API span receives the same
-values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
-`cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
+failure code. `provider_raw_code` carries only a known Cloudflare code, an upper-case code of at
+most 64 characters, or `other`. The provider's free-text description is never
+logged, returned or exported, because it can echo a failed dial's host or address:
+only `provider_message_fingerprint`, a hash of it, identifies the message, and the
+response snapshot replaces each description with `redacted-<fingerprint>`. The
+active API span receives the same values as `chalk.provider.raw_error_code` and
+`chalk.provider.message_fingerprint` on `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
 HTTP 200 acceptance rules are unchanged.
 

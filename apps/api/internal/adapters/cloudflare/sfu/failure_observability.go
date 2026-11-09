@@ -12,28 +12,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 )
 
-const maxProviderMessageRunes = 240
-
-var (
-	providerCodePattern    = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
-	providerURLPattern     = regexp.MustCompile(`https?://\S+`)
-	providerUUIDPattern    = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b`)
-	providerTokenPattern   = regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`)
-	providerNumberPattern  = regexp.MustCompile(`[0-9]+`)
-	providerUnicodePattern = regexp.MustCompile(`[^\x00-\x7F]+`)
-	providerWordPattern    = regexp.MustCompile(`[A-Za-z]+`)
-	providerChunkPattern   = regexp.MustCompile(`\S+`)
-)
-
-var observableProviderWords = map[string]struct{}{
-	"a": {}, "add": {}, "already": {}, "and": {}, "answer": {}, "are": {}, "at": {}, "bad": {}, "because": {},
-	"cannot": {}, "closed": {}, "close": {}, "connected": {}, "connecting": {}, "connection": {}, "create": {},
-	"description": {}, "duplicate": {}, "duplicated": {}, "error": {}, "expired": {}, "failed": {}, "for": {},
-	"found": {}, "has": {}, "in": {}, "internal": {}, "invalid": {}, "is": {}, "media": {}, "missing": {},
-	"not": {}, "offer": {}, "operation": {}, "provider": {}, "rate": {}, "ready": {}, "redacted": {}, "rejected": {}, "request": {},
-	"required": {}, "response": {}, "session": {}, "state": {}, "the": {}, "this": {}, "timeout": {}, "too": {},
-	"track": {}, "tracks": {}, "unavailable": {}, "unauthorized": {}, "unknown": {}, "unsupported": {}, "was": {},
-}
+var providerCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,63}$`)
 
 func newTransportFailure(ctx context.Context, operation string, statusCode int, err error) providerFailure {
 	cause := mediaplane.ClassifyTransportCause(ctx, err)
@@ -51,7 +30,6 @@ func newTransportFailure(ctx context.Context, operation string, statusCode int, 
 type providerFailureDetails struct {
 	rawCode            string
 	trackErrorCode     string
-	message            string
 	messageFingerprint string
 	responseBytes      int
 	responseSnapshot   string
@@ -66,13 +44,12 @@ func newProviderResponseFailure(operation string, stage providerFailureStage, st
 	failure := newProviderFailure(operation, stage, statusCode, providerRejectionCode(rawCode, message))
 	failure.details = providerFailureDetails{
 		rawCode:            observableProviderCode(rawCode, failure.providerCode),
-		message:            observableProviderMessage(message),
 		messageFingerprint: providerMessageFingerprint(message),
 		responseTrackCount: responseTrackCount,
 		failedTrackCount:   failedTrackCount,
 	}
 	if operation == "close_tracks" && stage == failureStageTrack {
-		failure.details.rawCode = observableProviderMessage(rawCode)
+		failure.details.rawCode = observableTrackErrorCode(rawCode)
 	} else if stage == failureStageTrack {
 		failure.details.trackErrorCode = observableTrackErrorCode(rawCode)
 	}
@@ -209,41 +186,9 @@ func observableHTTPProviderCode(payload []byte) string {
 	}
 }
 
-func observableProviderMessage(message string) string {
-	message = strings.Join(strings.Fields(message), " ")
-	if message == "" {
-		return ""
-	}
-	message = providerURLPattern.ReplaceAllString(message, "[redacted]")
-	message = providerChunkPattern.ReplaceAllStringFunc(message, redactHostLike)
-	message = providerUUIDPattern.ReplaceAllString(message, "[redacted]")
-	message = providerTokenPattern.ReplaceAllString(message, "[redacted]")
-	message = providerNumberPattern.ReplaceAllString(message, "[redacted]")
-	message = providerUnicodePattern.ReplaceAllString(message, "[redacted]")
-	message = providerWordPattern.ReplaceAllStringFunc(message, func(word string) string {
-		if _, ok := observableProviderWords[strings.ToLower(word)]; ok {
-			return word
-		}
-		return "[redacted]"
-	})
-	message = strings.Join(strings.Fields(message), " ")
-	runes := []rune(message)
-	if len(runes) > maxProviderMessageRunes {
-		message = string(runes[:maxProviderMessageRunes]) + "…"
-	}
-	return message
-}
-
-// redactHostLike drops a whitespace-delimited chunk as a unit when, after its edge punctuation,
-// it still holds a dot, colon, slash, bracket or at sign: a host, host:port, IP or path. The word
-// filter below works per word, so it would keep the allowed words of "media.internal" and leak the name.
-func redactHostLike(chunk string) string {
-	if strings.ContainsAny(strings.Trim(chunk, `"'()<>,;.!?:`), `.:/[]@\`) && chunk != "[redacted]" {
-		return "[redacted]"
-	}
-	return chunk
-}
-
+// providerMessageFingerprint stands in for the provider's free-text description. The text can
+// echo a failed dial, with its host and address, so it is never logged or exported; the hash
+// still lets two incidents be matched.
 func providerMessageFingerprint(message string) string {
 	message = strings.TrimSpace(message)
 	if message == "" {
