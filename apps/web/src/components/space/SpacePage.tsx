@@ -1,10 +1,10 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import type { ThemeMode } from "../../lib/theme";
-import { readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { publicAPIBaseURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
@@ -122,6 +122,12 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     setPending(null);
     entranceAccess.current = prepared;
     setSpaceAccess({ prepared, inviteLink, spaceName });
+  }, []);
+  // While the person reads the name prompt, open the connections and fetch the call UI that Join will need.
+  useEffect(() => {
+    const apiBaseURL = publicAPIBaseURL();
+    preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL) });
+    void loadCallSurface().catch(() => undefined);
   }, []);
   useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;

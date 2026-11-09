@@ -101,7 +101,7 @@ export function publicAPIBaseURL(): string {
   if (globalThis.location?.origin) return globalThis.location.origin;
   return defaultAPIOrigin;
 }
-function publicSyncURL(apiBaseURL: string): string {
+export function publicSyncURL(apiBaseURL: string): string {
   const configured = import.meta.env.VITE_CHALK_SYNC_URL?.trim();
   if (configured) return configured;
   const url = new URL(apiBaseURL);

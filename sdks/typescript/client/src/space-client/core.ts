@@ -25,10 +25,11 @@ export type SpaceClientPlatform = {
   readonly initialCameraEnabled?: boolean;
   readonly onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void;
 };
+export const DEFAULT_API_BASE_URL = "https://api.chalkmeet.com";
 export class SpaceClientCoreService extends Context.Service<SpaceClientCoreService, SpaceClientCore>()("@chalk/client/SpaceClientCore") {}
 /** Production composition keeps every mutable owner inside a scoped Layer. */
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
-  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? "https://api.chalkmeet.com");
+  const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
   const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;

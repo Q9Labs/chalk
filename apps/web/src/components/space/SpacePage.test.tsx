@@ -97,6 +97,14 @@ it("says calls are unavailable when resuming after a reload returns 503 media.un
   expect(requests).toEqual(["restore", "replace"]);
 });
 
+it("opens the API connection and loads the call UI while the name prompt shows", async () => {
+  document.head.querySelectorAll('link[rel="preconnect"]').forEach((link) => link.remove());
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect([...document.head.querySelectorAll('link[rel="preconnect"]')].map((link) => link.getAttribute("href"))).toContain(window.location.origin);
+  expect(requests).toEqual([]);
+});
+
 async function expectMessage(message: string) {
   await vi.waitFor(async () => {
     await act(async () => undefined);
