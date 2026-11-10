@@ -3,7 +3,7 @@ import type { FakeDeviceSetup } from "./pre-join-devices";
 import type { Action, CallState } from "./states";
 
 /** The step loads on demand, so the other states do not pay for it in the harness bundle. */
-const PreJoinStep = lazy(() => import("./PreJoinStep").then((module) => ({ default: module.PreJoinStep })));
+const PreJoinStep = lazy(() => import("./PreJoinStep"));
 
 const TALKING: FakeDeviceSetup = { permission: "granted", microphones: 3, talking: true };
 const PRE_JOIN_SCENES: readonly { readonly id: string; readonly title: string; readonly devices: FakeDeviceSetup; readonly actions?: readonly Action[]; readonly joining?: boolean }[] = [

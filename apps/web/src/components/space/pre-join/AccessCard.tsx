@@ -42,7 +42,7 @@ export function AccessCard({ reason, requesting, onDismiss, onAllow }: { readonl
           <Icon size={20} aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h3 id="access-card-title" className="pt-px text-(length:--type-body-lg) font-semibold leading-snug">
+          <h3 id="access-card-title" className="text-(length:--type-body-lg) font-semibold leading-snug">
             {blocked ? "Camera and microphone are blocked" : "Turn on camera and microphone?"}
           </h3>
           <p className="mt-0.5 text-(length:--type-body-sm) leading-[1.4] text-[var(--chalk-muted-text)]">{blocked ? `Allow them for this site in ${isChrome() ? "Chrome" : "your browser"}.` : "Your browser asks next. Only you see the preview until you join."}</p>

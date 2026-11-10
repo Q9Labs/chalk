@@ -75,7 +75,7 @@ function RowBody({ view, reserve = false }: { readonly view: RowView; readonly r
       <span className="grid w-[18px] flex-none place-items-center text-[var(--chalk-muted-text)]">
         <Lead size={18} aria-hidden="true" />
       </span>
-      <span className={cn("grid min-w-0 flex-1 gap-px", view.tone === "muted" && "opacity-60", reserve && "mr-24")}>
+      <span className={cn("grid min-w-0 flex-1", view.tone === "muted" && "opacity-60", reserve && "mr-24")}>
         <small className="text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.caption}</small>
         <span className={cn("truncate text-(length:--type-body) leading-snug", view.tone === "warn" && "text-[var(--chalk-warning)]", view.tone === "muted" && "text-[var(--chalk-muted-text)]")}>{view.value}</span>
       </span>
@@ -114,7 +114,7 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
 /** One grouped card: microphone with its level, camera, and speaker with a test tone. */
 export function DeviceRows({ devices, locked, onNeedAccess }: { readonly devices: PreJoinDevices; readonly locked: boolean; readonly onNeedAccess: () => void }) {
   return (
-    <div className={cn("grid rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")} aria-label="Devices" role="group">
+    <div className={cn("grid rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-60")} aria-label="Devices" role="group">
       {rowViews(devices).map((view, index) => (
         <DeviceRow key={view.kind} view={view} devices={devices} onNeedAccess={onNeedAccess} first={index === 0} />
       ))}
@@ -130,13 +130,13 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
   if (!microphone) return null;
   const summary: RowView = { ...microphone, kind: "microphone", caption: "Devices", help: undefined };
   return (
-    <div className={cn("rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")}>
+    <div className={cn("rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-60")}>
       <button type="button" className={rowClass} aria-haspopup="dialog" onClick={granted ? () => setOpen(true) : onNeedAccess}>
         <RowBody view={summary} />
       </button>
       {open ? (
         <BottomSheet label="Devices" onClose={() => setOpen(false)}>
-          <div className="grid gap-3 px-3 pb-8">
+          <div className="grid gap-3 px-3">
             {(["microphone", "camera", ...(devices.canChooseSpeaker ? (["speaker"] as const) : [])] as const).map((kind) => {
               const { list, selected, select } = listFor(devices, kind);
               return (
