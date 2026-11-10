@@ -28,6 +28,7 @@ const (
 	APIEnvironment        = "CHALK_API_ENV"
 	APIRateLimits         = "CHALK_API_RATE_LIMITS"
 	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
+	APIDirectURL          = "CHALK_API_DIRECT_URL"
 	APILogFormat          = "CHALK_API_LOG_FORMAT"
 	APILogLevel           = "CHALK_API_LOG_LEVEL"
 	APIOTLPEndpoint       = "CHALK_API_OTLP_ENDPOINT"
@@ -268,6 +269,12 @@ type ChalkSFUConfig struct {
 	// default. Turning it off sends clients back to the per-operation routes without a web
 	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
 	UnifiedSignaling bool
+
+	// DirectSignalingURL is the origin of the direct door (TLS proxy on the host) for the
+	// signalling routes. Each own-SFU join advertises it as directSignalingUrl, so the SDK
+	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
+	// joins without a web deploy. CHALK_API_DIRECT_URL.
+	DirectSignalingURL string
 
 	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
 	// room. It is on by default. When it is off, creating that Episode fails with
@@ -766,9 +773,14 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}
+	directURL, err := directSignalingURL(os.Getenv(APIDirectURL))
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
 		Enabled:            true,
 		UnifiedSignaling:   unifiedSignaling,
+		DirectSignalingURL: directURL,
 		CaptureEnabled:     envBool(ChalkSFUCaptureEnabled),
 		CloudflareOverflow: overflow,
 		ApplicationID:      strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
@@ -1467,4 +1479,17 @@ func validateOAuthURL(environment, name, raw string, allowPath bool) error {
 		return fmt.Errorf("%s must use https outside local environments", name)
 	}
 	return nil
+}
+
+// directSignalingURL accepts empty (off) or an https origin: the SDK appends the route path to it.
+func directSignalingURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("%s must be an https origin without a path", APIDirectURL)
+	}
+	return "https://" + u.Host, nil
 }

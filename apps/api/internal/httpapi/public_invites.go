@@ -985,17 +985,25 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 			"provider":     publicinvites.PublicProviderChalkSFU,
 			"episodeRef":   grant.ClientPayload.EpisodeRef,
 			"iceServers":   grant.ClientPayload.ICEServers,
-			"capabilities": map[string]any{
-				"serverLayerAdaptation": grant.ClientPayload.Capabilities.ServerLayerAdaptation,
-				"subscriptionState":     grant.ClientPayload.Capabilities.SubscriptionState,
-				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
-				"pullPublished":         grant.ClientPayload.Capabilities.PullPublished,
-				"unifiedSignaling":      grant.ClientPayload.Capabilities.UnifiedSignaling,
-				"muteInPlace":           grant.ClientPayload.Capabilities.MuteInPlace,
-			},
+			"capabilities": chalkSFUCapabilities(grant.ClientPayload.Capabilities),
 		}
 
 	default:
 		return map[string]any{}
 	}
+}
+
+func chalkSFUCapabilities(c publicinvites.PublicAccessCapabilities) map[string]any {
+	capabilities := map[string]any{
+		"serverLayerAdaptation": c.ServerLayerAdaptation,
+		"subscriptionState":     c.SubscriptionState,
+		"iceRestart":            c.ICERestart,
+		"pullPublished":         c.PullPublished,
+		"unifiedSignaling":      c.UnifiedSignaling,
+		"muteInPlace":           c.MuteInPlace,
+	}
+	if c.DirectSignalingURL != "" {
+		capabilities["directSignalingUrl"] = c.DirectSignalingURL
+	}
+	return capabilities
 }

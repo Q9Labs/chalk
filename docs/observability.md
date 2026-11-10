@@ -214,6 +214,18 @@ sanitized origin, policy and HTTP method, and adds `cors.outcome=forbidden`,
 only scheme and host: ports, paths, queries and credentials are dropped, IP
 literals become `[ip]`, and anything else unparseable becomes `invalid`.
 
+### Direct and Tunnel ingress
+
+Every API request span (`journey.phase.http`) carries `ingress=direct` or
+`ingress=tunnel`, as Sync's `sync.websocket.handshake` does. `direct` means the
+host's TLS proxy marked the request with `X-Chalk-Ingress: direct`, and only a
+trusted proxy peer (`CHALK_API_TRUSTED_PROXY_CIDRS`) can set the mark; everything
+else is `tunnel`. Split signalling latency and errors by it. A direct request
+over the per-IP bound (300 in 10 seconds, before any credential check) answers
+429 with `Retry-After` and counts as the `direct.ingress.ip` policy. The change
+adds no journey-ledger event: no lifecycle transition changes, and a join under
+either ingress keeps one trace.
+
 ### Interrupted recording stops and missing provider tracks
 
 A capture completed from retained bundles without a confirmed stopped callback

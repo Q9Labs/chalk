@@ -432,6 +432,7 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			UnifiedSignaling:      flags["unifiedSignaling"] == true,
 			MuteInPlace:           flags["muteInPlace"] == true,
 		}
+		capabilities.DirectSignalingURL, _ = flags["directSignalingUrl"].(string)
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 	case mediaplane.ProviderCloudflareSFU:
 		connectionID, ok := join.ClientPayload["connectionId"].(string)

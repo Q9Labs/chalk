@@ -23,3 +23,15 @@ func TestPublicJoinPayloadCarriesUnifiedSignaling(t *testing.T) {
 		}
 	}
 }
+
+// The direct door reaches the client payload of an access grant unchanged, and stays out when unset.
+func TestPublicJoinPayloadCarriesDirectSignalingURL(t *testing.T) {
+	for _, flags := range []map[string]any{{"iceRestart": true, "directSignalingUrl": "https://direct.chalk.test"}, {"iceRestart": true}} {
+		join := mediaplane.Join{Provider: mediaplane.ProviderChalkSFU, ClientPayload: map[string]any{"connectionId": "connection-1", "episodeRef": "episode-ref", "capabilities": flags}}
+		_, payload, err := publicJoinPayload(mediaplane.ProviderChalkSFU, join)
+		want, _ := flags["directSignalingUrl"].(string)
+		if err != nil || payload.Capabilities.DirectSignalingURL != want {
+			t.Errorf("flags %v: url %q, err %v", flags, payload.Capabilities.DirectSignalingURL, err)
+		}
+	}
+}

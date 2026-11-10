@@ -276,7 +276,7 @@ func rateLimitFailure(ctx context.Context, w http.ResponseWriter, policy ratelim
 func recordRateLimiterUnavailable(ctx context.Context, policy string) {
 	switch policy {
 	case ratelimit.PolicyNameCORSPolicyLookup, ratelimit.PolicyNameAuthenticatedRead, ratelimit.PolicyNameAuthenticatedWrite,
-		ratelimit.PolicyNameWebhookRead, ratelimit.PolicyNameTelemetryIntake,
+		ratelimit.PolicyNameWebhookRead, ratelimit.PolicyNameTelemetryIntake, ratelimit.PolicyNameDirectIngressIP,
 		ratelimit.PolicyNameAuthenticatedRead + ".service_ceiling", ratelimit.PolicyNameAuthenticatedWrite + ".service_ceiling",
 		reportParticipantLimit.Name, reportIPLimit.Name, reportAccountLimit.Name, reportEpisodeLimit.Name, connectionReportParticipantLimit.Name, callStatsParticipantLimit.Name:
 	default:

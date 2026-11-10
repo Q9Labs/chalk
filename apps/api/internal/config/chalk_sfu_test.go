@@ -108,3 +108,23 @@ func TestChalkSFUUnifiedSignalingIsOnUnlessSwitchedOff(t *testing.T) {
 		t.Fatalf("error %v, want the setting named", err)
 	}
 }
+
+func TestChalkSFUDirectSignalingURLIsOffUnlessAnHTTPSOriginIsSet(t *testing.T) {
+	setChalkSFUEnv(t, "sfu-a=https://a.chalk.test:8443")
+	config, err := loadChalkSFUConfig()
+	if err != nil || config.DirectSignalingURL != "" {
+		t.Fatalf("direct URL %q, err %v, want off by default", config.DirectSignalingURL, err)
+	}
+
+	t.Setenv(APIDirectURL, " https://direct.chalk.test/ ")
+	if config, err = loadChalkSFUConfig(); err != nil || config.DirectSignalingURL != "https://direct.chalk.test" {
+		t.Fatalf("direct URL %q, err %v, want the origin", config.DirectSignalingURL, err)
+	}
+
+	for _, bad := range []string{"http://direct.chalk.test", "https://direct.chalk.test/v1", "https://u:p@direct.chalk.test", "direct.chalk.test", "https://direct.chalk.test?x=1"} {
+		t.Setenv(APIDirectURL, bad)
+		if _, err := loadChalkSFUConfig(); err == nil || !strings.Contains(err.Error(), APIDirectURL) {
+			t.Fatalf("%s=%q: error %v, want the setting named", APIDirectURL, bad, err)
+		}
+	}
+}

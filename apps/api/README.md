@@ -60,6 +60,13 @@ load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
 `X-Forwarded-For` for public-route rate limiting. Non-local environments use
 Redis-backed rate limiting through `CHALK_REDIS_URL`.
 
+Set `CHALK_API_DIRECT_URL` to the https origin of the host's direct TLS proxy
+(see `docs/operators/direct-sync-path.md`) to advertise it as
+`directSignalingUrl` in each own-SFU join grant. Empty (the default) leaves it
+out, so the setting also turns the direct door off for new joins without a web
+deploy. Requests the proxy marks with `X-Chalk-Ingress: direct` are limited per
+client address before any credential check.
+
 For local harnesses, set `CHALK_API_RATE_LIMITS=off` with `CHALK_API_ENV=local`
 to disable only the authenticated read and write policies. Public-route and
 webhook policies remain enabled. `on` (the default when unset or empty) keeps
