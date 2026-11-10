@@ -6,7 +6,7 @@ import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
 import { BottomSheet, SAFE_BOTTOM } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
 
-const STACKED = "(max-width: 899px)";
+const STACKED = "(max-width: 1023px)";
 
 /** One column on phones and tablets, two columns when the preview and the form fit side by side. */
 function useStacked(): boolean {

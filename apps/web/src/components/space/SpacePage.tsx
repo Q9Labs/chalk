@@ -1,7 +1,7 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { CallLimbo, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
@@ -251,7 +251,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   useEffect(() => {
     if (!automaticName || !rememberedDevices || reloadMarker || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
-    start({ ...rememberedDevices, displayName: automaticName });
+    void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
   }, [automaticName, reloadMarker, rememberedDevices, start]);
   useEffect(() => {
     if (preparing || cancelRequested.current) return;

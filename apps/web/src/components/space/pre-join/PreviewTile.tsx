@@ -52,7 +52,7 @@ export function PreviewTile({
   const granted = devices.access === "granted";
   const name = displayName.trim() || "You";
   return (
-    <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] min-[900px]:w-[600px]">
+    <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] lg:w-[600px]">
       <video ref={video} autoPlay muted playsInline aria-hidden={!cameraTrack} className={cn("absolute inset-0 size-full object-cover", !cameraTrack && "hidden", dimmed && "opacity-35")} style={{ transform: devices.mirrored ? "scaleX(-1)" : undefined }} />
       {cameraTrack ? null : (
         <span

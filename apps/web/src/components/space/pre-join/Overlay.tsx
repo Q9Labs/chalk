@@ -44,6 +44,11 @@ export function BottomSheet({ label, onClose, children }: { readonly label: stri
       >
         <div aria-hidden="true" className="mx-auto mb-2 mt-2 h-1 w-9 rounded-full bg-[var(--chalk-line-strong)]" />
         {children}
+        <div className="px-3 pt-2">
+          <button type="button" data-part="pill-button" data-chalk-variant="outline" data-chalk-tone="neutral" className="chalk-pill-button w-full" style={{ height: "var(--space-10)" }} onClick={onClose}>
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

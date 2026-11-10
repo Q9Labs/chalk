@@ -203,12 +203,16 @@ describe("usePreJoinDevices", () => {
     expect(current.joinOptions).toMatchObject({ microphone: true, camera: false });
   });
 
-  it("remembers the toggles and devices for the next visit", async () => {
+  it("remembers the toggles and devices for the next visit, but only once the visitor joins", async () => {
     installBrowser({ permission: "granted" });
     await mount();
     await act(async () => {
       current.setMicrophoneOn(false);
       current.selectCamera("cam-2");
+    });
+    expect(readRememberedDevices()).toBeNull();
+    await act(async () => {
+      current.commit();
     });
     expect(readRememberedDevices()).toEqual({ microphone: false, camera: true, cameraDeviceId: "cam-2" });
 
@@ -286,6 +290,61 @@ describe("usePreJoinDevices", () => {
     expect(current.cameraMissing).toBe(true);
     expect(current.microphoneMissing).toBe(false);
     expect(current.joinOptions).toMatchObject({ microphone: true, camera: false });
+  });
+
+  it("does not remember a camera that was busy once as a camera the visitor turned off", async () => {
+    installBrowser({ permission: "granted", failWith: (constraints) => (constraints.video ? "NotReadableError" : undefined) });
+    await mount();
+    await act(async () => {
+      current.commit();
+    });
+    expect(readRememberedDevices()).toEqual({ microphone: true, camera: true });
+  });
+
+  it("keeps the microphone when only the camera is refused", async () => {
+    installBrowser({ permission: "granted", failWith: (constraints) => (constraints.video ? "NotAllowedError" : undefined) });
+    await mount();
+    expect(current.access).toBe("granted");
+    expect(current.cameraMissing).toBe(true);
+    expect(current.joinOptions).toMatchObject({ microphone: true, camera: false });
+  });
+
+  it("stops a camera the visitor turned off before the replacement capture finishes", async () => {
+    const browser = installBrowser({ permission: "granted" });
+    await mount();
+    const camera = browser.opened.find((track) => track.kind === "video");
+    browser.getUserMedia.mockImplementationOnce(() => new Promise<MediaStream>(() => undefined));
+    await act(async () => current.setCameraOn(false));
+    expect(camera?.stopped()).toBe(true);
+  });
+
+  it("stops a microphone from a fallback capture when the step unmounts before the camera attempt ends", async () => {
+    const browser = installBrowser({ permission: "granted", failWith: (constraints) => (constraints.audio && constraints.video ? "NotReadableError" : undefined) });
+    const original = browser.getUserMedia.getMockImplementation();
+    let calls = 0;
+    browser.getUserMedia.mockImplementation((constraints) => {
+      calls += 1;
+      return calls === 3 ? new Promise<MediaStream>(() => undefined) : (original?.(constraints) ?? Promise.reject(new Error("no capture")));
+    });
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    await settle();
+    const microphone = browser.opened.find((track) => track.kind === "audio");
+    expect(microphone?.stopped()).toBe(false);
+    await act(async () => root.unmount());
+    expect(microphone?.stopped()).toBe(true);
+    root = createRoot(document.createElement("div"));
+  });
+
+  it("tries a microphone that failed to open again when the browser lists another one", async () => {
+    const browser = installBrowser({ permission: "granted", failWith: (constraints) => (constraints.audio === true ? "NotReadableError" : undefined) });
+    await mount();
+    expect(current.microphoneMissing).toBe(true);
+    const before = browser.getUserMedia.mock.calls.length;
+    await act(async () => browser.plugIn(device("audioinput", "mic-3", "USB microphone")));
+    await settle();
+    expect(browser.getUserMedia.mock.calls.length).toBeGreaterThan(before);
   });
 
   it("reads granted access from device labels where the browser cannot query permission", async () => {

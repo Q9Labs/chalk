@@ -12,7 +12,7 @@ declare global {
 window.__CALL_STATES__ = PRE_JOIN_STATES.map(({ render: _render, ...meta }) => meta);
 const id = new URLSearchParams(location.search).get("state");
 const state = PRE_JOIN_STATES.find((candidate) => candidate.id === id);
-installFakeDevices({ blocked: false });
+if (!new URLSearchParams(location.search).has("browserMedia")) installFakeDevices({ blocked: false });
 
 const root = document.getElementById("root");
 if (!root) throw new Error("pre-join-states.html has no #root element.");

@@ -52,7 +52,18 @@ async function shoot() {
     for (const page of ["call-states.html", "pre-join-states.html"]) {
       const probe = await browser.newPage();
       await probe.goto(`${states}/${page}`);
-      await probe.waitForFunction(() => window.__CALL_STATES__);
+      // A baseline from before a page existed has no states to shoot there.
+      const listed = await probe
+        .waitForFunction(() => window.__CALL_STATES__, undefined, { timeout: page === "call-states.html" ? 30000 : 5000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!listed) {
+        await probe.close();
+        if (page === "call-states.html") throw new Error(`${states}/${page} has no call states`);
+        continue;
+      }
       const stateList = await probe.evaluate(() => window.__CALL_STATES__.map((state) => ({ id: state.id, actions: state.actions ?? [], stallBoard: Boolean(state.stallBoard) })));
       await probe.close();
       for (const state of stateList) jobs.push({ id: `state-${state.id}`, url: `${states}/${page}?state=${state.id}`, viewport: { width: 1280, height: 800 }, fullPage: false, scheme: "dark", actions: state.actions, stallBoard: state.stallBoard });

@@ -80,7 +80,6 @@ export function usePreJoinDevices(): PreJoinDevices {
     const next = { ...latestChoice.current, ...change };
     latestChoice.current = next;
     setChoice(next);
-    rememberDevices(next);
   };
 
   const microphones = devices?.audioinput ?? NO_DETECTED_DEVICES.audioinput;
@@ -135,6 +134,9 @@ export function usePreJoinDevices(): PreJoinDevices {
   const wantCamera = capturing && choice.camera;
   const hasMicrophone = microphones.length > 0;
   const hasCamera = cameras.length > 0;
+  // A device that failed to open gets another try when the browser lists a different set of devices.
+  const retryMicrophone = capture.missing.has("microphone") ? microphones.map((device) => device.deviceId).join() : "";
+  const retryCamera = capture.missing.has("camera") ? cameras.map((device) => device.deviceId).join() : "";
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Open one preview stream for the wanted devices; replace it only when the new one is ready and stop late captures on cleanup.
   useEffect(() => {
     if (!devicesKnown) return;
@@ -143,12 +145,18 @@ export function usePreJoinDevices(): PreJoinDevices {
       setCapture(NOTHING_CAPTURED);
       return;
     }
+    // A device the visitor turned off stops now; the others keep running until their replacement is ready.
+    if (!wantMicrophone) stream.current?.getAudioTracks().forEach((track) => track.stop());
+    if (!wantCamera) stream.current?.getVideoTracks().forEach((track) => track.stop());
     let cancelled = false;
-    void openPreview(wantMicrophone ? { deviceId: chosenMicrophone } : false, wantCamera ? { deviceId: chosenCamera } : false).then((opened) => {
+    let settled = false;
+    const held: MediaStream[] = [];
+    void openPreview(wantMicrophone ? { deviceId: chosenMicrophone } : false, wantCamera ? { deviceId: chosenCamera } : false, held).then((opened) => {
       if (cancelled) {
         opened.stream?.getTracks().forEach((track) => track.stop());
         return;
       }
+      settled = true;
       adopt(stream, opened.stream);
       const tracks = { microphone: opened.stream?.getAudioTracks()[0] ?? null, camera: opened.stream?.getVideoTracks()[0] ?? null };
       for (const track of [tracks.microphone, tracks.camera]) track?.addEventListener("ended", () => setGeneration((count) => count + 1), { once: true });
@@ -158,8 +166,10 @@ export function usePreJoinDevices(): PreJoinDevices {
     });
     return () => {
       cancelled = true;
+      // A fallback capture that is still waiting on the next one must not outlive the step.
+      if (!settled) held.forEach((captured) => captured.getTracks().forEach((track) => track.stop()));
     };
-  }, [devicesKnown, wantMicrophone, wantCamera, chosenMicrophone, chosenCamera, hasMicrophone, hasCamera, generation]);
+  }, [devicesKnown, wantMicrophone, wantCamera, chosenMicrophone, chosenCamera, hasMicrophone, hasCamera, retryMicrophone, retryCamera, generation]);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [resource] Stop the preview tracks when the step unmounts so the camera light goes off.
   useEffect(() => () => adopt(stream, null), []);
@@ -226,8 +236,8 @@ export function usePreJoinDevices(): PreJoinDevices {
     testSpeaker,
     joinOptions,
     commit: () => {
-      // Only device ids the visitor picked are kept: a default device that later disappears must not pin the next join.
-      rememberDevices({ ...latestChoice.current, microphone: joinOptions.microphone, camera: joinOptions.camera });
+      // The toggles are what the visitor asked for, so a camera that was busy once does not turn it off for good. Only picked device ids are kept.
+      if (granted) rememberDevices(latestChoice.current);
       return joinOptions;
     },
   };
@@ -246,22 +256,23 @@ function adopt(current: { current: MediaStream | null }, next: MediaStream | nul
 
 type Request = false | { readonly deviceId: string | undefined };
 
-async function openPreview(microphone: Request, camera: Request): Promise<{ readonly stream: MediaStream | null; readonly missing: ReadonlySet<Source>; readonly denied: boolean }> {
-  const together = await attempt(microphone, camera);
+/** `held` collects every stream as soon as the browser hands it over, so the caller can stop it before the whole sequence ends. */
+async function openPreview(microphone: Request, camera: Request, held: MediaStream[]): Promise<{ readonly stream: MediaStream | null; readonly missing: ReadonlySet<Source>; readonly denied: boolean }> {
+  const together = await attempt(microphone, camera, held);
   if (together.stream) return { stream: together.stream, missing: new Set(), denied: false };
-  if (together.failure === "denied") return { stream: null, missing: new Set(), denied: true };
-  // One absent or busy device fails a combined request, so each wanted device gets its own try.
-  const separate = microphone && camera ? [await attempt(microphone, false), await attempt(false, camera)] : [together];
+  // One absent, busy or refused device fails a combined request, so each wanted device gets its own try.
+  const separate = microphone && camera ? [await attempt(microphone, false, held), await attempt(false, camera, held)] : [together];
   const sources: readonly Source[] = microphone && camera ? ["microphone", "camera"] : [microphone ? "microphone" : "camera"];
   const tracks = separate.flatMap((result) => result.stream?.getTracks() ?? []);
   const missing = new Set(sources.filter((_, index) => separate[index]?.stream === undefined));
-  return { stream: tracks.length > 0 ? new MediaStream(tracks) : null, missing, denied: separate.some((result) => result.failure === "denied") };
+  return { stream: tracks.length > 0 ? new MediaStream(tracks) : null, missing, denied: tracks.length === 0 && separate.some((result) => result.failure === "denied") };
 }
 
-async function attempt(microphone: Request, camera: Request): Promise<{ readonly stream?: MediaStream; readonly failure?: Failure }> {
+async function attempt(microphone: Request, camera: Request, held: MediaStream[]): Promise<{ readonly stream?: MediaStream; readonly failure?: Failure }> {
   if (!microphone && !camera) return { failure: "missing" };
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: constraint(microphone), video: constraint(camera) });
+    held.push(stream);
     return { stream };
   } catch (cause) {
     return { failure: classify(cause) };
