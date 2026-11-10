@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { PreJoin } from "../components/space/pre-join/PreJoin";
-import { SPACE_NAME } from "./fixtures";
+import { lazy, Suspense } from "react";
 import type { FakeDeviceSetup } from "./media";
 import type { Action, CallState } from "./states";
+
+/** The step loads on demand, so the other states do not pay for it in the harness bundle. */
+const PreJoinStep = lazy(() => import("./PreJoinStep").then((module) => ({ default: module.PreJoinStep })));
 
 const TALKING: FakeDeviceSetup = { permission: "granted", microphones: 3, talking: true };
 const PRE_JOIN_SCENES: readonly { readonly id: string; readonly title: string; readonly devices: FakeDeviceSetup; readonly actions?: readonly Action[]; readonly joining?: boolean }[] = [
@@ -20,15 +21,10 @@ export const PRE_JOIN_STATES: readonly CallState[] = PRE_JOIN_SCENES.flatMap(({ 
     title: `${title}${theme === "light" ? ", light" : ""}`,
     devices,
     actions,
-    render: () => <PreJoinStep theme={theme} joining={joining === true} />,
+    render: () => (
+      <Suspense fallback={null}>
+        <PreJoinStep theme={theme} joining={joining === true} />
+      </Suspense>
+    ),
   })),
 );
-
-function PreJoinStep({ theme, joining }: { readonly theme: "light" | "dark"; readonly joining: boolean }) {
-  const [name, setName] = useState("Hasan Shoaib");
-  return (
-    <main data-chalk data-chalk-theme={theme} className="h-dvh">
-      <PreJoin spaceName={SPACE_NAME} displayName={name} onDisplayNameChange={setName} joining={joining} onJoin={() => undefined} />
-    </main>
-  );
-}

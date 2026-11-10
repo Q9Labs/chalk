@@ -36,7 +36,7 @@ export function BottomSheet({ label, onClose, children }: { readonly label: stri
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="max-h-full w-full overflow-y-auto rounded-t-[var(--corner-3xl)] border-t border-[var(--chalk-line)] bg-[var(--chalk-popover)] pb-[max(env(safe-area-inset-bottom),var(--space-4))] text-[var(--chalk-text)] outline-none"
+        className="max-h-full w-full overflow-y-auto rounded-t-3xl border-t border-[var(--chalk-line)] bg-[var(--chalk-popover)] pb-[max(env(safe-area-inset-bottom),var(--space-4))] text-[var(--chalk-text)] outline-none"
       >
         <div aria-hidden="true" className="mx-auto mb-2 mt-2 h-1 w-9 rounded-full bg-[var(--chalk-line-strong)]" />
         {children}

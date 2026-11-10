@@ -56,7 +56,7 @@ export function PreviewTile({
   const granted = devices.access === "granted";
   const name = displayName.trim() || "You";
   return (
-    <div className="relative h-[340px] overflow-hidden rounded-[var(--corner-2xl)] bg-[var(--chalk-tile)] min-[900px]:h-[338px] min-[900px]:w-[600px]">
+    <div className="relative h-[338px] overflow-hidden rounded-2xl bg-[var(--chalk-tile)] min-[900px]:w-[600px]">
       <video ref={video} autoPlay muted playsInline aria-hidden={!cameraTrack} className={cn("absolute inset-0 size-full object-cover", !cameraTrack && "hidden", dimmed && "opacity-35")} style={{ transform: devices.mirrored ? "scaleX(-1)" : undefined }} />
       {cameraTrack ? null : (
         <span
@@ -67,10 +67,8 @@ export function PreviewTile({
           {getParticipantInitials(name)}
         </span>
       )}
-      {granted ? (
-        <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-[var(--corner-pill)] bg-[color-mix(in_srgb,var(--chalk-canvas)_78%,transparent)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)] backdrop-blur-md">Only you see this</span>
-      ) : null}
-      <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-[var(--corner-lg)] bg-[color-mix(in_srgb,var(--chalk-canvas)_78%,transparent)] px-2.5 py-1 text-(length:--type-caption) font-medium backdrop-blur-md">{name}</span>
+      {granted ? <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-full bg-[color-mix(in_srgb,var(--chalk-canvas)_78%,transparent)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)] backdrop-blur-md">Only you see this</span> : null}
+      <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[color-mix(in_srgb,var(--chalk-canvas)_78%,transparent)] px-2.5 py-1 text-(length:--type-caption) font-medium backdrop-blur-md">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>
           {devices.microphoneOn ? <Microphone01Icon size={20} aria-hidden="true" /> : <MicrophoneOff01Icon size={20} aria-hidden="true" />}

@@ -39,7 +39,7 @@ function rowViews(devices: PreJoinDevices, compact = false): readonly RowView[] 
 function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevices; readonly kind: Kind; readonly onPick: () => void }) {
   const { list, selected, select } = listFor(devices, kind);
   return (
-    <div role="listbox" aria-label={CAPTION[kind]} className="absolute inset-x-0 bottom-full z-20 mb-2 grid rounded-[var(--corner-3xl)] border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2 shadow-[var(--chalk-shadow)]">
+    <div role="listbox" aria-label={CAPTION[kind]} className="absolute inset-x-0 bottom-full z-20 mb-2 grid rounded-3xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2 shadow-[var(--chalk-shadow)]">
       <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
       {list.length ? (
         list.map((device) => (
@@ -52,7 +52,7 @@ function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevice
               select(device.deviceId);
               onPick();
             }}
-            className="flex min-h-11 items-center gap-3 rounded-[var(--corner-xl)] px-3 text-left text-(length:--type-body) outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
           >
             <span className="grid w-[18px] flex-none place-items-center">{selected === device.deviceId ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
             <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
@@ -66,7 +66,7 @@ function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevice
   );
 }
 
-const rowClass = "flex min-h-14 w-full items-center gap-3 rounded-[var(--corner-xl)] px-3 text-left outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
+const rowClass = "flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]";
 
 function RowBody({ view, reserve = false }: { readonly view: RowView; readonly reserve?: boolean }) {
   const Lead = LEAD[view.kind];
@@ -76,8 +76,8 @@ function RowBody({ view, reserve = false }: { readonly view: RowView; readonly r
         <Lead size={18} aria-hidden="true" />
       </span>
       <span className={cn("grid min-w-0 flex-1 gap-px", view.tone === "muted" && "opacity-60", reserve && "mr-24")}>
-        <small className="text-(length:--type-caption) leading-[1.3] text-[var(--chalk-muted-text)]">{view.caption}</small>
-        <span className={cn("truncate text-(length:--type-body) leading-[1.35]", view.tone === "warn" && "text-[var(--chalk-warning)]", view.tone === "muted" && "text-[var(--chalk-muted-text)]")}>{view.value}</span>
+        <small className="text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.caption}</small>
+        <span className={cn("truncate text-(length:--type-body) leading-snug", view.tone === "warn" && "text-[var(--chalk-warning)]", view.tone === "muted" && "text-[var(--chalk-muted-text)]")}>{view.value}</span>
       </span>
       {view.trailing}
       <ArrowDown01Icon size={16} aria-hidden="true" className="flex-none text-[var(--chalk-muted-text)]" />
@@ -100,13 +100,13 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
         <button
           type="button"
           onClick={() => void devices.testSpeaker()}
-          className={cn("absolute right-10 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1.5 rounded-[var(--corner-pill)] bg-[var(--chalk-hover)] px-3 text-(length:--type-caption) font-medium", devices.speakerTesting && "text-[var(--chalk-accent)]")}
+          className={cn("absolute right-10 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1.5 rounded-full bg-[var(--chalk-hover)] px-3 text-(length:--type-caption) font-medium", devices.speakerTesting && "text-[var(--chalk-accent)]")}
         >
           <VolumeHighIcon size={14} aria-hidden="true" />
           Test
         </button>
       ) : null}
-      {view.help ? <p className="pb-3 pl-11 pr-3 text-(length:--type-caption) leading-[1.45] text-[var(--chalk-muted-text)]">{view.help}</p> : null}
+      {view.help ? <p className="pb-3 pl-11 pr-3 text-(length:--type-caption) leading-normal text-[var(--chalk-muted-text)]">{view.help}</p> : null}
     </div>
   );
 }
@@ -114,7 +114,7 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
 /** One grouped card: microphone with its level, camera, and speaker with a test tone. */
 export function DeviceRows({ devices, locked, onNeedAccess }: { readonly devices: PreJoinDevices; readonly locked: boolean; readonly onNeedAccess: () => void }) {
   return (
-    <div className={cn("grid rounded-[var(--corner-2xl)] bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")} aria-label="Devices" role="group">
+    <div className={cn("grid rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")} aria-label="Devices" role="group">
       {rowViews(devices).map((view, index) => (
         <DeviceRow key={view.kind} view={view} devices={devices} onNeedAccess={onNeedAccess} first={index === 0} />
       ))}
@@ -130,7 +130,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
   if (!microphone) return null;
   const summary: RowView = { ...microphone, kind: "microphone", caption: "Devices", help: undefined };
   return (
-    <div className={cn("rounded-[var(--corner-2xl)] bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")}>
+    <div className={cn("rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")}>
       <button type="button" className={cn(rowClass, "min-h-[60px]")} aria-haspopup="dialog" onClick={granted ? () => setOpen(true) : onNeedAccess}>
         <RowBody view={summary} />
       </button>
@@ -143,14 +143,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
                 <div key={kind} role="radiogroup" aria-label={CAPTION[kind]} className="grid">
                   <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
                   {list.map((device) => (
-                    <button
-                      key={device.deviceId}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected === device.deviceId}
-                      onClick={() => select(device.deviceId)}
-                      className="flex min-h-11 items-center gap-3 rounded-[var(--corner-xl)] px-3 text-left text-(length:--type-body) hover:bg-[var(--chalk-hover)]"
-                    >
+                    <button key={device.deviceId} type="button" role="radio" aria-checked={selected === device.deviceId} onClick={() => select(device.deviceId)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) hover:bg-[var(--chalk-hover)]">
                       <span className="grid w-[18px] flex-none place-items-center">{selected === device.deviceId ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
                       <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
                       {kind === "microphone" && selected === device.deviceId && devices.microphoneOn ? <LevelMeter level={devices.microphoneLevel} small /> : null}
@@ -160,7 +153,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
               );
             })}
             {devices.canChooseSpeaker ? (
-              <button type="button" onClick={() => void devices.testSpeaker()} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-[var(--corner-pill)] bg-[var(--chalk-hover)] text-(length:--type-body) font-medium">
+              <button type="button" onClick={() => void devices.testSpeaker()} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--chalk-hover)] text-(length:--type-body) font-medium">
                 <VolumeHighIcon size={16} aria-hidden="true" />
                 Test speaker
               </button>

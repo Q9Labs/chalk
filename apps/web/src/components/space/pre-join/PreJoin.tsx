@@ -78,10 +78,10 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   };
   const card = reason ? <AccessCard reason={reason} requesting={access === "requesting"} onDismiss={() => setDismissed(true)} onAllow={devices.requestAccess} /> : null;
 
-  const title = <h1 className="text-(length:--type-headline) font-semibold leading-[1.15]">{spaceName ?? "Join the call"}</h1>;
+  const title = <h1 className="text-(length:--type-headline) font-semibold leading-tight">{spaceName ?? "Join the call"}</h1>;
   const preview = (
     <PreviewTile devices={devices} displayName={displayName} locked={joining} dimmed={reason !== null} onToggle={toggle}>
-      {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-[var(--corner-3xl)] border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-[var(--chalk-shadow)]">{card}</div> : null}
+      {card && !stacked ? <div className="absolute left-1/2 top-1/2 z-10 w-80 -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-[var(--chalk-shadow)]">{card}</div> : null}
     </PreviewTile>
   );
   const rows = stacked ? <DevicesSheetRow devices={devices} locked={joining} onNeedAccess={askAgain} /> : <DeviceRows devices={devices} locked={joining} onNeedAccess={askAgain} />;
@@ -103,7 +103,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         readOnly={joining}
         value={displayName}
         onChange={(event) => onDisplayNameChange(event.target.value)}
-        className="h-12 w-full rounded-[var(--corner-xl)] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) text-[var(--chalk-app-text)] outline-none read-only:text-[var(--chalk-muted-text)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+        className="h-12 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) text-[var(--chalk-app-text)] outline-none read-only:text-[var(--chalk-muted-text)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
       />
       <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pb-[max(env(safe-area-inset-bottom),var(--space-6))] pt-3" : "grid gap-2"}>
         <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
@@ -116,7 +116,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
             "Join call"
           )}
         </button>
-        <p role="status" className="min-h-[18px] text-center text-(length:--type-caption) leading-[1.45] text-[var(--chalk-muted-text)]">
+        <p role="status" className="min-h-[18px] text-center text-(length:--type-caption) leading-normal text-[var(--chalk-muted-text)]">
           {joining ? null : joinNote(devices.joinOptions)}
         </p>
       </div>

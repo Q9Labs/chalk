@@ -4,7 +4,7 @@ export type AccessReason = "ask" | "blocked";
 
 const isChrome = () => /Chrome\//u.test(navigator.userAgent) && !/Edg\/|OPR\//u.test(navigator.userAgent);
 
-const stepRow = "flex items-center gap-2 rounded-[var(--corner-lg)] px-2 py-1.5 text-(length:--type-caption) text-[var(--chalk-text)]";
+const stepRow = "flex items-center gap-2 rounded-lg px-2 py-1.5 text-(length:--type-caption) text-[var(--chalk-text)]";
 
 function StepBadge({ step }: { readonly step: number }) {
   return <span className="grid size-4 flex-none place-items-center rounded-full bg-[var(--chalk-accent)] text-(length:--type-micro) font-semibold text-[var(--chalk-accent-text)]">{step}</span>;
@@ -13,12 +13,12 @@ function StepBadge({ step }: { readonly step: number }) {
 /** Chrome's own way back in: the site settings button next to the address, then the two switches. */
 function ChromeSteps() {
   return (
-    <div aria-hidden="true" className="grid gap-2 rounded-[var(--corner-2xl)] bg-[var(--chalk-hover)] p-3">
+    <div aria-hidden="true" className="grid gap-2 rounded-2xl bg-[var(--chalk-hover)] p-3">
       <div className={`${stepRow} bg-[var(--chalk-surface)]`}>
         <span className="flex-1">{globalThis.location.hostname}</span>
         <StepBadge step={1} />
       </div>
-      <div className="grid gap-0.5 rounded-[var(--corner-lg)] bg-[var(--chalk-surface)] p-1">
+      <div className="grid gap-0.5 rounded-lg bg-[var(--chalk-surface)] p-1">
         {["Camera", "Microphone"].map((name, index) => (
           <div key={name} className={stepRow}>
             <span className="flex-1">{name}</span>
@@ -42,7 +42,7 @@ export function AccessCard({ reason, requesting, onDismiss, onAllow }: { readonl
           <Icon size={20} aria-hidden="true" />
         </span>
         <div>
-          <h3 id="access-card-title" className="pt-px text-(length:--type-body-lg) font-semibold leading-[1.3]">
+          <h3 id="access-card-title" className="pt-px text-(length:--type-body-lg) font-semibold leading-snug">
             {blocked ? "Camera and microphone are blocked" : "Turn on camera and microphone?"}
           </h3>
           <p className="mt-0.5 text-(length:--type-body-sm) leading-[1.4] text-[var(--chalk-muted-text)]">{blocked ? `Allow them for this site in ${isChrome() ? "Chrome" : "your browser"}.` : "Your browser asks next. Only you see the preview until you join."}</p>
