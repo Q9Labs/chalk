@@ -140,10 +140,14 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
   });
   return createSFUConnectionMediaClient(client);
 }
-function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
+/** The mute path needs `setLocalSourceIntent` and `closeForcedLocalPublication`: without them every mute takes the forced-close path and fails on the bundled transport. */
+export function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    pauseLocalCapture: client.pauseLocalCapture.bind(client),
+    setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
+    closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
     start: client.start.bind(client),
