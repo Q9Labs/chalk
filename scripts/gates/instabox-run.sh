@@ -17,6 +17,16 @@ trap 'rm -rf -- "$scratch"' EXIT
 chmod 1777 "$scratch"
 sudo mount --bind "$scratch" /tmp
 trap 'sudo umount /tmp && rm -rf -- "$scratch"' EXIT
+# Parallel lanes (OSV, Go and browser proofs) can briefly need more than a 4 GiB machine has.
+# Swap on the data disk turns that spike into a slow moment instead of a killed lane.
+if [[ "$(swapon --show --noheadings | wc -l)" == 0 ]]; then
+  swapfile="$scratch/swapfile"
+  sudo fallocate -l 3G "$swapfile"
+  sudo chmod 600 "$swapfile"
+  sudo mkswap "$swapfile" >/dev/null
+  sudo swapon "$swapfile"
+  trap 'sudo swapoff "$swapfile"; sudo umount /tmp && rm -rf -- "$scratch"' EXIT
+fi
 export TMPDIR=/tmp
 export GOTOOLCHAIN=auto
 if ! command -v ruby >/dev/null || ! command -v lsof >/dev/null; then
