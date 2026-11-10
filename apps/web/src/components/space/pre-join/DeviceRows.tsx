@@ -106,7 +106,7 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
           Test
         </button>
       ) : null}
-      {view.help ? <p className="pb-3 pl-11 pr-3 text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.help}</p> : null}
+      {view.help ? <p className="pb-4 pl-11 pr-3 text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.help}</p> : null}
     </div>
   );
 }
