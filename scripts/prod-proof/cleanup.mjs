@@ -22,7 +22,7 @@ function cleanupClient(config) {
     }
   };
 }
-async function list(call, path, field) {
+export async function list(call, path, field) {
   const values = [];
   let cursor = "";
   do {

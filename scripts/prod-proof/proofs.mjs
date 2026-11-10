@@ -8,7 +8,8 @@ import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
-import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
 
@@ -124,8 +125,35 @@ export async function trackEpisode(run, space, episode) {
   run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
   await saveOwnership(run);
 }
+// A Space holds one live Episode, and a proof Space is shared with the run before it. The run holds the staging lease, so a live
+// Episode that carries another run's proof_run_id was left by a proof whose cleanup did not finish: end it. An Episode with no
+// proof_run_id belongs to someone else and is never ended; it only gets the wait below.
+async function endLeftoverEpisodes(run, space) {
+  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
+  for (const episode of await list(run.apiRequest, path, "episodes")) {
+    const owner = episode.metadata?.proof_run_id;
+    if (episode.status !== "active" || typeof owner !== "string" || owner === run.runId) continue;
+    console.log("Ending an Episode a finished proof run left live in the proof Space");
+    await requestEpisodeEnd(run.apiRequest, `${path}/${episode.id}`);
+  }
+}
+// An Episode still ending, or someone else's, makes Create Episode answer 409 episode.capacity_exceeded; wait up to 30 x 3 s for it.
+const spaceBusyPolls = 30;
+const spaceBusyPollMs = 3_000;
+async function createEpisodeWhenSpaceClears(run, space) {
+  for (let poll = 0; ; poll++) {
+    try {
+      return await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+    } catch (error) {
+      if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
+      if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);
+      await run.wait(spaceBusyPollMs);
+    }
+  }
+}
 export async function createEpisode(run, space, policy = manualPolicy) {
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  if (space.metadata?.proof_run_id !== run.runId) await endLeftoverEpisodes(run, space);
+  const episode = await createEpisodeWhenSpaceClears(run, space);
   await trackEpisode(run, space, episode);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);

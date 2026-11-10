@@ -139,7 +139,7 @@ export async function createRun(config, directory, signal = new AbortController(
   run.tenantPath = `/v1/tenants/${config.tenant_id}`;
   return run;
 }
-const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout", "capture-slot-held", "media-plane-config"]);
+const publicReasons = new Set(["configuration", "capability-disabled", "evidence-assertion", "timeout", "capture-slot-held", "media-plane-config", "proof-space-busy"]);
 const publicApiCodes = new Set(["api_key.inactive", "access.forbidden", "resource.not_found", "request.invalid", "rate_limit.exceeded", "internal.error"]);
 const publicStatuses = new Set([400, 401, 403, 404, 409, 422, 429, 500, 502, 503, 504]);
 function apiFailure(error) {

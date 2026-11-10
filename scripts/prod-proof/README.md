@@ -30,6 +30,14 @@ Signed webhook proofs use a temporary Webhook.site receiver. Voice generation us
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
 
+A proof Space is shared with the run before it, and a Space holds one live
+Episode. Before it creates an Episode in a reused Space, every proof ends a live
+Episode whose `proof_run_id` names another run: the staging lease serialises
+proof runs, so a finished run's Episode is one its cleanup left. An Episode
+with no `proof_run_id` is never ended. When Create Episode still answers
+409 `episode.capacity_exceeded`, the proof retries every 3 seconds for 90
+seconds, then fails with reason `proof-space-busy`.
+
 The Capture pool is shared and small, so one stale Capture job can block every
 Recording. Every proof that records reads
 `GET /v1/tenants/{tenant_id}/recording-capture-pool` (the proof key's
