@@ -352,8 +352,7 @@ function LiveKeySearch({ cursor, onPage }: { readonly cursor: string; readonly o
     return () => {
       current = false;
     };
-    // The cursor alone names the page to fetch; `onPage` and `toast` are new on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the cursor alone names the page to fetch; onPage and toast are new on every render
   }, [cursor]);
   return null;
 }
