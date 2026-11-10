@@ -10,6 +10,7 @@ import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
+import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -39,7 +40,6 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
@@ -47,9 +47,8 @@ const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // run that cannot get one stops at once with reason media-plane-config.
 export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
   const pinName = pinnedSpaceVariable(plane, policy);
-  const pinned = pinName && process.env[pinName];
-  if (pinned) {
-    const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+  const existing = await pinnedSpace(run, plane, policy, pinName);
+  if (existing) {
     checkSpacePlane(existing, plane, pinName);
     checkSpacePolicy(existing, policy);
     await save(`${run.directory}/space.json`, existing);
@@ -71,6 +70,19 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   await save(`${run.directory}/space.json`, space);
   return space;
 }
+// CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) uses the Space the own-sfu-spaces step checked and moved:
+// the pinned Space ID when an operator pinned one, otherwise the Space with the fixed slug (same resolver as the step).
+// Otherwise a Space ID variable reuses the Space an operator moved.
+async function pinnedSpace(run, plane, policy, pinName) {
+  const kind = ownSfuSpaceKind(policy);
+  if (plane === "chalk_sfu" && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
+    const found = await findOwnSfuSpace(run.apiRequest, run.tenantPath, kind);
+    check(found, `The proof Space for ${pinName} or ${ownSfuSpaces[kind].slug} does not exist: run the own-sfu-spaces proof first`, "media-plane-config");
+    return found;
+  }
+  const pinned = pinName && process.env[pinName];
+  return pinned ? run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`) : undefined;
+}
 function checkSpacePolicy(space, policy) {
   check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");
   check(space.transcription_policy === policy.transcription, `A proof Space has Transcription policy ${space.transcription_policy}, not ${policy.transcription}`, "media-plane-config");
@@ -85,7 +97,7 @@ function pinnedSpaceVariable(plane, policy) {
   return undefined;
 }
 function checkSpacePlane(space, plane, pinName) {
-  const got = space.effective_media_plane ?? space.media_plane;
+  const got = spacePlane(space);
   check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or ${pinName ?? `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`} for a Space moved with media-settings)`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
@@ -183,7 +195,7 @@ async function forceSwitch(run, pages, sample, receiveBefore) {
   console.log("Sender bandwidth restored; layer-switch evidence collected");
   return failure;
 }
-export function checkShareProgress(before, after) {
+function checkShareProgress(before, after) {
   const screens = after.filter((row) => row.source === "screen");
   const advancing = screens.some((row) => before.some((previous) => previous.id === row.id && previous.connection === row.connection && row.framesDecoded - previous.framesDecoded >= 2));
   check(advancing, "Screen-share decoding stalled during a ten-second observation window");

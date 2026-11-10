@@ -129,7 +129,24 @@ own-SFU proof for that exact SHA, both at selection and in the approval recheck.
 Missing results (including older cuts), skipped proofs and failed proofs block
 promotion with an error naming the SHA and nightly run unless the existing
 `scorecard_override` input supplies a written reason. Promote's own production
-proof (`leave smoke transcript`) still runs on the production Space's plane.
+proof runs on `chalk_sfu`: `leave-own-sfu` (the current client leaves; the acknowledgement,
+the released microphone and camera, and the removal of the participant and its media are
+checked), `camera-share` and `call-artifacts` (the call, the Recording and the Transcript).
+The old `smoke` and `transcript` proofs and the Leave comparison with the published 5.2.6
+client need Cloudflare and no longer run in Promote; `pnpm prod:proof leave` still runs by hand.
+The two baseline inputs stay required and recorded, and nothing scores against them now.
+
+The proof reuses two Spaces of the production proof Tenant, found by slug
+(`promote-proof-chalk-sfu`, `promote-proof-chalk-sfu-automatic`). The `own-sfu-spaces` job
+creates them if missing and moves them to `chalk_sfu` before `release` starts, so the
+release that is still in production does it: its public API accepts `chalk_sfu` for a
+Space in `CHALK_SFU_ALLOWED_SPACES`, the release with the per-Space setting refuses it, and
+a plane stored by the older release survives the upgrade. If the API refuses, Promote stops
+before it deploys and names the Space. One-time operator step, off the Promote path: add
+the two Spaces to `CHALK_SFU_ALLOWED_SPACES` (or run `media-settings` where the setting
+exists). Only these two Spaces move, so live Spaces keep their plane. The undo is to revert
+the change; the two Spaces can go back to `cf_sfu` with `media-settings set --plane cf_sfu`.
+A held release cut before this change lacks the `leave-own-sfu` proof, so cut a nightly after it merges.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
 It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
 newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.

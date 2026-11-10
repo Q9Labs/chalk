@@ -118,8 +118,19 @@ jobs:
             previous-media.json
             previous-npm.json
           retention-days: 90
-  release:
+  own-sfu-spaces:
+    # Runs before the deploy, on the release still in production. That release lets the public API move an allowlisted Space to chalk_sfu, and a plane stored that way survives the upgrade; the release that adds the per-Space setting refuses it. It runs the proof code of this master revision. A failure stops Promote before anything deploys.
+    permissions:
+      contents: read
     needs: [select, approve]
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      proofs: own-sfu-spaces
+      media_plane: chalk_sfu
+    secrets: inherit
+  release:
+    needs: [select, approve, own-sfu-spaces]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
@@ -143,10 +154,9 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave smoke transcript
+      proofs: leave-own-sfu camera-share call-artifacts
+      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
     secrets: inherit
   scorecard:
     # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
@@ -195,10 +205,9 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave
+      proofs: leave-own-sfu
+      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
       scorecard_label: rerun
     secrets: inherit
   scorecard-final:

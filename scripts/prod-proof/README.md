@@ -270,6 +270,14 @@ clients declare both media providers, so the Episode binds the Space's choice.
 The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
 for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.
 
+`pnpm prod:proof leave-own-sfu` (`CHALK_PROOF_MEDIA_PLANE=chalk_sfu`) is the own SFU's Leave proof: two guests join with the
+current client and one leaves. It fails unless the Sync acknowledgement arrives before the SDK's deadline and within
+5 s, the leaver's microphone and camera tracks end within 10 s, the other guest drops the leaver from its roster and
+its received media and keeps its own capture, and the Episode is not ended. It writes a Leave result in the
+shape the scorecard reads. `pnpm prod:proof own-sfu-spaces` finds or creates Promote's two proof Spaces by slug
+and moves them to `chalk_sfu` through the public API, which only a release before the per-Space setting accepts
+(an allowlisted Space); `CHALK_PROOF_SPACE_BY_SLUG=true` makes the proofs reuse them.
+
 ### Recording and Transcript of a three-guest call (`call-artifacts`)
 
 `pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
