@@ -140,7 +140,7 @@ func message(rule string) (headline, impact, next string) {
 	case "sfu-readiness":
 		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
 	case "certificate-expiry":
-		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, the direct door by checking that its proxy can renew over port 443."
+		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, a CA that ends first by rotating the service CA (see the README), the direct door by checking that its proxy can renew over port 443."
 	case "sfu-retirement-debt":
 		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
 	case "export":
@@ -475,6 +475,9 @@ type serverCertificate struct {
 	// notAfter is the effective expiry: the earliest NotAfter along the verified
 	// chain, or the NotAfter of the certificate verification found expired.
 	notAfter time.Time
+	// byCA is true when a certificate above the server's own ends first, so renewing
+	// the server certificate would not help.
+	byCA bool
 }
 
 // sfuServerCertificate reads one node's server certificate. A node that cannot be
@@ -492,6 +495,9 @@ func sfuServerCertificate(ctx context.Context, probe sfuProbe) certReading {
 		return certReading{}
 	}
 	reading := certReading{label: "an own SFU server certificate", notAfter: seen.notAfter}
+	if seen.byCA {
+		reading.label = "the CA of the own SFU server certificates"
+	}
 	if seen.untrusted {
 		reading.failure = "an own SFU server certificate is untrusted"
 	}
@@ -509,6 +515,9 @@ func doorCertificate(ctx context.Context, doorURL string) certReading {
 	seen := verifiedServerCertificate(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: doorRoots}, false)
 	if seen.reached && !seen.untrusted {
 		reading.notAfter, reading.failure = seen.notAfter, ""
+		if seen.byCA {
+			reading.label = "an intermediate certificate of the direct door"
+		}
 	}
 	return reading
 }
@@ -540,35 +549,36 @@ func verifiedServerCertificate(ctx context.Context, rawURL string, config *tls.C
 		}
 		var invalid x509.CertificateInvalidError
 		if errors.As(verification.Err, &invalid) && invalid.Reason == x509.Expired && invalid.Cert != nil {
-			return serverCertificate{reached: true, notAfter: invalid.Cert.NotAfter}
+			presented := verification.UnverifiedCertificates
+			return serverCertificate{reached: true, notAfter: invalid.Cert.NotAfter, byCA: len(presented) > 0 && !invalid.Cert.Equal(presented[0])}
 		}
 		return serverCertificate{reached: true, untrusted: true}
 	}
 	defer conn.Close()
-	return serverCertificate{reached: true, notAfter: effectiveExpiry(conn.(*tls.Conn).ConnectionState().VerifiedChains, includeRoot)}
+	notAfter, byCA := effectiveExpiry(conn.(*tls.Conn).ConnectionState().VerifiedChains, includeRoot)
+	return serverCertificate{reached: true, notAfter: notAfter, byCA: byCA}
 }
 
 // effectiveExpiry is the earliest NotAfter along the best verified path, because a
-// handshake fails once any certificate on it has expired. The root counts only when
-// it is the configured CA (includeRoot); a system root's own expiry is not this
-// certificate's to renew.
-func effectiveExpiry(chains [][]*x509.Certificate, includeRoot bool) time.Time {
-	var best time.Time
+// handshake fails once any certificate on it has expired. byCA says the earliest
+// is a certificate above the leaf. The root counts only when it is the configured
+// CA (includeRoot); a system root's own expiry is not this certificate's to renew.
+func effectiveExpiry(chains [][]*x509.Certificate, includeRoot bool) (best time.Time, byCA bool) {
 	for _, path := range chains {
 		if !includeRoot && len(path) > 1 {
 			path = path[:len(path)-1]
 		}
-		earliest := path[0].NotAfter
+		earliest, above := path[0].NotAfter, false
 		for _, certificate := range path[1:] {
 			if certificate.NotAfter.Before(earliest) {
-				earliest = certificate.NotAfter
+				earliest, above = certificate.NotAfter, true
 			}
 		}
 		if earliest.After(best) {
-			best = earliest
+			best, byCA = earliest, above
 		}
 	}
-	return best
+	return best, byCA
 }
 
 func sfuClient(probe sfuProbe) (*http.Client, error) {

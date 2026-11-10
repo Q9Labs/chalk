@@ -357,8 +357,8 @@ func TestACAThatExpiresBeforeItsLeafSetsTheEffectiveExpiry(t *testing.T) {
 	probes[0].URL, probes[0].CAFile = server.URL+"/readyz", caFile
 	// Handshakes start failing when the CA ends, so the leaf's year-long NotAfter must not read as healthy.
 	items := collectCertificateExpiry(context.Background(), probes[:1], "", time.Now())
-	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate expires within 7 days") {
-		t.Fatalf("the CA's earlier expiry must decide: %+v", items)
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "the CA of the own SFU server certificates expires within 7 days") || strings.Contains(items[0].Reason, "an own SFU server certificate expires") {
+		t.Fatalf("the CA's earlier expiry must decide and be named: %+v", items)
 	}
 }
 

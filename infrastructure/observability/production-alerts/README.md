@@ -91,7 +91,7 @@ SFU client certificate lasts 365 days and is a separate target: renew it with
 the collector read it. Each handshake verifies normally against the configured CA (the system roots for the door) and the name. A chain that fails only
 because a certificate has expired reads as expired, using that certificate's NotAfter; a chain
 that fails for any other reason (unknown authority, wrong name) raises an
-`untrusted` finding instead of hiding an expiry. A certificate's expiry is the earliest NotAfter along its verified chain: the pinned CA counts for the SFU, a system root does not for the door, so a CA that ends before its leaf sets the date. The checks run in parallel on their
+`untrusted` finding instead of hiding an expiry. A certificate's expiry is the earliest NotAfter along its verified chain: the pinned CA counts for the SFU, a system root does not for the door, so a CA that ends before its leaf sets the date and the finding names the CA, not the server certificate. Renewing the server certificate does not help then. Rotate the service CA instead: move the old `ca.crt` aside and run `certs <env> ca` (the script refuses while one exists, because a new CA orphans every certificate it issued), then reissue the server, API and operator certificates from it and give every node and the API the new client CA and CA file. An intermediate named for the direct door is Let's Encrypt's to rotate; check that Caddy still renews. The checks run in parallel on their
 own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
 The direct door's certificate is issued and renewed by its Caddy proxy
 over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the
