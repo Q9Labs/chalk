@@ -124,7 +124,7 @@ The report must show `meetsM7Minimum`, every join within 10 s, and every fault r
 
 ## Moving production Spaces
 
-Order: Spaces with Recording disabled first, then Spaces with Recording or Transcription, only after `call-artifacts` has passed on staging. Recording and Transcription both use the capture plane, so a Space with Transcription automatic belongs to the second group even when Recording is disabled.
+Order: real Spaces move only after `call-artifacts` has passed on staging, Recording-disabled Spaces first. Recording and Transcription both use the capture plane, so a Space with Transcription automatic needs capture even when Recording is disabled.
 
 Per Space (the candidate list with IDs lives in private operator notes):
 
