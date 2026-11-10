@@ -10,7 +10,6 @@ export async function proveToastLayering(browser, baseURL, { screenshotDirectory
   ]) {
     const page = await browser.newPage({ viewport: { width, height }, reducedMotion: "reduce" });
     page.setDefaultTimeout(3000);
-    page.on("console", (m) => { if (m.text().includes("sheet-debug")) console.log(m.text()); });
     try {
       await proveViewport(page, baseURL, { screenshotDirectory, label, noticeBottom, width, height, place });
       console.log(`[toast-layering] ${label} ${width}x${height}: passed`);
