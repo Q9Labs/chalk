@@ -142,12 +142,15 @@ read `media_plane_setting` or `default_media_plane_approved`, and it keeps writi
 `spaces.media_plane` and `tenants.default_media_plane`. A Space's setting is the
 value an operator wrote only while `media_plane` is unchanged; after a rollback and a
 redeploy, a `media_plane` the older release wrote is the Space's choice (`chalk_sfu` or
-`cf_sfu`; anything else means inherit). A Tenant default is approved only while it
-equals the value the operator approved, so a default the older release wrote needs
-an operator again. An operator who writes the same value the older release left is
-a fresh write. Proof runs name no plane in Create Space: the deployment fills it
+`cf_sfu`; anything else means inherit). A Tenant default is approved only by the operator
+command: a trigger on `tenants` clears `default_media_plane_approved` whenever the default
+changes and refuses any other write of the flag, unless the transaction sets
+`chalk.operator_write` (only `media-settings` does), so no sequence of writes from the
+API or the older release can create or restore an approval. Proof runs name no plane in Create Space: the deployment fills it
 (`CHALK_NEW_SPACE_MEDIA_PLANE`), the operator sets the Tenant default, or
-`CHALK_CANARY_SPACE_ID` names a Space moved with `media-settings`.
+`CHALK_CANARY_SPACE_ID` names a Space moved with `media-settings`. A proof that runs
+both planes (`prod:latency`) takes `CHALK_PROOF_SPACE_ID_<PLANE>` for each plane an operator
+moved, and stops at once when a Space is not on the plane it asked for.
 
 Only an operator sets `chalk_sfu`. The public API refuses it with 403
 `space.media_plane_not_permitted` or `tenant.media_plane_not_permitted`, and

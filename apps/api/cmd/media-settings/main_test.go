@@ -198,7 +198,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 
 	// A value no operator approved never selects the own SFU, and an operator can repair one
 	// that names no plane at all, with the raw value in the audit line.
-	exec(`update tenants set default_media_plane='chalk_sfu', default_media_plane_approved_value=null where id=$1`, tenantID.Bytes())
+	exec(`update tenants set default_media_plane='chalk_sfu' where id=$1`, tenantID.Bytes())
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
 		t.Fatalf("an unapproved legacy chalk_sfu default selected %v", got[0]["effective_plane"])
 	}

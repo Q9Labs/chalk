@@ -259,7 +259,10 @@ Real-call proof workflow's `media_plane` input, to run it on the own SFU where t
 API's switch is on, as on nightly. The public API always refuses `media_plane: chalk_sfu`, so
 set `CHALK_CANARY_SPACE_ID` to a Space an operator moved with
 `go run ./cmd/media-settings set`, or leave the plane out where the deployment gives
-new Spaces the own SFU (`CHALK_NEW_SPACE_MEDIA_PLANE`). The proof's
+new Spaces the own SFU (`CHALK_NEW_SPACE_MEDIA_PLANE`). The two-plane latency benchmark
+(`prod:latency`) cannot name a plane either, so set `CHALK_PROOF_SPACE_ID_CF_SFU` and
+`CHALK_PROOF_SPACE_ID_CHALK_SFU` to Spaces an operator moved; it stops at once when a Space
+is not on the plane it asked for. The proof's
 clients declare both media providers, so the Episode binds the Space's choice.
 The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
 for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.

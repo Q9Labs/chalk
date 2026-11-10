@@ -24,19 +24,42 @@ alter table spaces
     ) stored;
 
 -- Any tenant could write tenants.default_media_plane before operators owned it, with no check on the
--- value. An operator approves a default by writing the value it approved beside it. The default
--- counts as approved only while it equals that value, so a write from the previous release, which
--- knows nothing of approvals, leaves it unapproved. Existing rows are unapproved: a legacy chalk_sfu
--- never selects the own SFU until an operator writes it again, and an unknown value is ignored.
+-- value. default_media_plane_approved marks a default an operator wrote, and only the operator
+-- command can set it: a trigger clears it whenever the default changes, and refuses any other
+-- write of the flag, unless the transaction says it is the operator's
+-- (set_config('chalk.operator_write', 'on', true)). No sequence of writes from the API or from the
+-- previous release can create or restore an approval. Existing rows are unapproved: a legacy
+-- chalk_sfu never selects the own SFU until an operator writes it again, and an unknown value is ignored.
 alter table tenants
-    add column default_media_plane_approved_value text,
-    add column default_media_plane_approved boolean not null generated always as (
-        coalesce(default_media_plane = default_media_plane_approved_value, false)
-    ) stored;
+    add column default_media_plane_approved boolean not null default false;
+
+-- +goose StatementBegin
+create function guard_tenant_media_plane_approval()
+returns trigger
+language plpgsql
+as $$
+begin
+    if coalesce(current_setting('chalk.operator_write', true), '') = 'on' then
+        return new;
+    end if;
+    if tg_op = 'INSERT' or new.default_media_plane is distinct from old.default_media_plane then
+        new.default_media_plane_approved := false;
+    else
+        new.default_media_plane_approved := old.default_media_plane_approved;
+    end if;
+    return new;
+end;
+$$;
+-- +goose StatementEnd
+
+create trigger tenants_guard_media_plane_approval
+    before insert or update on tenants
+    for each row execute function guard_tenant_media_plane_approval();
 
 -- +goose Down
+drop trigger tenants_guard_media_plane_approval on tenants;
+drop function guard_tenant_media_plane_approval();
 alter table tenants drop column default_media_plane_approved;
-alter table tenants drop column default_media_plane_approved_value;
 alter table spaces drop column media_plane_setting;
 alter table spaces drop constraint spaces_media_plane_setting_witness;
 alter table spaces drop column media_plane_setting_against;

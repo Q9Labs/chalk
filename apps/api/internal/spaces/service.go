@@ -432,7 +432,9 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 		}
 		stored := s.planes.legacyPlane(setting)
 		if stored == "" {
-			return Space{}, ErrInvalidMediaPlane
+			// Clearing with no platform default: the column is not null, and Cloudflare is what a
+			// public write may name anyway.
+			stored = string(s.planes.PublicWritePlane())
 		}
 		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true, Value: setting}
 		input.MediaPlane.Value = &stored

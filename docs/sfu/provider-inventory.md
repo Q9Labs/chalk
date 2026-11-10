@@ -67,7 +67,8 @@ removal still touches.
   the kill switch off every new Episode binds to Cloudflare whatever these cells say.
 - `by_new_episode_provider` is what the API would bind a new Episode to.
   `cf_sfu_by_allowlist` is a Space that selects `chalk_sfu` but is outside the
-  allowlist. `none` is no provider selected or media disabled.
+  allowlist. A `chalk_sfu` Space inside the allowlist under a tenant-managed
+  Tenant counts as `cf_sfu`, as live resolution does. `none` is no provider selected or media disabled.
   `unresolvable` is a Space the API refuses to bind: unknown provider, invalid
   Tenant settings, a tenant-managed Tenant selecting `chalk_sfu` (it has no
   tenant-managed mode), or tenant-managed settings with no Cloudflare SFU

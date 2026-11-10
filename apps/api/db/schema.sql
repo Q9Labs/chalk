@@ -6,11 +6,8 @@ create table tenants (
     default_region text,
     -- cf_sfu
     default_media_plane text,
-    -- The value an operator approved beside default_media_plane; the default is approved only while it equals this.
-    default_media_plane_approved_value text,
-    default_media_plane_approved boolean not null generated always as (
-        coalesce(default_media_plane = default_media_plane_approved_value, false)
-    ) stored,
+    -- Set only by the operator command; a trigger clears it whenever the default changes otherwise.
+    default_media_plane_approved boolean not null default false,
     -- {
     --   "enabled": true,
     --   "provider": "cf_sfu",

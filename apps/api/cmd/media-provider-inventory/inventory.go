@@ -80,7 +80,8 @@ type rawReport struct {
 // has no setting yet), else the Tenant default (an unknown value, or a chalk_sfu no operator
 // approved, names no plane), else the stored media_plane, which holds
 // the platform default for a Space that inherits.
-// A chalk_sfu selection outside the allowlist is pinned to Cloudflare.
+// A chalk_sfu selection outside the allowlist is pinned to Cloudflare, and one under a Tenant on its
+// own credentials selects Cloudflare, as the resolver does.
 // outcome is the provider a new Episode would bind, or none (no provider or
 // media disabled), or unresolvable (the API refuses to create the binding).
 const classificationSQL = `
@@ -126,18 +127,21 @@ space_class as (
             when tc.resolver_default <> 'none' then 'tenant_default'
             else 'space'
         end as selection_source,
-        case
-            when own.plane is not null then case own.plane when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
-            when tc.resolver_default <> 'none' then tc.resolver_default
-            when btrim(s.media_plane) = '' then 'none'
-            else case btrim(s.media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
-        end as selected,
+        case when pick.chosen = 'chalk_sfu' and tc.config_source = 'tenant_managed' then 'cf_sfu' else pick.chosen end as selected,
         tc.config_provider, tc.sfu_configured
     from spaces s
     join tenant_class tc on tc.id = s.tenant_id
     cross join lateral (
         select coalesce(s.media_plane_setting, case when btrim(s.media_plane) = 'chalk_sfu' then 'chalk_sfu' end) as plane
     ) own
+    cross join lateral (
+        select case
+            when own.plane is not null then case own.plane when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
+            when tc.resolver_default <> 'none' then tc.resolver_default
+            when btrim(s.media_plane) = '' then 'none'
+            else case btrim(s.media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
+        end as chosen
+    ) pick
     where s.archived_at is null
 ),
 space_outcome as (
@@ -153,7 +157,6 @@ space_result as (
             when so.config_source = 'invalid' then 'unresolvable'
             when so.config_source = 'tenant_managed' then
                 case
-                    when so.selected = 'chalk_sfu' and not so.pinned then 'unresolvable'
                     when not so.sfu_configured then 'unresolvable'
                     when not so.pinned and so.config_provider not in ('', 'cf_sfu') then 'unresolvable'
                     else 'cf_sfu'

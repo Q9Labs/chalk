@@ -225,6 +225,8 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs) {
   try {
     outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, ending)) };
   } catch (error) {
+    // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
+    if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
     outcome = { plane, timestamp, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
   if (ending.current) await endEpisode(run, ending).catch((error) => (outcome = { plane, timestamp, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));

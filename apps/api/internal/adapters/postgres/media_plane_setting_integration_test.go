@@ -39,7 +39,15 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 	if space, err = utilities.NewID(); err != nil {
 		t.Fatal(err)
 	}
-	mustExec(t, pool, `insert into tenants (id,name,default_media_plane,default_media_plane_approved_value) values ($1,'Plane setting proof',$2,$2)`, tenant.Bytes(), tenantDefault)
+	seed, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, seed, `select set_config('chalk.operator_write', 'on', true)`)
+	mustExec(t, seed, `insert into tenants (id,name,default_media_plane,default_media_plane_approved) values ($1,'Plane setting proof',$2,$2::text is not null)`, tenant.Bytes(), tenantDefault)
+	if err := seed.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		for _, statement := range []string{`delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from tenants where id=$1`} {
 			mustExec(t, pool, statement, tenant.Bytes())
@@ -223,7 +231,13 @@ func TestTenantDefaultApprovalFollowsTheWriter(t *testing.T) {
 	}
 	set := func(value string, byOperator bool) {
 		t.Helper()
-		if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: &value}, DefaultMediaPlaneApproved: byOperator}); err != nil {
+		if byOperator {
+			if _, err := NewTenantOperator(pool).SetDefaultMediaPlane(t.Context(), tenant, &value); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
+		if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: &value}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -372,9 +386,7 @@ func TestALegacyWriteOfTheTenantDefaultDoesNotInheritTheApproval(t *testing.T) {
 	}
 	operatorWrites := func(plane *string) {
 		t.Helper()
-		if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{
-			DefaultMediaPlane: utilities.OptionalString{Set: true, Value: plane}, DefaultMediaPlaneApproved: plane != nil,
-		}); err != nil {
+		if _, err := NewTenantOperator(pool).SetDefaultMediaPlane(t.Context(), tenant, plane); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -395,6 +407,25 @@ func TestALegacyWriteOfTheTenantDefaultDoesNotInheritTheApproval(t *testing.T) {
 	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), "bogus")
 	if approved() {
 		t.Fatal("a legacy write kept an approval")
+	}
+	// Two legacy writes cannot recreate the approval: the value alone proves nothing.
+	operatorWrites(&own)
+	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), cloudflare)
+	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), own)
+	if approved() {
+		t.Fatal("cf_sfu then chalk_sfu written by the previous release restored the approval")
+	}
+	mustExec(t, pool, `update tenants set default_media_plane_approved=true where id=$1`, tenant.Bytes())
+	if approved() {
+		t.Fatal("a plain write approved a default")
+	}
+	if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{
+		DefaultMediaPlane: utilities.OptionalString{Set: true, Value: &own}, DefaultMediaPlaneApproved: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if approved() {
+		t.Fatal("a write through the API's repository approved a default")
 	}
 	operatorWrites(nil)
 	if approved() {

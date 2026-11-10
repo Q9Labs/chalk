@@ -40,7 +40,19 @@ export async function prepareIntegration(run, webhooks) {
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
 const manualPolicy = { recording: "manual", transcription: "on_demand" };
+// A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
+// proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
+// reuses a Space an operator moved with media-settings, and otherwise the deployment or the
+// Tenant default an operator set decides. Either way the Space must land on `plane`, and a
+// run that cannot get one stops at once with reason media-plane-config.
 export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
+  const pinned = process.env[`CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`];
+  if (pinned) {
+    const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+    checkSpacePlane(existing, plane);
+    await save(`${run.directory}/space.json`, existing);
+    return existing;
+  }
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
@@ -52,13 +64,15 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
-  // The public API refuses a request that names the own SFU, so the proof names no plane and the
-  // deployment (or the Tenant an operator configured) decides. A mismatch is a setup error.
-  check((space.effective_media_plane ?? space.media_plane) === plane, `A new Space gets ${space.effective_media_plane ?? space.media_plane}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or CHALK_CANARY_SPACE_ID for a Space moved with media-settings)`);
+  checkSpacePlane(space, plane);
   check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
   check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
   await save(`${run.directory}/space.json`, space);
   return space;
+}
+function checkSpacePlane(space, plane) {
+  const got = space.effective_media_plane ?? space.media_plane;
+  check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or CHALK_PROOF_SPACE_ID_${plane.toUpperCase()} for a Space moved with media-settings)`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
   let ended = false;

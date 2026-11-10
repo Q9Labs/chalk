@@ -157,6 +157,20 @@ func TestPublicUpdateCannotSelectTheOwnSFU(t *testing.T) {
 	}
 }
 
+func TestClearingASpacePlaneWorksWithoutAPlatformDefault(t *testing.T) {
+	tenantID, spaceID := ids(t)
+	repository := &updatingRepository{}
+	service := NewService(repository).WithPlanePolicy(PlanePolicy{Allowed: allowAll(t)})
+
+	if _, err := service.UpdateSpace(context.Background(), tenantID, spaceID, UpdateSpaceInput{MediaPlane: utilities.OptionalString{Set: true}}); err != nil {
+		t.Fatalf("clearing with CHALK_DEFAULT_MEDIA_PLANE unset: %v", err)
+	}
+	got := repository.updated
+	if !got.MediaPlaneSetting.Set || got.MediaPlaneSetting.Value != nil || got.MediaPlane.Value == nil || *got.MediaPlane.Value != "cf_sfu" {
+		t.Errorf("clearing must null the setting and store Cloudflare in the legacy column, got %+v / %+v", got.MediaPlaneSetting, got.MediaPlane)
+	}
+}
+
 func TestPublicWriteNeverNamesTheOwnSFUWhateverNewSpacesGet(t *testing.T) {
 	tenantID, spaceID := ids(t)
 	repository := &updatingRepository{}

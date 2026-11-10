@@ -156,7 +156,7 @@ func newSettings(pool *pgxpool.Pool, policy spaces.PlanePolicy, out io.Writer) s
 	spaceRepository := postgres.NewSpaceRepository(queries, pool)
 	return settings{
 		pool: pool, policy: policy, tenants: tenantService, spaces: spaceRepository,
-		operator: spaces.NewPlaneOperator(spaceRepository, tenantService, policy).WithAdopter(spaceRepository),
+		operator: spaces.NewPlaneOperator(spaceRepository, postgres.NewTenantOperator(pool), policy).WithAdopter(spaceRepository),
 		log:      slog.New(slog.NewJSONHandler(out, nil)),
 	}
 }

@@ -158,7 +158,9 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 		if config != "" {
 			document = config
 		}
-		exec(`insert into tenants(id, name, default_media_plane, default_media_plane_approved_value, media_plane_provider_config) values($1, 'inventory', $2, case when $2::text = 'chalk_sfu' then $2::text end, $3::jsonb)`, id.Bytes(), defaultPlane, document)
+		exec(`select set_config('chalk.operator_write', 'on', true)`)
+		exec(`insert into tenants(id, name, default_media_plane, default_media_plane_approved, media_plane_provider_config) values($1, 'inventory', $2, coalesce($2::text = 'chalk_sfu', false), $3::jsonb)`, id.Bytes(), defaultPlane, document)
+		exec(`select set_config('chalk.operator_write', 'off', true)`)
 		return id
 	}
 	space := func(tenantID utilities.ID, mediaPlane string, archived bool, preset ...utilities.ID) utilities.ID {
@@ -205,7 +207,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	c1 := space(tenantC, "cf_sfu", false)
 	c2 := space(tenantC, "chalk_sfu", false)
 	space(tenantC, "cf_sfu", true)
-	// D: tenant-managed Cloudflare. It runs on Cloudflare but cannot move to the own SFU.
+	// D: tenant-managed Cloudflare. It runs on Cloudflare, and an own-SFU Space under it selects Cloudflare, as the resolver does.
 	tenantD := tenant(nil, tenantManagedCloudflare)
 	d1 := space(tenantD, "cf_sfu", false)
 	space(tenantD, "chalk_sfu", false, d2)
@@ -254,13 +256,13 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	// A Space stored as cf_sfu with no setting inherits: the stored value is the platform default,
 	// so the Tenant default (here chalk_sfu, off the allowlist) now decides.
 	expectCounts(t, "spaces by selection", delta(after.Spaces.BySelection, before.Spaces.BySelection),
-		counts{"space_chalk_sfu": 7, "space_cf_sfu": 3, "tenant_default_cf_sfu": 1, "tenant_default_chalk_sfu": 1, "space_unknown": 1})
+		counts{"space_chalk_sfu": 6, "space_cf_sfu": 4, "tenant_default_cf_sfu": 1, "tenant_default_chalk_sfu": 1, "space_unknown": 1})
 	expectCounts(t, "spaces by new Episode provider", delta(after.Spaces.ByNewEpisodeProvider, before.Spaces.ByNewEpisodeProvider),
-		counts{"chalk_sfu": 1, "cf_sfu": 2, "cf_sfu_by_allowlist": 3, "none": 2, "unresolvable": 5})
+		counts{"chalk_sfu": 1, "cf_sfu": 3, "cf_sfu_by_allowlist": 3, "none": 2, "unresolvable": 4})
 	expectCounts(t, "spaces by configuration source", delta(after.Spaces.ByConfigurationSource, before.Spaces.ByConfigurationSource),
 		counts{"deployment_default": 4, "tenant_chalk_managed": 2, "tenant_managed": 2, "disabled": 2, "invalid": 3})
 	expectCounts(t, "Cloudflare Spaces (selected or pinned) by configuration source", delta(after.Spaces.CloudflareByConfigSource, before.Spaces.CloudflareByConfigSource),
-		counts{"deployment_default": 2, "tenant_chalk_managed": 2, "tenant_managed": 1, "disabled": 1, "invalid": 1})
+		counts{"deployment_default": 2, "tenant_chalk_managed": 2, "tenant_managed": 2, "disabled": 1, "invalid": 1})
 	if got := after.Spaces.Archived - before.Spaces.Archived; got != 1 {
 		t.Errorf("archived Spaces delta = %d, want 1", got)
 	}
