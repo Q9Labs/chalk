@@ -86,7 +86,7 @@ function SwitchRow({ label, hint, checked, onChange }: { readonly label: string;
         {label}
         {hint ? <small>{hint}</small> : null}
       </span>
-      <span className="chalk-switch" aria-hidden="true">
+      <span className="chalk-switch" aria-checked={checked} aria-hidden="true">
         <span />
       </span>
     </button>
@@ -160,14 +160,16 @@ export default function DeviceSheet({
                     <span className="chalk-shell-device-label">{device.label || "Speaker"}</span>
                   </DeviceRow>
                 ))}
-                {onTestSpeaker ? (
-                  <button type="button" className="chalk-sheet-row" onClick={onTestSpeaker}>
-                    <VolumeHighIcon />
-                    <span>Test speaker</span>
-                  </button>
-                ) : null}
               </div>
             </>
+          ) : null}
+          {onTestSpeaker ? (
+            <div className="chalk-sheet-group">
+              <button type="button" className="chalk-sheet-row" onClick={onTestSpeaker}>
+                <VolumeHighIcon />
+                <span>Test speaker</span>
+              </button>
+            </div>
           ) : null}
         </>
       ) : (

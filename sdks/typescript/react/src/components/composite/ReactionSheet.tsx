@@ -56,18 +56,22 @@ const REACTION_SHEET_CSS = `.chalk-sheet-center {
 /** The reactions tray on a phone: a bottom sheet with no scrim, so the emoji floating up over the tiles stay bright. */
 export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose"> & { readonly open: boolean }) {
   const [more, setMore] = useState(false);
+  if (!open && more) setMore(false);
+  const [frame, setFrame] = useState<HTMLElement | null>(null);
+  const findFrame = useCallback((node: HTMLElement | null) => setFrame(node?.closest<HTMLElement>("[data-part='call-frame']") ?? null), []);
   const [sheet, setSheet] = useState<HTMLElement | null>(null);
   const findSheet = useCallback((node: HTMLElement | null) => setSheet(node?.closest<HTMLElement>(".chalk-sheet") ?? null), []);
   const { trigger } = useHaptics();
   // Raise the call's notices above the open sheet, as the desktop tray does, so they do not cover its rows.
   useLayoutEffect(() => {
-    const frame = document.querySelector<HTMLElement>("[data-part='call-frame']");
     const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");
     if (!open || !sheet || !frame || !notices) return;
     const lift = () => {
-      if (!(notices.offsetParent instanceof HTMLElement)) return;
+      // The sheet sits at the bottom of the frame it is portaled into, which is not always the window.
+      if (!(notices.offsetParent instanceof HTMLElement) || !(sheet.offsetParent instanceof HTMLElement)) return;
       const baseline = notices.offsetParent.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(notices).bottom);
-      frame.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - (window.innerHeight - sheet.offsetHeight) + NOTICE_GAP)}px`);
+      const sheetTop = sheet.offsetParent.getBoundingClientRect().bottom - sheet.offsetHeight;
+      frame.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - sheetTop + NOTICE_GAP)}px`);
     };
     lift();
     const resize = new ResizeObserver(lift);
@@ -76,7 +80,7 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
       resize.disconnect();
       frame.style.removeProperty("--chalk-reaction-toast-lift");
     };
-  }, [open, sheet]);
+  }, [open, sheet, frame]);
   const closing = useRef<number | undefined>(undefined);
   // A tray reopened inside the delay must not be closed by the previous send's timer.
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Cancel the pending close timer when the sheet opens or closes again, and on unmount.
@@ -87,45 +91,48 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
     closing.current = window.setTimeout(onClose, CLOSE_DELAY_MS);
   };
   return (
-    <ChalkSheet
-      variant="reactions"
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) onClose();
-      }}
-      title="Reactions"
-    >
-      <style href="chalk-reaction-sheet" precedence="default">
-        {REACTION_SHEET_CSS}
-      </style>
-      {onToggleHandRaise ? (
-        <div className="chalk-sheet-group">
-          <button
-            type="button"
-            className="chalk-sheet-row chalk-sheet-center"
-            aria-pressed={isHandRaised}
-            onClick={() => {
-              onToggleHandRaise();
-              onClose();
-            }}
-          >
-            <ShellIcon name="hand" />
-            <span>{isHandRaised ? "Lower hand" : "Raise hand"}</span>
-          </button>
-        </div>
-      ) : null}
-      <div ref={findSheet} className="chalk-sheet-emoji" data-expanded={more || undefined} role="toolbar" aria-label="Reactions">
-        {(more ? reactions : reactions.slice(0, FIRST_ROW)).map((emoji) => (
-          <button key={emoji} type="button" aria-label={`React with ${emoji}`} onClick={() => send(emoji)}>
-            <span aria-hidden="true">{emoji}</span>
-          </button>
-        ))}
-        {!more && reactions.length > FIRST_ROW ? (
-          <button type="button" aria-label="More emoji" onClick={() => setMore(true)}>
-            …
-          </button>
+    <>
+      <span ref={findFrame} hidden />
+      <ChalkSheet
+        variant="reactions"
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) onClose();
+        }}
+        title="Reactions"
+      >
+        <style href="chalk-reaction-sheet" precedence="default">
+          {REACTION_SHEET_CSS}
+        </style>
+        {onToggleHandRaise ? (
+          <div className="chalk-sheet-group">
+            <button
+              type="button"
+              className="chalk-sheet-row chalk-sheet-center"
+              aria-pressed={isHandRaised}
+              onClick={() => {
+                onToggleHandRaise();
+                onClose();
+              }}
+            >
+              <ShellIcon name="hand" />
+              <span>{isHandRaised ? "Lower hand" : "Raise hand"}</span>
+            </button>
+          </div>
         ) : null}
-      </div>
-    </ChalkSheet>
+        <div ref={findSheet} className="chalk-sheet-emoji" data-expanded={more || undefined} role="toolbar" aria-label="Reactions">
+          {(more ? reactions : reactions.slice(0, FIRST_ROW)).map((emoji) => (
+            <button key={emoji} type="button" aria-label={`React with ${emoji}`} onClick={() => send(emoji)}>
+              <span aria-hidden="true">{emoji}</span>
+            </button>
+          ))}
+          {!more && reactions.length > FIRST_ROW ? (
+            <button type="button" aria-label="More emoji" onClick={() => setMore(true)}>
+              …
+            </button>
+          ) : null}
+        </div>
+      </ChalkSheet>
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useSheetDrag } from "./useSheetDrag";
 export interface ChalkSheetProps {
   /** `reactions` has no scrim, so what floats over the call stays bright. */
@@ -19,6 +19,15 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
   const popup = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
   const drag = useSheetDrag(popup, scrim, () => onOpenChange(false));
+  // A sheet dragged shut and reopened before its exit ends is the same popup: give it back from the drag's offset.
+  useLayoutEffect(() => {
+    if (!open) return;
+    if (popup.current) {
+      popup.current.style.transform = "";
+      popup.current.style.transition = "";
+    }
+    if (scrim.current) scrim.current.style.opacity = "";
+  }, [open]);
   const attach = useCallback((element: HTMLElement | null) => setContainer(element?.closest<HTMLElement>("[data-chalk]") ?? element), []);
   return (
     <span ref={attach} style={{ display: "contents" }}>

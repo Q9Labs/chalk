@@ -62,6 +62,8 @@ export function useSheetDrag(sheet: RefObject<HTMLElement | null>, scrim: RefObj
     const current = drag.current;
     if (!current || event.pointerId !== current.pointerId) return;
     drag.current = null;
+    // A pause before the release counts: the speed is measured up to the release itself.
+    current.samples.push({ time: event.timeStamp, y: event.clientY });
     settle(event.type === "pointerup" && shouldDismiss(current.offset, current.height, releaseSpeed(current.samples)));
   };
 

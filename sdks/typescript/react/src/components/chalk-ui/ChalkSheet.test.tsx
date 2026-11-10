@@ -84,6 +84,14 @@ it("closes on a flick over 0.5 px/ms from a short drag", async () => {
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
+it("does not count a quick short drag as a flick when the finger rests before the release", async () => {
+  const { onOpenChange } = await open();
+  await pointer(grabber(), "pointerdown", 0, 0);
+  await pointer(grabber(), "pointermove", 50, 50);
+  await pointer(grabber(), "pointerup", 50, 1050);
+  expect(onOpenChange).not.toHaveBeenCalled();
+});
+
 it("moves an upward drag a third as far and then springs back", async () => {
   const { sheet, onOpenChange } = await open();
   await pointer(grabber(), "pointerdown", 100, 0);
