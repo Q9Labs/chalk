@@ -512,6 +512,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
     events: Schema.Array(
       Schema.Struct({
         attempt: Schema.optional(Schema.NullOr(Schema.Number)),
+        bundle_tag_held: Schema.optional(Schema.NullOr(Schema.Boolean)),
         close_code: Schema.optional(Schema.NullOr(Schema.Number)),
         code: Schema.optional(
           Schema.Literals([
@@ -565,6 +566,8 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           "media_projection_mismatch",
           "audio_receive_stuck",
           "audio_receive_summary",
+          "receivers_closed",
+          "access_retry",
         ]),
         granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
@@ -593,6 +596,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           ),
         ),
         receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
+        receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
         source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio"])),
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
