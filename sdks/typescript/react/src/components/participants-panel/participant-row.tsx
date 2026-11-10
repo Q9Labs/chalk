@@ -1,12 +1,14 @@
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { useState, useRef, useEffect } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, type ReactNode } from "react";
 import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { HandIcon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
-import { ParticipantOptionsMenu } from "./participant-options-menu";
+
+// The menu opens on a click, so its code and styles load then.
+const ParticipantOptionsMenu = lazy(() => import("./participant-options-menu").then((module) => ({ default: module.ParticipantOptionsMenu })));
 
 export function ParticipantRow({
   participant,
@@ -66,31 +68,34 @@ export function ParticipantRow({
   const phone = useIsMobile();
   const [before, match, after] = splitMatch(participant.displayName, query);
   const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? "Sharing screen" : participant.deviceHint;
-  const menu = (
-    <ParticipantOptionsMenu
-      participant={participant}
-      variant={variant}
-      canManageParticipants={canManageParticipants}
-      onClose={onMenuClose}
-      onAssignRole={onAssignRole}
-      onStopParticipantScreenShare={onStopParticipantScreenShare}
-      onMuteParticipant={onMuteParticipant}
-      onRequestUnmute={onRequestUnmute}
-      onStopParticipantCamera={onStopParticipantCamera}
-      onRequestStartCamera={onRequestStartCamera}
-      onRemoveParticipant={onRemoveParticipant}
-      onEditName={
-        participant.isLocal
-          ? () => {
-              setIsEditing(true);
-              onMenuClose();
-            }
-          : undefined
-      }
-      participantVolumes={participantVolumes}
-      onParticipantVolumeChange={onParticipantVolumeChange}
-      onCommandError={onCommandError}
-    />
+  const menu = (header?: ReactNode) => (
+    <Suspense fallback={null}>
+      <ParticipantOptionsMenu
+        header={header}
+        participant={participant}
+        variant={variant}
+        canManageParticipants={canManageParticipants}
+        onClose={onMenuClose}
+        onAssignRole={onAssignRole}
+        onStopParticipantScreenShare={onStopParticipantScreenShare}
+        onMuteParticipant={onMuteParticipant}
+        onRequestUnmute={onRequestUnmute}
+        onStopParticipantCamera={onStopParticipantCamera}
+        onRequestStartCamera={onRequestStartCamera}
+        onRemoveParticipant={onRemoveParticipant}
+        onEditName={
+          participant.isLocal
+            ? () => {
+                setIsEditing(true);
+                onMenuClose();
+              }
+            : undefined
+        }
+        participantVolumes={participantVolumes}
+        onParticipantVolumeChange={onParticipantVolumeChange}
+        onCommandError={onCommandError}
+      />
+    </Suspense>
   );
   const optionsLabel = `Options for ${participant.displayName}`;
 
@@ -165,7 +170,7 @@ export function ParticipantRow({
               <MoreIcon />
             </button>
             <ChalkSheet open={menuOpen} onOpenChange={(open) => (open ? onMenuToggle() : onMenuClose())} title={optionsLabel}>
-              <div className="call-sheet-menu">
+              {menu(
                 <div className="call-sheet-who">
                   <Avatar name={participant.displayName} src={participant.avatarUrl} size="md" generated={generatedAvatars} gradientPreference={participantGradientPreference} />
                   <div>
@@ -174,9 +179,8 @@ export function ParticipantRow({
                     </b>
                     <span>{participant.isHandRaised ? `Hand raised${handNumber ? `, number ${handNumber}` : ""}` : participant.isLocal ? "You" : participant.isHost ? "Host" : "Guest"}</span>
                   </div>
-                </div>
-                {menu}
-              </div>
+                </div>,
+              )}
             </ChalkSheet>
           </>
         ) : (
@@ -193,7 +197,7 @@ export function ParticipantRow({
             <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
               <Popover.Positioner side="bottom" align="end" sideOffset={6} collisionPadding={8} className="chalk-popover-positioner">
                 <Popover.Popup aria-label={optionsLabel} className="chalk-menu call-row-menu">
-                  {menu}
+                  {menu()}
                 </Popover.Popup>
               </Popover.Positioner>
             </Popover.Portal>

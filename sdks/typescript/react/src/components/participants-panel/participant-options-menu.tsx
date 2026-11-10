@@ -1,11 +1,100 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../utils/cn";
 import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { VolumeSlider } from "../atomic";
 import { ChalkButton } from "../chalk-ui";
 import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
+const styles = `.call-row-menu {
+  width: 252px;
+  padding: var(--space-1-5);
+}
+.call-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--corner-lg);
+  font-size: var(--type-body);
+  font-weight: 500;
+  text-align: start;
+  color: var(--chalk-text);
+}
+.call-menu-item:hover {
+  background: var(--chalk-hover);
+}
+.call-menu-item svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--chalk-muted-text);
+}
+.call-menu-item.is-danger,
+.call-menu-item.is-danger svg {
+  color: var(--chalk-danger-text);
+}
+.call-menu-sep {
+  height: 1px;
+  margin: var(--space-1-5) var(--space-3);
+  background: var(--chalk-line-strong);
+}
+.call-menu-confirm {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+}
+.call-menu-confirm b {
+  font-size: var(--type-body-lg);
+  font-weight: 600;
+}
+.call-menu-confirm p {
+  font-size: var(--type-body-sm);
+  line-height: 1.45;
+  color: var(--chalk-muted-text);
+}
+.call-menu-confirm-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.call-menu-confirm-actions .chalk-pill-button {
+  flex: 1;
+}
+.call-menu-confirm-actions .chalk-pill-button[data-chalk-tone="danger"] {
+  background: var(--chalk-danger);
+  color: var(--chalk-on-overlay);
+}
+.call-sheet-menu {
+  display: grid;
+}
+.call-sheet-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-3);
+}
+.call-sheet-who b {
+  display: block;
+  font-size: var(--type-body-lg);
+  font-weight: 600;
+}
+.call-sheet-who span {
+  font-size: var(--type-body-sm);
+  color: var(--chalk-muted-text);
+}
+
+@media (max-width: 767px) {
+ .call-sheet-menu .call-menu-item { height: 48px; font-size: var(--type-body-lg); }
+ .call-sheet-menu .call-menu-item svg { width: 20px; height: 20px; }
+ .call-sheet-menu .call-menu-confirm { padding-inline: var(--space-2); }
+ .call-sheet-menu .call-menu-confirm-actions .chalk-pill-button { height: 48px; }
+}
+`;
+
 export function ParticipantOptionsMenu({
+  header,
   participant,
   variant,
   canManageParticipants,
@@ -21,7 +110,7 @@ export function ParticipantOptionsMenu({
   participantVolumes,
   onParticipantVolumeChange,
   onCommandError,
-}: ParticipantOptionsMenuProps) {
+}: ParticipantOptionsMenuProps & { readonly header?: ReactNode }) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
   const hasManageActions = canManageParticipants && !participant.isLocal && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || !!onAssignRole || !!onStopParticipantScreenShare);
@@ -33,9 +122,17 @@ export function ParticipantOptionsMenu({
   const menuItemClassName = "call-menu-item";
   const dividerClassName = "call-menu-sep";
 
+  const wrap = (content: ReactNode) => (
+    <div className={header ? "call-sheet-menu" : undefined}>
+      <style>{styles}</style>
+      {header}
+      {content}
+    </div>
+  );
+
   if (confirmingRemove && onRemoveParticipant) {
     const firstName = participant.displayName.split(" ")[0] ?? participant.displayName;
-    return (
+    return wrap(
       <div className="call-menu-confirm">
         <b>
           Remove <bdi>{firstName}</bdi> from the call?
@@ -49,11 +146,11 @@ export function ParticipantOptionsMenu({
             Remove
           </ChalkButton>
         </div>
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return wrap(
     <>
       {hasLocalActions ? (
         <button type="button" onClick={onEditName} className={menuItemClassName}>
@@ -169,7 +266,7 @@ export function ParticipantOptionsMenu({
           ) : null}
         </>
       ) : null}
-    </>
+    </>,
   );
 }
 
