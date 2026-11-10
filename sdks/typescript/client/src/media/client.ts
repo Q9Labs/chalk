@@ -2104,6 +2104,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
         this.#callStats.observe(report, this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : undefined);
+        this.#publishCallStats();
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();
         else await this.#applyCameraUplink(sender, report, cameraPolicy);
@@ -2453,6 +2454,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #projectRemotePublications(): readonly MediaPublication[] {
     return [...this.#remoteTracks.values()].map(({ participantId, source, publicationId }) => ({ participantId, source, publicationId, enabled: true }));
   }
+  #publishCallStats(): void {
+    if (this.#snapshot.callStats !== this.#callStats.recent()) this.#publishSnapshot();
+  }
   #publishSnapshot(phase = this.#snapshot.connection.phase, failure = this.#snapshot.failure): void {
     const next = freezeSnapshot({
       connection: {
@@ -2474,6 +2478,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       remoteTracks: this.#remoteTracks.size ? [...this.#remoteTracks.values()] : EMPTY_REMOTE,
       receiveStalls: this.#receiveProgress.observations,
       remoteDelivery: this.#delivery.deliveries,
+      callStats: this.#callStats.recent(),
       failure,
     });
     if (snapshotEqual(this.#snapshot, next)) return;
@@ -2645,13 +2650,16 @@ function snapshotEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot
 function snapshotMetadataEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
   return (
     (left.receiveStalls ?? EMPTY_RECEIVE_STALLS) === (right.receiveStalls ?? EMPTY_RECEIVE_STALLS) &&
-    left.remoteDelivery === right.remoteDelivery &&
+    sharedRefsEqual(left, right) &&
     connectionEqual(left.connection, right.connection) &&
     cursorEqual(left.cursor, right.cursor) &&
     failureEqual(left.failure, right.failure) &&
     left.localTracks.length === right.localTracks.length &&
     left.remoteTracks.length === right.remoteTracks.length
   );
+}
+function sharedRefsEqual(left: CloudflareSFUSnapshot, right: CloudflareSFUSnapshot): boolean {
+  return left.remoteDelivery === right.remoteDelivery && left.callStats === right.callStats;
 }
 function connectionEqual(left: CloudflareSFUSnapshot["connection"], right: CloudflareSFUSnapshot["connection"]): boolean {
   return left.phase === right.phase && left.peerConnectionState === right.peerConnectionState && left.iceConnectionState === right.iceConnectionState;

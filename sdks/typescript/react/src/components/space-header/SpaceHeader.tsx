@@ -44,7 +44,6 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const content = (
     <CallDetails
       {...props}
-      onReportProblem={props.reportUnavailableReason ? undefined : props.onReportProblem}
       onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}

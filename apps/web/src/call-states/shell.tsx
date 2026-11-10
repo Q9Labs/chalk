@@ -11,6 +11,7 @@ function ShellCall({
   privatePermission = false,
   host = false,
   report = false,
+  network,
   blocked = false,
   paged = false,
   singleCamera = false,
@@ -21,6 +22,7 @@ function ShellCall({
   readonly privatePermission?: boolean;
   readonly host?: boolean;
   readonly report?: boolean;
+  readonly network?: "steady" | "unstable";
   readonly blocked?: boolean;
   readonly paged?: boolean;
   readonly singleCamera?: boolean;
@@ -29,7 +31,7 @@ function ShellCall({
   const [command, setCommand] = useState("");
   const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
   const [client] = useState(() => {
-    const snapshot = liveSnapshot({ self: browserCameras ? { camera: cameraOn } : undefined, others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined });
+    const snapshot = liveSnapshot({ self: browserCameras ? { camera: cameraOn } : undefined, others: paged ? PEOPLE : PEOPLE.slice(0, 7), capabilities: host ? HOST : undefined, network, recording: network !== undefined });
     const instance = createCallStateClient({
       ...snapshot,
       media: {
@@ -178,6 +180,9 @@ export const SHELL_STATES: readonly CallState[] = [
   { id: "shell-host", title: "Shell host", render: () => <ShellCall host /> },
   { id: "shell-report", title: "Shell report callback", render: () => <ShellCall report /> },
   { id: "shell-report-light", title: "Shell report callback, Light", render: () => <ShellCall report initialColorScheme="light" /> },
+  { id: "shell-menu", title: "Shell call menu with connection charts", render: () => <ShellCall report network="steady" /> },
+  { id: "shell-menu-light", title: "Shell call menu with connection charts, Light", render: () => <ShellCall report network="steady" initialColorScheme="light" /> },
+  { id: "shell-menu-unstable", title: "Shell call menu with an unstable connection", render: () => <ShellCall report network="unstable" /> },
   { id: "shell-blocked", title: "Shell devices unavailable", render: () => <ShellCall blocked /> },
   { id: "shell-paged", title: "Shell phone pagination", render: () => <ShellCall paged /> },
 ];

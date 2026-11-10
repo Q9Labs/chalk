@@ -1,4 +1,4 @@
-import type { Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
 import { boardActivity, planScene, smallScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
@@ -51,7 +51,30 @@ export type LiveOptions = {
   readonly offlinePending?: boolean;
   readonly mediaRequest?: boolean;
   readonly reactions?: boolean;
+  /** A minute of call-stats windows for the call menu charts. */
+  readonly network?: "steady" | "unstable";
 };
+
+const STEADY_RTT = [44, 43, 52, 47, 42, 41];
+const STEADY_LOSS = [0, 0.4, 1.2, 0.3, 0, 0.1];
+const UNSTABLE_RTT = [58, 120, 340, 410, 380, 350];
+const UNSTABLE_LOSS = [0.5, 2, 6, 9, 8, 8];
+
+/** Six 10-second windows, the history the call menu charts. */
+function networkSamples(kind: "steady" | "unstable"): readonly CallStatsSample[] {
+  const rtt = kind === "steady" ? STEADY_RTT : UNSTABLE_RTT;
+  const loss = kind === "steady" ? STEADY_LOSS : UNSTABLE_LOSS;
+  return rtt.map((rtt_ms, index) => ({
+    elapsed_ms: (index + 1) * 10_000,
+    window_ms: 10_000,
+    connection_type: "udp" as const,
+    rtt_ms,
+    recv_loss_pct: loss[index],
+    send_loss_pct: 0,
+    send_bitrate_kbps: 1200 + (index % 3) * 40,
+    recv_bitrate_kbps: 3400 - (index === 2 ? 700 : 0) + (index % 2) * 60,
+  }));
+}
 
 const startedAt = new Date(Date.now() - (25 * 60 + 9) * 1000).toISOString();
 
@@ -84,6 +107,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
         screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
       },
       remote,
+      ...(options.network ? { callStats: networkSamples(options.network) } : {}),
       incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
     },
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },

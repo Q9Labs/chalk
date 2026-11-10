@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { CallNetwork } from "./call-network";
 
 export interface SpaceHeaderProps {
   spaceName: string;
@@ -9,6 +10,8 @@ export interface SpaceHeaderProps {
   callLinkOpen?: boolean;
   onCallLinkToggle?: () => void;
   diagnostics?: readonly { readonly label: string; readonly value: string }[];
+  /** Connection quality and its charts for the call menu. Without it the menu has no Connection row. */
+  network?: CallNetwork;
   weakConnection?: boolean;
   onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
   reportUnavailableReason?: string;

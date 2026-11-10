@@ -1,22 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
+import { useCopyText } from "./useCopyText";
 export function ChalkCopyButton({ text, label = "Copy link", announcement = "Link copied", showLabel = false }: { readonly text: string; readonly label?: string; readonly announcement?: string; readonly showLabel?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Cancel the event-created copied-feedback timeout on unmount.
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setError(false);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError(true);
-    }
-  };
+  const { copied, error, copy } = useCopyText(text);
   return (
     <>
       <button type="button" aria-label={label} data-part="copy-button" data-copied={copied} className="chalk-copy" onClick={() => void copy()}>

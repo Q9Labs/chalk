@@ -1,10 +1,14 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { currentSessionId } from "@q9labsai/chalk-client";
 import { useRef, useState, type RefObject } from "react";
-import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
+import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkToggle } from "../chalk-ui";
+import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 import { ShellIcon } from "../control-bar/ShellIcon";
+import { CallChartsView } from "./CallCharts";
 import type { SpaceHeaderProps } from "./space-header-contract";
+
+const REPORT_MAX_CHARACTERS = 1000;
 
 export const CALL_SHORTCUTS = [
   ["Mute or unmute", "⌘ D"],
@@ -144,12 +148,19 @@ export function CallDialog({
                     );
                 }}
               >
-                <label htmlFor="chalk-problem">What went wrong?</label>
-                <textarea ref={reportInput} id="chalk-problem" rows={4} required disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, 1000).join(""))} placeholder="Tell us what happened…" />
+                <div className="chalk-shell-report-field">
+                  <textarea ref={reportInput} id="chalk-problem" rows={2} required aria-label="What went wrong?" disabled={status === "sending"} value={text} onChange={(event) => setText(Array.from(event.target.value).slice(0, REPORT_MAX_CHARACTERS).join(""))} placeholder="What went wrong?" />
+                  <span className="chalk-shell-report-count" aria-hidden="true">
+                    {Array.from(text).length} / {REPORT_MAX_CHARACTERS}
+                  </span>
+                </div>
                 {diagnostics.trim() ? (
-                  <label className="chalk-shell-report-check">
-                    <input type="checkbox" disabled={status === "sending"} checked={includeDiagnostics} onChange={(event) => setIncludeDiagnostics(event.target.checked)} /> Include diagnostics
-                  </label>
+                  <div className="chalk-shell-report-check">
+                    <span id="chalk-report-diagnostics">
+                      Include diagnostics<small>Session, connection and devices</small>
+                    </span>
+                    <ChalkToggle aria-labelledby="chalk-report-diagnostics" disabled={status === "sending"} pressed={includeDiagnostics} onPressedChange={setIncludeDiagnostics} />
+                  </div>
                 ) : null}
                 {error ? <p role="alert">{error}</p> : null}
                 {unavailableReason ? <p role="alert">{unavailableReason}</p> : null}
@@ -158,7 +169,7 @@ export function CallDialog({
                     Cancel
                   </ChalkButton>
                   <ChalkButton type="submit" variant="solid" disabled={!text.trim() || status === "sending" || Boolean(unavailableReason)}>
-                    {status === "sending" ? "Sending…" : "Send"}
+                    {status === "sending" ? "Sending…" : "Send report"}
                   </ChalkButton>
                 </div>
               </form>
@@ -198,13 +209,16 @@ export function CallDetails({
   spaceName,
   onClose,
   diagnostics = [],
+  network,
+  people,
+  isRecording = false,
   colorScheme = "dark",
   onColorSchemeChange,
   sounds,
   onSoundsChange,
   onDialog,
   onReportProblem,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
@@ -212,99 +226,131 @@ export function CallDetails({
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
+  const [qrOpen, setQrOpen] = useState(false);
   const [details, setDetails] = useState(false);
-  const sessionId = currentSessionId();
+  const facts = diagnostics.filter(({ label }) => label !== "Connection");
+  const summary = [isRecording ? "Recording" : null, people ? `${people.length} in call` : null].filter(Boolean).join(" · ");
   return (
     <div className="chalk-details">
       <div className="chalk-shell-details-heading">
-        <h2>{spaceName}</h2>
+        <div>
+          <h2>{spaceName}</h2>
+          {summary ? (
+            <p className="chalk-shell-details-sub">
+              {isRecording ? <i aria-hidden="true" /> : null}
+              {summary}
+            </p>
+          ) : null}
+        </div>
         <ChalkIconButton aria-label="Close" size="sm" onClick={onClose}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
         </ChalkIconButton>
       </div>
-      <section className="chalk-shell-section">
-        <h3 className="chalk-shell-label">Share</h3>
-        <div className="chalk-shell-link">
-          <span dir="ltr">{link.replace(/^https?:\/\//, "")}</span>
-          <ChalkCopyButton text={link} label="Copy link" />
-        </div>
-        {qr ? (
-          <div className="chalk-shell-qr-row">
-            <InviteQR value={link} />
-            <p>Scan with a phone camera to join this call.</p>
-          </div>
-        ) : null}
-      </section>
-      {diagnostics.length ? (
-        <section className="chalk-shell-section">
-          <button type="button" className="chalk-shell-detail-action chalk-shell-connection" aria-expanded={details} onClick={() => setDetails(!details)}>
-            <span className="chalk-shell-connection-bars" aria-hidden="true">
-              {[6, 9, 12, 15].map((height) => (
-                <i key={height} style={{ height }} />
-              ))}
+      <InviteLinkButton link={link} variant="menu" />
+      {qr ? (
+        <>
+          <button type="button" className="chalk-shell-detail-action" aria-expanded={qrOpen} aria-controls="chalk-details-qr" onClick={() => setQrOpen(!qrOpen)}>
+            <span className="chalk-shell-detail-lead">
+              <MenuIcon name="qr" />
             </span>
-            <span>Connection: {diagnostics[0]?.value.toLowerCase()}</span>
-            <span className="chalk-shell-connection-details">{details ? "Hide details" : "Details"}</span>
-            <ShellIcon name={details ? "up2" : "down"} size={18} />
+            <span className="chalk-shell-detail-label">QR code</span>
+            <span className="chalk-shell-detail-trail">
+              <ShellIcon name={qrOpen ? "up2" : "down"} size={16} />
+            </span>
           </button>
-          {details ? (
-            <>
+          <div id="chalk-details-qr" hidden={!qrOpen} className="chalk-shell-qr-card">
+            {qrOpen ? <InviteQR value={link} /> : null}
+          </div>
+        </>
+      ) : null}
+      {network ? (
+        <>
+          <div className="chalk-shell-sep" />
+          <button type="button" className="chalk-shell-detail-action" aria-expanded={details} aria-controls="chalk-details-connection" onClick={() => setDetails(!details)}>
+            <span className="chalk-shell-detail-lead">
+              <span className="chalk-shell-connection-bars" data-level={network.quality.level} aria-hidden="true">
+                {[5, 8, 11, 14].map((height) => (
+                  <i key={height} style={{ height }} />
+                ))}
+              </span>
+            </span>
+            <span className="chalk-shell-detail-label">Connection</span>
+            <span className="chalk-shell-detail-value" data-tone={network.quality.tone}>
+              {network.quality.word}
+              <ShellIcon name={details ? "up2" : "down"} size={16} />
+            </span>
+          </button>
+          {network.quality.helper ? <p className="chalk-shell-detail-helper">{network.quality.helper}</p> : null}
+          <div id="chalk-details-connection" hidden={!details}>
+            {network.charts ? <CallChartsView charts={network.charts} /> : null}
+            {facts.length ? (
               <dl className="chalk-shell-diagnostics">
-                {diagnostics.map(({ label, value }) => (
+                {facts.map(({ label, value }) => (
                   <div key={label} style={{ display: "contents" }}>
                     <dt>{label}</dt>
-                    <dd>{value}</dd>
+                    <dd dir="ltr" data-mono={label === "Session" ? "" : undefined}>
+                      {value}
+                    </dd>
                   </div>
                 ))}
               </dl>
-              <div className="chalk-shell-diagnostics-copy">
-                <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" showLabel />
-              </div>
-            </>
-          ) : null}
-        </section>
-      ) : null}
-      <section className="chalk-shell-section">
-        <div className="chalk-details-row">
-          <span>Appearance</span>
-          <ChalkSegmentedControl
-            size="compact"
-            label="Appearance"
-            value={colorScheme}
-            options={[
-              { value: "dark", label: "Dark" },
-              { value: "light", label: "Light" },
-            ]}
-            onValueChange={(next) => onColorSchemeChange?.(next)}
-          />
-        </div>
-        <button type="button" role="switch" aria-label="Sounds" aria-checked={sounds} className="chalk-shell-detail-action" onClick={() => onSoundsChange(!sounds)}>
-          <span>Sounds</span>
-          <span className="chalk-switch" aria-checked={sounds} aria-hidden="true">
-            <span />
-          </span>
-        </button>
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-          Keyboard shortcuts
-          <ShellIcon name="right" size={18} />
-        </button>
-        {onReportProblem ? (
-          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
-            Report a problem
-            <ShellIcon name="right" size={18} />
-          </button>
-        ) : null}
-      </section>
-      {sessionId ? (
-        <section className="chalk-shell-section">
-          <h3 className="chalk-shell-label">Session ID</h3>
-          <div className="chalk-shell-link">
-            <span dir="ltr">{sessionId}</span>
-            <ChalkCopyButton text={sessionId} label="Copy session ID" />
+            ) : null}
+            <div className="chalk-shell-diagnostics-copy">
+              <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" showLabel />
+            </div>
           </div>
-        </section>
+        </>
+      ) : null}
+      <div className="chalk-shell-sep" />
+      <div className="chalk-details-row">
+        <span className="chalk-shell-detail-lead">
+          <MenuIcon name="sun" />
+        </span>
+        <span className="chalk-shell-detail-label">Appearance</span>
+        <ChalkSegmentedControl
+          size="compact"
+          label="Appearance"
+          value={colorScheme}
+          options={[
+            { value: "dark", label: "Dark" },
+            { value: "light", label: "Light" },
+          ]}
+          onValueChange={(next) => onColorSchemeChange?.(next)}
+        />
+      </div>
+      <button type="button" role="switch" aria-label="Sounds" aria-checked={sounds} className="chalk-shell-detail-action" onClick={() => onSoundsChange(!sounds)}>
+        <span className="chalk-shell-detail-lead">
+          <MenuIcon name="bell" />
+        </span>
+        <span className="chalk-shell-detail-label">Sounds</span>
+        <span className="chalk-switch" aria-checked={sounds} aria-hidden="true">
+          <span />
+        </span>
+      </button>
+      <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
+        <span className="chalk-shell-detail-lead">
+          <MenuIcon name="keyboard" />
+        </span>
+        <span className="chalk-shell-detail-label">Keyboard shortcuts</span>
+        <span className="chalk-shell-detail-trail">
+          <ShellIcon name="right" size={16} />
+        </span>
+      </button>
+      {onReportProblem ? (
+        <>
+          <div className="chalk-shell-sep" />
+          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
+            <span className="chalk-shell-detail-lead">
+              <MenuIcon name="flag" />
+            </span>
+            <span className="chalk-shell-detail-label">Report a problem</span>
+            <span className="chalk-shell-detail-trail">
+              <ShellIcon name="right" size={16} />
+            </span>
+          </button>
+        </>
       ) : null}
     </div>
   );
