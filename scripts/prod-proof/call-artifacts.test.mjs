@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { bundleFailures, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
-import { parseVolume, recordingEvidence, recordingFailures } from "./recording-evidence.mjs";
+import { bounds } from "./call-script.mjs";
+import { parseVolume, recordingEvidence, recordingFailures, screenGreenPixel } from "./recording-evidence.mjs";
 import { decodeFrames, tileEvidence } from "./tile-frames.mjs";
 
 const hasFfmpeg = ["ffmpeg", "ffprobe"].every((program) => spawnSync(program, ["-version"]).status === 0);
@@ -176,4 +177,34 @@ test("a failed Capture names its failure code, and only a recording Capture is r
   assert.equal(captureReady(null), false);
   assert.equal(captureReady({ recordingId: "r1", status: "starting", failureCode: null }), false);
   assert.equal(captureReady({ recordingId: "r1", status: "recording", failureCode: null }), true);
+});
+
+// The most common colours of one 96x54 thumbnail (5,184 pixels) from the 10 Nov 2026 staging export while guest 1 shared its screen: Chromium's fake display.
+// The pixels not listed here are counted as one grey the detector must not count the detector must not count.
+const observedGreens = [
+  [[0, 136, 0], 2654],
+  [[73, 255, 19], 141],
+  [[0, 134, 0], 92],
+  [[0, 124, 0], 87],
+  [[0, 255, 0], 39],
+];
+const observedOthers = [
+  [[245, 244, 240], 152],
+  [[247, 246, 243], 93],
+  [[0, 0, 0], 78],
+  [[90, 90, 90], 1848],
+];
+const framePixels = 96 * 54;
+const shareOf = (pixels) => pixels.filter(([colour]) => screenGreenPixel(...colour)).reduce((sum, [, count]) => sum + count, 0) / framePixels;
+
+test("every observed green counts, no other colour does, and the frame reaches the share threshold", () => {
+  assert.equal(
+    [...observedGreens, ...observedOthers].reduce((sum, [, count]) => sum + count, 0),
+    framePixels,
+  );
+  for (const [colour] of observedGreens) assert.ok(screenGreenPixel(...colour), `green ${colour} is not counted`);
+  for (const [colour] of observedOthers) assert.ok(!screenGreenPixel(...colour), `colour ${colour} is counted`);
+  const share = shareOf([...observedGreens, ...observedOthers]);
+  assert.ok(share >= bounds.screenGreenShare && share < 0.6, `observed share ${share}`);
+  assert.ok(shareOf([[[245, 244, 240], framePixels]]) < bounds.screenGreenShare);
 });

@@ -73,7 +73,7 @@ export async function recordingEvidence(file, guestCount) {
 const audioRate = 16_000;
 const thumbnail = { width: 96, height: 54 };
 // The proof browsers run with --use-fake-device-for-media-stream, so a screen share is Chromium's fake display: dark green (about 0, 150, 0) with a lighter green pie and a timer.
-const screenGreenPixel = (red, green, blue) => green > 110 && red < 110 && blue < 80;
+export const screenGreenPixel = (red, green, blue) => green > 110 && red < 110 && blue < 80;
 
 /** The script's marks as found in the Recording: tones, silences and levels from the audio, flashes and the shared screen from the picture. */
 async function audioSignals(file, frequencies) {
