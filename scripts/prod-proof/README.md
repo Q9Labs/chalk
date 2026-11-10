@@ -288,6 +288,8 @@ and moves them to `chalk_sfu` through the public API, which only a release befor
 
 ### Recording and Transcript of a three-guest call (`call-artifacts`)
 
+`CHALK_PROOF_TRANSCRIBE=false` records and checks the call without a Transcript: the proof sets the reused Space's `transcription_policy` to `on_demand` just while it creates the Episode (an Episode keeps the policies it was created with), puts `automatic` back at once, and skips the Transcript check. The nightly cut passes it once a cut of the same UTC day has passed its proof (the plan's `transcribe` output), because each Transcript costs provider credit.
+
 `pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
 `transcription_policy=automatic` on `CHALK_PROOF_MEDIA_PLANE` (default `cf_sfu`) and joins three
 headless Chromium guests with a fake camera and microphone. Each guest has its own camera colour.

@@ -10,6 +10,24 @@ import { trackVerdicts } from "./track-verdicts.mjs";
 import { check, mediaPlane, save, waitFor } from "./runtime.mjs";
 
 const automatic = { recording: "automatic", transcription: "automatic" };
+/** CHALK_PROOF_TRANSCRIBE=false records the call without paying for a Transcript: the Space asks for one on demand only, and the Transcript check is skipped. */
+export function transcribes(env = process.env) {
+  return env.CHALK_PROOF_TRANSCRIBE !== "false";
+}
+/**
+ * Runs `create` with the reused Space's Transcript asked for on demand only. An Episode keeps the policies it was created with,
+ * so the automatic policy goes back right after. It uses the owner client: it has no abort signal, so a cancelled run still restores the policy.
+ */
+export async function withTranscriptionOnDemand(run, space, create) {
+  const set = (transcription_policy) => run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}`, { transcription_policy });
+  await set("on_demand");
+  try {
+    return await create();
+  } finally {
+    await set(automatic.transcription);
+  }
+}
+
 // Two distinctive words per guest phrase; one match proves that guest's speech reached the Transcript.
 const keywords = [
   ["purple lantern", "quiet river"],
@@ -39,7 +57,8 @@ export function bundleFailures(recording) {
 export async function captureCall(run, receiver) {
   await checkCaptureSlotFree(run);
   const space = await createSpace(run, mediaPlane, automatic);
-  const { episode, end, useSDK } = await createEpisode(run, space, automatic);
+  const policy = transcribes() ? automatic : { ...automatic, transcription: "on_demand" };
+  const { episode, end, useSDK } = transcribes() ? await createEpisode(run, space, policy) : await withTranscriptionOnDemand(run, space, () => createEpisode(run, space, policy));
   run.episodeId = episode.id;
   console.log(`Joining ${guestCount} synthetic camera/voice guests on ${mediaPlane}`);
   const { voices, phraseSeconds } = await generateTurnVoices(run.directory, run.signal);
@@ -77,7 +96,8 @@ export async function captureCall(run, receiver) {
   );
   run.recordingId = listed.id;
   const recording = await availableSource(run);
-  check(recording.transcription_policy === "automatic", "Recording effective transcription policy is not automatic");
+  const wanted = transcribes() ? "automatic" : "on_demand";
+  check(recording.transcription_policy === wanted, `Recording effective transcription policy is not ${wanted}`);
   return { script, recordingId: run.recordingId, participants: guests.participants };
 }
 
@@ -166,7 +186,7 @@ export async function callArtifactsProof(run, captured) {
     return evidence;
   };
   // Run both so one failure never hides the other's evidence.
-  const [recording, transcript] = await Promise.allSettled([checkedRecording(), automaticTranscript(run)]);
+  const [recording, transcript] = await Promise.allSettled([checkedRecording(), transcribes() ? automaticTranscript(run) : undefined]);
   const failures = [recording, transcript].filter((result) => result.status === "rejected").map((result) => result.reason);
   if (failures.length === 1) throw failures[0];
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join("; "));

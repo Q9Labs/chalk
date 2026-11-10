@@ -12,7 +12,9 @@ from unittest.mock import Mock, patch
 
 import release
 import web
-from github_release import GitHub, digest, payload
+from datetime import datetime, timezone
+
+from github_release import GitHub, digest, first_cut_of_day, payload
 
 SHA = '693cb26f710040c0cbca65f6e299ce0a639bfe40'
 OTHER_SHA = 'b' * 40
@@ -578,6 +580,57 @@ class OwnSfuPromotionTests(unittest.TestCase):
             result, _, _ = self.run_nightly(Path(directory), warn_only=False, reject_push=True)
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertIn('Could not push the scorecard history.', result.stderr)
+
+
+class TranscribeOncePerDayTests(unittest.TestCase):
+    NOW = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
+
+    @staticmethod
+    def record(channel, created_at, proof_result='passed', transcribed=True):
+        return dict(id=1, created_at=created_at, payload=dict(channel=channel, proof_result=proof_result, transcribed=transcribed))
+
+    def test_the_first_cut_of_a_utc_day_transcribes(self):
+        yesterday = self.record('nightly-cut', '2026-11-09T23:59:00Z')
+        self.assertTrue(first_cut_of_day([], self.NOW))
+        self.assertTrue(first_cut_of_day([yesterday], self.NOW))
+
+    def test_a_later_cut_after_a_passed_cut_the_same_day_does_not(self):
+        self.assertFalse(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW))
+
+    def test_an_attempt_or_failed_cut_does_not_use_up_the_days_transcript(self):
+        attempt = self.record('nightly-attempt', '2026-11-10T01:00:00Z')
+        failed = self.record('nightly-cut', '2026-11-10T02:00:00Z', proof_result='failed')
+        self.assertTrue(first_cut_of_day([attempt, failed], self.NOW))
+
+    def test_a_cut_that_did_not_check_a_transcript_does_not_use_up_the_day(self):
+        # A cut planned late the day before finishes after midnight; it was recorded today but never paid for a Transcript.
+        skipped = self.record('nightly-cut', '2026-11-10T00:05:00Z', transcribed=False)
+        self.assertTrue(first_cut_of_day([skipped], self.NOW))
+
+    def test_a_transcribing_cut_counts_when_a_later_cut_the_same_day_did_not(self):
+        # `deployments` returns only the newest passed cut, so the day's cuts come from `cuts_on`.
+        newest = dict(id=3, created_at='2026-11-10T09:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=False))
+        earlier = dict(id=2, created_at='2026-11-10T03:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        yesterday = dict(id=1, created_at='2026-11-09T22:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        statuses = {3: 'success', 2: 'success', 1: 'success'}
+        github.request = Mock(side_effect=lambda route: [dict(state=statuses[int(route.split('/')[1])])] if route.startswith('deployments/') else [newest, earlier, yesterday])
+        cuts = github.cuts_on(self.NOW.date())
+        self.assertEqual([item['id'] for item in cuts], [3, 2])
+        self.assertFalse(first_cut_of_day(cuts, self.NOW))
+
+    def test_a_cut_without_a_final_status_does_not_count(self):
+        # `record` creates the deployment before it posts the final status; a failure in between leaves it pending.
+        unfinished = dict(id=2, created_at='2026-11-10T03:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        github.request = Mock(side_effect=lambda route: [] if route.startswith('deployments/') else [unfinished])
+        self.assertEqual(github.cuts_on(self.NOW.date()), [])
+        self.assertTrue(first_cut_of_day(github.cuts_on(self.NOW.date()), self.NOW))
+
+    def test_a_manual_cut_always_transcribes(self):
+        self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))
 
 
 if __name__ == '__main__':

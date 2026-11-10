@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { bundleFailures, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
+import { bundleFailures, captureReady, checkTranscript, transcribes, transcriptEvidence, withTranscriptionOnDemand } from "./call-artifacts.mjs";
 import { bounds } from "./call-script.mjs";
 import { parseVolume, recordingEvidence, recordingFailures, screenGreenPixel } from "./recording-evidence.mjs";
 import { decodeFrames, tileEvidence } from "./tile-frames.mjs";
@@ -207,4 +207,24 @@ test("every observed green counts, no other colour does, and the frame reaches t
   const share = shareOf([...observedGreens, ...observedOthers]);
   assert.ok(share >= bounds.screenGreenShare && share < 0.6, `observed share ${share}`);
   assert.ok(shareOf([[[245, 244, 240], framePixels]]) < bounds.screenGreenShare);
+});
+
+test("only CHALK_PROOF_TRANSCRIBE=false turns the Transcript off", () => {
+  assert.equal(transcribes({}), true);
+  assert.equal(transcribes({ CHALK_PROOF_TRANSCRIBE: "true" }), true);
+  assert.equal(transcribes({ CHALK_PROOF_TRANSCRIBE: "false" }), false);
+});
+
+test("the Transcript is on demand only while the Episode is created, and comes back even when creation fails", async () => {
+  const requests = [];
+  const run = { tenantPath: "/v1/tenants/t", ownerRequest: async (method, path, body) => requests.push({ method, path, body }) };
+  const patch = (transcription_policy) => ({ method: "PATCH", path: "/v1/tenants/t/spaces/space-1", body: { transcription_policy } });
+  assert.equal(await withTranscriptionOnDemand(run, { id: "space-1" }, async () => (requests.push("created"), "episode")), "episode");
+  assert.deepEqual(requests, [patch("on_demand"), "created", patch("automatic")]);
+  requests.length = 0;
+  await assert.rejects(
+    withTranscriptionOnDemand(run, { id: "space-1" }, async () => Promise.reject(new Error("no episode"))),
+    /no episode/,
+  );
+  assert.deepEqual(requests, [patch("on_demand"), patch("automatic")]);
 });
