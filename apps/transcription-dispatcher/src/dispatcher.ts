@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AssignmentError, ControlApiError, ProviderError, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
+import { isReasonWord } from "./provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { validateSpeakerTurnManifest } from "./urls.js";
@@ -208,8 +209,24 @@ export async function reportAssignmentFailure(error: unknown, assignment: Transc
   const terminal = kind === "nonretryable" || kind === "schema";
   if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
   const errorCode = safeErrorCode(error);
-  logger.warn("dispatcher_assignment_failed", { jobId: assignment.jobId, journeyId: journey.journeyId, errorCode, kind, terminal, attempt: assignment.attempt, ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}), reason: failureReason(error) });
-  await safeRetry(control, assignment, journey, errorCode, terminal, logger);
+  logger.warn("dispatcher_assignment_failed", {
+    jobId: assignment.jobId,
+    journeyId: journey.journeyId,
+    errorCode,
+    kind,
+    terminal,
+    attempt: assignment.attempt,
+    ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}),
+    ...(error instanceof ProviderError && error.providerCode !== undefined && isReasonWord(error.providerCode) ? { providerReason: error.providerCode } : {}),
+    reason: failureReason(error),
+  });
+  await safeRetry(control, assignment, journey, errorCode, terminal, logger, creditRetryAt(error, assignment));
+}
+
+// OpenRouter answers 402 when the credit is short or the chunks of one recording together exceed its in-flight budget; both pass within minutes, so the attempts wait 20, 40 and 60 seconds instead of burning the control plane's four attempts at once.
+function creditRetryAt(error: unknown, assignment: Pick<TranscriptionAssignment, "attempt">): string | undefined {
+  if (!(error instanceof ProviderError) || error.status !== 402 || error.kind !== "retryable") return undefined;
+  return new Date(Date.now() + 20_000 * assignment.attempt).toISOString();
 }
 
 // Only our own errors have fixed messages; anything else can carry a signed URL or provider data, so it logs only its class.
@@ -218,7 +235,7 @@ function failureReason(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
+async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger, retryAt?: string): Promise<void> {
   try {
     await control.retry({
       jobId: assignment.jobId,
@@ -226,6 +243,7 @@ async function safeRetry(control: Pick<ControlApi, "retry">, assignment: Transcr
       leaseToken: assignment.leaseToken,
       errorCode,
       terminal,
+      ...(retryAt === undefined ? {} : { retryAt }),
       context,
     });
   } catch (retryError) {
