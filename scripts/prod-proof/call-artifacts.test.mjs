@@ -44,19 +44,21 @@ test("the volume summary uses the last ffmpeg report, which covers the whole str
   assert.deepEqual(parseVolume(stderr), { samples: 288000, meanDb: -21.1, maxDb: -16.1 });
 });
 
-const camera = { visible: true, moving: true };
+const tile = (guest, intervals, liveFrames) => ({ guest, intervals, liveFrames, visibleFrames: intervals, liveShare: liveFrames / intervals });
 const sound = { codec: "aac", samples: 288000, meanDb: -21, maxDb: -16 };
-const good = { durationSeconds: 60, video: { decodedFrames: 900 }, audio: sound, frameMeans: [60, 61, 62], guests: [1, 2, 3].map((guest) => ({ guest, camera })) };
+const good = { durationSeconds: 60, video: { decodedFrames: 900 }, audio: sound, frameMeans: [60, 61, 62], guests: [1, 2, 3].map((guest) => ({ guest, tile: tile(guest, 100, 100) })) };
 test("a Recording without audio, video, frames or sound fails", () => {
   assert.deepEqual(recordingFailures(good, 48), []);
   assert.deepEqual(recordingFailures({ ...good, audio: null }, 48), ["Recording has no audio stream"]);
   assert.deepEqual(recordingFailures({ ...good, audio: { ...sound, maxDb: -91 } }, 48), ["Recording audio is silent"]);
   assert.deepEqual(recordingFailures({ ...good, audio: { ...sound, samples: 0 } }, 48), ["Recording audio is silent"]);
   assert.deepEqual(recordingFailures({ ...good, video: { decodedFrames: 0 } }, 48), ["Recording video decoded zero frames"]);
-  assert.deepEqual(recordingFailures({ ...good, video: null, frameMeans: [], guests: good.guests.map(({ guest }) => ({ guest, camera: null })) }, 48), ["Recording has no video stream"]);
+  assert.deepEqual(recordingFailures({ ...good, video: null, frameMeans: [], guests: good.guests.map(({ guest }) => ({ guest, tile: null })) }, 48), ["Recording has no video stream"]);
   assert.match(recordingFailures({ ...good, durationSeconds: 20 }, 48)[0], /shorter than the 48s call/);
   assert.match(recordingFailures({ ...good, frameMeans: [60, 1, 62] }, 48)[0], /black frame/);
-  assert.deepEqual(recordingFailures({ ...good, guests: [good.guests[0], { guest: 2, camera: { visible: false, moving: false } }, { guest: 3, camera: { visible: true, moving: false } }] }, 48), ["Recording does not show guest 2's camera", "Recording shows guest 3's camera frozen"]);
+  assert.deepEqual(recordingFailures({ ...good, guests: [good.guests[0], { guest: 2, tile: null }, { guest: 3, tile: tile(3, 100, 0) }] }, 48), ["Recording does not show guest 2's camera", "Recording shows no live video in guest 3's tile (0 of 100 sampled intervals)"]);
+  // The staging export of 10 Nov 2026: guest 3 live for 160 of 183 intervals while its own flash marker was in the middle sampled frame.
+  assert.deepEqual(recordingFailures({ ...good, guests: [tile(1, 183, 162), tile(2, 183, 157), tile(3, 183, 160)].map((entry) => ({ guest: entry.guest, tile: entry })) }, 48), []);
 });
 
 // Real media through ffprobe, ffmpeg and the recorder's analyzer. Tiles use the three guest camera colours.
@@ -97,7 +99,7 @@ test("recorded media is judged by its decoded frames, sound and each guest's til
     assert.deepEqual(recordingFailures(mute, 4), ["Recording has no audio stream"]);
 
     const twoTiles = await recordingEvidence(await fixture(directory, "two", { tileColors: tiles.slice(0, 2) }), 3);
-    assert.deepEqual(recordingFailures(twoTiles, 4), ["Recording does not show guest 3's camera"]);
+    assert.deepEqual(recordingFailures(twoTiles, 4), ["Recording shows no live video in guest 3's tile (0 of 11 sampled intervals)"]);
     assert.equal(twoTiles.guests[2].tile.liveFrames, 0);
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -125,7 +127,7 @@ test("each guest's tile is counted by its live decoded frames over the whole Rec
     const frozen = await recordingEvidence(await fixture(directory, "frozen", { frozen: [0] }), 3);
     assert.equal(frozen.guests[0].tile.liveFrames, 0);
     assert.equal(frozen.guests[0].tile.visibleFrames, frozen.guests[0].tile.intervals + 1);
-    assert.match(recordingFailures(frozen, 4).join(";"), /guest 1's camera frozen/);
+    assert.match(recordingFailures(frozen, 4).join(";"), /guest 1's tile/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -163,9 +165,7 @@ test("a Recording the decoder rejects fails with the tool name and exit code", {
 
 test("a tile with zero or a minority of live frames fails with the guest, the others pass", () => {
   const base = { bytes: 1, durationSeconds: 60, video: { decodedFrames: 900 }, audio: { samples: 1, maxDb: -10 }, frameMeans: [60, 60, 60] };
-  const camera = { visible: true, moving: true };
-  const tile = (guest, intervals, liveFrames) => ({ guest, intervals, liveFrames, visibleFrames: intervals, liveShare: liveFrames / intervals });
-  const guests = (...counts) => counts.map((live, index) => ({ guest: index + 1, camera, tile: tile(index + 1, 100, live) }));
+  const guests = (...counts) => counts.map((live, index) => ({ guest: index + 1, tile: tile(index + 1, 100, live) }));
   assert.deepEqual(recordingFailures({ ...base, guests: guests(100, 61, 99) }, 48), []);
   assert.deepEqual(recordingFailures({ ...base, guests: guests(100, 59, 99) }, 48), ["Recording shows guest 2's tile live for 59% of the call, below the 60% minimum"]);
   assert.deepEqual(recordingFailures({ ...base, guests: guests(100, 100, 0) }, 48), ["Recording shows no live video in guest 3's tile (0 of 100 sampled intervals)"]);
