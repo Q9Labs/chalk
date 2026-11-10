@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from time import monotonic, sleep as backoff_sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 CUT_GAP = timedelta(hours=6)
@@ -58,6 +58,14 @@ def cut_decision(target, deployments, now, manual=False):
     if payload(last)['target_sha'] == target:
         return False, 'master has no new commits'
     return True, 'new master commits'
+
+
+def first_cut_of_day(deployments, now, manual=False):
+    """A cut pays for a Transcript until a cut of the same UTC day has passed its proof; a manual cut always does."""
+    if manual:
+        return True
+    return not any(datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() == now.astimezone(timezone.utc).date()
+                   for item in held_candidates(deployments, held=False))
 
 
 def gate_branch_is_master(run):

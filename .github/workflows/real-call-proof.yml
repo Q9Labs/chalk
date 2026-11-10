@@ -21,6 +21,10 @@ on:
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
+      transcribe:
+        description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
+        type: boolean
+        default: true
       latency:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
@@ -51,6 +55,10 @@ on:
         description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
+      transcribe:
+        description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
+        type: boolean
+        default: true
       latency:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
@@ -202,6 +210,7 @@ jobs:
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           # Promote's own-SFU proof reuses the two Spaces that own-sfu-spaces moved, found by slug.
           CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
@@ -283,6 +292,7 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
           CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
           CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
@@ -338,6 +348,7 @@ jobs:
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
           if [ ! -f features/scorecard/own-sfu.mjs ] || [ -f .private/cf-latency-skipped ]; then
@@ -383,6 +394,7 @@ jobs:
             --out artifacts/scorecard-proof.json
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || 'production' }}
       - name: Upload the scorecard

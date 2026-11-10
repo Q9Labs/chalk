@@ -12,7 +12,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from github_release import GitHub, cut_decision, digest, held_candidates, outputs, payload, require
+from github_release import GitHub, cut_decision, digest, first_cut_of_day, held_candidates, outputs, payload, require
 from scorecard_override import override_reason
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,14 +173,15 @@ def plan(github, args):
         defer_cut(github, tip, 'no master commit has a successful push Gate', manual=False)
         return
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
-    cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
+    now = datetime.now(timezone.utc)
+    cut, reason = cut_decision(target, records, now, args.manual)
     print(f'Nightly: {reason}; target {target}')
     if not cut:
         write_no_cut_summary(github, reason, target, records)
     if args.manual:
         require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
                 f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')
-    result = dict(should_cut=cut, target_sha=target)
+    result = dict(should_cut=cut, target_sha=target, transcribe=first_cut_of_day(records, now, args.manual))
     if cut:
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)
