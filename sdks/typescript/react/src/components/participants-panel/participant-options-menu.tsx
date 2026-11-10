@@ -5,7 +5,12 @@ import { VolumeSlider } from "../atomic";
 import { ChalkButton } from "../chalk-ui";
 import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
-const styles = `.call-row-menu {
+const styles = `.chalk-sheet:has(.call-sheet-menu) {
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.call-row-menu {
   width: 252px;
   padding: var(--space-1-5);
 }

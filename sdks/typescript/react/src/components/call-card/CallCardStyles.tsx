@@ -67,13 +67,15 @@ const styles = `.call-card-tabs {
   box-shadow: inset 0 0 0 1px transparent;
   color: var(--chalk-muted-text);
 }
-[data-theme="light"] .call-people-search {
+[data-theme="light"] .call-people-search,
+[data-chalk-theme="light"] .call-people-search {
   background: var(--chalk-canvas);
   /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line);
 }
 .call-people-search:focus-within,
-[data-theme="light"] .call-people-search:focus-within {
+[data-theme="light"] .call-people-search:focus-within,
+[data-chalk-theme="light"] .call-people-search:focus-within {
   /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: 0 0 0 2px var(--chalk-accent);
 }
@@ -688,7 +690,8 @@ const styles = `.call-card-tabs {
   border-radius: var(--corner-2xl);
   background: var(--chalk-raised);
 }
-[data-theme="light"] .call-wait {
+[data-theme="light"] .call-wait,
+[data-chalk-theme="light"] .call-wait {
   /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line);
 }

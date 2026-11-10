@@ -4,6 +4,7 @@ import { lazy, Suspense, useState, useRef, useEffect, type ReactNode } from "rea
 import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { HandIcon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic";
+import { useNarrowCall } from "../../internal/call-width";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
 
@@ -65,7 +66,9 @@ export function ParticipantRow({
     }
   };
 
-  const phone = useIsMobile();
+  const narrowCall = useNarrowCall();
+  const narrowWindow = useIsMobile();
+  const phone = narrowCall || narrowWindow;
   const [before, match, after] = splitMatch(participant.displayName, query);
   const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? "Sharing screen" : participant.deviceHint;
   const menu = (header?: ReactNode) => (

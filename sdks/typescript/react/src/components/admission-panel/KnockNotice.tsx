@@ -193,7 +193,7 @@ export function KnockNoticeSurface({ requests, onAdmit, onDeny, onReview, onHide
 }
 
 export interface KnockNoticeProps {
-  /** Request ids whose notice the host hid. A request that arrives later shows the notice again. */
+  /** Request ids whose notice the host hid. The notice lists only the requests not hidden, so a later knock shows alone and the bulk action never reaches a hidden request. */
   readonly hiddenIds: ReadonlySet<string>;
   readonly onReview: () => void;
   readonly onHide: (ids: readonly string[]) => void;
@@ -203,7 +203,7 @@ export function KnockNotice({ hiddenIds, onReview, onHide }: KnockNoticeProps) {
   const client = useSpaceClient();
   const canManageAdmission = useCan("manageAdmission");
   const { admissionQueue } = useParticipants();
-  const requests = admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName }));
-  if (!canManageAdmission || requests.every((request) => hiddenIds.has(request.id))) return null;
+  const requests = admissionQueue.filter((request) => !hiddenIds.has(request.requestId)).map((request) => ({ id: request.requestId, displayName: request.displayName }));
+  if (!canManageAdmission || requests.length === 0) return null;
   return <KnockNoticeSurface requests={requests} onAdmit={(id) => client.participants.admit(id)} onDeny={(id) => client.participants.deny(id)} onReview={onReview} onHide={() => onHide(requests.map((request) => request.id))} />;
 }
