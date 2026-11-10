@@ -2373,6 +2373,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
     }
     for (const transceiver of this.#connection.getTransceivers()) {
+      // On React Native a stopped transceiver is gone natively, so a second stop() rejects with "Could not get transceiver" and nothing can catch it.
+      if (transceiver.direction === "stopped" || transceiver.currentDirection === "stopped") continue;
       try {
         transceiver.stop();
       } catch (error) {
