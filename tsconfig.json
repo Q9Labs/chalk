@@ -39,6 +39,7 @@
       "@q9labsai/chalk-whiteboard": ["./packages/whiteboard/src/index.ts"],
       "@q9labsai/chalk-whiteboard/react": ["./packages/whiteboard/src/react/index.ts"],
       "@q9labsai/chalk-client": ["./sdks/typescript/client/src/index.ts"],
+      "@q9labsai/chalk-client/camera-effects": ["./sdks/typescript/client/src/camera-effects.ts"],
       "@q9labsai/chalk-react": ["./sdks/typescript/react/src/index.ts"],
       "@q9labsai/chalk-react/components": ["./sdks/typescript/react/src/components/index.ts"],
       "@q9labsai/chalk-react/preview": ["./sdks/typescript/react/src/test-support/index.ts"],

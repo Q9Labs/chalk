@@ -2,6 +2,9 @@ import type { components } from "./generated/openapi-types";
 export type ConnectionReport = components["schemas"]["ConnectionReportRequest"];
 export type ConnectionReportTransportEvent = Pick<
   ConnectionReport["events"][number],
+  | "code"
+  | "media_error_kind"
+  | "media_error_step"
   | "event"
   | "phase"
   | "attempt"
@@ -18,8 +21,6 @@ export type ConnectionReportTransportEvent = Pick<
   | "element_state"
   | "play_result"
   | "receive_counts"
-  | "media_error_kind"
-  | "media_error_step"
   | "receivers_stopped"
   | "bundle_tag_held"
 >;

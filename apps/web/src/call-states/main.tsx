@@ -1,3 +1,4 @@
+import "../lib/camera-effects";
 import "../lib/whiteboard-assets";
 import { createRoot } from "react-dom/client";
 import "../styles.css";

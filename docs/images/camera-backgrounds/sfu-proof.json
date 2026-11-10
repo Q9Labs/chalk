@@ -1,0 +1,32 @@
+{
+  "stack": "local API + Sync, dedicated development Cloudflare SFU",
+  "assertions": ["remote SFU receives blur and image pixels", "switching retains publication and both tracks", "None restores live camera"],
+  "stage": "switch none",
+  "effects": [
+    {
+      "background": "blur",
+      "remotePixelDifference": 27.394675925925927,
+      "samePublication": true,
+      "sameSenderTrack": true,
+      "sameReceiverTrack": true,
+      "senderHidden": true
+    },
+    {
+      "background": "modern-acoustic-office",
+      "remotePixelDifference": 54.9068287037037,
+      "samePublication": true,
+      "sameSenderTrack": true,
+      "sameReceiverTrack": true,
+      "senderHidden": true
+    },
+    {
+      "background": "none",
+      "remotePixelDifference": 6.091435185185185,
+      "samePublication": true,
+      "sameSenderTrack": true,
+      "sameReceiverTrack": true,
+      "senderHidden": true
+    }
+  ],
+  "result": "passed"
+}
