@@ -3,7 +3,6 @@ import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
 import { CARD_STATES } from "./card";
-import { PRE_JOIN_STATES } from "./pre-join";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
@@ -72,7 +71,6 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
-  ...PRE_JOIN_STATES,
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",

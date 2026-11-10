@@ -20,7 +20,5 @@ export default defineConfig({
     ],
     dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
-  // The harness has no network to hide: the preload helper only adds a chunk to the bundle the budgets measure.
-  build: { modulePreload: false },
   plugins: [selfHostedExcalidraw(), tailwindcss(), viteReact()],
 });

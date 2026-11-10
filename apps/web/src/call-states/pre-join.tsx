@@ -1,9 +1,6 @@
-import { lazy, Suspense } from "react";
+import { PreJoinStep } from "./PreJoinStep";
 import type { FakeDeviceSetup } from "./pre-join-devices";
 import type { Action, CallState } from "./states";
-
-/** The step loads on demand, so the other states do not pay for it in the harness bundle. */
-const PreJoinStep = lazy(() => import("./PreJoinStep"));
 
 const TALKING: FakeDeviceSetup = { permission: "granted", microphones: 3, talking: true };
 const PRE_JOIN_SCENES: readonly { readonly id: string; readonly title: string; readonly devices: FakeDeviceSetup; readonly actions?: readonly Action[]; readonly joining?: boolean }[] = [
@@ -20,10 +17,6 @@ export const PRE_JOIN_STATES: readonly CallState[] = PRE_JOIN_SCENES.flatMap(({ 
     id: `prejoin-${id}${theme === "light" ? "-light" : ""}`,
     title: `${title}${theme === "light" ? ", light" : ""}`,
     actions,
-    render: () => (
-      <Suspense fallback={null}>
-        <PreJoinStep theme={theme} devices={devices} joining={joining === true} />
-      </Suspense>
-    ),
+    render: () => <PreJoinStep theme={theme} devices={devices} joining={joining === true} />,
   })),
 );
