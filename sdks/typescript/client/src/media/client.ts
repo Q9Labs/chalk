@@ -96,6 +96,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
   readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
+  readonly #onReceiveHealth: CloudflareSFUClientOptions["onReceiveHealth"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -181,6 +182,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onDiagnostic = options.onDiagnostic;
+    this.#onReceiveHealth = options.onReceiveHealth;
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -191,7 +193,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       clearInterval: (timer) => globalThis.clearInterval(timer),
       connection: () => this.#connection,
       tracks: () => this.#remoteTracks.values(),
-      onEvent: (event) => this.#invokeListener(() => options.onReceiveHealth?.(event)),
+      onEvent: (event) => this.#invokeListener(() => this.#onReceiveHealth?.(event)),
     });
     this.#snapshot = freezeSnapshot({
       connection: { phase: "idle", peerConnectionState: this.#connection.connectionState, iceConnectionState: this.#connection.iceConnectionState },
@@ -1609,6 +1611,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           transceiver.receiver.track.stop();
         } else transceiver.stop();
       }
+      this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: batch.length, bundle_tag_held: batch.some(({ mid }) => mid === bundleTagOf(this.#connection)) }));
     }
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {

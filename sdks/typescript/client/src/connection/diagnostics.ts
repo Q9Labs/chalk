@@ -7,6 +7,7 @@ export type ConnectionDiagnosticEventName =
   | "state_changed"
   | "access_refreshed"
   | "access_refresh_failed"
+  | "access_retry"
   | "recovery_attempt"
   | "recovery_succeeded"
   | "recovery_exhausted"

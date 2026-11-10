@@ -594,6 +594,7 @@ describe("failed join admission cleanup", () => {
           { reason: "join", replaceMediaConnection: false },
           { reason: "access_retry", replaceMediaConnection: true },
         ]);
+        expect(lifecycle.getDiagnostics().filter((event) => event.event === "access_retry")).toEqual([expect.objectContaining({ state: "joining" })]);
       }),
     );
   });
@@ -780,7 +781,37 @@ it("refreshes rejected access during entry confirmation instead of retrying the 
     Effect.gen(function* () {
       yield* lifecycle.join();
       expect(reasons).toEqual(["join", "access_retry"]);
+      expect(lifecycle.getDiagnostics().filter((event) => event.event === "access_retry")).toEqual([expect.objectContaining({ state: "joining" })]);
       expect(lifecycle.getSnapshot().state).toBe("live");
+    }),
+  );
+});
+
+it("records access_retry when a cancelled admission retries with fresh access", async () => {
+  const platform = createCoreTestPlatform();
+  const reasons: string[] = [];
+  let attempts = 0;
+  const layer = admissionLayer({
+    access: async ({ reason }) => {
+      reasons.push(reason);
+      return parseParsedAccessGrant(opaqueAccessGrant(reasons.length));
+    },
+    dependencies: {
+      ...platform.dependencies,
+      cancelPendingAdmission: async () => true,
+      createSyncClient: () => ({
+        ...platform.sync,
+        confirmEntered: async () => {
+          if (attempts++ === 0) throw Object.assign(new Error("Policy rejected"), { code: "access.invalid" });
+        },
+      }),
+    },
+  });
+  await exerciseAdmission(layer, (lifecycle) =>
+    Effect.gen(function* () {
+      yield* lifecycle.join();
+      expect(reasons).toEqual(["join", "join"]);
+      expect(lifecycle.getDiagnostics().filter((event) => event.event === "access_retry")).toEqual([expect.objectContaining({ state: "joining" })]);
     }),
   );
 });

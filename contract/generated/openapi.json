@@ -15104,6 +15104,9 @@
                   "minimum": 0,
                   "type": ["integer", "null"]
                 },
+                "bundle_tag_held": {
+                  "type": ["boolean", "null"]
+                },
                 "close_code": {
                   "maximum": 4999,
                   "minimum": 1000,
@@ -15173,7 +15176,9 @@
                     "media_http_error",
                     "media_projection_mismatch",
                     "audio_receive_stuck",
-                    "audio_receive_summary"
+                    "audio_receive_summary",
+                    "receivers_closed",
+                    "access_retry"
                   ],
                   "type": "string"
                 },
@@ -15277,6 +15282,11 @@
                 "receive_state": {
                   "enum": ["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"],
                   "type": "string"
+                },
+                "receivers_stopped": {
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 },
                 "source": {
                   "enum": ["microphone", "camera", "screen_audio"],

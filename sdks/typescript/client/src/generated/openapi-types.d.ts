@@ -1667,6 +1667,7 @@ export interface components {
     ConnectionReportRequest: {
       events: {
         attempt?: number | null;
+        bundle_tag_held?: boolean | null;
         close_code?: number | null;
         /** @enum {string} */
         code?:
@@ -1719,7 +1720,9 @@ export interface components {
           | "media_http_error"
           | "media_projection_mismatch"
           | "audio_receive_stuck"
-          | "audio_receive_summary";
+          | "audio_receive_summary"
+          | "receivers_closed"
+          | "access_retry";
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -1753,6 +1756,7 @@ export interface components {
         } | null;
         /** @enum {string} */
         receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
+        receivers_stopped?: number | null;
         /** @enum {string} */
         source?: "microphone" | "camera" | "screen_audio";
         /** @enum {string} */

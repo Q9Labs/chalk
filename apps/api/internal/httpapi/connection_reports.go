@@ -62,6 +62,8 @@ type connectionReportEvent struct {
 	ElementState     string                         `json:"element_state,omitempty"`
 	PlayResult       string                         `json:"play_result,omitempty"`
 	ReceiveCounts    *connectionReportReceiveCounts `json:"receive_counts,omitempty"`
+	ReceiversStopped *int64                         `json:"receivers_stopped,omitempty"`
+	BundleTagHeld    *bool                          `json:"bundle_tag_held,omitempty"`
 }
 
 type connectionReportReceiveCounts struct {
@@ -89,7 +91,7 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "trigger":
 		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "receivers_closed", "access_retry"}
 	case "source":
 		return []string{"microphone", "camera", "screen_audio"}
 	case "receive_state":
@@ -162,6 +164,14 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 				if value != nil && (*value < 0 || *value > ConnectionReportMaxReceiveCount) {
 					return report, rejectConnectionReport(r, "receive_counts_range")
 				}
+			}
+		}
+		if event.ReceiversStopped != nil || event.BundleTagHeld != nil {
+			if event.Event != "receivers_closed" {
+				return report, rejectConnectionReport(r, "receivers_closed_event")
+			}
+			if event.ReceiversStopped != nil && (*event.ReceiversStopped < 0 || *event.ReceiversStopped > ConnectionReportMaxReceiveCount) {
+				return report, rejectConnectionReport(r, "receivers_stopped_range")
 			}
 		}
 		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo, "source": event.Source, "publication_state": event.PublicationState, "projection_state": event.ProjectionState} {
