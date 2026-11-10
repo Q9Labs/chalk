@@ -780,6 +780,7 @@ it("refreshes rejected access during entry confirmation instead of retrying the 
     Effect.gen(function* () {
       yield* lifecycle.join();
       expect(reasons).toEqual(["join", "access_retry"]);
+      expect(lifecycle.getDiagnostics().filter((event) => event.event === "access_retry")).toEqual([expect.objectContaining({ state: "joining" })]);
       expect(lifecycle.getSnapshot().state).toBe("live");
     }),
   );

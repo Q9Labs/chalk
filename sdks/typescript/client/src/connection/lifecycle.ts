@@ -495,7 +495,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
+            const grant = yield* trace("access_initialize", reason === "access_retry" ? refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
             const media = yield* trace(
               "create_media_client",
@@ -642,6 +642,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           return yield* cancelPendingAdmission();
         });
+      const refreshAfterRejection = () => Effect.sync(() => diagnostics.record({ event: "access_retry", state: model.state, epoch: model.epoch })).pipe(Effect.andThen(access.refreshAfterRejection()));
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(
           Effect.gen(function* () {
@@ -670,7 +671,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               onFailure: (cause) => {
                 if (!accessRejected(cause)) return Effect.fail(cause);
                 return requireOpen.pipe(
-                  Effect.andThen(access.refreshAfterRejection()),
+                  Effect.andThen(refreshAfterRejection()),
                   Effect.mapError((failure) => (failure instanceof ConnectionAccessFailure ? accessFailure(failure) : failure)),
                   Effect.andThen(publishFreshAccess()),
                   Effect.andThen(run),
