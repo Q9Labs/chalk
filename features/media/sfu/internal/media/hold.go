@@ -138,11 +138,19 @@ type retargeted struct {
 	mids []string
 }
 
-// retargetSections gives each listed, accepted section that has the direction `from` the direction `to`.
+// retargetSections gives each listed, accepted section whose direction is `from` the direction `to`.
+// A section with no direction of its own has the session's (RFC 4566 section 6), so it gets a
+// direction of its own.
 func retargetSections(raw string, mids map[string]bool, from, to string) (retargeted, error) {
 	var description sdp.SessionDescription
 	if err := description.Unmarshal([]byte(raw)); err != nil {
 		return retargeted{}, err
+	}
+	inherited := sdp.AttrKeySendRecv
+	for _, attribute := range description.Attributes {
+		if isDirection(attribute.Key) {
+			inherited = attribute.Key
+		}
 	}
 	var changed []string
 	for _, media := range description.MediaDescriptions {
@@ -150,14 +158,20 @@ func retargetSections(raw string, mids map[string]bool, from, to string) (retarg
 		if !ok || !mids[mid] || media.MediaName.Port.Value == 0 {
 			continue
 		}
-		for index, attribute := range media.Attributes {
-			if attribute.Key != from {
-				continue
-			}
-			media.Attributes[index] = sdp.Attribute{Key: to}
-			changed = append(changed, mid)
-			break
+		direction := inherited
+		index := slices.IndexFunc(media.Attributes, func(attribute sdp.Attribute) bool { return isDirection(attribute.Key) })
+		if index >= 0 {
+			direction = media.Attributes[index].Key
 		}
+		if direction != from {
+			continue
+		}
+		if index >= 0 {
+			media.Attributes[index] = sdp.Attribute{Key: to}
+		} else {
+			media.Attributes = append(media.Attributes, sdp.Attribute{Key: to})
+		}
+		changed = append(changed, mid)
 	}
 	out, err := description.Marshal()
 	if err != nil {

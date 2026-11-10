@@ -520,7 +520,8 @@ func (s *subscription) release() {
 	s.close()
 }
 
-// close detaches the subscription and parks its section for the owner's next pull. It is idempotent.
+// close detaches the subscription and hands its section to the owner's park, which keeps a guest
+// video section for the next pull and stops any other. It is idempotent.
 func (s *subscription) close() {
 	if !s.detach() {
 		return

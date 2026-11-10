@@ -708,3 +708,32 @@ func TestAHeldSectionAnswersAnExtensionTheOfferDeclaresAtSessionLevel(t *testing
 		t.Fatalf("the held section answers with %v, want %v", got, want)
 	}
 }
+
+// A section with no direction of its own has the session's. An offer that says inactive once at
+// session level still parks nothing for Pion to stop.
+func TestHoldingAParkedSectionReadsTheDirectionItInheritsFromTheSession(t *testing.T) {
+	const section = "m=video 9 UDP/TLS/RTP/SAVPF 96\r\nc=IN IP4 0.0.0.0\r\na=mid:1\r\na=rtpmap:96 VP8/90000\r\n"
+	const head = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n"
+	for _, test := range []struct {
+		name, offer string
+		held        bool
+	}{
+		{"session inactive is inherited", head + "a=inactive\r\n" + section, true},
+		{"the section's own direction wins", head + "a=inactive\r\n" + section + "a=sendrecv\r\n", false},
+		{"no direction is sendrecv", head + section, false},
+		{"its own inactive", head + section + "a=inactive\r\n", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			held, err := retargetSections(test.offer, map[string]bool{"1": true}, sdp.AttrKeyInactive, sdp.AttrKeyRecvOnly)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(held.mids) == 1; got != test.held {
+				t.Fatalf("held mids %v, want held=%v", held.mids, test.held)
+			}
+			if test.held && !strings.Contains(held.sdp, "a=recvonly") {
+				t.Fatalf("the held section has no direction of its own:\n%s", held.sdp)
+			}
+		})
+	}
+}
