@@ -1990,14 +1990,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // that the offer turns on must receive again before the answer is made. cf_sfu keeps offering every closed mid as sendonly (the
   // 2026-11-10 Orb churn probe), so only the mids the response names are revived; the others stay parked and get an inactive answer.
   #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string, response: CloudflareSFUTracksResponse): void {
-    const named = new Set((response.tracks ?? []).flatMap((track) => (track.mid === undefined ? [] : [track.mid])));
-    const active = new Set<string>();
-    for (const section of offerSDP.split(/\r?\n(?=m=)/)) {
-      const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
-      if (mid !== undefined && named.has(mid) && !/\r?\na=(?:recvonly|inactive)\b/.test(section)) active.add(mid);
-    }
+    const named = new Set((response.tracks ?? []).map((track) => track.mid));
+    const active = activeOfferedMids(offerSDP);
     for (const transceiver of connection.getTransceivers()) {
-      if (transceiver.direction === "inactive" && transceiver.mid !== null && active.has(transceiver.mid)) transceiver.direction = "recvonly";
+      const { mid } = transceiver;
+      if (transceiver.direction === "inactive" && mid !== null && named.has(mid) && active.has(mid)) transceiver.direction = "recvonly";
     }
   }
   async #applyProviderDescriptionIfOpen(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
@@ -2609,6 +2606,15 @@ function pageIsHidden(): boolean {
 }
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
+}
+// The MIDs of the sections an offer turns on: a section the SFU sends on, not one it keeps recvonly or inactive.
+function activeOfferedMids(offerSDP: string): ReadonlySet<string> {
+  const mids = new Set<string>();
+  for (const section of offerSDP.split(/\r?\n(?=m=)/)) {
+    const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
+    if (mid !== undefined && !/\r?\na=(?:recvonly|inactive)\b/.test(section)) mids.add(mid);
+  }
+  return mids;
 }
 // The MID of the m-section that owns the BUNDLE transport: the first one in the group of the last local description.
 function bundleTagOf(connection: RTCPeerConnection): string | undefined {
