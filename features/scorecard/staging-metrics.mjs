@@ -28,10 +28,11 @@ export async function readNodeMetrics(startTime, endTime, { env = process.env, f
         signal: AbortSignal.timeout(30_000),
       });
       if (response.status === 200) break;
-      const statusClass = Number.isInteger(response.status) ? `${Math.trunc(response.status / 100)}xx` : "unknown";
+      // The numeric status separates an expired token (401), a missing permission (403), a wrong dataset (404) and a bad query (400).
+      const statusLabel = Number.isInteger(response.status) ? String(response.status) : "unknown";
       const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       const willRetry = retryable && attempt < maxAttempts;
-      console.warn(`Axiom staging metrics query returned HTTP ${statusClass}${willRetry ? `; retry ${attempt + 1}/${maxAttempts}` : "; stopping"}.`);
+      console.warn(`Axiom staging metrics query returned HTTP ${statusLabel} for ${metric}${willRetry ? `; retry ${attempt + 1}/${maxAttempts}` : "; stopping"}.`);
       if (!willRetry) throw new Error("staging_metrics_query_failed");
       await new Promise((resolve) => setTimeout(resolve, retryBaseMs * 2 ** (attempt - 1)));
     }

@@ -98,6 +98,16 @@ test("empty, truncated, paginated, malformed and failed metrics never produce is
   }
 });
 
+test("a rejected query logs its HTTP status and metric, never the body", async (t) => {
+  const warnings = [];
+  t.mock.method(console, "warn", (message) => warnings.push(message));
+  await assert.rejects(
+    read(async () => ({ status: 403, text: async () => "secret body" })),
+    /staging_metrics_query_failed/,
+  );
+  assert.deepEqual(warnings, ["Axiom staging metrics query returned HTTP 403 for chalk.sfu.host.cpu.steal; stopping."]);
+});
+
 test("a missing token or missing phase cannot be mistaken for a known zero steal reading", async () => {
   await assert.rejects(read(fake(), { ...env, CHALK_AXIOM_METRICS_QUERY_TOKEN: "" }), /configuration_missing/);
   const boundary = await read();
