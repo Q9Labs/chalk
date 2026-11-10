@@ -447,15 +447,22 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   #releaseIdle(source: "microphone" | "camera"): void {
     if (this.#disposed || this.#hasConsent(source) || this.#sources[source].localEnabled) return;
+    if (source === "camera") return this.#releaseIdleCamera();
+    const own = this.#tracks.get(source);
+    if (own) this.#selection.releaseTrack(own);
+    this.#releasePublished(source, own);
+  }
+  #releaseIdleCamera(): void {
     const camera = this.#camera;
-    if (source === "camera" && "owner" in camera && camera.owner.references > 0) return this.#scheduleIdleRelease(source);
-    const ownCamera = camera.status === "live" ? camera.track : undefined;
-    const own = source === "camera" ? ownCamera : this.#tracks.get(source);
-    const tracks = new Set<MediaStreamTrack>(own ? [own] : []);
-    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) tracks.add(publication.track);
+    if ("owner" in camera && camera.owner.references > 0) return this.#scheduleIdleRelease("camera");
+    this.#releasePublished("camera", camera.status === "live" ? camera.track : undefined);
     // Ending the camera state releases its own track and hands the media client a clean slate for the next capture.
-    for (const track of tracks) if (track !== ownCamera || source !== "camera") this.#selection.releaseTrack(track);
-    if (source === "camera" && camera.status === "live") this.#transitionCamera({ status: "ended" });
+    if (camera.status === "live") this.#transitionCamera({ status: "ended" });
+  }
+  #releasePublished(source: "microphone" | "camera", skip: MediaStreamTrack | undefined): void {
+    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) {
+      if (publication.source === source && publication.track !== skip) this.#selection.releaseTrack(publication.track);
+    }
   }
   #pauseTracks(source: MediaSource): void {
     const track = this.#track(source);

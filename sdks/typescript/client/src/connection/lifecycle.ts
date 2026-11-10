@@ -563,7 +563,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             Effect.matchEffect({
               onFailure: (cause) =>
                 Effect.gen(function* () {
-                  for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") platform.mediaDevices.releaseTrack(track);
+                  releaseLiveTracks(stream, platform.mediaDevices.releaseTrack);
                   const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   const failure = yield* resolveMediaRejection(originalFailure);
                   if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
@@ -1308,6 +1308,9 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       } satisfies ConnectionLifecycleCapability;
     }),
   );
+function releaseLiveTracks(stream: MediaStream | null | undefined, releaseTrack: ConnectionMediaDevices["releaseTrack"]): void {
+  for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") releaseTrack(track);
+}
 function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
 }
