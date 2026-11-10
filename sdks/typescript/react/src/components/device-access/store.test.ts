@@ -1,6 +1,6 @@
 import { SpaceClientError, type ErrorCode } from "@q9labsai/chalk-client";
 import { describe, expect, it, vi } from "vitest";
-import { commandFailurePresentation } from "../control-bar/command-failure";
+import { isDeviceAccessFailure } from "./model";
 import type { DevicePorts, Listenable } from "./ports";
 import { DeviceAccessStore } from "./store";
 
@@ -57,14 +57,6 @@ describe("DeviceAccessStore", () => {
     const { store } = setup();
     await store.report("microphone", failure("media.permission_denied"), async () => {});
     expect(store.getSnapshot().issues.microphone).toEqual({ reason: { kind: "blocked-browser", browser: "chrome" }, open: true });
-  });
-
-  it("tracks the browser's answer for the dock", async () => {
-    const { store, permission } = setup({ permission: "prompt" });
-    await settle();
-    expect(store.getSnapshot().permissions.microphone).toBe("prompt");
-    permission.set("denied");
-    expect(store.getSnapshot().permissions.microphone).toBe("denied");
   });
 
   it("does not retry a refusal while the browser already says granted", async () => {
@@ -133,7 +125,6 @@ describe("DeviceAccessStore", () => {
     const { store } = setup({ askable: false });
     await store.report("microphone", failure("media.permission_denied"), async () => {});
     expect(store.getSnapshot().issues.microphone?.reason.kind).toBe("blocked-browser");
-    expect(store.getSnapshot().permissions.microphone).toBe("unknown");
   });
 
   it("drops a report that a newer command has replaced", async () => {
@@ -181,14 +172,14 @@ describe("DeviceAccessStore", () => {
 
 describe("commandFailurePresentation", () => {
   it("sends microphone, camera and screen permission failures to the card", () => {
-    expect(commandFailurePresentation(failure("media.permission_denied"), "microphone", "start").card).toBe(true);
-    expect(commandFailurePresentation(failure("media.device_busy"), "camera", "start").card).toBe(true);
-    expect(commandFailurePresentation(failure("media.permission_denied"), "screen", "start").card).toBe(true);
+    expect(isDeviceAccessFailure(failure("media.permission_denied"), "microphone")).toBe(true);
+    expect(isDeviceAccessFailure(failure("media.device_busy"), "camera")).toBe(true);
+    expect(isDeviceAccessFailure(failure("media.permission_denied"), "screen")).toBe(true);
   });
 
   it("keeps toasts for everything else", () => {
-    expect(commandFailurePresentation(failure("media.device_busy"), "screen", "start").card).toBe(false);
-    expect(commandFailurePresentation(failure("media.permission_denied"), "speaker", "select").card).toBe(false);
-    expect(commandFailurePresentation(failure("client.internal_error"), "microphone", "start").card).toBe(false);
+    expect(isDeviceAccessFailure(failure("media.device_busy"), "screen")).toBe(false);
+    expect(isDeviceAccessFailure(failure("media.permission_denied"), "speaker")).toBe(false);
+    expect(isDeviceAccessFailure(failure("client.internal_error"), "microphone")).toBe(false);
   });
 });

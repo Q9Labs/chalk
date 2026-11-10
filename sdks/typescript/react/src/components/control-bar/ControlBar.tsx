@@ -1,4 +1,5 @@
-import { commandFailurePresentation } from "./command-failure";
+import { commandFailureMessage } from "./command-failure";
+import { isDeviceAccessFailure } from "../device-access/model";
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
@@ -187,15 +188,15 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, waitingForBrowser } = useConnectedControlBarBehavior(props);
-  const failure = !props.onCommandError && commandError ? commandFailurePresentation(commandError, commandSource, commandAction) : undefined;
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError && !isDeviceAccessFailure(commandError, commandSource) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? (failure?.card ? undefined : failure?.message)} />
-      {waitingForBrowser ? (
+      <CommandErrorAlert message={mediaNotice ?? failure} />
+      {requestingDevice ? (
         <Suspense fallback={null}>
-          <DeviceAccessWaiting />
+          <DeviceAccessWaiting key={requestingDevice} device={requestingDevice} />
         </Suspense>
       ) : null}
     </>

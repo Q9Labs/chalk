@@ -1,6 +1,30 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
 import { isDeviceAccessFailure, type AccessEnvironment, type BrowserName, type DeviceAccessReason, type DeviceKind, type PermissionAnswer, type Platform } from "./model";
-import { answerOf, watchPermission, type DevicePorts } from "./ports";
+import type { DevicePorts } from "./ports";
+
+function answerOf(state: string): PermissionAnswer {
+  return state === "prompt" || state === "granted" || state === "denied" ? state : "unknown";
+}
+
+/** Calls `onAnswer` now and on every change. A browser that cannot be asked is never called back. */
+export function watchPermission(ports: DevicePorts, device: "microphone" | "camera", onAnswer: (answer: PermissionAnswer) => void): () => void {
+  let stopped = false;
+  let release = () => {};
+  void ports.permissions?.query({ name: device }).then(
+    (status) => {
+      if (stopped) return;
+      const changed = () => onAnswer(answerOf(status.state));
+      status.addEventListener("change", changed);
+      release = () => status.removeEventListener("change", changed);
+      changed();
+    },
+    () => undefined,
+  );
+  return () => {
+    stopped = true;
+    release();
+  };
+}
 
 /** Browsers that cannot be asked about a device (Safari, older Firefox) answer "unknown". That is a real state here, not an error. */
 export async function readPermission(ports: DevicePorts, device: "microphone" | "camera"): Promise<PermissionAnswer> {

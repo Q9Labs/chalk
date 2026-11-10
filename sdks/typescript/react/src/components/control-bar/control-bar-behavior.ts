@@ -237,8 +237,8 @@ interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
   readonly mediaNotice?: string;
-  /** The browser's own permission prompt is open for this device. */
-  readonly waitingForBrowser: boolean;
+  /** The device being requested right now. The browser may be showing its own permission prompt for it. */
+  readonly requestingDevice: "microphone" | "camera" | undefined;
   readonly commandSource?: MediaCommandSource;
   readonly commandAction?: MediaCommandAction;
 }
@@ -423,8 +423,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  const waitingForBrowser = (["microphone", "camera"] as const).some((device) => access.snapshot.permissions[device] === "prompt" && media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, waitingForBrowser, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
+  const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. */

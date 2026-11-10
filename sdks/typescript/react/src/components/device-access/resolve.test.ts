@@ -1,7 +1,8 @@
 import { SpaceClientError, type ErrorCode } from "@q9labsai/chalk-client";
 import { describe, expect, it } from "vitest";
 import type { AccessEnvironment, PermissionAnswer } from "./model";
-import { deviceAccessReason, detectBrowser, detectPlatform } from "./resolve";
+import type { DevicePorts } from "./ports";
+import { deviceAccessReason, detectBrowser, detectPlatform, readPermission } from "./resolve";
 
 const failure = (code: ErrorCode, permissionBlock?: "system") => new SpaceClientError({ code, recoverable: true, message: code, permissionBlock });
 const env = (permission: PermissionAnswer, platform: AccessEnvironment["platform"] = "mac"): AccessEnvironment => ({ browser: "chrome", platform, permission });
@@ -60,5 +61,20 @@ describe("browser and platform detection", () => {
 
   it("finds the platform, and gives no settings link on phones or Linux", () => {
     expect([chromeMac, firefoxWin, chromeAndroid, "Mozilla/5.0 (X11; Linux x86_64)"].map(detectPlatform)).toEqual(["mac", "windows", "other", "other"]);
+  });
+});
+
+describe("readPermission", () => {
+  const portsWith = (permissions: DevicePorts["permissions"]): DevicePorts => ({ permissions, mediaDevices: undefined, window: { addEventListener: () => {}, removeEventListener: () => {} }, userAgent: "" });
+  const answering = (state: string): DevicePorts["permissions"] => ({ query: async () => ({ state, addEventListener: () => {}, removeEventListener: () => {} }) });
+
+  it("returns what the browser says", async () => {
+    expect(await readPermission(portsWith(answering("prompt")), "microphone")).toBe("prompt");
+    expect(await readPermission(portsWith(answering("denied")), "camera")).toBe("denied");
+  });
+
+  it("answers unknown when the browser cannot be asked or fails", async () => {
+    expect(await readPermission(portsWith(undefined), "microphone")).toBe("unknown");
+    expect(await readPermission(portsWith({ query: async () => Promise.reject(new TypeError("unsupported")) }), "microphone")).toBe("unknown");
   });
 });

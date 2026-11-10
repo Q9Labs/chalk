@@ -1,6 +1,6 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
-import { isDeviceAccessFailure, type DeviceAccessReason, type DeviceKind, type PermissionAnswer } from "./model";
-import { watchPermission, type DevicePorts } from "./ports";
+import { isDeviceAccessFailure, type DeviceAccessReason, type DeviceKind } from "./model";
+import type { DevicePorts } from "./ports";
 
 export interface DeviceIssue {
   readonly reason: DeviceAccessReason;
@@ -9,8 +9,6 @@ export interface DeviceIssue {
 
 export interface DeviceAccessSnapshot {
   readonly issues: Readonly<Partial<Record<DeviceKind, DeviceIssue>>>;
-  /** What the browser says right now, for the two devices it can be asked about. */
-  readonly permissions: Readonly<Record<"microphone" | "camera", PermissionAnswer>>;
 }
 
 /** What one device is waiting on: the newest report, the command to run again, and the listener that fixes it. */
@@ -21,8 +19,6 @@ interface Pending {
   running?: boolean;
 }
 
-const PROMPTABLE = ["microphone", "camera"] as const;
-
 /**
  * Which device access problem each dock button has, and the listeners that fix it without a click.
  * Browser permission changes are only watched while something is subscribed.
@@ -31,8 +27,7 @@ export class DeviceAccessStore {
   readonly #ports: DevicePorts;
   readonly #listeners = new Set<() => void>();
   readonly #pending = new Map<DeviceKind, Pending>();
-  #stopPermissionWatch: readonly (() => void)[] = [];
-  #snapshot: DeviceAccessSnapshot = { issues: {}, permissions: { microphone: "unknown", camera: "unknown" } };
+  #snapshot: DeviceAccessSnapshot = { issues: {} };
 
   constructor(ports: DevicePorts) {
     this.#ports = ports;
@@ -40,12 +35,9 @@ export class DeviceAccessStore {
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
-    if (this.#listeners.size === 1) this.#stopPermissionWatch = PROMPTABLE.map((device) => watchPermission(this.#ports, device, (answer) => this.#set({ permissions: { ...this.#snapshot.permissions, [device]: answer } })));
     return () => {
       this.#listeners.delete(listener);
       if (this.#listeners.size > 0) return;
-      for (const stop of this.#stopPermissionWatch) stop();
-      this.#stopPermissionWatch = [];
       for (const pending of this.#pending.values()) {
         pending.attempt++;
         pending.stop?.();

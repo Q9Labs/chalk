@@ -1,5 +1,6 @@
 "use client";
-import { commandFailure, commandFailurePresentation, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccessStore } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
@@ -265,10 +266,7 @@ export function SpaceView({
   const shownFailure = typeof displayedCommandError === "object" ? displayedCommandError : null;
   const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
   // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
-  const mappedFailure =
-    externalCommandError == null && shownFailure && commandFailurePresentation(shownFailure, displayedCommandSource, failureAction).card
-      ? null
-      : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  const mappedFailure = externalCommandError == null && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource) ? null : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);

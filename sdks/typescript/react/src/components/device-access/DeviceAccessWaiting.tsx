@@ -1,7 +1,20 @@
+import { useEffect, useState } from "react";
 import { DeviceAccessStyles } from "./DeviceAccessStyles";
+import { browserPorts } from "./ports";
+import { readPermission } from "./resolve";
 
-/** The browser's own prompt is open. The page dims and one pill points at the prompt. */
-export function DeviceAccessWaiting() {
+/** A device is being requested. When the browser has not decided yet, its own prompt is open: the page dims and one pill points at the prompt. */
+export function DeviceAccessWaiting({ device }: { readonly device: "microphone" | "camera" }) {
+  const [prompting, setPrompting] = useState(false);
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [async] Ask the browser once per request; ignore the answer if the request ended first.
+  useEffect(() => {
+    let live = true;
+    void readPermission(browserPorts(), device).then((answer) => live && setPrompting(answer === "prompt"));
+    return () => {
+      live = false;
+    };
+  }, [device]);
+  if (!prompting) return null;
   return (
     <>
       <DeviceAccessStyles />

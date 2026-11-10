@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useSyncExternalStore } from "react
 import { browserPorts } from "./ports";
 import { DeviceAccessStore, type DeviceAccessSnapshot } from "./store";
 
-const SERVER_SNAPSHOT: DeviceAccessSnapshot = { issues: {}, permissions: { microphone: "unknown", camera: "unknown" } };
+const SERVER_SNAPSHOT: DeviceAccessSnapshot = { issues: {} };
 const DeviceAccessContext = createContext<DeviceAccessStore | null>(null);
 
 /** SpaceView shares one store with its dock, so keyboard shortcuts and dock buttons report to the same card. */
