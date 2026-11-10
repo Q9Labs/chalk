@@ -177,6 +177,98 @@ A setting-only change, such as the backfill, sends no `space.updated` webhook: t
 Space's `media_plane` and so its payload do not change. Setting a Space to another
 plane changes `media_plane` and does send it.
 
+### Send one Space back to Cloudflare, and return it
+
+The Space setting is the kill switch for one Space. It moves the Space's next
+Episodes to Cloudflare (`cf_sfu`), and it moves them back, with no deploy and no API
+reload.
+
+**Who runs it.** A Chalk operator: someone who holds the API's database and plane
+settings in the private API environment (`CHALK_DATABASE_URL`,
+`CHALK_DEFAULT_MEDIA_PLANE`, `CHALK_SFU_ALLOWED_SPACES`, `CHALK_SFU_NEW_EPISODES`),
+because `media-settings` is the only way to set `chalk_sfu` and there is no operator
+principal in the API. Run it with the API's own values: without
+`CHALK_DEFAULT_MEDIA_PLANE` the command refuses `--plane inherit` with "invalid
+media plane". A Tenant owner with the Tenant API key can do the one-way half
+with the public API: `PATCH /v1/tenants/{tenant_id}/spaces/{space_id}` with
+`{"media_plane":"cf_sfu"}` sends the Space to Cloudflare (it answers 200 and the
+Space reports `effective_media_plane: cf_sfu`), but the API refuses `chalk_sfu` with
+403 `space.media_plane_not_permitted`, so the return always goes through an operator.
+
+**Rule that shapes the steps.** The flip changes only Episodes that start after it. An
+Episode keeps the plane its binding pinned, so guests who reload and rejoin a live
+Episode land on the same plane again. Moving a live call means ending the Episode and
+starting a new one.
+
+1. From `apps/api`, read the Space and confirm the ids are the ones you mean:
+
+   ```sh
+   CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
+   ```
+
+   `effective_plane` is what the next Episode gets; `kill_switch_on` and
+   `on_allowlist` explain it when it is not what you expect.
+
+2. Flip the Space:
+
+   ```sh
+   CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane cf_sfu
+   ```
+
+   The command prints one JSON line with `before` and `after`. Keep that line in the
+   incident log beside your name: the line records the Space and the planes, not the
+   operator. Use
+   `--plane cf_sfu` and not `inherit` for the fallback, because `inherit` hands the
+   choice to the Tenant default and the deployment default, which may be `chalk_sfu`.
+
+3. If a call is live and must move, end its Episode through the owner API
+   (`POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end`), or
+   with the host's End button, and start a new Episode the way the product normally
+   does. A guest in the ended Episode sees the call end: the SDK reports connection
+   status `left` with `episodeEnded: true`. A guest who opens the invite link or
+   rejoins from the app joins the new Episode on Cloudflare. If no call is live,
+   skip this step: the next Episode takes the new plane.
+
+4. Verify. `get` shows `space_setting` and `effective_plane` as `cf_sfu`. A new
+   Episode's join grant reports `media.provider` as `cloudflare_sfu`, and the guests
+   have audio and video. `media-provider-inventory` counts the live Episodes by
+   provider ([provider inventory](../../docs/sfu/provider-inventory.md)).
+
+5. Return the Space with the same command and `--plane chalk_sfu`, then repeat step 3
+   for a call that should move back. The setting only selects the plane. The new
+   Episode binds the own SFU only when the Space is on `CHALK_SFU_ALLOWED_SPACES`, the
+   SDK declares `chalk_sfu`, and a node has room; otherwise it starts on Cloudflare
+   when overflow is on, or the create fails. Treat the return as done when the new
+   Episode's join grant reports `media.provider` as `chalk_sfu`, not when `get`
+   says so.
+
+To stop every new Episode instead of one Space, set `CHALK_SFU_NEW_EPISODES=off` in
+the private API settings and reload the API (see the order above). Use the Space
+setting first: it touches one Space and needs no reload.
+
+**Measured times.** A drill on staging flipped one Space between `chalk_sfu` and
+`cf_sfu` twelve times (six each way) with two real browser guests in a live call
+each time, the operator command run from a laptop over the public internet to the
+database, and the Episode ended through the owner API. All twelve new Episodes
+landed on the plane the Space was flipped to, the live Episode kept its media after
+every flip, and a participant added to the live Episode after the flip got the old
+plane.
+
+| Step                                                                                                     | p50    | max    |
+| -------------------------------------------------------------------------------------------------------- | ------ | ------ |
+| `media-settings set` returns                                                                             | 2.6 s  | 2.9 s  |
+| API reports the new plane after the write returns                                                        | 0.4 s  | 0.8 s  |
+| Owner API end until the Episode reads `ended` (polled every 2 s)                                         | 3.0 s  | 7.6 s  |
+| Create the new Episode                                                                                   | 0.3 s  | 0.4 s  |
+| Guest joins the new Episode until both guests have audio and video, on Cloudflare                        | 11.8 s | 13.0 s |
+| The same, on the own SFU                                                                                 | 5.7 s  | 6.4 s  |
+| Flip started until both guests have media on the other plane, steps scripted back to back, to Cloudflare | 29.1 s | 33.5 s |
+| The same, back to the own SFU                                                                            | 24.3 s | 27.3 s |
+
+Add the time a person takes to read the output and start the next class to the last
+two rows. The `set` time is mostly the connection from the operator's machine to the
+database, so a host close to it is faster.
+
 ## Client sunset
 
 An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is
