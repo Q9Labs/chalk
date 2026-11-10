@@ -57,20 +57,23 @@ for spec in "${policies[@]}"; do
 done
 
 node_address="$(doctl compute droplet list --tag-name "$tag" --output json | jq -r 'if length == 1 then .[0].networks.v4[] | select(.type == "public") | .ip_address else empty end')"
-check_id="$(doctl monitoring uptime list --output json | jq -r --arg n "$check_name" '[.[] | select(.name == $n) | .id][0] // empty')"
+existing_check="$(doctl monitoring uptime list --output json | jq -c --arg n "$check_name" '[.[] | select(.name == $n)][0] // empty')"
+check_id="$(jq -r '.id // empty' <<<"${existing_check:-null}")"
 if [[ "$action" == remove ]]; then
-  [[ -z "$check_id" ]] || { doctl monitoring uptime delete "$check_id" --force; echo "deleted uptime check ${check_name}"; }
+  [[ -z "$check_id" ]] || { doctl monitoring uptime delete "$check_id"; echo "deleted uptime check ${check_name}"; }
   exit 0
 fi
 [[ -n "$node_address" ]] || { echo "expected exactly one Droplet tagged ${tag}" >&2; exit 1; }
-if [[ -z "$check_id" ]]; then
-  if [[ "$action" == apply ]]; then
-    check_id="$(doctl monitoring uptime create "$check_name" --type ping --target "$node_address" --regions se_asia,eu_west,us_east --output json | jq -r '.[0].id // .id')"
-  fi
-  echo "uptime check ${check_name}: create"
+# doctl cannot enable a check on update (an update leaves it disabled), so a check that is missing,
+# disabled or aimed at another address is deleted and created again.
+if [[ -n "$check_id" ]] && jq -e --arg t "$node_address" '.enabled == true and .target == $t' <<<"$existing_check" >/dev/null; then
+  echo "uptime check ${check_name}: keep"
 else
-  run monitoring uptime update "$check_id" --name "$check_name" --type ping --target "$node_address" --regions se_asia,eu_west,us_east
-  echo "uptime check ${check_name}: update"
+  if [[ "$action" == apply ]]; then
+    [[ -z "$check_id" ]] || doctl monitoring uptime delete "$check_id"
+    check_id="$(doctl monitoring uptime create "$check_name" --type ping --target "$node_address" --regions se_asia,eu_west,us_east --enabled true --output json | jq -r '.[0].id // .id')"
+  fi
+  echo "uptime check ${check_name}: $([[ -z "$check_id" ]] && echo create || echo recreate)"
 fi
 if [[ "$action" == apply ]]; then
   alert_id="$(doctl monitoring uptime alert list "$check_id" --output json | jq -r --arg n "${check_name}-down" '[.[] | select(.name == $n) | .id][0] // empty')"
