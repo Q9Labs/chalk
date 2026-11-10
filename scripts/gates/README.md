@@ -77,7 +77,7 @@ build caches, so pull requests and queue groups start from the latest master cac
 The Metro cache is no longer saved; the mobile export starts cold.
 The API job sets `-count=1` because a cached Go test result would not see a
 migration or database change. CI calls `scripts/gates/commit.sh` directly with
-`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the
+`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=4` instead of the
 one-CPU `pnpm gate` alias, and installs the pinned Gitleaks and OSV-Scanner
 releases through `.github/actions/setup-scanners` instead of compiling them with
 `go run`.
