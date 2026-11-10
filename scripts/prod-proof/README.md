@@ -325,6 +325,12 @@ It prints one line, `Long call: <guests> guests, <seconds>s, <n> access refreshe
 
 Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `own-sfu` job, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
 
+### Offers stay flat under toggles, and nobody goes deaf (`toggle-offers`)
+
+The Chalk SFU node reuses the section of a closed track for the next pull of the same kind, so the offer a client sends depends on the live tracks and not on the toggles ever made. `pnpm prod:proof toggle-offers` proves it with real Chromium guests on `chalk_sfu`: two calls of three guests, one joining in order and one in reverse. In the first, every guest turns its microphone and camera off and on 50 times; in the second, 8 times. `media.mjs` records the size of every offer a guest sends, and after each round the proof stores the largest and the final one. It prints toggle count against offer size, and it fails when a guest's final offer is more than 4 KiB over its offer at the first join, or when any offer passes the node's 64 KiB limit. The same calls run the deafness probe: each re-published microphone must be decoded by both other guests within 5 seconds of the click (`hearAfterUnmute`), at least 6 times per guest in each join order. A mid reused by the node lands on a receiver the SDK parked, which is the trigger of the deafness bug, so the two checks belong in one run. The numbers are in `toggle-offers-criteria.mjs`; `pnpm prod:proof toggle-offers --dry-run` prints the plan without configuration.
+
+It needs the node fix and the SDK that parks closed receivers (#1094) on staging. Hold the lease for the whole run: `scripts/staging-sfu/staging-lock --holder <you> --purpose toggle-offers --run-id <id> --wait 600 -- env CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof toggle-offers`. Cost: about 15 minutes of one runner and two shared-node calls of three guests.
+
 ### One-time webhook setup (each environment)
 
 Using the existing bootstrap key, create **one** disabled endpoint named after
