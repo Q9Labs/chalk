@@ -3,6 +3,7 @@ import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
 import { CARD_STATES } from "./card";
+import { PRE_JOIN_STATES } from "./pre-join";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
@@ -12,7 +13,7 @@ import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { NameNeeded } from "../components/space/SpacePage";
+import type { FakeDeviceSetup } from "./media";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -24,7 +25,8 @@ export type CallStateMeta = {
   readonly actions?: readonly Action[];
   /** The capture script holds back the board's stylesheet, so the board stays on its loading screen. */
   readonly stallBoard?: boolean;
-  readonly cameraBlocked?: boolean;
+  /** The browser this state runs in: its camera permission, microphones and whether the visitor is talking. */
+  readonly devices?: FakeDeviceSetup;
 };
 
 export type CallState = CallStateMeta & { readonly render: () => ReactNode };
@@ -72,8 +74,7 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
-  { id: "name-needed", title: "Name needed", render: () => <JoinName theme="dark" /> },
-  { id: "name-needed-light", title: "Name needed, light", render: () => <JoinName theme="light" /> },
+  ...PRE_JOIN_STATES,
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -307,15 +308,6 @@ function WaitingForHost() {
   return (
     <main className="h-dvh">
       <CallLimbo spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." action={{ label: "Cancel", onClick: () => undefined }} />
-    </main>
-  );
-}
-
-function JoinName({ theme }: { readonly theme: "light" | "dark" }) {
-  const [name, setName] = useState("");
-  return (
-    <main data-chalk data-chalk-theme={theme} className="h-dvh">
-      <NameNeeded spaceName={SPACE_NAME} theme={theme} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
     </main>
   );
 }

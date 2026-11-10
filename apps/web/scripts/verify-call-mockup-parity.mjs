@@ -9,7 +9,7 @@ try {
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
-  await page.goto(`${origin}/call-states.html?state=name-needed`);
+  await page.goto(`${origin}/call-states.html?state=prejoin-default`);
   const name = page.locator("#join-display-name");
   await name.waitFor();
   // Tailwind's radius scale once read a --radius token that no stylesheet defined, so every rounded-* rendered square.

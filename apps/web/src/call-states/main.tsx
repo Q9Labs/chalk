@@ -15,7 +15,7 @@ window.__CALL_STATES__ = CALL_STATES.map(({ render: _render, ...meta }) => meta)
 const params = new URLSearchParams(location.search);
 const id = params.get("state");
 const state = CALL_STATES.find((candidate) => candidate.id === id);
-if (!params.has("browserMedia")) installFakeDevices({ blocked: state?.cameraBlocked === true });
+if (!params.has("browserMedia")) installFakeDevices(state?.devices);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("call-states.html has no #root element.");
