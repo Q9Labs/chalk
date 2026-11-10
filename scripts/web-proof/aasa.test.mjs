@@ -27,22 +27,33 @@ test("associates short codes without widening existing Space links", () => {
   }
 });
 
-test("keeps all existing web routes, docs and public files in the browser", () => {
+function generatedRoutes() {
   const tree = readFileSync(new URL("apps/web/src/routeTree.gen.ts", root), "utf8");
   const fullPaths = tree.split("export interface FileRoutesByFullPath {")[1]?.split("\n}")[0];
   assert.ok(fullPaths, "expected the generated route inventory");
-  const routes = [...fullPaths.matchAll(/'([^']+)':/g)].map((match) => match[1]);
-  assert.ok(routes.includes("/privacy"));
+  return [...fullPaths.matchAll(/'([^']+)':/g)].map((match) => match[1]);
+}
+
+function docRoutes() {
   const docs = readFileSync(new URL("apps/web/src/docs/manifest.ts", root), "utf8");
-  routes.push(...[...docs.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]));
-  for (const entry of readdirSync(new URL("apps/web/public/", root), { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const path = `/${entry.parentPath.split("/apps/web/public/")[1] ?? ""}/${entry.name}`.replace(/\/+/g, "/");
-    routes.push(path, path.replace(/\/index\.html$/, "/"));
-  }
-  for (const route of routes) {
-    // These are the two deliberately associated call routes, not browser pages.
-    if (route === "/$code" || route.startsWith("/space/")) continue;
+  return [...docs.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
+}
+
+function publicFileRoutes() {
+  return readdirSync(new URL("apps/web/public/", root), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => `/${entry.parentPath.split("/apps/web/public/")[1] ?? ""}/${entry.name}`.replace(/\/+/g, "/"))
+    .flatMap((path) => [path, path.replace(/\/index\.html$/, "/")]);
+}
+
+// These are the two deliberately associated call routes, not browser pages.
+const isCallRoute = (route) => route === "/$code" || route.startsWith("/space/");
+
+test("keeps all existing web routes, docs and public files in the browser", () => {
+  const routes = generatedRoutes();
+  assert.ok(routes.includes("/privacy"));
+  const browserRoutes = [...routes, ...docRoutes(), ...publicFileRoutes()].filter((route) => !isCallRoute(route));
+  for (const route of browserRoutes) {
     assert.equal(opensApp(route), false, route);
   }
 });
