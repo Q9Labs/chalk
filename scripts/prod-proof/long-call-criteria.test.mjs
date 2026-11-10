@@ -56,7 +56,13 @@ function healthyCall({ durationMs = callDurationMs, toggles = toggleSchedule() }
   const refreshes = participants.map((_, index) => guestWith(index, [grant(refreshIntervalMs), grant(2 * refreshIntervalMs)]));
   return { ticks, participants, refreshes, toggles, startedAtMs };
 }
-const judged = (call) => judgeLongCall(call).failures;
+/** What every other guest decoded after each microphone turn-on in a healthy call: a passing verdict for each listener. */
+const heardEveryUnmute = ({ toggles }) =>
+  toggles
+    .filter((toggle) => toggle.kind === "microphone" && toggle.enabled)
+    .map(({ guest, atMs }) => ({ speaker: guest, atMs, verdicts: participants.flatMap((_, listener) => (listener === guest ? [] : [{ listener: listener + 1, speaker: guest + 1, pass: true, peakDb: -25, bin: 38, floorDb: -90 }])) }));
+const judge = (call) => judgeLongCall({ hearings: heardEveryUnmute(call), ...call });
+const judged = (call) => judge(call).failures;
 const replacedMedia = (failure) => failure.includes("replaced its media connection");
 /** The failures that are not the SDK replacing a media connection, for tests of the grant arithmetic that a replacement moves. */
 const otherThanReplacement = (call) => judged(call).filter((failure) => !replacedMedia(failure));
@@ -88,7 +94,7 @@ test("the refresh boundaries follow the first credential expiry of the call", ()
 });
 
 test("a healthy call passes and prints one evidence line", () => {
-  const result = judgeLongCall(healthyCall());
+  const result = judge(healthyCall());
   assert.deepEqual(result.failures, []);
   assert.equal(evidenceLine(result.evidence), `Long call: 3 guests, ${callDurationMs / 1000}s, 2 access refreshes seen, ${toggleSchedule().length} mic/camera toggles, 0 failures`);
 });
@@ -246,7 +252,7 @@ test("a refresh shifted into the last 10 s is renewed and noted, but needs no to
   // A replacement at +115 s moves the refreshes to +355 s and +595 s.
   const renewals = [grant(115_000, { replace: true }), grant(355_000), grant(595_000)];
   const toggles = [...call.toggles, ...refreshToggles(355_000)].sort((a, b) => a.atMs - b.atMs);
-  const result = judgeLongCall({ ...call, refreshes: late(renewals).refreshes, toggles });
+  const result = judge({ ...call, refreshes: late(renewals).refreshes, toggles });
   assert.deepEqual(result.failures, ["Guest 2 replaced its media connection at +115s (retry, status 201) with no fault injected"]);
   assert.deepEqual(result.notes, ["The access refresh at +595s fell in the last 10 s of the call, so no toggle could follow it; it was not toggle-tested"]);
   // The same shift still fails when the +595 s renewal never came and the grant is overdue, or when a refresh before the last 10 s has no toggle.
@@ -309,4 +315,33 @@ test("a media-connection replacement fails the call because the proof injects no
   const refreshes = [call.refreshes[0], call.refreshes[1], guestWith(2, [grant(126_800, { replace: true }), grant(366_800), grant(606_800 - 1000)])];
   const failures = judged({ ...call, refreshes }).filter(replacedMedia);
   assert.deepEqual(failures, ["Guest 3 replaced its media connection at +127s (retry, status 201) with no fault injected"]);
+});
+
+test("a microphone that turned back on and was not decoded by another guest fails, though its bytes kept advancing", () => {
+  const call = healthyCall();
+  // Guest 3 is deaf to guest 2 after guest 2's turn-on at +36 s: the healthy samples keep every counter climbing, so only the decoded tone says so.
+  const toggle = call.toggles.find((entry) => entry.guest === 1 && entry.kind === "microphone" && entry.enabled);
+  const hearings = heardEveryUnmute(call).map((hearing) => (hearing.speaker === 1 && hearing.atMs === toggle.atMs ? { ...hearing, verdicts: hearing.verdicts.map((verdict) => (verdict.listener === 3 ? { ...verdict, pass: false, peakDb: -140, bin: 76, floorDb: -140 } : verdict)) } : hearing));
+  assert.deepEqual(judged({ ...call, hearings }), ["Guest 3 did not decode guest 2 within 5 s of its microphone turning back on (-140 dB at bin 76, floor -140 dB); turned back on at +36s"]);
+});
+
+test("every microphone turn-on must be checked at every other guest, by every guest that turns one on", () => {
+  const call = healthyCall();
+  const turnOns = call.toggles.filter((entry) => entry.kind === "microphone" && entry.enabled);
+  assert.deepEqual([...new Set(turnOns.map((entry) => entry.guest))], [0, 1], "guests 1 and 2 re-publish their microphone");
+  const all = heardEveryUnmute(call);
+  const unchecked = all.filter((hearing) => !(hearing.speaker === 1 && hearing.atMs === turnOns.find((entry) => entry.guest === 1).atMs));
+  assert.deepEqual(judged({ ...call, hearings: unchecked }), ["Guest 2's microphone turned back on at +36s was never checked for being heard"]);
+  const partial = all.map((hearing) => (hearing.speaker === 0 && hearing.atMs === turnOns[0].atMs ? { ...hearing, verdicts: hearing.verdicts.slice(1) } : hearing));
+  assert.deepEqual(judged({ ...call, hearings: partial }), ["Guest 1's microphone turned back on at +26s was checked at 1 of 2 other guests"]);
+  assert.deepEqual(judged({ ...call, hearings: all }), []);
+});
+
+test("a listener page that closed during the hearing check fails the call naming the listener", () => {
+  const call = healthyCall();
+  const toggle = call.toggles.find((entry) => entry.guest === 0 && entry.kind === "microphone" && entry.enabled);
+  const hearings = heardEveryUnmute(call).map((hearing) =>
+    hearing.speaker === 0 && hearing.atMs === toggle.atMs ? { ...hearing, verdicts: hearing.verdicts.map((verdict) => (verdict.listener === 2 ? { listener: 2, speaker: 1, pass: false, why: "the listener's page failed: Target page, context or browser has been closed" } : verdict)) } : hearing,
+  );
+  assert.deepEqual(judged({ ...call, hearings }), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (the listener's page failed: Target page, context or browser has been closed); turned back on at +26s"]);
 });

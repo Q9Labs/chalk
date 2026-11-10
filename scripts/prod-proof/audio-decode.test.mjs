@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeCriteria, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, toneHz } from "./audio-decode.mjs";
+import { decodeCriteria, hearAfterUnmute, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, toneHz, unheardAfterUnmute, unmuteHearMs } from "./audio-decode.mjs";
 
 const sampleRate = 48_000;
 const { fftSize } = decodeCriteria;
@@ -125,7 +125,7 @@ function fakeCall(tones, readingsOf, publishes = true) {
     pages: [0, 1].map((listener) => ({
       evaluate: async (script, argument) => {
         if (typeof script === "string") return undefined;
-        return "since" in argument ? readingsOf(listener, argument.speaker) : publishes;
+        return "since" in argument ? readingsOf(listener, argument.speaker, argument.since) : publishes;
       },
     })),
   };
@@ -176,4 +176,69 @@ test("a muted guest whose remote track is gone passes as removed; a track that s
     ),
     (error) => error.reason === "audio-not-silent",
   );
+});
+
+test("after a microphone turns back on, every other guest must decode it; the guest itself is not a listener", async () => {
+  const verdicts = await hearAfterUnmute(
+    fakeCall(true, () => toneFrames),
+    0,
+    { turnedOnAt: Date.now(), criteria: fixedCriteria, timeoutMs: 50 },
+  );
+  assert.deepEqual(
+    verdicts.map(({ listener, speaker, pass }) => [listener, speaker, pass]),
+    [[2, 1, true]],
+  );
+  assert.deepEqual(unheardAfterUnmute(0, verdicts), []);
+});
+
+test("a re-published microphone whose bytes advance but whose tone is not decoded at a listener fails and names it", async () => {
+  // The listener's receiver is dead: its inbound bytes keep climbing (the callers' byte checks pass) while the analyser reads digital silence.
+  const verdicts = await hearAfterUnmute(
+    fakeCall(true, () => silentFrames),
+    0,
+    { turnedOnAt: Date.now(), criteria: fixedCriteria, timeoutMs: 20 },
+  );
+  assert.equal(unmuteHearMs, 5000);
+  assert.deepEqual(unheardAfterUnmute(0, verdicts), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (-140 dB at bin 38, floor -140 dB)"]);
+  // A listener with no live remote track yet yields no frames at all: that fails too, with the reason.
+  const none = await hearAfterUnmute(
+    fakeCall(true, () => []),
+    0,
+    { turnedOnAt: Date.now(), criteria: fixedCriteria, timeoutMs: 20 },
+  );
+  assert.deepEqual(unheardAfterUnmute(0, none), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (no audio frames were analysed)"]);
+});
+
+// Frames as the page keeps them: each carries the time it was captured, and the page returns only those at or after `since`.
+const stamped = (from, count) => frames(count, (_, index) => ({ ...read(sine(440, 0.15)), at: from + index * 100 }));
+const keptSince = (rows) => (_listener, _speaker, since) => rows.filter((row) => row.at >= since);
+
+test("a tone heard before the mute and nothing after the unmute fails; the same tone captured after the unmute passes", async () => {
+  const turnedOnAt = Date.now();
+  // The real reading window (1.5 s). Fifteen tone frames from the 1.5 s before the unmute are enough to pass on their own if they are counted.
+  const criteria = { ...decodeCriteria, intervalMs: 100 };
+  const before = await hearAfterUnmute(fakeCall(true, keptSince(stamped(turnedOnAt - 1500, 15))), 0, { turnedOnAt, criteria, timeoutMs: 30 });
+  assert.deepEqual(unheardAfterUnmute(0, before), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (no audio frames were analysed)"]);
+  const after = await hearAfterUnmute(fakeCall(true, keptSince(stamped(turnedOnAt + 1, 15))), 0, { turnedOnAt, criteria, timeoutMs: 30 });
+  assert.deepEqual(unheardAfterUnmute(0, after), []);
+});
+
+test("the 5 s start when the microphone turned on, not when the check starts", async () => {
+  const silent = keptSince([]);
+  const late = Date.now();
+  await hearAfterUnmute(fakeCall(true, silent), 0, { turnedOnAt: late - 6000, criteria: fixedCriteria });
+  assert.ok(Date.now() - late < 1000, "the deadline had already passed, so one look settles it");
+  const started = Date.now();
+  await hearAfterUnmute(fakeCall(true, silent), 0, { turnedOnAt: started, criteria: fixedCriteria, timeoutMs: 80 });
+  assert.ok(Date.now() - started >= 80, "a check made on time keeps looking until the deadline");
+  await assert.rejects(hearAfterUnmute(fakeCall(true, silent), 0, {}), /needs turnedOnAt/);
+});
+
+test("a listener page that closes during the check is a failed pair that names the listener, not a rejection", async () => {
+  const call = fakeCall(true, () => toneFrames);
+  call.pages[1].evaluate = async () => {
+    throw new Error("Target page, context or browser has been closed\n  at ...");
+  };
+  const verdicts = await hearAfterUnmute(call, 0, { turnedOnAt: Date.now(), criteria: fixedCriteria, timeoutMs: 20 });
+  assert.deepEqual(unheardAfterUnmute(0, verdicts), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (the listener's page failed: Target page, context or browser has been closed)"]);
 });

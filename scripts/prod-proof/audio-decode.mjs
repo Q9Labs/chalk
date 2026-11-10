@@ -135,17 +135,26 @@ const windowMs = (criteria) => criteria.sustainFrames * criteria.intervalMs;
  * Polls one pair until `judge` passes or the timeout ends; the last verdict is returned either way, and it says what was measured.
  * @param {(readings: object[], page: object, speaker: string) => object|Promise<object>} judge
  */
-async function settle(guests, { listener, speaker }, judge, timeoutMs, criteria) {
+async function settle(guests, { listener, speaker }, judge, timeoutMs, criteria, turnedOnAt) {
   const page = guests.pages[listener];
   const id = guests.participants[speaker];
-  const deadline = Date.now() + timeoutMs;
+  // The deadline counts from the moment the caller acted, and a frame captured before it never counts: a tone heard before a mute is not a tone heard after the unmute.
+  const deadline = (turnedOnAt ?? Date.now()) + timeoutMs;
   let verdict;
   for (;;) {
-    verdict = await judge(await readingsOf(page, id, Date.now() - windowMs(criteria) - criteria.intervalMs * 5), page, id);
+    const since = Math.max(Date.now() - windowMs(criteria) - criteria.intervalMs * 5, turnedOnAt ?? 0);
+    try {
+      verdict = await judge(await readingsOf(page, id, since), page, id);
+    } catch (error) {
+      return lostListener({ listener, speaker }, error);
+    }
     if (verdict.pass || Date.now() >= deadline) return { listener: listener + 1, speaker: speaker + 1, ...verdict };
     await new Promise((resolve) => setTimeout(resolve, criteria.intervalMs * 2));
   }
 }
+
+/** A listener whose page closed or crashed mid-check is a failed pair that names the listener, not a rejection that escapes the caller. */
+const lostListener = ({ listener, speaker }, error) => ({ listener: listener + 1, speaker: speaker + 1, pass: false, why: `the listener's page failed: ${String(error?.message ?? error).split("\n")[0]}` });
 
 const describe = (verdicts) => verdicts.map((v) => `guest ${v.listener} hearing guest ${v.speaker}: ${v.why ?? `${v.peakDb} dB at bin ${v.bin}, floor ${v.floorDb} dB, ${v.sustainedFrames} sustained frames`}`).join("; ");
 
@@ -155,14 +164,50 @@ const describe = (verdicts) => verdicts.map((v) => `guest ${v.listener} hearing 
  * @returns the measured verdicts, which the caller saves as evidence
  */
 export async function proveAudioDecoded(guests, { members = allGuests(guests), pairs = pairsOf(members), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {
-  const hzOf = Object.fromEntries(guests.participants.map((id, speaker) => [id, guests.tones ? toneHz(speaker) : null]));
-  await Promise.all([...new Set(pairs.map((pair) => pair.listener))].map((listener) => startProbe(guests.pages[listener], hzOf, criteria)));
-  const judge = guests.tones ? judgeTone : judgeSpeech;
-  const verdicts = await Promise.all(pairs.map((pair) => settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria)));
+  const verdicts = await listen(guests, pairs, timeoutMs, criteria);
   const failed = verdicts.filter((verdict) => !verdict.pass);
   check(failed.length === 0, `Audio bytes advance but are not decoded as ${guests.tones ? "the published tone" : "speech"}: ${describe(failed)}`, "audio-not-decoded");
   return verdicts;
 }
+
+/** Starts the probes the pairs need and judges every pair; it returns the verdicts, failed or not. */
+async function listen(guests, pairs, timeoutMs, criteria, turnedOnAt) {
+  const hzOf = Object.fromEntries(guests.participants.map((id, speaker) => [id, guests.tones ? toneHz(speaker) : null]));
+  const unreachable = new Map();
+  await Promise.all(
+    [...new Set(pairs.map((pair) => pair.listener))].map((listener) =>
+      startProbe(guests.pages[listener], hzOf, criteria).catch((error) => {
+        unreachable.set(listener, error);
+      }),
+    ),
+  );
+  const judge = guests.tones ? judgeTone : judgeSpeech;
+  return Promise.all(pairs.map((pair) => (unreachable.has(pair.listener) ? lostListener(pair, unreachable.get(pair.listener)) : settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria, turnedOnAt))));
+}
+
+/** How long after a guest turned its microphone back on every other guest must decode it again. */
+export const unmuteHearMs = 5000;
+
+/**
+ * Guest `speaker` turned its microphone back on at `turnedOnAt` (epoch ms, taken before the click), which publishes it again: every other member
+ * must decode its tone (or speech) within unmuteHearMs of that moment, from frames captured after it, so a tone heard before the mute cannot
+ * pass. A listener page that fails mid-check is a failed pair, not a rejection. A re-published microphone can keep its bytes advancing while a listener's receiver is dead, so bytes do not
+ * count. It never throws, so a caller that runs other work meanwhile (the long call) records the verdicts; `unheardAfterUnmute` names the failures.
+ */
+export async function hearAfterUnmute(guests, speaker, { turnedOnAt, members = allGuests(guests), timeoutMs = unmuteHearMs, criteria = decodeCriteria }) {
+  if (!Number.isFinite(turnedOnAt)) throw new TypeError("hearAfterUnmute needs turnedOnAt, the epoch ms taken before the microphone was turned on");
+  return listen(
+    guests,
+    pairsOf(members).filter((pair) => pair.speaker === speaker),
+    timeoutMs,
+    criteria,
+    turnedOnAt,
+  );
+}
+
+/** One sentence for each listener that did not decode the re-published guest `speaker` (a guest index) in time. */
+export const unheardAfterUnmute = (speaker, verdicts) =>
+  verdicts.filter((verdict) => !verdict.pass).map((verdict) => `Guest ${verdict.listener} did not decode guest ${speaker + 1} within ${unmuteHearMs / 1000} s of its microphone turning back on (${verdict.why ?? `${verdict.peakDb} dB at bin ${verdict.bin}, floor ${verdict.floorDb} dB`})`);
 
 /** After guest `speaker` mutes, every other member hears silence from that guest. */
 export async function proveSilenceFrom(guests, speaker, { members = allGuests(guests), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {

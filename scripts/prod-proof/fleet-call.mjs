@@ -6,7 +6,7 @@ import { cpus, loadavg } from "node:os";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { launchGuests } from "./media.mjs";
-import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
+import { hearAfterUnmute, proveAudioDecoded, proveSilenceFrom, unheardAfterUnmute } from "./audio-decode.mjs";
 import { createSpace, episodeEnd } from "./proofs.mjs";
 import { captureReady } from "./call-artifacts.mjs";
 import { mediaPlane, save, waitFor } from "./runtime.mjs";
@@ -112,11 +112,16 @@ async function toggle(call, guest, source) {
   await setLocal(page(), source, false);
   call.state[call.participants[guest]][source] = false;
   await checkOff(call, guest, [source], `${source} off`);
+  const turnedOnAt = Date.now();
   await setLocal(page(), source, true);
   call.state[call.participants[guest]][source] = true;
   const ms = await advancesWithin(call, joinLimitMs);
   if (ms === null) call.add("action_failed", `${source} of guest ${guest + 1} did not render again within ${joinLimitMs / 1000} s after it was turned on`);
-  else if (source === "microphone") await checkAudio(call, "microphone back on");
+  else if (source === "microphone") {
+    // The re-publish must be decoded by every other guest soon after it is on, not only by the wider check below.
+    for (const failure of unheardAfterUnmute(guest, await hearAfterUnmute(call.guests, guest, { turnedOnAt }))) call.add("audio_not_decoded", failure);
+    await checkAudio(call, "microphone back on");
+  }
   call.record.actions.push({ kind: `${source}-toggle`, ms });
 }
 
