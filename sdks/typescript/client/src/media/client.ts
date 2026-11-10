@@ -79,10 +79,10 @@ const RECEIVER_RETIREMENT_ATTEMPTS = 3;
 const RECEIVER_RETIREMENT_LIMIT = 64;
 // The SFU rejects a close that names more tracks than this.
 const TRACKS_PER_REQUEST = 16;
-// Closed receivers stay in the session as inactive sections (see #closeReceivers), and cf_sfu may put a later pull on any of them,
-// so a stopped section is a lost one. 128 is the most subscriptions chalk_sfu allows a session (SFU_MAX_SUBSCRIPTIONS_PER_SESSION), so past
-// it the oldest are stopped to release their receivers. chalk_sfu never reuses a MID; its pion peer numbers each pull after the highest MID.
-const PARKED_RECEIVER_LIMIT = 128;
+// Closed receivers stay in the session as inactive sections (see #closeReceivers) and in every later offer, and the Chalk SFU rejects an offer
+// over 64 KiB. A parked audio section is about 1.1 KB in a Chromium offer, so 16 cost about 17 KB. The Chalk SFU never reuses a MID: its pion
+// peer numbers each pull after the highest MID, so a stopped section is never needed again. Past the limit the oldest are stopped.
+const PARKED_RECEIVER_LIMIT = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.

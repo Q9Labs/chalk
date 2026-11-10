@@ -101,9 +101,9 @@ it("bounds the sections it keeps for closed receivers when the SFU hands out a f
       expect(peer.liveRemoteTransceiverCount()).toBe(1);
       await refresh();
       expect(peer.liveRemoteTransceiverCount()).toBe(0);
-      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(128);
+      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16);
     }
-    expect(peer.retainedRemoteSectionCount()).toBe(128);
+    expect(peer.retainedRemoteSectionCount()).toBe(16);
   });
 });
 
@@ -585,7 +585,7 @@ it("retires the receiver a newer Sync-advertised publication of the same source 
         await vi.advanceTimersByTimeAsync(0);
         await vi.advanceTimersByTimeAsync(0);
         expect(peer.liveRemoteTransceiverCount()).toBe(1);
-        expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(128 + 1);
+        expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16 + 1);
       }
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
       expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(149);
