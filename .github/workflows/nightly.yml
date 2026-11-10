@@ -49,6 +49,11 @@ jobs:
           if [[ "$MANUAL" == true ]]; then args+=(--manual); fi
           python3 scripts/releases/release.py plan "${args[@]}"
   release:
+    permissions:
+      contents: write # The managed deploy takes the shared staging-SFU lease.
+      actions: read
+      deployments: write
+      id-token: write
     needs: plan
     if: needs.plan.outputs.should_cut == 'true'
     uses: ./.github/workflows/ci.yml
