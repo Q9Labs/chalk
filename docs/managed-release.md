@@ -106,10 +106,8 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 ## Promote
 
-Dispatch `Promote newest held nightly` from master with three required inputs:
-`expected_sha` (the held release revision you approve), `leave_baseline_median_ms` and
-`leave_baseline_evidence_sha256` (from the same-session Leave comparison in
-[prod-proof](../scripts/prod-proof/README.md)). `scorecard_override` is optional.
+Dispatch `Promote newest held nightly` from master with one required input,
+`expected_sha` (the held release revision you approve), and the optional `scorecard_override`. `capture_proofs` (default true) runs `call-artifacts`; set it false only when this deploy does not turn the capture flags on.
 Selection fails before deployment if the newest held release is not `expected_sha`.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
@@ -136,7 +134,6 @@ the released microphone and camera, and the removal of the participant and its m
 checked), `camera-share` and `call-artifacts` (the call, the Recording and the Transcript).
 The old `smoke` and `transcript` proofs and the Leave comparison with the published 5.2.6
 client need Cloudflare and no longer run in Promote; `pnpm prod:proof leave` still runs by hand.
-The two baseline inputs stay required and recorded, and nothing scores against them now.
 
 The proof reuses two Spaces of the production proof Tenant, found by slug
 (`promote-proof-chalk-sfu`, `promote-proof-chalk-sfu-automatic`). The `own-sfu-spaces` job

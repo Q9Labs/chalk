@@ -301,11 +301,6 @@ def select(github, args):
         require(info['target_sha'] == expected,
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
     audit = promotion_override(info)
-    if expected:
-        median = float(env('LEAVE_BASELINE_MEDIAN_MS'))
-        require(0 < median <= 5000, 'captured Leave baseline median must be positive and at most 5000 ms')
-        evidence = env('LEAVE_BASELINE_EVIDENCE_SHA256')
-        require(len(evidence) == 64 and all(char in '0123456789abcdef' for char in evidence), 'captured Leave evidence must be a SHA-256')
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
     if audit:
