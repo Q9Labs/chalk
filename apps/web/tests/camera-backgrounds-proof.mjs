@@ -65,12 +65,13 @@ try {
               for (let i = 0; i < pixels.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2]);
               return sum / (24 * 72 * 3);
             });
+            window.__lastDiff = differences;
             return differences.every((difference) => difference > 12) ? { pixels, differences } : false;
           },
           { background, references, localOnly },
         )
         .catch(async (error) => {
-          console.log("Processed background failure", background, await page.evaluate(() => ({ background: window.cameraBackgroundProof.backgroundState(), frames: window.cameraBackgroundProof.frames(), publication: window.cameraBackgroundProof.publication() })));
+          console.log("Processed background failure", background, await page.evaluate(() => ({ lastDiff: window.__lastDiff, background: window.cameraBackgroundProof.backgroundState(), frames: window.cameraBackgroundProof.frames(), publication: window.cameraBackgroundProof.publication() })));
           throw error;
         });
       const decoded = await frame.jsonValue();
