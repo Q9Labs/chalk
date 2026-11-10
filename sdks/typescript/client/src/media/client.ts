@@ -1488,9 +1488,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #updateTracks(tracks: readonly CloudflareSFUTrackRequest[]): Promise<CloudflareSFUTracksResponse> {
     const transport = this.#transport;
     const connectionId = this.#bootstrap.connectionId;
+    const owner = { generation: this.#generation, connectionId };
     const update = this.#trackUpdates.then(async () => {
       if (!transport?.updateTracks) throw new CloudflareSFUError("This media plane cannot update tracks in place", "signaling_failed");
-      return transport.updateTracks({ connectionId, tracks });
+      // A replacement issues a token for the new connection, so an update still addressed to the old one is refused (403) by the API.
+      // Owning the failure makes the error reporter drop it once the connection has changed; the new connection pulls the state afresh.
+      if (this.#bootstrap.connectionId !== connectionId) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+      const updateTracks = transport.updateTracks.bind(transport);
+      return this.#signal(() => updateTracks({ connectionId, tracks }), owner);
     });
     this.#trackUpdates = update.catch(() => undefined);
     return update;
