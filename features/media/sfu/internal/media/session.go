@@ -680,15 +680,13 @@ func (s *Session) park(sub *subscription) {
 	sub.mu.Lock()
 	sec.stream = sub.translator
 	sub.mu.Unlock()
-	// The next track's repairs continue the sequence, past any repair still being written when
-	// the subscription closed. The skip only follows a track that sent on the RTX stream: the
-	// transport counts the SRTP index of an SSRC from the packets it encrypts, so skips without
-	// packets in between would bring the sequence back to a number already used at the same index.
+	// The next track's repairs continue the sequence from the last number allocated. Nothing of the
+	// closed subscription is written after its detach (egressPacket.allowed), so no number is used
+	// twice, and the sequence moves only with allocations: a skip with no packet behind it would
+	// leave the transport's SRTP index of this SSRC behind the sequence and, after enough cycles,
+	// bring a number back that was already used.
 	if binding.rtxSSRC != 0 {
 		sec.rtxSeq = binding.rtxSeq.Load()
-		if sec.rtxSeq != sub.track.rtxSeqFrom {
-			sec.rtxSeq += rtxSeqMargin
-		}
 	}
 	s.mu.Lock()
 	closed := s.closed
@@ -700,10 +698,6 @@ func (s *Session) park(sub *subscription) {
 		_ = sec.sender.Stop()
 	}
 }
-
-// rtxSeqMargin is how far a parked section's RTX sequence skips ahead for repairs that were
-// being written when its subscription closed.
-const rtxSeqMargin = 64
 
 // layerRequestFor reads the layer policy of a pull or update. Without one the
 // subscriber gets the best active layer.

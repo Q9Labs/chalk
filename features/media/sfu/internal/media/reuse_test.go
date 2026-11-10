@@ -347,10 +347,11 @@ func TestAnUnansweredOfferClosesTheSessionWhenItsTimerFiresAtOnce(t *testing.T) 
 	}
 }
 
-// Quiet reuse cycles must not move a section's RTX sequence. The transport derives the SRTP index of
-// an SSRC from the packets it encrypts, so a sequence that skipped ahead on every park would wrap
-// back onto numbers already used at the same index.
-func TestQuietReuseCyclesKeepTheRepairSequence(t *testing.T) {
+// A section's RTX sequence moves only with the numbers the node allocates. The transport derives
+// the SRTP index of an SSRC from the packets it encrypts, so a park that skipped numbers (or
+// restarted them) would, after enough cycles, bring back a number already used at the same index.
+// The repairs here are allocated but never written, as when the repair budget cuts them.
+func TestReuseCyclesContinueTheRepairSequenceWithoutSkipping(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
@@ -371,17 +372,20 @@ func TestQuietReuseCyclesKeepTheRepairSequence(t *testing.T) {
 	binding.rtxSeq.Store(64) // 64 repairs were sent
 	forceClose(t, subscriber, mid)
 
+	const cycles = 20
 	var track *egressTrack
-	for cycle := range 20 {
+	for cycle := range cycles {
 		again, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
 		if again != mid {
 			t.Fatalf("cycle %d: the camera got mid %s, want %s", cycle, again, mid)
 		}
-		track, _ = bindingOf(mid)
+		var current *egressBinding
+		track, current = bindingOf(mid)
+		current.rtxSeq.Add(1) // one repair allocated and cut before it was written
 		forceClose(t, subscriber, mid)
 	}
-	if want := uint32(64 + rtxSeqMargin); track.rtxSeqFrom != want {
-		t.Fatalf("after 20 quiet cycles the repair sequence starts at %d, want %d: it moved without a packet", track.rtxSeqFrom, want)
+	if want := uint32(64 + cycles - 1); track.rtxSeqFrom != want {
+		t.Fatalf("after %d cycles the repair sequence starts at %d, want %d: it must move only by allocations", cycles, track.rtxSeqFrom, want)
 	}
 }
 
