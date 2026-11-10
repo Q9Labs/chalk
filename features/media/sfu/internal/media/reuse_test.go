@@ -346,3 +346,63 @@ func TestAnUnansweredOfferClosesTheSessionWhenItsTimerFiresAtOnce(t *testing.T) 
 		}
 	}
 }
+
+// Quiet reuse cycles must not move a section's RTX sequence. The transport derives the SRTP index of
+// an SSRC from the packets it encrypts, so a sequence that skipped ahead on every park would wrap
+// back onto numbers already used at the same index.
+func TestQuietReuseCyclesKeepTheRepairSequence(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+
+	bindingOf := func(mid string) (*egressTrack, *egressBinding) {
+		subscriber.mu.Lock()
+		defer subscriber.mu.Unlock()
+		track := subscriber.subscribed[mid].track
+		return track, track.binding.Load()
+	}
+	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	_, binding := bindingOf(mid)
+	if binding == nil || binding.rtxSSRC == 0 {
+		t.Fatalf("the camera binding %+v has no RTX stream", binding)
+	}
+	binding.rtxSeq.Store(64) // 64 repairs were sent
+	forceClose(t, subscriber, mid)
+
+	var track *egressTrack
+	for cycle := range 20 {
+		again, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+		if again != mid {
+			t.Fatalf("cycle %d: the camera got mid %s, want %s", cycle, again, mid)
+		}
+		track, _ = bindingOf(mid)
+		forceClose(t, subscriber, mid)
+	}
+	if want := uint32(64 + rtxSeqMargin); track.rtxSeqFrom != want {
+		t.Fatalf("after 20 quiet cycles the repair sequence starts at %d, want %d: it moved without a packet", track.rtxSeqFrom, want)
+	}
+}
+
+// A pull that took a parked section while the session closed must not leave the section's sender on
+// the closed connection.
+func TestAttachingAParkedSectionToAClosedSessionFails(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
+	forceClose(t, subscriber, mid)
+	parked := subscriber.freeSection(webrtc.RTPCodecTypeAudio)
+	if parked == nil {
+		t.Fatal("the closed microphone section is not parked")
+	}
+
+	subscriber.Close()
+	pub := publisher.publication("mic")
+	if _, err := subscriber.attach(newEgressTrack(pub, subscriber.transport), parked); !errors.Is(err, ErrSessionGone) {
+		t.Fatalf("attach on a closed session returned %v, want ErrSessionGone", err)
+	}
+}

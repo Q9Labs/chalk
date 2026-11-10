@@ -488,6 +488,16 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 	if len(added) == 0 {
 		return response, nil
 	}
+	// A pull that fails before it commits its subscriptions must still end them: they hold a
+	// capture's lease and a publisher's fan-out slot, and Close only knows the committed ones.
+	committed := false
+	defer func() {
+		if !committed {
+			for _, subscription := range added {
+				subscription.detach()
+			}
+		}
+	}()
 
 	offer, err := s.pc.CreateOffer(nil)
 	if err == nil {
@@ -519,6 +529,7 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 	pending := &pendingOffer{}
 	pending.timer = time.AfterFunc(timeout, func() { s.offerExpired(pending) })
 	s.pending = pending
+	committed = true
 	s.mu.Unlock()
 
 	for _, subscription := range added {
@@ -601,12 +612,21 @@ func (s *Session) attach(egress *egressTrack, parked *section) (*section, error)
 		return newSection(transceiver), nil
 	}
 	s.mu.Lock()
+	closed := s.closed
 	s.free = slices.DeleteFunc(s.free, func(sec *section) bool { return sec == parked })
 	s.mu.Unlock()
+	if closed {
+		return nil, ErrSessionGone
+	}
 	egress.rtxSeqFrom = parked.rtxSeq
 	if err := parked.transceiver.SetSender(parked.sender, egress); err != nil {
 		_ = parked.transceiver.Stop()
 		return nil, fmt.Errorf("send on mid %q: %w", parked.transceiver.Mid(), err)
+	}
+	// A Close between the check above and SetSender no longer finds the section in s.free.
+	if s.isClosed() {
+		_ = parked.sender.Stop()
+		return nil, ErrSessionGone
 	}
 	return parked, nil
 }
@@ -660,8 +680,16 @@ func (s *Session) park(sub *subscription) {
 	sub.mu.Lock()
 	sec.stream = sub.translator
 	sub.mu.Unlock()
-	// In-flight repairs may still count on the old binding, so the next stream starts past them.
-	sec.rtxSeq = binding.rtxSeq.Load() + rtxSeqMargin
+	// The next track's repairs continue the sequence, past any repair still being written when
+	// the subscription closed. The skip only follows a track that sent on the RTX stream: the
+	// transport counts the SRTP index of an SSRC from the packets it encrypts, so skips without
+	// packets in between would bring the sequence back to a number already used at the same index.
+	if binding.rtxSSRC != 0 {
+		sec.rtxSeq = binding.rtxSeq.Load()
+		if sec.rtxSeq != sub.track.rtxSeqFrom {
+			sec.rtxSeq += rtxSeqMargin
+		}
+	}
 	s.mu.Lock()
 	closed := s.closed
 	if !closed {
