@@ -92,6 +92,8 @@ export type ConnectionMediaClient = ClientMediaPlane & {
 export type ConnectionMediaFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
+  /** A fresh grant for the current media connection (no replacement); resolves to its media token. */
+  readonly refreshCredential?: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
