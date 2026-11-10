@@ -120,6 +120,8 @@ The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
+The nightly proof step runs every proof in its list even when one fails, and the held cut prints each proof's result
+(`passed`, `failed` or `not-run`); a lease failure stops it, since the next proof would wait for the lease again.
 The cut is held by the `chalk_sfu` real-call proof (recorded as `real_call_proof_result`)
 and the web-call proof on `chalk_sfu` (`web_e2e_result`). Nightly also records `own_sfu_proof_result`
 (`passed`, `failed` or `skipped`), the proof together with the latency run,

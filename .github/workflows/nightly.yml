@@ -122,6 +122,7 @@ jobs:
           # The gate is the chalk_sfu proof job; a lease timeout is named in PROOF_FAILURE.
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           PROOF_FAILURE: ${{ needs.proof.outputs.failure }}
+          PROOF_RESULTS: ${{ needs.proof.outputs.results }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
           # Promote reads the proof and the latency run together: a failed latency measurement intentionally blocks promotion, never the cut.
           OWN_SFU_RESULT: ${{ needs.latency.result == 'skipped' && 'skipped' || needs.latency.result == 'success' && needs.latency.outputs.result == 'passed' && needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
@@ -129,7 +130,8 @@ jobs:
         run: |
           python3 scripts/releases/release.py record
           if [ "$DEPLOY_RESULT" = success ] && [ "$PROOF_RESULT" != passed ]; then
-            echo "::error title=Nightly gate failed: chalk_sfu proof::The chalk_sfu proof did not pass (${PROOF_FAILURE:-proof-failed}), so this cut is held."
+            echo "::error title=Nightly gate failed: chalk_sfu proof::The chalk_sfu proof did not pass (${PROOF_FAILURE:-proof-failed}), so this cut is held. Results: ${PROOF_RESULTS:-none recorded}"
+            echo "Proof results: ${PROOF_RESULTS:-none recorded}" >> "$GITHUB_STEP_SUMMARY"
           fi
           test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed
   github-release:
