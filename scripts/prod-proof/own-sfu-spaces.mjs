@@ -5,7 +5,7 @@ import { check, ProofError } from "./runtime.mjs";
 // release lets the public API set it on an allowlisted Space, and a plane stored that way survives the
 // upgrade. They are found by slug, so no Space ID lives in a variable or a log.
 export const manualPolicy = { recording: "manual", transcription: "on_demand" };
-export const automaticPolicy = { recording: "automatic", transcription: "automatic" };
+const automaticPolicy = { recording: "automatic", transcription: "automatic" };
 export const ownSfuSpaces = {
   manual: { slug: "promote-proof-chalk-sfu", policy: manualPolicy },
   automatic: { slug: "promote-proof-chalk-sfu-automatic", policy: automaticPolicy },
@@ -20,7 +20,7 @@ export function ownSfuSpaceKind(policy) {
   return undefined;
 }
 
-export async function findSpaceBySlug(apiRequest, tenantPath, slug) {
+async function findSpaceBySlug(apiRequest, tenantPath, slug) {
   let cursor = "";
   do {
     const query = new URLSearchParams({ page_size: "100", cursor });
@@ -38,7 +38,7 @@ function checkPolicy(space, { slug, policy }) {
 }
 
 // The Space an operator pinned for this kind (CHALK_PROOF_SPACE_ID_CHALK_SFU, or the _AUTOMATIC one), if any.
-export const pinVariable = (kind) => (kind === "manual" ? "CHALK_PROOF_SPACE_ID_CHALK_SFU" : "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC");
+const pinVariable = (kind) => (kind === "manual" ? "CHALK_PROOF_SPACE_ID_CHALK_SFU" : "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC");
 
 // The one Space this run proves on for `kind`: the pinned one when an operator pinned it, otherwise the one with the
 // fixed slug. The ensure step and the proof both resolve it here, so the proof runs on the Space the step checked.

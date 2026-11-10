@@ -195,7 +195,7 @@ async function forceSwitch(run, pages, sample, receiveBefore) {
   console.log("Sender bandwidth restored; layer-switch evidence collected");
   return failure;
 }
-export function checkShareProgress(before, after) {
+function checkShareProgress(before, after) {
   const screens = after.filter((row) => row.source === "screen");
   const advancing = screens.some((row) => before.some((previous) => previous.id === row.id && previous.connection === row.connection && row.framesDecoded - previous.framesDecoded >= 2));
   check(advancing, "Screen-share decoding stalled during a ten-second observation window");

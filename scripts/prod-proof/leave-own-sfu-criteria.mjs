@@ -1,5 +1,5 @@
 // What one guest's Leave must leave behind on the own SFU, judged from what the pages and the API reported.
-export const leaveCeilingMs = 5000;
+const leaveCeilingMs = 5000;
 export const releaseCeilingMs = 10_000;
 
 export function evaluateOwnSfuLeave(sample) {

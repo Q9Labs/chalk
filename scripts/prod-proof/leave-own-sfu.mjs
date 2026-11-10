@@ -5,7 +5,7 @@ import { createSpace, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
 
 // Collect every track the page captures, clones included, so the proof can see whether Leave released them.
-export function installCaptureTracking() {
+function installCaptureTracking() {
   const tracks = (window.proofCaptured = []);
   const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = async (constraints) => {
