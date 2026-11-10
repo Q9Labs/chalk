@@ -99,6 +99,11 @@ defmodule ChalkSync.ProtocolV1 do
         do: Map.put(frame, "media_off_reason", true),
         else: frame
 
+    frame =
+      if Map.get(options, :connection_quality, false),
+        do: Map.put(frame, "connection_quality", true),
+        else: frame
+
     frame |> maybe_entry_generation(identity, options) |> encode!()
   end
 
