@@ -1,6 +1,6 @@
 import { ChalkButton, ChalkSheet, usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { Loading01Icon } from "@q9labsai/chalk-react/utils";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
 import { PreviewTile } from "./PreviewTile";
@@ -61,6 +61,14 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const reason: AccessReason | null = dismissed || joining ? null : access === "blocked" ? "blocked" : access === "ask" || access === "requesting" ? "ask" : null;
   const named = displayName.trim() !== "";
   const ready = named && !joining && access !== "checking" && access !== "requesting";
+  // Join is disabled while the browser's permission is read, so it takes focus the first time it can: Enter then joins.
+  const joinButton = useRef<HTMLButtonElement>(null);
+  const focusedJoin = useRef(false);
+  useEffect(() => {
+    if (!ready || focusedJoin.current || document.activeElement !== document.body) return;
+    focusedJoin.current = true;
+    joinButton.current?.focus();
+  }, [ready]);
   const askAgain = () => setDismissed(false);
   const toggle = (device: "microphone" | "camera") => {
     if (access !== "granted") return askAgain();
@@ -97,7 +105,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         className="h-12 w-full rounded-[var(--corner-xl)] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) text-[var(--chalk-app-text)] outline-none read-only:text-[var(--chalk-muted-text)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
       />
       <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pb-[max(env(safe-area-inset-bottom),var(--space-6))] pt-3" : "grid gap-2"}>
-        <ChalkButton type="submit" variant="solid" autoFocus={named} className="mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
+        <ChalkButton ref={joinButton} type="submit" variant="solid" className="mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
               <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
