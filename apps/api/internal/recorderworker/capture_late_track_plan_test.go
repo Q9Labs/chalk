@@ -272,3 +272,32 @@ func TestEarlyCaptureTrackFirstPacketKeepsItsReadTime(t *testing.T) {
 		}
 	}
 }
+
+type captureBoundAtTrack struct {
+	*capturePlanWatchTrack
+	boundAt time.Time
+}
+
+func (t captureBoundAtTrack) BoundAt() time.Time { return t.boundAt }
+
+func TestCaptureAnchorsNeverPrecedeTheAttemptStart(t *testing.T) {
+	start := time.UnixMilli(10_000).UTC()
+	writer, _ := newCaptureTestWriter(t, start)
+	mid := "1"
+	track := func(boundAt time.Time) CaptureMediaTrack {
+		return captureBoundAtTrack{newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, mid, "late")), boundAt}
+	}
+	late := &lateTrackWatch{watching: map[string]*lateTrackEntry{"2": {}}}
+
+	before := bindAnchors(writer, late, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
+	if got := before[mid]; !got.Equal(start) {
+		t.Fatalf("anchor for a track bound before the attempt = %s, want the attempt start %s", got, start)
+	}
+	after := bindAnchors(writer, late, map[string]CaptureMediaTrack{mid: track(start.Add(3 * time.Second))}, nil)
+	if got := after[mid]; !got.Equal(start.Add(3 * time.Second)) {
+		t.Fatalf("anchor for a track bound after the attempt start = %s, want its bind time", got)
+	}
+	if got := bindAnchors(writer, &lateTrackWatch{}, map[string]CaptureMediaTrack{mid: track(start)}, nil); got != nil {
+		t.Fatalf("anchors with nothing silent = %v, want none", got)
+	}
+}

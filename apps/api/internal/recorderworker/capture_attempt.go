@@ -580,18 +580,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
-	// While a planned track is still silent, the bind waited before any reader
-	// started. Every reader then stamps its first packet with the time the peer
-	// bound its track, so initial and late tracks share one clock basis.
-	var firstPacketAt map[string]time.Time
-	if len(late.watching) > 0 {
-		firstPacketAt = make(map[string]time.Time, len(readers))
-		for mid, track := range readers {
-			if bound, ok := track.(interface{ BoundAt() time.Time }); ok {
-				firstPacketAt[mid] = bound.BoundAt()
-			}
-		}
-	}
+	firstPacketAt := bindAnchors(writer, late, readers, nil)
 	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt)
 	if startErr != nil {
 		return finish(startErr, writer)
@@ -611,7 +600,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 		}
 		mid := string(bound.MID())
 		next[mid] = bound
-		if err := a.applyBoundTracks(runCtx, writer, plan, next, readers, readerCancels, events, map[string]time.Time{mid: boundAt}); err != nil {
+		if err := a.applyBoundTracks(runCtx, writer, plan, next, readers, readerCancels, events, map[string]time.Time{mid: writer.clampAnchor(boundAt)}); err != nil {
 			return err
 		}
 		readers = next
@@ -690,7 +679,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel(nil)
 				return a.finishSuccess(writer)
 			}
-			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, nil); err != nil {
+			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, late, updatedReaders, readers)); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
@@ -854,6 +843,27 @@ func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []capturepla
 		return nil, nil, firstMiss
 	}
 	return bound, missing, nil
+}
+
+// bindAnchors returns the first-packet time for each track that is new in next
+// while a planned track is still silent. The bind then waited before any reader
+// started, so a reader's first read can be seconds after the track's first
+// packet. Stamping with the bind time keeps all of these tracks on one clock
+// basis. With nothing silent the readers are unchanged.
+func bindAnchors(writer *captureBundleWriter, late *lateTrackWatch, next, previous map[string]CaptureMediaTrack) map[string]time.Time {
+	if len(late.watching) == 0 {
+		return nil
+	}
+	anchors := make(map[string]time.Time, len(next))
+	for mid, track := range next {
+		if before, ok := previous[mid]; ok && sameCaptureBinding(before, track) {
+			continue
+		}
+		if bound, ok := track.(interface{ BoundAt() time.Time }); ok {
+			anchors[mid] = writer.clampAnchor(bound.BoundAt())
+		}
+	}
+	return anchors
 }
 
 // lateTrackWatch waits for planned MIDs that sent no RTP when the attempt bound
@@ -1655,6 +1665,7 @@ type captureBundleWriter struct {
 	hasLayout      bool
 	clocks         map[string]*captureTrackClock
 	lastMono       int64
+	startedAt      time.Time
 	lastMedia      int64
 	terminalGap    bool
 }
@@ -1670,7 +1681,7 @@ type pendingCaptureObject struct {
 }
 
 func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
-	writer := &captureBundleWriter{attempt: attempt, active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
+	writer := &captureBundleWriter{attempt: attempt, startedAt: attempt.config.Now().UTC(), active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
 	if attempt.authority.CaptureReadyAt != nil {
 		writer.origin = attempt.authority.CaptureReadyAt.UTC()
 		// A replacement epoch has no authoritative prior bundle end in its
@@ -1681,6 +1692,16 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 		writer.lastMedia = recoveryStart
 	}
 	return writer
+}
+
+// clampAnchor keeps a first-packet time inside this attempt: a replacement
+// attempt starts its clock at its own recovery boundary, and the interval before
+// it belongs to the recovery gap.
+func (w *captureBundleWriter) clampAnchor(at time.Time) time.Time {
+	if at.Before(w.startedAt) {
+		return w.startedAt
+	}
+	return at
 }
 
 func (w *captureBundleWriter) setOrigin(origin time.Time) {
