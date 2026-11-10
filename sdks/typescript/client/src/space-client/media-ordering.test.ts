@@ -57,7 +57,7 @@ describe("independent r7 ordering", () => {
       return mediaStream(track);
     });
     const command = vi.fn<ConnectionSyncClient["setMicrophoneEnabled"]>(async () => receipt);
-    const client = capturedClient(platform, track, { mediaDevices: { getUserMedia: capture, getDisplayMedia: capture }, sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command } });
+    const client = capturedClient(platform, track, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: capture }, sync: { setMicrophoneEnabled: command, setCameraEnabled: command, setScreenShareEnabled: command } });
     const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : source === "camera" ? client.media.setCameraEnabled : client.media.setScreenShareEnabled;
     try {
       await client.join({ microphone: false, camera: false });
@@ -138,7 +138,7 @@ describe("independent r7 ordering", () => {
       if (enabled) platform.media.emit({ ...platform.media.getSnapshot(), localTracks: [{ source: "screen", enabled, publicationId: `publication-${generation}`, track: currentTrack }] });
       return receipt;
     });
-    const client = capturedClient(platform, mediaTrack(), { mediaDevices: { getDisplayMedia: capture }, media: { clearPreparedLocalTrack: clear }, sync: { setScreenShareEnabled: command } });
+    const client = capturedClient(platform, mediaTrack(), { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getDisplayMedia: capture }, media: { clearPreparedLocalTrack: clear }, sync: { setScreenShareEnabled: command } });
     try {
       await client.join({ microphone: false, camera: false });
       await client.media.setScreenShareEnabled(true);
@@ -185,7 +185,7 @@ describe("independent r7 ordering", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia: capture },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture },
           createMediaClient: (input) => {
             const media = platform.dependencies.createMediaClient(input);
             return {

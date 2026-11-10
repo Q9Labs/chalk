@@ -608,7 +608,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           yield* Effect.sync(() => {
             for (const { track } of model.media?.getSnapshot().localTracks ?? []) {
               track.enabled = false;
-              track.stop();
+              platform.mediaDevices.releaseTrack(track);
             }
           });
           yield* transition("leaving");

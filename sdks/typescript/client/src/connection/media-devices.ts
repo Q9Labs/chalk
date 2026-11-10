@@ -23,6 +23,7 @@ export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined
       if (!mediaDevices?.enumerateDevices) return [];
       return mediaDevices.enumerateDevices();
     },
+    releaseTrack: (track) => track.stop(),
   };
 }
 

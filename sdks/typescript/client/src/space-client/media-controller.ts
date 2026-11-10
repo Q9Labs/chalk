@@ -17,6 +17,8 @@ import { MediaProjectionMonitor } from "./media-projection-monitor";
 import type { IncomingMediaRequest, CameraPreview, MediaSlice, RemoteMedia, ScreenShareOptions } from "./types";
 const MEDIA_SOURCES = ["microphone", "camera", "screen"] as const;
 const MEDIA_READY_TIMEOUT_MS = 10000;
+/** How long a muted microphone or camera stays open for a quick unmute before its track is released. */
+const IDLE_RELEASE_MS = 30_000;
 const OFF_RETRY_INITIAL_MS = 1000;
 const OFF_RETRY_MAX_MS = 30000;
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
@@ -163,6 +165,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #now: () => number;
   readonly #fork: Fork;
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
+  readonly #idleReleases = new Map<"microphone" | "camera", unknown>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
   #disposed = false;
@@ -334,6 +337,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   }
   dispose(): void {
     this.#disposed = true;
+    this.#cancelIdleReleases();
     this.#cancelOffRetries();
     this.#cancelInitialOnRetries();
     for (const source of MEDIA_SOURCES) this.#sources[source].offDebt = "none";
@@ -417,6 +421,41 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #stopScreen(): ClientEffect<void> {
     return this.#act("screen", false);
   }
+  /**
+   * A muted track stays open for a quick unmute, but a disabled track still holds the capture device. After
+   * `IDLE_RELEASE_MS` the track is released so the OS indicator goes off. The next unmute captures a fresh track,
+   * because `#retireEndedMicrophone` and the camera's ended state never hand an ended track back to the media client.
+   */
+  #scheduleIdleRelease(source: "microphone" | "camera"): void {
+    this.#cancelIdleRelease(source);
+    this.#idleReleases.set(
+      source,
+      this.#connection.scheduleUnsafe(() => {
+        this.#idleReleases.delete(source);
+        this.#releaseIdle(source);
+      }, IDLE_RELEASE_MS),
+    );
+  }
+  #cancelIdleRelease(source: "microphone" | "camera"): void {
+    if (!this.#idleReleases.has(source)) return;
+    this.#connection.cancelScheduleUnsafe(this.#idleReleases.get(source));
+    this.#idleReleases.delete(source);
+  }
+  #cancelIdleReleases(): void {
+    this.#cancelIdleRelease("microphone");
+    this.#cancelIdleRelease("camera");
+  }
+  #releaseIdle(source: "microphone" | "camera"): void {
+    if (this.#disposed || this.#sources[source].desired.enabled || this.#sources[source].localEnabled) return;
+    const camera = this.#camera;
+    if (source === "camera" && "owner" in camera && camera.owner.references > 0) return this.#scheduleIdleRelease(source);
+    const tracks = new Set<MediaStreamTrack>();
+    const own = source === "camera" ? (camera.status === "live" ? camera.track : undefined) : this.#tracks.get(source);
+    if (own) tracks.add(own);
+    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) tracks.add(publication.track);
+    for (const track of tracks) this.#selection.releaseTrack(track);
+    if (source === "camera") this.#discardEndedCamera();
+  }
   #pauseTracks(source: MediaSource): void {
     const track = this.#track(source);
     if (track) track.enabled = false;
@@ -438,9 +477,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const desired = { enabled, revision: state.desired.revision + 1, controlRevision, options, previousEnabled: state.localEnabled };
     state.desired = desired;
     state.capturePause = "none";
+    if (source !== "screen") this.#cancelIdleRelease(source);
     if (!enabled) {
       state.localEnabled = false;
       this.#pauseTracks(source);
+      if (source !== "screen") this.#scheduleIdleRelease(source);
       if (source === "screen") {
         this.#track("screen")?.stop();
         this.#screenAudioTrack?.stop();

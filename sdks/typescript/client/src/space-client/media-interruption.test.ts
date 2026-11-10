@@ -35,7 +35,7 @@ it.each(["capture", "command"] as const)("can unmute after Sync ports are replac
       ...original,
       dependencies: {
         ...original.dependencies,
-        mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] },
+        mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, enumerateDevices: async () => [] },
         createSyncClient: () => ({ ...(++clients === 1 ? original.sync : replacement.sync), setMicrophoneEnabled: command }),
       },
     },
@@ -99,7 +99,7 @@ it.each(["leave", "supersede", "dispose"] as const)("classifies a pending captur
             { space: "test-space", getAccess: async () => opaqueAccessGrant("test") },
             {
               ...platform,
-              dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] } },
+              dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, enumerateDevices: async () => [] } },
             },
           ),
         ),

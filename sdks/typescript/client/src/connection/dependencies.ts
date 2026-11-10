@@ -29,6 +29,11 @@ export type ConnectionMediaDevices = {
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**
+   * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls
+   * `release()`, because `stop()` there only marks the track ended and the native capture stays open.
+   */
+  readonly releaseTrack: (track: MediaStreamTrack) => void;
+  /**
    * An application-provided output sink selector. Browser capture APIs have no
    * global speaker switch, so an application that renders remote audio supplies the
    * element-specific implementation here.

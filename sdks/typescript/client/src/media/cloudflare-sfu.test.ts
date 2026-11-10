@@ -5888,7 +5888,7 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
           foreground = listener;
           return () => {};
         },
-        mediaDevices: { getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: enumerate },
+        mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: enumerate },
         getEpisodeStatus: status,
         createMediaClient: (input) => {
           failure = input.onFailure;

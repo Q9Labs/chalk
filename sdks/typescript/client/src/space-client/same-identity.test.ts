@@ -30,7 +30,7 @@ it.each([true, false].flatMap((enabled) => [true, false].map((pending) => ({ ena
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
   );
   try {
     await client.join({ microphone: true, camera: false });
@@ -53,7 +53,10 @@ it("stops a microphone muted while admission is pending before handing tracks to
     return opaqueAccessGrant("test");
   });
   const start = vi.fn(async (_stream: MediaStream) => undefined);
-  const client = createSpaceClientForPlatform({ space: "space-1", getAccess }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } });
+  const client = createSpaceClientForPlatform(
+    { space: "space-1", getAccess },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+  );
   try {
     const joining = client.join({ microphone: true, camera: false });
     await vi.waitFor(() => expect(getAccess).toHaveBeenCalled());
@@ -164,7 +167,7 @@ it("starts muted when a known sibling is still sending after disappearing from p
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
   );
   try {
     const joining = client.join({ microphone: true, camera: false });
