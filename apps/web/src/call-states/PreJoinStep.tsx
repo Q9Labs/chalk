@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { PreJoin } from "../components/space/pre-join/PreJoin";
 import { SPACE_NAME } from "./fixtures";
+import { installPreJoinDevices, type FakeDeviceSetup } from "./pre-join-devices";
 
-export default function PreJoinStep({ theme, joining }: { readonly theme: "light" | "dark"; readonly joining: boolean }) {
+export default function PreJoinStep({ theme, devices, joining }: { readonly theme: "light" | "dark"; readonly devices: FakeDeviceSetup; readonly joining: boolean }) {
+  // The fake browser must be in place before the step asks for the camera.
+  useState(() => installPreJoinDevices(devices));
   const [name, setName] = useState("Hasan Shoaib");
   return (
     <main data-chalk data-chalk-theme={theme} className="h-dvh">

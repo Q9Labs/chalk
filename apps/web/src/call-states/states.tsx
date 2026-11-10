@@ -13,7 +13,6 @@ import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
-import type { FakeDeviceSetup } from "./pre-join-devices";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -25,8 +24,7 @@ export type CallStateMeta = {
   readonly actions?: readonly Action[];
   /** The capture script holds back the board's stylesheet, so the board stays on its loading screen. */
   readonly stallBoard?: boolean;
-  /** The browser this state runs in: its camera permission, microphones and whether the visitor is talking. */
-  readonly devices?: FakeDeviceSetup;
+  readonly cameraBlocked?: boolean;
 };
 
 export type CallState = CallStateMeta & { readonly render: () => ReactNode };

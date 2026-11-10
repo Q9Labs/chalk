@@ -15,23 +15,12 @@ window.__CALL_STATES__ = CALL_STATES.map(({ render: _render, ...meta }) => meta)
 const params = new URLSearchParams(location.search);
 const id = params.get("state");
 const state = CALL_STATES.find((candidate) => candidate.id === id);
-const browserMedia = params.has("browserMedia");
-if (!browserMedia) installFakeDevices({ blocked: false });
+if (!params.has("browserMedia")) installFakeDevices({ blocked: state?.cameraBlocked === true });
 
 const root = document.getElementById("root");
 if (!root) throw new Error("call-states.html has no #root element.");
 // No StrictMode: its doubled effects in development change what the board shows while it loads.
-const render = () => createRoot(root).render(state ? state.render() : <StateIndex />);
-// The device setup of the pre-join states loads on demand, so the other states do not download it.
-if (state?.devices && !browserMedia) {
-  const { devices } = state;
-  void import("./pre-join-devices").then((module) => {
-    module.installPreJoinDevices(devices);
-    render();
-  });
-} else {
-  render();
-}
+createRoot(root).render(state ? state.render() : <StateIndex />);
 
 function StateIndex() {
   return (

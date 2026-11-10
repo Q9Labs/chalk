@@ -19,11 +19,10 @@ export const PRE_JOIN_STATES: readonly CallState[] = PRE_JOIN_SCENES.flatMap(({ 
   (["dark", "light"] as const).map((theme) => ({
     id: `prejoin-${id}${theme === "light" ? "-light" : ""}`,
     title: `${title}${theme === "light" ? ", light" : ""}`,
-    devices,
     actions,
     render: () => (
       <Suspense fallback={null}>
-        <PreJoinStep theme={theme} joining={joining === true} />
+        <PreJoinStep theme={theme} devices={devices} joining={joining === true} />
       </Suspense>
     ),
   })),
