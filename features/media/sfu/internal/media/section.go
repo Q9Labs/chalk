@@ -21,11 +21,14 @@ type section struct {
 	// reading is set once the section's RTCP reader runs. The reader serves the section's
 	// sender for its life, whichever subscription is current.
 	reading atomic.Bool
-	// stream and rtxSeq are where the last subscription left the outgoing stream. The next one
-	// continues it, so the subscriber's SRTP replay window and decoder see one stream. They are
-	// written before the section is parked and read after it is taken, under the session's mu.
+	// stream is where the last subscription left the outgoing stream. The next one continues it,
+	// so the subscriber's SRTP replay window and decoder see one stream. It is written before the
+	// section is parked and read after it is taken, under the session's mu.
 	stream translator
-	rtxSeq uint32
+	// rtx numbers the section's RTX stream. Every subscription's binding on the section draws from
+	// this one counter, so a writer of an earlier subscription that is still running (a bandwidth
+	// probe, a repair in flight) takes a number no later binding takes, and no number repeats.
+	rtx *atomic.Uint32
 }
 
 func newSection(transceiver *webrtc.RTPTransceiver) *section {

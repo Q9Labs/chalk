@@ -347,7 +347,7 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 	offset := 0
 	if repair && binding.rtxSSRC != 0 {
 		binary.BigEndian.PutUint16(w.payload[:2], out.seq)
-		packet.rtx, packet.seq, offset = true, uint16(binding.rtxSeq.Add(1)), 2
+		packet.rtx, packet.seq, offset = true, binding.nextRTXSeq(), 2
 	}
 	if offset > 0 || (p.hasVP8 && out.vp8.differs(&p.vp8)) {
 		n := copy(w.payload[offset:], p.payload)

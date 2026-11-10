@@ -22,9 +22,11 @@ type egressTrack struct {
 	kind      webrtc.RTPCodecType
 	transport *transport
 	binding   atomic.Pointer[egressBinding]
-	// rtxSeqFrom is where the RTX sequence of the section's earlier track ended; this track's
-	// RTX stream goes on from it, on the same SSRC.
-	rtxSeqFrom uint32
+	// rtx numbers the RTX stream of the track's section. A section keeps its RTX SSRC from one
+	// track to the next, so every binding of the section draws from one counter: a stale writer
+	// of an earlier binding (a probe in flight when its subscription closed) then takes a number
+	// of its own, never one the next track uses.
+	rtx *atomic.Uint32
 }
 
 // egressBinding is what the subscriber negotiated for one outgoing track.
@@ -35,7 +37,9 @@ type egressBinding struct {
 	// rtxSSRC and rtxPayloadType carry repairs and probe padding; 0 without RTX.
 	rtxSSRC        uint32
 	rtxPayloadType uint8
-	rtxSeq         atomic.Uint32
+	// rtxShared is the section's RTX counter; a binding built without one counts on its own.
+	rtxShared *atomic.Uint32
+	rtxSeq    atomic.Uint32
 	// twccID is the transport sequence extension; 0 means the subscriber sends
 	// no transport-wide feedback, so the node neither paces nor adapts.
 	twccID       uint8
@@ -47,7 +51,7 @@ func newEgressTrack(pub *publication, transport *transport) *egressTrack {
 	if !pub.video() {
 		codec = opusCapability
 	}
-	return &egressTrack{id: pub.name, streamID: pub.session.id, codec: codec, kind: pub.kind, transport: transport}
+	return &egressTrack{id: pub.name, streamID: pub.session.id, codec: codec, kind: pub.kind, transport: transport, rtx: new(atomic.Uint32)}
 }
 
 // Bind takes the negotiated codec with the track's MIME type, and its RTX and
@@ -61,7 +65,7 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 		binding := &egressBinding{writer: ctx.WriteStream(), ssrc: uint32(ctx.SSRC()), payloadType: uint8(codec.PayloadType)}
 		if rtx, ok := rtxFor(codecs, codec.PayloadType); ok && ctx.SSRCRetransmission() != 0 {
 			binding.rtxSSRC, binding.rtxPayloadType = uint32(ctx.SSRCRetransmission()), uint8(rtx)
-			binding.rtxSeq.Store(e.rtxSeqFrom)
+			binding.rtxShared = e.rtx
 		}
 		for _, extension := range ctx.HeaderExtensions() {
 			switch extension.URI {
@@ -130,6 +134,14 @@ type egressPacket struct {
 const rtpOverhead = 12 + 12
 
 func (p *egressPacket) size() int { return rtpOverhead + len(p.payload) + int(p.padding) }
+
+// nextRTXSeq allocates the next number of the binding's RTX stream.
+func (b *egressBinding) nextRTXSeq() uint16 {
+	if b.rtxShared != nil {
+		return uint16(b.rtxShared.Add(1))
+	}
+	return uint16(b.rtxSeq.Add(1))
+}
 
 // allowed reports whether the packet's source may still forward it at now, and its
 // subscription is still open on a publication that is not parked.

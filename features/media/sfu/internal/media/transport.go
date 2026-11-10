@@ -422,7 +422,7 @@ func (t *transport) probeWait(now int64) time.Duration {
 	}
 	owed := t.probeTarget/8*time.Duration(now-t.probeStart).Seconds() - float64(t.probeBytes)
 	for sent := 0; owed > 0 && sent < 16 && stream != nil && t.tokens >= 0; sent++ {
-		packet := egressPacket{binding: stream, class: classProbe, rtx: true, padding: probePadding, seq: uint16(stream.rtxSeq.Add(1))}
+		packet := egressPacket{binding: stream, class: classProbe, rtx: true, padding: probePadding, seq: stream.nextRTXSeq()}
 		size := packet.size()
 		seq := t.assign(classProbe, size, now)
 		t.counters.Probes++

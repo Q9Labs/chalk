@@ -347,45 +347,58 @@ func TestAnUnansweredOfferClosesTheSessionWhenItsTimerFiresAtOnce(t *testing.T) 
 	}
 }
 
-// A section's RTX sequence moves only with the numbers the node allocates. The transport derives
-// the SRTP index of an SSRC from the packets it encrypts, so a park that skipped numbers (or
-// restarted them) would, after enough cycles, bring back a number already used at the same index.
-// The repairs here are allocated but never written, as when the repair budget cuts them.
-func TestReuseCyclesContinueTheRepairSequenceWithoutSkipping(t *testing.T) {
+// A section numbers its RTX stream from one counter that every subscription's binding on it shares.
+// A writer of a closed subscription that is still running, such as a bandwidth probe, takes a number
+// from the same counter as the subscription that reused the section, so no number is used twice on
+// the reused SSRC: the transport derives the SRTP index of an SSRC from the packets it sends, and a
+// repeated number is dropped by the receiver as a replay.
+func TestReuseCyclesNeverRepeatARepairSequenceNumber(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
 
-	bindingOf := func(mid string) (*egressTrack, *egressBinding) {
+	bindingOf := func(mid string) *egressBinding {
 		subscriber.mu.Lock()
 		defer subscriber.mu.Unlock()
-		track := subscriber.subscribed[mid].track
-		return track, track.binding.Load()
+		return subscriber.subscribed[mid].track.binding.Load()
 	}
 	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-	_, binding := bindingOf(mid)
-	if binding == nil || binding.rtxSSRC == 0 {
-		t.Fatalf("the camera binding %+v has no RTX stream", binding)
+	old := bindingOf(mid)
+	if old == nil || old.rtxSSRC == 0 {
+		t.Fatalf("the camera binding %+v has no RTX stream", old)
 	}
-	binding.rtxSeq.Store(64) // 64 repairs were sent
-	forceClose(t, subscriber, mid)
+
+	seen := map[uint16]int{}
+	var last uint16
+	record := func(cycle int, who string, binding *egressBinding) {
+		seq := binding.nextRTXSeq()
+		if previous, ok := seen[seq]; ok {
+			t.Fatalf("cycle %d: %s took RTX sequence number %d, already taken in cycle %d", cycle, who, seq, previous)
+		}
+		if len(seen) > 0 && seq != last+1 {
+			t.Fatalf("cycle %d: %s took %d after %d, the section's sequence must move by one per allocation", cycle, who, seq, last)
+		}
+		seen[seq], last = cycle, seq
+	}
 
 	const cycles = 20
-	var track *egressTrack
 	for cycle := range cycles {
+		record(cycle, "the subscription", old)
+		forceClose(t, subscriber, mid)
 		again, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
 		if again != mid {
 			t.Fatalf("cycle %d: the camera got mid %s, want %s", cycle, again, mid)
 		}
-		var current *egressBinding
-		track, current = bindingOf(mid)
-		current.rtxSeq.Add(1) // one repair allocated and cut before it was written
-		forceClose(t, subscriber, mid)
-	}
-	if want := uint32(64 + cycles - 1); track.rtxSeqFrom != want {
-		t.Fatalf("after %d cycles the repair sequence starts at %d, want %d: it must move only by allocations", cycles, track.rtxSeqFrom, want)
+		current := bindingOf(mid)
+		if current == old {
+			t.Fatalf("cycle %d: the reused section kept the closed subscription's binding", cycle)
+		}
+		// The closed subscription's probe loop was inside a write when the section was reused.
+		record(cycle, "a probe of the closed subscription", old)
+		record(cycle, "the new subscription", current)
+		old = current
 	}
 }
 

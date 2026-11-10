@@ -609,7 +609,9 @@ func (s *Session) attach(egress *egressTrack, parked *section) (*section, error)
 		if err != nil {
 			return nil, err
 		}
-		return newSection(transceiver), nil
+		sec := newSection(transceiver)
+		sec.rtx = egress.rtx
+		return sec, nil
 	}
 	s.mu.Lock()
 	closed := s.closed
@@ -618,7 +620,7 @@ func (s *Session) attach(egress *egressTrack, parked *section) (*section, error)
 	if closed {
 		return nil, ErrSessionGone
 	}
-	egress.rtxSeqFrom = parked.rtxSeq
+	egress.rtx = parked.rtx
 	if err := parked.transceiver.SetSender(parked.sender, egress); err != nil {
 		_ = parked.transceiver.Stop()
 		return nil, fmt.Errorf("send on mid %q: %w", parked.transceiver.Mid(), err)
@@ -680,14 +682,6 @@ func (s *Session) park(sub *subscription) {
 	sub.mu.Lock()
 	sec.stream = sub.translator
 	sub.mu.Unlock()
-	// The next track's repairs continue the sequence from the last number allocated. Nothing of the
-	// closed subscription is written after its detach (egressPacket.allowed), so no number is used
-	// twice, and the sequence moves only with allocations: a skip with no packet behind it would
-	// leave the transport's SRTP index of this SSRC behind the sequence and, after enough cycles,
-	// bring a number back that was already used.
-	if binding.rtxSSRC != 0 {
-		sec.rtxSeq = binding.rtxSeq.Load()
-	}
 	s.mu.Lock()
 	closed := s.closed
 	if !closed {
