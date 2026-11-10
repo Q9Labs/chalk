@@ -264,7 +264,8 @@ new Spaces the own SFU (`CHALK_NEW_SPACE_MEDIA_PLANE`). The two-plane latency be
 `CHALK_PROOF_SPACE_ID_CHALK_SFU` to Spaces an operator moved (the real-call workflow reads them from
 the environment's variables of the same names; the nightly own-SFU lane needs the second one, and the
 Cloudflare lane leaves the first unset); it stops at once when a Space
-is not on the plane it asked for. The proof's
+is not on the plane it asked for. `call-artifacts` needs automatic Recording and Transcription, so it reuses
+`CHALK_PROOF_SPACE_ID_<PLANE>_AUTOMATIC` instead, a Space with those policies. The proof's
 clients declare both media providers, so the Episode binds the Space's choice.
 The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
 for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.

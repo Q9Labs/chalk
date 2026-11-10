@@ -81,7 +81,7 @@ test("a Space setup mismatch keeps its bounded public reason", () => {
 // takes the Space an operator moved, which the workflow hands to the proof as CHALK_PROOF_SPACE_ID_CHALK_SFU.
 test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {
   const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
-  for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU"]) {
+  for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC"]) {
     assert.equal(workflow.split(`${name}: \${{ vars.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
   }
   const deployment = (method) => (method === "GET" ? { id: "chalk-space", effective_media_plane: "chalk_sfu", ...policyApplied } : { id: "new", effective_media_plane: "cf_sfu", ...policyApplied });
@@ -94,5 +94,24 @@ test("the Cloudflare lane and the own-SFU lane each land on their own plane", as
     assert.equal((await createSpace(ownSfuLane, "cf_sfu")).effective_media_plane, "cf_sfu");
   } finally {
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
+  }
+});
+
+test("the automatic-policy proof reuses its own Space and never the manual one", async () => {
+  const automatic = { recording: "automatic", transcription: "automatic" };
+  process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "manual-space";
+  process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC = "automatic-space";
+  try {
+    const run = await fakeRun((method) => ({ id: method === "GET" ? "automatic-space" : "created", effective_media_plane: "chalk_sfu", recording_policy: "automatic", transcription_policy: "automatic" }));
+    assert.equal((await createSpace(run, "chalk_sfu", automatic)).id, "automatic-space");
+    assert.match(run.requests[0].path, /spaces\/automatic-space$/);
+    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
+    await assert.rejects(
+      createSpace(await fakeRun(() => ({ id: "created", effective_media_plane: "cf_sfu", recording_policy: "automatic", transcription_policy: "automatic" })), "chalk_sfu", automatic),
+      (error) => error.reason === "media-plane-config" && /CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC/.test(error.message),
+    );
+  } finally {
+    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
+    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
   }
 });

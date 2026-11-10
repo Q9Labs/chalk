@@ -196,6 +196,8 @@ jobs:
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
           CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
           CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
           CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
           CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
@@ -249,6 +251,8 @@ jobs:
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
           CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
           CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
