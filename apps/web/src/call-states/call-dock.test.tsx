@@ -150,3 +150,26 @@ it("shows reactions as a sheet with no scrim and closes it 120 ms after an emoji
     vi.useRealTimers();
   }
 });
+
+it("does not let a sent emoji's close timer shut a tray that was reopened in the meantime", async () => {
+  phoneWidth();
+  vi.useFakeTimers();
+  try {
+    const client = await mount();
+    vi.spyOn(client.reactions, "send").mockReturnValue(new Promise(() => {}));
+    await click(button("Reactions"));
+    await settle();
+    await click(sheet()?.querySelector<HTMLButtonElement>(".chalk-sheet-emoji button"));
+    await act(async () => vi.advanceTimersByTime(50));
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    await click(button("Reactions"));
+    await settle();
+    expect(sheet()).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(sheet()).not.toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

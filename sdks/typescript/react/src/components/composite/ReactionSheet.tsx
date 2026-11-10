@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChalkSheet } from "../chalk-ui";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { useHaptics } from "../../internal/useHaptics";
@@ -77,10 +77,13 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
       frame.style.removeProperty("--chalk-reaction-toast-lift");
     };
   }, [open, sheet]);
+  const closing = useRef<number | undefined>(undefined);
+  // A tray reopened inside the delay must not be closed by the previous send's timer.
+  useEffect(() => () => window.clearTimeout(closing.current), [open]);
   const send = (emoji: string) => {
     void trigger("success");
     onSelect(emoji);
-    window.setTimeout(onClose, CLOSE_DELAY_MS);
+    closing.current = window.setTimeout(onClose, CLOSE_DELAY_MS);
   };
   return (
     <ChalkSheet
