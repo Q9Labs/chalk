@@ -18,6 +18,7 @@
 // (fault trials included) takes more than 10 s, a fault takes more than 15 s to
 // recover, the fault did not stall media, or recovery turns the muted microphone on.
 // meetsM7Minimum in the report says whether the run had 20 joins and 10 faults.
+// --faults 0 runs joins only, with no fault commands: a post-deploy smoke of a media node.
 // CHALK_CANARY_SPACE_ID reuses one existing Space, as an allowlisted production Space
 // needs, instead of creating a Space for each trial.
 import { mkdir } from "node:fs/promises";
@@ -176,7 +177,8 @@ async function mutedRendersWithin(pages, startedAt, limitMs) {
 }
 
 function checkConfiguration() {
-  check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 1, "--joins and --faults must each be at least 1", "configuration");
+  check(Number.isInteger(joins) && joins >= 1 && Number.isInteger(faults) && faults >= 0, "--joins must be at least 1 and --faults at least 0", "configuration");
+  if (faults === 0) return;
   check(faultMs > stallProbeMs + 1000, "--fault-seconds is too short to prove an interruption", "configuration");
   check(faultDown && faultUp, "Set CHALK_CANARY_FAULT_DOWN and CHALK_CANARY_FAULT_UP to commands that block and restore UDP to the media provider", "configuration");
 }
