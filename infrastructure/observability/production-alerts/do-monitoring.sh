@@ -6,21 +6,22 @@
 # is not a Slack-format receiver, and it has no plain webhook. Oncall hears of a node outage from
 # the Axiom sfu-readiness rule instead (see sfu-runbook.md).
 #
-#   do-monitoring.sh <production|staging> plan      print what apply would do; changes nothing
-#   do-monitoring.sh <production|staging> apply     create or update the policies and the check
-#   do-monitoring.sh <production|staging> remove    delete everything this script made (the undo)
+#   do-monitoring.sh <production|staging|test> plan      print what apply would do; changes nothing
+#   do-monitoring.sh <production|staging|test> apply     create or update the policies and the check
+#   do-monitoring.sh <production|staging|test> remove    delete everything this script made (the undo)
 #
 # Policies apply by Droplet tag, so a rebuilt node that keeps its tag keeps its policies. The ping
 # check targets the node's address, so after a rebuild that changes the address, run apply again.
 # Needs doctl, jq and DISCORD_WEBHOOK_URL in the environment.
 set -euo pipefail
 
-usage="usage: do-monitoring.sh <production|staging> <plan|apply|remove>"
+usage="usage: do-monitoring.sh <production|staging|test> <plan|apply|remove>"
 environment="${1:?$usage}"
 action="${2:?$usage}"
 case "$environment" in
   production) tag=chalk-sfu-prod ;;
   staging) tag=chalk-sfu-staging ;;
+  test) tag=chalk-sfu-alerttest ;; # a throwaway Droplet that proves the policies fire
   *) echo "$usage" >&2; exit 2 ;;
 esac
 case "$action" in plan | apply | remove) ;; *) echo "$usage" >&2; exit 2 ;; esac
