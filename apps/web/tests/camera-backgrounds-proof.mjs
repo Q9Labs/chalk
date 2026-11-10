@@ -115,6 +115,7 @@ try {
     // Stop measuring the previous effect while the image preset loads on software WebGL.
     await choose("None");
     await closePicker();
+    for (let i = 0; i < 5; i++) { console.log("DEBUGF", phone, JSON.stringify(await page.evaluate(() => ({ f: window.cameraBackgroundProof.frames(), vis: document.visibilityState, bg: window.cameraBackgroundProof.backgroundState(), v: [...document.querySelectorAll("video")].map((v) => [v.getAttribute("aria-label"), v.readyState, v.paused, v.getBoundingClientRect().width, v.getBoundingClientRect().top|0, v.srcObject?.getVideoTracks()[0]?.readyState])})))); await page.waitForTimeout(1500); }
     await waitForProcessedPixels("none", [blurred]);
     await choose("Office");
     await closePicker();
