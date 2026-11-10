@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateOwnSfuLeave, scorecardShape } from "./leave-own-sfu-criteria.mjs";
+import { awaitRelease, evaluateOwnSfuLeave, scorecardShape } from "./leave-own-sfu-criteria.mjs";
 
 const good = () => ({
   leave: { confirmed: true, deadlineFallback: false, ms: 240, peerClosedBeforeAck: false },
@@ -38,3 +38,34 @@ for (const [name, change, message] of [
     assert.match(result.failures.join("\n"), message);
   });
 }
+
+// A fake clock: sleeping moves time, and the capture ends at `endsAt` ms after the Leave began.
+function fakeCapture(endsAt) {
+  let time = 0;
+  return {
+    now: () => time,
+    sleep: async (ms) => void (time += ms),
+    sample: async () => (time >= endsAt ? { live: 0 } : { live: 2 }),
+  };
+}
+
+test("tracks that end right at the deadline are seen as ended and pass", async () => {
+  const capture = fakeCapture(9900);
+  const { after, ms } = await awaitRelease(capture.sample, 0, capture);
+  assert.equal(after.live, 0);
+  assert.ok(ms <= 10_000);
+  assert.equal(evaluateOwnSfuLeave({ ...good(), release: { ...after, ms } }).passed, true);
+});
+
+test("tracks that end after the deadline still fail", async () => {
+  const capture = fakeCapture(10_100);
+  const { after, ms } = await awaitRelease(capture.sample, 0, capture);
+  assert.equal(after.live, 2);
+  assert.equal(evaluateOwnSfuLeave({ ...good(), release: { ...after, ms } }).passed, false);
+});
+
+test("a slow acknowledgement leaves less time to release", async () => {
+  const capture = fakeCapture(7000);
+  const { after } = await awaitRelease(capture.sample, -4000, capture);
+  assert.equal(after.live, 2);
+});

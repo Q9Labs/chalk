@@ -1,5 +1,5 @@
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
-import { evaluateOwnSfuLeave, releaseCeilingMs, scorecardShape } from "./leave-own-sfu-criteria.mjs";
+import { evaluateOwnSfuLeave, awaitRelease, scorecardShape } from "./leave-own-sfu-criteria.mjs";
 import { measureLeave } from "./leave.mjs";
 import { createSpace, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
@@ -52,12 +52,9 @@ export async function leaveOwnSfuProof(run) {
   const leaveBegan = performance.now();
   const leave = await measureLeave(leaver, "ordinary");
   await save(`${run.directory}/leave.json`, leave);
-  // The release deadline runs from the start of the Leave, not from its acknowledgement. A wait that times out is not an error
+  // The release deadline runs from the start of the Leave, not from its acknowledgement. A release that misses it is not an error
   // here: the criteria below name what stayed behind.
-  let after = await captured(leaver);
-  const window = Math.max(0, releaseCeilingMs - (performance.now() - leaveBegan));
-  if (after.live !== 0 && window > 0) await waitFor("the leaving guest's capture tracks end", async () => (after = await captured(leaver)).live === 0, window, 250).catch(() => {});
-  const releaseMs = Math.round(performance.now() - leaveBegan);
+  const { after, ms: releaseMs } = await awaitRelease(() => captured(leaver), leaveBegan);
   let view = await survivorView(survivor, leaverId);
   await waitFor("the other guest drops the guest who left", async () => (view = await survivorView(survivor, leaverId)).rosterWithoutLeaver && view.remoteWithoutLeaver, 30_000, 500).catch(() => {});
   const survivorTracks = await captured(survivor);

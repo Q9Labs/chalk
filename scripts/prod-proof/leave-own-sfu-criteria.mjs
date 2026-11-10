@@ -1,6 +1,19 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 // What one guest's Leave must leave behind on the own SFU, judged from what the pages and the API reported.
 const leaveCeilingMs = 5000;
-export const releaseCeilingMs = 10_000;
+const releaseCeilingMs = 10_000;
+
+// Samples the leaver's capture until it is released or the deadline, counted from `began` (the start of the Leave), passes.
+// The last sample is always taken at or after the deadline, so tracks that ended just before it are seen as ended.
+export async function awaitRelease(sample, began, { now = () => performance.now(), sleep = delay, ceilingMs = releaseCeilingMs, intervalMs = 250 } = {}) {
+  let after = await sample();
+  while (after.live !== 0 && now() - began < ceilingMs) {
+    await sleep(intervalMs);
+    after = await sample();
+  }
+  return { after, ms: Math.round(now() - began) };
+}
 
 export function evaluateOwnSfuLeave(sample) {
   const { leave, capture, release, survivor, episodeStatus } = sample;
