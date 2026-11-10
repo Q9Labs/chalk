@@ -64,7 +64,7 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 					headers.Set("Access-Control-Allow-Credentials", "true")
 				}
 				// A cached preflight never skips the origin check: each real request repeats it.
-				headers.Set("Access-Control-Max-Age", "600")
+				headers.Set("Access-Control-Max-Age", "7200")
 			}
 			if origin != "" {
 				outcome := "forbidden"

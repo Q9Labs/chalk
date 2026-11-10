@@ -314,10 +314,10 @@ func (o signalOrigins) AllowsOrigin(_ context.Context, _ utilities.ID, origin st
 	return o[origin], nil
 }
 
-// One preflight covers a whole join for ten minutes, and the longer cache never
+// One preflight covers a whole join for two hours (Chrome's cap), and the longer cache never
 // lets in an origin the Tenant does not allow: a refused preflight sends no
 // allow headers and no Max-Age, and the real request repeats the same check.
-func TestTenantOriginPreflightCachesForTenMinutesAndStillRefusesOtherOrigins(t *testing.T) {
+func TestTenantOriginPreflightCachesForTwoHoursAndStillRefusesOtherOrigins(t *testing.T) {
 	handler := allowCORS(CORSOptions{TenantOrigins: signalOrigins{"https://customer.example": true}}, RateLimitOptions{})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -331,8 +331,8 @@ func TestTenantOriginPreflightCachesForTenMinutesAndStillRefusesOtherOrigins(t *
 	}
 
 	allowed := preflight("https://customer.example")
-	if allowed.Code != http.StatusNoContent || allowed.Header().Get("Access-Control-Allow-Origin") != "https://customer.example" || allowed.Header().Get("Access-Control-Max-Age") != "600" {
-		t.Errorf("allowed origin got %d, allow-origin %q, max-age %q; want 204, its origin, 600", allowed.Code, allowed.Header().Get("Access-Control-Allow-Origin"), allowed.Header().Get("Access-Control-Max-Age"))
+	if allowed.Code != http.StatusNoContent || allowed.Header().Get("Access-Control-Allow-Origin") != "https://customer.example" || allowed.Header().Get("Access-Control-Max-Age") != "7200" {
+		t.Errorf("allowed origin got %d, allow-origin %q, max-age %q; want 204, its origin, 7200", allowed.Code, allowed.Header().Get("Access-Control-Allow-Origin"), allowed.Header().Get("Access-Control-Max-Age"))
 	}
 	refused := preflight("https://attacker.example")
 	if refused.Code != http.StatusForbidden || refused.Header().Get("Access-Control-Allow-Origin") != "" || refused.Header().Get("Access-Control-Max-Age") != "" {
