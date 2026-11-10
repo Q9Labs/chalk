@@ -39,7 +39,7 @@ The private API environment is the SecureString `/chalk/production/managed-episo
 
 Never print `api.env`. Change one line and print only a count. Run these snippets with `bash`.
 
-Set or change one line in SSM (`NAME` and `VALUE` are the variable and its new value; the old line is saved privately):
+Set, change or delete one line in SSM (`NAME` and `VALUE` are the variable and its new value; run with `DELETE=1` and no `VALUE` to remove the line; the old line is saved privately):
 
 ```sh
 set -euo pipefail
@@ -49,15 +49,18 @@ mkdir -p ~/.chalk-rollout /tmp/chalk-rollout-sfu && chmod 700 ~/.chalk-rollout /
 work=/tmp/chalk-rollout-sfu/api.env
 aws ssm get-parameter --name $p --with-decryption --query Parameter.Value --output text > $work
 [ "$(wc -l < $work)" -gt 50 ] || { echo "read failed"; exit 1; }
-# Keep the old line (empty when the variable is absent) so the undo restores it exactly.
-( umask 077; sed -n "s/^$NAME=//p" $work > ~/.chalk-rollout/$NAME.before )
-python3 - "$NAME" "$VALUE" <<'EOF'
+# Keep the old line. The file is empty when the variable is absent, so the undo can tell "absent" from "empty".
+( umask 077; grep "^$NAME=" $work > ~/.chalk-rollout/$NAME.before || true )
+python3 - "$NAME" "${VALUE-}" "${DELETE-}" <<'EOF'
 import re, sys, pathlib
-name, value = sys.argv[1:]
+name, value, delete = sys.argv[1:]
 f = pathlib.Path("/tmp/chalk-rollout-sfu/api.env")
 t = f.read_text()[:-1]  # `--output text` adds one newline the value does not have
-new, n = re.subn(rf"^{name}=.*$", lambda _: f"{name}={value}", t, flags=re.M)
-f.write_text(new if n else t.rstrip("\n") + f"\n{name}={value}\n")
+if delete:
+    f.write_text(re.sub(rf"^{name}=.*\n?", "", t, flags=re.M))
+else:
+    new, n = re.subn(rf"^{name}=.*$", lambda _: f"{name}={value}", t, flags=re.M)
+    f.write_text(new if n else t.rstrip("\n") + f"\n{name}={value}\n")
 EOF
 aws ssm put-parameter --name $p --type SecureString --tier Advanced --overwrite --value file://$work --query Version
 rm -f $work
@@ -68,13 +71,13 @@ Apply the same line to the running API without a deploy, on the production host 
 ```sh
 f=/run/chalk/env/api.env
 cp -p $f /run/chalk/env/api.env.before-change
-# change or append the one line, with the same value as SSM
+# change, append or delete the one line, the same way as in SSM
 runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) systemctl --user restart chalk-api.service
 ```
 
 Then read `/healthz` and `/readyz` and check that a new join grant still works. The restart interrupts API requests for a few seconds (join grants, Space calls); live media and Sync are separate services and stay up. Do it in a quiet minute.
 
-**Undo.** Put the old line back in both places. In SSM, run the script again with the saved `~/.chalk-rollout/<NAME>.before` value (an empty file means delete the line). On the host, copy `/run/chalk/env/api.env.before-change` back over `api.env` and run the same restart. SSM keeps every version (`get-parameter-history`).
+**Undo.** Put the old line back in both places. In SSM, run the script again: with the saved line's text after `NAME=` as `VALUE`, or with `DELETE=1` when `~/.chalk-rollout/<NAME>.before` is empty (the variable was absent). On the host, copy `/run/chalk/env/api.env.before-change` back over `api.env` and run the same restart. SSM keeps every version (`get-parameter-history`).
 
 ## 1. One deploy carries everything
 
@@ -135,9 +138,34 @@ With capture on and the recorder fleet missing, the API fails at startup (the AP
 
 ### Undo for the deploy
 
-- Remove `CHALK_SFU_CAPTURE_ENABLED` from SSM and the host (script above, empty old value), then redeploy: Promote of the previous held release, or a runtime-only Release.
-- Put each moved Space back: `media-settings set --tenant <tenant> --space <space> --plane cf_sfu` (not `inherit`).
-- Remove the proof Space IDs from the allowlist the same way. Revert the Promote PR if its change is at fault.
+**Primary undo: return the traffic, keep the release.** It needs no redeploy of images and works the same before and after the window.
+
+1. Put each moved Space back, one at a time: `media-settings set --tenant <tenant> --space <space> --plane cf_sfu` (not `inherit`). Only new Episodes move; end a live Episode to move that call. If more than one Space is affected, set `CHALK_SFU_NEW_EPISODES=off` first (SSM script, host edit, one restart).
+2. Remove `CHALK_SFU_CAPTURE_ENABLED` and the proof Space IDs from the allowlist in SSM and on the host (`DELETE=1` for the flag, the saved line for the allowlist), with one restart.
+3. Revert the Promote PR if its change is at fault.
+
+A runtime-only Release does not undo the deploy: it re-fetches the environment but keeps the new images.
+
+**Release rollback (not run).** Promote cannot take the previous release: `select()` in `scripts/releases/release.py` accepts only the newest held nightly. A failed Promote needs none of this: its rollback job restores the Pages deployment, media pins and npm tags, and the `result` job prints the exact manual Release inputs when that recovery did not run. After a successful Promote, dispatch the CI workflow (`.github/workflows/ci.yml`) from master with the identity of the release before it:
+
+```sh
+# Index 0 is the release Promote just shipped; index 1 is the previous one. Read only.
+gh api "repos/Q9Labs/chalk/deployments?environment=production&task=production-release&per_page=5" \
+  --jq '.[] | [.id, .created_at, .payload.target_sha, .payload.release_id] | @tsv'
+gh api "repos/Q9Labs/chalk/deployments?environment=production&task=production-release&per_page=5" \
+  --jq '.[1].payload | {target_sha, run_id, manifest_artifact_id, manifest_sha256, release_id, media_sha256}'
+# Saved Pages identity and media pins from the Promote run:
+gh run download <promote run id> -n promotion-rollback-1 -D /tmp/chalk-rollout-sfu/rollback
+jq -r .pages_deployment_id /tmp/chalk-rollout-sfu/rollback/rollback.json
+jq -c . /tmp/chalk-rollout-sfu/rollback/previous-media.json
+gh workflow run ci.yml --ref master -f target_sha=<target_sha> -f release_managed=false -f deploy_managed=true \
+  -f managed_environment=production -f deploy_web=true -f manifest_run_id=<run_id> \
+  -f manifest_artifact_id=<manifest_artifact_id> -f manifest_sha256=<manifest_sha256> \
+  -f reuse_release_id=<release_id> -f media_sha256=<media_sha256> \
+  -f rollback_media='<previous-media.json>' -f pages_rollback_id=<pages_deployment_id>
+```
+
+The dispatch needs the production concurrency group (`chalk-environment-production`) free. I read these commands against the workflow inputs and the deployment payload keys; the dispatch itself has not been run, so treat it as the second choice after the primary undo. npm `latest` may need restoring from `npm_latest` in the saved rollback record.
 
 ## 2. The 60-minute window
 
@@ -172,7 +200,7 @@ Roll back with the kill switch: first the Space setting for the affected Space, 
 
 ### Kill-switch drill (timed)
 
-Follow [Send one Space back to Cloudflare, and return it](../../infrastructure/sfu/README.md#send-one-space-back-to-cloudflare-and-return-it) on the canary Space with a real two-guest call. Record in seconds: the operator command, the first new join grant that reports `cloudflare_sfu`, and the return to `chalk_sfu`. It passes when the first new Episode after the flip reports `cloudflare_sfu` and the return reports `chalk_sfu`. **Undo:** `media-settings set --plane chalk_sfu` on the same Space.
+Follow the section "Send one Space back to Cloudflare, and return it" in [the SFU README](../../infrastructure/sfu/README.md) on the canary Space with a real two-guest call. Record in seconds: the operator command, the first new join grant that reports `cloudflare_sfu`, and the return to `chalk_sfu`. It passes when the first new Episode after the flip reports `cloudflare_sfu` and the return reports `chalk_sfu`. **Undo:** `media-settings set --plane chalk_sfu` on the same Space.
 
 ### M7 evidence
 
@@ -199,6 +227,8 @@ Start only when the window is green. Two blockers sit in front of every real Spa
    python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <production openrouter-token parameter ARN> --apply
    ```
 
+   The plan (checked 2026-11-10, names only) has two updates and nothing else: `module.dispatcher.aws_iam_role_policy.dispatcher` gains a read grant for that one secret, and `module.dispatcher.aws_lambda_function.dispatcher` gains `CODESWITCH_PROVIDER` and `OPENROUTER_TOKEN_PARAMETER_ARN` in its environment (`CHALK_CONFIG_DIGEST` changes with them). No creates, deletes or code changes. Run `--apply` only after Promote has shipped the reader and the dispatcher ZIP.
+
    **Undo:** `configure-mai.py --environment production --disable --apply` pauses Auto and keeps fixed languages.
 
 2. **M10 passed in production** (the window's `call-artifacts`), because every real Space records or transcribes.
@@ -214,9 +244,18 @@ media-settings set --tenant <tenant> --space <space> --plane chalk_sfu
 
 Watch 30 minutes between batches with the table above. **Undo per Space:** `media-settings set --tenant <tenant> --space <space> --plane cf_sfu` (not `inherit`, because the Tenant default may be `chalk_sfu`). Only new Episodes move; end a live Episode to move that call.
 
-### `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` (last step)
+### `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` (last step, optional)
 
-Set it only after every earlier step is green and the capture flag is live. The API refuses to start with it set to `chalk_sfu` while either new-Space policy default is not `disabled` and `CHALK_SFU_CAPTURE_ENABLED` is off, so a refusal at deploy means the check does not allow it: do not force it. `CHALK_SFU_ALLOWED_SPACES` still applies as an AND, so a new Space runs on `chalk_sfu` only if it is listed. **Undo:** remove the line from SSM and the host and restart `chalk-api.service`.
+Leave it unset unless Hasan decides that every new Space should start on `chalk_sfu`. It is a product decision, not part of the window.
+
+The API refuses to start with it set to `chalk_sfu` unless three things hold: `CHALK_SFU_ENABLED=true`, `CHALK_SFU_ALLOWED_SPACES=*`, and `CHALK_SFU_CAPTURE_ENABLED=true` when either new-Space policy default is not `disabled`. So the step is one change of two lines, never the new-Space line alone:
+
+1. Save the current allowlist line (the SSM script does it) and set `CHALK_SFU_ALLOWED_SPACES` to `*` and `CHALK_NEW_SPACE_MEDIA_PLANE` to `chalk_sfu` in SSM and on the host, then restart once. Do the host edit first and read `/healthz`; if the API does not start, restore the host backup at once.
+2. Read `/healthz`, create a throwaway Space in the proof Tenant and check that it reports `chalk_sfu`.
+
+With `*` the allowlist no longer limits anything, so these Spaces use `chalk_sfu` for new Episodes: every Space whose stored setting is `chalk_sfu` (the Spaces moved above), every Space created after the restart, and every Space that inherits a Tenant default of `chalk_sfu` (none today: 10 Tenants are `cf_sfu`, 13 are unset). `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` stays, so every other existing Space stays on Cloudflare. `*` also removes the allowlist as a safety net for `media-settings set`, so each later flip needs the same care as before.
+
+**Undo.** Restore both lines together: the saved allowlist line and no `CHALK_NEW_SPACE_MEDIA_PLANE` line (`DELETE=1`), in SSM and on the host, with one restart. Spaces created in the meantime keep `chalk_sfu` as their stored setting; set the ones that should not have it back with `media-settings set --plane cf_sfu`.
 
 ## Not proven
 
