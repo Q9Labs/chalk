@@ -639,26 +639,53 @@ func withExtension(t *testing.T, raw, mid, value string) string {
 	return string(out)
 }
 
-// An extmap value is "<id>[/<direction>] <uri> [<attributes>]". The URI is the second token, so a
-// direction on the id or an attribute after the URI neither hides a negotiated extension nor lets
-// an unknown one in, and the answer carries no direction of the offerer's.
-func TestAnswerableReadsTheURIAfterTheIDWhateverElseTheLineCarries(t *testing.T) {
+// An extmap value is "<id>[/<direction>] <uri> [<attributes>]" (RFC 8285 section 5). The URI is the
+// second token, so a direction on the id or an attribute after the URI neither hides a negotiated
+// extension nor lets an unknown one in. The answer restricts the offered direction (section 6),
+// keeps the attributes, and drops what it cannot answer.
+func TestAnswerableAnswersEachOfferedExtmapLineAsTheRFCAllows(t *testing.T) {
+	mid, rid, repaired, audio := sdp.SDESMidURI, sdp.SDESRTPStreamIDURI, sdp.SDESRepairRTPStreamIDURI, sdp.AudioLevelURI
+	for _, test := range []struct {
+		name, offered, want string
+	}{
+		{"no direction answers without one", "3 " + mid, "3 " + mid},
+		{"sendrecv answers without a direction", "3/sendrecv " + mid, "3 " + mid},
+		{"sendonly is answered recvonly", "3/sendonly " + mid, "3/recvonly " + mid},
+		{"recvonly is answered sendonly", "3/recvonly " + mid, "3/sendonly " + mid},
+		{"inactive stays inactive", "3/inactive " + mid, "3/inactive " + mid},
+		{"a trailing attribute is kept", "10 " + rid + " urn:example:attribute", "10 " + rid + " urn:example:attribute"},
+		{"direction and trailing attribute together", "11/recvonly " + repaired + " mode=a", "11/sendonly " + repaired + " mode=a"},
+		{"two-byte id", "200 " + audio, "200 " + audio},
+		{"an unknown URI is dropped", "13 " + sdp.ABSSendTimeURI, ""},
+		{"a URI only in the attributes is dropped", "14/sendonly " + sdp.ABSSendTimeURI + " " + mid, ""},
+		{"an unknown direction is dropped", "3/sideways " + mid, ""},
+		{"id 0 is dropped", "0 " + mid, ""},
+		{"id 256 is dropped", "256 " + mid, ""},
+		{"a non-numeric id is dropped", "x " + mid, ""},
+		{"a line without a URI is dropped", "3", ""},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := answerable([]sdp.Attribute{{Key: sdp.AttrKeyExtMap, Value: test.offered}, {Key: sdp.AttrKeyRecvOnly}})
+			switch {
+			case test.want == "" && len(got) != 0:
+				t.Fatalf("answerable kept %+v, want nothing", got)
+			case test.want != "" && (len(got) != 1 || got[0].Key != sdp.AttrKeyExtMap || got[0].Value != test.want):
+				t.Fatalf("answerable kept %+v, want %q", got, test.want)
+			}
+		})
+	}
+}
+
+// An answer maps an id once and offers an extension once, whatever the offer repeats.
+func TestAnswerableAnswersEachIDAndURIOnce(t *testing.T) {
 	line := func(value string) sdp.Attribute { return sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: value} }
 	got := answerable([]sdp.Attribute{
-		line("3/sendonly " + sdp.SDESMidURI),
-		line("10 " + sdp.SDESRTPStreamIDURI + " urn:example:attribute"),
-		line("11/recvonly " + sdp.SDESRepairRTPStreamIDURI + " mode=a"),
-		line("13 " + sdp.ABSSendTimeURI),
-		line("14/sendonly " + sdp.ABSSendTimeURI + " " + sdp.SDESMidURI),
-		{Key: sdp.AttrKeyRecvOnly},
+		line("3 " + sdp.SDESMidURI),
+		line("4 " + sdp.SDESMidURI),
+		line("3 " + sdp.AudioLevelURI),
+		line("5 " + sdp.AudioLevelURI),
 	})
-	want := []string{"3 " + sdp.SDESMidURI, "10 " + sdp.SDESRTPStreamIDURI + " urn:example:attribute", "11 " + sdp.SDESRepairRTPStreamIDURI + " mode=a"}
-	if len(got) != len(want) {
-		t.Fatalf("answerable kept %+v, want %v", got, want)
-	}
-	for index, attribute := range got {
-		if attribute.Key != sdp.AttrKeyExtMap || attribute.Value != want[index] {
-			t.Fatalf("answerable kept %+v at %d, want %q", attribute, index, want[index])
-		}
+	if len(got) != 2 || got[0].Value != "3 "+sdp.SDESMidURI || got[1].Value != "5 "+sdp.AudioLevelURI {
+		t.Fatalf("answerable kept %+v, want 3 sdes:mid and 5 audio-level", got)
 	}
 }

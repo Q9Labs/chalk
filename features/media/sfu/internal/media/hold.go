@@ -2,6 +2,8 @@ package media
 
 import (
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pion/sdp/v3"
@@ -67,7 +69,7 @@ func releaseParked(answer, offer string, held []string) (string, error) {
 	extensions := map[string][]sdp.Attribute{}
 	for _, media := range offered.MediaDescriptions {
 		if mid, ok := media.Attribute(sdp.AttrKeyMID); ok && mids[mid] {
-			extensions[mid] = answerable(media.Attributes)
+			extensions[mid] = answerable(append(slices.Clone(offered.Attributes), media.Attributes...))
 		}
 	}
 	for _, media := range answered.MediaDescriptions {
@@ -91,21 +93,42 @@ func releaseParked(answer, offer string, held []string) (string, error) {
 	return string(out), nil
 }
 
-// answerable returns the offered extmap lines for extensions the node negotiates. An extmap value is
-// "<id>[/<direction>] <uri> [<attributes>]". The answer keeps the id and what follows the URI but no
-// direction: the offerer's direction is not the answerer's.
+// answeredDirection maps the direction an offered extmap line carries to the one its answer may
+// carry (RFC 8285 section 6): the answer can only restrict, so sendonly is answered recvonly, recvonly
+// sendonly and inactive inactive. No direction, or sendrecv, is answered without one.
+var answeredDirection = map[string]string{
+	"":                  "",
+	sdp.AttrKeySendRecv: "",
+	sdp.AttrKeySendOnly: "/" + sdp.AttrKeyRecvOnly,
+	sdp.AttrKeyRecvOnly: "/" + sdp.AttrKeySendOnly,
+	sdp.AttrKeyInactive: "/" + sdp.AttrKeyInactive,
+}
+
+// answerable returns the extmap lines that answer the offered ones for extensions the node negotiates.
+// An extmap value is "<id>[/<direction>] <uri> [<attributes>]" (RFC 8285 section 5). The answer keeps
+// the id and the attributes, answers the direction as answeredDirection says, and drops a line it
+// cannot answer: an unknown URI or direction, an id outside 1 to 255, or an id or URI the offer
+// already used, because an answer must not map one id twice or offer one extension twice.
 func answerable(attributes []sdp.Attribute) []sdp.Attribute {
 	var found []sdp.Attribute
+	ids := map[int]bool{}
+	uris := map[string]bool{}
 	for _, attribute := range attributes {
 		if attribute.Key != sdp.AttrKeyExtMap {
 			continue
 		}
 		fields := strings.Fields(attribute.Value)
-		if len(fields) < 2 || !answerableExtensions[fields[1]] {
+		if len(fields) < 2 || !answerableExtensions[fields[1]] || uris[fields[1]] {
 			continue
 		}
-		id, _, _ := strings.Cut(fields[0], "/")
-		found = append(found, sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: strings.Join(append([]string{id}, fields[1:]...), " ")})
+		idField, direction, _ := strings.Cut(fields[0], "/")
+		id, err := strconv.Atoi(idField)
+		answered, known := answeredDirection[direction]
+		if err != nil || id < 1 || id > 255 || ids[id] || !known {
+			continue
+		}
+		ids[id], uris[fields[1]] = true, true
+		found = append(found, sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: idField + answered + " " + strings.Join(fields[1:], " ")})
 	}
 	return found
 }
