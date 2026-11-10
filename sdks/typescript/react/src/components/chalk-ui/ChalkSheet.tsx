@@ -25,6 +25,7 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
       <Dialog.Root
         open={open}
         onOpenChange={(next, details) => {
+          console.info("[sheet-debug]", details.reason, details.event.target instanceof Element ? details.event.target.className : "");
           // The reactions sheet has no scrim, so a tap on a call notice's button must reach the notice and leave the sheet open.
           if (variant === "reactions" && details.reason === "outside-press" && details.event.target instanceof Element && details.event.target.closest(".chalk-toasts")) {
             details.cancel();
