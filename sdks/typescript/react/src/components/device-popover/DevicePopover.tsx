@@ -200,7 +200,9 @@ export function DevicePopover({
   // The phone dock has no microphone menu, so there is nothing for "Choose another" to open.
   const phone = useMediaQuery("(max-width: 640px)");
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
-  const accessLabel = access ? accessTooltip(mic ? "microphone" : "camera", access.reason) : undefined;
+  // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
+  const pressOpensCard = access && !busy;
+  const accessLabel = pressOpensCard ? accessTooltip(mic ? "microphone" : "camera", access.reason) : undefined;
   return (
     <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={access ? true : undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
@@ -212,10 +214,10 @@ export function DevicePopover({
             aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label)}
             aria-pressed={isActive}
             aria-busy={busy}
-            aria-haspopup={access ? "dialog" : undefined}
-            aria-expanded={access ? access.open : undefined}
+            aria-haspopup={pressOpensCard ? "dialog" : undefined}
+            aria-expanded={pressOpensCard ? access.open : undefined}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
-            onClick={access ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
+            onClick={pressOpensCard ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
           >
             {busy ? <span aria-hidden="true">…</span> : <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />}
           </button>

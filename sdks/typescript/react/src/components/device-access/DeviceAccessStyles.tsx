@@ -12,6 +12,10 @@ const DEVICE_ACCESS_CSS = `
   outline: 1px solid var(--chalk-danger);
   outline-offset: -1px;
 }
+.chalk-shell-split[data-blocked]:has(button:focus-visible) {
+  outline: 2px solid var(--chalk-focus);
+  outline-offset: 3px;
+}
 .chalk-shell-split[data-blocked] .chalk-shell-main {
   color: var(--chalk-danger-text);
 }

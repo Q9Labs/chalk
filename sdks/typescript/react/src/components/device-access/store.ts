@@ -42,6 +42,7 @@ export class DeviceAccessStore {
       for (const stop of this.#stopPermissionWatch) stop();
       this.#stopPermissionWatch = [];
       for (const device of this.#recoveries.keys()) this.#forget(device);
+      for (const device of [...this.#attempt.keys()]) this.#nextAttempt(device);
     };
   };
 

@@ -73,10 +73,14 @@ const KIND_OF = { microphone: "audioinput", camera: "videoinput" } as const;
  */
 export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: DeviceAccessReason, recovered: () => void): () => void {
   if (device === "screen") return () => {};
-  if (reason.kind === "blocked-browser")
+  if (reason.kind === "blocked-browser") {
+    // watchPermission reports the current answer first. Only a change after that counts, or a refusal with the permission already granted would retry forever.
+    let current = true;
     return watchPermission(ports, device, (answer) => {
-      if (answer === "granted") recovered();
+      if (current) current = false;
+      else if (answer === "granted") recovered();
     });
+  }
   if (reason.kind === "blocked-system") {
     ports.window.addEventListener("focus", recovered);
     return () => ports.window.removeEventListener("focus", recovered);

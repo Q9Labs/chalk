@@ -67,6 +67,24 @@ describe("DeviceAccessStore", () => {
     expect(store.getSnapshot().permissions.microphone).toBe("denied");
   });
 
+  it("does not retry a refusal while the browser already says granted", async () => {
+    const { store } = setup({ permission: "granted", userAgent: "Mozilla/5.0 (X11; Linux x86_64) Chrome/130.0.0.0 Safari/537.36" });
+    const retry = vi.fn(async () => {});
+    await store.report("microphone", failure("media.permission_denied"), retry);
+    await settle();
+    expect(store.getSnapshot().issues.microphone?.reason.kind).toBe("blocked-browser");
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("starts no watch when the last subscriber leaves while a report is still reading the permission", async () => {
+    const { store, window, stop } = setup({ permission: "granted" });
+    const reported = store.report("microphone", failure("media.permission_denied"), async () => {});
+    stop();
+    await reported;
+    expect(store.getSnapshot().issues.microphone).toBeUndefined();
+    expect(window.count("focus")).toBe(0);
+  });
+
   it("retries the command when the person allows the site in browser settings", async () => {
     const { store, permission } = setup();
     const retry = vi.fn(async () => {});
