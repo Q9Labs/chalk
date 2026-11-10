@@ -514,12 +514,6 @@ ${phoneRules(`
   .chalk-shell-split .chalk-shell-caret {
     display: none;
   }
-  .chalk-shell-split[data-camera-menu] .chalk-shell-main {border-radius:999px 0 0 999px;}
-  .chalk-shell-split[data-camera-menu] .chalk-shell-caret {
-    display: grid;
-    width: 44px;
-    height: 52px;
-  }
   .chalk-shell-dock .chalk-icon-button {
     width: 52px;
     height: 52px;

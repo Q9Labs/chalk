@@ -6,6 +6,8 @@ import { Search01Icon } from "../../utils/icons";
 import { getParticipantThemeVariables } from "../../utils/colorGenerator";
 import { DEFAULT_QUICK_REACTIONS, EMOJI_CATEGORIES, EMOJI_KEYWORDS, type ReactionCategoryKey } from "@q9labsai/chalk-ui/reactions";
 import { ReactionTray } from "./ReactionTray";
+import { ReactionSheet } from "./ReactionSheet";
+import { usePhoneCall } from "../../internal/call-width";
 import { type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface ReactionPickerProps {
@@ -25,6 +27,7 @@ export interface ReactionPickerProps {
 
 export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isOpen, onClose, onSelect, recentReactions = [], allowedReactions, position = "top", participantColorSeed, participantGradientPreference, className, size = "default" }: ReactionPickerProps) => {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const phone = usePhoneCall();
   const { trigger } = useHaptics();
   const [activeCategory, setActiveCategory] = useState<ReactionCategoryKey>("smileys");
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,6 +85,10 @@ export const ReactionPicker = React.memo(({ isHandRaised, onToggleHandRaise, isO
   }, [query, isSearching]);
 
   const currentEmojis = isSearching ? searchResults : EMOJI_CATEGORIES[activeCategory]?.emojis || [];
+
+  if (phone && allowedReactions) {
+    return <ReactionSheet open={isOpen} isHandRaised={isHandRaised} onToggleHandRaise={onToggleHandRaise} reactions={allowedReactions} onSelect={onSelect} onClose={onClose} />;
+  }
 
   if (!isOpen) return null;
 

@@ -5,11 +5,14 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import { usePhoneCall } from "../../internal/call-width";
+import { useLongPress } from "../../internal/useLongPress";
 import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 
+const DeviceSheet = lazy(() => import("./DeviceSheet"));
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
 
@@ -41,9 +44,12 @@ export interface DevicePopoverProps {
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
+  /** The phone picker sheet. Press and hold on the button opens it; the dock's More sheet opens it too. */
+  sheetOpen?: boolean;
+  onSheetOpenChange?: (open: boolean) => void;
 }
 
-function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
+export function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   const [level, setLevel] = useState(0);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the microphone meter AudioContext and sampling interval; disconnect, close and clear them on track replacement.
   useEffect(() => {
@@ -72,7 +78,7 @@ function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
   );
 }
 
-function CameraPreview({
+export function CameraPreview({
   track,
   mirrored,
   open,
@@ -173,8 +179,14 @@ export function DevicePopover({
   toggleDisabled,
   busy,
   onCancelPending,
+  sheetOpen = false,
+  onSheetOpenChange,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  const [sheetLoaded, setSheetLoaded] = useState(false);
+  if (sheetOpen && !sheetLoaded) setSheetLoaded(true);
+  const phone = usePhoneCall();
+  const hold = useLongPress(phone && onSheetOpenChange ? () => onSheetOpenChange(true) : undefined);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
@@ -197,6 +209,7 @@ export function DevicePopover({
             aria-busy={busy}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
             onClick={busy && onCancelPending ? onCancelPending : onToggle}
+            {...hold}
           >
             <MediaGlyph kind={mic ? "mic" : "cam"} slashed={!isActive && !busy} busy={Boolean(busy)} />
           </button>
@@ -255,6 +268,28 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
+      {sheetLoaded && onSheetOpenChange ? (
+        <Suspense fallback={null}>
+          <DeviceSheet
+            type={type}
+            open={sheetOpen}
+            onOpenChange={onSheetOpenChange}
+            devices={devices}
+            selectedDeviceId={selectedDeviceId}
+            onDeviceChange={onDeviceChange}
+            secondaryDevices={secondaryDevices}
+            selectedSecondaryDeviceId={selectedSecondaryDeviceId}
+            onSecondaryDeviceChange={onSecondaryDeviceChange}
+            track={track}
+            captureCameraPreview={captureCameraPreview}
+            noiseSuppression={noiseSuppression}
+            onNoiseSuppressionChange={onNoiseSuppressionChange}
+            mirrored={mirrored}
+            onMirrorChange={onMirrorChange}
+            onTestSpeaker={onTestSpeaker}
+          />
+        </Suspense>
+      ) : null}
       {warning ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>

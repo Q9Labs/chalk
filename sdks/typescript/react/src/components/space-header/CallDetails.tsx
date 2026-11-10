@@ -205,7 +205,10 @@ export function CallDetails({
   onSoundsChange,
   onDialog,
   onReportProblem,
+  hideShortcuts = false,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+  /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
+  readonly hideShortcuts?: boolean;
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
@@ -287,10 +290,12 @@ export function CallDetails({
             <span />
           </span>
         </button>
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-          Keyboard shortcuts
-          <ShellIcon name="right" size={18} />
-        </button>
+        {hideShortcuts ? null : (
+          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
+            Keyboard shortcuts
+            <ShellIcon name="right" size={18} />
+          </button>
+        )}
         {onReportProblem ? (
           <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
             Report a problem

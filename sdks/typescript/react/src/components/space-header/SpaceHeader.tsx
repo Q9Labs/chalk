@@ -41,10 +41,11 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       {chevron}
     </button>
   );
-  const content = (
+  const content = (hideShortcuts: boolean) => (
     <CallDetails
       {...props}
       onReportProblem={props.reportUnavailableReason ? undefined : props.onReportProblem}
+      hideShortcuts={hideShortcuts}
       onClose={() => setOpen(false)}
       sounds={sounds}
       onSoundsChange={setSounds}
@@ -83,12 +84,12 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
                   <span>{props.callLinkOpen ? "Hide call link" : "Show call link"}</span>
                 </button>
               ) : null}
-              {content}
+              {content(true)}
             </ChalkSheet>
           </>
         ) : (
           <ChalkPopover open={open} onOpenChange={setOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
-            {content}
+            {content(false)}
           </ChalkPopover>
         )}
         {weakConnection ? (

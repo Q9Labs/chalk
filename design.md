@@ -29,6 +29,7 @@ call-dark:
   text-strong: "#FFFFFF"
   text-soft: "#C4C6CC"
   text-muted: "#9A9CA3"
+  text-faint: "#5F6168"
   danger: "#E5484D"
   danger-hover: "#EC5D61"
   danger-text: "#FF6B6B"
@@ -51,6 +52,7 @@ call-light:
   text-strong: "#000000"
   text-soft: "#3D3E45"
   text-muted: "#5C5D65"
+  text-faint: "#8B8C94"
   danger: "#D93A3F"
   danger-hover: "#E04B50"
   danger-text: "#BF272C"
@@ -159,6 +161,7 @@ Both call themes share one set of roles. Dark is the default. Light is a designe
 | `text-strong` | `#FFFFFF`                 | `#000000`          | Hover state of an inverted button                                       |
 | `text-soft`   | `#C4C6CC`                 | `#3D3E45`          | Secondary text on cards and in menus                                    |
 | `text-muted`  | `#9A9CA3`                 | `#5C5D65`          | Meta, placeholders, section labels, inactive icons                      |
+| `text-faint`  | `#5F6168`                 | `#8B8C94`          | The drag handle pill on a phone sheet                                   |
 | `danger`      | `#E5484D`                 | `#D93A3F`          | Leave button and Stop sharing; `danger-hover` is `#EC5D61` or `#E04B50` |
 | `danger-text` | `#FF6B6B`                 | `#BF272C`          | Off-state icons, error text, End call for everyone                      |
 | `success`     | `#80B879`                 | `#2B8A3E`          | Level meter, switch on, good signal, copy done                          |
@@ -167,16 +170,16 @@ Both call themes share one set of roles. Dark is the default. Light is a designe
 
 Colors that stay the same in both themes, because they sit on video or stand for a fixed meaning:
 
-| Token                               | Value                                                                                  | Use                                                                    |
-| ----------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `overlay`                           | `rgba(0,0,0,0.75)` with `#FFFFFF` text                                                 | Name tags, signal chip, tile and share hover buttons                   |
-| `overlay-strong`                    | `rgba(0,0,0,0.82)`                                                                     | Share notes, the switcher, and the own-share bar                       |
-| `overlay-hover`                     | `rgba(34,34,34,0.95)`                                                                  | Hover state of an overlay button                                       |
-| `overlay-warning`, `overlay-danger` | `#E2BD3A`, `#FF6B6B`                                                                   | Raised-hand and weak-signal marks, and the mic-off mark, on an overlay |
-| `hand`                              | `#DCB740` with `#16140C` text                                                          | Raised-hand order badge and the active Raise hand row                  |
-| `scrim`                             | `rgba(0,0,0,0.55)`; the photo viewer uses `rgba(8,8,10,0.94)`                          | Behind phone sheets, small dialogs, and the photo viewer               |
-| Identity colors                     | `#315F72`, `#5C6650`, `#6B5B4F`, `#64576B`, `#49645D`, `#665D42`, `#4D5D73`, `#6D5158` | Avatar background, chosen by a hash of the person's name               |
-| File types                          | PDF `#C42B2B`, Word `#2F5FB3`, Excel `#1E7A46`, PowerPoint `#B8481E`, other `#5C5D65`  | Badge behind the white type label on a file card                       |
+| Token                               | Value                                                                                                                 | Use                                                                    |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `overlay`                           | `rgba(0,0,0,0.75)` with `#FFFFFF` text                                                                                | Name tags, signal chip, tile and share hover buttons                   |
+| `overlay-strong`                    | `rgba(0,0,0,0.82)`                                                                                                    | Share notes, the switcher, and the own-share bar                       |
+| `overlay-hover`                     | `rgba(34,34,34,0.95)`                                                                                                 | Hover state of an overlay button                                       |
+| `overlay-warning`, `overlay-danger` | `#E2BD3A`, `#FF6B6B`                                                                                                  | Raised-hand and weak-signal marks, and the mic-off mark, on an overlay |
+| `hand`                              | `#DCB740` with `#16140C` text                                                                                         | Raised-hand order badge and the active Raise hand row                  |
+| `scrim`                             | `rgba(0,0,0,0.55)`; phone sheets in the light theme use `rgba(0,0,0,0.38)`; the photo viewer uses `rgba(8,8,10,0.94)` | Behind phone sheets, small dialogs, and the photo viewer               |
+| Identity colors                     | `#315F72`, `#5C6650`, `#6B5B4F`, `#64576B`, `#49645D`, `#665D42`, `#4D5D73`, `#6D5158`                                | Avatar background, chosen by a hash of the person's name               |
+| File types                          | PDF `#C42B2B`, Word `#2F5FB3`, Excel `#1E7A46`, PowerPoint `#B8481E`, other `#5C5D65`                                 | Badge behind the white type label on a file card                       |
 
 Color rules for the call:
 
@@ -283,7 +286,7 @@ Two round buttons sit in the bottom corners, `20px` from the edges. The link but
 
 **Share source menu.** The caret opens three `52px` rows with a plain icon, a label, and one line of help: "Entire screen" (Everything on one display), "Window" (One app, like Slides or Figma), and "Browser tab" (One tab, and its sound if you like). A check marks the last choice. A separator and a "Share tab audio" switch follow, with the help line "Works when you share a browser tab". The share button without the caret reuses the last choice, and Window is the first. The choice goes to the browser as the `displaySurface` hint. Browsers that cannot share hide the button.
 
-**Phone dock.** One row of five `52px` round buttons with safe-area padding: microphone, camera, reactions, More, and leave. Carets are hidden. More opens a bottom sheet with a drag handle and `52px` rows: Copy link, Share screen (where the browser can share), Board, Chat, People, and Layout as a Spotlight/Grid segmented control.
+**Phone dock.** One row of five `52px` round buttons with safe-area padding: microphone, camera, reactions, More, and leave. Carets are hidden: press and hold the microphone or camera for `400ms` to open its picker as a bottom sheet. More opens a bottom sheet with a drag handle and `48px` rows: Microphone and speaker, Camera, Share screen (where the browser can share), Board, Chat (with an unread badge), People, and Layout as a Spotlight/Grid segmented control. The call link is copied from the call menu.
 
 ### Device menus
 
@@ -564,7 +567,9 @@ The phone keeps the same hierarchy rather than shrinking the laptop UI. All size
 - The stage is `8px` from the sides, `52px` from the top, and `106px` from the bottom. Tiles have a `14px` radius.
 - Alone, you fill the stage. With two people, one person fills the stage and the other floats as a `96px` by `128px` tile at the top right, `12px` inside the corner. With more people, the strip sits below at `30%` of the stage height, and the content-aware placement works in portrait with a column minimum of `120px`. Grid uses the same planner with the phone tile minimums.
 - The header, dock, and More sheet are described above. The chrome does not fade on a phone.
-- People, Chat, call details, the ready card, tile options, and More open as bottom sheets with a `24px` top radius, a `36px` by `5px` drag handle, and a scrim. A sheet traps focus, and Esc or a tap on the scrim closes it.
+- People, Chat, call details, the microphone and camera pickers, reactions, the ready card, tile options, and More open as bottom sheets with a `24px` top radius, a `36px` by `5px` drag handle, and a scrim. A sheet traps focus, and Esc or a tap on the scrim closes it. The sheet stays pinned while its rows scroll, up to `88%` of the screen, and its bottom padding is the safe-area inset (at least `16px`) plus `8px`.
+- Drag a sheet down by its handle or heading (the top `76px`, never a row). It follows the finger one to one, moves a third as far upward, and fades the scrim with it. It closes when released past `30%` of its height or faster than `0.5px/ms`, and otherwise springs back in `240ms`. With reduced motion it snaps. Closing by drag gives the success haptic.
+- The reactions sheet has no scrim, so the call stays visible, and it closes `120ms` after an emoji is sent.
 - Nothing is hover-only. Tile actions open from a tap, share controls appear on a tap, and message reactions appear on a long press.
 - Safe-area insets apply to the dock, the composer, and every sheet.
 
