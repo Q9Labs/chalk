@@ -7,6 +7,7 @@ import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure
 import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
+import { closeReusedInvite } from "./invite.mjs";
 
 const runId = process.env.CHALK_PROOF_RUN_ID ?? `web-${randomUUID()}`;
 runLabel(runId);
@@ -28,6 +29,7 @@ const stop = () => {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 const report = { result: "failed", cleanup: "not-started" };
+let reusedInviteSpace;
 try {
   check(process.env.CHALK_PROOF_CONFIG_SOURCE === "env", "Web proof requires environment configuration", "configuration");
   const config = await loadConfig({ readiness: false });
@@ -57,6 +59,8 @@ try {
   // A reused Space is not the run's own, so cleanup learns of this Episode from the ownership file.
   if (mediaPlane === "chalk_sfu") await trackEpisode(run, space, episode);
   await save(`${directory}/episode.json`, episode);
+  // Only a reused Space outlives the run, so only its invite must be closed again (also when the proof fails).
+  if (mediaPlane === "chalk_sfu") reusedInviteSpace = space;
   const invite = await run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}/public-invite`, { enabled: true });
   const url = new URL(invite.canonical_url);
   const web = new URL(run.config.web_url);
@@ -91,7 +95,11 @@ try {
 } finally {
   if (run) {
     try {
-      await cleanupRun(run);
+      // A failed invite close fails the cleanup, but never skips the rest of it.
+      const inviteClosing = reusedInviteSpace ? closeReusedInvite(run, reusedInviteSpace) : Promise.resolve();
+      const outcomes = await Promise.allSettled([inviteClosing, cleanupRun(run)]);
+      const failed = outcomes.find((outcome) => outcome.status === "rejected");
+      if (failed) throw failed.reason;
       report.cleanup = "passed";
     } catch (error) {
       report.cleanup = "failed";

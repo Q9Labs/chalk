@@ -87,7 +87,13 @@ the cut. Production Promote records the previous media members before mutation,
 including the legacy first-promotion baseline, and rollback restores those pins.
 
 Release builds changed backend images and two target-specific web archives.
-After nightly deployment, the real-call workflow runs `smoke transcript`.
+After nightly deployment, the real-call workflow runs `camera-share`, `call-artifacts`
+and `long-call` on the own SFU (`chalk_sfu`) under the staging SFU lease, and the
+web-call proof runs on the same plane. The latency run is a separate job: it blocks
+Promote, never the cut. A lease that stays busy for the whole 30-minute wait fails
+the gate as `staging-sfu-lease-timeout`; a lease lost mid-run is
+`staging-sfu-lease-lost`, and a lease tool failure before the lease is taken is
+`staging-sfu-lease-error`. The `record` job prints the name.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
 SHA256 hashes, applied identity and proof result. Actions artifacts are retained for 90 days (the public-repository maximum).
@@ -115,9 +121,7 @@ manifest are checked before approval. Missing/expired/corrupt files fail clearly
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
 The cut is held by the `chalk_sfu` real-call proof (recorded as `real_call_proof_result`)
-and the web-call proof on `chalk_sfu` (`web_e2e_result`). A staging SFU lease that stays
-busy for the whole 30-minute wait fails the proof by name (`staging-sfu-lease-timeout`),
-shown on the run and by the `record` job. Nightly also records `own_sfu_proof_result`
+and the web-call proof on `chalk_sfu` (`web_e2e_result`). Nightly also records `own_sfu_proof_result`
 (`passed`, `failed` or `skipped`), the proof together with the latency run,
 bound to the cut's `target_sha` and `proof_run_id`. A failed latency run never holds
 the cut. Promote requires a passed
