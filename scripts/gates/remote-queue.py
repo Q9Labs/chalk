@@ -343,8 +343,8 @@ def check_slot_ports(job, slot):
         return
     if ports.is_symlink() or ports.read_text().strip() != str(slot):
         raise ValueError('invalid slot port receipt')
-    # remote-slot-env.sh assigns roles 1-19 in this block; 19 is Metro.
-    first, last = 21000 + slot * 100 + 1, 21000 + slot * 100 + 19
+    # remote-slot-env.sh assigns roles 1-19 in this block; 19 is Metro, and 20-24 are the dashboard refresh proof.
+    first, last = 21000 + slot * 100 + 1, 21000 + slot * 100 + 24
     holders = {}
     omitted = False
     owner = command = ''
