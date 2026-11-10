@@ -51,3 +51,24 @@ export function evaluateLeaves(baseline, candidate, capturedMedianMs) {
     candidateSamples: candidate.length,
   };
 }
+
+// The own SFU has no earlier client to compare against, so its Leaves are judged on absolute bounds:
+// every ordinary and rejected Leave is acknowledged within 5 s, and a rejected background request never closes the peer first.
+export function evaluateOwnLeaves(samples) {
+  const ordinary = samples.filter((sample) => sample.scenario === "ordinary");
+  const rejected = samples.filter((sample) => sample.scenario === "publications-403");
+  const complete = [ordinary.length, rejected.length].every((count) => count === 5);
+  const allConfirmed = samples.every(confirmed);
+  const observed403 = rejected.every(safeRejection);
+  const summary = summarize(samples);
+  return {
+    passed: [complete, allConfirmed, observed403, summary.max <= 5000].every(Boolean),
+    complete,
+    confirmed: allConfirmed,
+    observed403,
+    medianMs: summary.median,
+    maxMs: summary.max,
+    limitMs: 5000,
+    samples: samples.length,
+  };
+}

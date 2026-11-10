@@ -2,15 +2,18 @@ import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { baselineEntry } from "./leave-baseline.mjs";
-import { evaluateLeaves } from "./leave-criteria.mjs";
+import { evaluateLeaves, evaluateOwnLeaves } from "./leave-criteria.mjs";
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
-import { createSpace, prepareIntegration } from "./proofs.mjs";
-import { check, save } from "./runtime.mjs";
+import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { check, mediaPlane, save } from "./runtime.mjs";
 
 async function createEpisode(run) {
   const space = await createSpace(run);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  return { space, episode };
+  // A reused (pinned) Space takes one live Episode at a time, so each sample ends its own.
+  if (mediaPlane === "cf_sfu") return { space, episode };
+  await trackEpisode(run, space, episode);
+  return { space, episode, ending: episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`) };
 }
 
 // The SDK lists publications with GET publications, or with POST signal {op: "publications"} when the API advertises the unified route.
@@ -80,7 +83,7 @@ export function measureLeave(page, scenario) {
 }
 
 export async function sampleLeave(run, origin, sdkEntry, scenario) {
-  const { space, episode } = await createEpisode(run);
+  const { space, episode, ending } = await createEpisode(run);
   const resourcesStart = run.resources.length;
   const directory = resolve(run.directory, `leave-${sdkEntry ? "baseline" : "candidate"}-${scenario}-${randomUUID()}`);
   await mkdir(directory, { recursive: true });
@@ -94,6 +97,7 @@ export async function sampleLeave(run, origin, sdkEntry, scenario) {
   } finally {
     for (const resource of run.resources.slice(resourcesStart).reverse()) await resource.dispose();
     run.resources.splice(resourcesStart);
+    await ending?.end();
   }
 }
 
@@ -102,8 +106,24 @@ function capturedBaseline() {
   return { median: value ? Number(value) : undefined, evidence: process.env.CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256 || null };
 }
 
+// chalk_sfu: the earlier SDK cannot join an own-SFU Episode, so the Leaves are judged on absolute bounds alone.
+async function ownLeaveProof(run, receiver) {
+  const samples = [];
+  for (let index = 0; index < 5; index++) {
+    samples.push(await sampleLeave(run, receiver.origin, undefined, "ordinary"));
+    samples.push(await sampleLeave(run, receiver.origin, undefined, "publications-403"));
+    await save(`${run.directory}/leave-samples.json`, { samples });
+  }
+  const result = evaluateOwnLeaves(samples);
+  await save(`${run.directory}/leave-comparison.json`, result);
+  console.log(`Leave on ${mediaPlane}: median ${result.medianMs} ms, max ${result.maxMs} ms; limit ${result.limitMs} ms; 403 observed ${result.observed403}`);
+  check(result.passed, "Leave acknowledgement check failed");
+  return result;
+}
+
 export async function leaveProof(run) {
   const receiver = await prepareIntegration(run, false);
+  if (mediaPlane === "chalk_sfu") return ownLeaveProof(run, receiver);
   const entry = await baselineEntry(run);
   const baseline = [];
   const candidate = [];
