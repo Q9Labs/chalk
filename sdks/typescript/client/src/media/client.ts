@@ -786,7 +786,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #carriesBundleTransport(publication: OwnedLocalPublication): boolean {
-    const bundleTag = /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(publication.connection.localDescription?.sdp ?? "")?.[1];
+    const bundleTag = bundleTagOf(publication.connection);
     return !bundleTag || (publication.transceiver.mid !== null && publication.transceiver.mid === bundleTag);
   }
   #shouldKeepBundleTransportOnUserPause(publication: OwnedLocalPublication, closed: boolean): boolean {
@@ -1600,9 +1600,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
       await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
       this.#requireGeneration(generation);
-      for (const { transceiver } of batch) {
+      for (const { transceiver, mid } of batch) {
         this.#closedReceiverTracks.add(transceiver.receiver.track);
-        transceiver.stop();
+        // Stopping moves no SDP, so the next offer of any kind would reject this m-section. Rejecting the BUNDLE tag makes
+        // Chrome drop the transport and the SFU session with it, so that one receiver is parked inactive instead.
+        if (mid === bundleTagOf(this.#connection)) {
+          transceiver.direction = "inactive";
+          transceiver.receiver.track.stop();
+        } else transceiver.stop();
       }
     }
   }
@@ -2547,6 +2552,10 @@ function pageIsHidden(): boolean {
 }
 function connectionIsLive(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "connected" && (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed");
+}
+// The MID of the m-section that owns the BUNDLE transport: the first one in the group of the last local description.
+function bundleTagOf(connection: RTCPeerConnection): string | undefined {
+  return /(?:^|\r?\n)a=group:BUNDLE[ \t]+(\S+)/.exec(connection.localDescription?.sdp ?? "")?.[1];
 }
 function connectionIsClosed(connection: RTCPeerConnection): boolean {
   return connection.connectionState === "closed";

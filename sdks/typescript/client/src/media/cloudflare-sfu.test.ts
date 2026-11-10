@@ -2294,6 +2294,34 @@ it.each(["microphone", "camera"] as const)("ownership: production replacement fe
   }
 });
 
+it.each([
+  { tagIsReceiver: true, parked: true },
+  { tagIsReceiver: false, parked: false },
+] as const)("a withdrawn receiver that owns the BUNDLE transport is parked inactive, not stopped (tag is the receiver: $tagIsReceiver)", async ({ tagIsReceiver, parked }) => {
+  // Stopping a receiver moves no SDP, so the next offer (the user's own mute, a publish) rejects its m-section.
+  // Rejecting the BUNDLE tag makes Chrome drop the transport, and the SFU session answers 404 from then on.
+  const harness = createHarness();
+  harness.transport.uniqueRemoteMids = true;
+  try {
+    await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+    const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote", "0", "microphone") };
+    harness.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    harness.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
+    await harness.client.refreshRemotePublications();
+    const receiver = harness.peers[0]!.getTransceivers().find((transceiver) => transceiver.mid?.startsWith("remote-"))!;
+    const stop = vi.spyOn(receiver, "stop");
+    harness.peers[0]!.localDescription = { type: "answer", sdp: `v=0\r\na=group:BUNDLE ${tagIsReceiver ? receiver.mid : "0"} ${tagIsReceiver ? "0" : receiver.mid}\r\n` };
+    harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+    harness.client.remotePublicationsChanged([]);
+    await harness.client.refreshRemotePublications();
+    expect(harness.transport.closeInputs).toMatchObject([{ receiveOnly: true, force: true, tracks: [{ mid: receiver.mid }] }]);
+    expect(stop).toHaveBeenCalledTimes(parked ? 0 : 1);
+    expect(receiver.direction).toBe(parked ? "inactive" : undefined);
+    expect(receiver.receiver.track.readyState).toBe("ended");
+  } finally {
+    harness.client.stop();
+  }
+});
 it.each(["microphone", "camera"] as const)("replaces conservatively on %s retirement without BUNDLE information", async (source) => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });
