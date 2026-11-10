@@ -5,7 +5,6 @@ import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk
 import { ShellIcon } from "./ShellIcon";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
-import { DeviceAccessStyles } from "../device-access/DeviceAccessStyles";
 import { accessTooltip } from "../device-access/model";
 
 function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
@@ -59,7 +58,6 @@ export function ShareControl({
   };
   return (
     <div ref={setSplit} data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing} data-blocked={access ? true : undefined}>
-      <DeviceAccessStyles />
       <ChalkTooltip
         trigger={
           <button
@@ -78,14 +76,7 @@ export function ShareControl({
       >
         {accessLabel ?? (sharing ? "Stop sharing" : "Share screen")}
       </ChalkTooltip>
-      {access ? (
-        <>
-          <span className="chalk-access-badge" aria-hidden="true">
-            !
-          </span>
-          <LazyDeviceAccessCard device="screen" anchor={split} control={access} />
-        </>
-      ) : null}
+      {access ? <LazyDeviceAccessCard device="screen" anchor={split} control={access} /> : null}
       <ChalkMenu
         side="top"
         className="chalk-device-menu"

@@ -12,7 +12,6 @@ import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
-import { DeviceAccessStyles } from "../device-access/DeviceAccessStyles";
 import { accessTooltip } from "../device-access/model";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
@@ -205,7 +204,6 @@ export function DevicePopover({
   return (
     <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={access ? true : undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
-      <DeviceAccessStyles />
       <ChalkTooltip
         trigger={
           <button
@@ -276,14 +274,7 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
-      {access ? (
-        <>
-          <span className="chalk-access-badge" aria-hidden="true">
-            !
-          </span>
-          <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} />
-        </>
-      ) : null}
+      {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} /> : null}
       {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>

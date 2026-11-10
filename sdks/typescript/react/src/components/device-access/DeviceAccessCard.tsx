@@ -4,7 +4,8 @@ import { useMediaQuery } from "../../internal/useMediaQuery";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { BROWSER_MARKS } from "./browser-marks";
 import { DeviceAccessStyles } from "./DeviceAccessStyles";
-import { cardCopy, DEVICE_NAMES, systemSettingsLink, type BrowserName, type DeviceAccessReason, type DeviceKind } from "./model";
+import { cardCopy, systemSettingsLink } from "./card-copy";
+import { DEVICE_NAMES, type BrowserName, type DeviceAccessReason, type DeviceKind } from "./model";
 
 /** What a dock button needs to show its problem and open the card. */
 export interface DeviceAccessControl {
@@ -213,8 +214,21 @@ function CardBody({ device, control, onChooseAnother }: { readonly device: Devic
   );
 }
 
+/** The dock button's "!" badge and its card, which live together so both load on the first refusal. */
+export function DeviceAccessCard(props: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl; readonly onChooseAnother?: () => void }) {
+  return (
+    <>
+      <DeviceAccessStyles />
+      <span className="chalk-access-badge" aria-hidden="true">
+        !
+      </span>
+      <DeviceAccessSurface {...props} />
+    </>
+  );
+}
+
 /** One card for every way a microphone, camera or screen share can be refused. Popover above the dock button, bottom sheet on phones. */
-export function DeviceAccessCard({ device, anchor, control, onChooseAnother }: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl; readonly onChooseAnother?: () => void }) {
+function DeviceAccessSurface({ device, anchor, control, onChooseAnother }: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl; readonly onChooseAnother?: () => void }) {
   const phone = useMediaQuery("(max-width: 640px)");
   const popup = useRef<HTMLDivElement>(null);
   const label = cardCopy(device, control.reason).title;

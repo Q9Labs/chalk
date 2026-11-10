@@ -1,5 +1,5 @@
 import { commandFailurePresentation } from "./command-failure";
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon } from "../../utils/icons";
@@ -13,7 +13,7 @@ import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type Cont
 import { ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
-import { DeviceAccessWaiting } from "../device-access/DeviceAccessWaiting";
+const DeviceAccessWaiting = lazy(() => import("../device-access/DeviceAccessWaiting").then((module) => ({ default: module.DeviceAccessWaiting })));
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
@@ -193,7 +193,11 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
     <>
       <ControlBarSurface {...surfaceProps} />
       <CommandErrorAlert message={mediaNotice ?? (failure?.card ? undefined : failure?.message)} />
-      {waitingForBrowser ? <DeviceAccessWaiting /> : null}
+      {waitingForBrowser ? (
+        <Suspense fallback={null}>
+          <DeviceAccessWaiting />
+        </Suspense>
+      ) : null}
     </>
   );
 }
