@@ -20,26 +20,44 @@ export const bounds = {
   disconnectedMs: 10_000,
   /** A toggle counts as testing a refresh when it falls this close to the refresh request. */
   acrossRefreshMs: 10_000,
+  /** A grant's successor must be requested within this long after the grant's refresh point (its expiry less the refresh window). */
+  refreshLateMs: 30_000,
   sampleIntervalMs: 2000,
 };
 
 const baselineToggleMs = [60_000, 120_000, 180_000, 330_000, 390_000, 540_000];
 
+/** The baseline toggles, which do not depend on when a refresh happens. */
+export function baselineToggles() {
+  return baselineToggleMs.flatMap((atMs, index) => offOn(atMs, index % 2, index % 4 < 2 ? "microphone" : "camera"));
+}
+
+function offOn(atMs, guest, kind) {
+  return [
+    { atMs, guest, kind, enabled: false },
+    { atMs: atMs + 6000, guest, kind, enabled: true },
+  ];
+}
+
 /**
- * The toggles of one call, as `{ atMs, guest, kind, enabled }` sorted by time from the start of the call.
- * Guests 1 and 2 (indexes 0 and 1) toggle, guest 3 only listens and speaks. Around each predicted refresh both guests toggle
- * 8 s before and 2 to 6 s after it, so each refresh has a toggle on either side within the bound.
+ * The toggles around one access refresh due at `dueMs`: guests 1 and 2 (indexes 0 and 1) toggle 8 s before and 2 to 6 s after it,
+ * so a refresh from `dueMs - 18 s` to `dueMs + 18 s` has a toggle on either side within the bound.
+ */
+export function refreshToggles(dueMs) {
+  return [...offOn(dueMs - 8000, 0, "microphone"), ...offOn(dueMs - 4000, 1, "camera"), ...offOn(dueMs + 2000, 1, "microphone"), ...offOn(dueMs - 2000, 0, "camera")];
+}
+
+/** How far past the earliest due refresh one group of toggles still has a toggle within the bound. */
+export const refreshCoverMs = 18_000;
+
+/**
+ * The toggles of one call if every guest renews its grant at the predicted time, as `{ atMs, guest, kind, enabled }` sorted by time from the
+ * start of the call. Guest 3 only listens and speaks. A real call plans the refresh toggles from each guest's current grant instead
+ * (long-call.mjs), because a media-connection replacement issues a new grant and moves the next refresh.
  */
 export function toggleSchedule({ durationMs = callDurationMs, firstRefreshMs = refreshIntervalMs } = {}) {
-  const toggles = [];
-  const off = (atMs, guest, kind) => toggles.push({ atMs, guest, kind, enabled: false }, { atMs: atMs + 6000, guest, kind, enabled: true });
-  baselineToggleMs.forEach((atMs, index) => off(atMs, index % 2, index % 4 < 2 ? "microphone" : "camera"));
-  for (let boundary = firstRefreshMs; boundary + 10_000 < durationMs; boundary += refreshIntervalMs) {
-    off(boundary - 8000, 0, "microphone");
-    off(boundary - 4000, 1, "camera");
-    off(boundary + 2000, 1, "microphone");
-    off(boundary - 2000, 0, "camera");
-  }
+  const toggles = baselineToggles();
+  for (let boundary = firstRefreshMs; boundary + 10_000 < durationMs; boundary += refreshIntervalMs) toggles.push(...refreshToggles(boundary));
   return toggles.filter((toggle) => toggle.atMs + 1000 < durationMs).sort((a, b) => a.atMs - b.atMs);
 }
 
@@ -102,6 +120,30 @@ const seconds = (ms) => Math.round(ms / 1000);
 const span = ({ fromMs, toMs }) => `+${seconds(fromMs)}s to +${seconds(toMs)}s`;
 
 /**
+ * Walks one guest's grants in order. Each grant must be followed by a renewal requested no later than `refreshLateMs` after its refresh point
+ * (expiry less the window), and the last grant must not be overdue when the call ends. A renewal may come early, because a media-connection
+ * replacement issues a new grant too, and that moves the next refresh.
+ */
+function grantChainFailures({ initialExpiry, requests }, endMs, startedAtMs) {
+  const failures = [];
+  let expiry = initialExpiry;
+  for (const request of requests.filter((entry) => entry.status === 201)) {
+    const lateMs = Date.parse(request.startedAt) - (expiry - refreshWindowMs);
+    if (lateMs > bounds.refreshLateMs) failures.push(`renewed its access at +${seconds(Date.parse(request.startedAt) - startedAtMs)}s, ${seconds(lateMs)} s after the refresh was due`);
+    expiry = request.mediaExpiry;
+  }
+  if (endMs - (expiry - refreshWindowMs) > bounds.refreshLateMs) failures.push(`did not renew its access, due at +${seconds(expiry - refreshWindowMs - startedAtMs)}s, before the call ended`);
+  return failures;
+}
+
+/** The media-connection replacements a call made, as notes. They move the next refresh and are worth reading, but are not failures by themselves. */
+export function mediaReplacementNotes(refreshes, startedAtMs) {
+  return refreshes.flatMap(({ guest, requests }) =>
+    requests.filter((request) => request.replaceMediaConnection).map((request) => `Guest ${guest} replaced its media connection at +${seconds(Date.parse(request.startedAt) - startedAtMs)}s (${request.reason ?? "no reason"}, status ${request.status ?? "none"})`),
+  );
+}
+
+/**
  * @param ticks `{ t, guests: [sample] }` in time order; a sample is `{ reachable, status, errorCode, mic, camera, pcs, outAudio, remotes: [{ participantId, source, bytes }] }`.
  * @param participants The participant id of each guest, in guest order.
  * @param refreshes What each guest's credential provider saw: `{ guest, requests: [{ status, replaceMediaConnection, startedAt }] }`.
@@ -145,16 +187,19 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, started
       }
     }
   }
-  const refreshCounts = refreshes.map(({ requests }) => requests.filter((request) => !request.replaceMediaConnection && request.status === 201).length);
+  const grantCounts = refreshes.map(({ requests }) => requests.filter((request) => request.status === 201).length);
+  const scheduledCounts = refreshes.map(({ requests }) => requests.filter((request) => !request.replaceMediaConnection && request.status === 201).length);
   for (const { guest, requests } of refreshes) {
     for (const request of requests.filter((entry) => entry.status !== 201)) failures.push(`${label(guest - 1)}'s access refresh failed with status ${request.status ?? "none"}${request.code ? ` (${request.code})` : ""}`);
   }
   const refreshMs = refreshes.flatMap(({ requests }) => requests.filter((request) => !request.replaceMediaConnection).map((request) => Date.parse(request.startedAt) - startedAtMs));
   const untested = refreshMs.filter((at) => !toggles.some((toggle) => Math.abs(toggle.atMs - at) <= bounds.acrossRefreshMs));
   if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
-  const expectedRefreshes = Math.floor((ticks.at(-1)?.t - ticks[0]?.t) / refreshIntervalMs);
-  const fewest = Math.min(...refreshCounts);
-  if (!(fewest >= expectedRefreshes && fewest >= 2)) failures.push(`Guests saw ${refreshCounts.join(", ")} access refreshes; at least ${Math.max(2, expectedRefreshes)} each were expected in this call`);
+  const endMs = ticks.at(-1)?.t ?? startedAtMs;
+  for (const refresh of refreshes) failures.push(...grantChainFailures(refresh, endMs, startedAtMs).map((text) => `${label(refresh.guest - 1)} ${text}`));
+  const fewest = Math.min(...grantCounts);
+  const fewestScheduled = Math.min(...scheduledCounts);
+  if (!(fewest >= 2 && fewestScheduled >= 1)) failures.push(`Guests renewed their access ${grantCounts.join(", ")} times (${scheduledCounts.join(", ")} scheduled); at least 2 each, with at least 1 scheduled, were expected in this call`);
   return {
     failures,
     evidence: {

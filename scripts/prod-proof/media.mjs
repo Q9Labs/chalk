@@ -48,7 +48,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     checkMediaPlane(grant, guest + 1, options.plane ?? mediaPlane);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
-    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
+    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, currentExpiry: initial.mediaExpiry, latestExpiry: 0, requests: [] };
     refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();

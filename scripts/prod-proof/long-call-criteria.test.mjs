@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { accessLifetimeMs, bounds, callDurationMs, evidenceLine, judgeLongCall, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { accessLifetimeMs, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, refreshCoverMs, refreshIntervalMs, refreshToggles, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const startedAtMs = Date.parse("2026-11-10T02:00:00Z");
 const participants = ["p1", "p2", "p3"];
+
+/** A grant request `atMs` into the call; the grant it returns lives one access lifetime. */
+const grant = (atMs, { replace = false } = {}) => ({
+  status: 201,
+  reason: replace ? "media_recovery" : "scheduled_refresh",
+  replaceMediaConnection: replace,
+  startedAt: new Date(startedAtMs + atMs).toISOString(),
+  mediaExpiry: startedAtMs + atMs + accessLifetimeMs,
+});
+const guestWith = (index, requests) => ({ guest: index + 1, initialExpiry: startedAtMs + accessLifetimeMs, requests });
 
 /** A healthy three-guest call, sampled like the proof does: a counter climbs while its source is on and restarts after each toggle. */
 function healthyCall({ durationMs = callDurationMs, toggles = toggleSchedule() } = {}) {
@@ -43,10 +53,7 @@ function healthyCall({ durationMs = callDurationMs, toggles = toggleSchedule() }
       })),
     });
   }
-  const refreshes = participants.map((_, index) => ({
-    guest: index + 1,
-    requests: [refreshIntervalMs, 2 * refreshIntervalMs].map((at) => ({ status: 201, replaceMediaConnection: false, startedAt: new Date(startedAtMs + at).toISOString() })),
-  }));
+  const refreshes = participants.map((_, index) => guestWith(index, [grant(refreshIntervalMs), grant(2 * refreshIntervalMs)]));
   return { ticks, participants, refreshes, toggles, startedAtMs };
 }
 const judged = (call) => judgeLongCall(call).failures;
@@ -169,6 +176,34 @@ test("inbound audio or video that stands still for more than 10 s while its send
 test("a refresh that no toggle crossed, or too few refreshes, fails because the call did not test what it must", () => {
   const call = healthyCall({ toggles: toggleSchedule().filter((toggle) => Math.abs(toggle.atMs - refreshIntervalMs) > 30_000) });
   assert.ok(judged(call).some((failure) => failure.includes("had no mic or camera toggle within 10 s")));
-  const once = { ...healthyCall(), refreshes: participants.map((_, index) => ({ guest: index + 1, requests: [{ status: 201, replaceMediaConnection: false, startedAt: new Date(startedAtMs + refreshIntervalMs).toISOString() }] })) };
-  assert.ok(judged(once).some((failure) => failure.startsWith("Guests saw 1, 1, 1 access refreshes")));
+  const once = { ...healthyCall(), refreshes: participants.map((_, index) => guestWith(index, [grant(refreshIntervalMs)])) };
+  assert.ok(judged(once).some((failure) => failure.startsWith("Guests renewed their access 1, 1, 1 times")));
+});
+
+test("a media-connection replacement moves the next refresh, and a call that refreshes at the moved time passes", () => {
+  // Guest 2 replaced its media connection at +127 s, so its grant ran to +427 s and its refresh came at +367 s instead of +240 s.
+  const shifted = [guestWith(0, [grant(refreshIntervalMs), grant(2 * refreshIntervalMs)]), guestWith(1, [grant(127_000, { replace: true }), grant(367_000)]), guestWith(2, [grant(refreshIntervalMs), grant(2 * refreshIntervalMs)])];
+  const toggles = [...toggleSchedule(), ...refreshToggles(367_000)].sort((a, b) => a.atMs - b.atMs);
+  assert.deepEqual(judged({ ...healthyCall({ toggles }), refreshes: shifted, toggles }), []);
+  // The moved refresh still has to be crossed by a toggle: the fixed schedule alone misses it.
+  assert.ok(judged({ ...healthyCall(), refreshes: shifted }).some((failure) => failure.startsWith("1 access refresh(es) at +367s had no mic or camera toggle")));
+  assert.deepEqual(mediaReplacementNotes(shifted, startedAtMs), ["Guest 2 replaced its media connection at +127s (media_recovery, status 201)"]);
+});
+
+test("a refresh that never came, came late, or was only ever a replacement fails", () => {
+  const call = healthyCall();
+  const withGuest2 = (requests) => ({ ...call, refreshes: [call.refreshes[0], guestWith(1, requests), call.refreshes[2]] });
+  // A replacement at +127 s moves the due time to +367 s; nothing after it leaves the call past the due time without a renewal.
+  assert.ok(judged(withGuest2([grant(127_000, { replace: true })])).some((failure) => failure.startsWith("Guest 2 did not renew its access, due at +367s")));
+  assert.ok(judged(withGuest2([grant(300_000), grant(2 * refreshIntervalMs)])).some((failure) => failure.startsWith("Guest 2 renewed its access at +300s, 60 s after the refresh was due")));
+  assert.ok(judged(withGuest2([grant(127_000, { replace: true }), grant(367_000, { replace: true })])).some((failure) => failure === "Guests renewed their access 2, 2, 2 times (2, 0, 2 scheduled); at least 2 each, with at least 1 scheduled, were expected in this call"));
+});
+
+test("one group of refresh toggles has a toggle within the bound of every refresh it covers", () => {
+  const toggles = refreshToggles(300_000);
+  for (let at = 300_000 - refreshCoverMs; at <= 300_000 + refreshCoverMs; at += 1000)
+    assert.ok(
+      toggles.some((toggle) => Math.abs(toggle.atMs - at) <= bounds.acrossRefreshMs),
+      `+${at / 1000}s has no toggle within the bound`,
+    );
 });
