@@ -1,6 +1,6 @@
 import { launchGuests } from "./media.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
-import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, refreshCoverMs, refreshIntervalMs, refreshToggles, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
 const guestCount = 3;
@@ -72,15 +72,10 @@ export async function longCallProof(run, receiver) {
   // A media-connection replacement issues a new grant and moves that guest's next refresh, so the toggles around a refresh are planned from the current grants.
   const toggling = (async () => {
     const pending = baselineToggles();
-    const covered = [];
+    const planned = new Set();
     while (Date.now() - startedAtMs < callDurationMs) {
       const now = Date.now() - startedAtMs;
-      const uncovered = guests.refreshes.map(dueMs).filter((due) => due > now + 9000 && due + 10_000 < callDurationMs && !covered.some((first) => due >= first - 8000 && due <= first + refreshCoverMs));
-      if (uncovered.length) {
-        const first = Math.min(...uncovered);
-        covered.push(first);
-        pending.push(...refreshToggles(first));
-      }
+      pending.push(...planRefreshToggles({ dues: guests.refreshes.map((refresh) => ({ key: `${refresh.guest}:${refresh.currentExpiry}`, dueMs: dueMs(refresh) })), nowMs: now, planned }));
       pending.sort((a, b) => a.atMs - b.atMs);
       while (pending.length && pending[0].atMs <= now) {
         const entry = pending.shift();
@@ -100,7 +95,7 @@ export async function longCallProof(run, receiver) {
   failures.push(...judged.failures);
   const evidence = { ...judged.evidence, failureCount: failures.length };
   console.log(evidenceLine(evidence));
-  for (const note of mediaReplacementNotes(guests.refreshes, startedAtMs)) console.log(`Long call note: ${note}`);
+  for (const note of [...mediaReplacementNotes(guests.refreshes, startedAtMs), ...judged.notes]) console.log(`Long call note: ${note}`);
   for (const failure of failures) console.log(`Long call failure: ${failure}`);
   await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, ticks });
   await end();

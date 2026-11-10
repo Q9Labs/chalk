@@ -41,14 +41,26 @@ function offOn(atMs, guest, kind) {
 
 /**
  * The toggles around one access refresh due at `dueMs`: guests 1 and 2 (indexes 0 and 1) toggle 8 s before and 2 to 6 s after it,
- * so a refresh from `dueMs - 18 s` to `dueMs + 18 s` has a toggle on either side within the bound.
+ * so a refresh within 2 s of `dueMs` has a toggle on either side within the bound.
  */
 export function refreshToggles(dueMs) {
   return [...offOn(dueMs - 8000, 0, "microphone"), ...offOn(dueMs - 4000, 1, "camera"), ...offOn(dueMs + 2000, 1, "microphone"), ...offOn(dueMs - 2000, 0, "camera")];
 }
 
-/** How far past the earliest due refresh one group of toggles still has a toggle within the bound. */
-export const refreshCoverMs = 18_000;
+/**
+ * The toggle groups to add at `nowMs`. `dues` lists each guest's pending refresh as `{ key, dueMs }`, where `key` changes whenever the guest gets a new grant;
+ * `planned` remembers the keys already planned. Every refresh gets its own group, because refreshes of different guests can be a few seconds apart and one
+ * group covers only the 2 s around its due time. A refresh with less than 9 s left, or whose group would run past the end of the call, gets none.
+ */
+export function planRefreshToggles({ dues, nowMs, planned, durationMs = callDurationMs }) {
+  const toggles = [];
+  for (const { key, dueMs } of dues) {
+    if (planned.has(key) || dueMs <= nowMs + 9000 || dueMs + 10_000 >= durationMs) continue;
+    planned.add(key);
+    toggles.push(...refreshToggles(dueMs));
+  }
+  return toggles;
+}
 
 /**
  * The toggles of one call if every guest renews its grant at the predicted time, as `{ atMs, guest, kind, enabled }` sorted by time from the
@@ -148,7 +160,7 @@ export function mediaReplacementNotes(refreshes, startedAtMs) {
  * @param participants The participant id of each guest, in guest order.
  * @param refreshes What each guest's credential provider saw: `{ guest, requests: [{ status, replaceMediaConnection, startedAt }] }`.
  * @param toggles The toggles that ran, as `{ atMs, guest, kind, enabled }` from the start of the call.
- * @returns `{ failures, evidence }`; the run passes when `failures` is empty.
+ * @returns `{ failures, notes, evidence }`; the run passes when `failures` is empty.
  */
 export function judgeLongCall({ ticks, participants, refreshes, toggles, startedAtMs }) {
   const failures = [];
@@ -192,16 +204,21 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, started
   for (const { guest, requests } of refreshes) {
     for (const request of requests.filter((entry) => entry.status !== 201)) failures.push(`${label(guest - 1)}'s access refresh failed with status ${request.status ?? "none"}${request.code ? ` (${request.code})` : ""}`);
   }
-  const refreshMs = refreshes.flatMap(({ requests }) => requests.filter((request) => !request.replaceMediaConnection).map((request) => Date.parse(request.startedAt) - startedAtMs));
-  const untested = refreshMs.filter((at) => !toggles.some((toggle) => Math.abs(toggle.atMs - at) <= bounds.acrossRefreshMs));
-  if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
   const endMs = ticks.at(-1)?.t ?? startedAtMs;
+  const notes = [];
+  const refreshMs = refreshes.flatMap(({ requests }) => requests.filter((request) => !request.replaceMediaConnection).map((request) => Date.parse(request.startedAt) - startedAtMs));
+  // A refresh in the last 10 s of the call has no room for a toggle after it. It is not toggle-tested, but it is still counted and its grant is still judged below.
+  const testable = refreshMs.filter((at) => at + bounds.acrossRefreshMs <= endMs - startedAtMs);
+  for (const at of refreshMs.filter((at) => !testable.includes(at))) notes.push(`The access refresh at +${seconds(at)}s fell in the last ${seconds(bounds.acrossRefreshMs)} s of the call, so no toggle could follow it; it was not toggle-tested`);
+  const untested = testable.filter((at) => !toggles.some((toggle) => toggle.atMs >= at - bounds.acrossRefreshMs && toggle.atMs <= at) || !toggles.some((toggle) => toggle.atMs >= at && toggle.atMs <= at + bounds.acrossRefreshMs));
+  if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle on each side within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
   for (const refresh of refreshes) failures.push(...grantChainFailures(refresh, endMs, startedAtMs).map((text) => `${label(refresh.guest - 1)} ${text}`));
   const fewest = Math.min(...grantCounts);
   const fewestScheduled = Math.min(...scheduledCounts);
   if (!(fewest >= 2 && fewestScheduled >= 1)) failures.push(`Guests renewed their access ${grantCounts.join(", ")} times (${scheduledCounts.join(", ")} scheduled); at least 2 each, with at least 1 scheduled, were expected in this call`);
   return {
     failures,
+    notes,
     evidence: {
       guests,
       durationSeconds: seconds((ticks.at(-1)?.t ?? 0) - (ticks[0]?.t ?? 0)),
