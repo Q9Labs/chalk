@@ -395,9 +395,9 @@ export function SpaceView({
           stageOverlay={
             <>
               {feature("reactions") ? <ReactionsOverlay /> : null}
-              {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. */}
+              {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
               {feature("reactions") && canSendReaction && connection.status === "live" ? (
-                <div className="absolute bottom-24 left-1/2 z-50">
+                <div className="absolute bottom-24 left-1/2 z-44">
                   <ReactionPicker
                     isHandRaised={self.handRaised}
                     onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
