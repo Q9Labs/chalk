@@ -1,0 +1,41 @@
+# Per-source caps on port 443, loaded and removed with chalk-direct-sync-proxy.service.
+# Stock Caddy has no rate limiter, so the host firewall bounds one noisy source before the proxy sees it.
+# Mobile networks share one address between many users: keep both caps well above one user's needs.
+add table inet chalk_direct_proxy
+delete table inet chalk_direct_proxy
+
+table inet chalk_direct_proxy {
+	set open4 {
+		type ipv4_addr
+		size 65535
+		flags dynamic
+	}
+	set open6 {
+		type ipv6_addr
+		size 65535
+		flags dynamic
+	}
+	set fresh4 {
+		type ipv4_addr
+		size 65535
+		flags dynamic
+		timeout 1m
+	}
+	set fresh6 {
+		type ipv6_addr
+		size 65535
+		flags dynamic
+		timeout 1m
+	}
+
+	chain input {
+		type filter hook input priority filter - 10; policy accept;
+		# More than 512 connections from one source: refuse the next one. The count follows the kernel's
+		# connection tracking, so a closed connection still counts until it leaves TIME_WAIT (about 2 minutes).
+		tcp dport 443 ct state new add @open4 { ip saddr ct count over 512 } drop
+		tcp dport 443 ct state new add @open6 { ip6 saddr ct count over 512 } drop
+		# More than 30 new connections a second from one source (burst 100): drop the excess.
+		tcp dport 443 ct state new add @fresh4 { ip saddr limit rate over 30/second burst 100 packets } drop
+		tcp dport 443 ct state new add @fresh6 { ip6 saddr limit rate over 30/second burst 100 packets } drop
+	}
+}

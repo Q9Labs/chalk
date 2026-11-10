@@ -1,4 +1,5 @@
-# Direct Sync TLS proxy, installed as /etc/chalk-direct-sync/Caddyfile by direct-sync-proxy.
+# Direct TLS proxy, installed as /etc/chalk-direct-sync/Caddyfile by direct-sync-proxy.
+# One hostname serves two doors: Sync at /v1/sync and the SFU signalling calls of the API.
 {
 	admin off
 	# Only port 443 is open on this path: no HTTP listener, no redirect, no HTTP-01 challenge.
@@ -7,8 +8,17 @@
 		protocols h1
 		timeouts {
 			read_header 10s
+			read_body 15s
+			idle 60s
 		}
 	}
+}
+
+# The API and Sync trust these headers only from this proxy: replace whatever the client sent.
+(direct_ingress) {
+	header_up Cf-Connecting-Ip {remote_host}
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Chalk-Ingress direct
 }
 
 {$CHALK_DIRECT_SYNC_HOST} {
@@ -21,9 +31,27 @@
 
 	handle /v1/sync {
 		reverse_proxy 127.0.0.1:14100 {
-			# Replace anything the client sent: Sync trusts these two headers only from this proxy.
-			header_up Cf-Connecting-Ip {remote_host}
-			header_up X-Chalk-Ingress direct
+			import direct_ingress
+		}
+	}
+
+	# SFU signalling only: the unified /signal route and the per-operation routes under media/sfu/.
+	# Login, admin, OAuth, MCP and every other API route stay on the Tunnel.
+	@sfu_signalling {
+		method GET POST PUT OPTIONS
+		path_regexp ^/v1/tenants/[^/]+/spaces/[^/]+/episodes/[^/]+/participants/[^/]+/media/sfu/[a-z/]+$
+	}
+	handle @sfu_signalling {
+		request_body {
+			max_size 1MB
+		}
+		# The API answers CORS itself; this proxy adds no CORS headers and passes preflights through.
+		reverse_proxy 127.0.0.1:18080 {
+			import direct_ingress
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 25s
+			}
 		}
 	}
 

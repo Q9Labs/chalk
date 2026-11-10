@@ -5,6 +5,7 @@
 #   direct-sync-proxy status      fails when the proxy is down or its certificate expires within 14 days
 #   direct-sync-proxy remove      stops and removes the proxy; --purge also deletes the certificate store
 #
+# The proxy unit also loads and removes the port 443 caps (chalk_direct_proxy nftables table).
 # The script changes only this proxy. It never touches the Chalk runtime units, Sync or the Tunnel.
 set -euo pipefail
 
@@ -32,6 +33,7 @@ require_root() {
 install_proxy() {
   require_root
   local host="${CHALK_DIRECT_SYNC_HOST:-}"
+  command -v nft >/dev/null || fail 'nft is required for the port 443 caps'
   [[ "$host" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
     || fail 'set CHALK_DIRECT_SYNC_HOST to a lowercase hostname'
 
@@ -56,6 +58,8 @@ install_proxy() {
   install -m 0755 "${work}/caddy" "${install_dir}/caddy.new"
   mv -f "${install_dir}/caddy.new" "${install_dir}/caddy"
   install -m 0644 "${here}/Caddyfile" "${config_dir}/Caddyfile"
+  install -m 0644 "${here}/chalk-direct-sync-proxy.nft" "${config_dir}/chalk-direct-sync-proxy.nft"
+  nft --check --file "${config_dir}/chalk-direct-sync-proxy.nft"
   CHALK_DIRECT_SYNC_HOST="$host" "${install_dir}/caddy" validate --config "${config_dir}/Caddyfile" --adapter caddyfile >/dev/null
   sed "s|__DIRECT_SYNC_HOST__|${host}|" "${here}/chalk-direct-sync-proxy.service.in" >"$unit_path"
   chmod 0644 "$unit_path"
@@ -84,6 +88,7 @@ served_certificate() {
 
 status_proxy() {
   systemctl is-active --quiet "$unit" || fail "${unit} is not active (journalctl -u ${unit})"
+  nft list table inet chalk_direct_proxy >/dev/null 2>&1 || fail 'the port 443 caps (nftables table chalk_direct_proxy) are not loaded'
   local host not_after
   host="$(sed -n 's/^Environment=CHALK_DIRECT_SYNC_HOST=//p' "$unit_path")"
   not_after="$(served_certificate "$host" -enddate | cut -d= -f2)"
