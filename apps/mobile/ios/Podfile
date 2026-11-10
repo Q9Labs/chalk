@@ -60,6 +60,20 @@ target 'Chalk' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # Xcode 27 fails the build for any Pod whose deployment target is below its supported range.
+    # Several Pods still declare 12.4 or 13.4, so lift them to the app's own minimum.
+    minimum_ios = Gem::Version.new(podfile_properties['ios.deploymentTarget'] || '15.1')
+    installer.pods_project.build_configurations.each do |config|
+      current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = minimum_ios.to_s if current && Gem::Version.new(current) < minimum_ios
+    end
+    installer.pods_project.targets.each do |pod_target|
+      pod_target.build_configurations.each do |config|
+        current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = minimum_ios.to_s if current && Gem::Version.new(current) < minimum_ios
+      end
+    end
   end
 end
 

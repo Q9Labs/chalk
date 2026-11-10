@@ -62,6 +62,7 @@ func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context,
 
 type RecordingFleetAuthorityRepository struct {
 	admissionLimits recordingpipeline.AdmissionLimits
+	ownCapture      bool
 	queries         recordingFleetAuthorityQuerier
 }
 
@@ -74,7 +75,7 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 		return recorderfleet.Demand{}, recorderfleet.ErrProviderUnavailable
 	}
 	row, err := r.queries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{
-		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt),
+		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt), OwnCapture: r.ownCapture,
 	})
 	if err != nil {
 		return recorderfleet.Demand{}, fmt.Errorf("read recording fleet demand: %w", err)
@@ -389,6 +390,13 @@ func isUniqueViolation(err error) bool {
 }
 
 var _ recorderfleetauthority.Repository = RecordingFleetAuthorityRepository{}
+
+// WithOwnCapture says the recorder can reach the own SFU's nodes, so a preparation for a Space on
+// it counts as demand. Without it the own SFU has no capture path, and no such preparation counts.
+func (r RecordingFleetAuthorityRepository) WithOwnCapture(enabled bool) RecordingFleetAuthorityRepository {
+	r.ownCapture = enabled
+	return r
+}
 
 func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingFleetAuthorityRepository {
 	r.admissionLimits = limits.WithDefaults()

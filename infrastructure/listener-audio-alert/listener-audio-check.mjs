@@ -1,8 +1,16 @@
 export const EPISODE_THRESHOLD = 1;
 const WINDOW_MS = 10 * 60 * 1000;
 const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
-// #721 can add sdk.connection_report with attributes.trigger == audio_receive_stuck here.
-export const SIGNALS = [{ name: "api_unpulled", event: "media.listener_publication_unpulled" }];
+// api_unpulled exists only on Cloudflare SFU and goes away with it. The client report is provider-neutral and
+// carries the provider from the participant's media credential; the query tags it onto the signal name.
+export const PROVIDERS = ["cloudflare_sfu", "chalk_sfu"];
+// A signal pages on EPISODE_THRESHOLD events unless it sets minParticipants: then it pages only when that many distinct
+// participants reported it. One client can repeat or mis-report; the server-side sampler has no such doubt.
+// Reports without a participant hash never count as a participant.
+export const SIGNALS = [
+  { name: "api_unpulled", event: "media.listener_publication_unpulled" },
+  { name: "client_audio_stuck", event: "sdk.connection_report", trigger: "audio_receive_stuck", minParticipants: 2 },
+];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 const predicate = (signal) => `(['attributes.event'] == ${literal(signal.event)}${signal.trigger ? ` and ['attributes.trigger'] == ${literal(signal.trigger)}` : ""})`;
@@ -11,9 +19,13 @@ export function query(dataset) {
   return `[${literal(dataset)}]
 | where ['service.name'] == 'chalk-api' and ['attributes.event'] in (${SIGNALS.map((s) => literal(s.event)).join(", ")})
 | where ${SIGNALS.map(predicate).join(" or ")}
+| extend provider=iff(tostring(['attributes.provider']) in (${PROVIDERS.map(literal).join(", ")}), tostring(['attributes.provider']), 'unknown')
 | extend signal=case(${SIGNALS.map((s) => `${predicate(s)}, ${literal(s.name)}`).join(", ")}, '')
-| summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal
-| project episode_id, signal, events`;
+| extend signal=iff(signal == 'client_audio_stuck', strcat(signal, ':', provider), signal)
+| extend participant=tostring(['attributes.participant_id_hash'])
+| summarize events=count() by episode_id=tostring(['attributes.episode_id']), signal, participant
+| summarize events=sum(events), participants=countif(isnotempty(participant)) by episode_id, signal
+| project episode_id, signal, events, participants`;
 }
 
 export function parseTabular(body) {
@@ -24,13 +36,13 @@ export function parseTabular(body) {
   if (body?.status?.isPartial || body?.status?.isEstimate || body?.status?.messages?.some((m) => m.priority === "error")) malformed();
   if (!Array.isArray(body?.tables) || body.tables.length !== 1 || !Array.isArray(table?.fields) || !Array.isArray(table?.columns)) malformed();
   const names = table.fields.map((f) => f?.name);
-  if (names.length !== 3 || new Set(names).size !== 3 || !["episode_id", "signal", "events"].every((n) => names.includes(n))) malformed();
+  if (names.length !== 4 || new Set(names).size !== 4 || !["episode_id", "signal", "events", "participants"].every((n) => names.includes(n))) malformed();
   const columns = table.columns;
-  if (columns.length !== 3 || !columns.every((c) => Array.isArray(c) && c.length === columns[0].length)) malformed();
+  if (columns.length !== 4 || !columns.every((c) => Array.isArray(c) && c.length === columns[0].length)) malformed();
   return columns[0]
     .map((_, i) => {
       const row = Object.fromEntries(names.map((name, j) => [name, columns[j][i]]));
-      if (typeof row.episode_id !== "string" || typeof row.signal !== "string" || !Number.isSafeInteger(row.events) || row.events < 0) malformed();
+      if (typeof row.episode_id !== "string" || typeof row.signal !== "string" || !Number.isSafeInteger(row.events) || row.events < 0 || !Number.isSafeInteger(row.participants) || row.participants < 0) malformed();
       return row;
     })
     .filter((row) => uuid.test(row.episode_id));
@@ -38,29 +50,41 @@ export function parseTabular(body) {
 
 export function mergeEpisodes(rows) {
   const episodes = new Map();
-  for (const { episode_id, signal, events } of rows) {
+  for (const { episode_id, signal, events, participants } of rows) {
     if (!uuid.test(episode_id)) continue;
     const id = episode_id.toLowerCase();
-    const counts = episodes.get(id) ?? new Map();
-    counts.set(signal, (counts.get(signal) ?? 0) + events);
-    episodes.set(id, counts);
+    const signals = episodes.get(id) ?? new Map();
+    const seen = signals.get(signal) ?? { events: 0, participants: 0 };
+    // Distinct counts cannot be added across rows, so keep the larger: it can only under-count, never page early.
+    signals.set(signal, { events: seen.events + events, participants: Math.max(seen.participants, participants) });
+    episodes.set(id, signals);
   }
   return [...episodes]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([episode_id, counts]) => ({
-      episode_id,
-      counts: Object.fromEntries([...counts].sort(([a], [b]) => a.localeCompare(b))),
-      total: [...counts.values()].reduce((a, b) => a + b, 0),
-    }));
+    .map(([episode_id, signals]) => {
+      const sorted = [...signals].sort(([a], [b]) => a.localeCompare(b));
+      return {
+        episode_id,
+        counts: Object.fromEntries(sorted.map(([signal, { events }]) => [signal, events])),
+        participants: Object.fromEntries(sorted.map(([signal, { participants }]) => [signal, participants])),
+        total: sorted.reduce((sum, [, { events }]) => sum + events, 0),
+      };
+    });
+}
+
+// "client_audio_stuck:chalk_sfu" follows the rule of "client_audio_stuck"; an unlisted signal pages on any event.
+function pages(signal, { events, participants }) {
+  const minParticipants = SIGNALS.find((s) => signal === s.name || signal.startsWith(`${s.name}:`))?.minParticipants;
+  return minParticipants ? participants >= minParticipants : events >= EPISODE_THRESHOLD;
 }
 
 export function evaluate(rows, { startTime, endTime }) {
   return mergeEpisodes(rows)
-    .filter((e) => e.total >= EPISODE_THRESHOLD)
+    .filter((e) => Object.entries(e.counts).some(([signal, events]) => pages(signal, { events, participants: e.participants[signal] })))
     .map((e) => ({
       key: `listener-audio:chalk:${e.episode_id}`,
       detail: `Listener audio missing. ${Object.entries(e.counts)
-        .map(([signal, events]) => `${signal}: ${events}`)
+        .map(([signal, events]) => `${signal}: ${events}${e.participants[signal] ? ` (participants: ${e.participants[signal]})` : ""}`)
         .join(", ")}. UTC query window: ${startTime} to ${endTime}.`,
     }));
 }

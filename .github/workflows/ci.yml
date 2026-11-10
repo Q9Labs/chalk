@@ -130,6 +130,9 @@ on:
       orchestrated:
         type: boolean
         default: false
+      promotion_audit:
+        description: Approved scorecard override audit from Promote selection; does not bypass release checks
+        type: string
     outputs:
       release_id:
         value: ${{ jobs.prepare-release.outputs.release_id }}
@@ -740,6 +743,7 @@ jobs:
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           MANIFEST_SHA256: ${{ needs.prepare-release.outputs.manifest_sha256 }}
           MANIFEST_ARTIFACT_ID: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
+          PROMOTION_AUDIT: ${{ inputs.promotion_audit }}
         run: python3 scripts/releases/release.py retain_production --directory "${{ runner.temp }}/managed-release"
 
       - name: Validate managed deployment configuration
@@ -779,6 +783,10 @@ jobs:
       - name: Set up OpenTofu for dispatcher binding
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-opentofu
+
+      - name: Restore the OpenTofu provider cache
+        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
+        uses: ./.github/actions/cache-tofu-providers
 
       - name: Install doctl for read-only snapshot validation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
@@ -952,6 +960,8 @@ jobs:
       - name: Build selected public endpoints
         env:
           WEB_TARGET: ${{ matrix.target }}
+          # Nightly only; the production artifact never receives a direct Sync URL from this job.
+          CHALK_WEB_SYNC_DIRECT_URL: ${{ matrix.target == 'nightly' && vars.CHALK_NIGHTLY_SYNC_DIRECT_URL || '' }}
         run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --source-root "$GITHUB_WORKSPACE/build-source"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

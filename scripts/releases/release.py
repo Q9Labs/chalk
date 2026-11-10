@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from github_release import GitHub, cut_decision, digest, held_candidates, outputs, payload, require
+from scorecard_override import override_reason
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -120,6 +121,11 @@ def retain_production(github, args):
     media = source.with_suffix('.media.json')
     if media.exists():
         info.update(media_sha256=digest(media.read_bytes()), media_base64=base64.b64encode(media.read_bytes()).decode())
+    audit = json.loads(os.environ.get('PROMOTION_AUDIT') or 'null')
+    if audit:
+        require(audit['target_sha'] == info['target_sha'] and override_reason(audit['reason']),
+                'scorecard override audit does not match the production release or has no reason')
+        info['scorecard_override'] = audit
     item = save_production(github, info)
     outputs({'deployment_id': item['id']})
 
@@ -132,8 +138,21 @@ def complete_production(github, args):
     github.request(f"deployments/{env('DEPLOYMENT_ID')}/statuses", {'state': 'success', 'auto_inactive': False})
 
 
-def defer_cut(github, target, reason, *, manual):
+def write_no_cut_summary(github, reason, target, records=None):
+    # A skipped plan leaves every later job skipped and the run green, so the run page must say why.
+    if records is None:
+        records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
+    # Cooldown falls back to completed cuts when no reservation exists, so the summary does the same.
+    attempts = [item for item in records if payload(item).get('channel') == 'nightly-attempt'] or records
+    last = max(attempts, key=lambda item: item['created_at'], default=None)
+    when = last and (f"run {payload(last)['run_id']}" if payload(last).get('run_id') else last['created_at'])
+    with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+        summary.write(f"No cut: {reason}, target {target}, last attempt {when or 'none'}\n")
+
+
+def defer_cut(github, target, reason, *, manual, records=None):
     print(f'Nightly: {reason}')
+    write_no_cut_summary(github, reason, target, records)
     if manual:
         github.dispatch_nightly()
         print('Nightly: manual request requeued on master with fresh orchestration')
@@ -156,6 +175,8 @@ def plan(github, args):
     records = github.deployments('nightly') + github.deployments('nightly', 'nightly-attempt')
     cut, reason = cut_decision(target, records, datetime.now(timezone.utc), args.manual)
     print(f'Nightly: {reason}; target {target}')
+    if not cut:
+        write_no_cut_summary(github, reason, target, records)
     if args.manual:
         require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
                 f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')
@@ -177,7 +198,7 @@ def plan(github, args):
             result.update(baseline_run_id=baseline['run_id'], baseline_artifact_id=baseline['manifest_artifact_id'])
         result['recorder_control'] = True
         if github.request('git/ref/heads/master')['object']['sha'] != tip:
-            defer_cut(github, target, 'master moved during planning', manual=args.manual)
+            defer_cut(github, target, 'master moved during planning', manual=args.manual, records=records)
             return
         github.reserve_cut(target)
     outputs(result)
@@ -225,6 +246,49 @@ def validate_choice(github, item):
     return info
 
 
+def require_own_sfu_proof(info):
+    result = info.get('own_sfu_proof_result', 'missing')
+    require(result == 'passed',
+            f"cannot promote SHA {info['target_sha']} from nightly run {info.get('proof_run_id') or info['run_id']}: "
+            f'own_sfu_proof_result={result}; a passed own-SFU proof for this SHA is required')
+
+
+def require_scorecard(info):
+    result = info.get('scorecard_result', 'missing')
+    metrics = ', '.join(info.get('scorecard_gated_metrics', [])) or 'none recorded'
+    missing = info.get('scorecard_missing_items', [])
+    missing_message = f'; missing evidence: {", ".join(missing)}' if missing else ''
+    require(result == 'passed' and not info.get('scorecard_gated_metrics') and not missing,
+            f"cannot promote SHA {info['target_sha']} from nightly run {info.get('proof_run_id') or info['run_id']}: "
+            f'scorecard_result={result}; gated metrics: {metrics}{missing_message}')
+
+
+def promotion_override(info):
+    reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
+    scorecard_result = info.get('scorecard_result', 'missing')
+    if not reason or scorecard_result not in ('gated-breach', 'missing'):
+        require_scorecard(info)
+    if not reason:
+        require_own_sfu_proof(info)
+        return None
+    proof_results = {}
+    if info.get('own_sfu_proof_result') != 'passed':
+        proof_results['own_sfu_proof_result'] = info.get('own_sfu_proof_result', 'missing')
+    if scorecard_result != 'passed':
+        proof_results['scorecard_result'] = scorecard_result
+    return dict(reason=reason, target_sha=info['target_sha'], nightly_run_id=info.get('proof_run_id') or info['run_id'],
+                actor=os.environ.get('GITHUB_ACTOR', ''), proof_results=proof_results,
+                gated_metrics=info.get('scorecard_gated_metrics', []),
+                missing_items=info.get('scorecard_missing_items', ['nightly scorecard result'] if scorecard_result == 'missing' else []))
+
+
+def summarize_override(audit):
+    if audit:
+        with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+            summary.write('## Scorecard override\n\nThe following failures are explicitly accepted for this promotion.\n\n```json\n'
+                          + json.dumps(audit, indent=2) + '\n```\n')
+
+
 def select(github, args):
     records = github.deployments('nightly')
     held = held_candidates(records)
@@ -233,16 +297,22 @@ def select(github, args):
     info = validate_choice(github, selected)
     expected = os.environ.get('EXPECTED_RELEASE_SHA')
     if expected:
-        require(info['target_sha'] == expected, 'newest held nightly is not the approved release revision')
+        require(info['target_sha'] == expected,
+                f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
+    audit = promotion_override(info)
+    if expected:
         median = float(env('LEAVE_BASELINE_MEDIAN_MS'))
         require(0 < median <= 5000, 'captured Leave baseline median must be positive and at most 5000 ms')
         evidence = env('LEAVE_BASELINE_EVIDENCE_SHA256')
         require(len(evidence) == 64 and all(char in '0123456789abcdef' for char in evidence), 'captured Leave evidence must be a SHA-256')
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
+    if audit:
+        result['scorecard_override'] = audit
     outputs({'selection': result})
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write('## Exact promotion choice and rollback source\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
+    summarize_override(audit)
 
 
 def recheck(github, args):
@@ -253,9 +323,12 @@ def recheck(github, args):
     require(held_candidates([item]) and payload(item) == selection['selection'], 'selected nightly changed or is no longer held')
     newest = held_candidates(github.deployments('nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
-    validate_choice(github, item)
+    info = validate_choice(github, item)
+    audit = promotion_override(info)
+    require(audit == selection.get('scorecard_override'), 'scorecard override changed after selection')
     manifest_bytes(github, selection['previous'])
     require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
+    summarize_override(audit)
 
 
 def fresh_envelope(source, output):
@@ -335,9 +408,18 @@ def record(github, args):
     info['web'] = json.loads(info.get('web') or '{}')
     real_call = os.environ.get('PROOF_RESULT', 'failed')
     web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
+    own_sfu = os.environ.get('OWN_SFU_RESULT', 'skipped')
+    scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
+    if scorecard:
+        require(scorecard.get('target_sha') == info['target_sha'] and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
+                f"scorecard identity does not match SHA {info['target_sha']} and nightly run {env('GITHUB_RUN_ID')}")
     passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
     info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
-                real_call_proof_result=real_call, web_e2e_result=web_e2e, proof_run_id=env('GITHUB_RUN_ID'))
+                real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
+                proof_run_id=env('GITHUB_RUN_ID'))
+    info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
+                scorecard_missing_items=scorecard.get('missing_items', ['nightly scorecard result'] if not scorecard else []),
+                scorecard_budgets_revision=scorecard.get('budgets_revision', ''))
     if passed:
         require(info['release_id'] == info['applied_release_id'], 'deploy result identity mismatch')
         require_current_write(github.deployments('nightly', 'nightly-write'), info)

@@ -521,9 +521,23 @@ create function protect_immutable_episode_policy()
 returns trigger
 language plpgsql
 as $$
+declare
+    old_binding jsonb := old.config_snapshot -> 'media_plane_binding';
+    new_binding jsonb := new.config_snapshot -> 'media_plane_binding';
+    placement constant text[] := array['node', 'node_incarnation', 'placement_reason', 'generation', 'previous_allocations'];
 begin
     if new.config_snapshot is distinct from old.config_snapshot then
-        raise exception 'Episode config_snapshot is immutable';
+        if not coalesce(
+            (new.config_snapshot - 'media_plane_binding') = (old.config_snapshot - 'media_plane_binding')
+            and jsonb_typeof(old_binding) = 'object'
+            and jsonb_typeof(new_binding) = 'object'
+            and old_binding ->> 'provider' = 'chalk_sfu'
+            and (new_binding - placement) = (old_binding - placement)
+            and coalesce((new_binding ->> 'generation')::bigint, 0) = coalesce((old_binding ->> 'generation')::bigint, 0) + 1,
+            false
+        ) then
+            raise exception 'Episode config_snapshot is immutable';
+        end if;
     end if;
 
     if new.deadline_at is distinct from old.deadline_at
@@ -2691,6 +2705,18 @@ create table recording_job_failure_history (
     failed_at timestamptz not null,
     retried_at timestamptz not null default now(),
     primary key (job_id, manual_retry_count)
+);
+
+create table recording_job_attempt_failures (
+    job_id uuid not null references recording_jobs(id) on delete restrict,
+    attempt_count integer not null check (attempt_count > 0),
+    fencing_generation bigint not null check (fencing_generation > 0),
+    kind text not null check (kind in ('capture', 'transcription', 'render')),
+    error_code text not null check (octet_length(error_code) <= 128),
+    error_detail text not null check (octet_length(error_detail) <= 2048),
+    lease_owner text not null check (octet_length(lease_owner) between 1 and 256),
+    failed_at timestamptz not null default now(),
+    primary key (job_id, attempt_count, fencing_generation)
 );
 
 create table recording_job_attempt_authorities (

@@ -1,3 +1,4 @@
+import { readCapturePool, waitForCapture } from "./capture-pool.mjs";
 import { contactSheetFont } from "./contact-sheet.mjs";
 import { recordingRejoinWindow } from "./recording-rejoin.mjs";
 import { requestEpisodeEnd } from "./episode-end.mjs";
@@ -6,10 +7,12 @@ import { writeFile } from "node:fs/promises";
 import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
+import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
 
-export async function prepareIntegration(run, webhooks) {
+// Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
+export async function createProofKey(run) {
   run.signal.throwIfAborted();
   const key = await run.ownerRequest("POST", `${run.tenantPath}/api-keys`, {
     name: run.label,
@@ -20,6 +23,10 @@ export async function prepareIntegration(run, webhooks) {
   run.apiKey = key.secret;
   await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` }, mediaProviders, run.signal);
+  return key.api_key.id;
+}
+export async function prepareIntegration(run, webhooks) {
+  await createProofKey(run);
   const denied = await fetch(new URL(run.tenantPath, run.config.api_url), {
     headers: { Authorization: `Bearer ${run.apiKey}` },
     signal: AbortSignal.timeout(30_000),
@@ -32,21 +39,22 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-export async function createSpace(run, plane = mediaPlane) {
+const manualPolicy = { recording: "manual", transcription: "on_demand" };
+export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
     media_plane: plane,
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
+    recording_policy: policy.recording,
+    transcription_policy: policy.transcription,
     default_episode_duration_seconds: 1800,
     maximum_episode_duration_seconds: 1800,
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
-  check(space.recording_policy === "manual", "Space Recording policy was not applied");
-  check(space.transcription_policy === "on_demand", "Space Transcription policy was not applied");
+  check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
+  check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
   await save(`${run.directory}/space.json`, space);
   return space;
 }
@@ -68,13 +76,13 @@ export function episodeEnd(run, path) {
     },
   };
 }
-async function createEpisode(run, space) {
+export async function createEpisode(run, space, policy = manualPolicy) {
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
-  const policy = episode.config_snapshot.artifact_policy;
-  check(policy.transcription.mode === "on_demand", "Episode effective transcription policy is not on_demand");
-  check(policy.recording.mode === "manual", "Episode effective Recording policy is not manual");
+  const effective = episode.config_snapshot.artifact_policy;
+  check(effective.transcription.mode === policy.transcription, `Episode effective transcription policy is not ${policy.transcription}`);
+  check(effective.recording.mode === policy.recording, `Episode effective Recording policy is not ${policy.recording}`);
   return { episode, ...ending };
 }
 async function startCapture(run, pages) {
@@ -84,18 +92,17 @@ async function startCapture(run, pages) {
   run.recordingId = started.recordingId;
   await save(`${run.directory}/recording-start.json`, started);
   console.log("Recording acknowledged; waiting for Capture readiness");
-  await waitFor(
-    "Capture ready",
-    async () => {
+  await waitForCapture({
+    recordingId: run.recordingId,
+    ready: async () => {
       const current = await pages[0].evaluate(() => window.proofClient.getSnapshot().recording.current);
       if (!current) return false;
       check(current.status !== "failed", "Capture failed before readiness");
       return current.recordingId === run.recordingId && current.status === "recording";
     },
-    180_000,
-    3000,
-    run.signal,
-  );
+    readPool: () => readCapturePool(run),
+    signal: run.signal,
+  });
   console.log("Capture ready; collecting media evidence");
 }
 function statsSampler(run, pages) {
@@ -186,9 +193,8 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   await share.close();
   return { seconds: observed.seconds, failure };
 }
-async function finalizedSource(run) {
-  if (!recordable) return null;
-  const recording = await waitFor(
+export function availableSource(run) {
+  return waitFor(
     "Recording source",
     async () => {
       const value = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
@@ -200,6 +206,10 @@ async function finalizedSource(run) {
     5000,
     run.signal,
   );
+}
+async function finalizedSource(run) {
+  if (!recordable) return null;
+  const recording = await availableSource(run);
   check(recording.transcription_policy === "on_demand", "Recording effective transcription policy is disabled");
   return recording;
 }
@@ -226,6 +236,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   );
   await Promise.all(pages.map((page) => page.evaluate(playProofMedia)));
   await save(`${run.directory}/media-agreement.json`, await assertAgreement(pages));
+  await save(`${run.directory}/audio-decode-initial.json`, await proveAudioDecoded(guests));
   await startCapture(run, pages);
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
@@ -238,6 +249,8 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   await run.wait(5000);
   const refreshedAfter = await sample("refreshed-end");
   checkMediaProgress(refreshedBefore, refreshedAfter);
+  // Bytes advancing after the refresh is not audio: each guest must still decode the other's.
+  await save(`${run.directory}/audio-decode-refreshed.json`, await proveAudioDecoded(guests));
   // End the active Episode once; its lifecycle stops any Capture and finalizes the Recording.
   console.log("Ending own Episode");
   await end();

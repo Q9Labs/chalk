@@ -1,0 +1,88 @@
+name: Nightly Cloudflare latency
+# Warn-only Cloudflare action latency, measured with the same kit and runner as the own-SFU job of Cut nightly.
+# It is a separate workflow so it can never hold the nightly deployment lock, delay the next cut, or change the
+# conclusion of Cut nightly, which the Android release reads.
+on:
+  workflow_run:
+    workflows: [Cut nightly]
+    types: [completed]
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  # The called proof workflow has its own group, and a caller and callee cannot share one.
+  group: chalk-nightly-cf-latency-run
+  cancel-in-progress: false
+jobs:
+  target:
+    # Only a cut that was recorded as deployed and proved gets a measurement.
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+    outputs:
+      sha: ${{ steps.cut.outputs.sha }}
+    steps:
+      - name: Find the revision this cut deployed
+        id: cut
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          # A cut reserves a deployment for its target revision before it builds. A run that planned no cut has none.
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=nightly&task=nightly-attempt&per_page=100" \
+            --jq "[.[] | select((.payload | if type == \"string\" then fromjson else . end).run_id == \"$SOURCE_RUN\")] | first | .sha // empty")
+          if [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cut nightly run $SOURCE_RUN deployed no new nightly, so no Cloudflare latency was measured." >> "$GITHUB_STEP_SUMMARY"
+          fi
+  latency:
+    needs: target
+    if: needs.target.outputs.sha != ''
+    permissions:
+      contents: write # Staging-SFU Git-ref lease.
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
+      media_plane: cf_sfu
+      latency: true
+      latency_only: true
+      release_sha: ${{ needs.target.outputs.sha }}
+      scorecard_label: cf_sfu
+    secrets: inherit
+  history:
+    # The card goes to the history after the fact. A failure here changes nothing else.
+    needs: latency
+    if: always() && needs.latency.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Download the Cloudflare latency card
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: warn-scorecard-nightly-*
+          path: artifacts/warn
+          merge-multiple: true
+      - name: Add the Cloudflare card to the history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCORECARD_WARN_ONLY: "true"
+        run: |
+          cards=$(find artifacts/warn -name "scorecard-*.json" 2> /dev/null || true)
+          if [ -z "$cards" ]; then
+            echo "No Cloudflare latency card in this run."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          features/scorecard/nightly.sh $cards

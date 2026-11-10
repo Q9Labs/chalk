@@ -1,0 +1,42 @@
+{
+  "host": "us-east-1.aws.edge.axiom.co",
+  "endpoint": "/v1/query/_mpl?format=metrics-v2",
+  "request": {
+    "startTime": "string",
+    "endTime": "string",
+    "mpl": "string"
+  },
+  "status": 200,
+  "content_type": "application/vnd.metrics.v2+json",
+  "response_shape": {
+    "metadata": {
+      "unit": "str"
+    },
+    "series": {
+      "type": "array",
+      "length": 2,
+      "item": {
+        "metric": "str",
+        "tags": {
+          "deployment.environment.name": "str",
+          "otel.scope.name": "str",
+          "otel.scope.version": "str",
+          "service.instance.id": "str",
+          "service.name": "str",
+          "service.version": "str"
+        },
+        "start": "int",
+        "resolution": "int",
+        "data": {
+          "type": "array",
+          "length": 898,
+          "item": "NoneType"
+        },
+        "summary": "float"
+      }
+    }
+  },
+  "completeness_fields": [],
+  "pagination_fields": [],
+  "documented_mpl_point_limit": null
+}

@@ -1,0 +1,33 @@
+# Direct Sync TLS proxy, installed as /etc/chalk-direct-sync/Caddyfile by direct-sync-proxy.
+{
+	admin off
+	# Only port 443 is open on this path: no HTTP listener, no redirect, no HTTP-01 challenge.
+	auto_https disable_redirects
+	servers {
+		protocols h1
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+{$CHALK_DIRECT_SYNC_HOST} {
+	# Certificates are issued and renewed by Caddy itself over TLS-ALPN-01 on port 443.
+	tls {
+		issuer acme {
+			disable_http_challenge
+		}
+	}
+
+	handle /v1/sync {
+		reverse_proxy 127.0.0.1:14100 {
+			# Replace anything the client sent: Sync trusts these two headers only from this proxy.
+			header_up Cf-Connecting-Ip {remote_host}
+			header_up X-Chalk-Ingress direct
+		}
+	}
+
+	handle {
+		respond "not found" 404
+	}
+}

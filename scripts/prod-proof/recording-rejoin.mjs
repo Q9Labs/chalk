@@ -1,18 +1,21 @@
 import { contactSheetFont } from "./contact-sheet.mjs";
 import { command, check, save } from "./runtime.mjs";
 
-const colors = {
+export const colors = {
   before: [
     [27, 54, 93],
     [97, 60, 105],
+    [93, 42, 27],
   ],
   after: [
     [24, 93, 69],
     [105, 70, 29],
+    [93, 27, 69],
   ],
 };
 const width = 320;
 const height = 180;
+export const frameSize = { width, height };
 
 export async function recordingRejoinWindow(run, { pages, rejoin, participants }) {
   const timeline = { participants, beforeStartedAt: Date.now() };
@@ -56,7 +59,7 @@ function* regionPixels(region) {
     for (let x = region.left; x <= region.right; x++) yield (y * width + x) * 3;
   }
 }
-function changedFraction(before, after, region) {
+export function changedFraction(before, after, region) {
   let changed = 0;
   let pixels = 0;
   for (const offset of regionPixels(region)) {
@@ -74,7 +77,7 @@ export function cameraEvidence(frames, phase, guest) {
 
 // The MP4 mixes audio, so attribute its energy using the two injected frequencies.
 // Projection rejects the other guest's tone; ordinary mixed RMS alone cannot do so.
-export function toneEvidence(pcm, frequency) {
+function toneEvidence(pcm, frequency) {
   const samples = pcm.length / 4;
   let sine = 0,
     cosine = 0,

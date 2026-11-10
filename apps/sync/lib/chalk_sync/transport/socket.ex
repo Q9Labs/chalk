@@ -18,7 +18,9 @@ defmodule ChalkSync.Transport.SocketV1 do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.Telemetry
   alias ChalkSync.Transport.CollaborationQueue, as: CollaborationQueue
+  alias ChalkSync.Transport.DirectLimits
   alias ChalkSync.Transport.SocketClose
   alias ChalkSync.Transport.SocketContext
   alias ChalkSync.UUID
@@ -33,8 +35,19 @@ defmodule ChalkSync.Transport.SocketV1 do
 
   @impl true
   def init(opts) do
-    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
     opts = Map.new(opts)
+    direct = Map.get(opts, :direct)
+
+    # The router checked the IP before the upgrade; this reserves the slot and closes on a lost race.
+    with %{ip: ip} <- direct, {:error, _denial} <- DirectLimits.register(ip) do
+      send(self(), :direct_denied)
+    end
+
+    {:ok, awaiting_hello_state(opts, direct)}
+  end
+
+  defp awaiting_hello_state(opts, direct) do
+    timer = Process.send_after(self(), :hello_timeout, @hello_timeout_ms)
 
     connection_attributes =
       opts |> Map.new() |> Map.get(:connection_attributes, %{close_code: nil})
@@ -49,33 +62,33 @@ defmodule ChalkSync.Transport.SocketV1 do
         Map.merge(connection_attributes, %{transport: "websocket", protocol: 1})
       )
 
-    {:ok,
-     %{
-       phase: :awaiting_hello,
-       terminal: nil,
-       hello_timer: timer,
-       heartbeat_timer: nil,
-       entry_timer: nil,
-       entry_confirmation: Map.get(opts, :entry_confirmation, false),
-       participant_self_identity: Map.get(opts, :participant_self_identity, false),
-       media_off_reason: Map.get(opts, :media_off_reason, false),
-       participant_devices: Map.get(opts, :participant_devices, false),
-       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
-       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
-       terminal_ack_timer: nil,
-       terminal_head: nil,
-       missed_heartbeats: 0,
-       opened_at_ms: System.monotonic_time(:millisecond),
-       last_heartbeat_at_ms: nil,
-       identity: nil,
-       coordinator: nil,
-       commands: %{},
-       collaboration_negotiated: false,
-       collaboration_version: nil,
-       collaboration_queue: CollaborationQueue.new(),
-       connection_attributes: connection_attributes,
-       observability: observability
-     }}
+    %{
+      phase: :awaiting_hello,
+      direct: direct,
+      terminal: nil,
+      hello_timer: timer,
+      heartbeat_timer: nil,
+      entry_timer: nil,
+      entry_confirmation: Map.get(opts, :entry_confirmation, false),
+      participant_self_identity: Map.get(opts, :participant_self_identity, false),
+      media_off_reason: Map.get(opts, :media_off_reason, false),
+      participant_devices: Map.get(opts, :participant_devices, false),
+      participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
+      requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
+      terminal_ack_timer: nil,
+      terminal_head: nil,
+      missed_heartbeats: 0,
+      opened_at_ms: System.monotonic_time(:millisecond),
+      last_heartbeat_at_ms: nil,
+      identity: nil,
+      coordinator: nil,
+      commands: %{},
+      collaboration_negotiated: false,
+      collaboration_version: nil,
+      collaboration_queue: CollaborationQueue.new(),
+      connection_attributes: connection_attributes,
+      observability: observability
+    }
   end
 
   @impl true
@@ -94,6 +107,9 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: stop(state, 1008, "hello timeout", :hello_timeout)
 
   def handle_info(:hello_timeout, state), do: {:ok, state}
+
+  def handle_info(:direct_denied, state),
+    do: stop(state, 1013, "try again later", :direct_limit)
 
   def handle_info(:entry_timeout, %{phase: :live, entry_timer: timer, identity: identity} = state)
       when not is_nil(timer) do
@@ -125,6 +141,15 @@ defmodule ChalkSync.Transport.SocketV1 do
   end
 
   def handle_info(:heartbeat_check, state), do: {:ok, %{state | heartbeat_timer: nil}}
+
+  def handle_info(:renew_presence, %{phase: :live, identity: identity} = state) do
+    case Stateholder.renew_presence(identity) do
+      :ok -> {:ok, state}
+      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
+    end
+  end
+
+  def handle_info(:renew_presence, state), do: {:ok, state}
 
   def handle_info(:terminal_ack_timeout, %{phase: :terminal} = state),
     do:
@@ -299,6 +324,15 @@ defmodule ChalkSync.Transport.SocketV1 do
     }
   end
 
+  defp admit_direct_tenant(%{direct: nil}, _identity), do: :ok
+
+  defp admit_direct_tenant(_state, identity) do
+    case DirectLimits.authenticated(identity.episode.tenant_id) do
+      :ok -> :ok
+      {:error, _denial} -> {:error, :direct_limit}
+    end
+  end
+
   defp stop(state, close_code, message, reason) do
     {:stop, :normal, {close_code, message},
      %{state | terminal: %{close_code: close_code, reason: reason}}}
@@ -311,9 +345,11 @@ defmodule ChalkSync.Transport.SocketV1 do
     state = merge_hello_observability(state, Map.get(hello, :correlation, %{}))
 
     with {:ok, claims} <- TokenVerifier.verify(token),
-         {:ok, identity} <- identity(claims) do
+         {:ok, identity} <- identity(claims),
+         :ok <- admit_direct_tenant(state, identity) do
       authenticated_hello(SocketContext.authenticated(state, identity), identity, cursor, hello)
     else
+      {:error, :direct_limit} -> stop(state, 1013, "try again later", :direct_limit)
       {:error, _reason} -> stop(state, 1008, "invalid token", :admission_rejected)
     end
   end
@@ -611,10 +647,10 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp handle_frame(:ping, %{phase: :live} = state) do
     state = %{state | last_heartbeat_at_ms: System.monotonic_time(:millisecond)}
 
-    case Stateholder.renew_presence(state.identity) do
-      :ok -> {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
-      _ -> stop(state, 1012, "service restart", :dependency_unavailable)
-    end
+    # The pong leaves before the Postgres renewal so the client-measured ping is not
+    # inflated by a database round trip. The renewal runs from the mailbox next.
+    send(self(), :renew_presence)
+    {:push, {:text, encode_with_context(state, ProtocolV1.pong())}, state}
   end
 
   defp handle_frame(:ping, state),
@@ -638,12 +674,12 @@ defmodule ChalkSync.Transport.SocketV1 do
          collaboration_negotiated,
          collaboration_version
        ) do
-    case Coordinator.activate_recovery(
-           coordinator,
-           recovery,
-           self(),
-           recovery_timeout()
-         ) do
+    activated =
+      entry_stage(:activate, fn ->
+        Coordinator.activate_recovery(coordinator, recovery, self(), recovery_timeout())
+      end)
+
+    case activated do
       :ok ->
         Process.cancel_timer(state.hello_timer)
 
@@ -980,41 +1016,58 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp negotiation_outcome(true), do: "negotiated"
   defp negotiation_outcome(false), do: "not_requested"
 
+  # Wall time of each hello step, so the nightly `sync_welcome` stage splits into
+  # database work and Episode-coordinator work.
+  defp entry_stage(stage, fun), do: Telemetry.timed([:entry, :stage], stage, fun)
+
+  defp admit_entry(state, identity) do
+    entry_stage(:admit, fn ->
+      Stateholder.admit_socket_entry(
+        %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
+        state.requested_entry_generation
+      )
+    end)
+  end
+
+  defp negotiate_entry(state, identity, recovery, hello) do
+    requested =
+      if recovery.mode == :terminal or recovery.terminal_reason,
+        do: nil,
+        else: Map.get(hello, :collaboration)
+
+    entry_stage(:negotiate, fn ->
+      negotiate_collaboration(identity, requested, state.observability)
+    end)
+  end
+
+  defp begin_entry_recovery(state, identity, protocol_options) do
+    options =
+      protocol_options
+      |> Map.put(:entry_confirmation, state.entry_confirmation)
+      |> Map.put(:media_off_reason, state.media_off_reason)
+      |> Map.put(
+        :entry_generation,
+        state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)
+      )
+
+    entry_stage(:begin_recovery, fn -> Coordinator.begin_recovery(identity, self(), options) end)
+  end
+
   defp authenticated_hello(state, identity, cursor, hello) do
-    with {:ok, identity} <-
-           Stateholder.admit_socket_entry(
-             %{identity | device_type: device_type(state.connection_attributes[:user_agent])},
-             state.requested_entry_generation
-           ),
+    with {:ok, identity} <- admit_entry(state, identity),
          state = %{
            state
            | entry_confirmation:
                state.entry_confirmation && identity.entry_ownership != :compatibility
          },
-         :ok <- confirm_legacy_entry(identity, state.entry_confirmation),
-         {:ok, recovery} <- Stateholder.recover(identity, cursor),
+         :ok <-
+           entry_stage(:confirm, fn ->
+             confirm_legacy_entry(identity, state.entry_confirmation)
+           end),
+         {:ok, recovery} <- entry_stage(:recover, fn -> Stateholder.recover(identity, cursor) end),
          {:ok, protocol_options, negotiated?, collaboration_version} <-
-           negotiate_collaboration(
-             identity,
-             if(recovery.mode == :terminal or recovery.terminal_reason,
-               do: nil,
-               else: Map.get(hello, :collaboration)
-             ),
-             state.observability
-           ),
-         {:ok, coordinator} <-
-           Coordinator.begin_recovery(
-             identity,
-             self(),
-             protocol_options
-             |> Map.put(:entry_confirmation, state.entry_confirmation)
-             |> Map.put(:media_off_reason, state.media_off_reason)
-             |> Map.put(
-               :entry_generation,
-               state.requested_entry_generation != :legacy &&
-                 not is_nil(identity.entry_generation)
-             )
-           ) do
+           negotiate_entry(state, identity, recovery, hello),
+         {:ok, coordinator} <- begin_entry_recovery(state, identity, protocol_options) do
       start_registered_recovery(
         state,
         identity,

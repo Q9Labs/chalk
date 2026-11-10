@@ -5,12 +5,14 @@ import { installAgreementProbe, playProofMedia } from "../web-proof/agreement.mj
 import { check, save, waitFor, maskCredentials, mediaPlane, mediaProviders } from "./runtime.mjs";
 import { credentialExpiries, issueCredentialRefresh, waitForCredentialRefresh } from "./credential-refresh.mjs";
 import { installLeaveObservation } from "./leave-observation.mjs";
+import { installLatencyTrace } from "./latency-trace.mjs";
+import { buildSdkBundle } from "./sdk-bundle.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: sdkEntry, observeLeave, plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
@@ -18,28 +20,15 @@ function checkMediaPlane(grant, guest, plane) {
   check(grant.media?.provider === "chalk_sfu", `Guest ${guest} got media on ${grant.media?.provider}, not chalk_sfu`, "media-plane");
 }
 
-async function sdkBundle(entry = "./sdks/typescript/client/src/index.ts") {
-  const result = await build({
-    stdin: {
-      contents: `import {createSpaceClient} from ${JSON.stringify(entry)};
-window.proofJoin=async(space,baseUrl,displayName)=>{
- const client=createSpaceClient({space,baseUrl,getAccess:({reason,replaceMediaConnection})=>window.proofAccess({reason,replaceMediaConnection})});
- window.proofClient=client;await client.join({displayName,microphone:true,camera:true});
-};`,
-      resolveDir: process.cwd(),
-      sourcefile: "proof.ts",
-    },
-    logLevel: "silent",
-    nodePaths: [new URL("../../sdks/typescript/client/node_modules", import.meta.url).pathname],
-    bundle: true,
-    write: false,
-    format: "iife",
-    platform: "browser",
-  });
-  return result.outputFiles[0].text;
+// A run builds each bundle once: the source cannot change under it, and a fleet joins hundreds of calls.
+const bundles = new Map();
+function sdkBundle(entry = "./sdks/typescript/client/src/index.ts", lobby = false) {
+  const key = `${lobby}:${entry}`;
+  if (!bundles.has(key)) bundles.set(key, buildSdkBundle(entry, { lobby }));
+  return bundles.get(key);
 }
 export async function launchGuests(run, space, episode, speech, origin, tones = false, guestCount = 2, options = {}) {
-  const bundle = await sdkBundle(options.sdkEntry);
+  const bundle = await sdkBundle(options.sdkEntry, options.lobby);
   const serverPath = `${run.directory}/sdk-server.mjs`;
   await build({ logLevel: "silent", entryPoints: [new URL("../../sdks/typescript/client/src/server/index.ts", import.meta.url).pathname], bundle: true, outfile: serverPath, format: "esm", platform: "node" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(serverPath).href);
@@ -59,7 +48,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     checkMediaPlane(grant, guest + 1, options.plane ?? mediaPlane);
     maskCredentials(grant);
     const initial = credentialExpiries(grant);
-    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, latestExpiry: 0, requests: [] };
+    const refresh = { guest: guest + 1, count: 0, initialExpiry: initial.mediaExpiry, initialSyncExpiry: initial.syncExpiry, currentExpiry: initial.mediaExpiry, latestExpiry: 0, requests: [] };
     refreshes.push(refresh);
     let first = true;
     let queue = Promise.resolve();
@@ -90,8 +79,11 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       const context = await browser.newContext({ permissions: ["camera", "microphone"] });
       await context.addInitScript(installAgreementProbe);
       await context.addInitScript(`window.proofPlayMedia = (${playProofMedia.toString()});`);
-      await context.addInitScript(installFixture, { speech, guest, tones });
+      // An array of speech tracks gives each guest its own voice at equal volume.
+      const ownVoice = Array.isArray(speech);
+      await context.addInitScript(installFixture, { speech: ownVoice ? speech[guest] : speech, guest, tones, voiceGain: ownVoice ? 0.8 : undefined, turns: ownVoice, camera: options.camera });
       if (options.observeLeave) await context.addInitScript(installLeaveObservation);
+      if (options.trace) await context.addInitScript(installLatencyTrace); // After the fixture: it wraps the fixture's RTCPeerConnection.
       const page = await context.newPage();
       const network = [];
       networks[guest] = network;
@@ -143,6 +135,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       await page.goto(origin);
       await page.evaluate(installTransportDiagnostics);
+      if (options.pageProbe) await page.evaluate(options.pageProbe);
       await page.addScriptTag({ content: bundle });
       if (options.deferJoin && !replacing) return page;
       try {
@@ -174,6 +167,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     pages,
     participants,
     admissions,
+    tones, // True when each guest publishes its own tone (audio-decode.mjs), false when all play speech.
+    refreshes,
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);
@@ -212,7 +207,7 @@ function signalingFailure(request) {
 
 export function signalingOperation(url) {
   const path = new URL(url).pathname;
-  const operation = /\/media\/sfu\/(tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
+  const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
   return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
 }
 

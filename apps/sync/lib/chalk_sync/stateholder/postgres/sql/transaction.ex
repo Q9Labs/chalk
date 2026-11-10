@@ -10,7 +10,4 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Transaction do
       set_config('synchronous_commit', 'on', true)
     """
   end
-
-  def effective_synchronous_commit,
-    do: "select current_setting('synchronous_commit')"
 end

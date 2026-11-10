@@ -114,6 +114,33 @@ The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
+Nightly also records `own_sfu_proof_result` (`passed`, `failed` or `skipped`),
+bound to the cut's `target_sha` and `proof_run_id`. Promote requires a passed
+own-SFU proof for that exact SHA, both at selection and in the approval recheck.
+Missing results (including older cuts), skipped proofs and failed proofs block
+promotion with an error naming the SHA and nightly run unless the existing
+`scorecard_override` input supplies a written reason. The existing Cloudflare
+proof and held-cut rules are unchanged.
+The scorecard job evaluates every `gate: true` budget before the cut is recorded.
+It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
+newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
+It saves `scorecard_result` (`passed`, `gated-breach` or `missing`),
+`scorecard_gated_metrics` and `scorecard_missing_items` against the same SHA and nightly run.
+A missing own-SFU card is missing evidence, even when a Cloudflare card exists,
+and so is any gated `chalk_sfu.action.*` metric that no own-SFU card measures.
+Selection and
+recheck reject gated breaches with the metric names unless `scorecard_override`
+supplies a written reason. Missing scorecard evidence also blocks unless a
+written override names the accepted missing items in the audit record.
+Budgets with `gate: false` remain warnings. History or issue publication cannot
+erase the saved verdict. Contended measurements are not performance evidence;
+their failed own-SFU result requires an override to promote.
+Empty and whitespace-only reasons do not override either check. A reason has no
+other length, format or user-role rule; dispatch permissions and production
+approval remain unchanged. The accepted proof results, gated metric names,
+missing evidence, reason and actor are labelled as a scorecard override in the run summary and
+retained production release record. Approval rechecks the same override; it
+cannot bypass SHA, artifact, Gate or rollback-source validation.
 
 The parent holds `chalk-environment-production` across approval, deploy, call
 and rollback. **Pending approval holds this lock**, blocking other production

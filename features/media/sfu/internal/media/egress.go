@@ -104,7 +104,11 @@ type egressPacket struct {
 	binding *egressBinding
 	// authority is the source's forwarding lease, checked when the packet is
 	// written; nil for probe padding, which carries no media.
-	authority     *sourceAuthority
+	authority *sourceAuthority
+	// sub is the subscription that sent the packet; nil for probe padding. A packet
+	// queued or repaired for a subscription that has since closed, or whose publication
+	// was parked, must never leave, so the write checks it with the lease.
+	sub           *subscription
 	arrival       int64 // when the media packet reached the SFU, monotonic
 	class         packetClass
 	rtx           bool // sent on the RTX stream; the payload starts with the original sequence number
@@ -115,6 +119,7 @@ type egressPacket struct {
 	seq           uint16
 	timestamp     uint32
 	payload       []byte
+	resumes       uint64 // the publication's resume count when the packet was made
 }
 
 // rtpOverhead is the RTP header with both extensions, close enough for pacing.
@@ -122,8 +127,12 @@ const rtpOverhead = 12 + 12
 
 func (p *egressPacket) size() int { return rtpOverhead + len(p.payload) + int(p.padding) }
 
-// allowed reports whether the packet's source may still forward it at now.
+// allowed reports whether the packet's source may still forward it at now, and its
+// subscription is still open on a publication that is not parked.
 func (p *egressPacket) allowed(now int64) bool {
+	if p.sub != nil && (p.sub.closed.Load() || p.sub.pub.held.Load() || p.sub.pub.resumes.Load() != p.resumes) {
+		return false
+	}
 	return p.authority == nil || p.authority.allows(p.arrival, now)
 }
 

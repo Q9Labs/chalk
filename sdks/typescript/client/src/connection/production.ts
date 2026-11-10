@@ -2,14 +2,14 @@ import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
 import { ConnectionReporter } from "./report";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
-import { createV1SyncClient } from "../sync";
+import { createBrowserWebSocketFactory, createV1SyncClient, directFirstSyncOptions } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 import { mediaBootstrap } from "../access/media-bootstrap";
 const apiFetch = withRequestContext();
-export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly whiteboardURL?: string | null }): ConnectionDependencies {
+export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
     clock: {
       now: () => Date.now(),
@@ -73,7 +73,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
     },
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
-    createSyncClient: (input) => createSyncClient(options.syncURL, input),
+    createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, input),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input),
     subscribeForeground: subscribeBrowserForeground,
@@ -110,8 +110,9 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
 function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
+  const bootstrap = mediaBootstrap(input.access.media);
   const client = new CloudflareSFUClient({
-    bootstrap: mediaBootstrap(input.access.media),
+    bootstrap,
     participantId: subject.participantId,
     replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
     transport: createCloudflareSFUHTTPTransport({
@@ -123,6 +124,8 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
+      // The grant decides, so an older API without the capability keeps the per-operation routes.
+      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
     }),
     onError: input.onFailure,
     // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
@@ -154,9 +157,10 @@ type BoundMediaClient = Pick<
   | "clearPreparedLocalTrack"
   | "getSnapshot"
   | "subscribe"
->;
+> & { readonly prepareLocalPublicationTarget: NonNullable<ConnectionMediaClient["prepareLocalPublicationTarget"]> };
 export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
+    prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     ...(client.pauseLocalCapture ? { pauseLocalCapture: client.pauseLocalCapture.bind(client) } : {}),
     ...(client.setLocalSourceIntent ? { setLocalSourceIntent: client.setLocalSourceIntent.bind(client) } : {}),
@@ -177,7 +181,7 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     subscribe: client.subscribe.bind(client),
   };
 }
-function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
+function createSyncClient(syncURL: string, syncDirectURL: string | null | undefined, input: ConnectionSyncFactoryInput) {
   return createV1SyncClient({
     url: syncURL,
     onDiagnostic: input.onTransportDiagnostic,
@@ -187,6 +191,7 @@ function createSyncClient(syncURL: string, input: ConnectionSyncFactoryInput) {
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
     entryConfirmation: true,
+    ...directFirstSyncOptions(syncDirectURL, createBrowserWebSocketFactory()),
   });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {

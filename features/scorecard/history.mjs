@@ -30,7 +30,7 @@ export function appendCards(directory, cards) {
   return fresh.length;
 }
 
-const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane);
+const nightlyOf = (history, plane) => history.filter((card) => card.run.tier === "nightly" && card.mediaPlane === plane && !card.contention?.contended && !card.contention?.unobservable);
 
 /**
  * baselineCard is the real-node baseline: the median over the last 7 nightly cards of a plane, per metric.
@@ -55,7 +55,9 @@ export function baselineCard(history, plane) {
     ),
   }));
   const latest = runs.at(-1);
-  return { ...latest, run: { ...latest.run, id: `median-of-${runs.length}` }, metrics, dropped: [] };
+  const baseline = { ...latest, run: { ...latest.run, id: `median-of-${runs.length}` }, metrics, dropped: [] };
+  delete baseline.series;
+  return baseline;
 }
 
 const number = (value) => String(Math.abs(value) >= 100 ? Math.round(value) : Number(value.toPrecision(3)));

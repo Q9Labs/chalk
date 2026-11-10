@@ -39,11 +39,11 @@ type subscription struct {
 	track       *egressTrack
 	mid         string
 	closed      atomic.Bool
-	// owner is the session that pulled the track. reserved is what a capture owner holds for it
-	// against the node budget, 0 for a Participant; detach returns it.
-	owner    *Session
-	capture  bool
-	reserved int
+	// owner is the session that pulled the track. lease is what a capture owner holds for it
+	// against the node budget, nil for a Participant; detach returns it.
+	owner   *Session
+	capture bool
+	lease   *captureLease
 
 	// interest has a bit per layer whose packets this subscription reads: the
 	// forwarded layer and the one it waits to switch to. Readers check it
@@ -99,13 +99,13 @@ type resentPacket struct {
 	at  int64 // monotonic; 0 marks a free slot
 }
 
-func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, reserved int) *subscription {
+func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, lease *captureLease) *subscription {
 	clockRate := uint32(90000)
 	if !pub.video() {
 		clockRate = 48000
 	}
 	return &subscription{
-		owner: owner, capture: owner.kind == kindCapture, reserved: reserved, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
+		owner: owner, capture: owner.kind == kindCapture, lease: lease, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
 		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
 		order: serials.Add(1),
 	}
@@ -335,7 +335,7 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 		return false
 	}
 	packet := egressPacket{
-		binding: binding, authority: s.pub.authority, arrival: p.arrival,
+		binding: binding, authority: s.pub.authority, sub: s, resumes: s.pub.resumes.Load(), arrival: p.arrival,
 		class: class, marker: p.marker, padding: p.paddingSize,
 		seq: out.seq, timestamp: out.timestamp, payload: p.payload,
 		audioLevel: p.audioLevel, hasAudioLevel: p.hasAudioLevel,
@@ -516,10 +516,22 @@ func (s *subscription) detach() bool {
 	}
 	s.interest.Store(0)
 	s.pub.removeSubscriber(s)
-	if s.reserved > 0 {
-		s.owner.node.releaseCapture(s.owner, s.reserved)
+	if s.lease != nil {
+		s.owner.node.releaseCapture(s.owner, s.lease)
 	}
 	return true
+}
+
+// release ends the subscription and forgets it in its owner's session, as the owner's close
+// of its MID does, so the owner can pull the same publication again. The owner's next offer
+// carries the stopped transceiver.
+func (s *subscription) release() {
+	s.owner.mu.Lock()
+	if s.owner.subscribed[s.mid] == s {
+		delete(s.owner.subscribed, s.mid)
+	}
+	s.owner.mu.Unlock()
+	s.close()
 }
 
 // close detaches the subscription and stops its transceiver and sender. That ends the RTCP

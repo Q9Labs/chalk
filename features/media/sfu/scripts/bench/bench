@@ -4,14 +4,18 @@
 #   bench up                         create the primary and the standby, deploy the SFU, wait for /readyz
 #   bench status                     list tagged Droplets with size, age and estimated cost so far
 #   bench down [--all]               delete the fleet and its firewall, then fail if a paid node remains
-#   bench reap [hours] [--dry-run] [--exclude ID]...   delete tagged Droplets older than the age (default 3 hours)
+#   bench reap [hours] [--dry-run] [--exclude ID]...   delete bench Droplets older than the age (default 3 hours)
 #
-# Every Droplet carries the tag chalk-sfu-bench and lives in sgp1. Only Droplets with that tag in
-# sgp1 are ever listed for deletion, so the production and staging nodes and every other Droplet
-# are out of reach. `down` deletes the fleet's own Droplets (names chalk-sfu-bench-fleet-*);
+# `faults` (a script beside this one) creates the pair with `up`, runs the node-level fault cases and deletes the pair.
+#
+# Every fleet Droplet carries the tag chalk-sfu-bench and lives in sgp1.
+# `down` deletes the fleet's own Droplets (names chalk-sfu-bench-fleet-*);
 # another run that also wears the tag, such as a load generator, is reported and left alone unless
-# you pass --all. `reap` is the age-based janitor: it deletes tagged sgp1 Droplets older than the
-# age whatever their name, except the IDs given with --exclude. It trusts the Droplet's creation
+# you pass --all. `reap` matches names starting chalk-sfu-bench OR the chalk-sfu-bench tag, in any
+# region, but never names starting chalk-sfu-staging or chalk-sfu-production. It deletes matches
+# older than the age, except IDs given with --exclude. A keep-until-<unix-seconds> tag skips a
+# Droplet only while that UTC expiry is in the future; expired or malformed tags do not protect it.
+# The hourly GitHub Actions job runs `bench reap 4`. It trusts the Droplet's creation
 # time from DigitalOcean, not a local file, so it works from any machine. Deleting waits until the
 # Droplets are gone, and only then are the firewall and the certificates removed.
 #
@@ -21,7 +25,10 @@
 #
 # Environment: BENCH_OPERATOR_ADDRESS (default: this machine's public IPv4) is the only source
 # for SSH. BENCH_CONTROL_ADDRESSES (comma-separated IPv4, for example Instabox) also reaches
-# control. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
+# control, and BENCH_SSH_ADDRESSES also reaches SSH (a jump host that survives this machine's address changing).
+# BENCH_PRIMARY_BUDGET and BENCH_STANDBY_BUDGET replace the packet budgets (32000 and
+# 16000), and SFU_MAX_EPISODE_PARTICIPANTS reaches the nodes' settings; `capacity` uses them to
+# measure each size at the budget `deploy` renders for it. SFU_SSH_KEY defaults to ~/.ssh/chalk-sfu-operator_ed25519.
 set -euo pipefail
 
 tag=chalk-sfu-bench
@@ -33,11 +40,11 @@ media_port=50000
 default_reap_hours=3
 # role, node ID in CHALK_SFU_NODES, size, packet budget. Placement order: primary first.
 nodes=(
-  "primary sgp1-a s-2vcpu-2gb 32000"
-  "standby sgp1-b s-1vcpu-1gb 16000"
+  "primary sgp1-a s-2vcpu-2gb ${BENCH_PRIMARY_BUDGET:-32000}"
+  "standby sgp1-b s-1vcpu-1gb ${BENCH_STANDBY_BUDGET:-16000}"
 )
 
-bench_dir="$(cd "$(dirname "$0")" && pwd)"
+bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sfu_root="$(cd "${bench_dir}/../.." && pwd)"
 export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
 export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
@@ -48,10 +55,23 @@ die() {
   exit 1
 }
 
-# Tagged Droplets. The tag filter is the only way a Droplet enters this script.
+# operator_cidr is this machine's public IPv4 as a /32, the one source SSH accepts.
+operator_cidr() {
+  host_cidr "${BENCH_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}"
+}
+
+# Tagged Droplets for fleet operations. The reaper also finds legacy untagged bench names.
 tagged() {
   doctl compute droplet list --tag-name "$tag" --output json |
     jq --arg tag "$tag" '[.[] | select(.tags | index($tag))]'
+}
+
+reap_candidates() {
+  doctl compute droplet list --output json |
+    jq --arg tag "$tag" '[.[] | select(
+      ((.name | startswith("chalk-sfu-bench")) or (.tags | index($tag))) and
+      (.name | startswith("chalk-sfu-staging") or startswith("chalk-sfu-production") | not)
+    )]'
 }
 
 # The fleet's own Droplets among the tagged ones.
@@ -64,21 +84,24 @@ in_region() {
   jq --arg region "$region" '[.[] | select(.region.slug == $region)]'
 }
 
-# delete_droplets deletes the Droplets on stdin and waits until none of them is listed under the
-# tag any more, because DigitalOcean deletes asynchronously. It returns 1 if one is still there.
+# delete_droplets waits until none of the input IDs is listed in the account any more,
+# because DigitalOcean deletes asynchronously. It returns 1 if one is still there.
 delete_droplets() {
   local id name ids=()
   while read -r id name; do
     echo "deleting Droplet ${name} (${id})"
-    doctl compute droplet delete "$id" --force
+    doctl compute droplet delete "$id" --force || return 1
     ids+=("$id")
   done < <(jq -r '.[] | "\(.id) \(.name)"')
   ((${#ids[@]} > 0)) || return 0
   local listed ids_json
   ids_json="$(printf '%s\n' "${ids[@]}" | jq -Rs 'split("\n") | map(select(. != "") | tonumber)')"
   for _ in $(seq 24); do
-    listed="$(tagged | jq --argjson ids "$ids_json" '[.[] | select(.id as $id | $ids | index($id))] | length')"
-    [[ "$listed" == 0 ]] && return 0
+    listed="$(doctl compute droplet list --output json | jq --argjson ids "$ids_json" '[.[] | select(.id as $id | $ids | index($id))] | length')" || return 1
+    if [[ "$listed" == 0 ]]; then
+      echo "confirmed deletion of Droplets: ${ids[*]}"
+      return 0
+    fi
     sleep 5
   done
   echo "bench: ${listed} deleted Droplet(s) are still listed" >&2
@@ -86,11 +109,13 @@ delete_droplets() {
 }
 
 delete_firewall() {
-  local id
+  local id ids
+  ids="$(doctl compute firewall list --output json | jq -r --arg name "$firewall" '.[] | select(.name == $name) | .id')" || return 1
   while read -r id; do
+    [[ -n "$id" ]] || continue
     echo "deleting firewall ${firewall} (${id})"
-    doctl compute firewall delete "$id" --force
-  done < <(doctl compute firewall list --output json | jq -r --arg name "$firewall" '.[] | select(.name == $name) | .id')
+    doctl compute firewall delete "$id" --force || return 1
+  done <<<"$ids"
 }
 
 # One IPv4 address becomes a /32. Anything wider is refused: control is for named sources only.
@@ -147,12 +172,16 @@ up() {
   key_id="$(doctl compute ssh-key list --output json | jq -r '.[] | select(.name == "chalk-sfu-operator") | .id')"
   [[ -n "$key_id" ]] || die "no DigitalOcean SSH key named chalk-sfu-operator"
 
-  local operator control_addresses
-  operator="$(host_cidr "${BENCH_OPERATOR_ADDRESS:-$(curl --silent --fail --max-time 10 -4 https://api.ipify.org)}")"
+  local operator control_addresses ssh_addresses
+  operator="$(operator_cidr)"
   control_addresses="$operator"
+  ssh_addresses="$operator"
   local extra
   for extra in $(tr ',' ' ' <<<"${BENCH_CONTROL_ADDRESSES:-}"); do
     control_addresses+=",$(host_cidr "$extra")"
+  done
+  for extra in $(tr ',' ' ' <<<"${BENCH_SSH_ADDRESSES:-}"); do
+    ssh_addresses+=",$(host_cidr "$extra")"
   done
 
   # From here a Droplet may exist, so any failure deletes the fleet rather than leave it billing.
@@ -167,7 +196,7 @@ up() {
   "${sfu_root}/deploy/certs" bench operator >/dev/null
 
   echo "==> creating Droplets in ${region}"
-  render_cloud_init "$control_addresses" "$operator" >"${dir}/cloud-init.yaml"
+  render_cloud_init "$control_addresses" "$ssh_addresses" >"${dir}/cloud-init.yaml"
   local spec role slug pids=() failed=0 pid
   for spec in "${nodes[@]}"; do
     read -r role _ slug _ <<<"$spec"
@@ -181,7 +210,7 @@ up() {
 
   local droplet_ids
   droplet_ids="$(jq -rs '[.[][0].id] | join(",")' "${dir}"/*.json)"
-  local inbound="protocol:tcp,ports:22,address:${operator} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
+  local inbound="protocol:tcp,ports:22,address:${ssh_addresses//,/,address:} protocol:udp,ports:${media_port},address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0"
   local control_rule="protocol:tcp,ports:${control_port}"
   for extra in ${control_addresses//,/ }; do
     control_rule+=",address:${extra}"
@@ -189,13 +218,15 @@ up() {
   doctl compute firewall create --name "$firewall" --droplet-ids "$droplet_ids" --inbound-rules "${inbound} ${control_rule}" \
     --outbound-rules "protocol:tcp,ports:all,address:0.0.0.0/0,address:::/0 protocol:udp,ports:all,address:0.0.0.0/0,address:::/0 protocol:icmp,address:0.0.0.0/0,address:::/0" >/dev/null
 
-  local id budget address nodes_value="" incarnations=()
+  local id budget address prefix nodes_value="" incarnations=()
   for spec in "${nodes[@]}"; do
     read -r role id slug budget <<<"$spec"
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
     SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
-    nodes_value+="${nodes_value:+,}${id}=https://${address}:${control_port}"
+    prefix=""
+    if [[ "$role" == standby ]]; then prefix="standby:"; fi
+    nodes_value+="${nodes_value:+,}${prefix}${id}=https://${address}:${control_port}"
   done
 
   echo "==> checking /readyz over mutual TLS from this machine"
@@ -280,22 +311,29 @@ reap() {
   local skip='[]'
   ((${#excluded[@]} == 0)) || skip="$(printf '%s\n' "${excluded[@]}" | jq -Rs 'split("\n") | map(select(. != "") | tonumber)')"
   local old
-  old="$(tagged | in_region | jq --argjson hours "$hours" --argjson skip "$skip" \
-    '[.[] | select((now - (.created_at | fromdateiso8601)) / 3600 > $hours and (.id as $id | $skip | index($id) | not))]')"
+  old="$(reap_candidates | jq --argjson hours "$hours" --argjson skip "$skip" '
+    now as $now | [.[] | select(
+      ($now - (.created_at | fromdateiso8601)) / 3600 > $hours and
+      (.id as $id | $skip | index($id) | not) and
+      (any(.tags[]; select(test("^keep-until-[0-9]+$")) |
+        ltrimstr("keep-until-") | tonumber > $now) | not)
+    )]')" || return 1
   if [[ "$dry_run" == true ]]; then
     jq -r --argjson hours "$hours" '.[] | "would delete \(.name) (\(.id)), older than \($hours) hours"' <<<"$old"
     return
   fi
-  local pending=0
-  delete_droplets <<<"$old" || pending=1
-  if [[ "$pending" == 0 && "$(jq length <<<"$old")" != 0 && "$(tagged | fleet_of | jq length)" == 0 ]]; then
-    delete_firewall
+  delete_droplets <<<"$old" || return 1
+  local remaining
+  remaining="$(reap_candidates)" || return 1
+  if [[ "$(jq length <<<"$old")" != 0 && "$(fleet_of <<<"$remaining" | jq length)" == 0 ]]; then
+    delete_firewall || return 1
     rm -rf "$dir"
   fi
-  echo "Droplets still tagged ${tag}: $(tagged | jq length)"
-  return "$pending"
+  echo "Bench Droplets remaining: $(jq length <<<"$remaining")"
 }
 
+# `faults` sources this file for its functions and runs no command.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   up) up ;;
   status) status ;;

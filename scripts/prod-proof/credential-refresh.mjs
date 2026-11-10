@@ -15,6 +15,7 @@ export async function issueCredentialRefresh(run, refreshes, refresh, request, i
     maskCredentials(grant);
     const expiry = credentialExpiries(grant);
     Object.assign(attempt, { status: 201, ...expiry });
+    refresh.currentExpiry = expiry.mediaExpiry;
     if (!request.replaceMediaConnection) {
       refresh.count++;
       refresh.latestExpiry = expiry.mediaExpiry;

@@ -28,6 +28,8 @@ function receiveReportFields(event: ConnectionReportTransportEvent): Partial<Rep
     media_error_kind: event.media_error_kind,
     media_error_step: event.media_error_step,
     ...(event.receive_counts ? { receive_counts } : {}),
+    ...(event.receivers_stopped == null ? {} : { receivers_stopped: Math.min(10000, milliseconds(event.receivers_stopped)) }),
+    ...(event.bundle_tag_held == null ? {} : { bundle_tag_held: event.bundle_tag_held }),
   };
 }
 

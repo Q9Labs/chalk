@@ -65,6 +65,12 @@ export type MediaPlaneResult = {
 
 export type ClientMediaPlane = {
   readonly observeAudioElement?: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
+  /**
+   * Runs the part of an enable that needs no grant, while Sync still decides it. It sends no media and
+   * publishes nothing: `setLocalPublicationTarget` stays the only step that publishes, and it redoes
+   * whatever this left undone. A rejection is safe to ignore for that reason.
+   */
+  readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
   readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;

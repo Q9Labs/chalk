@@ -15,6 +15,8 @@ import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sf
 import { webMetrics } from "./adapters/web.mjs";
 import { sectionComment, sectionMarker } from "./comment.mjs";
 import { diffMetrics, renderTable } from "./diff.mjs";
+import { contentionMarkdown } from "./contention.mjs";
+import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
 import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
 
@@ -79,14 +81,20 @@ async function diff(argv) {
     options: { baseline: { type: "string" }, current: { type: "string" }, title: { type: "string", default: "Performance scorecard" }, "baseline-label": { type: "string", default: "the latest master run" }, markdown: { type: "string" }, "fail-on-gate": { type: "boolean" } },
   });
   const current = parseScorecard(readJson(values.current));
-  const baseline = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
+  const candidate = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
+  const baseline = candidate?.contention?.contended || candidate?.contention?.unobservable ? undefined : candidate;
   const { budgets } = await readBudgets();
   validateBudgetEntries(budgets);
   const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
-  const table = renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
-  if (values.markdown) writeFileSync(values.markdown, table);
-  console.log(table);
-  if (values["fail-on-gate"] && result.failures.length > 0) {
+  if (current.contention?.contended || current.contention?.unobservable) {
+    result.failures = [];
+    for (const row of result.rows) row.gate = false;
+  }
+  const table = contentionMarkdown(current.contention) + renderTable(result, { title: values.title, baselineLabel: baseline ? values["baseline-label"] : "none yet", dropped: current.dropped });
+  const output = planeNoteMarkdown(current.mediaPlane) + table;
+  if (values.markdown) writeFileSync(values.markdown, output);
+  console.log(output);
+  if (values["fail-on-gate"] && !current.contention?.contended && !current.contention?.unobservable && result.failures.length > 0) {
     console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
     process.exitCode = 1;
   }

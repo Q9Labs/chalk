@@ -1,36 +1,116 @@
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
-const DEFAULT_DEADLINE_MS = 90_000;
-const DEFAULT_RETRY_DELAY_MS = 5_000;
+const DEFAULT_DEADLINE_MS = 300_000;
+const DEFAULT_INITIAL_DELAY_MS = 2_000;
+const DEFAULT_MAX_DELAY_MS = 30_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const APP_LINK_FILES = ["/.well-known/apple-app-site-association", "/.well-known/assetlinks.json"];
 const SMART_APP_BANNER = /<meta\b[^>]*\bname=["']apple-itunes-app["']/i;
 
-export async function verifyWebDeploy({ baseURL, expectedSHA, deadlineMs = DEFAULT_DEADLINE_MS, retryDelayMs = DEFAULT_RETRY_DELAY_MS, requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, apiBaseURL = "https://api.chalkmeet.com", expectedEnvironment }) {
-  const origin = normalizeBaseURL(baseURL);
-  const apiOrigin = normalizeBaseURL(apiBaseURL);
-  const normalizedSHA = normalizeSHA(expectedSHA);
-  const deadline = Date.now() + deadlineMs;
-  const deadlineSignal = AbortSignal.timeout(Math.max(1, deadlineMs));
-  let attempt = 0;
-  let lastError;
+class CommitMismatchError extends Error {
+  constructor(deployedSHA, expectedSHA) {
+    super(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
+    this.deployedSHA = deployedSHA;
+  }
+}
 
-  while (Date.now() <= deadline) {
-    attempt += 1;
-    try {
-      await verifyOnce(origin, apiOrigin, normalizedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal);
-      console.log(`Web deployment verified at ${origin.origin} on attempt ${attempt}.`);
+const DEFAULT_SETTINGS = {
+  deadlineMs: DEFAULT_DEADLINE_MS,
+  initialDelayMs: DEFAULT_INITIAL_DELAY_MS,
+  maxDelayMs: DEFAULT_MAX_DELAY_MS,
+  requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+  apiBaseURL: "https://api.chalkmeet.com",
+  environment: process.env,
+  now: Date.now,
+  sleep: delay,
+};
+
+export async function verifyWebDeploy(options) {
+  const settings = { ...DEFAULT_SETTINGS, ...options };
+  const target = {
+    origin: normalizeBaseURL(settings.baseURL),
+    apiOrigin: normalizeBaseURL(settings.apiBaseURL),
+    expectedSHA: normalizeSHA(settings.expectedSHA),
+    expectedEnvironment: settings.expectedEnvironment,
+    requestTimeoutMs: settings.requestTimeoutMs,
+    deadlineSignal: AbortSignal.timeout(Math.max(1, settings.deadlineMs)),
+  };
+  const startedAt = settings.now();
+  const deadline = startedAt + settings.deadlineMs;
+  const progress = { attempt: 0, lastError: undefined, lastSeenSHA: undefined, pagesNote: "" };
+  let retryDelayMs = settings.initialDelayMs;
+
+  while (settings.now() <= deadline) {
+    if (await attemptOnce(target, settings, progress)) {
+      console.log(`Web deployment verified at ${target.origin.origin} on attempt ${progress.attempt}.`);
+      console.log(`web propagation: ${elapsedSeconds(settings, startedAt)} s, attempts ${progress.attempt}`);
       return;
-    } catch (error) {
-      lastError = error;
-      if (Date.now() + retryDelayMs > deadline) break;
-      console.warn(`Verification attempt ${attempt} failed: ${errorMessage(error)}. Retrying...`);
-      await delay(retryDelayMs);
     }
+    const remainingMs = deadline - settings.now();
+    if (remainingMs <= 0) break;
+    const waitMs = Math.min(retryDelayMs, remainingMs);
+    console.warn(`Verification attempt ${progress.attempt} failed: ${errorMessage(progress.lastError)}${progress.pagesNote}. Retrying in ${waitMs / 1000} s...`);
+    await settings.sleep(waitMs);
+    retryDelayMs = Math.min(retryDelayMs * 2, settings.maxDelayMs);
   }
 
-  throw new Error(`Web deployment verification failed at ${origin.origin} after ${attempt} attempts: ${errorMessage(lastError)}`);
+  throw new Error(failureMessage(target, progress, elapsedSeconds(settings, startedAt)));
+}
+
+async function attemptOnce(target, settings, progress) {
+  progress.attempt += 1;
+  try {
+    await verifyOnce(target.origin, target.apiOrigin, target.expectedSHA, target.requestTimeoutMs, target.expectedEnvironment, target.deadlineSignal, `${progress.attempt}-${settings.now()}`);
+    return true;
+  } catch (error) {
+    progress.lastError = error;
+    if (error instanceof CommitMismatchError) {
+      progress.lastSeenSHA = error.deployedSHA;
+      progress.pagesNote = await describePagesDeployment(settings.environment, target.expectedSHA);
+    }
+    return false;
+  }
+}
+
+function elapsedSeconds(settings, startedAt) {
+  return Math.round((settings.now() - startedAt) / 1000);
+}
+
+function failureMessage(target, progress, seconds) {
+  const seen = progress.lastSeenSHA ?? "none";
+  return `Web deployment verification failed at ${target.origin.origin} after ${progress.attempt} attempts in ${seconds} s: expected commit ${target.expectedSHA}, last seen ${seen}: ${errorMessage(progress.lastError)}${progress.pagesNote}`;
+}
+
+// Tells "Pages has not promoted the deployment yet" from "Pages serves it but the alias still shows old content".
+// Best effort: the verifier still works without Cloudflare credentials, such as in a local release.
+async function describePagesDeployment(environment, expectedSHA) {
+  const { CLOUDFLARE_ACCOUNT_ID: account, CLOUDFLARE_API_TOKEN: token, PAGES_PROJECT: project } = environment;
+  if (![account, token, project].every(Boolean)) return "";
+  try {
+    return pagesNote(await fetchPagesProject(account, token, project), expectedSHA);
+  } catch (error) {
+    return ` [Pages API lookup failed: ${errorMessage(error)}]`;
+  }
+}
+
+async function fetchPagesProject(account, token, project) {
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/${encodeURIComponent(project)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Pages API returned ${response.status}`);
+  return response.json();
+}
+
+function pagesNote(project, expectedSHA) {
+  const commit = String(valueAt(project, "result", "canonical_deployment", "deployment_trigger", "metadata", "commit_hash") ?? "unknown").toLowerCase();
+  const verdict = commit === expectedSHA ? "so Pages has the new deployment live and the alias serves stale content" : "so the new deployment is not live at Pages yet";
+  return ` [Pages production deployment has commit ${commit}, ${verdict}]`;
+}
+
+function valueAt(value, ...keys) {
+  return keys.reduce((current, key) => current?.[key], value);
 }
 
 export function parseArguments(arguments_) {
@@ -44,10 +124,10 @@ export function parseArguments(arguments_) {
   return { baseURL: positionals[0], expectedSHA: normalizeSHA(positionals[1]), production: values.production, apiBaseURL: values["api-base-url"], expectedEnvironment: values.environment };
 }
 
-async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal) {
-  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal);
+async function verifyOnce(baseURL, apiBaseURL, expectedSHA, requestTimeoutMs, expectedEnvironment, deadlineSignal, cacheBuster) {
+  await verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal, cacheBuster);
   await verifyAPIHealth(apiBaseURL, requestTimeoutMs, deadlineSignal);
-  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal);
+  if (expectedEnvironment) await verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal, cacheBuster);
   await verifyAppLinks(baseURL, requestTimeoutMs, deadlineSignal);
   if (expectedEnvironment === "nightly") await verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal);
 }
@@ -59,23 +139,19 @@ async function verifyDashboard(baseURL, requestTimeoutMs, deadlineSignal) {
   if (session?.error?.code !== "sign_in_required") throw new Error("dashboard did not report the signed-out state");
 }
 
-async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal) {
-  const response = await request(endpointURL(baseURL, "/release.json"), requestTimeoutMs, deadlineSignal);
+async function verifyReleaseMarker(baseURL, expectedSHA, expectedEnvironment, requestTimeoutMs, deadlineSignal, cacheBuster) {
+  const response = await request(endpointURL(baseURL, "/release.json", cacheBuster), requestTimeoutMs, deadlineSignal);
   requireStatus(response, 200, "release marker");
   const marker = await readJSON(response, "release marker");
   if (!marker || marker.environment !== expectedEnvironment || marker.commit !== expectedSHA) throw new Error("served web release mismatch");
 }
 
-async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal) {
-  const serviceWorkerURL = endpointURL(baseURL, "/sw.js");
-  serviceWorkerURL.searchParams.set("cb", expectedSHA);
-  const serviceWorker = await request(serviceWorkerURL, requestTimeoutMs, deadlineSignal);
+async function verifyServiceWorker(baseURL, expectedSHA, requestTimeoutMs, deadlineSignal, cacheBuster) {
+  const serviceWorker = await request(endpointURL(baseURL, "/sw.js", cacheBuster), requestTimeoutMs, deadlineSignal);
   requireStatus(serviceWorker, 200, "service worker");
   const serviceWorkerSource = await serviceWorker.text();
   const deployedSHA = serviceWorkerSource.match(/"commitHash"\s*:\s*"([0-9a-f]{40})"/i)?.[1]?.toLowerCase();
-  if (deployedSHA !== expectedSHA) {
-    throw new Error(`service worker has commit ${deployedSHA ?? "unknown"}, expected ${expectedSHA}`);
-  }
+  if (deployedSHA !== expectedSHA) throw new CommitMismatchError(deployedSHA, expectedSHA);
 }
 
 // iOS and Android open call links in the app only after these files verify it.
@@ -104,7 +180,7 @@ async function verifyAPIHealth(baseURL, requestTimeoutMs, deadlineSignal) {
 async function request(url, timeoutMs, deadlineSignal) {
   return fetch(url, {
     cache: "no-store",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", "Cache-Control": "no-cache", Pragma: "no-cache" },
     signal: AbortSignal.any([deadlineSignal, AbortSignal.timeout(timeoutMs)]),
   });
 }
@@ -155,8 +231,10 @@ function normalizeSHA(rawSHA) {
   return sha;
 }
 
-function endpointURL(baseURL, pathname) {
-  return new URL(pathname, baseURL);
+function endpointURL(baseURL, pathname, cacheBuster) {
+  const url = new URL(pathname, baseURL);
+  if (cacheBuster) url.searchParams.set("cb", cacheBuster);
+  return url;
 }
 
 function errorMessage(error) {

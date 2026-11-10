@@ -6,6 +6,23 @@ if config_env() != :test do
   end
 end
 
+if config_env() != :test do
+  # Bounds for connections that arrive through the direct proxy; unset keeps the defaults
+  # in ChalkSync.Transport.DirectLimits.
+  direct_limits =
+    for {key, variable} <- [
+          upgrades_per_ip_window: "CHALK_SYNC_DIRECT_UPGRADES_PER_IP_WINDOW",
+          max_sockets_per_ip: "CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_IP",
+          max_unauthenticated_per_ip: "CHALK_SYNC_DIRECT_MAX_UNAUTHENTICATED_PER_IP",
+          max_sockets_per_tenant: "CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT"
+        ],
+        value = System.get_env(variable) do
+      {key, String.to_integer(value)}
+    end
+
+  config :chalk_sync, direct_limits: direct_limits
+end
+
 if config_env() == :prod do
   config :chalk_sync,
     port: String.to_integer(System.get_env("CHALK_SYNC_PORT") || System.get_env("PORT", "4100"))

@@ -5,6 +5,8 @@
 // the SDK-facing envelope stays the same for both providers.
 package protocol
 
+import "time"
+
 // Version is the control API version. Every route lives under "/" + Version.
 const Version = "v1"
 
@@ -81,6 +83,10 @@ type CreateSessionRequest struct {
 	Scope       Scope  `json:"scope"`
 	// Kind is SessionKindCapture for a capture session and absent for a participant.
 	Kind string `json:"kind,omitempty"`
+	// AllocationGeneration is the binding generation the caller was issued the node under. A
+	// create below the Episode's retirement floor (see RetireEpisodeRequest) is refused as stale;
+	// absent, no floor applies.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -173,6 +179,74 @@ type EndEpisodeResponse struct {
 	Closed int `json:"closed"`
 }
 
+// RetireEpisodeRequest retires every allocation of one Tenant's Episode below a binding
+// generation. The node closes the sessions created under a lower generation (a session that named
+// none counts as generation 0) and refuses any later create, source control or capture below it
+// with the stale-generation error, until the retirement expires or the node restarts. Retiring
+// again, at the same or a lower generation, changes nothing. Generation is the floor: it must be
+// at least 1.
+type RetireEpisodeRequest struct {
+	TenantID   string `json:"tenantId"`
+	EpisodeID  string `json:"episodeId"`
+	Generation int64  `json:"generation"`
+}
+
+type RetireEpisodeResponse struct {
+	// Closed counts the sessions this call closed; a repeat reports 0.
+	Closed int `json:"closed"`
+	// Floor is the Episode's retirement floor on the node after the call.
+	Floor int64 `json:"floor"`
+}
+
+// Reservation hold times in seconds. A request without a TTL gets the default.
+const (
+	DefaultReservationTTLSeconds = 30
+	MaxReservationTTLSeconds     = 120
+)
+
+// EpisodeShape is what an Episode was admitted with on the node it recovers from.
+// CamerasPerParticipant may not exceed the node's limit, and the reservation is the node's own
+// upper bound for the shape, the same as a join reserves, so the Participants' joins replace it
+// without growing the node's total. CaptureSlots is the capture sessions to keep room for.
+type EpisodeShape struct {
+	Participants          int  `json:"participants"`
+	CamerasPerParticipant int  `json:"camerasPerParticipant"`
+	ScreenShare           bool `json:"screenShare,omitempty"`
+	CaptureSlots          int  `json:"captureSlots,omitempty"`
+}
+
+// ReserveEpisodeRequest reserves a complete recovering Episode before any Participant rejoins.
+// Generation fences it: a reserve older than the Episode's hold or its live sessions is refused as
+// stale. TTLSeconds bounds how long the reservation stays; the Participants' joins replace it, and
+// an expired or ended Episode releases what is left. The same OperationID with the same body
+// returns the first result. PacketCeiling, when set, caps the node's whole reservation, this hold
+// included, below the node's own packet budget, so a caller that runs the node under a lower
+// operating limit (a standby's degraded budget) gets it enforced atomically with the reserve.
+// Callers that omit it get the node's budget alone.
+type ReserveEpisodeRequest struct {
+	OperationID string       `json:"operationId"`
+	TenantID    string       `json:"tenantId"`
+	EpisodeID   string       `json:"episodeId"`
+	Generation  int64        `json:"generation"`
+	Shape       EpisodeShape `json:"shape"`
+	TTLSeconds  int          `json:"ttlSeconds,omitempty"`
+	// PacketCeiling is the most packets/s the node's reservations may total with this hold; zero
+	// means the node's packet budget.
+	PacketCeiling int `json:"packetCeiling,omitempty"`
+	// AllocationGeneration is the binding generation the move commits. The node installs it as the
+	// Episode's retirement floor once it accepts the reserve, so a node that restarted and lost its
+	// floors refuses the generations the Episode left, and refuses a reserve below a floor it holds.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
+}
+
+// ReserveEpisodeResponse reports the reservation. A refusal uses the capacity-exceeded or
+// draining error codes.
+type ReserveEpisodeResponse struct {
+	NodeIncarnation string    `json:"nodeIncarnation"`
+	ReservedPackets int       `json:"reservedPackets"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+}
+
 // MaxSourceControls bounds one source control batch: every source of a full Episode.
 const MaxSourceControls = 64
 
@@ -195,6 +269,9 @@ type SourceControlRequest struct {
 	TenantID  string          `json:"tenantId"`
 	EpisodeID string          `json:"episodeId"`
 	Controls  []SourceControl `json:"controls"`
+	// AllocationGeneration is as in CreateSessionRequest: a control below the Episode's retirement
+	// floor is refused as stale.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type SourceControl struct {
@@ -330,7 +407,25 @@ type EpisodeState struct {
 	PausedCameras int `json:"pausedCameras"`
 }
 
+// WireProtocol is the request-body revision this build of the node decodes. The node decodes
+// requests strictly, so a field it does not know is refused with 400 invalid_request. A caller
+// that sends a newer field reads ReadyResponse.Protocol first and places nothing on a node below
+// the revision the field needs. A node that predates the field reports none, which reads as 0.
+//
+//	1: the original bodies.
+//	2: create, reserve, move and source-control bodies carry allocationGeneration. A body without
+//	   it is still accepted, so an API that predates the field still places on a node of this revision.
+//
+// Raise it when a caller may send a field an older node refuses, and in the same change raise the
+// caller's minimum.
+const WireProtocol = 2
+
 type ReadyResponse struct {
+	// Protocol is WireProtocol. Absent on a node that predates the field.
+	Protocol int `json:"protocol,omitempty"`
+	// Revision is the source commit the node was built from, as set at deploy (SFU_VERSION).
+	// It is "dev" on a local run.
+	Revision        string `json:"revision,omitempty"`
 	NodeIncarnation string `json:"nodeIncarnation"`
 	Sessions        int    `json:"sessions"`
 	// PacketBudget is the node's packets/s budget and ReservedPackets the part
@@ -354,10 +449,15 @@ type DrainState struct {
 	// Draining is true while the node refuses new Episodes. Calls already on it continue and
 	// still take joins.
 	Draining bool `json:"draining"`
-	// Allocations counts what the node holds for live Episodes: sessions and open source leases.
+	// Allocations counts what the node holds for live Episodes: its sessions, capture sessions
+	// included. Source leases are not in it.
 	Allocations int `json:"allocations"`
 	// CleanupDebt counts closes that have begun and not finished.
 	CleanupDebt int `json:"cleanupDebt"`
+	// SourceLeases counts the source leases open now. It is informational: leases are soft state,
+	// the API renews standing grants with no session on the node, and a restart drops them, so
+	// they do not hold a restart.
+	SourceLeases int `json:"sourceLeases"`
 }
 
 // HostState is the host-health guard's view over its window.

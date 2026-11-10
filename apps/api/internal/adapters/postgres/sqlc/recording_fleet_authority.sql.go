@@ -272,6 +272,11 @@ preparation_demand as (
       and preparation.starts_at <= $2::timestamptz + interval '5 minutes'
       and preparation.starts_at > $2::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
+      and ($3::boolean or coalesce(
+        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
+         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
+        nullif(btrim(spaces.media_plane), ''),
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
 ),
 facts as (
     select
@@ -296,7 +301,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($3::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($4::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -315,6 +320,7 @@ from target
 type GetRecordingFleetDemandParams struct {
 	Role         string             `json:"role"`
 	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
+	OwnCapture   bool               `json:"own_capture"`
 	RecordingCap int32              `json:"recording_cap"`
 }
 
@@ -330,7 +336,12 @@ type GetRecordingFleetDemandRow struct {
 }
 
 func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingFleetDemandParams) (GetRecordingFleetDemandRow, error) {
-	row := q.db.QueryRow(ctx, getRecordingFleetDemand, arg.Role, arg.ObservedAt, arg.RecordingCap)
+	row := q.db.QueryRow(ctx, getRecordingFleetDemand,
+		arg.Role,
+		arg.ObservedAt,
+		arg.OwnCapture,
+		arg.RecordingCap,
+	)
 	var i GetRecordingFleetDemandRow
 	err := row.Scan(
 		&i.Revision,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu"
 	sfuadapter "github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
+	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/turn"
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -34,7 +35,39 @@ type Config struct {
 	// ChalkSFUSpaces are the Spaces whose new Episodes may start on the own SFU.
 	// Every other Space selecting it starts on Cloudflare.
 	ChalkSFUSpaces spaces.ChalkSFUAllowlist
-	Episodes       EpisodeReader
+	// ChalkSFUClientSunset is the instant after which a client that cannot run the
+	// own SFU is refused a new Episode in an allowlisted Space, instead of getting
+	// Cloudflare. The zero value means never.
+	ChalkSFUClientSunset time.Time
+	// Now is the clock for the sunset; it defaults to time.Now.
+	Now      func() time.Time
+	Episodes EpisodeReader
+	// Recovery moves a live own-SFU Episode whose node was lost. Without it a lost node
+	// only fails the Episode's calls.
+	Recovery EpisodeRecovery
+}
+
+// EpisodeRecovery is the durable side of whole-Episode recovery.
+type EpisodeRecovery interface {
+	// LiveParticipants counts the Participants the Episode still holds a place for.
+	LiveParticipants(ctx context.Context, tenantID, episodeID utilities.ID) (int, error)
+	// Binding reads the stored binding, nil when the Episode has none.
+	Binding(ctx context.Context, tenantID, episodeID utilities.ID) (*mediaplane.Binding, error)
+	// MoveBinding replaces the Episode's binding with next only while the stored binding is
+	// at generation from. When another writer moved it first it returns the stored binding
+	// with mediaplane.ErrBindingStale, so the caller follows the winner.
+	// The move also records, in the same transaction, a retirement debt for each allocation next
+	// owes (next.Retirements()), so a committed move is never without its retires.
+	MoveBinding(ctx context.Context, tenantID, episodeID utilities.ID, from int64, next mediaplane.Binding) (mediaplane.Binding, error)
+	// RecordRetirementDebts adds the debts, keeping the higher generation of a debt that exists.
+	RecordRetirementDebts(ctx context.Context, debts []mediaplane.RetirementDebt) error
+	// ClaimRetirementDebts returns up to limit debts that are due and pushes their next attempt
+	// out by a bounded backoff, so concurrent workers do not take the same debt.
+	ClaimRetirementDebts(ctx context.Context, limit int) ([]mediaplane.RetirementDebt, error)
+	// SettleRetirementDebt deletes the debt unless a higher generation was recorded since.
+	SettleRetirementDebt(ctx context.Context, debt mediaplane.RetirementDebt) error
+	// RetirementBacklog counts the unpaid debts and ages the oldest one.
+	RetirementBacklog(ctx context.Context) (count int, oldest time.Duration, err error)
 }
 
 type Registry struct {
@@ -43,10 +76,15 @@ type Registry struct {
 	telemetry       providercontracts.Telemetry
 	chalk           *chalksfu.Fleet
 	chalkSpaces     spaces.ChalkSFUAllowlist
+	clientSunset    time.Time
+	now             func() time.Time
 	episodes        EpisodeReader
+	recovery        EpisodeRecovery
+	// backlog is what the retirement worker last read; the pointer is shared by the copies of the Registry.
+	backlog *backlogCell
 	// turn outlives a single Resolve, so TURN credentials are minted once for
 	// all joins. It is nil without a TURN key.
-	turn *sfuadapter.TurnCredentials
+	turn *turn.Credentials
 }
 
 type providerConfig struct {
@@ -68,14 +106,22 @@ type cloudflareSFUConfig struct {
 }
 
 func NewRegistry(config Config) Registry {
+	now := config.Now
+	if now == nil {
+		now = time.Now
+	}
 	return Registry{
+		clientSunset:    config.ChalkSFUClientSunset,
+		now:             now,
 		processConfig:   config.ProcessConfig,
 		defaultProvider: config.DefaultProvider,
 		telemetry:       config.Telemetry,
 		chalk:           config.ChalkSFU,
 		chalkSpaces:     config.ChalkSFUSpaces,
 		episodes:        config.Episodes,
-		turn:            sfuadapter.NewTurnCredentials(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
+		recovery:        config.Recovery,
+		backlog:         &backlogCell{},
+		turn:            turn.New(config.ProcessConfig.TurnKeyID, config.ProcessConfig.TurnAPIToken),
 	}
 }
 
@@ -131,15 +177,25 @@ func (r Registry) ResolveEpisode(ctx context.Context, tenant tenants.Tenant, spa
 	if err != nil || resolved == nil {
 		return nil, err
 	}
-	node := ""
+	var allocation mediaplane.Allocation
+	var generation int64
 	if binding != nil {
 		fingerprint, err := mediaplane.AdapterFingerprint(binding.Provider, r.applicationID(resolved))
 		if err != nil || fingerprint != binding.AdapterFingerprint {
 			return nil, fmt.Errorf("%w: the configured application is not the one the Episode was bound to", providercontracts.ErrAdapterUnavailable)
 		}
-		node = binding.Node
+		if episode.Status == episodes.EpisodeStatusActive {
+			if *binding, err = r.recoverBinding(ctx, tenant.ID, episodeID, *binding); err != nil {
+				return nil, err
+			}
+		}
+		allocation, generation = binding.Current(), binding.Generation
 	}
-	return r.newService(resolved.provider, resolved.config, node)
+	var fence func(context.Context) error
+	if binding != nil {
+		fence = r.bindingFence(tenant.ID, episodeID, *binding)
+	}
+	return r.newService(resolved.provider, resolved.config, allocation, generation, fence)
 }
 
 type resolvedProviderConfig struct {
@@ -321,9 +377,9 @@ func (r Registry) tenantManagedConfig(providerName spaces.MediaPlaneProvider, pr
 	return runtimeconfig.CloudflareRealtimeConfig{}, fmt.Errorf("%w: %s", providercontracts.ErrUnknownProvider, providerName)
 }
 
-// newService builds the Episode's media plane. node is the Episode's bound node for
-// a provider that runs several; it is ignored by a provider with one endpoint.
-func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, node string) (*mediaplane.Service, error) {
+// newService builds the Episode's media plane. allocation is the Episode's bound node and
+// boot incarnation for a provider that runs several; a provider with one endpoint ignores it.
+func (r Registry) newService(provider mediaplane.Provider, providerConfig runtimeconfig.CloudflareRealtimeConfig, allocation mediaplane.Allocation, generation int64, fence func(context.Context) error) (*mediaplane.Service, error) {
 	var plane mediaplane.Plane
 	switch provider {
 
@@ -342,9 +398,13 @@ func (r Registry) newService(provider mediaplane.Provider, providerConfig runtim
 		if r.chalk == nil {
 			return nil, fmt.Errorf("%w: Chalk SFU is not enabled", providercontracts.ErrAdapterUnavailable)
 		}
-		bound, err := r.chalk.Node(node)
+		bound, err := r.chalk.Node(allocation.Node)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", providercontracts.ErrAdapterUnavailable, err)
+		}
+		bound = bound.Bound(allocation.Incarnation, generation)
+		if fence != nil {
+			bound = bound.WithFence(fence)
 		}
 		// A nil TURN source would be a typed nil inside the interface.
 		if r.turn != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -262,7 +263,7 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).
 		RequestBody("CreateEpisodeRequest", createEpisodeRequest{}).Responds(http.StatusCreated, "Episode", episodeResponse{}).
-		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorTenantLiveEpisodeLimit, apiErrorMediaClientUnsupported, apiErrorMediaPlaneUnavailable, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
 }
 
 func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listEpisodesRequest, episodeListResponse] {
@@ -383,7 +384,7 @@ func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenI
 				return participantLifecycleResponse{}, err
 			}
 			if mediaTokens != nil && syncCredential.Value != "" {
-				mediaCredential, err := mediaTokens.Issue(ctx, subject)
+				mediaCredential, err := mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
 				if err != nil {
 					return participantLifecycleResponse{}, err
 				}

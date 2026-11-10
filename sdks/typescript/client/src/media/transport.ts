@@ -7,7 +7,17 @@ import { withRequestContext } from "../session";
 import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
 const CREDENTIAL_TIMEOUT_MS = 7000;
-const SIGNALING_STEPS: Readonly<Partial<Record<string, MediaFailureStep>>> = { publications: "sfu_publications", subscriptions: "sfu_subscriptions", "tracks/close": "sfu_close_tracks", renegotiate: "sfu_renegotiate" };
+/** One SFU signaling call. The per-operation routes carry it in the URL; the unified `signal` route carries it in the body. */
+type SignalOp = "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
+/** Method, per-operation path and failure step of each call. */
+const ROUTES: Readonly<Record<SignalOp, readonly ["GET" | "POST" | "PUT", string, MediaFailureStep]>> = {
+  publications: ["GET", "publications", "sfu_publications"],
+  subscriptions: ["GET", "subscriptions", "sfu_subscriptions"],
+  tracks: ["POST", "tracks", "sfu_tracks"],
+  tracks_close: ["PUT", "tracks/close", "sfu_close_tracks"],
+  tracks_update: ["PUT", "tracks/update", "sfu_tracks"],
+  renegotiate: ["POST", "renegotiate", "sfu_renegotiate"],
+};
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
@@ -17,21 +27,42 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
-  const freshToken = async (): Promise<string> => {
-    const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
-    if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
-    lastToken = token;
-    return token;
-  };
-  const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
+  const freshToken = async (op?: SignalOp): Promise<string> => {
+    const startedAt = performance.now();
     try {
-      const token = await freshToken();
+      const token = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => credential(signal));
+      if (!token.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+      lastToken = token;
+      return token;
+    } finally {
+      // A user-timing entry shows in a latency run whether the credential provider waits on a network round trip.
+      if (op) {
+        try {
+          performance.measure("chalk.sfu.credential", { start: startedAt, end: performance.now(), detail: { op } });
+        } catch {
+          /* Observers cannot interrupt signaling. */
+        }
+      }
+    }
+  };
+  /**
+   * Sends one signaling call. `query` holds the options the per-operation tracks route reads from its query string;
+   * the unified route reads them from the body. The unified route is used only when the API advertised it for this connection.
+   */
+  const request = async <T>(op: SignalOp, body?: Readonly<Record<string, unknown>>, query: Readonly<Record<string, string | true>> = {}): Promise<T> => {
+    try {
+      const token = await freshToken(op);
+      const [method, path] = ROUTES[op];
+      const target = options.unifiedSignaling
+        ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
+        : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };
       return await withDeadline(timeoutMs, async (signal) => {
         const startedAt = performance.now();
-        const response = await fetch(`${mediaPath}/${path}`, {
-          ...init,
+        const response = await fetch(target.url, {
+          method: target.method,
+          ...(target.body === undefined ? {} : { body: target.body }),
           signal,
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}), ...init?.headers },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}) },
         }).catch((error: unknown) => {
           markMediaFetchFailure(error);
           throw error;
@@ -50,47 +81,31 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         return (await response.json()) as T;
       });
     } catch (error) {
-      const step = SIGNALING_STEPS[path] ?? "sfu_tracks";
-      markMediaFailure(error, step);
+      markMediaFailure(error, ROUTES[op][2]);
       throw error;
     }
   };
   return {
     addTracks: async (input) => {
-      const query = new URLSearchParams();
-      if (input.allowPartialRemoteTracks) query.set("allow_partial_remote_tracks", "true");
-      if (input.replacementCause) query.set("replacement_cause", input.replacementCause);
-      const path = query.size ? `tracks?${query}` : "tracks";
-      const response = await request<{
-        readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
-        readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
-          readonly publication_id?: string;
-        })[];
-        readonly requiresImmediateRenegotiation?: boolean;
-      }>(path, {
-        method: "POST",
-        body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks }),
-      });
-      return {
-        ...response,
-        tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })),
-      };
+      const response = await request<TracksWireResponse>(
+        "tracks",
+        { connection_id: input.connectionId, session_description: input.sessionDescription, tracks: input.tracks },
+        { ...(input.allowPartialRemoteTracks ? { allow_partial_remote_tracks: true as const } : {}), ...(input.replacementCause ? { replacement_cause: input.replacementCause } : {}) },
+      );
+      return tracksResponse(response);
     },
     closeTracks: async (input) =>
-      request<CloudflareSFUTracksResponse>("tracks/close", {
-        method: "PUT",
-        body: JSON.stringify({
-          connection_id: input.connectionId,
-          session_description: input.sessionDescription,
-          tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
-          force: input.force,
-          ...(input.receiveOnly ? { receive_only: true } : {}),
-        }),
+      request<CloudflareSFUTracksResponse>("tracks_close", {
+        connection_id: input.connectionId,
+        session_description: input.sessionDescription,
+        tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
+        force: input.force,
+        ...(input.receiveOnly ? { receive_only: true } : {}),
       }),
     updateTracks: async (input) =>
-      request<CloudflareSFUTracksResponse>("tracks/update", {
-        method: "PUT",
-        body: JSON.stringify({ connection_id: input.connectionId, tracks: input.tracks }),
+      request<CloudflareSFUTracksResponse>("tracks_update", {
+        connection_id: input.connectionId,
+        tracks: input.tracks.map(({ publicationId, ...track }) => (publicationId === undefined ? track : { ...track, publication_id: publicationId })),
       }),
     listSubscriptions: async (): Promise<readonly SFUSubscriptionState[]> => {
       const response = await request<{
@@ -117,10 +132,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
       }));
     },
     renegotiate: async (input) => {
-      await request("renegotiate", {
-        method: "POST",
-        body: JSON.stringify({ connection_id: input.connectionId, session_description: input.sessionDescription }),
-      });
+      await request("renegotiate", { connection_id: input.connectionId, session_description: input.sessionDescription });
     },
     uploadCallStats: async (stats: CallStatsRequest, closing: boolean) => {
       // A hidden tab stops signaling, so the cached token can expire during a call. Only the closing batch skips the provider.
@@ -137,28 +149,50 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         if (!response.ok) throw new CloudflareSFUError(`Chalk call stats upload failed with HTTP ${response.status}`, "signaling_failed", { status: response.status });
       });
     },
-    listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => {
-      const response = await request<{
-        incarnation: number;
-        sequence: number;
-        publications: readonly {
-          participant_id?: string;
-          participant_session_id?: string;
-          source: MediaPublicationSource;
-          publication_id: string;
-        }[];
-      }>("publications");
-      return {
-        incarnation: response.incarnation,
-        sequence: response.sequence,
-        publications: response.publications.map((publication) => ({
-          participantId: publication.participant_id ?? publication.participant_session_id ?? "",
-          source: publication.source,
-          publicationId: publication.publication_id,
-        })),
-      };
+    listPublications: async (): Promise<CloudflareSFUPublicationSnapshot> => publicationSnapshot(await request<WirePublicationList>("publications")),
+    pullPublishedAudio: async (input) => {
+      const { publications, ...response } = await request<TracksWireResponse & { readonly publications?: WirePublicationList }>("tracks", { connection_id: input.connectionId, tracks: [], pull_published_audio: true }, { allow_partial_remote_tracks: true });
+      if (!publications) throw new CloudflareSFUError("The pull-published response carried no publications", "signaling_failed");
+      return { snapshot: publicationSnapshot(publications), response: tracksResponse(response) };
     },
   };
+}
+type TracksWireResponse = {
+  readonly sessionDescription?: CloudflareSFUTracksResponse["sessionDescription"];
+  readonly tracks?: readonly (Omit<NonNullable<CloudflareSFUTracksResponse["tracks"]>[number], "publicationId"> & {
+    readonly publication_id?: string;
+  })[];
+  readonly requiresImmediateRenegotiation?: boolean;
+};
+type WirePublicationList = {
+  readonly incarnation: number;
+  readonly sequence: number;
+  readonly publications: readonly {
+    readonly participant_id?: string;
+    readonly participant_session_id?: string;
+    readonly source: MediaPublicationSource;
+    readonly publication_id: string;
+  }[];
+};
+function tracksResponse(response: TracksWireResponse): CloudflareSFUTracksResponse {
+  return { ...response, tracks: response.tracks?.map(({ publication_id, ...track }) => ({ ...track, publicationId: publication_id })) };
+}
+function publicationSnapshot(response: WirePublicationList): CloudflareSFUPublicationSnapshot {
+  return {
+    incarnation: response.incarnation,
+    sequence: response.sequence,
+    publications: response.publications.map((publication) => ({
+      participantId: publication.participant_id ?? publication.participant_session_id ?? "",
+      source: publication.source,
+      publicationId: publication.publication_id,
+    })),
+  };
+}
+/** The unified route names the close list `close_tracks`, because `tracks` there is the list of tracks to add or update. */
+function unifiedBody(op: SignalOp, body: Readonly<Record<string, unknown>> | undefined): Readonly<Record<string, unknown>> | undefined {
+  if (op !== "tracks_close" || !body) return body;
+  const { tracks, ...rest } = body;
+  return { ...rest, close_tracks: tracks };
 }
 async function withDeadline<T>(timeoutMs: number, operation: (signal: AbortSignal) => T | Promise<T>): Promise<T> {
   const controller = new AbortController();

@@ -1,10 +1,10 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import type { ThemeMode } from "../../lib/theme";
-import { readReloadRejoin, ArrivalUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
 import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { publicAPIBaseURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
+import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
@@ -13,8 +13,19 @@ import { reportCredentialExpiredReason, useProblemReports, useReportCredentialEx
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-type EntryFailure = { readonly message: string; readonly retryable: boolean };
+type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
+// A visitor on the lobby or the leave screen usually presses Join within seconds. Sync closes an idle socket after 5 s, so the
+// SDK replaces it for this long after the last action: about four short-lived sockets at most, then none.
+const LOBBY_KEEP_WARM_MS = 15_000;
+/**
+ * Opens the API connection and the Sync WebSocket upgrade before Join, so joining skips both. The call UI stays unloaded
+ * until Join: the call-performance route budget guards that. Call this again as the visitor acts to extend the window.
+ */
+function warmCall(): void {
+  const apiBaseURL = publicAPIBaseURL();
+  preconnect({ baseUrl: apiBaseURL, syncUrl: publicSyncURL(apiBaseURL), syncDirectUrl: publicSyncDirectURL().syncDirectURL, keepWarmMs: LOBBY_KEEP_WARM_MS });
+}
 let callSurfaceLoad: Promise<typeof CallSurface> | undefined;
 /** Loads the call UI and media stack, which a participant needs only once they ask to join. */
 function loadCallSurface(): Promise<typeof CallSurface> {
@@ -124,6 +135,14 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     setSpaceAccess({ prepared, inviteLink, spaceName });
   }, []);
   useEffect(() => {
+    if (!reloadMarker) warmCall();
+  }, [reloadMarker]);
+  // Sync closes the socket of a call that ended, so the next call's socket is warmed while the visitor reads the leave screen.
+  const exitPhase = terminal?.phase;
+  useEffect(() => {
+    if (exitPhase === "left" || exitPhase === "failed") warmCall();
+  }, [exitPhase]);
+  useEffect(() => {
     if (reloadAttempted.current || !reloadMarker) return;
     reloadAttempted.current = true;
     const marker = reloadMarker;
@@ -134,8 +153,15 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     const recovery = resumePublicSpace(client, marker, slug).then((prepared) => ({ prepared, spaceName: prepared.arrival.space?.name }));
     void recovery
       .then((result) => complete(result.prepared, undefined, result.spaceName))
-      .catch(() => {
-        if (active.current) setError({ message: "Could not return to the Episode. Check your access before joining again.", retryable: true });
+      .catch((cause: unknown) => {
+        if (active.current)
+          setError(
+            cause instanceof AccessMediaProofRejectedError
+              ? { message: "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", retryable: true, retryLabel: "Join as a new participant" }
+              : cause instanceof MediaUnavailableError
+                ? neutralMessage(cause)
+                : { message: "Could not return to the Episode. Check your access before joining again.", retryable: true },
+          );
       })
       .finally(() => {
         if (active.current) setPreparing(false);
@@ -160,6 +186,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelRequested.current = false;
       setError(null);
       setPreparing(true);
+      warmCall();
       void loadCallSurface().catch(() => undefined);
       const preparation = terminal
         ? terminal.cleanup().then(() => {
@@ -419,7 +446,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           ) : preparing || (spaceAccess && !error) || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
             <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: "Ask again", onClick: askAgain } : undefined} />
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
           ) : (
             <NameNeeded
               spaceName={callName}
@@ -428,6 +455,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               onDisplayNameChange={(name) => {
                 nameEdited.current = true;
                 setDisplayName(name);
+                warmCall();
               }}
               onJoin={() => start()}
             />
@@ -527,6 +555,7 @@ function neutralMessage(cause: unknown): EntryFailure {
   // Generated public-invite errors keep their contract code across Promise rejection.
   if (cause instanceof SpacePublicInviteUnavailableError) return { message: "This invite link is unavailable. Ask the host for a new link.", retryable: false };
   if (cause instanceof ArrivalUnavailableError) return { message: "Your request to join is no longer available. Open the invite link and join again.", retryable: false };
+  if (cause instanceof MediaUnavailableError) return { message: "Calls are unavailable right now. Try again in a few minutes.", retryable: true };
   if (cause instanceof AdmissionError) {
     if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true };
     if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true };

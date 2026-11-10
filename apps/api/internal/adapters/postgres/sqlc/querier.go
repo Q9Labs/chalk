@@ -31,7 +31,7 @@ type Querier interface {
 	ClaimArtifactJob(ctx context.Context, arg ClaimArtifactJobParams) (ArtifactJob, error)
 	ClaimChatAttachmentCleanup(ctx context.Context, arg ClaimChatAttachmentCleanupParams) ([]ClaimChatAttachmentCleanupRow, error)
 	ClaimChatAttachmentUploadFinalize(ctx context.Context, arg ClaimChatAttachmentUploadFinalizeParams) (ClaimChatAttachmentUploadFinalizeRow, error)
-	ClaimDueEpisodeDeadlines(ctx context.Context, batchSize int32) ([]ClaimDueEpisodeDeadlinesRow, error)
+	ClaimDueEpisodeDeadlines(ctx context.Context, arg ClaimDueEpisodeDeadlinesParams) ([]ClaimDueEpisodeDeadlinesRow, error)
 	ClaimEmptyEpisodeLingers(ctx context.Context, arg ClaimEmptyEpisodeLingersParams) ([]ClaimEmptyEpisodeLingersRow, error)
 	// Lock control before Episode/participant, as entry and heartbeat renewal do.
 	ClaimExpiredParticipantPresence(ctx context.Context, arg ClaimExpiredParticipantPresenceParams) ([]ClaimExpiredParticipantPresenceRow, error)
@@ -256,6 +256,7 @@ type Querier interface {
 	// cleanup at current active seats, never at retained admitted-request history.
 	ListDueAdmissionRequests(ctx context.Context, pageSize int32) ([]ListDueAdmissionRequestsRow, error)
 	ListDueAutoSpaceLifecycles(ctx context.Context, arg ListDueAutoSpaceLifecyclesParams) ([]AutoSpaceLifecycle, error)
+	ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error)
 	ListMatchingWebhookTargets(ctx context.Context, arg ListMatchingWebhookTargetsParams) ([]ListMatchingWebhookTargetsRow, error)
 	ListPendingSpacePublicAdmissionRequests(ctx context.Context, arg ListPendingSpacePublicAdmissionRequestsParams) ([]ListPendingSpacePublicAdmissionRequestsRow, error)
 	ListRecordingCompletionRecoveryBundles(ctx context.Context, arg ListRecordingCompletionRecoveryBundlesParams) ([]ListRecordingCompletionRecoveryBundlesRow, error)

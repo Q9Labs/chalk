@@ -16,6 +16,7 @@ select
     grant_row.tenant_id,
     grant_row.episode_id,
     coalesce(episode.config_snapshot->'media_plane_binding'->>'node', '')::text as node,
+    coalesce((episode.config_snapshot->'media_plane_binding'->>'generation')::bigint, 0)::bigint as generation,
     grant_row.participant_id,
     grant_row.source,
     grant_row.control_revision::bigint as control_revision
@@ -91,6 +92,7 @@ type ListRenewableSourceGrantsRow struct {
 	TenantID        pgtype.UUID `json:"tenant_id"`
 	EpisodeID       pgtype.UUID `json:"episode_id"`
 	Node            string      `json:"node"`
+	Generation      int64       `json:"generation"`
 	ParticipantID   pgtype.UUID `json:"participant_id"`
 	Source          string      `json:"source"`
 	ControlRevision int64       `json:"control_revision"`
@@ -123,6 +125,7 @@ func (q *Queries) ListRenewableSourceGrants(ctx context.Context, arg ListRenewab
 			&i.TenantID,
 			&i.EpisodeID,
 			&i.Node,
+			&i.Generation,
 			&i.ParticipantID,
 			&i.Source,
 			&i.ControlRevision,

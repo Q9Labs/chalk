@@ -506,20 +506,31 @@ class MediaControllerRuntime implements MediaControllerEffects {
     }).pipe(Effect.ensuring(Effect.sync(() => this.#scheduleOffRetry(source))));
   }
   #runRevision(source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {
-    return Effect.gen({ self: this }, function* () {
+    return Effect.suspend(() => {
       const state = this.#sources[source];
       const pause = state.pause;
       state.pause = null;
-      const paused = yield* Effect.exit(pause ? foreign(() => pause) : Effect.void);
-      if (state.desired.revision !== intent.revision) return;
-      if (state.awaitingLive === intent.revision) return yield* paused;
-      const ports = this.#ports;
-      const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
-      if (state.desired.revision !== intent.revision) return;
-      if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
-      else rejectOffline(state, intent);
-      yield* paused;
-      yield* cleanup;
+      const settled = pause
+        ? pause.then(
+            () => Exit.succeed(undefined),
+            (cause) => Exit.fail(cause),
+          )
+        : Promise.resolve(Exit.succeed(undefined));
+      const joinPause = foreign(() => settled);
+      return Effect.gen({ self: this }, function* () {
+        // A turn-on republishes, so the SFU must be done with the old publication first. A turn-off tells Sync
+        // beside the SFU close: the close is a network round trip, and receivers learn of the off from Sync.
+        if (intent.enabled) yield* joinPause;
+        if (state.desired.revision !== intent.revision) return;
+        if (state.awaitingLive === intent.revision) return yield* yield* joinPause;
+        const ports = this.#ports;
+        const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
+        if (state.desired.revision !== intent.revision) return;
+        if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
+        else rejectOffline(state, intent);
+        yield* yield* joinPause;
+        yield* cleanup;
+      }).pipe(Effect.ensuring(Effect.ignore(joinPause))); // The next revision never starts while this pause is in flight.
     });
   }
   #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {

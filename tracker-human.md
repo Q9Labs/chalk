@@ -276,14 +276,20 @@ Ideas without a current user journey. These are not planned work.
     - Reconcile one live Episode against the provider bill, then expose usage to policy
       limits.
 
-5. **Custom SFU** (Unclear · size XL · P1)
-    Media runs only on Cloudflare SFU and RTK. A custom SFU removes that dependency. It
-    is one task in two parts: the SFU itself, then its integration into Chalk.
-    Open question: The SFU design and scope are not defined yet.
-    - Part 1, the SFU: build the server that receives and forwards audio, video and
-      screen share.
-    - Part 2, the integration: add a MediaPlane adapter, web and native clients,
-      credential renewal and Recording capture on top of it.
+5. **Custom SFU** (Partly working · size XL · P1)
+    Chalk has its own Pion SFU, the chalk_sfu media plane, built through milestones M1
+    to M6 behind a default-off switch. Staging and production nodes are live in sgp1,
+    and Cloudflare SFU still carries all Chalk media.
+    Open question: No live media has run through the production node yet, and the design
+    lists workload combinations that do not fit the initial capacity budgets.
+    - M7: run the internal canary, including a live audio and video smoke against the
+      production node, before production turns own SFU on.
+    - M10: implement Recording capture for the own provider, then remove the
+      own-provider capture rejection.
+    - M11: add primary-first placement, degraded standby admission and drain, with the
+      capacity proof.
+    - M12: move every Tenant and Space to the own SFU and reach monitoring parity. M8
+      visible-tile subscriptions must land first; M13 retires Cloudflare SFU after that.
 
 6. **Show when a shared screen is degraded** (Unclear · size Unknown)
     The redesigned call can draw weak and low-quality states on a shared screen, but

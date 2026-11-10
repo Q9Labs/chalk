@@ -10,6 +10,7 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Telemetry
   alias ChalkSync.UUID
 
   @enforce_keys [
@@ -427,8 +428,9 @@ defmodule ChalkSync.Live.Episode do
     if source in [:camera, :microphone, :screen] and
          result["outcome"] in ["confirmed", "satisfied"] do
       key = {authority.participant_id, Atom.to_string(source)}
+      cleared = timed(:clear_pause, fn -> Stateholder.set_media_pause(identity, source, nil) end)
 
-      case Stateholder.set_media_pause(identity, source, nil) do
+      case cleared do
         :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
         {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
         {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
@@ -475,7 +477,9 @@ defmodule ChalkSync.Live.Episode do
   defp enable_publication(state, identity, authority, source, target) do
     with {module, adapter} <- media_plane(authority) || {:error, :dependency_unavailable},
          {:ok, reservation} <-
-           Stateholder.reserve_publication_grant(identity, target.operation_id, source) do
+           timed(:reserve, fn ->
+             Stateholder.reserve_publication_grant(identity, target.operation_id, source)
+           end) do
       enable_reserved_publication(
         state,
         authority,
@@ -531,28 +535,34 @@ defmodule ChalkSync.Live.Episode do
     {state, live_result(target, reported)}
   end
 
+  defp timed(stage, fun), do: Telemetry.timed([:live_target, :stage], stage, fun)
+
   defp grant(module, adapter, state, authority, source, operation_id, reservation) do
     adapter = with_control_revision(module, adapter, reservation.control_revision)
 
-    MediaPlaneCall.invoke(fn ->
-      module.grant_publication(
-        adapter,
-        operation_id,
-        state.episode,
-        authority.participant_id,
-        source
-      )
+    timed(:grant, fn ->
+      MediaPlaneCall.invoke(fn ->
+        module.grant_publication(
+          adapter,
+          operation_id,
+          state.episode,
+          authority.participant_id,
+          source
+        )
+      end)
     end)
     |> provider_outcome()
   end
 
   defp complete_grant(state, reservation, outcome) do
     completion =
-      Stateholder.complete_publication_grant(
-        state.episode,
-        reservation.reservation_id,
-        outcome
-      )
+      timed(:complete, fn ->
+        Stateholder.complete_publication_grant(
+          state.episode,
+          reservation.reservation_id,
+          outcome
+        )
+      end)
 
     completed_grant_result(outcome, completion)
   end

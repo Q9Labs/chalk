@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""A shared, expiring staging-SFU lease in a Git ref; no node access required."""
+import argparse
+import base64
+import datetime as dt
+import json
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import sys
+import time
+import uuid
+
+REF = "refs/heads/locks/staging-sfu"
+
+
+class Conflict(Exception):
+    pass
+
+
+class Held(Exception):
+    def __init__(self, lease):
+        self.lease = lease
+
+
+def utc():
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+class Store:
+    def __init__(self, remote="origin", ref=REF):
+        self.remote, self.ref = remote, ref
+        self.env = dict(os.environ, GIT_AUTHOR_NAME="Chalk staging lease", GIT_AUTHOR_EMAIL="noreply@chalkmeet.com", GIT_COMMITTER_NAME="Chalk staging lease", GIT_COMMITTER_EMAIL="noreply@chalkmeet.com")
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if token and os.environ.get("GITHUB_ACTIONS") == "true":
+            auth = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+            self.env.update(GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="http.https://github.com/.extraheader", GIT_CONFIG_VALUE_0=f"AUTHORIZATION: basic {auth}")
+
+    def git(self, *args, data=None, check=True):
+        result = subprocess.run(["git", *args], input=data, text=True, capture_output=True, env=self.env, timeout=30)
+        if check and result.returncode:
+            raise RuntimeError("staging lease Git operation failed")
+        return result
+
+    def read(self):
+        head = self.git("ls-remote", "--refs", self.remote, self.ref).stdout.split()
+        if not head:
+            return None, None
+        sha = head[0]
+        self.git("fetch", "--quiet", "--no-tags", self.remote, sha)
+        lease = json.loads(self.git("show", f"{sha}:lease.json").stdout)
+        return sha, lease
+
+    def cas(self, previous, lease):
+        blob = self.git("hash-object", "-w", "--stdin", data=json.dumps(lease) + "\n").stdout.strip()
+        tree = self.git("mktree", data=f"100644 blob {blob}\tlease.json\n").stdout.strip()
+        parent = ["-p", previous] if previous else []
+        sha = self.git("commit-tree", tree, *parent, data="Staging SFU lease\n").stdout.strip()
+        result = self.git("push", "--quiet", f"--force-with-lease={self.ref}:{previous or ''}", self.remote, f"{sha}:{self.ref}", check=False)
+        if result.returncode:
+            raise Conflict("staging lease changed concurrently or push failed")
+        return sha
+
+    def acquire(self, holder, purpose, run_id, ttl):
+        previous, lease = self.read()
+        now = utc()
+        if lease and dt.datetime.fromisoformat(lease["expires_at"]) > dt.datetime.fromisoformat(now):
+            raise Held(lease)
+        current = dict(holder=holder, purpose=purpose, run_id=run_id, acquired_at=now,
+                       expires_at=(dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=ttl)).isoformat(timespec="milliseconds").replace("+00:00", "Z"), token=uuid.uuid4().hex)
+        return self.cas(previous, current), current, lease
+
+    def update(self, sha, lease, ttl=0):
+        # A release retains the last holder and times for the next run's evidence.
+        current = {**lease, "expires_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=ttl)).isoformat(timespec="milliseconds").replace("+00:00", "Z")}
+        return self.cas(sha, current), current
+
+
+def label(value):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", value):
+        raise argparse.ArgumentTypeError("use a plain label of at most 100 letters, digits, underscores or hyphens")
+    return value
+
+
+def stop_workload(child):
+    def send(signum):
+        try:
+            os.killpg(child.pid, signum)
+        except ProcessLookupError:
+            pass
+
+    def running():
+        child.poll()  # Reap the leader, but do not mistake its exit for the group's exit.
+        processes = subprocess.run(["ps", "-axo", "pgid=,stat="], check=True, capture_output=True, text=True, timeout=5)
+        # Orphan zombies may await init's reaper; they cannot execute more workload.
+        return any(int(pgid) == child.pid and not state.startswith(("Z", "X"))
+                   for pgid, state in (line.split() for line in processes.stdout.splitlines()))
+
+    for signum in (signal.SIGTERM, signal.SIGKILL):
+        send(signum)
+        deadline = time.monotonic() + 5
+        while running():
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+        else:
+            child.wait()
+            return
+    raise RuntimeError("staging workload process group did not stop; retaining lease until expiry")
+
+
+def run(args):
+    store = Store(args.remote)
+    deadline = time.monotonic() + args.wait
+    evidence = {"previous": None, "acquired": False, "lost": False}
+
+    def save():
+        if args.evidence:
+            Path(args.evidence).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.evidence).write_text(json.dumps(evidence) + "\n")
+
+    while True:
+        try:
+            sha, lease, previous = store.acquire(args.holder, args.purpose, args.run_id, args.ttl)
+            if evidence["previous"] is None:
+                evidence["previous"] = previous
+            break
+        except Held as error:
+            evidence["previous"] = error.lease
+        except Conflict:
+            pass
+        save()
+        if time.monotonic() >= deadline:
+            print("Staging SFU lease unavailable after bounded wait.", file=sys.stderr)
+            return 75
+        time.sleep(min(5, max(0, deadline - time.monotonic())))
+    evidence["acquired"] = True
+    save()
+    child = None
+
+    def stop(signum, _frame):
+        raise InterruptedError("staging lease command interrupted")
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, stop)
+    try:
+        child = subprocess.Popen(args.command, start_new_session=True)
+        while True:
+            try:
+                return child.wait(timeout=args.ttl / 3)
+            except subprocess.TimeoutExpired:
+                sha, lease = store.update(sha, lease, args.ttl)
+    except (Conflict, RuntimeError, OSError, subprocess.SubprocessError):
+        evidence["lost"] = True
+        save()
+        print("Staging SFU lease renewal failed; stopping its workload.", file=sys.stderr)
+        return 75
+    finally:
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(signum, signal.SIG_IGN)
+        if child:
+            try:
+                stop_workload(child)
+            except (RuntimeError, OSError, subprocess.SubprocessError):
+                evidence["lost"] = True
+                save()
+                raise
+        try:
+            store.update(sha, lease)
+        except (Conflict, RuntimeError, subprocess.SubprocessError):
+            evidence["lost"] = True
+            save()
+            print("Staging SFU lease release failed; it will expire.", file=sys.stderr)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--remote", default="origin")
+    parser.add_argument("--holder", required=True, type=label)
+    parser.add_argument("--purpose", required=True, type=label)
+    parser.add_argument("--run-id", required=True, type=label)
+    parser.add_argument("--wait", type=int, default=600)
+    parser.add_argument("--ttl", type=int, default=180)
+    parser.add_argument("--evidence")
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    if args.command[:1] == ["--"]:
+        args.command.pop(0)
+    if not args.command or args.wait < 0 or not 60 <= args.ttl <= 3600:
+        parser.error("supply a command after --, wait >= 0, and ttl from 60 to 3600 seconds")
+    return run(args)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        print("Staging SFU lease operation failed; workload not authorized to continue.", file=sys.stderr)
+        sys.exit(75)

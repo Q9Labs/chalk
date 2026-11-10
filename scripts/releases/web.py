@@ -27,7 +27,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def public_config(target, sha):
     nightly = target == 'nightly'
+    # Off unless the release environment names a direct Sync URL; see docs/operators/direct-sync-path.md.
+    direct = os.environ.get('CHALK_WEB_SYNC_DIRECT_URL', '').strip()
+    require(nightly or not direct, 'a production web build never takes a direct Sync URL')
+    if direct:
+        parts = urlsplit(direct)
+        require(parts.scheme == 'wss' and parts.hostname and parts.path == '/v1/sync' and not parts.query,
+                'CHALK_WEB_SYNC_DIRECT_URL must be a wss:// URL ending in /v1/sync')
     return {'CHALK_ENVIRONMENT': target, 'CHALK_COMMIT_SHA': sha,
+            **({'VITE_CHALK_SYNC_DIRECT_URL': direct} if direct else {}),
             'VITE_API_URL': 'https://nightly-api.chalkmeet.com' if nightly else 'https://api.chalkmeet.com',
             'VITE_CHALK_SYNC_URL': 'wss://nightly-sync.chalkmeet.com/v1/sync' if nightly else 'wss://sync.chalkmeet.com/v1/sync',
             'VITE_PUBLIC_APP_URL': 'https://nightly.chalkmeet.com' if nightly else 'https://chalkmeet.com'}
@@ -43,12 +51,22 @@ def read_marker(data):
         return json.load(archive.extractfile('dist/client/release.json'))
 
 
+def reject_direct_sync_url(client):
+    """The direct Sync hostname is a nightly trial: a production bundle that names one is not published."""
+    found = [str(path.relative_to(client)) for path in client.rglob('*') if path.is_file() and b'sync-direct' in path.read_bytes()]
+    require(not found, f'production web bundle names a direct Sync host: {found[:5]}')
+
+
 def build(target, sha, output, source_root):
     require(re.fullmatch('[0-9a-f]{40}', sha or ''), 'expected full source SHA')
     checked_out = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source_root, text=True).strip()
     require(checked_out == sha, 'web source checkout does not match requested SHA')
+    # Only public_config may set the direct URL: a stray VITE_ value in the runner environment must not reach any build.
+    inherited = {name: value for name, value in os.environ.items() if name != 'VITE_CHALK_SYNC_DIRECT_URL'}
     subprocess.run(['pnpm', 'exec', 'turbo', 'run', 'build', '--filter=web...', '--force', '--env-mode=loose'],
-                   cwd=source_root, env={**os.environ, **public_config(target, sha)}, check=True)
+                   cwd=source_root, env={**inherited, **public_config(target, sha)}, check=True)
+    if target == 'production':
+        reject_direct_sync_url(source_root / 'apps/web/dist/client')
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as directory:
         stage = Path(directory)

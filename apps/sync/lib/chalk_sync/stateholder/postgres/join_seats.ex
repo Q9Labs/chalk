@@ -10,17 +10,26 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
   alias ChalkSync.Stateholder.Postgres.Presence
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.Transaction
+  alias ChalkSync.Telemetry
   alias ChalkSync.UUID
 
   # Episode authority is always acquired before Episode, participant, and seat.
   def admit_entry(connection, identity, requested) do
-    Transaction.configure(connection)
-    {identity, requested} = socket_request(connection, identity, requested)
-    Authority.lock_control(connection, identity.episode)
-    policy = Authority.lock_episode(connection, identity.episode)
+    {identity, requested} =
+      stage(:admit_configure, fn ->
+        socket_request(identity, requested, Transaction.configure(connection))
+      end)
 
-    participant =
-      Authority.lock_participant(connection, identity.episode, identity.participant_id)
+    {policy, participant} =
+      stage(:admit_locks, fn ->
+        Authority.lock_control(connection, identity.episode)
+        policy = Authority.lock_episode(connection, identity.episode)
+
+        participant =
+          Authority.lock_participant(connection, identity.episode, identity.participant_id)
+
+        {policy, participant}
+      end)
 
     if participant && participant.generation != identity.participant_generation do
       Postgrex.rollback(connection, {:error, :stale_participant_generation})
@@ -28,18 +37,22 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
 
     if policy.status == "active" && participant &&
          participant.status in ["joining", "active", "leaving"] do
-      ensure_seat(connection, identity, participant.status)
-      reconcile_applied_join(connection, identity)
-
       admitted =
-        allocate_requested_entry(
-          connection,
-          %{identity | identity_id: participant.identity_id},
-          requested
-        )
+        stage(:admit_seat, fn ->
+          ensure_seat(connection, identity, participant.status)
+          reconcile_applied_join(connection, identity)
 
-      remember_device(connection, admitted)
-      Presence.renew(connection, admitted)
+          allocate_requested_entry(
+            connection,
+            %{identity | identity_id: participant.identity_id},
+            requested
+          )
+        end)
+
+      stage(:admit_presence, fn ->
+        remember_device(connection, admitted)
+        Presence.renew(connection, admitted)
+      end)
 
       admitted
     else
@@ -47,6 +60,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
       identity
     end
   end
+
+  defp stage(name, fun), do: Telemetry.timed([:entry, :stage], name, fun)
 
   defp remember_device(connection, identity) do
     Postgrex.query!(
@@ -62,15 +77,12 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     )
   end
 
-  defp socket_request(connection, identity, {:socket, requested}) do
-    [[enforced]] =
-      Postgrex.query!(connection, "select enforced from sync_entry_rollout where singleton", []).rows
-
+  defp socket_request(identity, {:socket, requested}, enforced) do
     mode = if enforced, do: :enforced, else: :compatibility
     {%{identity | entry_ownership: mode}, requested}
   end
 
-  defp socket_request(_connection, identity, requested),
+  defp socket_request(identity, requested, _enforced),
     do: {%{identity | entry_ownership: nil}, requested}
 
   defp allocate_requested_entry(
@@ -133,6 +145,36 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
     validate_entry_dispatch(connection, identity, requested)
     params = Scope.participant(identity) ++ [identity.participant_generation]
 
+    case issue_new_generation(connection, params, requested) do
+      generation when is_integer(generation) ->
+        %{identity | entry_generation: generation}
+
+      nil ->
+        existing_entry(connection, identity, params, requested)
+    end
+  end
+
+  # A new entry bumps the seat in one statement, which also takes the row lock.
+  defp issue_new_generation(connection, params, :new) do
+    case Postgrex.query!(
+           connection,
+           """
+           update participant_join_seats set issued_entry_generation=issued_entry_generation+1,
+             issued_entry_expires_at=clock_timestamp()+interval '120 seconds'
+           where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
+             and issued_entry_generation < 9007199254740991
+           returning issued_entry_generation
+           """,
+           params
+         ).rows do
+      [[next]] -> next
+      [] -> nil
+    end
+  end
+
+  defp issue_new_generation(_connection, _params, _requested), do: nil
+
+  defp existing_entry(connection, identity, params, requested) do
     case Postgrex.query!(
            connection,
            """
@@ -142,35 +184,11 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
            """,
            params
          ).rows do
-      [] ->
+      [[issued]] when is_integer(requested) and requested > 0 and requested <= issued ->
+        %{identity | entry_generation: requested}
+
+      _missing_or_not_issued ->
         Postgrex.rollback(connection, {:error, :invalid_admission_intent})
-
-      [[issued]] ->
-        generation =
-          case requested do
-            :new when issued < 9_007_199_254_740_991 ->
-              [[next]] =
-                Postgrex.query!(
-                  connection,
-                  """
-                  update participant_join_seats set issued_entry_generation=issued_entry_generation+1,
-                    issued_entry_expires_at=clock_timestamp()+interval '120 seconds'
-                  where tenant_id=$1 and space_id=$2 and episode_id=$3 and participant_id=$4 and generation=$5
-                  returning issued_entry_generation
-                  """,
-                  params
-                ).rows
-
-              next
-
-            generation when is_integer(generation) and generation > 0 and generation <= issued ->
-              generation
-
-            _ ->
-              Postgrex.rollback(connection, {:error, :invalid_admission_intent})
-          end
-
-        %{identity | entry_generation: generation}
     end
   end
 

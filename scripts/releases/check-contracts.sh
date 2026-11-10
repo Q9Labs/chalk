@@ -23,6 +23,7 @@ if [[ "$mode" == --all ]]; then
   export TARGET_SHA="${TARGET_SHA-$(git rev-parse HEAD)}"
 fi
 check release-source scripts/releases/check-source.sh
+check own-sfu-promotion-tests python3 -m unittest discover -s scripts/releases -p test_release.py
 if [[ "${MANAGED_ENVIRONMENT:-nightly}" == nightly ]]; then
   check dispatcher-configuration python3 scripts/releases/media.py check_configuration --environment nightly
 fi

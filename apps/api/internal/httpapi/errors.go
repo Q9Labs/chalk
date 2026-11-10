@@ -1,11 +1,15 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+	"strconv"
+)
 
 type APIError struct {
-	Status  int
-	Code    string
-	Message string
+	Status     int
+	Code       string
+	Message    string
+	RetryAfter int
 }
 
 func (err APIError) Error() string {
@@ -54,7 +58,7 @@ var (
 	apiErrorIdempotencyConflict           = APIError{Status: http.StatusConflict, Code: "request.idempotency_conflict", Message: "Idempotency key was already used for another request"}
 	apiErrorEpisodeCapacityExceeded       = APIError{Status: http.StatusConflict, Code: "episode.capacity_exceeded", Message: "Episode capacity is exhausted"}
 	apiErrorMediaPlaneUnavailable         = APIError{Status: http.StatusServiceUnavailable, Code: "media.unavailable", Message: "Media plane is unavailable"}
-	apiErrorMediaClientUnsupported        = APIError{Status: http.StatusConflict, Code: "media.client_unsupported", Message: "This Episode's media needs a newer Chalk SDK"}
+	apiErrorMediaClientUnsupported        = APIError{Status: http.StatusConflict, Code: "media.client_unsupported", Message: "This call needs a newer version of Chalk. Update the app and try again."}
 	apiErrorMediaConnectionNotFound       = APIError{Status: http.StatusNotFound, Code: "media.connection_not_found", Message: "Media connection not found"}
 
 	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_id", Message: "Invalid recording id"}
@@ -94,5 +98,8 @@ var (
 )
 
 func writeAPIError(w http.ResponseWriter, err APIError) {
+	if err.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(err.RetryAfter))
+	}
 	writeError(w, err.Status, err.Code, err.Message)
 }

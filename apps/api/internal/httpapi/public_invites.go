@@ -633,7 +633,7 @@ func publicInviteManagementErrors() []APIError {
 }
 
 func publicInvitePublicErrors() []APIError {
-	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
+	return []APIError{apiErrorInvalidRequest, apiErrorInvalidArrivalHandle, apiErrorInvalidRequestKey, apiErrorPublicInviteUnavailable, apiErrorArrivalUnavailable, apiErrorEpisodeCapacityExceeded, apiErrorEpisodeNotActive, apiErrorMediaClientUnsupported, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorTenantLiveEpisodeLimit, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorIdempotencyConflict, apiErrorInternal}
 }
 
 func publicInviteRefreshErrors() []APIError {
@@ -656,8 +656,12 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorAdmissionRequestNotFound, true
 	case errors.Is(err, publicinvites.ErrArrivalNotFound), errors.Is(err, publicinvites.ErrArrivalUnavailable), errors.Is(err, publicinvites.ErrCredentialMismatch), errors.Is(err, publicinvites.ErrInvalidCredential):
 		return apiErrorArrivalUnavailable, true
+	case errors.Is(err, mediaplane.ErrConnectionNotFound):
+		return apiErrorMediaConnectionNotFound, true
 	case errors.Is(err, mediaplane.ErrClientUnsupported):
 		return apiErrorMediaClientUnsupported, true
+	case errors.Is(err, mediaplane.ErrPlaneUnavailable):
+		return apiErrorMediaPlaneUnavailable, true
 	case errors.Is(err, publicinvites.ErrMediaProofExpired):
 		return apiErrorMediaProofExpired, true
 	case errors.Is(err, publicinvites.ErrMediaProofRejected):
@@ -672,7 +676,11 @@ func publicInviteEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, publicinvites.ErrInvalidSpaceID):
 		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, publicinvites.ErrSpaceUnavailable), errors.Is(err, publicinvites.ErrLifecycleUnavailable), errors.Is(err, publicinvites.ErrAccessUnavailable), errors.Is(err, publicinvites.ErrAccountsUnavailable), errors.Is(err, publicinvites.ErrInvalidKeyring):
+	case errors.Is(err, publicinvites.ErrAccessUnavailable):
+		unavailable := apiErrorServiceUnavailable
+		unavailable.RetryAfter = 1
+		return unavailable, true
+	case errors.Is(err, publicinvites.ErrSpaceUnavailable), errors.Is(err, publicinvites.ErrLifecycleUnavailable), errors.Is(err, publicinvites.ErrAccountsUnavailable), errors.Is(err, publicinvites.ErrInvalidKeyring):
 		return apiErrorServiceUnavailable, true
 	case errors.Is(err, publicinvites.ErrInvalidAccountID), errors.Is(err, publicinvites.ErrInvalidInvite), errors.Is(err, publicinvites.ErrInvalidPublicRole), errors.Is(err, publicinvites.ErrInvalidAdmissionMode), errors.Is(err, publicinvites.ErrInvalidArrival), errors.Is(err, publicinvites.ErrInvalidIdentityMode), errors.Is(err, publicinvites.ErrInvalidAdmissionRequest), errors.Is(err, publicinvites.ErrInvalidAdmissionDecision), errors.Is(err, publicinvites.ErrAdmissionRequestTerminal), errors.Is(err, publicinvites.ErrInvalidLifecycleState):
 		return apiErrorInvalidRequest, true
@@ -981,6 +989,9 @@ func publicAccessClientPayload(grant publicinvites.PublicAccessGrant) map[string
 				"serverLayerAdaptation": grant.ClientPayload.Capabilities.ServerLayerAdaptation,
 				"subscriptionState":     grant.ClientPayload.Capabilities.SubscriptionState,
 				"iceRestart":            grant.ClientPayload.Capabilities.ICERestart,
+				"pullPublished":         grant.ClientPayload.Capabilities.PullPublished,
+				"unifiedSignaling":      grant.ClientPayload.Capabilities.UnifiedSignaling,
+				"muteInPlace":           grant.ClientPayload.Capabilities.MuteInPlace,
 			},
 		}
 

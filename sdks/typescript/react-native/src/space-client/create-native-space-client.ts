@@ -4,6 +4,7 @@ import {
   createChalkChatFileHttpTransport,
   createChalkWhiteboardV1Client,
   createChalkWhiteboardV1FileDownloadTransport,
+  createDirectFirstWebSocketFactory,
   createCloudflareSFUHTTPTransport,
   createReactNativeSyncLifecycle,
   createReactNativeWebSocketFactory,
@@ -32,6 +33,8 @@ export type NativeSpaceClientOptions = {
   readonly getAccess: GetAccess;
   readonly baseUrl?: string;
   readonly syncUrl?: string;
+  /** Direct Sync URL tried before `syncUrl`, with fallback. Unset (the default) keeps today's single path. */
+  readonly syncDirectUrl?: string;
   readonly whiteboardURL?: string | null;
   readonly microphone?: boolean;
   readonly camera?: boolean;
@@ -56,6 +59,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });
   const webSocket = createReactNativeWebSocketFactory(globalThis.WebSocket as unknown as ReactNativeWebSocketConstructor);
+  const syncWebSocket = options.syncDirectUrl ? createDirectFirstWebSocketFactory({ directUrl: options.syncDirectUrl, inner: webSocket }) : webSocket;
   const dependencies: PlatformDependencies = {
     clock: {
       now: () => Date.now(),
@@ -73,7 +77,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
-    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, webSocket, storage, syncDialTimeoutMs),
+    createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),
     createChatFileTransport: (input) => createChatFileTransport(apiBaseURL, input, fetch),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(apiBaseURL, options.whiteboardURL ?? whiteboardURL(syncURL), input, fetch, lifecycle, webSocket, syncDialTimeoutMs),
     subscribeForeground: (listener) => {
@@ -111,8 +115,9 @@ const CALL_OPEN_STATUSES: ReadonlySet<string> = new Set(["joining", "live", "rec
 function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: typeof globalThis.fetch): NativeMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
+  const bootstrap = mediaBootstrap(input.access.media);
   const client = new CloudflareSFUClient({
-    bootstrap: mediaBootstrap(input.access.media),
+    bootstrap,
     participantId: subject.participantId,
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
@@ -121,6 +126,8 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
       spaceId: subject.spaceId,
       episodeId: subject.episodeId,
       participantId: subject.participantId,
+      // The grant decides, so an older API without the capability keeps the per-operation routes.
+      unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
       fetch,
     }),
     replaceMediaConnection: replaceMediaConnection ? async () => mediaBootstrap(await replaceMediaConnection()) : undefined,
@@ -135,6 +142,7 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
 }
 function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
   return {
+    prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),

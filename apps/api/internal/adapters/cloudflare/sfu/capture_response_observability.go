@@ -41,7 +41,7 @@ func captureResponseSnapshot(payload []byte) string {
 	}
 	response.ErrorCode = captureSnapshotCode(response.ErrorCode)
 	if response.ErrorDescription != nil {
-		*response.ErrorDescription = observableProviderMessage(*response.ErrorDescription)
+		*response.ErrorDescription = redactedDescription(*response.ErrorDescription)
 	}
 	if len(response.Tracks) > 16 {
 		response.OmittedTracks = len(response.Tracks) - 16
@@ -60,7 +60,7 @@ func captureResponseSnapshot(payload []byte) string {
 		}
 		track.ErrorCode = captureSnapshotCode(track.ErrorCode)
 		if track.ErrorDescription != nil {
-			*track.ErrorDescription = observableProviderMessage(*track.ErrorDescription)
+			*track.ErrorDescription = redactedDescription(*track.ErrorDescription)
 		}
 	}
 	for {
@@ -87,4 +87,13 @@ func captureSnapshotCode(code *string) *string {
 		*code = "[redacted]"
 	}
 	return code
+}
+
+// redactedDescription replaces a provider description with its fingerprint, as identities are.
+// The description is free text that can echo a failed dial's host or address.
+func redactedDescription(description string) string {
+	if description == "" {
+		return ""
+	}
+	return "redacted-" + providerMessageFingerprint(description)
 }

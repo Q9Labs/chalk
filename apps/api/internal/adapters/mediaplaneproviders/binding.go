@@ -1,7 +1,9 @@
 package mediaplaneproviders
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	providercontracts "github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
@@ -11,17 +13,24 @@ import (
 
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
-// A Space outside the own-SFU allowlist and an SDK that cannot run the own SFU
-// get Cloudflare, so only allowlisted Spaces move and old SDK cohorts stay on
-// Cloudflare when their Space selects the own SFU.
-func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+// A Space outside the own-SFU allowlist gets Cloudflare, so only allowlisted
+// Spaces move. An SDK that cannot run the own SFU gets Cloudflare in an
+// allowlisted Space too, until the client sunset passes. After it the request
+// fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
+// Cloudflare for good.
+func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
 	selected, err := selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
 	var pin spaces.MediaPlaneProvider
-	if selected == spaces.MediaPlaneProviderChalkSFU && (!r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU)) {
-		pin = spaces.MediaPlaneProviderCloudflareSFU
+	if selected == spaces.MediaPlaneProviderChalkSFU {
+		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
+			return nil, err
+		}
+		if !r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU) {
+			pin = spaces.MediaPlaneProviderCloudflareSFU
+		}
 	}
 	resolved, resolution, err := r.resolveApplication(tenant, space, pin)
 	if err != nil {
@@ -37,29 +46,44 @@ func (r Registry) ResolveBinding(tenant tenants.Tenant, space spaces.Space, clie
 		return nil, nil
 	}
 	// The own SFU runs several nodes: the Episode stays on the one placed here.
-	node := ""
+	var placement mediaplane.Placement
 	if resolved.provider == mediaplane.ProviderChalkSFU {
 		var room bool
-		node, room = r.chalk.Place()
-		// Every node would refuse a new Episode, so it starts on Cloudflare when
-		// the Tenant can run it there. Otherwise it stays on the node placed,
-		// whose admission refuses the join with a retryable capacity error.
+		placement, room = r.chalk.Place()
 		if !room {
-			if fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU); err == nil && fallback != nil {
-				resolved, resolution, node = fallback, fallbackResolution, ""
+			// No node can take a new Episode. It starts on Cloudflare when the Tenant
+			// can run it there and overflow is on. With overflow off it is refused with
+			// the capacity error a full node gives a join. Without a Cloudflare
+			// application it is refused too: Place names a node only when it can take
+			// the Episode, and a binding to any other would fail every join.
+			fallback, fallbackResolution, err := r.resolveApplication(tenant, space, spaces.MediaPlaneProviderCloudflareSFU)
+			if err != nil || fallback == nil || !r.chalk.CloudflareOverflow() {
+				// The refusal keeps the reason nothing had room, so a host guard
+				// reads differently from a full pool or a drain.
+				r.recordPlacement(ctx, resolution.Provider, placement.Reason)
+				return nil, fmt.Errorf("%w: %w: %w: %s", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused, placement.Reason)
 			}
+			resolved, resolution = fallback, fallbackResolution
+			placement.Node, placement.Incarnation = "", ""
 		}
 	}
 	binding, err := mediaplane.NewBinding(string(resolution.Provider), resolution.ConfigurationSource, r.applicationID(resolved))
 	if err != nil {
 		return nil, err
 	}
-	if node != "" {
-		if binding, err = binding.OnNode(node); err != nil {
+	if placement.Reason != "" {
+		if binding, err = binding.Placed(placement); err != nil {
 			return nil, err
 		}
+		r.recordPlacement(ctx, resolution.Provider, placement.Reason)
 	}
 	return &binding, nil
+}
+
+func (r Registry) recordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+	if r.telemetry != nil {
+		r.telemetry.RecordPlacement(ctx, provider, reason)
+	}
 }
 
 // resolveApplication resolves the provider configuration a new Episode binds to.
@@ -83,4 +107,34 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 		return nil, resolution, nil
 	}
 	return resolved, resolution, nil
+}
+
+// RefuseClient is the sunset check of ResolveBinding on its own, for a caller
+// that must refuse before it writes anything. A Space that does not exist yet
+// has the zero ID, so only the allowlist entry * covers it.
+func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) error {
+	selected, err := selectedProvider(tenant, space)
+	if err != nil {
+		return err
+	}
+	return r.refuseAfterSunset(ctx, tenant, space, selected, clients)
+}
+
+// refuseAfterSunset refuses a client that cannot run the own SFU once the client
+// sunset has passed, in a Space that is on the allowlist. Disabled media is left
+// alone: that Episode has no binding, so no client has to run the own SFU.
+func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected spaces.MediaPlaneProvider, clients mediaplane.ClientProviders) error {
+	if selected != spaces.MediaPlaneProviderChalkSFU || !r.chalkSpaces.Allows(space.ID) || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+		return nil
+	}
+	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: providercontracts.ModeUnknown}
+	resolved, err := r.resolveProviderConfig(tenant, space, &resolution, "")
+	if err != nil {
+		return err
+	}
+	if resolved == nil && resolution.ConfigurationSource == providercontracts.ConfigurationSourceDisabled {
+		return nil
+	}
+	slog.InfoContext(ctx, "chalk sfu refused a client that cannot run it", "event", "chalk_sfu.client_refused", "reason", "client_sunset")
+	return mediaplane.ErrClientUnsupported
 }

@@ -958,6 +958,15 @@ with failure_policy as (
             and authority.lease_owner = sqlc.arg(lease_owner)
       )
     returning recording_jobs.*
+), attempt_failure as (
+    -- The job row keeps only its latest error and clears it on success; this row outlives a retry.
+    insert into recording_job_attempt_failures (
+        job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
+    )
+    select failed.id, failed.attempt_count, failed.fencing_generation, failed.kind,
+        sqlc.arg(error_code), sqlc.arg(error_detail), sqlc.arg(lease_owner)
+    from failed
+    on conflict do nothing
 ), publication_failure as (
     insert into recording_capture_publication_failures(job_id, attempt_count, fencing_generation)
     select id, attempt_count, fencing_generation from failed
@@ -1600,3 +1609,21 @@ limit 1;
 
 -- name: DrainCaptureStopPublications :exec
 select recording_drain_capture_stop_publications(sqlc.arg(observed_at)::timestamptz, 100);
+
+-- name: ListHeldCaptureSlots :many
+select
+    job.id,
+    job.tenant_id,
+    job.recording_id,
+    job.episode_id,
+    job.lease_expires_at,
+    coalesce(
+        (select max(authority.issued_at)
+         from recording_job_attempt_authorities authority
+         where authority.job_id = job.id and authority.attempt_count = job.attempt_count),
+        job.updated_at
+    )::timestamptz as claimed_at
+from recording_jobs job
+where job.kind = 'capture' and job.state = 'leased'
+order by claimed_at, job.id
+limit sqlc.arg(row_limit);

@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { webMediaFixture } from "../../../../scripts/web-proof/media.mjs";
-import { collectPage, measureFirstFrame, receiverTimedOut, senderNeverPublished, tileState } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
+import { collectPage, measureAdvance, measureFirstFrame, receiverTimedOut, senderNeverPublished, videoNotAdvancing } from "../../../../scripts/web-proof/tile-diagnostics.mjs";
 
 const runId = process.argv[2];
 if (!runId) throw new Error("usage: join-call.mjs <run-id> [--web <origin>]");
@@ -130,11 +130,10 @@ try {
       const received = await measureFirstFrame(page, other, { timeoutMs: waitMs });
       measurements[name] = { ...measurements[name], remoteFirstFrameMs: received.firstFrameMs };
       if (received.firstFrameMs === null) throw new Error(receiverTimedOut(name, other, received, waitMs));
-      const first = received.state.frames;
-      await page.waitForTimeout(3000);
-      const { frames: second } = await page.evaluate(tileState, other);
-      if (!(second > first + 5)) throw new Error(`${other}'s tile decoded ${first} then ${second} frames after ${received.firstFrameMs} ms; video is not advancing`);
-      return { firstFrameMs: received.firstFrameMs, frames: [first, second] };
+      const advance = await measureAdvance(page, other, { timeoutMs: waitMs });
+      measurements[name] = { ...measurements[name], remoteAdvancedAfterMs: advance.advancedAfterMs };
+      if (advance.advancedAfterMs === null) throw new Error(videoNotAdvancing(name, other, advance, waitMs));
+      return { firstFrameMs: received.firstFrameMs, advancedAfterMs: advance.advancedAfterMs };
     });
   }
 

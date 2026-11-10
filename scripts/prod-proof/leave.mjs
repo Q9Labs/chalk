@@ -1,36 +1,23 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+import { baselineEntry } from "./leave-baseline.mjs";
 import { evaluateLeaves } from "./leave-criteria.mjs";
 import { launchGuests, waitForMediaProgress } from "./media.mjs";
 import { createSpace, prepareIntegration } from "./proofs.mjs";
-import { check, command, save } from "./runtime.mjs";
-
-const baselineVersion = "5.2.6";
-
-export async function baselineEntry(run) {
-  const metadata = await fetch(`https://registry.npmjs.org/@q9labsai%2fchalk-client/${baselineVersion}`, { signal: AbortSignal.timeout(30_000) });
-  check(metadata.ok, "Baseline npm metadata is unavailable");
-  const release = await metadata.json();
-  const response = await fetch(release.dist.tarball, { signal: AbortSignal.timeout(30_000) });
-  check(response.ok, "Baseline npm tarball is unavailable");
-  const archive = Buffer.from(await response.arrayBuffer());
-  check(`sha512-${createHash("sha512").update(archive).digest("base64")}` === release.dist.integrity, "Baseline tarball integrity mismatch");
-  const directory = resolve(run.directory, "leave-baseline");
-  await mkdir(directory, { recursive: true });
-  const path = resolve(directory, "baseline.tgz");
-  await writeFile(path, archive);
-  await command("tar", ["-xzf", path, "-C", directory], { signal: run.signal });
-  const manifest = JSON.parse(await readFile(resolve(directory, "package/package.json"), "utf8"));
-  check(manifest.version === baselineVersion, "Wrong baseline SDK version");
-  await save(`${run.directory}/leave-baseline-integrity.json`, { version: baselineVersion, integrity: release.dist.integrity });
-  return resolve(directory, "package", manifest.exports["."].import);
-}
+import { check, save } from "./runtime.mjs";
 
 async function createEpisode(run) {
   const space = await createSpace(run);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
   return { space, episode };
+}
+
+// The SDK lists publications with GET publications, or with POST signal {op: "publications"} when the API advertises the unified route.
+function isPublicationsPoll(request) {
+  const { pathname } = new URL(request.url());
+  if (pathname.endsWith("/media/sfu/publications")) return request.method() === "GET";
+  return pathname.endsWith("/media/sfu/signal") && request.method() === "POST" && request.postDataJSON()?.op === "publications";
 }
 
 async function armPublications(page, reject) {
@@ -39,8 +26,8 @@ async function armPublications(page, reject) {
     acceptPoll = accept;
   });
   let held;
-  await page.route("**/media/sfu/publications*", (route) => {
-    if (held || route.request().method() !== "GET") return route.continue();
+  await page.route(/\/media\/sfu\/(publications|signal)(\?.*)?$/, (route) => {
+    if (held || !isPublicationsPoll(route.request())) return route.continue();
     held = route;
     acceptPoll();
   });

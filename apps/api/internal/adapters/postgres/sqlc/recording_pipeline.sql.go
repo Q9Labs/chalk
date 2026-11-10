@@ -1293,6 +1293,15 @@ with failure_policy as (
             and authority.lease_owner = $8
       )
     returning recording_jobs.id, recording_jobs.tenant_id, recording_jobs.episode_id, recording_jobs.recording_id, recording_jobs.kind, recording_jobs.idempotency_key, recording_jobs.payload_schema_version, recording_jobs.state, recording_jobs.priority, recording_jobs.available_at, recording_jobs.attempt_count, recording_jobs.attempt_limit, recording_jobs.lease_token, recording_jobs.lease_owner, recording_jobs.lease_expires_at, recording_jobs.fencing_generation, recording_jobs.error_code, recording_jobs.error_detail, recording_jobs.terminal_at, recording_jobs.updated_at, recording_jobs.created_at, recording_jobs.result_metadata
+), attempt_failure as (
+    -- The job row keeps only its latest error and clears it on success; this row outlives a retry.
+    insert into recording_job_attempt_failures (
+        job_id, attempt_count, fencing_generation, kind, error_code, error_detail, lease_owner
+    )
+    select failed.id, failed.attempt_count, failed.fencing_generation, failed.kind,
+        $1, $4, $8
+    from failed
+    on conflict do nothing
 ), publication_failure as (
     insert into recording_capture_publication_failures(job_id, attempt_count, fencing_generation)
     select id, attempt_count, fencing_generation from failed
@@ -2240,6 +2249,61 @@ func (q *Queries) InsertRecordingJobAttemptAuthority(ctx context.Context, arg In
 		&i.IssuedAt,
 	)
 	return i, err
+}
+
+const listHeldCaptureSlots = `-- name: ListHeldCaptureSlots :many
+select
+    job.id,
+    job.tenant_id,
+    job.recording_id,
+    job.episode_id,
+    job.lease_expires_at,
+    coalesce(
+        (select max(authority.issued_at)
+         from recording_job_attempt_authorities authority
+         where authority.job_id = job.id and authority.attempt_count = job.attempt_count),
+        job.updated_at
+    )::timestamptz as claimed_at
+from recording_jobs job
+where job.kind = 'capture' and job.state = 'leased'
+order by claimed_at, job.id
+limit $1
+`
+
+type ListHeldCaptureSlotsRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	TenantID       pgtype.UUID        `json:"tenant_id"`
+	RecordingID    pgtype.UUID        `json:"recording_id"`
+	EpisodeID      pgtype.UUID        `json:"episode_id"`
+	LeaseExpiresAt pgtype.Timestamptz `json:"lease_expires_at"`
+	ClaimedAt      pgtype.Timestamptz `json:"claimed_at"`
+}
+
+func (q *Queries) ListHeldCaptureSlots(ctx context.Context, rowLimit int32) ([]ListHeldCaptureSlotsRow, error) {
+	rows, err := q.db.Query(ctx, listHeldCaptureSlots, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHeldCaptureSlotsRow
+	for rows.Next() {
+		var i ListHeldCaptureSlotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.RecordingID,
+			&i.EpisodeID,
+			&i.LeaseExpiresAt,
+			&i.ClaimedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRecordingDeadLetters = `-- name: ListRecordingDeadLetters :many

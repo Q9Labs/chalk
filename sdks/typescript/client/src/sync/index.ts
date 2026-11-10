@@ -1,5 +1,6 @@
 export { canonicalJson, canonicalJsonBytes } from "./canonical";
 export { createBrowserSyncLifecycle, createBrowserWebSocketFactory, type BrowserLifecycleEnvironment, type BrowserWebSocketConstructor } from "./browser";
+export { createDirectFirstWebSocketFactory, directFirstSyncOptions, type DirectFirstOptions, type DirectPathMemory } from "./direct-first";
 export { SyncBrowserCapabilityError, SyncReactNativeCapabilityError } from "./errors";
 export {
   createReactNativeSyncLifecycle,

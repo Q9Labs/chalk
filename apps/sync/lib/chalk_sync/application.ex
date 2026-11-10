@@ -17,6 +17,7 @@ defmodule ChalkSync.Application do
         {Task.Supervisor, [name: ChalkSync.CommandTaskSupervisor]},
         {ChalkSync.Episodes.CommandIntake, []},
         {ChalkSync.Admission, []},
+        {ChalkSync.Transport.DirectLimits, []},
         whiteboard_authority_child(),
         whiteboard_views_child(),
         collaboration_fanout_child(),
@@ -206,9 +207,16 @@ defmodule ChalkSync.Application do
         {Bandit,
          plug: ChalkSync.Transport.Router,
          ip: Application.fetch_env!(:chalk_sync, :listen_ip),
-         port: port}
+         port: port,
+         websocket_options: websocket_options()}
     end
   end
+
+  # Bandit buffers fragmented messages up to 8 MB by default. The largest inbound message any
+  # socket accepts is the whiteboard's 256 KiB (decodedInboundFrameBytes), so a larger fragmented
+  # message is closed with 1009 instead of buffered. The option is per listener, not per upgrade.
+  @spec websocket_options() :: keyword()
+  def websocket_options, do: [max_fragmented_message_size: 262_144]
 
   defp presence_runtime_child do
     case Application.fetch_env!(:chalk_sync, :stateholder) do

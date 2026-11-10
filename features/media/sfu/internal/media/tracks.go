@@ -45,8 +45,14 @@ type publication struct {
 	revoked  bool
 
 	closed atomic.Bool
-	done   chan struct{}
-	layers [maxLayers]atomic.Pointer[ingressLayer]
+	// held parks the publication for its owner's mute: it stays open and keeps its MID,
+	// and its subscriptions, but forwards nothing until the owner resumes it.
+	held atomic.Bool
+	// resumes counts resumes: a packet queued before one carries the older count and is dropped,
+	// so a quick unmute never sends what the mute had already fenced.
+	resumes atomic.Uint64
+	done    chan struct{}
+	layers  [maxLayers]atomic.Pointer[ingressLayer]
 	// subscribers is copied on write, so readers never lock.
 	subscribers atomic.Pointer[[]*subscription]
 
@@ -59,7 +65,7 @@ type publication struct {
 }
 
 func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodecType) (*publication, error) {
-	authority, revision, revoked, err := session.node.authorityFor(session.scope, track.Source)
+	authority, revision, revoked, err := session.node.authorityFor(session.scope, session.allocation, track.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +139,9 @@ func (p *publication) read(layer *ingressLayer) {
 // caller owns header and writer, so it allocates nothing.
 func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, header *rtp.Header, writer *packetWriter) {
 	layer.meter.add(len(raw))
+	if p.held.Load() {
+		return
+	}
 	packet, ok := parseRTP(header, raw, p.video())
 	if !ok {
 		return
@@ -149,6 +158,11 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 	if layer.audioLevelID != 0 {
 		p.readAudioLevel(layer, header, &packet)
 	}
+	if history := layer.history.Load(); history != nil {
+		if !history.store(&packet) {
+			return
+		}
+	}
 	resumed := !layer.active(packet.arrival)
 	if resumed {
 		// The monitor may have missed the gap, so end the live segments while
@@ -156,9 +170,6 @@ func (p *publication) forward(layer *ingressLayer, raw []byte, repaired bool, he
 		p.reselect()
 	}
 	layer.lastRTP.Store(packet.arrival)
-	if history := layer.history.Load(); history != nil {
-		history.store(&packet)
-	}
 	if resumed {
 		p.reselect()
 	}
@@ -247,10 +258,10 @@ func (p *publication) monitor() {
 // views reports every layer slot for the selection policy.
 func (p *publication) views(now int64) [maxLayers]layerView {
 	var views [maxLayers]layerView
-	closed := p.closed.Load()
+	idle := p.closed.Load() || p.held.Load()
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil {
-			views[index] = layerView{rid: layer.rid, active: !closed && layer.active(now)}
+			views[index] = layerView{rid: layer.rid, active: !idle && layer.active(now)}
 		}
 	}
 	return views
@@ -266,6 +277,40 @@ func (p *publication) reselect() {
 	for _, subscription := range *subscribers {
 		if layer := subscription.reselect(views[:]); layer >= 0 {
 			p.requestKeyframe(layer)
+		}
+	}
+}
+
+// setHeld parks or resumes the publication and reports whether that changed it. A parked
+// publication forwards nothing, and egress drops what was queued for its subscriptions, but the
+// subscriptions stay: a viewer that never saw the mute has the same subscription when media
+// returns. Each transition reselects layers, which advances every subscription's revision, so
+// a receiver that polls sees the change, and a resume asks for keyframes so viewers decode
+// without waiting for the periodic one.
+func (p *publication) setHeld(held bool) bool {
+	p.mu.Lock()
+	if p.held.Load() == held {
+		p.mu.Unlock()
+		return false
+	}
+	// The count rises before the flag clears, so no queued packet sees an unparked publication
+	// and its own count together.
+	if !held {
+		p.resumes.Add(1)
+	}
+	p.held.Store(held)
+	p.mu.Unlock()
+	// Layer selection follows the hold: parking idles every subscription, including one that
+	// subscribes during the mute, and resuming selects a layer for each and asks for its keyframe.
+	p.reselect()
+	return true
+}
+
+// requestKeyframes asks the publisher for a keyframe on every layer it sends.
+func (p *publication) requestKeyframes() {
+	for index := range p.layers {
+		if p.layer(index) != nil {
+			p.requestKeyframe(index)
 		}
 	}
 }
@@ -320,7 +365,7 @@ func (p *publication) close() {
 // active reports whether the publication is delivering: it is open, its source's
 // lease allows forwarding, and RTP arrived recently.
 func (p *publication) active(now int64) bool {
-	if p.closed.Load() || !p.authority.allows(now, now) {
+	if p.closed.Load() || p.held.Load() || !p.authority.allows(now, now) {
 		return false
 	}
 	for index := range p.layers {
@@ -342,7 +387,7 @@ func (p *publication) inspectLayers(now int64) []protocol.InspectedLayer {
 	var layers []protocol.InspectedLayer
 	for index := range p.layers {
 		if layer := p.layers[index].Load(); layer != nil {
-			inspected := protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && p.authority.allows(now, now) && layer.active(now), RepairedPackets: layer.repaired.Load()}
+			inspected := protocol.InspectedLayer{RID: layer.rid, Active: !p.closed.Load() && !p.held.Load() && p.authority.allows(now, now) && layer.active(now), RepairedPackets: layer.repaired.Load()}
 			if layer.nack != nil {
 				inspected.RequestedPackets = layer.nack.requested.Load()
 			}

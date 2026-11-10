@@ -54,4 +54,6 @@ type Resolution struct {
 
 type Telemetry interface {
 	RecordResolution(context.Context, Resolution)
+	// RecordPlacement counts where a new Episode went and why.
+	RecordPlacement(context.Context, spaces.MediaPlaneProvider, mediaplane.PlacementReason)
 }

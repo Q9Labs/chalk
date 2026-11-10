@@ -2,6 +2,7 @@ package recordingpipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -226,6 +227,40 @@ func (s Service) GetPoolHealth(ctx context.Context, role PoolRole) (PoolHealth, 
 		return PoolHealth{}, ErrInvalidJobID
 	}
 	return s.repository.GetPoolHealth(ctx, role)
+}
+
+// maximumHeldCaptureSlots bounds the readout. A Capture pool is a handful of
+// slots, so a larger count means the readout is no longer the problem.
+const maximumHeldCaptureSlots = 100
+
+// GetCapturePool reports how many Capture slots exist and which of them the
+// Tenant's own jobs hold. A pool that never reported health has zero slots.
+func (s Service) GetCapturePool(ctx context.Context, tenantID utilities.ID) (CapturePool, error) {
+	if tenantID.IsZero() {
+		return CapturePool{}, ErrInvalidTenantID
+	}
+	pool := CapturePool{Held: []HeldCaptureSlot{}}
+	health, err := s.repository.GetPoolHealth(ctx, PoolRoleCapture)
+	switch {
+	case errors.Is(err, ErrPoolHealthNotFound):
+	case err != nil:
+		return CapturePool{}, err
+	default:
+		pool.SlotsTotal, pool.ObservedAt = health.ReadyCapacity, &health.ObservedAt
+	}
+	held, err := s.repository.ListHeldCaptureSlots(ctx, maximumHeldCaptureSlots)
+	if err != nil {
+		return CapturePool{}, err
+	}
+	pool.SlotsUsed = len(held)
+	for _, slot := range held {
+		if slot.TenantID == tenantID {
+			pool.Held = append(pool.Held, slot)
+		} else {
+			pool.HeldByOtherTenants++
+		}
+	}
+	return pool, nil
 }
 
 func (s Service) Claim(ctx context.Context, input ClaimInput) (Job, error) {

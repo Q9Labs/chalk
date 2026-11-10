@@ -37,6 +37,11 @@ preparation_demand as (
       and preparation.starts_at <= sqlc.arg(observed_at)::timestamptz + interval '5 minutes'
       and preparation.starts_at > sqlc.arg(observed_at)::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
+      and (sqlc.arg(own_capture)::boolean or coalesce(
+        (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
+         where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
+        nullif(btrim(spaces.media_plane), ''),
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
 ),
 facts as (
     select

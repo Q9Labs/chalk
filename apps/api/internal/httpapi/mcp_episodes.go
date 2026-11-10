@@ -33,7 +33,8 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 		}
 	})
 	bindMCPEndpoint(server, mcpapi.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
-		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, Body: i.Body}
+		// The tool has no SDK to ask, like its admit and grant tools below.
+		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, MediaClients: mediaplane.AllClientProviders(), Body: i.Body}
 	})
 	bindMCPEndpoint(server, mcpapi.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcpapi.EpisodeInput) endEpisodeEndpointRequest {
 		return endEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey}

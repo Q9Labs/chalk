@@ -21,4 +21,6 @@ export type ConnectionReportTransportEvent = Pick<
   | "element_state"
   | "play_result"
   | "receive_counts"
+  | "receivers_stopped"
+  | "bundle_tag_held"
 >;

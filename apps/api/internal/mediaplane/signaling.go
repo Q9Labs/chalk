@@ -3,6 +3,7 @@ package mediaplane
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 )
 
@@ -45,6 +46,9 @@ type Track struct {
 	Paused *bool `json:"paused,omitempty"`
 }
 
+// MaxTracksPerRequest bounds the tracks one add-tracks request can carry.
+const MaxTracksPerRequest = 16
+
 type TracksRequest struct {
 	ConnectionID       string
 	Scope              Scope
@@ -60,6 +64,21 @@ type TracksResponse struct {
 	Tracks                         []Track             `json:"tracks,omitempty"`
 	TrackErrors                    []TrackError        `json:"trackErrors,omitempty"`
 	RequiresImmediateRenegotiation bool                `json:"requiresImmediateRenegotiation,omitempty"`
+	// Publications is the Episode's publication list a pull-published request read. Planes never set it.
+	Publications *PublicationList `json:"publications,omitempty"`
+}
+
+// PublicationList is the Episode's enabled publications at one registry position. It is also the body of the list route.
+type PublicationList struct {
+	Incarnation  int64               `json:"incarnation"`
+	Sequence     int64               `json:"sequence"`
+	Publications []ListedPublication `json:"publications"`
+}
+
+type ListedPublication struct {
+	ParticipantID string `json:"participant_id"`
+	Source        string `json:"source"`
+	PublicationID string `json:"publication_id"`
 }
 
 type TrackError struct {
@@ -178,6 +197,13 @@ type TrackUpdatingPlane interface {
 	UpdateTracks(context.Context, UpdateTracksRequest) (TracksResponse, error)
 }
 
+// PublicationHoldingPlane also parks and resumes the caller's own publication in
+// place, for a mute that keeps the track and its MID and moves no SDP.
+type PublicationHoldingPlane interface {
+	TrackUpdatingPlane
+	HoldsPublications()
+}
+
 type TrackClosingPlane interface {
 	CloseTracks(context.Context, CloseTracksRequest) (CloseTracksResponse, error)
 }
@@ -209,6 +235,9 @@ func (s Service) UpdateTracks(ctx context.Context, input UpdateTracksRequest) (T
 	}
 	if err := requireUpdateTracksRequest(&input); err != nil {
 		return TracksResponse{}, err
+	}
+	if _, holding := s.plane.(PublicationHoldingPlane); !holding && slices.ContainsFunc(input.Tracks, func(track Track) bool { return track.Location == "local" }) {
+		return TracksResponse{}, ErrUnsupportedOperation
 	}
 	return updating.UpdateTracks(ctx, input)
 }
@@ -280,7 +309,7 @@ func (s Service) restartICE(ctx context.Context, input TracksRequest) (TracksRes
 
 func requireTracksRequest(input *TracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
-	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > MaxTracksPerRequest {
 		return ErrInvalidSignalRequest
 	}
 	input.ConnectionID = connectionID
@@ -315,12 +344,12 @@ func requireTracksRequest(input *TracksRequest) error {
 	return nil
 }
 
-// requireUpdateTracksRequest accepts only a remote subscription that names its
-// receiving MID and carries a simulcast policy, a pause state or both; local
-// publications cannot change.
+// requireUpdateTracksRequest accepts a remote subscription that names its
+// receiving MID and carries a simulcast policy, a pause state or both, and a local
+// publication that names its MID and source and carries a pause state.
 func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 	connectionID, err := requiredString(input.ConnectionID)
-	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > 16 {
+	if err != nil || len(input.Tracks) == 0 || len(input.Tracks) > MaxTracksPerRequest {
 		return ErrInvalidSignalRequest
 	}
 	input.ConnectionID = connectionID
@@ -330,6 +359,13 @@ func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 		track.Mid = strings.TrimSpace(track.Mid)
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
+		track.Source = strings.TrimSpace(track.Source)
+		if track.Location == "local" {
+			if track.Mid == "" || track.TrackName == "" || track.SessionID != "" || !validMediaSource(track.Source) || track.Paused == nil || track.Simulcast != nil {
+				return ErrInvalidSignalRequest
+			}
+			continue
+		}
 		if track.Location != "remote" || track.Mid == "" || track.TrackName == "" || track.SessionID == "" || (track.Simulcast == nil && track.Paused == nil) {
 			return ErrInvalidSignalRequest
 		}

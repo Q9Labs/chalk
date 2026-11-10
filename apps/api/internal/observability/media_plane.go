@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"go.opentelemetry.io/otel"
@@ -22,6 +23,9 @@ type MediaPlaneResolutionTelemetry struct {
 	logger   *slog.Logger
 	requests otelmetric.Int64Counter
 	duration otelmetric.Float64Histogram
+	// placements counts placement decisions, not committed Episodes: a decision whose
+	// enclosing transaction later rolls back is still counted.
+	placements otelmetric.Int64Counter
 }
 
 func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionTelemetry {
@@ -39,7 +43,42 @@ func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionT
 		otelmetric.WithDescription("MediaPlane resolution latency"),
 		otelmetric.WithUnit("s"),
 	)
-	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration}
+	placements, _ := meter.Int64Counter(
+		"chalk.api.media_plane.placement_decisions",
+		otelmetric.WithDescription("Own-SFU placement decisions for new Episodes, including ones whose creation later rolls back"),
+		otelmetric.WithUnit("{decision}"),
+	)
+	return MediaPlaneResolutionTelemetry{logger: logger, requests: requests, duration: duration, placements: placements}
+}
+
+// RecordPlacement counts one placement decision. The resolver runs inside the
+// Episode-creation transaction, so a rolled-back creation still counts. Labels are bounded: the node
+// role comes from the reason, never from a node name, and no Tenant, Episode or
+// Participant identity is attached.
+func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+	role, bounded := boundedPlacement(reason)
+	t.placements.Add(ctx, 1, otelmetric.WithAttributes(
+		attribute.String("chalk.media_plane.provider", boundedMediaPlaneProvider(provider)),
+		attribute.String("chalk.media_plane.node_role", role),
+		attribute.String("chalk.media_plane.placement_reason", bounded),
+	))
+}
+
+// boundedPlacement maps a placement reason to its node role and a known reason.
+// A no-capacity Episode stays on the primary. A refused Episode, with overflow off,
+// counts under its overflow reason on the own-SFU provider; one that moved to
+// Cloudflare counts the same reason under the Cloudflare provider.
+func boundedPlacement(reason mediaplane.PlacementReason) (role, bounded string) {
+	switch reason {
+	case mediaplane.PlacementPrimary, mediaplane.PlacementNoCapacity:
+		return "primary", string(reason)
+	case mediaplane.PlacementStandby:
+		return "standby", string(reason)
+	case mediaplane.PlacementOverflowNoRoom, mediaplane.PlacementOverflowHostGuard, mediaplane.PlacementOverflowDraining, mediaplane.PlacementOverflowNodeUnavailable, mediaplane.PlacementOverflowNodeProtocol:
+		return "overflow", string(reason)
+	default:
+		return "unknown", "unknown"
+	}
 }
 
 func (t MediaPlaneResolutionTelemetry) RecordResolution(ctx context.Context, resolution mediaplaneproviders.Resolution) {

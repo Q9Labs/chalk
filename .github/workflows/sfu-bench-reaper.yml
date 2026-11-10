@@ -1,0 +1,36 @@
+name: SFU bench reaper
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chalk-sfu-bench-reaper
+  cancel-in-progress: false
+
+jobs:
+  reap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Reuse the DO token already used by the managed nightly deploy workflow.
+    environment: nightly
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-doctl
+      - name: Delete bench Droplets older than four hours
+        env:
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$DIGITALOCEAN_ACCESS_TOKEN" || { echo "Missing existing nightly DO token" >&2; exit 1; }
+          features/media/sfu/scripts/bench/bench reap 4

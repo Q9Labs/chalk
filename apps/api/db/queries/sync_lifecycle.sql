@@ -504,6 +504,7 @@ where
             and operations.operation_name = 'maximum_episode_duration_expired'
             and operations.deadline_generation = episodes.deadline_generation
     )
+    and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.deadline_at, episodes.id
 for update of episodes skip locked
 limit sqlc.arg(batch_size);
@@ -697,14 +698,24 @@ cross join lateral (
         ) end
     ) as empty_since
 ) empty_window
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "<base>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where o.status<>'failed') as live_attempts,
+        (count(*) filter (where o.status='failed'))::integer as failed_attempts,
+        max(o.completed_at) filter (where o.status='failed') as last_failed_at
+    from sync_external_operations o
+    where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+        and o.operation_name='tenant_end_episode'
+        and (o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
+            or o.request_key like 'empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text || '-retry-%')
+) linger
 where episodes.status='active' and empty_window.empty_since is not null
-    and not exists (
-        select 1 from sync_external_operations o
-        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
-            and o.operation_name='tenant_end_episode'
-            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
-    )
+    and linger.live_attempts = 0
+    and (linger.failed_attempts = 0 or linger.last_failed_at
+        + make_interval(mins => least(power(2, least(linger.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
+    and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.id
 for update of episodes skip locked
 limit sqlc.arg(batch_size);
@@ -714,14 +725,11 @@ limit sqlc.arg(batch_size);
 -- admission use that same lock, so an earlier reconnect cancels the old window.
 select empty_window.empty_since::timestamptz as empty_since, coalesce(
     episodes.status='active'
-    and not exists (
-        select 1 from sync_external_operations o
-        where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
-            and o.operation_name='tenant_end_episode'
-            and o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
-    )
+    and linger.live_attempts = 0
+    and (linger.failed_attempts = 0 or linger.last_failed_at
+        + make_interval(mins => least(power(2, least(linger.failed_attempts - 1, 6))::integer, 60)) <= clock_timestamp())
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp(), false
-)::boolean as due
+)::boolean as due, linger.failed_attempts
 from episodes
 left join episode_presence_leases presence on presence.tenant_id=episodes.tenant_id
     and presence.space_id=episodes.space_id and presence.episode_id=episodes.id
@@ -743,6 +751,18 @@ cross join lateral (
         ) end
     ) as empty_since
 ) empty_window
+cross join lateral (
+    -- A failed end must not block the Episode: each retry is a new operation
+    -- keyed "<base>-retry-<n>", backed off 1, 2, 4 ... 60 minutes.
+    select count(*) filter (where o.status<>'failed') as live_attempts,
+        (count(*) filter (where o.status='failed'))::integer as failed_attempts,
+        max(o.completed_at) filter (where o.status='failed') as last_failed_at
+    from sync_external_operations o
+    where o.tenant_id=episodes.tenant_id and o.space_id=episodes.space_id and o.episode_id=episodes.id
+        and o.operation_name='tenant_end_episode'
+        and (o.request_key='empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text
+            or o.request_key like 'empty-episode-linger-' || ((extract(epoch from empty_window.empty_since) * 1000000)::bigint)::text || '-retry-%')
+) linger
 where episodes.tenant_id=sqlc.arg(tenant_id) and episodes.space_id=sqlc.arg(space_id) and episodes.id=sqlc.arg(episode_id);
 -- name: ListDueAdmissionRequests :many
 -- Separate pending expiry from admitted cleanup. The lateral lookup starts
@@ -847,6 +867,7 @@ where sqlc.narg(presence_recover_after)::timestamptz <= clock_timestamp()
             and coalesce(lease.expires_at, p.joined_at + interval '600 seconds') <= clock_timestamp()
             and p.status='active' and e.status='active'
     )
+    and control.episode_id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by control.episode_id
 for update of control skip locked
 limit sqlc.arg(batch_size);

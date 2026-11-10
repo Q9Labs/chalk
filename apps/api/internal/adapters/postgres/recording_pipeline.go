@@ -65,6 +65,7 @@ type recordingPipelineQuerier interface {
 	ReleaseRecordingReservation(context.Context, sqlc.ReleaseRecordingReservationParams) (sqlc.ReleaseRecordingReservationRow, error)
 	UpsertRecordingPoolHealth(context.Context, sqlc.UpsertRecordingPoolHealthParams) (sqlc.UpsertRecordingPoolHealthRow, error)
 	GetRecordingPoolHealth(context.Context, string) (sqlc.GetRecordingPoolHealthRow, error)
+	ListHeldCaptureSlots(context.Context, int32) ([]sqlc.ListHeldCaptureSlotsRow, error)
 }
 
 func (r RecordingPipelineRepository) RequestExport(ctx context.Context, input recordingpipeline.ExportInput, renderJobID utilities.ID) (recordingpipeline.Job, error) {
@@ -1540,6 +1541,21 @@ func mapArtifactRecord(row sqlc.RecordingArtifact) recordingpipeline.Artifact {
 		CommittedAt: timestamp(row.CommittedAt),
 		CreatedAt:   timestamp(row.CreatedAt),
 	}
+}
+
+func (r RecordingPipelineRepository) ListHeldCaptureSlots(ctx context.Context, limit int) ([]recordingpipeline.HeldCaptureSlot, error) {
+	rows, err := r.queries.ListHeldCaptureSlots(ctx, int32(limit))
+	if err != nil {
+		return nil, fmt.Errorf("list held capture slots: %w", err)
+	}
+	slots := make([]recordingpipeline.HeldCaptureSlot, 0, len(rows))
+	for _, row := range rows {
+		slots = append(slots, recordingpipeline.HeldCaptureSlot{
+			JobID: id(row.ID), TenantID: id(row.TenantID), RecordingID: id(row.RecordingID), EpisodeID: id(row.EpisodeID),
+			ClaimedAt: timestamp(row.ClaimedAt), LeaseExpiresAt: timestamp(row.LeaseExpiresAt),
+		})
+	}
+	return slots, nil
 }
 
 func mapPoolHealth(row sqlc.GetRecordingPoolHealthRow) recordingpipeline.PoolHealth {

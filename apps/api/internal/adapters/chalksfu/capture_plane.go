@@ -112,9 +112,12 @@ func (a *Adapter) CreateCaptureConnection(ctx context.Context, input captureplan
 		return captureplane.CreateCaptureConnectionResult{}, err
 	}
 	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Kind: captureSessionKind}
+	request := wireCreateRequest{OperationID: operationID, Scope: captureScope(input.Metadata), Kind: captureSessionKind, AllocationGeneration: a.allocation}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
 		return captureplane.CreateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
+	}
+	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
+		return captureplane.CreateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, a.discardStaleSession(ctx, created.ConnectionID, request.Scope, err))
 	}
 	reference, err := captureplane.NewProviderReference(strings.TrimSpace(created.ConnectionID))
 	if err != nil {

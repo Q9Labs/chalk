@@ -2,6 +2,7 @@
 # The nightly tier of the scorecard: compare scorecards from a real-node run with the median of the last seven nightly runs,
 # append them to the history branch, and keep one "scorecard regression" issue open while a gated metric is over its budget.
 # Usage: nightly.sh <scorecard.json>...   (run from the repository root; needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY)
+# With SCORECARD_WARN_ONLY=true it only compares and appends to the history: it never opens, edits or closes the regression issue, and a history push that stays rejected after three tries exits 0.
 set -euo pipefail
 
 scorecard="node features/scorecard/scorecard.mjs"
@@ -25,7 +26,11 @@ clone_history() {
 
 clone_history
 regressions=0
+inconclusive=0
 for card in "$@"; do
+  if node -e 'const c=JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).contention; process.exit(c?.contended || c?.unobservable ? 0 : 1)' "${card}"; then
+    inconclusive=1
+  fi
   plane="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).mediaPlane)' "${card}")"
   baseline=()
   if ${scorecard} baseline --history "${work}/history" --plane "${plane}" --out "${work}/baseline-${plane}.json" | grep -q '^Baseline'; then
@@ -46,9 +51,17 @@ for attempt in 1 2 3; do
   git -C "${work}/history" add history.jsonl TRENDS.md
   git -C "${work}/history" commit --quiet -m "Nightly scorecard ${GITHUB_RUN_ID:-local}" || break
   git -C "${work}/history" push --quiet origin scorecard-history && break
-  [[ "${attempt}" -eq 3 ]] && { echo "Could not push the scorecard history." >&2; exit 1; }
+  if [[ "${attempt}" -eq 3 ]]; then
+    echo "Could not push the scorecard history." >&2
+    [[ "${SCORECARD_WARN_ONLY:-}" == true ]] && exit 0
+    exit 1
+  fi
   clone_history
 done
+
+if [[ "${SCORECARD_WARN_ONLY:-}" == true ]]; then
+  exit 0
+fi
 
 number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label scorecard-regression --state open --json number --jq '.[0].number // empty')"
 if [[ "${regressions}" -eq 1 ]]; then
@@ -60,6 +73,7 @@ if [[ "${regressions}" -eq 1 ]]; then
     gh label create scorecard-regression --repo "${GITHUB_REPOSITORY}" --color B60205 --description "A gated performance metric is over its budget" 2> /dev/null || true
     gh issue create --repo "${GITHUB_REPOSITORY}" --title "Scorecard regression" --label scorecard-regression --body-file "${work}/issue.md"
   fi
-elif [[ -n "${number}" ]]; then
+elif [[ -n "${number}" && "${inconclusive}" -eq 0 ]]; then
   gh issue close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "The latest nightly run has no gated metric over its budget."
 fi
+exit "${regressions}"

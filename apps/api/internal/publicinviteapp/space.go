@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
@@ -30,6 +31,9 @@ const startCallLingerWindowSeconds int32 = 30
 type SpaceConfig struct {
 	ManagedTenantID   utilities.ID
 	DefaultMediaPlane string
+	// RefuseClient is asked before the Space exists, so a client that the media
+	// plane will refuse leaves no Space behind. Nil asks nothing.
+	RefuseClient func(context.Context, tenants.Tenant, spaces.Space, mediaplane.ClientProviders) error
 }
 
 type spaceService interface {
@@ -60,6 +64,7 @@ func NewSpacePort(spaceService spaceService, tenantService tenantService, config
 	return spacePort{spaces: spaceService, tenant: tenantService, config: SpaceConfig{
 		ManagedTenantID:   config.ManagedTenantID,
 		DefaultMediaPlane: strings.TrimSpace(config.DefaultMediaPlane),
+		RefuseClient:      config.RefuseClient,
 	}}, nil
 }
 
@@ -70,8 +75,14 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 	if !validRequestKey(input.RequestKey) {
 		return publicinvites.PublicSpace{}, publicinvites.ErrInvalidRequestKey
 	}
-	if _, err := a.tenant.GetTenant(ctx, a.config.ManagedTenantID); err != nil {
+	tenant, err := a.tenant.GetTenant(ctx, a.config.ManagedTenantID)
+	if err != nil {
 		return publicinvites.PublicSpace{}, fmt.Errorf("resolve managed Tenant for public Space: %w", err)
+	}
+	if a.config.RefuseClient != nil {
+		if err := a.config.RefuseClient(ctx, tenant, spaces.Space{MediaPlane: a.config.DefaultMediaPlane}, input.MediaClients); err != nil {
+			return publicinvites.PublicSpace{}, fmt.Errorf("check the client before creating a public Space: %w", err)
+		}
 	}
 
 	name := []rune(strings.TrimSpace(input.DisplayName))

@@ -10,6 +10,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -213,6 +214,11 @@ func (a accessPort) resumePublicAccess(ctx context.Context, arrival publicinvite
 		ParticipantID: arrival.ParticipantID, ParticipantGeneration: arrival.ParticipantGeneration,
 		AccountID: arrival.AccountID, IdentityMode: string(arrival.IdentityMode),
 	})
+	if errors.Is(err, episodes.ErrParticipantNotActive) {
+		// A refresh that overlaps Leave finds the participant already leaving. The arrival is about to be Left, so
+		// answer as the arrival will a moment later instead of a 500.
+		return publicinvites.PublicAccessGrant{}, publicinvites.ErrArrivalUnavailable
+	}
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -341,7 +347,7 @@ func (a accessPort) issue(ctx context.Context, arrival publicinvites.Arrival, re
 		Provider: provider,
 	}
 	mediaSubject.ConnectionID = providerSubject
-	mediaToken, err := a.mediaTokens.Issue(ctx, mediaSubject)
+	mediaToken, err := a.mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, clients), mediaSubject)
 	if err != nil {
 		return publicinvites.PublicAccessGrant{}, err
 	}
@@ -422,6 +428,9 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			ServerLayerAdaptation: flags["serverLayerAdaptation"] == true,
 			SubscriptionState:     flags["subscriptionState"] == true,
 			ICERestart:            flags["iceRestart"] == true,
+			PullPublished:         flags["pullPublished"] == true,
+			UnifiedSignaling:      flags["unifiedSignaling"] == true,
+			MuteInPlace:           flags["muteInPlace"] == true,
 		}
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil
 	case mediaplane.ProviderCloudflareSFU:

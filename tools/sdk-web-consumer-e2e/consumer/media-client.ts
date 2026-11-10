@@ -32,7 +32,7 @@ type FixtureChalkSFUPayload = {
   readonly connectionId: string;
   readonly episodeRef: string;
   readonly iceServers: readonly CloudflareSFUIceServer[];
-  readonly capabilities: { readonly serverLayerAdaptation: boolean; readonly iceRestart: boolean };
+  readonly capabilities: { readonly serverLayerAdaptation: boolean; readonly iceRestart: boolean; readonly pullPublished: boolean };
 };
 
 export class FixtureMediaClient {

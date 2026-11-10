@@ -4,6 +4,8 @@ import { Schema } from "effect";
 export type PublicSpaceCredential = {
   readonly apiBaseURL: string;
   readonly syncURL: string;
+  /** Direct Sync URL tried before `syncURL`; absent unless the build sets VITE_CHALK_SYNC_DIRECT_URL. */
+  readonly syncDirectURL?: string;
   readonly space: string;
 };
 export type SpaceAccessCleanupOptions = {
@@ -89,7 +91,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     },
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),
     arrival,
-    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), space: publicSpaceSlug(arrival) },
+    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), ...publicSyncDirectURL(), space: publicSpaceSlug(arrival) },
     getAccess,
     connectionAccess,
     finish,
@@ -101,7 +103,11 @@ export function publicAPIBaseURL(): string {
   if (globalThis.location?.origin) return globalThis.location.origin;
   return defaultAPIOrigin;
 }
-function publicSyncURL(apiBaseURL: string): string {
+export function publicSyncDirectURL(): { readonly syncDirectURL?: string } {
+  const configured = import.meta.env.VITE_CHALK_SYNC_DIRECT_URL?.trim();
+  return configured ? { syncDirectURL: configured } : {};
+}
+export function publicSyncURL(apiBaseURL: string): string {
   const configured = import.meta.env.VITE_CHALK_SYNC_URL?.trim();
   if (configured) return configured;
   const url = new URL(apiBaseURL);

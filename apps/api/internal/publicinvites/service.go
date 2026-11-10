@@ -1193,7 +1193,13 @@ func (r Runtime) ArrivalStatus(ctx context.Context, input PublicInviteArrivalSta
 		if err := beforeWrite(); err != nil {
 			return PublicSpaceArrival{}, err
 		}
-		return r.resumeAdmittedArrival(ctx, space, arrival, input.MediaClients)
+		result, err := r.resumeAdmittedArrival(ctx, space, arrival, input.MediaClients)
+		if errors.Is(err, mediaplane.ErrConnectionNotFound) {
+			// A lost SFU session does not revoke admission. Replacement still
+			// requires the saved media proof through RefreshAccess.
+			return r.arrivalResult(space, arrival), nil
+		}
+		return result, err
 	}
 	return r.arrivalResult(space, arrival), nil
 }

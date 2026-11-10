@@ -39,6 +39,9 @@ type wireCreateRequest struct {
 	// Kind is "capture" for a recorder's receive-only session. A node that does not
 	// know the field refuses the request, so it is sent only for captures.
 	Kind string `json:"kind,omitempty"`
+	// AllocationGeneration is the binding generation the request was issued under. Absent, the
+	// node applies no retirement floor.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
 }
 
 type wireCreateResponse struct {
@@ -114,6 +117,14 @@ type wireSourceControlRequest struct {
 	TenantID  string              `json:"tenantId"`
 	EpisodeID string              `json:"episodeId"`
 	Controls  []wireSourceControl `json:"controls"`
+	// AllocationGeneration is as in wireCreateRequest.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
+}
+
+type wireRetireRequest struct {
+	TenantID   string `json:"tenantId"`
+	EpisodeID  string `json:"episodeId"`
+	Generation int64  `json:"generation"`
 }
 
 type wireSourceControl struct {
@@ -174,6 +185,11 @@ type wireError struct {
 }
 
 type wireReady struct {
+	// Protocol is the request-body revision the node decodes (see the SFU's protocol.WireProtocol).
+	// A node that predates it omits it, which reads as 0.
+	Protocol int `json:"protocol"`
+	// Revision is the commit the node was built from.
+	Revision        string `json:"revision"`
 	NodeIncarnation string `json:"nodeIncarnation"`
 	Sessions        int    `json:"sessions"`
 	PacketBudget    int    `json:"packetBudget"`
@@ -190,4 +206,30 @@ type wireReady struct {
 		// AdmissionReason is set while the node refuses new Episodes.
 		AdmissionReason string `json:"admissionReason"`
 	} `json:"host"`
+}
+
+type wireShape struct {
+	Participants          int  `json:"participants"`
+	CamerasPerParticipant int  `json:"camerasPerParticipant"`
+	ScreenShare           bool `json:"screenShare,omitempty"`
+}
+
+type wireReserveRequest struct {
+	OperationID string    `json:"operationId"`
+	TenantID    string    `json:"tenantId"`
+	EpisodeID   string    `json:"episodeId"`
+	Generation  int64     `json:"generation"`
+	Shape       wireShape `json:"shape"`
+	TTLSeconds  int       `json:"ttlSeconds,omitempty"`
+	// PacketCeiling caps the node's whole reservation below its own budget; a standby's degraded
+	// budget goes here so the node enforces it against the full shape under its own lock.
+	PacketCeiling int `json:"packetCeiling,omitempty"`
+	// AllocationGeneration is the binding generation the move commits. The node installs it as the
+	// Episode's retirement floor, so a node that restarted refuses what the Episode left.
+	AllocationGeneration *int64 `json:"allocationGeneration,omitempty"`
+}
+
+type wireReserveResponse struct {
+	NodeIncarnation string `json:"nodeIncarnation"`
+	ReservedPackets int    `json:"reservedPackets"`
 }

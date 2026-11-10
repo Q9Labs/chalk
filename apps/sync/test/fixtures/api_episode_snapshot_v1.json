@@ -1,0 +1,38 @@
+{
+  "episode_id": "00000000-0000-4000-8000-000000000010",
+  "config_snapshot": {
+    "roles": {
+      "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand", "sendChat"],
+      "observer": ["subscribe", "sendReaction"]
+    },
+    "admission_policy": { "mode": "knock" },
+    "default_episode_duration_seconds": 3600,
+    "maximum_episode_duration_seconds": 7200,
+    "linger_window_seconds": 30
+  },
+  "deadline_at": "2026-08-09T12:34:56.789Z",
+  "deadline_generation": 1,
+  "pending_intent": {
+    "participant_id": "00000000-0000-4000-8000-000000000011",
+    "display_name": "Ada",
+    "role": "facilitator",
+    "admission_revision": 1
+  },
+  "folded_state": {
+    "admission_policy": "knock",
+    "admission_requests": [],
+    "control_revision": 0,
+    "deadline_at_ms": 1786278896789,
+    "deadline_generation": 1,
+    "participants": [],
+    "recording": null,
+    "role_capabilities": {
+      "facilitator": ["publishAudio", "publishVideo", "subscribe", "raiseHand", "sendChat"],
+      "observer": ["subscribe", "sendReaction"]
+    },
+    "state_schema_version": 1,
+    "status": "active"
+  },
+  "state_digest": "66a317eda731c760baa2d1ab482b86878427ea584883e4647cc445ad1b6a9b38",
+  "snapshot_bytes": 431
+}

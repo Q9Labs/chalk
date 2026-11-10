@@ -219,9 +219,14 @@ func prepareSetDeadlineInput(input *SetDeadlineInput) error {
 	return nil
 }
 
-func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt time.Time) (Request, error) {
-	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
-		Request: Request{Key: "empty-episode-linger-" + strconv.FormatInt(lastDepartureAt.UnixMicro(), 10)}}
+// NewLingerRequest keys the end of one empty window. Each failed earlier end
+// of that window adds a retry suffix, so a retry is a new operation.
+func NewLingerRequest(tenantID, spaceID, episodeID utilities.ID, lastDepartureAt time.Time, failedAttempts int) (Request, error) {
+	key := "empty-episode-linger-" + strconv.FormatInt(lastDepartureAt.UnixMicro(), 10)
+	if failedAttempts > 0 {
+		key += "-retry-" + strconv.Itoa(failedAttempts)
+	}
+	input := RequestEpisodeEndInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, Request: Request{Key: key}}
 	if err := prepareEpisodeEndInput(&input); err != nil {
 		return Request{}, err
 	}

@@ -662,6 +662,29 @@ const defaultGroup = HttpApiGroup.make("default")
     }),
   )
   .add(
+    HttpApiEndpoint.post("signalCloudflareSFU", "/v1/tenants/:tenant_id/spaces/:space_id/episodes/:episode_id/participants/:participant_id/media/sfu/signal", {
+      params: S.SignalCloudflareSFUPathParamsSchema,
+      payload: S.SignalCloudflareSFURequestBodySchema,
+      success: S.SignalCloudflareSFUResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.EpisodeInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.ParticipantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.RequestInvalidErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.SpaceInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
+        S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.MediaConnectionNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
+        S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("testWebhookEndpoint", "/v1/tenants/:tenant_id/webhook-endpoints/:endpoint_id/test", {
       params: S.TestWebhookEndpointPathParamsSchema,
       headers: S.TestWebhookEndpointRequestHeadersSchema,
@@ -835,11 +858,13 @@ const episodesGroup = HttpApiGroup.make("episodes")
         S.EpisodeNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.SpaceNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
         S.EpisodeCapacityExceededErrorSchema.pipe(HttpApiSchema.status(409)),
+        S.MediaClientUnsupportedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestIdempotencyConflictErrorSchema.pipe(HttpApiSchema.status(409)),
         S.TenantLiveEpisodeLimitReachedErrorSchema.pipe(HttpApiSchema.status(409)),
         S.RequestPayloadTooLargeErrorSchema.pipe(HttpApiSchema.status(413)),
         S.RequestRateLimitedErrorSchema.pipe(HttpApiSchema.status(429)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.MediaUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],
     }),
@@ -1121,6 +1146,19 @@ const recordingsGroup = HttpApiGroup.make("recordings")
         S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
         S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.RecordingNotFoundErrorSchema.pipe(HttpApiSchema.status(404)),
+        S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
+        S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
+      ],
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("getRecordingCapturePool", "/v1/tenants/:tenant_id/recording-capture-pool", {
+      params: S.GetRecordingCapturePoolPathParamsSchema,
+      success: S.GetRecordingCapturePoolResponseSchema.pipe(HttpApiSchema.status(200)),
+      error: [
+        S.TenantInvalidIdErrorSchema.pipe(HttpApiSchema.status(400)),
+        S.AccessUnauthenticatedErrorSchema.pipe(HttpApiSchema.status(401)),
+        S.AccessForbiddenErrorSchema.pipe(HttpApiSchema.status(403)),
         S.ServiceInternalErrorSchema.pipe(HttpApiSchema.status(500)),
         S.ServiceUnavailableErrorSchema.pipe(HttpApiSchema.status(503)),
       ],

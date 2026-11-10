@@ -79,6 +79,7 @@ func PreviewRouteContracts() []APIRouteContract {
 	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
 	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
 	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil, nil)...)
+	endpoints = append(endpoints, getRecordingCapturePoolEndpoint(nil, nil))
 	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil, nil)...)
 	endpoints = append(endpoints, transcriptTextEndpoint(nil, nil, nil, nil))
 

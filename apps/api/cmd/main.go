@@ -181,7 +181,7 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUAllowlist(cfg.ChalkSFU.AllowedSpaces)
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithChalkSFUAllowlist(cfg.ChalkSFU.AllowedSpaces).WithNewSpaceDefaults(cfg.NewSpace, tenantRepository)
 	var chalkSFU *chalksfu.Fleet
 	if cfg.ChalkSFU.Enabled {
 		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
@@ -189,7 +189,9 @@ func run() error {
 			return fmt.Errorf("configure chalk sfu: %w", err)
 		}
 	}
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces})
+	ownCapture := chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled
+	mediaPlaneTelemetry := observability.NewMediaPlaneResolutionTelemetry(logger)
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces, ChalkSFUClientSunset: cfg.ChalkSFU.ClientSunset})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -280,7 +282,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recorder worker identity: %w", err)
 		}
-		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier)
+		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier, ownCapture)
 		if err != nil {
 			return err
 		}
@@ -292,9 +294,19 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recording application identity: %w", err)
 		}
-		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureproviders.Registration{
+		captureRegistrations := []captureproviders.Registration{{
 			Provider: managedBinding.Provider, AdapterFingerprint: managedBinding.AdapterFingerprint, Plane: managedSFU,
-		})
+		}}
+		if ownCapture {
+			ownBinding, err := mediaplane.NewBinding(string(mediaplane.ProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, chalkSFU.ApplicationID())
+			if err != nil {
+				return fmt.Errorf("configure own SFU recording identity: %w", err)
+			}
+			captureRegistrations = append(captureRegistrations, captureproviders.Registration{
+				Provider: ownBinding.Provider, AdapterFingerprint: ownBinding.AdapterFingerprint, Nodes: chalkSFU,
+			})
+		}
+		captureProviderRegistry, err := captureproviders.NewRegistry(postgres.NewRecordingCaptureBindingSource(operationQueries), captureRegistrations...)
 		if err != nil {
 			return fmt.Errorf("configure recording provider registry: %w", err)
 		}
@@ -318,9 +330,10 @@ func run() error {
 	mediaPlaneRegistry := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{
 		ProcessConfig:   cfg.CloudflareRealtime,
 		DefaultProvider: cfg.DefaultMediaPlane,
-		Telemetry:       observability.NewMediaPlaneResolutionTelemetry(logger),
+		Telemetry:       mediaPlaneTelemetry,
 		ChalkSFU:        chalkSFU,
 		Episodes:        episodeService,
+		Recovery:        postgres.NewEpisodeRecovery(pool),
 	})
 	providerOperationRepository := postgres.NewProviderOperationRepositoryWithPool(pool)
 	mediaPublicationService := mediapublications.NewService(providerOperationRepository)
@@ -397,12 +410,13 @@ func run() error {
 		}
 		recorderRecordingLifecycle = lifecycleService
 	}
-	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool))
+	recordingPipelineService := recordingpipeline.NewService(recordingPipelineRepository).WithCaptureEligibility(postgres.NewEpisodeBindings(pool).WithOwnCapture(ownCapture))
 	var recordingPreparationService httpapi.RecordingPreparationService
 	var recordingEntrance httpapi.RecordingEntrancePreparer
 	if cfg.Capabilities.Recording {
-		recordingEntrance = postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission)
-		recordingPreparationService = recordingpreparation.NewService(postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission), spaceService)
+		recordingPreparations := postgres.NewRecordingPreparationRepository(pool).WithAdmissionLimits(cfg.RecordingAdmission).WithOwnCapture(ownCapture)
+		recordingEntrance = recordingPreparations
+		recordingPreparationService = recordingpreparation.NewService(recordingPreparations, spaceService)
 	}
 	recorderHealthService := recorderhealth.NewService(recordingPipelineRepository, 2*time.Minute)
 	webhookProtector, err := webhooks.NewAESGCMKeyring(cfg.Webhooks.CurrentKeyVersion, cfg.Webhooks.EncryptionKeys)
@@ -504,6 +518,7 @@ func run() error {
 		spacePort, err := publicinviteapp.NewSpacePort(spaceService, tenantService, publicinviteapp.SpaceConfig{
 			ManagedTenantID:   managedTenantID,
 			DefaultMediaPlane: publicInviteConfig.DefaultMediaPlane,
+			RefuseClient:      episodeMediaBindingResolver.RefuseClient,
 		})
 		if err != nil {
 			return fmt.Errorf("configure public invite Space port: %w", err)
@@ -564,8 +579,12 @@ func run() error {
 		LocalSystemToken: cfg.API.LocalSystemToken,
 		ServicePrincipal: cfg.API.ServicePrincipal,
 
-		RateLimit:            rateLimitOptions,
-		Readiness:            postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RateLimit: rateLimitOptions,
+		Readiness: postgres.Readiness{Pool: pool, RequiredMigration: migrations.LatestVersion},
+		RetirementBacklog: func() (int, time.Duration, bool) {
+			backlog, observed := mediaPlaneRegistry.RetirementBacklog()
+			return backlog.Count, backlog.Oldest, observed
+		},
 		APIKeys:              apiKeyService,
 		APIKeyAuthentication: apiKeyService,
 
@@ -596,6 +615,7 @@ func run() error {
 		RecorderWorkerVerifier:     recorderWorkerVerifier,
 		Recordings:                 recordingService,
 		RecordingExports:           recordingPipelineService,
+		RecordingCapturePool:       recordingPipelineService,
 		RecordingPreparations:      recordingPreparationService,
 		RecordingEntrance:          recordingEntrance,
 		EntranceInvites:            entranceInvites,
@@ -636,18 +656,14 @@ func run() error {
 	// nil interface.
 	var chalkNodes providerbridge.ChalkNodes
 	if chalkSFU != nil {
-		chalkNodes = func(node string) (providerbridge.ChalkNode, error) {
-			adapter, err := chalkSFU.Node(node)
-			if err != nil {
-				return nil, err
-			}
-			return adapter, nil
-		}
+		chalkNodes = providerbridge.ChalkNodesOf(func(node string, generation int64) (*chalksfu.Adapter, error) {
+			return chalkSFU.Allocation(node, "", generation)
+		})
 	}
 	if cfg.ProviderBridge.Enabled {
 		recordingController := recordingorchestrator.NewController(recordingPipelineService)
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
-		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes)
+		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
 		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
@@ -680,10 +696,14 @@ func run() error {
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if chalkSFU != nil {
-		// Placement reads node load from these probes.
+		// Placement reads node load from these probes. The first round finishes, within the probe
+		// timeout, before the server takes a request; a node with no answer is not placed on.
+		chalkSFU.Probe(signalCtx)
 		go chalkSFU.Watch(signalCtx)
 		// Own SFU nodes forward a source only while the API renews its grant.
 		go providerbridge.NewSourceLeases(postgres.NewSourceGrants(pool), chalkNodes).Run(signalCtx)
+		// Retires owed to the allocations Episodes left are paid until each node acknowledges.
+		go mediaPlaneRegistry.RunRetirements(signalCtx)
 	}
 	receiveHealthDone := make(chan struct{})
 	go func() {

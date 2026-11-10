@@ -97,8 +97,20 @@ export class V1LiveTargetCoordinator {
     this.#deadlineTimers.set(operationId, deadlineTimer);
     this.#localMedia[source] = "requesting";
     this.#options.sendIfLive(frame);
+    if (enabled) this.#prepareLocal(operationId, source, participantId);
     this.#options.stateChanged();
     return promise;
+  }
+
+  // The frame is already on the wire. Only grant-independent work starts here; publishing waits for the server result in #executeLocal.
+  #prepareLocal(operationId: string, source: V1MediaSource, participantId: string): void {
+    const prepare = this.#options.mediaPlane?.prepareLocalPublicationTarget;
+    if (!prepare) return;
+    const target = { operationId, participantId, source, enabled: true };
+    // #executeLocal runs the same work after the grant and reports its failure, so a failed head start needs no handling here.
+    void Promise.resolve()
+      .then(() => prepare.call(this.#options.mediaPlane, target))
+      .catch(() => {});
   }
 
   receive(frame: V1LiveTargetResult): void {

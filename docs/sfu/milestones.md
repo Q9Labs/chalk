@@ -73,8 +73,8 @@ See [admission](design.md#admission-and-the-single-node-envelope).
 
 Advertise capabilities but leave server adaptation/ICE restart false until their
 milestones pass. Reject capture before reserving work until M10 supplies it.
-Keep incompatible SDK cohorts on Cloudflare only during migration; M12 upgrades
-or sunsets them and makes the own provider the default for all Tenants/Spaces.
+Keep SDKs that do not declare `chalk_sfu` on Cloudflare during migration; M12
+makes the own provider the default for all Tenants/Spaces.
 Do not implement multi-node failover or the full-cutover operation in this lane.
 
 **Files:** `apps/api/internal/{adapters/chalksfu,adapters/mediaplaneproviders,
@@ -283,6 +283,17 @@ gates. Starve CPU and expire TURN credentials to prove admission guards, renewal
 alerts and bounded recovery. Load generators run on Instabox, or on disposable
 Droplets tagged with the lane's own tag, `chalk-sfu-bench-<lane>`, and deleted by that tag after each run. The tag list must be empty before the lane reports done.
 
+**Node sizing evidence (soak C, 2026-11-08):**
+
+| Area                | Evidence                                                                                                                                                                                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Setup               | 3.0 node-hours on the production-class own-SFU node: DigitalOcean `sgp1`, `s-2vcpu-2gb`, Basic shared CPU (`DO-Regular`). Two `s-2vcpu-4gb` `DO-Regular` generators in `sgp1`: classes 0–2 (3 classes, 9 participants) and 3–4 (2 classes, 6 participants), 15 participants total.                    |
+| Media               | Zero camera, screen or audio stalls across all five classes; 0 freezes.                                                                                                                                                                                                                               |
+| Node                | Host steal: mean 3.4%, p99 36%, max 68%; SFU `/readyz` steal means 1.15% and 1.18%. Node `eth0`: mean 33,696 packets/s, p99 35,108, both below the 36,000 packets/s budget. This is not a soak at the budget.                                                                                         |
+| Generator exclusion | Generator pauses are excluded: timer lateness maxima 28 ms and 32 ms, 0 seconds ≥100 ms, max GC pause delta 12 ms; 0 TSC/clocksource journal hits on node and generators. The earlier shared-generator run's 4 freezes in 10.98 node-hours (0.364/h) were generator-side.                             |
+| Sizing decision     | A dedicated-CPU node is not needed on today's evidence. A dedicated CPU-Optimized comparison was considered but not run because the shared node showed no freezes even at steal p99 36%.                                                                                                              |
+| Unproved capacity   | The staging soak and capacity above 15 participants toward 36,000 packets/s remain unproved. See [partial soak acceptance](capacity-calibration.md#soak-acceptance). Run the higher-capacity proof only if M11 needs it, on the shared node: short-lived bench droplets, at most USD 1, delete by ID. |
+
 **Risk:** shared CPU and generator limits can distort one run. Staging matches
 production's size, so its results carry over, but one run is not a capacity
 guarantee. Full cutover waits for M10's capture demand and M11's placement and
@@ -311,6 +322,21 @@ failures or persistent listener-unpulled alarm and within M6 capacity limits.
 Once the media plane is live, test it end to end, stress it and hunt edge cases
 on the live node: a killed node recovers by explicit rejoin, outstanding cleanup
 drains, and a live own-SFU Episode stays pinned when the selector changes.
+
+**Hard condition before production turns own SFU on:** before the production API
+gets `CHALK_SFU_ENABLED` or any configured node, for any Space, run a live media
+smoke against the production node and record the result. The smoke is
+`features/media/sfu/scripts/live-smoke production --confirm production`: it
+sends real audio and video RTP through the node's signalling endpoint, checks a
+second participant receives it and that packets keep advancing, ends the Episode
+and checks the node returns to its earlier load. It prints
+`production-live-smoke: PASS` or a `FAIL` line with the reason. The same code
+runs against staging (`live-smoke staging --confirm staging`, under the staging
+lease), where it is rehearsed first. It sends synthetic RTP, so it proves the
+node forwards media, not that a browser decodes it.
+`TestLoopback` does not count: it starts its own in-process service and never
+reaches a deployed node. Until that smoke is recorded, the production node is
+proven only to be healthy, on protocol 2, at the deployed revision.
 
 **Risk:** a one-node canary can lose all own-SFU calls until replacement. That
 is acceptable only for this internal proof. M11 supplies primary-first placement,
@@ -457,7 +483,8 @@ an overflow switch, whole-Episode recovery, and every proof below.
    `apps/api/internal/mediaplane/binding.go`, config,
    `apps/api/internal/observability/media_plane.go`.
 2. **Drain control.** `/readyz` reports `draining`, live allocations (sessions,
-   leases and capture sessions) and cleanup debt. An mTLS drain request replaces
+   capture sessions included), cleanup debt and, apart from both, open source
+   leases, which do not hold a restart. An mTLS drain request replaces
    SIGUSR1 as the control path, with an undrain for an aborted deploy. The
    deploy script waits for zero allocations and zero debt, and a forced deadline
    is logged as disruptive replacement. The API probe tells a draining node from
@@ -474,7 +501,7 @@ an overflow switch, whole-Episode recovery, and every proof below.
 4. **Whole-Episode recovery.** When a bound node is lost or returns with a new
    boot incarnation, the Episode moves through one durable, generation-fenced
    transition: the SFU reserves the Episode's complete admitted shape atomically
-   (a new reserve operation), then participants rejoin with fresh generations and
+   (`POST /v1/episodes/reserve`, an expiring hold that each rejoin replaces), then participants rejoin with fresh generations and
    M3 consent rules. A node refusing the reserve gives an explicit capacity
    outcome and never a half-recovered call. Responses from a replaced
    incarnation are rejected, and cleanup keeps targeting the old allocation. On a
@@ -523,6 +550,17 @@ binding gains optional fields only, so the previous release still reads it.
 Bench Droplets are deleted by tag; nothing in production changes until the SFU
 lead deploys.
 
+**Release order:** an SFU node reports its wire protocol and build commit on
+`/readyz`, and the API places no Episode on a node below the protocol it sends
+(the placement reason `overflow_node_protocol_too_old`). That guard covers new
+Episodes only: a live Episode bound to an older node still gets the API's calls
+with `allocationGeneration`, which the older node's strict decoder refuses. So no
+production Promote of a commit that contains #965 happens until the production
+SFU runs a build that accepts `allocationGeneration` and reports its protocol on
+`/readyz`. Production deploys the SFU before the API (expand, then contract), or
+the API deploy refuses when `/readyz` reports an older protocol than the API's
+minimum.
+
 **Needs the owner:** nothing in this plan. A production standby, a larger primary
 or an always-on second node is a money decision and is not assumed.
 
@@ -531,24 +569,32 @@ calls until it is rebuilt. This plan makes that outcome explicit and bounded
 instead of hiding it, and does not claim redundancy. Calling the bench-proved
 standby role "production failover" would be false while production has one node.
 
-## M12 — Full cutover, cohort sunset and monitoring parity
+## M12 — Full cutover and monitoring parity
 
 **Dependencies:** rollout requires M1–M8, M10 and M11 packages 1–6, with package 5's fault proofs passing. The
 inventory, SDK version policy, monitoring and dashboards start now and run in
 parallel. M9 is optional. Production deploys and the flag flips belong to the SFU
 lead.
+Rollout also requires the production SFU to run a build that accepts
+`allocationGeneration` and reports its protocol on `/readyz`, and production deploys
+that SFU before the API (see M11 release order).
 
 **Work packages**
 
 1. **Inventory and counts (starts now).** One audited query set counts Tenants,
    Spaces, explicit Cloudflare overrides, tenant-managed provider configuration,
    inactive settings and live bindings by provider, plus recording and
-   transcription dependencies. Output is sanitized counts only.
-2. **Client release and sunset (starts now).** Release compatible browser/shared
-   SDKs, React Native SDKs and first-party apps before selection changes.
-   Inventory old releases, set a bounded upgrade window and minimum version, and
-   return an actionable upgrade response at sunset. Never send an unknown grant to
-   an old decoder, and keep no indefinite Cloudflare cohort.
+   transcription dependencies. Output is sanitized counts only. Usage and
+   count meanings: [provider inventory](provider-inventory.md).
+2. **Client release (starts now).** Release compatible browser/shared SDKs,
+   React Native SDKs and first-party apps before selection changes. Chalk has no
+   outside clients: the only users are our sister companies, and they stay off
+   Chalk until the own SFU is stable, so no client sunset is planned. Never send
+   an unknown grant to an old decoder. A client that does not declare
+   `chalk_sfu` gets Cloudflare, or `media.client_unsupported` (409) when it joins
+   a live own-SFU Episode. The `CHALK_SFU_CLIENT_SUNSET` setting exists, stays
+   unset, and nothing builds on it (see
+   [Client sunset](../../infrastructure/sfu/README.md#client-sunset)).
 3. **Monitoring parity (starts now).** Provider-aware client stats, rendered-media
    and listener-heal evidence, API/SFU/capture failure alarms, latency/loss/freeze,
    packet admission, node health/drain/repair, and TURN credential and relay
@@ -575,30 +621,44 @@ lead.
    15 November, owned by M12). `cf_sfu` action budgets stay warn-only and M13
    deletes them.
 
-4. **Cutover.** Expand the flag through internal canary, cohorts, and then flip
+4. **Cutover.** First pass the [production canary entry condition](#package-4-entry-condition).
+   Expand the flag through internal canary, cohorts, and then flip
    the deployment and all Tenant/Space defaults to `chalk_sfu`, including
    explicit overrides. New Tenants and Spaces inherit it. Existing Episodes stay
    pinned until they finish or an authority replaces them. Cloudflare SFU stays
-   only as rollback through M13. When counts show every Tenant and Space on the
-   own provider and the last compatible-client check passes, and Promote has a
-   passing `chalk_sfu` real-call proof scorecard (join startup, Leave, mic/camera
-   toggle) for the same SHA from the nightly or staging node, so it needs no
-   production canary, and the scorecard scoring fails the Promote run on
-   regression (rollback stays safe). That gate is built only if it fits the
-   existing Promote pattern (`scripts/releases/release.py`, `.github/workflows/promote.yml`);
-   otherwise it stays in this package with its cost written down. Today nightly
-   defaults to `cf_sfu` and proof scoring records only Leave, so the gate needs a
-   same-SHA `chalk_sfu` run in the nightly or staging workflow and scoring for
-   join startup and the toggles. When all of that holds, set
+   only as rollback through M13. Promote already requires a same-SHA own-SFU
+   scorecard, so the cutover needs no production canary for it: the nightly
+   `own-sfu` job measures the staging SFU node, `features/scorecard/evaluate.mjs`
+   marks the cut `missing` when a gated `chalk_sfu.action.*` metric (join startup,
+   Leave, mic/camera toggle and the rest) has no samples and `gated-breach` when
+   one is over budget, and `scripts/releases/release.py` refuses a held cut
+   without a passing scorecard unless `scorecard_override` gives a written reason.
+   When counts show every Tenant and Space on the own provider, the SFU lead sets
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
+   No production Promote of a commit that contains #965 until the production SFU
+   runs a build that accepts `allocationGeneration`.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
    pinned live Episodes do not drift, explicit replacement and cleanup succeed.
 
-**Check:** audit counts show every Tenant and Space resolves to the own provider
+### Package 4 entry condition
+
+The SFU lead owns the production calibration canary, run on the production node
+under the existing bench/canary rules before package 4 expands the flag.
+The named pass line, `production-calibration-canary: PASS`, requires at least
+3 hours with five classes (15 participants), the 36,000 packets/s budget configured,
+the 40% guard setting read from the node at the start, paired 10 s own-CPU and steal samples, and no
+microphone stall over 500 ms. Record actual packet rates; the configured budget
+does not prove sustained throughput at 36,000 packets/s. This gate is independent
+of Promote's scorecard and the post-cutover checks below. The five-hour,
+three-class staging soak remains a separate proof.
+
+### Post-cutover checks
+
+Audit counts show every Tenant and Space resolves to the own provider
 for new Episodes, and live bindings and traffic counts agree with the flag. Each
 supported browser and real iOS and Android builds pass join, refresh,
 restart/replacement, every source, relay-only paths and recording/transcription.
-Unsupported versions get the upgrade response. Matched peak cohorts compare
+A client that does not declare `chalk_sfu` gets Cloudflare or the 409 above. Matched peak cohorts compare
 success, rendered latency/freezes, recovery and capacity under M6/M7 gates.
 Injected API, SFU, TURN, capture and cleanup faults fire their alarms with
 journey correlation. Publish sanitized counts and proof, no Tenant identifiers
@@ -608,11 +668,9 @@ or private queries.
 where they are. Rehearsed in package 5 before the flip is called complete.
 
 **Needs the owner:** the production flag flips and deploys are routine for the
-SFU lead. A minimum-client-version cutoff date that shuts out real users is
-direction and needs the owner's date.
+SFU lead.
 
-**Risk:** flipping only a process default leaves explicit Space selectors, old app
-installs, capture and vendor-specific support queries behind. Counts of bindings
+**Risk:** flipping only a process default leaves explicit Space selectors, capture and vendor-specific support queries behind. Counts of bindings
 and actual traffic, not a checked flag, prove full cutover.
 
 ## M13 — Cloudflare SFU retirement and removal
@@ -629,10 +687,10 @@ separate from TURN.
    the audit shows it unused.
 2. **Observation window.** Starts when M12 package 4 finishes. It lasts **7
    consecutive days**, including at least two evening peaks and one matched
-   synthetic peak, with every Tenant, Space and supported client cohort on the
-   own provider. The earlier 30-day figure assumed busy traffic; Chalk has no
-   active users, so a calendar window would add waiting and no evidence. The
-   window extends until the criteria hold, and the owner can lengthen it.
+   synthetic peak, with every Tenant and Space on the
+   own provider. Chalk has no active users, so a longer calendar window would add
+   waiting and no evidence. The window extends until the criteria hold, and the
+   owner can lengthen it.
    Require no unresolved privacy, media, recording or capacity regression,
    passing M11 capacity and drain proofs, zero Cloudflare overflow including
    during deploy and failure drills, zero Cloudflare SFU signaling, and at its end

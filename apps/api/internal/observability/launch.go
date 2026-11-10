@@ -8,6 +8,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -102,6 +103,14 @@ type AccessGrantIssuer struct {
 	telemetry *LaunchTelemetry
 }
 
+type accessGrantChalkSFUDeclaredContextKey struct{}
+
+// ContextWithAccessGrantClientProviders carries only parsed capabilities and
+// declaration provenance to issuance telemetry, not request headers or identities.
+func ContextWithAccessGrantClientProviders(ctx context.Context, clients mediaplane.ClientProviders) context.Context {
+	return context.WithValue(ctx, accessGrantChalkSFUDeclaredContextKey{}, clients)
+}
+
 func InstrumentAccessGrantIssuer(next accessGrantIssuer, telemetry *LaunchTelemetry) AccessGrantIssuer {
 	return AccessGrantIssuer{next: next, telemetry: telemetry}
 }
@@ -179,8 +188,12 @@ func (v ParticipantMediaVerifier) VerifyForRecovery(ctx context.Context, credent
 }
 
 func (t *LaunchTelemetry) recordParticipantIssuance(ctx context.Context, outcome, reason string, duration time.Duration) {
-	attributes := otelmetric.WithAttributes(attribute.String("outcome", outcome), attribute.String("reason", reason))
-	t.participantIssuance.Add(ctx, 1, attributes)
+	issuanceAttributes := []attribute.KeyValue{attribute.String("outcome", outcome), attribute.String("reason", reason)}
+	attributes := otelmetric.WithAttributes(issuanceAttributes...)
+	if clients, ok := ctx.Value(accessGrantChalkSFUDeclaredContextKey{}).(mediaplane.ClientProviders); ok && clients.DeclarationKnown() {
+		issuanceAttributes = append(issuanceAttributes, attribute.Bool("chalk_sfu_declared", clients.Runs(mediaplane.ProviderChalkSFU)))
+	}
+	t.participantIssuance.Add(ctx, 1, otelmetric.WithAttributes(issuanceAttributes...))
 	t.participantIssuanceDuration.Record(ctx, nonNegative(duration).Seconds(), attributes)
 	t.logger.Log(ctx, launchLogLevel(outcome, "issued"), "access grant issuance", "event", "access_grant.issuance", "outcome", outcome, "reason", reason, "duration_ms", milliseconds(nonNegative(duration)))
 }

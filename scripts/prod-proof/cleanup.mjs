@@ -10,7 +10,17 @@ export function runLabel(runId) {
 }
 function cleanupClient(config) {
   // Never inherit the proof's aborted signal. Every HTTP operation has a deadline.
-  return (method, path, body, headers) => request(config, method, path, body, { Authorization: `Bearer ${config.api_key}` }, headers, AbortSignal.timeout(15_000));
+  // A 30-minute latency run makes hundreds of cleanup calls; one connection reset (a TypeError from fetch) must not fail the run, and every call here is safe to repeat.
+  return async (method, path, body, headers) => {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await request(config, method, path, body, { Authorization: `Bearer ${config.api_key}` }, headers, AbortSignal.timeout(15_000));
+      } catch (error) {
+        if (!(error instanceof TypeError) || attempt === 3) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+      }
+    }
+  };
 }
 async function list(call, path, field) {
   const values = [];

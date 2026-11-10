@@ -42,8 +42,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   def transaction(connection, %Identity{} = identity, cursor) do
     Postgrex.query!(connection, "set transaction isolation level repeatable read read only", [])
 
-    with {:ok, control} <- read_control(connection, Scope.episode(identity.episode)),
-         {:ok, status} <- read_episode_status(connection, Scope.episode(identity.episode)),
+    with {:ok, control, status} <- read_control(connection, Scope.episode(identity.episode)),
          {:ok, state} <- Control.validate_fold(identity.episode, control) do
       result =
         case validate_recovery_identity(connection, identity, status) do
@@ -81,8 +80,7 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
     Postgrex.query!(connection, "set transaction isolation level repeatable read read only", [])
     params = Scope.episode(episode)
 
-    with {:ok, control} <- read_control(connection, params),
-         {:ok, status} <- read_episode_status(connection, params),
+    with {:ok, control, status} <- read_control(connection, params),
          {:ok, state} <- Control.validate_fold(episode, control) do
       build_recovery(connection, episode, state, status, cursor, 1)
     else
@@ -162,25 +160,18 @@ defmodule ChalkSync.Stateholder.Postgres.RecoveryReader do
   end
 
   defp read_control(connection, params) do
-    case Postgrex.query!(connection, SQL.read_control(), params).rows do
-      [[revision, folded_state, schema, digest, _space_id]] ->
+    case Postgrex.query!(connection, SQL.read_control_and_status(), params).rows do
+      [[revision, folded_state, schema, digest, status]] when is_binary(status) ->
         {:ok,
          %{
            revision: revision,
            folded_state: folded_state,
            state_schema_version: schema,
            digest: digest
-         }}
+         }, status}
 
-      [] ->
+      _missing ->
         {:error, :episode_not_found}
-    end
-  end
-
-  defp read_episode_status(connection, params) do
-    case Postgrex.query!(connection, SQL.read_episode_status(), params).rows do
-      [[status]] -> {:ok, status}
-      [] -> {:error, :episode_not_found}
     end
   end
 

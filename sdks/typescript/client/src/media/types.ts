@@ -29,6 +29,12 @@ export type SFUMediaCapabilities = {
   readonly subscriptionState: boolean;
   /** The SFU answers an ICE restart offer on the existing session, so a lost path recovers without a new session. */
   readonly iceRestart: boolean;
+  /** One `tracks` request lists the publications and pulls the other Participants' audio, so a join skips the list request. */
+  readonly pullPublished: boolean;
+  /** The API serves every signaling call from one URL, so a join pays one CORS preflight instead of one per call. */
+  readonly unifiedSignaling: boolean;
+  /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute keeps the track and moves no SDP. */
+  readonly muteInPlace: boolean;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -58,7 +64,7 @@ export type CloudflareSFUTrackRequest = {
   };
   readonly source?: MediaPublicationSource;
   readonly publicationId?: string;
-  /** On an update only: stops or resumes a remote video in place. Only a plane with `subscriptionState` accepts it. */
+  /** On an update only: stops or resumes a remote video in place (a plane with `subscriptionState`), or parks or resumes the caller's own local track (a plane with `muteInPlace`). */
   readonly paused?: boolean;
 };
 export type CloudflareSFUCloseTrackRequest = {
@@ -99,6 +105,12 @@ export type CloudflareSFUSignalingTransport = {
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
   readonly listPublications: () => Promise<CloudflareSFUPublicationSnapshot>;
+  /**
+   * One request that lists the publications and pulls the other Participants' microphone and screen audio.
+   * The response carries the SFU's offer for those tracks, which the caller must answer with `renegotiate`.
+   * Only a plane with the `pullPublished` capability answers it.
+   */
+  readonly pullPublishedAudio?: (input: { readonly connectionId: string }) => Promise<{ readonly snapshot: CloudflareSFUPublicationSnapshot; readonly response: CloudflareSFUTracksResponse }>;
   /** Reads the delivery state of this connection's remote videos. Only a plane with `subscriptionState` answers it. */
   readonly listSubscriptions?: () => Promise<readonly SFUSubscriptionState[]>;
   /**
@@ -184,6 +196,8 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly participantId: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly requestTimeoutMs?: number;
+  /** Send every signaling call to the one `signal` route. Set it only when the API advertised `unifiedSignaling` for this connection. */
+  readonly unifiedSignaling?: boolean;
 };
 export class CloudflareSFUError extends Error {
   constructor(

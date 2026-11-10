@@ -19,6 +19,7 @@ pnpm prod:proof camera-share # simulcast + share, without the optional limit
 pnpm prod:proof export
 pnpm prod:proof recording-rejoin
 pnpm prod:proof transcript
+CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts # three guests, scripted call, automatic Recording and Transcript (about 2 minutes of call; CHALK_PROOF_CAPTURE_RESTART_COMMAND adds a capture-node restart)
 pnpm prod:proof leave
 pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
@@ -28,6 +29,21 @@ Install `op` (local configuration only), FFmpeg (`ffmpeg`/`ffprobe`), and ImageM
 Signed webhook proofs use a temporary Webhook.site receiver. Voice generation uses macOS `say` (Samantha), or Linux `espeak`.
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
+
+The Capture pool is shared and small, so one stale Capture job can block every
+Recording. Every proof that records reads
+`GET /v1/tenants/{tenant_id}/recording-capture-pool` (the proof key's
+`recordings:read` scope) while it waits for Capture readiness, after 25 seconds
+and again at the 180-second timeout. `call-artifacts` (own SFU, automatic
+Recording) also reads it before it creates the Space, so a held slot fails the
+run before any call starts. When every slot is held and none belongs to this
+proof's Recording, it fails at once with reason `capture-slot-held`. An idle
+Capture node scaled to zero reports `slots_total` 0; that pool counts as free
+only while no job holds a slot, so any held job still fails the check. The private evidence names the job,
+Recording, Episode, claim time and lease expiry; slots held for other Tenants
+are counted without identifiers. Otherwise it keeps waiting, and the timeout
+message in the private evidence carries the pool readout or why it was
+unavailable.
 
 The Leave plan runs the integrity-verified published 5.2.6 client and the candidate
 on the same host and backend. It compares five ordinary baseline samples with
@@ -62,6 +78,14 @@ pnpm prod:latency --environment staging --samples 3 --planes chalk_sfu
 xvfb-run -a pnpm prod:latency --environment staging --headed
 ```
 
+`--lobby-dwell-ms N` (0 to 15000, default 0) makes the second guest call `preconnect()` and wait N ms before its join
+timer starts, the way a person waits in a lobby. The Sync socket opened then is already open when `join()` runs, so
+`join.prepare` and `join.sync_connect` read 0. Without the flag the join starts cold. Compare runs only with the same
+setting. Sync closes a socket that gets no hello within 5 s, so `preconnect` replaces an unused socket every 4 s for
+`keepWarmMs` (the proof asks for N + 1 s); the join counts as adopting a socket only when its hello went out on a socket opened before the join started.
+Use `--lobby-dwell-ms 10000` to see the keep-warm window: without it the socket from the first second is gone by the join
+and `join.sync_connect` reads a full upgrade.
+
 [`features/scorecard/schema.mjs`](../../features/scorecard/schema.mjs) lists every metric id and what it times. Each
 watch runs in the receiver's page and polls the SDK snapshot and WebRTC stats
 every 10 ms. A video frame counts when it is decoded, and an audio frame counts
@@ -83,6 +107,8 @@ or Space ids. With the `action.*` budgets in [`perf/budgets.json`](../../perf/bu
 the run fails on a p95 over budget, on any timeout, or when a plane has fewer
 kept cycles than `--samples`.
 
+Each cycle also records the runner's round trip to the SFU and to Sync (read from the SDK's own pings, with no probe traffic), a one-way audio estimate (`media.network_jitter_one_way_ms`: network plus jitter buffer, not mouth to ear), the selected ICE pair of the join (candidate types and check counters), and stage timings inside each action, from a wire trace that only this kit installs in the guests' pages (`latency-trace.mjs`, `latency-stages.mjs`). They go in the sidecar `latency-diagnostics-<plane>.json` beside the card, never in the card, a budget or a verdict: see [Latency diagnostics](../../features/scorecard/README.md#latency-diagnostics).
+
 Other checks cover parts of the same journey:
 
 | Check                                                                                   | What it times                                                                                              | Media plane                              | How it relates                                                                                                                                               |
@@ -92,6 +118,70 @@ Other checks cover parts of the same journey:
 | Join startup proof (`.github/workflows/gate.yml`, `scripts/web-proof/join-startup.mjs`) | The failure and retry screens under loss and stalls, against a local Sync fixture                          | none: no media                           | Startup correctness under faults, not live latency.                                                                                                          |
 | Leave plan (`pnpm prod:proof leave`)                                                    | The `leave()` median until the Sync acknowledgement, from five samples, against the published 5.2.6 client | the Space's plane, Cloudflare by default | `action.leave_ack_ms` uses the same acknowledgement probe (`leave-observation.mjs`), per plane with N samples. The plan keeps its relative gate for promote. |
 | `publisher-leaves` in `pnpm prod:sfu-e2e`                                               | One sample of leave until the others drop the publisher                                                    | one plane per run                        | The same definition as `action.leave_ms`, as a pass or fail check.                                                                                           |
+
+## Canary fleet
+
+`pnpm prod:fleet` is the volume half of the M7 canary exit in
+[`docs/sfu/milestones.md`](../../docs/sfu/milestones.md#m7--internal-canary-and-live-verification): scripted joins and
+fault trials pass, plus at least 200 calls and 50 call-hours with no P1. `pnpm prod:canary` proves the thresholds with
+two guests at a time; the fleet runs many 2-to-6-guest calls in parallel on one machine and counts what it ran.
+
+`pnpm prod:canary` reports each join twice. `summary.join` ends on the first 500 ms stats poll that sees video and audio growing at both guests (the long-standing number, rounded up by up to one poll). `summary.joinEvent` (`render-probe.mjs`) ends on the last guest's first presented video frame (`requestVideoFrameCallback` on a hidden muted `<video>`) and first received audio packet (`unmute`), so the poll's delay is not in it. Compare new runs against old ones with `summary.join`.
+
+Every call is a new Episode (in a new Space, or in one of the `--spaces` you list) with real SDK clients in headless
+Chromium and generated camera and tones. A call joins its guests, then works through a shuffled script: a microphone
+mute and unmute, usually a camera off and on, a screen share in `--screen-fraction` of the calls, a hard leave and
+rejoin of one guest in `--rejoin-fraction` of them, and holds between them. Half of the calls end with one guest muted.
+`--recording-fraction` of the calls use a Space with an automatic Recording and check afterwards that a Recording
+source became available; it needs fresh Spaces, only one such call runs at a time, and it stays at 0 until the Capture pool is
+known to be free.
+
+Fault trials are fleet-wide, because every call on the machine shares its media path. Every `--fault-interval-seconds`
+the fleet waits until all running calls reach a checkpoint, runs `CHALK_CANARY_FAULT_DOWN`, holds the fault for
+`--fault-seconds`, has every call prove that its camera video stalled, runs `CHALK_CANARY_FAULT_UP`, and times how long
+each call takes to render again. Each call in a pulse is one fault trial, and no call joins during a pulse. Without
+the two commands the run refuses to start; `--fault-interval-seconds 0` turns faults off.
+
+A P1 is one of these, printed as `P1 <reason> <call>` when it happens:
+
+| Reason                  | What it means                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `join_over_limit`       | All guests rendered the others, but later than 10 s after the last guest's join call.                                               |
+| `join_not_rendered`     | A guest could not join, or a guest did not render the others within 25 s.                                                           |
+| `recovery_over_limit`   | After a fault, media rendered again later than 15 s after the path came back.                                                       |
+| `recovery_not_rendered` | After a fault, media did not render again within 30 s.                                                                              |
+| `mute_leak`             | A muted microphone's tone was still heard (or its byte rate kept going), or a disabled camera's frames kept reaching another guest. |
+| `consent_reenabled`     | Fault recovery turned a muted microphone or a disabled camera back on, or media from it reached other guests.                       |
+| `cross_tenant`          | A guest's roster or media included a participant outside its call.                                                                  |
+
+`cross_tenant` is the closest check one Tenant allows: it catches media or roster entries that cross between calls of
+the same fleet, not between two Tenants. Other findings (`audio_not_decoded` (a guest with its microphone on was not heard as its tone at another guest, though its bytes advanced; checked after the join, a microphone turn-on, a rejoin and each recovery, see `audio-decode.mjs`), `action_failed`, `detector_blind` (the mute check had nothing to compare against), `fault_not_stalled`, `recording_failed`, and
+an errored call such as a failed admission or an Episode that did not end) fail the run without being a P1. A
+join time includes a loaded generator: each finding carries the load per core, and the fleet starts no new call while
+the load per core is above `--max-load` (0.85). Add machines, not concurrency, when it stays high.
+
+The fleet never picks a target. `--allow-host` names the API host a run may use and must match the proof configuration, so a
+configuration that points at production fails unless you named it on purpose. It reads `CHALK_PROOF_*` like every proof,
+or a file with `--env-file`. It stops starting calls at the first P1 unless you pass `--no-stop-on-p1`, lets the running
+calls end, and writes a summary file and a calls file under `.private/prod-proof/<run>/`. The summary has call
+and call-hour counts, join and recovery percentiles, fault trials, findings by reason and `meetsVolumeExit`. Runs on
+several machines are one result:
+
+```sh
+CHALK_PROOF_CONFIG_SOURCE=env CHALK_PROOF_MEDIA_PLANE=chalk_sfu \
+  CHALK_CANARY_FAULT_DOWN='iptables -I OUTPUT -p udp ! --dport 53 -j DROP' \
+  CHALK_CANARY_FAULT_UP='iptables -D OUTPUT -p udp ! --dport 53 -j DROP' \
+  pnpm prod:fleet --allow-host <api host> --concurrency 6
+pnpm prod:fleet --dry-run --calls 20 --call-hours 2   # no API and no browsers: scheduler and summary only
+pnpm prod:fleet --merge machine-1/fleet-calls.json machine-2/fleet-calls.json
+```
+
+On Instabox, three concurrent three-guest calls measured a load of 0.4 to 0.65 per core on a 4 vCPU machine, so a guest costs
+about 0.2 vCPU and a call of 4 guests about one. The camera is 640x360 (`--camera`) to keep that down. The fleet stops
+starting calls above `--max-load`, so a machine that is too small runs fewer calls rather than failing. By that measure an
+8 vCPU, 16 GiB machine ($0.068 an hour) should fit about 6 calls of 4 guests, and 50 call-hours would take about 8 hours of
+wall time; that scale has not been measured. Take the staging lease (`scripts/staging-sfu/staging-lock`) before a run against staging, and release it
+afterwards. Fault commands need root on the machine; the example blocks all outgoing UDP except DNS, which stops the media path without naming a node address.
 
 ## Manual hosted integrator proof
 
@@ -131,6 +221,12 @@ node scripts/prod-proof/integrator.mjs
    revoke the proof key, and stop the server. Close both browser contexts before
    starting the next proof. If interrupted, use the run-ID cleanup command below.
 
+The proof bundle that every guest runs is built by `sdk-bundle.mjs`. The Leave proof builds it against the published 5.2.6 baseline client, so only
+the current client may import what that release lacks (the lobby `preconnect` helper, behind the `lobby` option). Gate's `proof-bundle` lane runs
+`sdk-bundle.test.mjs` whenever `scripts/prod-proof` or the client source changes: it bundles a client entry with and without `preconnect`, the
+current source, and the real 5.2.6 package fetched from npm and checked against its published integrity, so a bundle that breaks a nightly cut fails
+the pull request that causes it.
+
 The offline ordering regression runs with `node --test
 scripts/prod-proof/integrator-session.test.mjs`, in `pnpm test`, and in Gate's
 required `self-test` lane. It covers setup longer than the three-minute empty
@@ -162,8 +258,62 @@ The proof Space uses Cloudflare. Set `CHALK_PROOF_MEDIA_PLANE=chalk_sfu`, or the
 Real-call proof workflow's `media_plane` input, to run it on the own SFU where the
 API's switch is on, as on nightly. The proof's
 clients declare both media providers, so the Episode binds the Space's choice.
-Recording and export need Cloudflare, so use `camera-share` for the own SFU; it
-skips the Capture there and checks the call alone.
+The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
+for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.
+
+### Recording and Transcript of a three-guest call (`call-artifacts`)
+
+`pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
+`transcription_policy=automatic` on `CHALK_PROOF_MEDIA_PLANE` (default `cf_sfu`) and joins three
+headless Chromium guests with a fake camera and microphone. Each guest has its own camera colour.
+The call then plays a script (`call-script.mjs` holds its constants and the checks, `call-play.mjs`
+plays it) and the Recording must contain it:
+
+1. **Turns.** All three pages start their audio loop from one wall-clock instant, 3 s after every guest is live and the Capture is recording. Each page schedules its sounds on its own `AudioContext` clock anchored on that instant, logs its loop start (`Guest N loop starts at ... (+x ms from the shared start)`), and the proof fails when a page starts more than 150 ms away from it or its clock is late. Two 24-second cycles follow. In its 8-second slot a guest sounds a 0.5 s marker tone (1500, 2000 or 2500 Hz, one per guest), shows a full white picture for 0.4 s at the same instant, and speaks its phrase 1 s later.
+2. **Mute and screen share.** Guest 2 holds a 2000 Hz tone for 12 s and then mutes its microphone. Guest 1 shares a tab that plays a 3200 Hz tone (screen audio) and a green square for 24 s, then stops.
+3. **Capture-node restart (optional).** When `CHALK_PROOF_CAPTURE_RESTART_COMMAND` is set, the proof runs that shell command once, waits 30 s, and plays one more round of markers for guests 1 and 3. The command is operator-supplied (the capture nodes belong to the recorder fleet controller, not to the proof's Tenant key) and its output is never printed. When unset, the console and the evidence say the restart was skipped.
+4. **Host stop.** Guest 3 holds a 2500 Hz tone and the host stops the Recording 10 s later; the tone keeps playing for 18 s more.
+
+The `export` proof downloads the Recording MP4. The `call-artifacts` proof then fails unless:
+
+- `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the scripted call (first marker to host stop);
+- `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
+- each guest's camera colour is visible and moving in all three sampled frames of the composite;
+- each guest's own tile is live in a clear majority of the whole Recording. The proof decodes the composite at two frames per second and, for every sampled interval, takes the largest connected patch of the guest's camera colour, plus any piece of it that a label or border across the tile cut off, as that guest's tile (so another guest's animation in the same colour cannot widen it), checks that the tile fills at least 3% of the frame (so a black tile never counts) and that the picture inside moved since the previous sample (so a frozen tile never counts). A tile with no live interval fails, and so does one live in fewer than 60% of the intervals, so "3/3 guests on camera" proves each guest's video and not the total;
+- every guest's marker tone is found, anchored on guest 1's first marker, within 1.5 s of the time the script gives, with speech after it (per-guest audio completeness: tone and phrase for every cycle). Markers inside the restart window are excused;
+- the longest silence (`silencedetect` threshold -50 dB, at least 0.5 s) is no longer than the script's own longest gap between sounds plus 2.5 s, which is about 6.6 s for the default phrases. The 8 Nov proof had four silences of 10.9 to 15.7 s because each guest looped on its own clock, so its pauses were never aligned; one shared start and the derived bound catch that;
+- each marker's white flash and beep are less than 300 ms apart in the Recording (the A/V sync check; this bound is a first estimate and the first live run calibrates it);
+- guest 2's tone ends within 15 s of the mute, the screen's tone and green square within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` (the "bounded mute-enforcement window"); the console prints the measured values;
+- when `CHALK_PROOF_RECORDER_TRACKS_COMMAND` is set, every guest's markers are also checked in that guest's own recorder track, and the console prints a `Verdict:` line for each. A marker absent from the guest's own track was lost at capture. A marker in its own track but absent from the mix was lost by the mixer. A mix silence longer than the bound that a track covers was lost by the mixer; one that no track covers and the script does not cover is a gap in the script itself. The public API serves only the mixed MP4 and keeps the encrypted bundles behind a key the proof never holds, so the operator supplies the command: it runs once with `CHALK_PROOF_TRACKS_DIR` (an empty private folder in the run's encrypted evidence), `CHALK_PROOF_RECORDING_ID` and `CHALK_PROOF_PARTICIPANT_IDS` (comma separated, in guest order), and writes each participant's decrypted audio to a WAV file named after the participant id. It may leave the bundle and manifest in the folder too; everything there is uploaded only inside the encrypted evidence. Without the command the proof prints that the per-track check was skipped and judges the mix alone;
+- the Recording source is `available` (the public API sets that only after Capture completion, so it stands for the sealed encrypted bundles and manifest; the API exposes no bundle objects), has an R2 storage key, did not stop early, and its export is `ready`;
+- the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
+
+Known limits of the tile check. It attributes a tile to a guest by that guest's camera colour, and the fixture cameras are flat-colour backgrounds with moving squares, so it does not work for real camera pictures. A tile with a thin border that is frozen, next to a larger moving square of the same colour in another tile, can still pass. The earlier three-frame camera check (visible and moving) is unchanged and shares that limit: it boxes every pixel of the guest's colour. The flash check reads whole-frame brightness, so it assumes the composite shows the flashing guest's tile.
+
+The private run folder `.private/prod-proof/<run>/` has the Recording evidence file (duration, bytes, codecs,
+decoded frames, audio samples and levels, black, freeze and silence intervals, per-guest camera
+checks, and per-guest tile counts: sampled intervals, visible frames, live frames and live share), the script (call-script.json: every guest's loop start and each milestone time) and its measurements (script-evidence.json: marker, flash and tone times, silences, measured end times), the Transcript evidence file (first 300 characters, word count, speaker names, matched
+words per guest), the export contact sheet, the recorder's own tracks (the recorder-tracks folder, when the command is set), and the console prints the same summary lines.
+Speaker names in the Transcript are reported but not required to match the guests.
+
+### A call held across media-access refreshes (`long-call`)
+
+Short-call proofs never outlive a media-access grant, so a bug that appears only when the SDK renews access (a guest loses the call with `access.invalid`, or a microphone stops publishing while the UI shows it on) passes them. `pnpm prod:proof long-call` holds one call of three headless Chromium guests (synthetic camera and a continuous tone) on `CHALK_PROOF_MEDIA_PLANE` (`chalk_sfu` or `cf_sfu`) for the longer of 10 minutes and two grant lifetimes. A grant lives 5 minutes and the SDK renews it 60 seconds early, so each guest sees a refresh about every 240 seconds, twice in the default 10 minutes. `long-call-criteria.mjs` holds those numbers, and its test fails if either constant in the API or the SDK moves.
+
+Guest 1 turns its microphone off and on at 20 seconds, and guest 2 (the second to join) does the same at 30 seconds, so guest 2 has to keep its peer connection through another guest's mute and its own right after. Guests 1 and 2 then turn their microphone and camera off for 6 seconds at fixed times, and within 8 seconds before and 2 to 6 seconds after each due refresh, so every refresh has a toggle on both sides of it. The due time of a refresh comes from each guest's current grant, not from a fixed 240-second cycle: a media-connection replacement issues a new grant too and moves that guest's next refresh, so each guest's every refresh gets its own toggles, planned again after every grant. It samples every guest every 2 seconds from the SDK snapshot and the page's `getStats`. It fails when:
+
+- a guest's connection status is `failed` or `left`, its last error is `access.invalid`, or an access refresh answers with anything but 201;
+- a guest is not `live`, or has no connected peer connection, for more than 10 seconds (a closed peer connection with a connected successor is a replacement, which fails below);
+- a peer connection leaves `connected` after it has been connected, for any state including `closed`, or a guest's credential provider issues a media-connection replacement: the proof injects no fault, so the SDK must never need to replace a connection;
+- a guest's outbound audio bytes stand still for more than 8 seconds while its microphone shows on;
+- a remote tile's inbound audio or video bytes stand still, or the tile is missing, for more than 10 seconds while its sender is on;
+- a guest renewed its access fewer than twice (replacements count), never by a scheduled refresh, more than 30 seconds after the refresh was due (its grant's expiry less 60 seconds), or has a grant overdue when the call ends; or a scheduled refresh had no toggle on each side of it within 10 seconds (one in the last 10 seconds of the call has no room for a toggle after it; it is noted, still has to be renewed), because then the call did not test what it must.
+
+It prints one line, `Long call: <guests> guests, <seconds>s, <n> access refreshes seen, <n> mic/camera toggles, <n> failures`, then one `Long call failure:` line per failure, and saves every sample in the run's private evidence folder. Its pass or fail is the proof's result in the job and the nightly; it has no scorecard metric and no budget, because it is a gate, not a measurement.
+
+`pnpm prod:proof long-call --dry-run` prints the duration, thresholds and toggle schedule without configuration or network.
+
+Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `own-sfu` job, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
 
 ### One-time webhook setup (each environment)
 
@@ -272,6 +422,8 @@ or Recordings; ended/archived history and Recording artifacts follow the product
 retention policy. The provisioned Tenant and bootstrap API key are retained.
 
 ## What counts as proof
+
+**Audio is decoded, not just received.** `inbound-rtp` bytes keep growing for silence, garbage and for audio that headless Chromium never plays out (`totalAudioEnergy` stays 0 without playout), so a byte counter cannot judge audio. `audio-decode.mjs` adds the further condition every call proof that publishes tones now also meets: guest _n_ publishes a WebAudio oscillator at `toneHz(n)` (440 Hz times _n_), and every other guest feeds the remote microphone track into an `AnalyserNode`, which runs headless without an output device. The tone passes when its FFT bins (the peak of three bins around it) hold at least -50 dBFS, stand at least 25 dB above the median of the other bins, and do so for ten consecutive 100 ms frames. A muted sender passes only when the newest ten frames at those bins are at or below -70 dBFS. Speech calls (`camera-share`, which plays a synthesized voice) have no tone, so they pass when the 100 Hz to 4 kHz band reaches -70 dBFS in at least ten frames (guest 2 of the fixture plays 20 dB under guest 1, so its words peak near -54 dBFS). The failure names each listener and speaker with the peak dB, bin, noise floor and sustained frames, and the evidence JSON keeps them (`audio-decode-*.json`, and `audio` in the `sfu-e2e` report). The thresholds are `decodeCriteria`; `audio-decode.test.mjs` runs the rules against a fake analyser built from a real FFT. The `pnpm prod:sfu-e2e audio` scenario is the direct proof: tone in, tone detected at both other guests, mute, silence, unmute, tone back. Wired in: `camera-share` (after setup and after the credential refresh), `sfu-e2e` (every scenario), `sfu-canary` (each join, each fault recovery, the muted round) and `sfu-classes`.
 
 - **offreason:** Sync's off-reason extension (`media_off_reason`) over the WebSocket
   protocol, with no browser or media. It admits a host and two guests, then for each

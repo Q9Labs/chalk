@@ -59,7 +59,17 @@ type sourceAuthority struct {
 	key      sourceKey
 	revision int64
 	revoked  bool
-	window   atomic.Pointer[leaseWindow]
+	// allocation is the highest binding generation that granted or revoked, or opened a
+	// publication under, this source; 0 when only callers that name none have. A retirement
+	// above it, or a publication under a newer generation, ends the lease it left behind.
+	allocation int64
+	window     atomic.Pointer[leaseWindow]
+}
+
+// lapse ends the forwarding lease and keeps the revision and the revoke, so a control
+// stays ordered against it. Only a grant under a current allocation opens a new window.
+func (a *sourceAuthority) lapse() {
+	a.window.Store(&leaseWindow{opens: a.window.Load().opens})
 }
 
 // allows reports whether a packet that arrived at arrival may be sent at now.
@@ -72,18 +82,26 @@ func (a *sourceAuthority) allows(arrival, now int64) bool {
 // forwards under, creating it, and the control it is admitted under. A source
 // that no control has named waits for a grant. It refuses a new source when every
 // entry belongs to a live session or would need a floor past the limit, so the
-// table never holds more than its limit. The caller may hold the session's mutex.
-func (n *Node) authorityFor(scope protocol.Scope, source string) (*sourceAuthority, int64, bool, error) {
+// table never holds more than its limit. A grant made under an older allocation generation
+// than the publication's does not authorize it: the lease lapses and waits for a fresh grant,
+// whether or not the retire that would have ended it has reached this node. The caller may
+// hold the session's mutex.
+func (n *Node) authorityFor(scope protocol.Scope, allocation int64, source string) (*sourceAuthority, int64, bool, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := sourceKey{keyOf(scope), source}
 	if authority := n.sources[key]; authority != nil {
+		if allocation > authority.allocation {
+			authority.lapse()
+			authority.allocation = allocation
+		}
 		return authority, authority.revision, authority.revoked, nil
 	}
 	if err := n.makeSourceRoom(1, nil); err != nil {
 		return nil, 0, false, err
 	}
 	authority := n.addSource(key, closedWindow)
+	authority.allocation = allocation
 	return authority, authority.revision, authority.revoked, nil
 }
 
@@ -172,6 +190,9 @@ func validateSourceControls(request protocol.SourceControlRequest) error {
 func (n *Node) applySourceControls(request protocol.SourceControlRequest, results []protocol.SourceControlResult) ([]*sourceAuthority, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if err := n.refuseRetired(episodeKey{request.TenantID, request.EpisodeID}, request.AllocationGeneration); err != nil {
+		return nil, err
+	}
 	keys := make([]sourceKey, len(request.Controls))
 	named := map[sourceKey]bool{}
 	added := 0
@@ -184,6 +205,10 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 	}
 	if err := n.makeSourceRoom(added, named); err != nil {
 		return nil, err
+	}
+	var allocation int64
+	if request.AllocationGeneration != nil {
+		allocation = *request.AllocationGeneration
 	}
 	now := monotonic()
 	lease := n.cfg.SourceLeaseTTL
@@ -203,6 +228,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 		case control.Action == protocol.SourceRevoke:
 			authority.revision, authority.revoked = control.Revision, true
 			authority.window.Store(&leaseWindow{opens: authority.window.Load().opens})
+			authority.allocation = max(authority.allocation, allocation)
 			result.Applied = true
 			changed[index] = authority
 		default:
@@ -214,6 +240,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 				changed[index] = authority
 			}
 			authority.revision, authority.revoked = control.Revision, false
+			authority.allocation = max(authority.allocation, allocation)
 			authority.window.Store(window)
 			result.Applied = true
 		}
@@ -281,7 +308,9 @@ func (s *Session) closeSource(authority *sourceAuthority, revision int64) []prot
 		// The revoke applied over any grant at its own revision, so only a publication
 		// admitted at that revision while revoked came after it.
 		admittedSince := pub.revision > revision || (pub.revision == revision && pub.revoked)
-		if pub.authority != authority || admittedSince {
+		// A held publication forwards nothing and stays gated by the revoked lease, so the
+		// owner's mute is not undone by closing the track it will resume.
+		if pub.authority != authority || admittedSince || pub.held.Load() {
 			continue
 		}
 		delete(s.published, mid)
@@ -309,10 +338,6 @@ func (s *Session) refreshSource(authority *sourceAuthority) {
 	}
 	s.mu.Unlock()
 	for _, pub := range pubs {
-		for index := range pub.layers {
-			if pub.layer(index) != nil {
-				pub.requestKeyframe(index)
-			}
-		}
+		pub.requestKeyframes()
 	}
 }

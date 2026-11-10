@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,22 @@ var turnMintFailures, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/
 	metric.WithUnit("{join}"),
 )
 
+// failures counts control calls that ended in a provider failure after the adapter's retries.
+// Attributes are bounded: the operation is the route with the session ID cut out, the stage
+// is transport, http_status or decode, and the detail is a transport cause or a status class.
+// No node, Tenant, Episode or Participant identity is attached, and no error text.
+var callFailures, _ = otel.Meter("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu").Int64Counter(
+	"chalk.api.chalk_sfu.failures",
+	metric.WithDescription("Chalk SFU control call failures by bounded operation, stage and cause"),
+	metric.WithUnit("{failure}"),
+)
+
+const (
+	stageTransport  = "transport"
+	stageHTTPStatus = "http_status"
+	stageDecode     = "decode"
+)
+
 // Adapter is the media plane of one SFU node. Fleet builds one per configured node.
 type Adapter struct {
 	node          string
@@ -55,9 +72,20 @@ type Adapter struct {
 	client        *http.Client
 	applicationID string
 	iceServers    []mediaplane.ICEServer
-	relay         RelaySource
-	backoff       time.Duration
-	captureReplay *captureplane.ReplayCache
+	// unifiedSignaling is advertised in each join so the SDK uses the single signalling URL.
+	unifiedSignaling bool
+	relay            RelaySource
+	backoff          time.Duration
+	captureReplay    *captureplane.ReplayCache
+	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
+	// join the node answers for another incarnation is refused as stale.
+	incarnation string
+	// allocation is the binding generation the adapter was issued under, set by Bound. Sent with
+	// creates and source controls, it lets the node refuse a retired allocation.
+	allocation *int64
+	// fence, when set, re-reads the Episode's durable binding after a join and fails when it is
+	// no longer the one the join was issued under. See WithFence.
+	fence func(context.Context) error
 }
 
 // RelaySource hands out TURN servers. The SFU has no TCP media, so a client
@@ -132,13 +160,14 @@ func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFU
 		return nil, fmt.Errorf("%w: node ID %q", ErrMissingConfig, node.ID)
 	}
 	return &Adapter{
-		node:          node.ID,
-		base:          base,
-		client:        client,
-		applicationID: config.ApplicationID,
-		iceServers:    iceServersOf(config.STUNURLs),
-		backoff:       retryBackoff,
-		captureReplay: captureplane.NewReplayCache(captureReplayCapacity),
+		node:             node.ID,
+		base:             base,
+		client:           client,
+		applicationID:    config.ApplicationID,
+		iceServers:       iceServersOf(config.STUNURLs),
+		unifiedSignaling: config.UnifiedSignaling,
+		backoff:          retryBackoff,
+		captureReplay:    captureplane.NewReplayCache(captureReplayCapacity),
 	}, nil
 }
 
@@ -167,7 +196,8 @@ func newOperationID() (string, error) {
 
 // call posts one JSON body and decodes the reply. Transport failures and 502, 503
 // and 504 replies retry with the same body, so the operation ID inside it makes
-// the retry safe. Any other status is the answer.
+// the retry safe. Any other status is the answer. A transport error's text holds the
+// node's control URL and IP, so only its cause leaves this function.
 func (a *Adapter) call(ctx context.Context, path string, request, response any) error {
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -175,6 +205,7 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 	}
 	endpoint := a.base.JoinPath(path).String()
 	var lastErr error
+	var lastFailure []attribute.KeyValue
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if attempt > 1 {
 			select {
@@ -186,25 +217,62 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 		status, payload, err := a.send(ctx, endpoint, body)
 		switch {
 		case err != nil:
-			lastErr = fmt.Errorf("%w: transport: %v", mediaplane.ErrProviderFailed, err)
+			cause := mediaplane.ClassifyTransportCause(ctx, err)
+			lastErr = fmt.Errorf("%w: transport: %s", mediaplane.ErrProviderFailed, cause)
+			lastFailure = failureAttributes(path, stageTransport, attribute.String("chalk.provider.transport_cause", string(cause)))
+			if cause == mediaplane.TransportCauseCallerCanceled {
+				lastFailure = nil
+			}
 		case status == http.StatusBadGateway || status == http.StatusServiceUnavailable || status == http.StatusGatewayTimeout:
 			lastErr = classify(status, payload)
+			lastFailure = failureAttributes(path, stageHTTPStatus, attribute.String("http.response.status_class", statusClass(status)))
 		case status >= 200 && status < 300:
 			if response == nil {
 				return nil
 			}
 			if err := json.Unmarshal(payload, response); err != nil {
+				recordFailure(ctx, failureAttributes(path, stageDecode))
 				return fmt.Errorf("%w: decode response", mediaplane.ErrProviderFailed)
 			}
 			return nil
 		default:
-			return classify(status, payload)
+			err := classify(status, payload)
+			if errors.Is(err, mediaplane.ErrProviderFailed) {
+				recordFailure(ctx, failureAttributes(path, stageHTTPStatus, attribute.String("http.response.status_class", statusClass(status))))
+			}
+			return err
 		}
 		if ctx.Err() != nil {
-			return lastErr
+			break
 		}
 	}
+	recordFailure(ctx, lastFailure)
 	return lastErr
+}
+
+// failureAttributes labels one failure. The operation is the route with a session ID cut out.
+func failureAttributes(path, stage string, detail ...attribute.KeyValue) []attribute.KeyValue {
+	operation := strings.TrimPrefix(path, "/v1/")
+	if rest, ok := strings.CutPrefix(operation, "sessions/"); ok {
+		_, action, _ := strings.Cut(rest, "/")
+		operation = "sessions/" + action
+	}
+	attributes := []attribute.KeyValue{
+		attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU)),
+		attribute.String("chalk.provider.operation", operation),
+		attribute.String("chalk.provider.failure_stage", stage),
+	}
+	return append(attributes, detail...)
+}
+
+func recordFailure(ctx context.Context, attributes []attribute.KeyValue) {
+	if attributes != nil {
+		callFailures.Add(ctx, 1, metric.WithAttributes(attributes...))
+	}
+}
+
+func statusClass(status int) string {
+	return strconv.Itoa(status/100) + "xx"
 }
 
 // ready reads the node's readiness: its packet budget and the part live Episodes
@@ -312,7 +380,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true},
+			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": advertiseMuteInPlace},
 		},
 		Metadata: a.metadata(),
 	}
@@ -327,15 +395,51 @@ func (a *Adapter) CreateJoin(ctx context.Context, input mediaplane.CreateJoinInp
 		return mediaplane.Join{}, fmt.Errorf("%w: operation id", mediaplane.ErrProviderFailed)
 	}
 	var created wireCreateResponse
-	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope)}
+	request := wireCreateRequest{OperationID: operationID, Scope: wireScopeOf(input.Scope), AllocationGeneration: a.allocation}
 	if err := a.call(ctx, "/v1/sessions", request, &created); err != nil {
-		return mediaplane.Join{}, err
+		return mediaplane.Join{}, a.explainStale(ctx, err)
+	}
+	if err := a.checkIncarnation(created.NodeIncarnation); err != nil {
+		return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
+	}
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, a.discardStaleSession(ctx, created.ConnectionID, wireScopeOf(input.Scope), err)
+		}
 	}
 	participantRef := input.ExternalParticipantID
 	if participantRef == "" {
 		participantRef = input.ParticipantName
 	}
 	return a.join(input.Episode.Ref, participantRef, created.ConnectionID, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
+}
+
+// explainStale turns a node's stale-generation refusal of a create into the binding's retry error
+// when the Episode has moved: the node refuses the join because it retired the allocation the join
+// was issued under, and the caller should retry under the current binding. The same refusal for an
+// Episode that has not moved is a stale Participant generation, which stays as it is.
+func (a *Adapter) explainStale(ctx context.Context, err error) error {
+	if a.fence == nil || !errors.Is(err, errStaleGeneration) {
+		return err
+	}
+	if fenceErr := a.fence(ctx); fenceErr != nil {
+		return errors.Join(fenceErr, err)
+	}
+	return err
+}
+
+// discardStaleSession closes a session a join or capture created and then refused, and returns its error. A close
+// that fails is joined to it, so the caller sees that the session may still be live; the
+// Participant's next join replaces it and the Episode's end cleans the retired allocation.
+func (a *Adapter) discardStaleSession(ctx context.Context, connectionID string, scope wireScope, cause error) error {
+	path, err := sessionPath(connectionID, "remove")
+	if err == nil {
+		err = a.call(context.WithoutCancel(ctx), path, wireRemoveRequest{Scope: scope}, nil)
+	}
+	if err != nil {
+		return errors.Join(cause, fmt.Errorf("close the session on node %q: %w", a.node, err))
+	}
+	return cause
 }
 
 // ResumeJoin hands back the same connection when the SFU still holds it. The SFU
@@ -350,6 +454,13 @@ func (a *Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInp
 	}
 	if !state.Found {
 		return mediaplane.Join{}, mediaplane.ErrConnectionNotFound
+	}
+	// The session lives on the node this adapter was issued for. When the Episode has moved, that
+	// is a retired allocation, so it is not handed out again.
+	if a.fence != nil {
+		if err := a.fence(ctx); err != nil {
+			return mediaplane.Join{}, err
+		}
 	}
 	return a.join(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServersFor(ctx, input.Scope.EpisodeID, input.AllowRelay)), nil
 }
@@ -381,6 +492,14 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 func (a *Adapter) RestartICE(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	return a.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: input.ConnectionID, Scope: input.Scope, SessionDescription: input.SessionDescription})
 }
+
+// advertiseMuteInPlace stays false until a mute is proven on an Orb that runs the own SFU. The
+// node and the hold endpoint are in place, so turning it on is this one value; while it is off,
+// no client parks a publication and a mute closes it as before.
+const advertiseMuteInPlace = false
+
+// HoldsPublications marks that the node parks a participant's own publication in place.
+func (a *Adapter) HoldsPublications() {}
 
 // UpdateTracks changes a subscription's layer ceiling or pauses and resumes it in
 // place. The MID and track stay, so no renegotiation follows.
@@ -550,7 +669,7 @@ func (a *Adapter) ControlSources(ctx context.Context, input mediaplane.ControlSo
 	results := make([]mediaplane.SourceControlResult, 0, len(input.Controls))
 	for start := 0; start < len(input.Controls); start += maxSourceControls {
 		batch := input.Controls[start:min(start+maxSourceControls, len(input.Controls))]
-		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Controls: make([]wireSourceControl, len(batch))}
+		request := wireSourceControlRequest{TenantID: input.TenantID, EpisodeID: input.EpisodeID, AllocationGeneration: a.allocation, Controls: make([]wireSourceControl, len(batch))}
 		for index, control := range batch {
 			request.Controls[index] = wireSourceControl{ParticipantID: control.ParticipantID, Source: control.Source, Action: string(control.Action), Revision: control.Revision}
 		}

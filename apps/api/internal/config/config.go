@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
@@ -81,17 +83,25 @@ const (
 
 	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
 
-	ChalkSFUEnabled        = "CHALK_SFU_ENABLED"
-	ChalkSFUNodes          = "CHALK_SFU_NODES"
-	ChalkSFUApplicationID  = "CHALK_SFU_APPLICATION_ID"
-	ChalkSFUServerName     = "CHALK_SFU_SERVER_NAME"
-	ChalkSFUCAFile         = "CHALK_SFU_CA_FILE"
-	ChalkSFUClientCertFile = "CHALK_SFU_CLIENT_CERT_FILE"
-	ChalkSFUClientKeyFile  = "CHALK_SFU_CLIENT_KEY_FILE"
-	ChalkSFUTimeoutMS      = "CHALK_SFU_TIMEOUT_MS"
-	ChalkSFUSTUNURLs       = "CHALK_SFU_STUN_URLS"
-	ChalkSFUAllowedSpaces  = "CHALK_SFU_ALLOWED_SPACES"
-	DefaultMediaPlane      = "CHALK_DEFAULT_MEDIA_PLANE"
+	ChalkSFUEnabled             = "CHALK_SFU_ENABLED"
+	ChalkSFUCaptureEnabled      = "CHALK_SFU_CAPTURE_ENABLED"
+	ChalkSFUNodes               = "CHALK_SFU_NODES"
+	ChalkSFUApplicationID       = "CHALK_SFU_APPLICATION_ID"
+	ChalkSFUServerName          = "CHALK_SFU_SERVER_NAME"
+	ChalkSFUCAFile              = "CHALK_SFU_CA_FILE"
+	ChalkSFUClientCertFile      = "CHALK_SFU_CLIENT_CERT_FILE"
+	ChalkSFUClientKeyFile       = "CHALK_SFU_CLIENT_KEY_FILE"
+	ChalkSFUTimeoutMS           = "CHALK_SFU_TIMEOUT_MS"
+	ChalkSFUSTUNURLs            = "CHALK_SFU_STUN_URLS"
+	ChalkSFUCloudflareOverflow  = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
+	ChalkSFUStandbyBudget       = "CHALK_SFU_STANDBY_PACKET_BUDGET"
+	ChalkSFUAllowedSpaces       = "CHALK_SFU_ALLOWED_SPACES"
+	ChalkSFUClientSunset        = "CHALK_SFU_CLIENT_SUNSET"
+	ChalkSFUUnifiedSignaling    = "CHALK_SFU_UNIFIED_SIGNALING"
+	DefaultMediaPlane           = "CHALK_DEFAULT_MEDIA_PLANE"
+	NewSpaceMediaPlane          = "CHALK_NEW_SPACE_MEDIA_PLANE"
+	NewSpaceRecordingPolicy     = "CHALK_NEW_SPACE_RECORDING_POLICY"
+	NewSpaceTranscriptionPolicy = "CHALK_NEW_SPACE_TRANSCRIPTION_POLICY"
 
 	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
 	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
@@ -134,6 +144,9 @@ const (
 	DefaultLogLevel                           = "info"
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
 	DefaultChalkSFUTimeoutMS                  = int64(6000)
+	// DefaultChalkSFUStandbyBudget is the packets/s a standby admits for new
+	// Episodes: half the primary's 32,000, because a standby is a smaller node.
+	DefaultChalkSFUStandbyBudget = 16000
 
 	DefaultRequestLogs                  = "off"
 	DefaultRequestSampleRate            = 0.01
@@ -196,24 +209,38 @@ type CloudflareRealtimeConfig struct {
 	RequestTimeout time.Duration
 }
 
+// ChalkSFURole says whether placement prefers a node. A primary takes new
+// Episodes in configuration order; a standby takes one only when no primary can.
+type ChalkSFURole string
+
+const (
+	ChalkSFURolePrimary ChalkSFURole = "primary"
+	ChalkSFURoleStandby ChalkSFURole = "standby"
+)
+
 // ChalkSFUNode is one SFU node. ID is the stable name Episode bindings record;
-// ControlURL may change when the node's host changes.
+// ControlURL may change when the node's host changes. An empty Role is a primary.
 type ChalkSFUNode struct {
 	ID         string
 	ControlURL string
+	Role       ChalkSFURole
 }
 
 // ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
 // Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
 type ChalkSFUConfig struct {
 	Enabled bool
+	// CaptureEnabled lets the recorder reach the pool's nodes through the capture plane. It is
+	// off by default and needs Enabled. Starting a recording on the own SFU stays refused until
+	// the milestone's last step removes that check.
+	CaptureEnabled bool
 	// ApplicationID names the SFU pool and goes into each Episode binding, so it
 	// stays the same when hosts or certificates rotate.
 	ApplicationID string
-	// Nodes are the SFU nodes of the pool in placement order: the primary first,
-	// then standbys. A new Episode goes to the first ready node with budget left
-	// for it, and its binding names the node, so adding a node needs no migration
-	// and never moves a live Episode.
+	// Nodes are the SFU nodes of the pool in placement order. A new Episode goes to
+	// the first ready primary with budget left for it, and to a standby only when no
+	// primary can take it. Its binding names the node, so adding a node needs no
+	// migration and never moves a live Episode.
 	Nodes          []ChalkSFUNode
 	ServerName     string
 	CAFile         string
@@ -221,12 +248,32 @@ type ChalkSFUConfig struct {
 	ClientKeyFile  string
 	STUNURLs       []string
 
+	// StandbyPacketBudget caps the packets/s a standby admits for new Episodes, below
+	// what the node itself reports. The node enforces its own budget as well.
+	StandbyPacketBudget int
+
 	// AllowedSpaces are the only Spaces that start Episodes on the own SFU while the
 	// rest of the deployment stays on Cloudflare. It is empty by default, even when
 	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
 	AllowedSpaces spaces.ChalkSFUAllowlist
 
-	RequestTimeout time.Duration
+	// ClientSunset is the instant after which a client that does not declare the own
+	// SFU can no longer start an Episode in a Space on the allowlist: it gets
+	// media.client_unsupported instead of Cloudflare. The zero value means never.
+	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
+	ClientSunset time.Time
+
+	// UnifiedSignaling advertises the single-URL signalling route in each own-SFU join, so the
+	// SDK sends every signalling call to one URL and pays one CORS preflight. It is on by
+	// default. Turning it off sends clients back to the per-operation routes without a web
+	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
+	UnifiedSignaling bool
+
+	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
+	// room. It is on by default. When it is off, creating that Episode fails with
+	// a retryable capacity error instead. Migration policy until M13 removes it.
+	CloudflareOverflow bool
+	RequestTimeout     time.Duration
 }
 
 type ProviderBridgeConfig struct {
@@ -315,8 +362,11 @@ type Config struct {
 	CloudflareRealtime CloudflareRealtimeConfig
 	ChalkSFU           ChalkSFUConfig
 	DefaultMediaPlane  spaces.MediaPlaneProvider
-	Database           DatabaseConfig
-	DeadlineScheduler  DeadlineSchedulerConfig
+	// NewSpace holds what a Create Space request gets for the fields it omits.
+	// Each field is empty when new Spaces keep the existing default.
+	NewSpace          spaces.NewSpaceDefaults
+	Database          DatabaseConfig
+	DeadlineScheduler DeadlineSchedulerConfig
 
 	Observability            ObservabilityConfig
 	PublicInvite             PublicInviteConfig
@@ -524,6 +574,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	newSpace, err := loadNewSpaceDefaults(chalkSFU)
+	if err != nil {
+		return Config{}, err
+	}
 	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
@@ -591,6 +645,7 @@ func Load() (Config, error) {
 		CloudflareRealtime:              cloudflareRealtime,
 		ChalkSFU:                        chalkSFU,
 		DefaultMediaPlane:               defaultMediaPlane,
+		NewSpace:                        newSpace,
 		Database: DatabaseConfig{
 			URL:      databaseURL,
 			MaxConns: maxConns,
@@ -644,6 +699,47 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	return provider, nil
 }
 
+// loadNewSpaceDefaults reads what a Create Space request gets for the fields it
+// omits. A new Space has a random ID that no allowlist can name in advance, so
+// the own SFU as the new-Space plane needs every Space allowed. Automatic capture
+// defaults on the own SFU need capture, or new Spaces would promise artifacts
+// that no node produces. An omitted policy is the database default, so it counts.
+func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
+	var defaults spaces.NewSpaceDefaults
+	if value := strings.TrimSpace(os.Getenv(NewSpaceMediaPlane)); value != "" {
+		provider, err := spaces.ParseMediaPlaneProvider(value)
+		if err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceMediaPlane, err)
+		}
+		defaults.MediaPlane = provider
+	}
+	if value := strings.TrimSpace(os.Getenv(NewSpaceRecordingPolicy)); value != "" {
+		defaults.RecordingPolicy = artifactpolicy.RecordingMode(value)
+		if err := defaults.RecordingPolicy.Validate(); err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceRecordingPolicy, err)
+		}
+	}
+	if value := strings.TrimSpace(os.Getenv(NewSpaceTranscriptionPolicy)); value != "" {
+		defaults.TranscriptionPolicy = artifactpolicy.TranscriptionMode(value)
+		if err := defaults.TranscriptionPolicy.Validate(); err != nil {
+			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceTranscriptionPolicy, err)
+		}
+	}
+	if defaults.MediaPlane != spaces.MediaPlaneProviderChalkSFU {
+		return defaults, nil
+	}
+	if !chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1 {
+		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s=%s requires %s=true and %s=*", NewSpaceMediaPlane, defaults.MediaPlane, ChalkSFUEnabled, ChalkSFUAllowedSpaces)
+	}
+	recording := cmp.Or(defaults.RecordingPolicy, spaces.DatabaseDefaultRecordingPolicy)
+	transcription := cmp.Or(defaults.TranscriptionPolicy, spaces.DatabaseDefaultTranscriptionPolicy)
+	capturing := recording != artifactpolicy.RecordingDisabled || transcription != artifactpolicy.TranscriptionDisabled
+	if capturing && !chalkSFU.CaptureEnabled {
+		return spaces.NewSpaceDefaults{}, fmt.Errorf("new Spaces get recording %s and transcription %s (%s and %s default to %s and %s); unless both are disabled they need %s=true when %s=%s", recording, transcription, NewSpaceRecordingPolicy, NewSpaceTranscriptionPolicy, spaces.DatabaseDefaultRecordingPolicy, spaces.DatabaseDefaultTranscriptionPolicy, ChalkSFUCaptureEnabled, NewSpaceMediaPlane, defaults.MediaPlane)
+	}
+	return defaults, nil
+}
+
 func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if !envBool(ChalkSFUEnabled) {
 		return ChalkSFUConfig{}, nil
@@ -655,15 +751,33 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if timeout <= 0 {
 		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUTimeoutMS)
 	}
+	overflow, err := envStrictBool(ChalkSFUCloudflareOverflow, true)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
+	standbyBudget, err := envInt32(ChalkSFUStandbyBudget, DefaultChalkSFUStandbyBudget)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
+	if standbyBudget <= 0 {
+		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUStandbyBudget)
+	}
+	unifiedSignaling, err := envStrictBool(ChalkSFUUnifiedSignaling, true)
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
-		Enabled:        true,
-		ApplicationID:  strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
-		ServerName:     strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
-		CAFile:         strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
-		ClientCertFile: strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
-		ClientKeyFile:  strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
-		STUNURLs:       envList(ChalkSFUSTUNURLs),
-		RequestTimeout: timeout,
+		Enabled:            true,
+		UnifiedSignaling:   unifiedSignaling,
+		CaptureEnabled:     envBool(ChalkSFUCaptureEnabled),
+		CloudflareOverflow: overflow,
+		ApplicationID:      strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
+		ServerName:         strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
+		CAFile:             strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
+		ClientCertFile:     strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
+		ClientKeyFile:      strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
+		STUNURLs:           envList(ChalkSFUSTUNURLs),
+		RequestTimeout:     timeout,
 	}
 	required := []struct{ name, value string }{
 		{ChalkSFUApplicationID, config.ApplicationID},
@@ -678,6 +792,7 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 			return ChalkSFUConfig{}, fmt.Errorf("%s must be set when %s is on", field.name, ChalkSFUEnabled)
 		}
 	}
+	config.StandbyPacketBudget = int(standbyBudget)
 	nodes, err := parseChalkSFUNodes(envList(ChalkSFUNodes))
 	if err != nil {
 		return ChalkSFUConfig{}, err
@@ -686,10 +801,16 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if config.AllowedSpaces, err = spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces)); err != nil {
 		return ChalkSFUConfig{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
 	}
+	if sunset := strings.TrimSpace(envOrDefault(ChalkSFUClientSunset, "")); sunset != "" {
+		if config.ClientSunset, err = time.Parse(time.RFC3339, sunset); err != nil {
+			return ChalkSFUConfig{}, fmt.Errorf("%s must be an RFC 3339 instant: %w", ChalkSFUClientSunset, err)
+		}
+	}
 	return config, nil
 }
 
-// parseChalkSFUNodes reads "id=https://host:port" entries. IDs must be unique and
+// parseChalkSFUNodes reads "id=https://host:port" and "standby:id=https://host:port"
+// entries; an entry without a role prefix is a primary. IDs must be unique and
 // valid binding node names, and every URL absolute https without query or fragment.
 func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	nodes := make([]ChalkSFUNode, 0, len(entries))
@@ -697,6 +818,13 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	for _, entry := range entries {
 		id, controlURL, found := strings.Cut(entry, "=")
 		id, controlURL = strings.TrimSpace(id), strings.TrimSpace(controlURL)
+		role := ChalkSFURolePrimary
+		if prefix, rest, hasRole := strings.Cut(id, ":"); hasRole {
+			if ChalkSFURole(prefix) != ChalkSFURoleStandby && ChalkSFURole(prefix) != ChalkSFURolePrimary {
+				return nil, fmt.Errorf("%s entry %q has role %q, want primary or standby", ChalkSFUNodes, entry, prefix)
+			}
+			role, id = ChalkSFURole(prefix), rest
+		}
 		if !found || !mediaplane.ValidNodeID(id) {
 			return nil, fmt.Errorf("%s entry %q must be id=https://host:port with a lowercase id", ChalkSFUNodes, entry)
 		}
@@ -708,7 +836,7 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 			return nil, fmt.Errorf("%s node %q must have an absolute https URL without query or fragment", ChalkSFUNodes, id)
 		}
-		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL})
+		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL, Role: role})
 	}
 	return nodes, nil
 }

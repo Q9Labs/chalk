@@ -495,6 +495,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            if (retried) recordAccessRetry();
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
             const media = yield* trace(
@@ -504,11 +505,16 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
+                    // as a lost connection. A refresh then would race the server's own Leave and replace a connection
+                    // that is about to go.
                     replaceMediaConnection: () =>
-                      toPromise(access.refresh("media_recovery", true)).then((replacement) => {
-                        if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
-                        return replacement.media;
-                      }),
+                      model.closed || model.state === "leaving" || model.state === "left"
+                        ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
+                        : toPromise(access.refresh("media_recovery", true)).then((replacement) => {
+                            if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
+                            return replacement.media;
+                          }),
                     onTransportDiagnostic,
                     traceparent: reporter?.traceparent,
                     onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
@@ -637,6 +643,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           return yield* cancelPendingAdmission();
         });
+      const recordAccessRetry = () => diagnostics.record({ event: "access_retry", state: model.state, epoch: model.epoch });
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(
           Effect.gen(function* () {
@@ -665,6 +672,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               onFailure: (cause) => {
                 if (!accessRejected(cause)) return Effect.fail(cause);
                 return requireOpen.pipe(
+                  Effect.tap(() => Effect.sync(recordAccessRetry)),
                   Effect.andThen(access.refreshAfterRejection()),
                   Effect.mapError((failure) => (failure instanceof ConnectionAccessFailure ? accessFailure(failure) : failure)),
                   Effect.andThen(publishFreshAccess()),

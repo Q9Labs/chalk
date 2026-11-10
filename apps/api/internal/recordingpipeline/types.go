@@ -430,6 +430,27 @@ type PoolHealth struct {
 	UpdatedAt     time.Time
 }
 
+// HeldCaptureSlot is a Capture job leased by a worker, which therefore holds
+// one slot of the Capture pool until it completes, fails or its lease is recovered.
+type HeldCaptureSlot struct {
+	JobID          utilities.ID
+	TenantID       utilities.ID
+	RecordingID    utilities.ID
+	EpisodeID      utilities.ID
+	ClaimedAt      time.Time
+	LeaseExpiresAt time.Time
+}
+
+// CapturePool is a Tenant's view of the shared Capture pool. Slots held for
+// other Tenants are counted only, so no identifier crosses a Tenant boundary.
+type CapturePool struct {
+	SlotsTotal         int
+	SlotsUsed          int
+	ObservedAt         *time.Time
+	Held               []HeldCaptureSlot
+	HeldByOtherTenants int
+}
+
 type Repository interface {
 	Reserve(ctx context.Context, input ReservationInput, captureJobID utilities.ID) (Reservation, error)
 	GetReservation(ctx context.Context, tenantID, reservationID utilities.ID) (Reservation, error)
@@ -453,4 +474,5 @@ type Repository interface {
 	CommitArtifact(ctx context.Context, input ArtifactInput) (Artifact, error)
 	UpsertPoolHealth(ctx context.Context, health PoolHealth) (PoolHealth, error)
 	GetPoolHealth(ctx context.Context, role PoolRole) (PoolHealth, error)
+	ListHeldCaptureSlots(ctx context.Context, limit int) ([]HeldCaptureSlot, error)
 }

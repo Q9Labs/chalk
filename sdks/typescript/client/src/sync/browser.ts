@@ -1,5 +1,6 @@
 import { SyncBrowserCapabilityError } from "./errors";
 import type { SyncLifecycle, SyncSocket, SyncWebSocketFactory } from "./types";
+import { WarmSocketSlot } from "./warm-socket";
 
 export type BrowserWebSocketConstructor = new (url: string) => WebSocket;
 
@@ -8,6 +9,26 @@ export type BrowserLifecycleEnvironment = {
   readonly navigator?: Pick<Navigator, "onLine">;
 };
 
+const WEBSOCKET_OPEN = 1;
+const warmSlot = new WarmSocketSlot({
+  open: (url) => (globalThis.WebSocket ? new globalThis.WebSocket(url) : undefined),
+  visible: () => typeof document === "undefined" || document.visibilityState !== "hidden",
+});
+
+/**
+ * Has a Sync socket for `url` upgrading or open before the join, so the first client that dials the same URL adopts it
+ * instead of paying the upgrade. See `WarmSocketSlot` for the states and the bounds. Best effort: a socket that cannot open is
+ * dropped, and `connect` then dials as usual and reports the real failure.
+ */
+export function warmBrowserSyncSocket(url: string, keepMs?: number): void {
+  warmSlot.warm(url, keepMs);
+}
+
+/** Closes the warm socket, if any, and stops keeping one: call it at sign-out. */
+export function releaseWarmBrowserSyncSocket(): void {
+  warmSlot.release();
+}
+
 export function createBrowserWebSocketFactory(WebSocketConstructor?: BrowserWebSocketConstructor): SyncWebSocketFactory {
   return {
     connect(url) {
@@ -15,7 +36,8 @@ export function createBrowserWebSocketFactory(WebSocketConstructor?: BrowserWebS
       if (!Constructor) {
         throw new SyncBrowserCapabilityError("WebSocket");
       }
-      return new BrowserSyncSocket(new Constructor(url));
+      const parked = WebSocketConstructor ? undefined : warmSlot.adopt(url);
+      return new BrowserSyncSocket(parked ?? new Constructor(url));
     },
   };
 }
@@ -50,6 +72,8 @@ class BrowserSyncSocket implements SyncSocket {
     this.#socket.addEventListener("message", (event) => this.onmessage?.({ data: event.data }));
     this.#socket.addEventListener("close", (event) => this.onclose?.({ code: event.code, reason: event.reason, ...(typeof event.wasClean === "boolean" ? { wasClean: event.wasClean } : {}) }));
     this.#socket.addEventListener("error", () => this.onerror?.());
+    // A parked socket opened before this one adopted it, so its open event is already past.
+    if (this.#socket.readyState === WEBSOCKET_OPEN) queueMicrotask(() => this.onopen?.());
   }
 
   send(data: string): void {

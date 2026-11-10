@@ -76,6 +76,7 @@
     "check:tracker": "node scripts/generate-tracker.mjs --check",
     "prod:proof": "node scripts/prod-proof/index.mjs",
     "prod:canary": "node scripts/prod-proof/sfu-canary.mjs",
+    "prod:fleet": "node scripts/prod-proof/fleet.mjs",
     "prod:sfu-e2e": "node scripts/prod-proof/sfu-e2e.mjs",
     "prod:latency": "node scripts/prod-proof/latency.mjs",
     "prod:sfu-classes": "node scripts/prod-proof/sfu-classes.mjs",

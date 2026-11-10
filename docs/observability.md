@@ -81,6 +81,29 @@ later reconnects. The whiteboard client sends the same baggage member beside its
 presenter-view extensions, then retries without baggage after a 1009 close from
 an older server.
 
+### Measure client readiness for the own SFU
+
+`chalk.api.access_grant.issuance` has bounded tags `outcome`, `reason`, and
+optional `chalk_sfu_declared` (boolean). The boolean comes from the parsed
+`X-Chalk-Media-Providers` capability used by media binding resolution: `true`
+when it declares `chalk_sfu`, and `false` when absent or containing only other
+providers. No header text, SDK version, or client identity is exported as a tag.
+Host-approved legacy guest admissions do not retain the guest's declaration.
+Their server-assumed provider support is not a client declaration, so those
+issuances omit `chalk_sfu_declared`. The guest's later credential collection or
+refresh supplies its own declaration and emits the boolean as usual. Issuances
+without declaration context also omit the tag. The issuance duration metric
+keeps only `outcome` and `reason`.
+
+To see how many credential issuances come from clients that do not declare
+`chalk_sfu`, filter the issuance counter to `outcome=issued`. Divide the sum of
+counter increases with `chalk_sfu_declared=false` by the sum across both boolean
+values in the same time window. Exclude all series without the tag, including
+host-approved legacy admissions and older series. This measures credential
+issuances, including refreshes, not unique participants or all join attempts:
+requests rejected before credential issuance do not increment this counter. No
+sunset is planned, so no threshold on this share gates anything.
+
 ### Compare call quality by connection type
 
 The SDK summarises WebRTC stats on the device every 10 seconds and uploads them
@@ -120,6 +143,33 @@ credential. That ID is the session the own SFU names in its logs and in
 Add `by ['attributes.country']` to compare regions. Field paths follow the
 dataset's log mapping, so match them to how `sdk.connection_report` appears there.
 Add `| where ['session.id'] == "<session-id>"` to read one device's call.
+
+### Compare call quality by provider
+
+The same `sdk.call_stats` lines carry `provider`, so one query compares the two
+providers while Cloudflare SFU and the own SFU run side by side. It is a saved
+query, not an alarm: nothing pages on it. Keep it as the Axiom saved query
+`call-quality-by-provider` and read it after a cutover step or when a
+provider-tagged connection report points at one provider. A sample window holds
+about ten seconds, so compare `samples` before trusting a percentile.
+
+```apl
+['<api-log-dataset>']
+| where ['attributes.event'] == "sdk.call_stats"
+| extend provider = iff(tostring(['attributes.provider']) in ("cloudflare_sfu", "chalk_sfu"), tostring(['attributes.provider']), "unknown")
+| summarize
+    samples = count(),
+    rtt_p50 = percentile(todouble(['attributes.rtt_ms']), 50),
+    rtt_p95 = percentile(todouble(['attributes.rtt_ms']), 95),
+    send_loss_p95 = percentile(todouble(['attributes.send_loss_pct']), 95),
+    recv_loss_p95 = percentile(todouble(['attributes.recv_loss_pct']), 95),
+    freeze_rate = sumif(todouble(['attributes.freeze_count']), isnotnull(['attributes.freeze_count'])) / count(),
+    freeze_ms_p95 = percentile(todouble(['attributes.freeze_ms']), 95)
+  by provider
+```
+
+Add `by provider, bin(_time, 1h)` for a trend, or `by provider, ['attributes.connection_type']`
+to separate relayed calls from direct ones.
 
 ### Own-SFU video paused for network
 
@@ -202,12 +252,13 @@ checks, including an Episode end that adopts the stop (#618).
 
 Capture close-track rejections inside HTTP 200 responses emit
 `cloudflare_sfu.request_failed` in API logs before conversion to the worker's
-failure code. `provider_raw_code` and `provider_message` retain the rejected
-code and message with the existing diagnostic-word allowlist. URLs, identifiers,
-numbers, token-like strings and unknown words are redacted. Each field is capped
-at 240 characters plus a truncation marker. The active API span receives the same
-values as `chalk.provider.raw_error_code` and `chalk.provider.message` on
-`cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
+failure code. `provider_raw_code` carries only a known Cloudflare code, an upper-case code of at
+most 64 characters, or `other`. The provider's free-text description is never
+logged, returned or exported, because it can echo a failed dial's host or address:
+only `provider_message_fingerprint`, a hash of it, identifies the message, and the
+response snapshot replaces each description with `redacted-<fingerprint>`. The
+active API span receives the same values as `chalk.provider.raw_error_code` and
+`chalk.provider.message_fingerprint` on `cloudflare_sfu.provider_failure`. No request bodies, SDP or credentials are
 retained. Both capture track-close and connection-close use this path. Retry and
 HTTP 200 acceptance rules are unchanged.
 
@@ -222,10 +273,63 @@ adds one to the API metric `chalk.sfu.turn_mint_failures`, whose only attribute 
 `chalk.media_plane.provider`; it carries no Episode id, so its cardinality stays
 fixed. Search the log for the Episode id to find the affected class. Any value
 above zero over a few minutes means clients on UDP-blocked networks cannot
-connect media.
+connect media. The production monitor pages on three of either TURN event in five minutes
+(`cloudflare_turn.credentials_failed`, and `chalk_sfu.turn_credentials_failed` once Cloudflare SFU
+is retired).
+
+A live own-SFU Episode whose node goes silent (no probe answer for the probe freshness window, so one missed probe does not count), or answers
+with another `NodeIncarnation` than its binding recorded, moves through one
+generation-fenced binding change (see the SFU milestones, M11). Each attempt adds one
+to the API metric `chalk.sfu.episode_recoveries`, whose only attributes are
+`chalk.sfu.recovery.reason` (`node_silent`, `node_restarted`) and
+`chalk.sfu.recovery.outcome`: `moved`, `lost_race` (another API replica committed
+the move first and this one followed it), `refused_no_node` (no node was fit to ask),
+`refused_no_room` (every node asked answered and refused the reserve) and `refused_unreachable`
+(at least one node asked could not be reached or failed, and none accepted). It carries no Episode id. The logs name the Episode: `chalk_sfu.recovered`
+(from and to node, generation), `chalk_sfu.recovery_refused` (callers then get 503
+`media.unavailable` and retry; the binding did not change) and `chalk_sfu.recovery` at warning
+level for each node that could not reserve. A sustained `refused_*` rate means live calls cannot
+leave a lost node: check pool capacity first. The production monitor pages when
+`chalk_sfu.recovery_refused` is logged in three distinct minutes of five. Any `moved` is worth a look
+at the lost node.
+
+A moved or ended own-SFU Episode owes a retire to every node it left. The debt is a row in
+`sfu_retirement_debts`, written in the same transaction as the binding move, or re-recorded when the
+Episode ends. The Episode's end is confirmed once that row is durable, not when the node acknowledges
+it. The API worker pays each debt every few seconds with a growing backoff (5 seconds up to 5 minutes)
+and deletes it when the node acknowledges the retire, when the node answers with a new boot, or when the
+node is no longer configured. A node that stays silent on the control path keeps three things apart.
+The fence: the node's retirement floor, if it ever received one, expires after 24 hours, and that only
+ends the refusal of lower generations; it never closes a session. The sessions: a session closes when
+the retire is acknowledged, when the node restarts, or when its own peer connection fails or its client
+closes it, so a node that stays silent for good keeps its connected sessions until it restarts, with no
+time limit. The media: forwarding and publication stop within the source lease TTL
+(`SFU_SOURCE_LEASE_TTL`, 15 seconds by default, at most 2 minutes), because the API stops renewing a
+lease once the Episode moves or ends and the node checks the lease on every write. Three signals show unpaid debt:
+the gauges `chalk.sfu.retirement_debts` (count) and `chalk.sfu.retirement_debt_oldest_age` (seconds,
+unit `s`), each reported by every API replica from the same table; the `sfu_retirement_debts` object
+(`count`, `oldest_age_seconds`) in the `/readyz` body, which never fails readiness; and the warning logs
+`chalk_sfu.retire_pending` and `chalk_sfu.retire_debt_unsettled` (a try failed or a settle failed; both
+carry `tenant_id` and `episode_id`, and the API log handler adds the trace and journey IDs when the move
+that owed the debt ran inside a request, so a try by the worker has none),
+`chalk_sfu.retire_debts_unread` and `chalk_sfu.retire_backlog_unread` (the table could not be read).
+The production alert collector reads the table itself, so the age is the same for every replica, and
+pages when the oldest unpaid debt is above 15 minutes in four of five minute samples (the
+`sfu-retirement-debt` rule). A healthy fleet pays a debt within seconds, so an older debt means a node
+has been silent through many backoff cycles: check that node, and restart it if it is up but not
+answering control calls.
+
+The own SFU counts each control call that ends in a provider failure, after the adapter's
+retries, in the API metric `chalk.api.chalk_sfu.failures`. Its attributes are
+`chalk.media_plane.provider`, `chalk.provider.operation` (the route without the session ID,
+such as `episodes/retire` or `sessions/tracks`), `chalk.provider.failure_stage` (`transport`,
+`http_status` or `decode`) and, by stage, `chalk.provider.transport_cause` or
+`http.response.status_class`. It carries no node, Tenant, Episode or Participant identity.
+A caller that cancels is not counted, and an answer such as a gone session or a refused
+request is not a failure. The own SFU has no failure span: the call has no span of its own.
 
 SFU transport failures retain only the bounded `transport_cause` log field and
-`chalk.provider.transport_cause` span/metric attribute: `timeout`, `caller_canceled`,
+`chalk.provider.transport_cause` span/metric attribute, for both providers: `timeout`, `caller_canceled`,
 `connection_reset`, `connection_refused`, `dns`, `tls`, or `other`. Raw transport
 error text is not retained. A canceled or expired caller context produces
 `cloudflare_sfu.client_canceled`, does not increment the provider-failure counter
@@ -318,24 +422,28 @@ are sampled, so a newly visible pair normally logs roughly 15–25 seconds later
 #### Alarm
 
 The [listener audio check](../infrastructure/listener-audio-alert/README.md)
-runs every five minutes against a ten-minute Axiom window. At least one
-`media.listener_publication_unpulled` event pages Oncall, with one incident per
-Episode and per-signal counts. The stable `listener-audio:chalk:<episode_id>`
+runs every five minutes against a ten-minute Axiom window. One
+`media.listener_publication_unpulled` event (Cloudflare SFU only) pages Oncall. An
+`sdk.connection_report` with `['attributes.trigger'] == 'audio_receive_stuck'` (both
+providers, signal `client_audio_stuck:<provider>`) pages only when at least two
+distinct participants (`attributes.participant_id_hash`) reported it on the Episode in
+the window, the count `connection-reports.apl` uses; reports without a hash never
+count. Each page is one incident per Episode with per-signal counts. The client
+report is the provider-neutral signal: it stays when M13 removes Cloudflare and its
+sampler. The stable `listener-audio:chalk:<episode_id>`
 key lets Oncall dedupe overlapping windows and subsequent repeats. Public logs
-contain only aggregate counts; the query projects only `episode_id`, `signal` and
-`events`, and validated UUIDs go only in the Oncall POST body. The workflow requires
+contain only aggregate counts; the query projects only `episode_id`, `signal`, `events`
+and the distinct `participants` count, and validated UUIDs go only in the Oncall POST body. The workflow requires
 `CHALK_AXIOM_QUERY_TOKEN`, `CHALK_AXIOM_LOG_DATASET` and the existing
 `ONCALL_WEBHOOK_URL`. `CHALK_AXIOM_LOG_DATASET` must be the production API log
 dataset, the same one the production Axiom monitors use as `LOG_DATASET`.
 The query does not filter by environment: pointing it at a dataset that also
 holds nightly logs would page for nightly. A fired alert fails the run so GitHub
 sends a failed-run email. Because `media.listener_publication_unpulled` is
-one-shot per pair, a stuck Episode stops firing roughly ten minutes after its
-last new event. A webhook-only drill never reads Axiom.
+one-shot per pair and `audio_receive_stuck` is sent once per unhealthy episode, a
+stuck Episode stops firing roughly ten minutes after its last new event. A webhook-only drill never reads Axiom.
 The `listener-audio` scope must also be registered for Chalk in Oncall's registry
-outside this repo. #721 will add `sdk.connection_report` with
-`['attributes.trigger'] == 'audio_receive_stuck'` as a second signal; it is not
-included yet. GitHub scheduling can delay the roughly five-minute paging target.
+outside this repo. GitHub scheduling can delay the roughly five-minute paging target.
 
 ### Background-tab and presence-expiry evidence
 
@@ -374,6 +482,14 @@ Participant, address, SDP, certificate or payload in its node-wide lines.
 - `media readers still running after close` (error) when shutdown gave up
   waiting for a stream reader. A publisher that sent a second SSRC under a RID
   causes it; the process still exits.
+- `subscription paused for congestion` and `subscription resumed after a congestion pause`
+  (info) identify the subscriber by its media `connectionId` and subscription `mid`,
+  with the allocated `rid`, `reason` (`insufficient_bandwidth` or `bandwidth_recovered`),
+  `estimateBps`, `provenBps`, `deliveredShare`, `probing` and `hostPressure`, and the evidence behind the estimate:
+  `ackedBps`, `lossShare` (the latest loss window), `lossy` (heavy loss reported in the last 2 s), `trend` (`normal`, `overuse` or `underuse`)
+  and the latest estimate decrease (`decreaseCause` `overuse` or `loss`, empty before the first; `decreaseAgoMs`, `decreaseFromBps`, `decreaseToBps`, `decreaseAckedBps`).
+  The connection ID and MID together correlate one subscription across transitions;
+  no track names or participant identities are logged.
 
 To follow one subscriber, call the session's `inspect`. Each subscription shows
 its requested and effective RID, `state` and `reason` (`congestion` for a
@@ -405,7 +521,7 @@ The export matches `inspect` and carries no identities.
   `chalk.sfu.refusals` by reason (`draining`,
   `sessions`, `fences`, `episode_full`, `mandatory_media`, `node_full`,
   `cpu_steal`, `cpu_busy`, `scheduler_latency`, `pacer_drops`,
-  `udp_buffer_errors`, `screen_ceiling`, `cameras`, `capture_limit`).
+  `udp_buffer_errors`, `screen_ceiling`, `cameras`, `capture_limit`, `holds`; a refused Episode reserve counts under its reason).
 - Quality and host: `chalk.sfu.subscriptions.congestion_paused` (network pauses
   only), `chalk.sfu.subscriptions.planner_paused` (pauses to hold an Episode
   ceiling),
@@ -417,6 +533,46 @@ The export matches `inspect` and carries no identities.
 - State and process: `chalk.sfu.draining` and `chalk.sfu.admission.closed`
   (1 or 0, with the admission reason), `process.cpu.time` and
   `process.memory.usage` (resident bytes, Linux).
+
+The API counts own-SFU placement decisions for new Episodes as
+`chalk.api.media_plane.placement_decisions`, with `chalk.media_plane.provider`,
+`chalk.media_plane.node_role` (`primary`, `standby`, `overflow`) and
+`chalk.media_plane.placement_reason` (`primary`, `standby`, `overflow_no_room`,
+`overflow_host_guard`, `overflow_draining`, `overflow_node_unavailable`, `overflow_node_protocol_too_old`, `no_capacity`).
+`standby` means every primary was silent, draining, host-guard closed or out of budget. `overflow_no_room` means a node that takes new Episodes was out of
+packet budget, `overflow_host_guard` means a node's host guard refused new Episodes
+(CPU or scheduler pressure) whatever budget was left, `overflow_draining`
+means every node that answered was draining (a planned state, not a capacity shortage),
+`overflow_node_unavailable` means no node answered ready, and `overflow_node_protocol_too_old` means
+the nodes that answered report an older SFU wire protocol than the API sends (the SFU was not deployed before the API; the
+API logs `chalk sfu node is out of placement` with `reason=node_protocol_too_old`, the node's protocol and its build commit).
+The binding of an Episode that overflowed for this reason reads `overflow_node_unavailable`.
+A node with no probe answer, or one that answers an older protocol, is never placed on, so until an API process
+finishes its first probe round (it finishes before the server takes requests) new Episodes count under
+`overflow_node_unavailable`. One missed probe does not remove a node: its last answer stays usable for three probe
+intervals. Without a Cloudflare application, or with overflow off, a new Episode that no node can take is refused
+(`503 media.unavailable`, nothing bound) under the reason above, so no Episode is bound to a node that cannot take it.
+The `no_capacity` reason stays readable on bindings an earlier release wrote. The counter counts decisions, not
+committed Episodes: placement runs inside the creation transaction, so a request that
+later rolls back (for example an Episode already live in the Space) still counts once.
+Read it as a rate of placement attempts by outcome. The binding frozen on a committed
+Episode is the record of what was kept. No production alert reads this counter, because the
+Axiom monitors read logs and no log line records `no_capacity` or an overflow to Cloudflare; only a
+refusal with overflow off is logged (below), and it counts toward the API 5xx alert.
+
+`CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
+no node can take is then refused with `503 media.unavailable`. It is counted under its
+`overflow_*` reason on the `chalk_sfu` provider (the same reason on `cf_sfu` means the Episode
+moved to Cloudflare), and `http.failure` logs the bounded reason
+`no own sfu node with room (full, draining, host guard closed or not answering) and cloudflare overflow disabled`
+without the `overflow_*` reason.
+The same reason and the node's boot incarnation are frozen in the Episode binding
+(`placement_reason`, `node_incarnation`), so a past overflow stays findable.
+
+When `CHALK_SFU_CLIENT_SUNSET` is set, which no deployment plans, an Episode start
+refused because the client cannot run the own SFU logs `chalk_sfu.client_refused`
+with the bounded reason `client_sunset` and no Tenant or user data (see
+[Client sunset](../infrastructure/sfu/README.md#client-sunset)).
 
 A rate from the totals is exact over any window. A stream that closes between two
 100 ms control ticks loses that tick's counts, so totals can run slightly under
@@ -449,6 +605,14 @@ completion. Successful capture jobs still count. Any nonzero latest snapshot
 newer than five minutes alerts on the next evaluation. A zero snapshot clears
 the alert after callback recovery. This rule detects blocked Episode end and
 new Episodes in the same Space without changing lifecycle or retry behavior.
+
+The deadline scheduler runs each Episode's deadline, presence-expiry and linger
+work in its own savepoint, so one Episode that cannot take its publication
+fences is skipped instead of rolling back the pass for every Tenant. Each skip
+logs `episode.deadline_scheduler.failed` with `tenant_id`, `episode_id`, `phase`,
+`reason` and `consecutive_failures`. The first grouped monitor alerts when one
+Episode fails more than five passes in a row, or sixty for `control_busy`, which
+normally clears within seconds when Sync settles the blocking operation.
 
 The same collector independently samples Sync `/readyz` every minute, including
 when its SQL snapshot fails. The grouped state monitor alerts when at least four
@@ -706,6 +870,25 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+Two more events ride in the same buffer, so they appear only inside a failure
+report and never trigger one. `receivers_closed` records each batch of up to 16
+receive-only tracks the client closed, so a close of more than 16 receivers
+yields several events and a failed later batch leaves the earlier ones reported:
+`receivers_stopped` (0 to 10000) counts the receivers closed in that batch, and
+`bundle_tag_held` is true when one of them owned the BUNDLE transport, which the
+client parks inactive instead of stopping. `access_retry` records each time the
+client asks for fresh access after a rejection: a join that retries after
+Chalk rejected its access (whether or not the pending admission was cancelled
+first), or a rejected media operation on an open connection. Its `state` field
+is the connection state at that moment: `joining`, `live` or `reconnecting`.
+Neither event carries a Space,
+participant or media identifier. The report is tenant-scoped, and the API log
+line already adds `space_id` and the `provider` of the verified media credential
+(`cloudflare_sfu` or `chalk_sfu`), so the events add no plane field. The API
+rejects the count and the flag on any other event. The replacement cause stays
+on `media.connection_replacement`. Deploy the API allowlist to production before
+the SDK release that emits these events.
+
 A browser camera-effects processing failure records `media_state` with
 `source=camera`, `phase=failed`, `outcome=failed`, `code=media_capture_failed`,
 `media_error_kind=OperationError`, and `media_error_step=local_capture` before
@@ -778,8 +961,9 @@ element observation, playback rejection/cleanup, and API validation/log levels.
 It does not constitute a real-browser audible-playback proof. The production
 alert query in
 `infrastructure/observability/production-alerts/connection-reports.apl` selects
-only `join_failed`, `recovery_exhausted`, and `media_projection_mismatch` triggers;
-neither receive-health trigger currently matches it.
+only `join_failed`, `recovery_exhausted`, `media_projection_mismatch` and
+`audio_receive_stuck` triggers; `audio_receive_summary` never matches it. The
+alert message names the report's provider.
 
 The API validates a maximum 32 KiB body and 64 events, rejects unknown fields and
 labels, and authenticates the participant media credential against the route's
@@ -787,7 +971,8 @@ Tenant. It deliberately does not require an active participant or passing Sync
 readiness: those can be the failure being reported. Identity comes exclusively
 from that verified credential. The `sdk.connection_report` log (Info for
 `audio_receive_summary`, Warn for other triggers) includes
-`tenant_id`, `space_id`, `episode_id`, SHA-256 `participant_id_hash` (the same
+`tenant_id`, `space_id`, `episode_id`, `provider` (`cloudflare_sfu` or `chalk_sfu`,
+read from the verified media credential, so old SDKs report it too), SHA-256 `participant_id_hash` (the same
 format as presence expiry and Sync close events), `trigger`, and a compact JSON
 string in `report`. Its `trace_id` shares the SDK's W3C parent with Sync hello and
 media signaling. Parse `report` as JSON when querying the API log dataset.

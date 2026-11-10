@@ -14,6 +14,7 @@ on:
       - .github/workflows/release-contracts.yml
       - .github/actions/setup-opentofu/**
       - .github/actions/setup-doctl/**
+      - .github/actions/cache-tofu-providers/**
       - scripts/releases/**
       - scripts/deploy/**
       - scripts/prod-proof/**

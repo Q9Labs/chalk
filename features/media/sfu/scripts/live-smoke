@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Live media smoke: real audio and video through a deployed own-SFU node.
+#
+#   live-smoke <staging|production> --confirm <staging|production> [--seconds N]
+#
+# It runs TestLiveSmoke (tests/live_test.go) against the node's real control endpoint: a
+# publisher sends RTP, a second participant receives it, the Episode ends and the node must
+# return to its earlier load. Control goes through an SSH tunnel with the operator
+# certificate (deploy/certs <env> operator), the way deploy/deploy reaches the node; media
+# goes straight to the node's UDP port, so run it from a host with outbound UDP.
+# It refuses to start without the environment and a confirmation that repeats it. It prints
+# one line, `<env>-live-smoke: PASS` or `<env>-live-smoke: FAIL: <reason>`, and no address.
+#
+# The node's address comes from its DigitalOcean tag (doctl), or SFU_NODE_ADDRESS. SFU_SSH_KEY
+# defaults to ~/.ssh/chalk-sfu-operator_ed25519; certificates come from
+# $CHALK_SFU_PRIVATE_DIR/<env> (default ~/.config/chalk-sfu), as for deploy.
+#
+# Staging runs hold the shared lease:
+#   scripts/staging-sfu/staging-lock --holder lane --purpose live-smoke --run-id label -- \
+#     features/media/sfu/scripts/live-smoke staging --confirm staging
+# Production is the M7 hard condition (docs/sfu/milestones.md). Run it once the production
+# node is deployed and before any production API gets CHALK_SFU_ENABLED. It creates one
+# random-named Episode and ends it.
+set -euo pipefail
+
+usage="usage: live-smoke <staging|production> --confirm <staging|production> [--seconds N]"
+environment="${1:?$usage}"
+case "$environment" in
+  staging) tag=chalk-sfu-staging ;;
+  production) tag=chalk-sfu-prod ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+[[ "${2:-}" == --confirm && "${3:-}" == "$environment" ]] || { echo "$usage" >&2; exit 2; }
+seconds=6
+if [[ $# -eq 5 && "$4" == --seconds ]]; then
+  seconds="$5"
+elif [[ $# -ne 3 ]]; then
+  echo "$usage" >&2
+  exit 2
+fi
+
+label="${environment}-live-smoke"
+fail() { echo "${label}: FAIL: $1"; exit 1; }
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+sfu_root="$(dirname "$script_dir")"
+dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
+if [[ -d /usr/local/go/bin ]]; then
+  export PATH="/usr/local/go/bin:${PATH}"
+fi
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.10+auto}"
+export GOFLAGS="${GOFLAGS:--buildvcs=false}"
+
+host="${SFU_NODE_ADDRESS:-}"
+if [[ -z "$host" ]]; then
+  host="$(doctl compute droplet list --tag-name "$tag" --output json 2>/dev/null |
+    jq -r 'if length == 1 then .[0].networks.v4[] | select(.type == "public") | .ip_address else empty end')" ||
+    fail "could not look up the node"
+fi
+[[ -n "$host" ]] || fail "expected exactly one node tagged ${tag}"
+
+"${sfu_root}/deploy/certs" "$environment" operator >/dev/null 2>&1 || fail "could not issue the operator certificate"
+for file in ca.crt operator.crt operator.key; do
+  [[ -f "${dir}/${file}" ]] || fail "missing ${file}"
+done
+
+ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts" -o ExitOnForwardFailure=yes)
+ssh_options+=(-i "${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}")
+port=$((20000 + RANDOM % 20000))
+ssh "${ssh_options[@]}" -N -L "${port}:127.0.0.1:8443" "root@${host}" &
+tunnel=$!
+log="$(mktemp)"
+trap 'kill "$tunnel" 2>/dev/null || true; rm -f "$log"' EXIT
+
+for _ in $(seq 20); do
+  kill -0 "$tunnel" 2>/dev/null || fail "the SSH tunnel did not open"
+  (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null && break
+  sleep 0.5
+done
+
+cd "$sfu_root"
+script_sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+[[ -z "$(git status --porcelain -- . 2>/dev/null)" ]] || script_sha="${script_sha}+dirty"
+status=0
+CHALK_SFU_LIVE_ENV="$environment" CHALK_SFU_LIVE_CONFIRM="$environment" CHALK_SFU_LIVE_DIR="$dir" \
+  CHALK_SFU_LIVE_URL="https://127.0.0.1:${port}" CHALK_SFU_LIVE_SECONDS="$seconds" \
+  go test -count=1 -v -run '^TestLiveSmoke$' ./tests >"$log" 2>&1 || status=$?
+# The evidence line prints on every run, pass or fail, with the script's own commit.
+evidence="$(grep -E '^[[:space:]]+live_test\.go:[0-9]+: live smoke: ' "$log" | sed -E 's/^[[:space:]]+[a-z_]+\.go:[0-9]+: live smoke: //' | head -1)"
+echo "evidence: script ${script_sha}, ${evidence:-no measurements}" >&2
+if [[ $status -eq 0 ]]; then
+  grep -q -- '--- PASS: TestLiveSmoke ' "$log" || fail "the smoke test did not run"
+  echo "${label}: PASS"
+else
+  # Only the test's own failure lines, never the raw output, which can carry addresses.
+  reason="$(grep -E '^[[:space:]]+(live|loopback)_test\.go:[0-9]+: ' "$log" | grep -v 'live smoke: ' | sed -E 's/^[[:space:]]+[a-z_]+\.go:[0-9]+: //' | head -3 | paste -sd';' -)"
+  fail "${reason:-the smoke test failed}"
+fi

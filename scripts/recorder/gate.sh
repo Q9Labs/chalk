@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tofu_dir="$repo_root/infrastructure/recorder"
 
+python3 -m unittest discover -s "$repo_root/scripts/recorder" -p 'test_boot_check_host.py'
 
 tofu -chdir="$tofu_dir" fmt -check -recursive
 bash "$repo_root/scripts/recorder/tofu-init.sh" "$tofu_dir"

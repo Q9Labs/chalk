@@ -454,6 +454,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/v1/tenants/{tenant_id}/recording-capture-pool": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get recording capture pool */
+    get: operations["getRecordingCapturePool"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/v1/tenants/{tenant_id}/recordings": {
     parameters: {
       query?: never;
@@ -808,6 +825,23 @@ export interface paths {
     put?: never;
     /** Renegotiate cloudflare s f u */
     post: operations["renegotiateCloudflareSFU"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/signal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Signal cloudflare s f u */
+    post: operations["signalCloudflareSFU"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1466,9 +1500,107 @@ export interface components {
     CloudflareSFURenegotiateResponse: {
       accepted: boolean;
     };
+    CloudflareSFUSignalAPIResponse: {
+      accepted?: boolean;
+      incarnation?: number;
+      publications?:
+        | {
+            [key: string]: unknown;
+          }
+        | unknown[]
+        | string
+        | number
+        | boolean
+        | null;
+      requiresImmediateRenegotiation?: boolean;
+      sequence?: number;
+      sessionDescription?: {
+        sdp: string;
+        type: string;
+      } | null;
+      subscriptions?: {
+        effective_rid?: string;
+        mid: string;
+        reason?: string;
+        requested_rid?: string;
+        revision: number;
+        session_id: components["schemas"]["UUID"];
+        state: string;
+        track_name: string;
+      }[];
+      trackErrors?: {
+        code: string;
+        connectionId: string;
+        trackName: string;
+      }[];
+      tracks?: {
+        location?: string;
+        mid?: string;
+        paused?: boolean | null;
+        publication_id?: string;
+        sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
+        source?: string;
+        trackName?: string;
+      }[];
+    };
+    CloudflareSFUSignalRequest: {
+      allow_partial_remote_tracks?: boolean;
+      close_tracks?: {
+        mid: string;
+        publication_id: string;
+        source: string;
+      }[];
+      connection_id?: string;
+      force?: boolean;
+      /** @enum {string} */
+      op: "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
+      pull_published_audio?: boolean;
+      receive_only?: boolean;
+      /** @enum {string} */
+      replacement_cause?:
+        | "user_pause"
+        | "moderation_pause"
+        | "sync_recovery_loss"
+        | "discovery_absent"
+        | "capture_cleanup"
+        | "consent_revoked"
+        | "publish_failure"
+        | "enable_failure"
+        | "projection_mismatch"
+        | "forced_pause"
+        | "local_signaling_failure"
+        | "remote_signaling_failure"
+        | "dormant_connection"
+        | "access_refresh"
+        | "receive_stalled";
+      session_description?: {
+        sdp: string;
+        type: string;
+      } | null;
+      tracks?: {
+        location: string;
+        mid?: string;
+        paused?: boolean | null;
+        publication_id?: string;
+        sessionId?: string;
+        simulcast?: {
+          preferredRid: string;
+          priorityOrdering: string;
+          ridNotAvailable: string;
+        } | null;
+        source?: string;
+        trackName: string;
+      }[];
+    };
     CloudflareSFUTracksAPIResponse: components["schemas"]["CloudflareSFUUpdateTracksAPIResponse"];
     CloudflareSFUTracksRequest: {
       connection_id: string;
+      pull_published_audio?: boolean;
       session_description?: {
         sdp: string;
         type: string;
@@ -1489,6 +1621,7 @@ export interface components {
       }[];
     };
     CloudflareSFUUpdateTracksAPIResponse: {
+      publications?: components["schemas"]["CloudflareSFUPublicationsResponse"] | null;
       requiresImmediateRenegotiation?: boolean;
       sessionDescription?: {
         sdp: string;
@@ -1534,6 +1667,7 @@ export interface components {
     ConnectionReportRequest: {
       events: {
         attempt?: number | null;
+        bundle_tag_held?: boolean | null;
         close_code?: number | null;
         /** @enum {string} */
         code?:
@@ -1586,7 +1720,9 @@ export interface components {
           | "media_http_error"
           | "media_projection_mismatch"
           | "audio_receive_stuck"
-          | "audio_receive_summary";
+          | "audio_receive_summary"
+          | "receivers_closed"
+          | "access_retry";
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -1620,6 +1756,7 @@ export interface components {
         } | null;
         /** @enum {string} */
         receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
+        receivers_stopped?: number | null;
         /** @enum {string} */
         source?: "microphone" | "camera" | "screen_audio";
         /** @enum {string} */
@@ -2148,6 +2285,19 @@ export interface components {
       transcription_policy: string;
       transcription_preparation: components["schemas"]["RecordingTranscriptionPreparation"];
       updated_at: components["schemas"]["DateTimeString"];
+    };
+    RecordingCapturePool: {
+      held: {
+        claimed_at: components["schemas"]["DateTimeString"];
+        episode_id: components["schemas"]["EpisodeId"];
+        job_id: components["schemas"]["UUID"];
+        lease_expires_at: components["schemas"]["DateTimeString"];
+        recording_id: components["schemas"]["RecordingId"];
+      }[];
+      held_by_other_tenants: number;
+      observed_at?: components["schemas"]["DateTimeString"] | null;
+      slots_total: number;
+      slots_used: number;
     };
     RecordingDownloadURL: {
       expires_at: components["schemas"]["DateTimeString"];
@@ -6017,6 +6167,73 @@ export interface operations {
       };
     };
   };
+  getRecordingCapturePool: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecordingCapturePool"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
   listRecordings: {
     parameters: {
       query?: {
@@ -8216,6 +8433,110 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CloudflareSFURenegotiateResponse"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Forbidden */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Request Entity Too Large */
+      413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          "Retry-After": number;
+          "X-RateLimit-Limit": number;
+          "X-RateLimit-Remaining": number;
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Internal Server Error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+      /** @description Service Unavailable */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ErrorResponse"];
+        };
+      };
+    };
+  };
+  signalCloudflareSFU: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tenant_id: components["schemas"]["TenantId"];
+        space_id: components["schemas"]["SpaceId"];
+        episode_id: components["schemas"]["EpisodeId"];
+        participant_id: components["schemas"]["ParticipantId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CloudflareSFUSignalRequest"];
+      };
+    };
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CloudflareSFUSignalAPIResponse"];
         };
       };
       /** @description Bad Request */

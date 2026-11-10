@@ -126,7 +126,7 @@ The SDK is now under `sdks/typescript/`, not `packages/`.
    replacement require `cloudflare_sfu`; bootstrap contains `connectionId`,
    `stunServer`, optional credentialed `iceServers`. Reuse the same media engine
    for additive `chalk_sfu` grants, updating these checks and native consumers.
-   Old SDKs use Cloudflare only during migration. M12 sunsets those cohorts; an
+   Old SDKs use Cloudflare only during migration, and no sunset is planned; an
    unknown provider must not fall through. Public-invite arrivals follow the same
    rule: an arrival, status poll or refresh that declares `chalk_sfu` in
    `X-Chalk-Media-Providers` can bind and join an own-SFU Episode, one that
@@ -249,7 +249,7 @@ be explicitly identified as optional rather than silently left on Cloudflare.
 | Native provider checks on replacement/restart and `@cloudflare/react-native-webrtc` in `sdks/typescript/react-native/src/space-client/create-native-space-client.ts`                                                                                                                               | Extend native dispatch and prove actual iOS/Android audio, video, supported screen sources, TURN and recovery against Pion. The WebRTC binding need not be replaced just because its name contains Cloudflare. Sunset incompatible native releases.                                                           | M2, M6, M12             |
 | Six capture operations in `apps/api/internal/captureplane/types.go`, implemented by `apps/api/internal/adapters/cloudflare/sfu/capture_plane.go`; `apps/api/cmd/main.go` registers only the Cloudflare capture adapter                                                                             | Add an own capture adapter for create, pull, renegotiate, inspect, close-tracks and close-connection. Route by the durable binding and preserve capture identity, epochs, authority, replay and per-track failure semantics.                                                                                  | M10                     |
 | `apps/api/cmd/recorder-capture/run.go` builds the Pion capture worker; `apps/api/internal/recorderworker/capture_attempt.go`, `apps/api/internal/recordingpipeline/` and `apps/api/internal/transcripts/` own downstream work                                                                      | Prove `chalk-recorder-capture` receives the own-SFU media and completes encrypted bundles, rendering, playback/export and automatic transcription. Preserve timestamp/A/V sync, codec handling, late tracks, stop/salvage, moderation privacy and orphan cleanup. Do not rebuild the pipeline inside the SFU. | M10                     |
-| Owner-attributed relay policy in `apps/api/internal/mediaplane/service.go`; cached, short-lived TURN credentials with bounded minting and STUN fallback in `apps/api/internal/adapters/cloudflare/sfu/turn.go`                                                                                     | Share the minter independently of the SFU adapter, retain `AllowRelay`, prove external-SFU relay/TLS-443 and credential rotation, and keep TURN on SFU retirement.                                                                                                                                            | M2, M6, M12, M13        |
+| Owner-attributed relay policy in `apps/api/internal/mediaplane/service.go`; cached, short-lived TURN credentials with bounded minting and STUN fallback in `apps/api/internal/adapters/cloudflare/turn/turn.go`                                                                                    | Share the minter independently of the SFU adapter, retain `AllowRelay`, prove external-SFU relay/TLS-443 and credential rotation, and keep TURN on SFU retirement.                                                                                                                                            | M2, M6, M12, M13        |
 | Client call stats in `sdks/typescript/client/src/media/call-stats.ts`; Cloudflare-specific failure/replacement metrics in `apps/api/internal/adapters/cloudflare/sfu/adapter.go`; terminal media reports and alerts under `infrastructure/observability/production-alerts/`                        | Add bounded own-provider correlation, packet/queue/repair/admission metrics, cohort dashboards, listener-heal evidence and tested alerts with equal operational coverage. A bytes-sent counter is not rendered-media proof.                                                                                   | M5, M6, M12             |
 | Durable events and correlation in `apps/api/internal/observability/journey.go`, `apps/api/internal/observability/capture_signaling.go`, `contract/webhooks/v1/journey-events.json` and `docs/observability.md`                                                                                     | Preserve the Postgres journey ledger and executable observability proof for capture, revoke, placement/replacement and cutover failures. Carry trace and operation context through delayed cleanup; do not substitute SFU-local logs for durable evidence.                                                    | M3, M5, M10, M11, M12   |
 | Deployment/tenant-managed selection in `apps/api/internal/adapters/mediaplaneproviders/registry.go`, and Cloudflare-only SDK/native grants in the files above                                                                                                                                      | Migrate all defaults, explicit Space overrides, tenant-managed configuration and supported SDK/app cohorts. Flip default-on only after recording, capacity and monitoring parity; no permanent old-SDK Cloudflare cohort.                                                                                     | M12                     |
@@ -516,6 +516,39 @@ or missing session gets a fresh bootstrap, generation and PeerConnection. Never 
 across a node incarnation change. Prove Wi-Fi/mobile-style address changes and
 TURN/TLS-only recovery independently of the Sync reconnect tests.
 
+**Pull-published join:** a join used to pay a `publications` request, a `tracks` pull and a
+`renegotiate` answer in sequence. When the own SFU advertises `pullPublished`, the SDK's first
+poll sends one `tracks` request with `pull_published_audio` and no tracks. The API reads the
+Episode's publication list, pulls every other Participant's enabled microphone and screen audio
+(at most 16), and returns the SFU offer together with the list under `publications`. Video stays
+out of it because the SDK waits for the UI's tile reports before pulling video, so the normal
+reconcile pulls video next. The answer still goes out as `renegotiate`: it depends on the offer.
+The SDK keeps only the audio of Participants on its roster and stops the rest, as the list route
+does. If the combined request fails, the SDK lists and pulls the old way, so the normal recovery
+(for example a replaced connection after a 410) handles the failure.
+Any later poll, a replaced connection and every Cloudflare join use the list route as before.
+The nightly latency sidecar leaves `join.sfu_publications` empty for a combined join, and
+`join.sfu_tracks` then carries the list and the pull.
+
+**Mute in place:** when the own SFU advertises the `muteInPlace` capability, a user
+mute of the camera or microphone parks the publication instead of closing it. The
+SDK detaches the track locally and sends `PUT tracks/update` with `paused: true` for
+the local track, so no SDP and no `tracks/close` run and the transceiver and MID
+stay. The node stops forwarding that publication at once and drops what was queued for
+its subscriptions, so a muted track forwards no media within the same bound as a close.
+The subscriptions stay attached and read as an idle source with a new revision, and a
+viewer that subscribes during the mute gets its layer when the publication resumes. The API
+records the publication as disabled with its ID unchanged. A source revoke from Sync
+does not close a parked publication, and a grant keeps its lease. Unmute re-attaches the
+track and resumes with `paused: false`; the node asks for a keyframe and media flows
+again on the subscriptions a receiver still holds, so a receiver that missed the mute
+needs no new pull. A receiver that saw the mute closes its subscription and pulls the
+publication again from the next snapshot, as for any enabled publication. If the SFU no longer holds the parked publication, the SDK closes it
+and publishes a new one. Cloudflare and older SDKs never see the flag, so they keep
+the close path. Receivers that see the muted snapshot still tear down and rebuild
+their subscription; keeping them subscribed needs a Sync and schema change that this does
+not make.
+
 **Node loss:** all sessions, packets and retransmission caches disappear. A new
 boot uses a new incarnation; reject old handles with normalized gone responses.
 Clients replace sessions, republish authorized wanted sources and re-pull from
@@ -528,7 +561,7 @@ from disk. Postgres unavailability prevents new admissions and lease extension.
 V1 reuses **current Cloudflare TURN on TCP/TLS 443**, preserving the accountable-
 owner `AllowRelay` policy, short-lived credential delivery, bounded mint timeout
 and STUN-only fallback (`apps/api/internal/mediaplane/service.go:60`;
-`apps/api/internal/adapters/cloudflare/sfu/turn.go:1`). Run the relay-only proof
+`apps/api/internal/adapters/cloudflare/turn/turn.go:1`). Run the relay-only proof
 against our SFU: being compatible with Cloudflare SFU does not prove an arbitrary
 destination. A failed relay proof blocks rollout until a verified relay path
 exists; do not silently switch providers.
@@ -1029,12 +1062,12 @@ audible/rendered media, privacy, recovery and resource budgets, not just HTTP.
 
 M12 performs full cutover only after M8, M10 and M11 pass alongside M1–M7.
 Release compatible shared and React Native SDKs and first-party apps first.
-Inventory every Tenant default, Space override, tenant-managed provider config,
-recording/transcription dependency and active SDK cohort. Migrate explicit
-Cloudflare selectors as well as defaults. Announce and enforce a minimum
-compatible SDK/app version; old clients use Cloudflare only during that bounded
-migration window, then receive an explicit upgrade requirement rather than a
-misdecoded own-provider grant or a permanent Cloudflare exception.
+Inventory every Tenant default, Space override, tenant-managed provider config
+and recording/transcription dependency. Migrate explicit
+Cloudflare selectors as well as defaults. A client that
+does not declare `chalk_sfu` gets Cloudflare or an explicit
+`media.client_unsupported` (409), never a misdecoded own-provider grant. Chalk
+has no outside clients, so no client sunset is planned.
 
 Expand the migration flag by cohort, then set the deployment and every Tenant's
 default to `chalk_sfu`, with no forgotten Space override. New Tenants and Spaces

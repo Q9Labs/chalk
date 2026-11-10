@@ -36,7 +36,7 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 		// Transport errors can include credential-bearing URLs.
 		detail = requestErr.Err.Error()
 	}
-	for _, providerErr := range []error{mediaplane.ErrProviderFailed, mediaplane.ErrProviderUnauthorized, mediaplane.ErrProviderRateLimited, mediaplane.ErrEpisodeNotFound} {
+	for _, providerErr := range []error{mediaplane.ErrPlacementRefused, mediaplane.ErrProviderFailed, mediaplane.ErrProviderUnauthorized, mediaplane.ErrProviderRateLimited, mediaplane.ErrEpisodeNotFound} {
 		if errors.Is(err, providerErr) {
 			// Provider response text is untrusted and may echo credentials or
 			// payloads. Keep the typed cause; provider spans retain safe facts.

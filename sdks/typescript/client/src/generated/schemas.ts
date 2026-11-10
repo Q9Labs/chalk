@@ -265,8 +265,141 @@ export const CloudflareSFURenegotiateResponseSchema = /* @__PURE__ */ (() =>
   }))();
 export type CloudflareSFURenegotiateResponse = typeof CloudflareSFURenegotiateResponseSchema.Type;
 
+export const CloudflareSFUSignalAPIResponseSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    accepted: Schema.optional(Schema.Boolean),
+    incarnation: Schema.optional(Schema.Number),
+    publications: Schema.optional(Schema.Unknown),
+    requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
+    sequence: Schema.optional(Schema.Number),
+    sessionDescription: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String,
+          type: Schema.String,
+        }),
+      ),
+    ),
+    subscriptions: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          effective_rid: Schema.optional(Schema.String),
+          mid: Schema.String,
+          reason: Schema.optional(Schema.String),
+          requested_rid: Schema.optional(Schema.String),
+          revision: Schema.Number,
+          session_id: UUIDSchema,
+          state: Schema.String,
+          track_name: Schema.String,
+        }),
+      ),
+    ),
+    trackErrors: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          code: Schema.String,
+          connectionId: Schema.String,
+          trackName: Schema.String,
+        }),
+      ),
+    ),
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          location: Schema.optional(Schema.String),
+          mid: Schema.optional(Schema.String),
+          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+          publication_id: Schema.optional(Schema.String),
+          sessionId: Schema.optional(Schema.String),
+          simulcast: Schema.optional(
+            Schema.NullOr(
+              Schema.Struct({
+                preferredRid: Schema.String,
+                priorityOrdering: Schema.String,
+                ridNotAvailable: Schema.String,
+              }),
+            ),
+          ),
+          source: Schema.optional(Schema.String),
+          trackName: Schema.optional(Schema.String),
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUSignalAPIResponse = typeof CloudflareSFUSignalAPIResponseSchema.Type;
+
+export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    allow_partial_remote_tracks: Schema.optional(Schema.Boolean),
+    close_tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          mid: Schema.String.check(Schema.isMinLength(1)),
+          publication_id: Schema.String.check(Schema.isMinLength(1)),
+          source: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    connection_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    force: Schema.optional(Schema.Boolean),
+    op: Schema.Literals(["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"]),
+    pull_published_audio: Schema.optional(Schema.Boolean),
+    receive_only: Schema.optional(Schema.Boolean),
+    replacement_cause: Schema.optional(
+      Schema.Literals([
+        "user_pause",
+        "moderation_pause",
+        "sync_recovery_loss",
+        "discovery_absent",
+        "capture_cleanup",
+        "consent_revoked",
+        "publish_failure",
+        "enable_failure",
+        "projection_mismatch",
+        "forced_pause",
+        "local_signaling_failure",
+        "remote_signaling_failure",
+        "dormant_connection",
+        "access_refresh",
+        "receive_stalled",
+      ]),
+    ),
+    session_description: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          sdp: Schema.String.check(Schema.isMinLength(1)),
+          type: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+    tracks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          location: Schema.String.check(Schema.isMinLength(1)),
+          mid: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          paused: Schema.optional(Schema.NullOr(Schema.Boolean)),
+          publication_id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          sessionId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          simulcast: Schema.optional(
+            Schema.NullOr(
+              Schema.Struct({
+                preferredRid: Schema.String.check(Schema.isMinLength(1)),
+                priorityOrdering: Schema.String.check(Schema.isMinLength(1)),
+                ridNotAvailable: Schema.String.check(Schema.isMinLength(1)),
+              }),
+            ),
+          ),
+          source: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+          trackName: Schema.String.check(Schema.isMinLength(1)),
+        }),
+      ),
+    ),
+  }))();
+export type CloudflareSFUSignalRequest = typeof CloudflareSFUSignalRequestSchema.Type;
+
 export const CloudflareSFUUpdateTracksAPIResponseSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
+    publications: Schema.optional(Schema.NullOr(CloudflareSFUPublicationsResponseSchema)),
     requiresImmediateRenegotiation: Schema.optional(Schema.Boolean),
     sessionDescription: Schema.optional(
       Schema.NullOr(
@@ -316,6 +449,7 @@ export type CloudflareSFUTracksAPIResponse = typeof CloudflareSFUTracksAPIRespon
 export const CloudflareSFUTracksRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     connection_id: Schema.String.check(Schema.isMinLength(1)),
+    pull_published_audio: Schema.optional(Schema.Boolean),
     session_description: Schema.optional(
       Schema.NullOr(
         Schema.Struct({
@@ -378,6 +512,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
     events: Schema.Array(
       Schema.Struct({
         attempt: Schema.optional(Schema.NullOr(Schema.Number)),
+        bundle_tag_held: Schema.optional(Schema.NullOr(Schema.Boolean)),
         close_code: Schema.optional(Schema.NullOr(Schema.Number)),
         code: Schema.optional(
           Schema.Literals([
@@ -431,6 +566,8 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           "media_projection_mismatch",
           "audio_receive_stuck",
           "audio_receive_summary",
+          "receivers_closed",
+          "access_retry",
         ]),
         granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
@@ -459,6 +596,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           ),
         ),
         receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
+        receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
         source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio"])),
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
@@ -1096,6 +1234,24 @@ export const RecordingSchema = /* @__PURE__ */ (() =>
     updated_at: DateTimeStringSchema,
   }))();
 export type Recording = typeof RecordingSchema.Type;
+
+export const RecordingCapturePoolSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    held: Schema.Array(
+      Schema.Struct({
+        claimed_at: DateTimeStringSchema,
+        episode_id: EpisodeIdSchema,
+        job_id: UUIDSchema,
+        lease_expires_at: DateTimeStringSchema,
+        recording_id: RecordingIdSchema,
+      }),
+    ),
+    held_by_other_tenants: Schema.Number,
+    observed_at: Schema.optional(Schema.NullOr(DateTimeStringSchema)),
+    slots_total: Schema.Number,
+    slots_used: Schema.Number,
+  }))();
+export type RecordingCapturePool = typeof RecordingCapturePoolSchema.Type;
 
 export const RecordingDownloadURLSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -2837,6 +2993,15 @@ export type GetRecordingPathParams = typeof GetRecordingPathParamsSchema.Type;
 export const GetRecordingResponseSchema = /* @__PURE__ */ (() => RecordingSchema)();
 export type GetRecordingResponse = typeof GetRecordingResponseSchema.Type;
 
+export const GetRecordingCapturePoolPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    tenant_id: TenantIdSchema,
+  }))();
+export type GetRecordingCapturePoolPathParams = typeof GetRecordingCapturePoolPathParamsSchema.Type;
+
+export const GetRecordingCapturePoolResponseSchema = /* @__PURE__ */ (() => RecordingCapturePoolSchema)();
+export type GetRecordingCapturePoolResponse = typeof GetRecordingCapturePoolResponseSchema.Type;
+
 export const GetSpacePathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     space_id: SpaceIdSchema,
@@ -3798,6 +3963,29 @@ export const SetEpisodeDeadline429ResponseHeadersSchema = /* @__PURE__ */ (() =>
     "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
   }))();
 export type SetEpisodeDeadline429ResponseHeaders = typeof SetEpisodeDeadline429ResponseHeadersSchema.Type;
+
+export const SignalCloudflareSFUPathParamsSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    episode_id: EpisodeIdSchema,
+    participant_id: ParticipantIdSchema,
+    space_id: SpaceIdSchema,
+    tenant_id: TenantIdSchema,
+  }))();
+export type SignalCloudflareSFUPathParams = typeof SignalCloudflareSFUPathParamsSchema.Type;
+
+export const SignalCloudflareSFURequestBodySchema = /* @__PURE__ */ (() => CloudflareSFUSignalRequestSchema)();
+export type SignalCloudflareSFURequestBody = typeof SignalCloudflareSFURequestBodySchema.Type;
+
+export const SignalCloudflareSFUResponseSchema = /* @__PURE__ */ (() => CloudflareSFUSignalAPIResponseSchema)();
+export type SignalCloudflareSFUResponse = typeof SignalCloudflareSFUResponseSchema.Type;
+
+export const SignalCloudflareSFU429ResponseHeadersSchema = /* @__PURE__ */ (() =>
+  Schema.Struct({
+    "Retry-After": RetryAfterHeaderSchema,
+    "X-RateLimit-Limit": RateLimitLimitHeaderSchema,
+    "X-RateLimit-Remaining": RateLimitRemainingHeaderSchema,
+  }))();
+export type SignalCloudflareSFU429ResponseHeaders = typeof SignalCloudflareSFU429ResponseHeadersSchema.Type;
 
 export const TestWebhookEndpointPathParamsSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
@@ -6333,6 +6521,8 @@ export const ArriveBySpacePublicInviteErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
   MediaClientUnsupportedErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6411,6 +6601,8 @@ export const CreateEpisodeErrorSchema = Schema.Union([
   AccessUnauthenticatedErrorSchema,
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotFoundErrorSchema,
+  MediaClientUnsupportedErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6445,6 +6637,8 @@ export const CreatePublicSpaceErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
   MediaClientUnsupportedErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6708,6 +6902,9 @@ export type GetParticipantEpisodeStatusError = typeof GetParticipantEpisodeStatu
 export const GetProblemReportAvailabilityErrorSchema = TenantInvalidIdErrorSchema;
 export type GetProblemReportAvailabilityError = typeof GetProblemReportAvailabilityErrorSchema.Type;
 
+export const GetRecordingCapturePoolErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
+export type GetRecordingCapturePoolError = typeof GetRecordingCapturePoolErrorSchema.Type;
+
 export const GetRecordingErrorSchema = Schema.Union([AccessForbiddenErrorSchema, AccessUnauthenticatedErrorSchema, RecordingInvalidIdErrorSchema, RecordingNotFoundErrorSchema, ServiceInternalErrorSchema, ServiceUnavailableErrorSchema, TenantInvalidIdErrorSchema]);
 export type GetRecordingError = typeof GetRecordingErrorSchema.Type;
 
@@ -6720,6 +6917,8 @@ export const GetSpacePublicInviteArrivalErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
   MediaClientUnsupportedErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -6912,6 +7111,8 @@ export const LeaveSpacePublicInviteArrivalErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
   MediaClientUnsupportedErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -7152,6 +7353,8 @@ export const RefreshSpacePublicInviteAccessErrorSchema = Schema.Union([
   EpisodeCapacityExceededErrorSchema,
   EpisodeNotActiveErrorSchema,
   MediaClientUnsupportedErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
   RequestIdempotencyConflictErrorSchema,
   RequestInvalidErrorSchema,
   RequestInvalidIdempotencyKeyErrorSchema,
@@ -7367,6 +7570,24 @@ export const SetEpisodeDeadlineErrorSchema = Schema.Union([
 ]);
 export type SetEpisodeDeadlineError = typeof SetEpisodeDeadlineErrorSchema.Type;
 
+export const SignalCloudflareSFUErrorSchema = Schema.Union([
+  AccessForbiddenErrorSchema,
+  AccessUnauthenticatedErrorSchema,
+  EpisodeInvalidIdErrorSchema,
+  EpisodeNotFoundErrorSchema,
+  MediaConnectionNotFoundErrorSchema,
+  MediaUnavailableErrorSchema,
+  ParticipantInvalidIdErrorSchema,
+  RequestInvalidErrorSchema,
+  RequestPayloadTooLargeErrorSchema,
+  RequestRateLimitedErrorSchema,
+  ServiceInternalErrorSchema,
+  ServiceUnavailableErrorSchema,
+  SpaceInvalidIdErrorSchema,
+  TenantInvalidIdErrorSchema,
+]);
+export type SignalCloudflareSFUError = typeof SignalCloudflareSFUErrorSchema.Type;
+
 export const TestWebhookEndpointErrorSchema = Schema.Union([
   AccessForbiddenErrorSchema,
   AccessUnauthenticatedErrorSchema,
@@ -7580,6 +7801,7 @@ export const ChalkOperationPolicies = {
   rotateWebhookEndpointSecret: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   sendProblemReport: { maxBodyBytes: 37024, rateLimit: { limit: 3, policy: "problem_reports.participant", windowSeconds: 3600 } },
   setEpisodeDeadline: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
+  signalCloudflareSFU: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   testWebhookEndpoint: { rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateCloudflareSFUTracks: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },
   updateMembership: { maxBodyBytes: 1048576, rateLimit: { limit: 60, policy: "v1.authenticated.write", windowSeconds: 60 } },

@@ -45,6 +45,19 @@ To replace a broken node, taint the Droplet, apply, update `CHALK_SFU_NODES` in
 the API's settings if the address changed, and deploy. The node ID the API
 records stays the same, so bound Episodes still name it.
 
+## Upgrade order
+
+The SFU decodes requests strictly, so a field the API adds is refused as
+`400 invalid_request` by a node that predates it. Each node reports its wire
+protocol and build commit on `/readyz`, and the API places no new Episode on a node
+below the protocol it sends: the Episode starts on Cloudflare, or is refused with
+overflow off, under the placement reason `overflow_node_protocol_too_old`, and the
+API logs `node_protocol_too_old` once per node. A live Episode already bound to an
+older node is not protected by that guard. So an environment's SFU nodes run the new
+build before its API does: deploy the node (`deploy <env> <address>`), check
+`/readyz` through the deploy tunnel for the protocol, then release the API. The
+managed release deploys the API and Sync only, never the SFU.
+
 ## Connect the API
 
 The API reaches a node with its provider-bridge certificate, reissued by
@@ -63,6 +76,30 @@ CHALK_SFU_CLIENT_KEY_FILE=/run/chalk/provider-bridge/server.key
 CHALK_SFU_STUN_URLS=stun:stun.cloudflare.com:3478
 ```
 
+`CHALK_SFU_CAPTURE_ENABLED` (default `false`) lets the recorder pull from the nodes
+through capture sessions. It needs `CHALK_SFU_ENABLED=true`. While it is off, an
+Episode bound to `chalk_sfu` refuses to start a Recording. Recording also needs the
+recorder fleet: `CHALK_RECORDING_ENABLED=true` and the private provider bridge, because
+the API only registers the own-SFU capture provider when it builds the recorder fleet.
+Nightly (staging) runs with it on. Keep it off in production until M10 recording parity passes.
+
+`CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` entry is a primary;
+`standby:id=url` marks a standby, which takes a new Episode only when every primary is
+silent, draining, host-guard closed or full, and admits at most
+`CHALK_SFU_STANDBY_PACKET_BUDGET` packets/s (default 16000) for it. At least one node must be a primary.
+
+`CHALK_SFU_CLOUDFLARE_OVERFLOW` defaults to `true`: a new Episode that no node can
+take starts on Cloudflare when its Tenant has a Cloudflare application. Set it to
+`false` to refuse that Episode with a retryable `503 media.unavailable` instead.
+An Episode already bound to a node never moves either way.
+
+`CHALK_SFU_UNIFIED_SIGNALING` defaults to `true`: the join grant tells the SDK it may send
+every SFU signaling call to the one `media/sfu/signal` route, so a join pays one CORS
+preflight instead of one per call. Set it to `false` to stop advertising it; SDKs then use
+the per-operation routes again on their next join, with no web deploy. The `signal` route
+itself stays mounted. Deploy the API before the web build, because an SDK uses the route
+only when the grant advertises it.
+
 The switch lets a Space choose `chalk_sfu`, and the allowlist decides which
 Spaces may:
 
@@ -78,6 +115,42 @@ its Tenant default says `chalk_sfu`. Changing the list changes only new
 Episodes: a live Episode keeps the provider its binding pinned. Keep the real
 list in the private API settings, not in Git. Production keeps the switch off
 until the M7 canary.
+
+## Client sunset
+
+An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is
+Cloudflare-only, and a new Episode in an allowlisted Space starts on Cloudflare
+for such a client. `CHALK_SFU_CLIENT_SUNSET` can end that, but no sunset is
+planned: Chalk has no outside clients, and the only users, our sister companies,
+stay off Chalk until the own SFU is stable. The setting exists and stays unset.
+
+```sh
+CHALK_SFU_CLIENT_SUNSET=2027-01-15T00:00:00Z
+```
+
+The value is an RFC 3339 instant, and an invalid value stops the API at startup.
+Empty or missing means never, which is the default. At and after the instant, a
+client that does not declare `chalk_sfu` gets `409 media.client_unsupported` with
+the message "This call needs a newer version of Chalk. Update the app and try
+again." when it starts an Episode in a Space on the allowlist, the same answer it
+already gets when it joins a live Episode on the own SFU. A Space off the
+allowlist still starts on Cloudflare. A Tenant with media disabled still starts
+Episodes without media. The hosted MCP tools have no SDK to ask, so they count as
+capable. A public call is refused before its Space is created. A live Episode
+keeps its provider, so a client that cannot run it is refused at join, and a
+client joining a Cloudflare Episode is unaffected.
+
+Each refusal logs `event=chalk_sfu.client_refused reason=client_sunset` with no
+Tenant or user data, because the request log keeps only the 409 status. Count that
+event to see who still runs old builds after the date.
+
+To undo the setting, unset the variable and redeploy. New Episodes of old clients
+return to Cloudflare at once.
+
+To check the setting in a non-production deployment, set a past instant and
+confirm that the npm release `@q9labsai/chalk-client@5.4.1`, which does not
+declare `chalk_sfu`, gets the 409 when it creates an Episode in an allowlisted
+Space, and that its `ChalkAPIError.code` is `media.client_unsupported`.
 
 ## Run the canary
 
@@ -140,12 +213,24 @@ Run it from a clean checkout, because `deploy` builds the committed revision.
 features/media/sfu/scripts/bench/bench up      # about 5 minutes; prints CHALK_SFU_NODES and the client bundle paths
 features/media/sfu/scripts/bench/bench status  # size, age and estimated cost of every tagged Droplet
 features/media/sfu/scripts/bench/bench down    # delete the fleet and its firewall, then list the tag
-features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets older than 3 hours
+features/media/sfu/scripts/bench/bench reap    # delete bench Droplets older than 3 hours
 ```
 
-- Every Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`. The script
-  lists and deletes only Droplets with that tag in `sgp1`, so the production and
-  staging nodes and every other Droplet are out of reach.
+`features/media/sfu/scripts/bench/faults` is the fault harness of M11 package 5.
+It runs `up`, then the node-level cases against the real SFU processes: kill the
+primary, partition control and heal, return the old node, expire a hold and a
+lease, saturate the standby, and drain with a short deadline, a forced
+replacement and a drain to zero. It prints a snapshot of both nodes after each
+case, deletes the Droplets it created by ID, lists the tag, and exits 1 if a case
+failed or a `chalk-sfu-bench-fleet-*` Droplet remains. Droplets of other runs are
+listed and left alone. `--long-drain` adds the one-hour drain
+(`BENCH_LONG_DRAIN_SECONDS` shortens it for a smoke run). A run takes about 25
+minutes and costs a few cents. The cases open sessions and reserves without a
+WebRTC peer, so they prove admission, drain and restart behavior and not media
+recovery; repair and layer counters reach only the OTLP export.
+
+- Every fleet Droplet carries the tag `chalk-sfu-bench` and lives in `sgp1`.
+  `status` and `down` use this tag; `down` deletes only in `sgp1`.
 - Control (TCP 8443) and SSH accept only this machine's public IPv4 address.
   `BENCH_CONTROL_ADDRESSES` adds comma-separated IPv4 sources for control, such
   as Instabox. The media port stays open to all, like production.
@@ -160,11 +245,32 @@ features/media/sfu/scripts/bench/bench reap    # delete tagged sgp1 Droplets old
   the tag. It exits 1 if one of them remains. Another run that also wears the
   tag, such as a load generator, is left alone and reported with exit 3.
   `down --all` deletes every tagged Droplet in `sgp1`.
-- `reap [hours]` (default 3) deletes tagged `sgp1` Droplets older than the age
-  whatever their name, including a load generator another run still uses. Skip
+- `reap [hours]` (default 3) deletes Droplets older than the age with a name
+  starting `chalk-sfu-bench` **or** the tag `chalk-sfu-bench`, in any region.
+  This includes legacy rollout load generators with missing or different tags.
+  Names starting `chalk-sfu-staging` or `chalk-sfu-production` are never selected,
+  even if accidentally bench-tagged. Other names without the bench tag are untouched. Skip
   one with `--exclude <droplet id>`, repeated as needed, and list the targets
   first with `--dry-run`. It uses DigitalOcean's creation time, so it works from
   any machine, and it removes the firewall and certificates only after the
   Droplets are gone.
+
+The [SFU bench reaper workflow](../../.github/workflows/sfu-bench-reaper.yml)
+runs `bench reap 4` hourly at minute 23 UTC and supports manual dispatch on
+`master`. It uses the existing `nightly` Environment's `DIGITALOCEAN_ACCESS_TOKEN`,
+as the managed deploy workflow does, and the same `ubuntu-24.04` hosted runners
+as other scheduled workflows. Runs do not overlap. Deletions log the name and ID;
+DigitalOcean list, delete or deletion-poll errors fail the job.
+
+For a longer soak, add a tag `keep-until-<unix-seconds>` to the Droplet, where the
+suffix is the UTC Unix expiry in whole seconds (for example `keep-until-1794153600`).
+The reaper skips it only while at least one well-formed expiry is in the future.
+Expired or malformed keep tags do not prevent deletion once the Droplet is old
+enough. Remove or extend the tag as needed; it never grants a permanent exemption.
+`--exclude` applies only to that invocation, not the scheduled run. Preview with:
+
+```sh
+features/media/sfu/scripts/bench/bench reap 4 --dry-run
+```
 
 A stopped Droplet still bills, so never power one off to save money: delete it.

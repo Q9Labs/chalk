@@ -664,7 +664,7 @@ func applyFieldConstraints(schema map[string]any, schemaName string, fieldName s
 		case "http_status":
 			schema["minimum"] = 400
 			schema["maximum"] = 599
-		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off":
+		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off", "receivers_stopped":
 			schema["minimum"] = 0
 			schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
 		}
@@ -761,6 +761,11 @@ func fieldEnum(schemaName string, fieldName string) []string {
 	}
 	if schemaName == "CallStatsRequest" {
 		return httpapi.CallStatsFieldEnum(fieldName)
+	}
+	if schemaName == "CloudflareSFUSignalRequest" {
+		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
+			return values
+		}
 	}
 	if schemaName == "SFUSubscriptionsResponse" {
 		switch fieldName {

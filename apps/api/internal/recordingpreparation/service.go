@@ -34,8 +34,7 @@ func (s Service) Prepare(ctx context.Context, input Input) (Preparation, error) 
 	if err != nil {
 		return Preparation{}, err
 	}
-	// The own SFU has no capture path yet, so a Space that selects it cannot schedule one.
-	if space.ArchivedAt != nil || space.RecordingPolicy == artifactpolicy.RecordingDisabled || space.MediaPlane == string(spaces.MediaPlaneProviderChalkSFU) {
+	if space.ArchivedAt != nil || space.RecordingPolicy == artifactpolicy.RecordingDisabled {
 		return Preparation{}, ErrPolicyDenied
 	}
 	input.StartsAt = input.StartsAt.UTC().Truncate(time.Microsecond)

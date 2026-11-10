@@ -62,6 +62,8 @@ type connectionReportEvent struct {
 	ElementState     string                         `json:"element_state,omitempty"`
 	PlayResult       string                         `json:"play_result,omitempty"`
 	ReceiveCounts    *connectionReportReceiveCounts `json:"receive_counts,omitempty"`
+	ReceiversStopped *int64                         `json:"receivers_stopped,omitempty"`
+	BundleTagHeld    *bool                          `json:"bundle_tag_held,omitempty"`
 }
 
 type connectionReportReceiveCounts struct {
@@ -89,7 +91,7 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "trigger":
 		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "receivers_closed", "access_retry"}
 	case "source":
 		return []string{"microphone", "camera", "screen_audio"}
 	case "receive_state":
@@ -164,6 +166,14 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 				}
 			}
 		}
+		if event.ReceiversStopped != nil || event.BundleTagHeld != nil {
+			if event.Event != "receivers_closed" {
+				return report, rejectConnectionReport(r, "receivers_closed_event")
+			}
+			if event.ReceiversStopped != nil && (*event.ReceiversStopped < 0 || *event.ReceiversStopped > ConnectionReportMaxReceiveCount) {
+				return report, rejectConnectionReport(r, "receivers_stopped_range")
+			}
+		}
 		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo, "source": event.Source, "publication_state": event.PublicationState, "projection_state": event.ProjectionState} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
@@ -207,6 +217,27 @@ func rejectConnectionReport(r *http.Request, reason string) error {
 	return apiErrorInvalidRequest
 }
 
+// provider comes from the verified media credential, as in sdk.call_stats, so an
+// old client reports it too and a join_failed alert can name the failing provider.
+func logConnectionReport(ctx context.Context, subject accessgrants.Subject, report connectionReport) error {
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		return apiErrorInternal
+	}
+	level := slog.LevelWarn
+	message := "SDK connection failure"
+	if report.Trigger == "audio_receive_summary" {
+		level = slog.LevelInfo
+		message = "SDK audio receive summary"
+	}
+	observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
+		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
+		"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
+		"provider", subject.Provider,
+		"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
+	return nil
+}
+
 // A still-valid signed credential is enough: a failed join or expired presence
 // must be able to report without active-participant or readiness authorization.
 func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connectionReportRequest, struct{}] {
@@ -226,22 +257,7 @@ func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connec
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
-			report := request.Report
-			encoded, err := json.Marshal(report)
-			if err != nil {
-				return struct{}{}, apiErrorInternal
-			}
-			level := slog.LevelWarn
-			message := "SDK connection failure"
-			if report.Trigger == "audio_receive_summary" {
-				level = slog.LevelInfo
-				message = "SDK audio receive summary"
-			}
-			observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
-				"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
-				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
-			return struct{}{}, nil
+			return struct{}{}, logConnectionReport(ctx, subject, request.Report)
 		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(connectionReportParticipantLimit).
 		Parameters(tenantIDParameter()).
 		RequestBodyWithLimit("ConnectionReportRequest", connectionReport{}, ConnectionReportBodyLimit).

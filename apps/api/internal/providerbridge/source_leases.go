@@ -24,6 +24,7 @@ type SourceGrant struct {
 	TenantID      utilities.ID
 	EpisodeID     utilities.ID
 	Node          string
+	Generation    int64 // the Episode's binding generation
 	ParticipantID utilities.ID
 	Source        string
 	Revision      int64
@@ -106,7 +107,7 @@ func (l SourceLeases) renewEpisode(ctx context.Context, grants []SourceGrant, fa
 			controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: "screen_audio", Action: mediaplane.SourceGrant, Revision: grant.Revision})
 		}
 	}
-	node, err := l.nodes(first.Node)
+	node, err := l.nodes(first.Node, first.Generation)
 	if err == nil {
 		callCtx, cancel := context.WithTimeout(ctx, sourceLeaseCallTimeout)
 		_, err = node.ControlSources(callCtx, mediaplane.ControlSourcesInput{TenantID: first.TenantID.String(), EpisodeID: first.EpisodeID.String(), Controls: controls})

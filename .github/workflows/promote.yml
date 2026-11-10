@@ -15,7 +15,7 @@ on:
         type: string
         required: true
       scorecard_override:
-        description: Reason to accept a performance regression the scorecard gate finds; leave empty to apply the gate
+        description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
         required: false
 permissions:
@@ -39,11 +39,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Choose newest held record and verify that exact choice and rollback source
+      - name: Choose newest held record and verify its own-SFU proof, exact SHA and rollback source
         id: select
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
+          SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
           LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
           LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
         run: python3 scripts/releases/release.py select
@@ -59,10 +60,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Recheck exact selection after approval under the production lock
+      - name: Recheck exact selection and own-SFU proof after approval under the production lock
         env:
           GH_TOKEN: ${{ github.token }}
           SELECTION: ${{ needs.select.outputs.selection }}
+          SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
         run: python3 scripts/releases/release.py recheck
       - name: Select the explicit production Pages destination
         run: |
@@ -132,8 +134,11 @@ jobs:
       reuse_release_id: ${{ fromJSON(needs.select.outputs.selection).selection.release_id }}
       media_sha256: ${{ fromJSON(needs.select.outputs.selection).selection.media_sha256 }}
       web_artifact: ${{ toJSON(fromJSON(needs.select.outputs.selection).selection.web.production) }}
+      promotion_audit: ${{ toJSON(fromJSON(needs.select.outputs.selection).scorecard_override) }}
     secrets: inherit
   proof:
+    permissions:
+      contents: read
     needs: [select, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
@@ -183,6 +188,8 @@ jobs:
           export SCORECARD_EXPECTED
           features/scorecard/promote-gate.sh first artifacts/scorecard-proof.json
   scorecard-rerun:
+    permissions:
+      contents: read
     needs: [select, scorecard]
     if: needs.scorecard.outputs.over == 'true'
     uses: ./.github/workflows/real-call-proof.yml
