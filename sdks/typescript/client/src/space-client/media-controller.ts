@@ -311,7 +311,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return this.#captureStream(
       (captureSignal) => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera }, captureSignal),
       (stream) =>
-        Effect.try({ try: () => selectInitialTracks(stream, intent), catch: (cause) => cause }).pipe(
+        Effect.try({ try: () => selectInitialTracks(stream, intent, (track) => this.#selection.releaseTrack(track)), catch: (cause) => cause }).pipe(
           Effect.tap((tracks) =>
             Effect.sync(() => {
               for (const [source, track] of tracks) this.#setTrack(source, track);
@@ -323,7 +323,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
           Effect.map(() => streamFromTracks([...this.#localTracks().values()])),
           Effect.catch((cause) =>
             Effect.sync(() => {
-              stopStream(stream);
+              this.#releaseStream(stream);
               this.#publish();
             }).pipe(Effect.andThen(Effect.fail(captureError(cause, "join", "Camera or microphone permission was denied")))),
           ),
@@ -427,7 +427,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
    * because `#retireEndedMicrophone` and the camera's ended state never hand an ended track back to the media client.
    */
   #scheduleIdleRelease(source: "microphone" | "camera"): void {
-    this.#cancelIdleRelease(source);
+    if (this.#idleReleases.has(source)) return;
     this.#idleReleases.set(
       source,
       this.#connection.scheduleUnsafe(() => {
@@ -446,21 +446,23 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#cancelIdleRelease("camera");
   }
   #releaseIdle(source: "microphone" | "camera"): void {
-    if (this.#disposed || this.#sources[source].desired.enabled || this.#sources[source].localEnabled) return;
+    if (this.#disposed || this.#hasConsent(source) || this.#sources[source].localEnabled) return;
     const camera = this.#camera;
     if (source === "camera" && "owner" in camera && camera.owner.references > 0) return this.#scheduleIdleRelease(source);
-    const tracks = new Set<MediaStreamTrack>();
-    const own = source === "camera" ? (camera.status === "live" ? camera.track : undefined) : this.#tracks.get(source);
-    if (own) tracks.add(own);
+    const ownCamera = camera.status === "live" ? camera.track : undefined;
+    const own = source === "camera" ? ownCamera : this.#tracks.get(source);
+    const tracks = new Set<MediaStreamTrack>(own ? [own] : []);
     for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) tracks.add(publication.track);
-    for (const track of tracks) this.#selection.releaseTrack(track);
-    if (source === "camera") this.#discardEndedCamera();
+    // Ending the camera state releases its own track and hands the media client a clean slate for the next capture.
+    for (const track of tracks) if (track !== ownCamera || source !== "camera") this.#selection.releaseTrack(track);
+    if (source === "camera" && camera.status === "live") this.#transitionCamera({ status: "ended" });
   }
   #pauseTracks(source: MediaSource): void {
     const track = this.#track(source);
     if (track) track.enabled = false;
     for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) if (publication.source === source) publication.track.enabled = false;
     if (source === "screen" && this.#screenAudioTrack) this.#screenAudioTrack.enabled = false;
+    if (source !== "screen") this.#scheduleIdleRelease(source);
   }
   #retainPause(state: SourceWorker, next: Promise<void>): void {
     const previous = state.pause;
@@ -481,7 +483,6 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (!enabled) {
       state.localEnabled = false;
       this.#pauseTracks(source);
-      if (source !== "screen") this.#scheduleIdleRelease(source);
       if (source === "screen") {
         this.#track("screen")?.stop();
         this.#screenAudioTrack?.stop();
@@ -872,7 +873,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       track.enabled = enabled;
       if (!enabled) {
         this.#deleteTrack(source);
-        if (source === "microphone") track.stop();
+        if (source === "microphone") this.#selection.releaseTrack(track);
       }
       return enabled;
     });
@@ -1042,7 +1043,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#camera = next;
     if (!sameOwner && "owner" in previous) {
       previous.owner.cancel();
-      if (previous.status === "live") previous.track.stop();
+      if (previous.status === "live") this.#selection.releaseTrack(previous.track);
     }
     if (next.status === "live") next.track.addEventListener("ended", next.onEnded, { once: true });
     this.#publish();
@@ -1108,6 +1109,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         else {
           state.forcedRevision = state.desired.revision;
           state.localEnabled = false;
+          this.#scheduleIdleRelease("microphone");
         }
       }
       this.#publish();
@@ -1170,7 +1172,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       track.enabled = true;
       const release = () => {
         this.#pendingCaptures.delete(release);
-        track.stop();
+        this.#selection.releaseTrack(track);
       };
       this.#pendingCaptures.add(release);
       return Effect.succeed({ track, release });
@@ -1195,7 +1197,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
             try: () => {
               const state = this.#camera;
               if (abort.signal.aborted || !("owner" in state) || state.owner !== owner) {
-                track.stop();
+                this.#selection.releaseTrack(track);
                 throw this.#cancelledCaptureError();
               }
               const onEnded = () => this.#handleCameraEnded(track);
@@ -1259,7 +1261,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       const cancel = () => {
         cancelled = true;
         preparation.abort();
-        stopStream(captured);
+        this.#releaseStream(captured);
         Deferred.doneUnsafe(cancellation, Effect.fail(this.#cancelledCaptureError()));
       };
       this.#pendingCaptures.add(cancel);
@@ -1271,7 +1273,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
         captured = stream;
         // Browser capture cannot be aborted; this owner must dispose its late result.
         if (cancelled || this.#ports?.media.getSnapshot().connection.phase === "stopped") {
-          stopStream(stream);
+          this.#releaseStream(stream);
           throw this.#cancelledCaptureError();
         }
         return stream;
@@ -1296,7 +1298,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#pendingCaptures.clear();
     this.#screenAudioTrack?.stop();
     this.#screenAudioTrack = null;
-    for (const track of this.#tracks.values()) track.stop();
+    for (const track of this.#tracks.values()) this.#selection.releaseTrack(track);
+  }
+  #releaseStream(stream: MediaStream | null): void {
+    for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") this.#selection.releaseTrack(track);
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
@@ -1309,7 +1314,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
               try: () => {
                 const track = stream.getTracks().find((candidate) => candidate.kind === (source === "microphone" ? "audio" : "video"));
                 if (!track) throw new TypeError(`Media capture did not return a ${source} track`);
-                for (const candidate of stream.getTracks()) if (candidate !== track) candidate.stop();
+                for (const candidate of stream.getTracks()) if (candidate !== track) this.#selection.releaseTrack(candidate);
                 return track;
               },
               catch: (cause) => cause,
@@ -1342,7 +1347,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       Effect.andThen(
         Effect.sync(() => {
           if (this.#track(source) === track) this.#deleteTrack(source);
-          track.stop();
+          this.#selection.releaseTrack(track);
         }),
       ),
     );
@@ -1679,7 +1684,7 @@ function refusedBySync(cause: unknown): boolean {
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
-function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>): Map<"microphone" | "camera", MediaStreamTrack> {
+function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>, release: (track: MediaStreamTrack) => void): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
   const selected = new Map<"microphone" | "camera", MediaStreamTrack>();
   for (const [source, kind] of [
@@ -1691,9 +1696,9 @@ function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"micro
     if (track) selected.set(source, track);
   }
   const retained = new Set(selected.values());
-  for (const track of tracks) if (!retained.has(track)) track.stop();
+  for (const track of tracks) if (!retained.has(track)) release(track);
   if (selected.size !== Number(intent.microphone) + Number(intent.camera)) {
-    for (const track of retained) track.stop();
+    for (const track of retained) release(track);
     throw new TypeError("Media capture did not return every requested track");
   }
   return selected;

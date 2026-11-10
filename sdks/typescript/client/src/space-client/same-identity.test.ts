@@ -160,6 +160,7 @@ it("starts muted when a known sibling is still sending after disappearing from p
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
+  const releaseTrack = vi.fn((stopped: MediaStreamTrack) => stopped.stop());
   let published: MediaStream | undefined;
   const start = vi.fn(async (_stream: MediaStream, beforePublish?: () => Promise<MediaStream>) => {
     await held;
@@ -167,7 +168,7 @@ it("starts muted when a known sibling is still sending after disappearing from p
   });
   const client = createSpaceClientForPlatform(
     { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+    { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack, getUserMedia: async () => stream([mic]) }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
   );
   try {
     const joining = client.join({ microphone: true, camera: false });
@@ -177,6 +178,7 @@ it("starts muted when a known sibling is still sending after disappearing from p
     await joining;
     expect(published?.getTracks()).toHaveLength(0);
     expect(mic.stop).toHaveBeenCalled();
+    expect(releaseTrack).toHaveBeenCalledWith(mic);
     expect(client.getSnapshot().media.microphoneMutedByOtherDevice).toBe(true);
   } finally {
     release();

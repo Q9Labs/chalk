@@ -8,8 +8,8 @@ import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessL
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
 import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
-import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
-import { stopStream, streamFromTracks } from "./media-devices";
+import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionMediaDevices, type ConnectionSyncClient } from "./dependencies";
+import { streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
@@ -490,7 +490,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent));
+            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices.releaseTrack));
             stream = captured.stream;
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
@@ -563,7 +563,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             Effect.matchEffect({
               onFailure: (cause) =>
                 Effect.gen(function* () {
-                  stopStream(stream);
+                  for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") platform.mediaDevices.releaseTrack(track);
                   const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   const failure = yield* resolveMediaRejection(originalFailure);
                   if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
@@ -1369,6 +1369,7 @@ function acquireInitialMedia(
     microphone: boolean;
     camera: boolean;
   }>,
+  releaseTrack: ConnectionMediaDevices["releaseTrack"],
 ): Effect.Effect<
   {
     stream: MediaStream;
@@ -1411,7 +1412,7 @@ function acquireInitialMedia(
       }).pipe(
         Effect.onInterrupt(() =>
           Effect.sync(() => {
-            for (const track of tracks) track.stop();
+            for (const track of tracks) releaseTrack(track);
           }),
         ),
       );

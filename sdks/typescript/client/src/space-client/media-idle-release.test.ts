@@ -150,9 +150,118 @@ describe("Leave", () => {
 
     await client.leave();
 
-    expect(releaseTrack.mock.calls.map(([track]) => track)).toEqual([microphone, camera]);
+    expect(releaseTrack).toHaveBeenCalledWith(microphone);
+    expect(releaseTrack).toHaveBeenCalledWith(camera);
     expect(microphone.enabled).toBe(false);
     expect(camera.enabled).toBe(false);
     client.dispose();
+  });
+});
+
+describe.each(["microphone", "camera"] as const)("a %s that Sync or the device turns off", (source) => {
+  it("is released 30 s after a moderator mute, not before", async () => {
+    const { clock, client, captured, releaseTrack, base } = await rig(source);
+    try {
+      base.emitMediaPause({ source, revision: 2 });
+      clock.advance(IDLE_MS - 1);
+      expect(releaseTrack).not.toHaveBeenCalled();
+      clock.advance(1);
+      expect(releaseTrack).toHaveBeenCalledExactlyOnceWith(captured[0]);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("is kept when the user turns it back on within the 30 s", async () => {
+    const { clock, client, set, releaseTrack, base } = await rig(source);
+    try {
+      base.emitMediaPause({ source, revision: 2 });
+      clock.advance(IDLE_MS - 1);
+      await set(true);
+      clock.advance(IDLE_MS * 2);
+      expect(releaseTrack).not.toHaveBeenCalled();
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("is released when the client is disposed without Leave", async () => {
+    const { client, captured, releaseTrack } = await rig(source);
+    client.dispose();
+    expect(releaseTrack).toHaveBeenCalledWith(captured[0]);
+  });
+});
+
+it("releases a microphone the OS muted, 30 s after the interruption", async () => {
+  const { clock, client, captured, releaseTrack } = await rig("microphone");
+  try {
+    const microphone = captured[0];
+    if (!microphone) throw new Error("The rig captured no microphone");
+    Object.defineProperty(microphone, "muted", { value: true });
+    microphone.dispatchEvent(new Event("mute"));
+    clock.advance(IDLE_MS);
+    expect(releaseTrack).toHaveBeenCalledExactlyOnceWith(microphone);
+  } finally {
+    client.dispose();
+  }
+});
+
+describe("a capture that finishes after nobody wants it", () => {
+  it("releases a microphone that resolves after the client is disposed", async () => {
+    const base = createCoreTestPlatform();
+    const late = captureTrack("audio");
+    const pending = Promise.withResolvers<MediaStream>();
+    const releaseTrack = vi.fn();
+    const getUserMedia = vi.fn(() => pending.promise);
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...base, dependencies: { ...base.dependencies, mediaDevices: { getUserMedia, getDisplayMedia: getUserMedia, enumerateDevices: async () => [], releaseTrack } } });
+    await client.join({ microphone: false, camera: false });
+    const enabling = client.media.setMicrophoneEnabled(true).catch(() => "rejected");
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
+    client.dispose();
+    pending.resolve(mediaStream(late));
+    await enabling;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(releaseTrack).toHaveBeenCalledWith(late);
+  });
+});
+
+describe("a join that fails after the devices opened", () => {
+  it("releases the tracks it captured", async () => {
+    const base = createCoreTestPlatform();
+    const microphone = captureTrack("audio");
+    const releaseTrack = vi.fn();
+    const client = createSpaceClientForPlatform(
+      { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+      {
+        ...base,
+        dependencies: {
+          ...base.dependencies,
+          mediaDevices: { getUserMedia: async () => mediaStream(microphone), getDisplayMedia: async () => mediaStream(microphone), enumerateDevices: async () => [], releaseTrack },
+          createSyncClient: () => ({ ...base.sync, start: async () => Promise.reject(new Error("Sync is down")) }),
+        },
+      },
+    );
+    await client.join({ microphone: true, camera: false }).catch(() => undefined);
+    expect(releaseTrack).toHaveBeenCalledWith(microphone);
+    client.dispose();
+  });
+
+  it("releases the microphone it opened when the camera capture is cut off by Leave", async () => {
+    const base = createCoreTestPlatform();
+    const microphone = captureTrack("audio");
+    const releaseTrack = vi.fn();
+    const camera = Promise.withResolvers<MediaStream>();
+    const getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
+      if (constraints.audio && constraints.video) throw new DOMException("No camera", "NotFoundError");
+      if (constraints.audio) return mediaStream(microphone);
+      return camera.promise;
+    });
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...base, dependencies: { ...base.dependencies, mediaDevices: { getUserMedia, getDisplayMedia: getUserMedia, enumerateDevices: async () => [], releaseTrack } } });
+    const joining = client.join({ microphone: true, camera: true }).catch(() => undefined);
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(3));
+    client.dispose();
+    camera.resolve(mediaStream(captureTrack("video")));
+    await joining;
+    expect(releaseTrack).toHaveBeenCalledWith(microphone);
   });
 });
