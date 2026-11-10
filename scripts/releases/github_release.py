@@ -179,6 +179,22 @@ class GitHub:
             page += 1
         return []
 
+    def cuts_on(self, day):
+        """Every passed nightly cut recorded on the UTC date `day`, newest first: `deployments` stops at the newest one."""
+        cuts = []
+        page = 1
+        while True:
+            items = self.request(f'deployments?environment=nightly&task=nightly-cut&per_page=100&page={page}')
+            for item in items:
+                created = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date()
+                if created < day:
+                    return cuts
+                if created == day:
+                    cuts.append(item)
+            if len(items) < 100:
+                return cuts
+            page += 1
+
     def dispatch_nightly(self):
         route = f'repos/{self.repository}/actions/workflows/nightly.yml/dispatches'
         self._call(['gh', 'api', route, '--method', 'POST', '--input', '-'],

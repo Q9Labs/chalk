@@ -181,7 +181,7 @@ def plan(github, args):
     if args.manual:
         require(github.has_green_gate(target), f'latest master Gate for {target} is not successful '
                 f'(still queued or running, or superseded); newest commit with a passing push Gate: {newest_green}')
-    result = dict(should_cut=cut, target_sha=target, transcribe=first_cut_of_day(records, now, args.manual))
+    result = dict(should_cut=cut, target_sha=target, transcribe=first_cut_of_day(github.cuts_on(now.date()), now, args.manual))
     if cut:
         held = held_candidates(records, held=False)
         baseline = payload(held[0]) if held else previous_production(github)

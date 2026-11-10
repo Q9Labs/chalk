@@ -607,6 +607,18 @@ class TranscribeOncePerDayTests(unittest.TestCase):
         skipped = self.record('nightly-cut', '2026-11-10T00:05:00Z', transcribed=False)
         self.assertTrue(first_cut_of_day([skipped], self.NOW))
 
+    def test_a_transcribing_cut_counts_when_a_later_cut_the_same_day_did_not(self):
+        # `deployments` returns only the newest passed cut, so the day's cuts come from `cuts_on`.
+        newest = dict(id=3, created_at='2026-11-10T09:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=False))
+        earlier = dict(id=2, created_at='2026-11-10T03:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        yesterday = dict(id=1, created_at='2026-11-09T22:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        github.request = Mock(return_value=[newest, earlier, yesterday])
+        cuts = github.cuts_on(self.NOW.date())
+        self.assertEqual([item['id'] for item in cuts], [3, 2])
+        self.assertFalse(first_cut_of_day(cuts, self.NOW))
+
     def test_a_manual_cut_always_transcribes(self):
         self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))
 
