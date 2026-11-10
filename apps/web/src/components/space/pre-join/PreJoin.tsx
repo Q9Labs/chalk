@@ -3,7 +3,7 @@ import { Loading01Icon } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
-import { BottomSheet } from "./Overlay";
+import { BottomSheet, SAFE_BOTTOM } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
 
 const STACKED = "(max-width: 899px)";
@@ -105,7 +105,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         onChange={(event) => onDisplayNameChange(event.target.value)}
         className={`h-12 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) ${joining ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-app-text)]"} outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]`}
       />
-      <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pb-[max(env(safe-area-inset-bottom),var(--space-6))] pt-3" : "grid gap-2"}>
+      <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pt-3" : "grid gap-2"} style={stacked ? SAFE_BOTTOM : undefined}>
         <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 w-full" style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }} disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
@@ -116,7 +116,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
             "Join call"
           )}
         </button>
-        <p role="status" className="min-h-[18px] text-center text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">
+        <p role="status" style={{ minHeight: "var(--space-5)" }} className="text-center text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">
           {joining ? null : joinNote(devices.joinOptions)}
         </p>
       </div>
@@ -143,7 +143,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
     );
   return (
     <div className="flex h-full min-h-0 w-full justify-center overflow-y-auto bg-[var(--chalk-app-canvas)] px-6 py-10 text-[var(--chalk-app-text)]">
-      <div className="m-auto grid grid-cols-[600px_320px] items-start gap-14">
+      <div className="m-auto grid items-start gap-14" style={{ gridTemplateColumns: "600px 320px" }}>
         <div className="grid gap-3">
           {preview}
           {rows}

@@ -131,7 +131,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
   const summary: RowView = { ...microphone, kind: "microphone", caption: "Devices", help: undefined };
   return (
     <div className={cn("rounded-2xl bg-[var(--chalk-raised)] p-1 ring-1 ring-[var(--chalk-line)]", locked && "pointer-events-none opacity-55")}>
-      <button type="button" className={cn(rowClass, "min-h-[60px]")} aria-haspopup="dialog" onClick={granted ? () => setOpen(true) : onNeedAccess}>
+      <button type="button" className={rowClass} aria-haspopup="dialog" onClick={granted ? () => setOpen(true) : onNeedAccess}>
         <RowBody view={summary} />
       </button>
       {open ? (
