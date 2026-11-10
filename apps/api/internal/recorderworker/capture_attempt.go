@@ -580,7 +580,8 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
-	firstPacketAt := bindAnchors(writer, late, readers, nil)
+	firstPacketAt := bindAnchors(writer, readers, nil)
+	writer.startAt(firstPacketAt)
 	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt)
 	if startErr != nil {
 		return finish(startErr, writer)
@@ -679,7 +680,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel(nil)
 				return a.finishSuccess(writer)
 			}
-			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, late, updatedReaders, readers)); err != nil {
+			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, updatedReaders, readers)); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
@@ -845,15 +846,16 @@ func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []capturepla
 	return bound, missing, nil
 }
 
-// bindAnchors returns the first-packet time for each track that is new in next
-// while a planned track is still silent. The bind then waited before any reader
-// started, so a reader's first read can be seconds after the track's first
-// packet. Stamping with the bind time keeps all of these tracks on one clock
-// basis. With nothing silent the readers are unchanged.
-func bindAnchors(writer *captureBundleWriter, late *lateTrackWatch, next, previous map[string]CaptureMediaTrack) map[string]time.Time {
-	if len(late.watching) == 0 {
-		return nil
-	}
+// bindAnchors returns the first-packet time for each track that is new in next.
+// Binding waits for every planned track before any reader starts, and each
+// bound track queues its packets meanwhile, so a reader's first read comes
+// after the track's first packet: by the rest of the bind for an early track,
+// and by seconds when a planned track is silent. Stamping a track with the time
+// the peer bound it keeps its place on the Recording's clock. Stamping the read
+// instead would give every track one shared start, and an audio track bound
+// hundreds of milliseconds before a camera would sound that much later than the
+// picture it belongs to.
+func bindAnchors(writer *captureBundleWriter, next, previous map[string]CaptureMediaTrack) map[string]time.Time {
 	anchors := make(map[string]time.Time, len(next))
 	for mid, track := range next {
 		if before, ok := previous[mid]; ok && sameCaptureBinding(before, track) {
@@ -1218,10 +1220,11 @@ func (a *PionCaptureAttempt) consumeAuthorizedPacket(ctx context.Context, writer
 		return nil
 	}
 	if !a.ready {
-		if err := a.emitReadyAt(ctx, false, event.at); err != nil {
+		origin := writer.firstPacketOrigin(event.at)
+		if err := a.emitReadyAt(ctx, false, origin); err != nil {
 			return err
 		}
-		writer.setOrigin(event.at)
+		writer.setOrigin(origin)
 	}
 	return writer.addPacket(ctx, event.track, event.packet, event.at)
 }
@@ -1676,6 +1679,7 @@ type captureBundleWriter struct {
 	clocks         map[string]*captureTrackClock
 	lastMono       int64
 	recoveryStart  time.Time
+	earliestAnchor time.Time
 	lastMedia      int64
 	terminalGap    bool
 }
@@ -1711,6 +1715,25 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 func (w *captureBundleWriter) clampAnchor(at time.Time) time.Time {
 	if at.Before(w.recoveryStart) {
 		return w.recoveryStart
+	}
+	return at
+}
+
+// startAt records the earliest first-packet time among the initial readers. The
+// Recording's clock starts there, not at the first event the loop happens to
+// take, so a track stamped earlier than that event keeps its offset.
+func (w *captureBundleWriter) startAt(anchors map[string]time.Time) {
+	for _, at := range anchors {
+		if w.earliestAnchor.IsZero() || at.Before(w.earliestAnchor) {
+			w.earliestAnchor = at
+		}
+	}
+}
+
+// firstPacketOrigin returns the Recording's start for a first event taken at at.
+func (w *captureBundleWriter) firstPacketOrigin(at time.Time) time.Time {
+	if !w.earliestAnchor.IsZero() && w.earliestAnchor.Before(at) {
+		return w.earliestAnchor
 	}
 	return at
 }
