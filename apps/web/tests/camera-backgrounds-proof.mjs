@@ -92,6 +92,7 @@ try {
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
     await openPicker();
     await pickerRow("Blur").click();
+    if (phone) { await page.waitForTimeout(3000); console.log("DEBUG", JSON.stringify(await page.locator("[role=dialog]").first().innerText({ timeout: 2000 }).catch((e) => String(e).slice(0, 60))), JSON.stringify(await page.locator("[role=radio]").evaluateAll((els) => els.map((e) => e.textContent + ":" + e.getAttribute("aria-checked") + ":" + e.disabled)))); }
     const blurred = await waitForProcessedPixels("blur", [original]);
     await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
     await page.keyboard.press("Escape");
