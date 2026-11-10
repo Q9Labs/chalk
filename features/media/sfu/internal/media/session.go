@@ -668,7 +668,10 @@ func (s *Session) park(sub *subscription) {
 	sec := sub.section
 	sec.current.CompareAndSwap(sub, nil)
 	binding := sub.track.binding.Load()
-	if binding == nil {
+	// A capture session never reuses a section. The recorder keeps one receiver per mid and follows
+	// the node's new track through the browser-side track event, which a reused SSRC does not fire,
+	// so its replacement subscription would never find its track. It gets a fresh section, as before.
+	if binding == nil || s.kind == kindCapture {
 		_ = sec.transceiver.Stop()
 		return
 	}

@@ -402,6 +402,39 @@ func TestReuseCyclesNeverRepeatARepairSequenceNumber(t *testing.T) {
 	}
 }
 
+// A capture session (the recorder) never reuses a section: its receiver binds a track on the
+// track event of a new SSRC, and a reused section fires none. Each re-pull gets a fresh mid and a
+// fresh SSRC, as before section reuse.
+func TestACaptureSessionGetsAFreshSectionForEveryPull(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	publishMedia(t, publisher)
+	scope := testScope("recorder", 1)
+	created, err := node.CreateCaptureSession("capture-reuse", scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capture, err := node.Session(created.ConnectionID, scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer := newTestPeer(t)
+
+	seen := map[string]bool{}
+	const cycles = 5
+	for cycle := range cycles {
+		mid, _ := pullAndAnswer(t, capture, publisher, viewer, "cam")
+		if seen[mid] {
+			t.Fatalf("cycle %d: the capture session reused mid %s, want a fresh section for every pull", cycle, mid)
+		}
+		seen[mid] = true
+		forceClose(t, capture, mid)
+	}
+	if got := len(capture.free); got != 0 {
+		t.Fatalf("the capture session parked %d sections, want none", got)
+	}
+}
+
 // A pull that took a parked section while the session closed must not leave the section's sender on
 // the closed connection.
 func TestAttachingAParkedSectionToAClosedSessionFails(t *testing.T) {
