@@ -109,6 +109,13 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       const bytes = Uint8Array.from(atob(speech), (character) => character.charCodeAt(0));
       const phrase = await context.decodeAudioData(bytes.buffer);
       const destination = context.createMediaStreamDestination();
+      // A destination with no input sends no RTP at all, so the Capture would wait for the microphone's first packet and the call would never start.
+      const idle = context.createOscillator();
+      const idleGain = context.createGain();
+      idleGain.gain.value = 0;
+      idle.connect(idleGain);
+      idleGain.connect(destination);
+      idle.start();
       window.proofAudio = { context, phrase, destination };
       const tone = (hz, level) => {
         const oscillator = context.createOscillator();
