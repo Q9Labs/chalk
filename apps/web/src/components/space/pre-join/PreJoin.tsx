@@ -148,7 +148,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           {preview}
           {rows}
         </div>
-        <div className="grid h-[338px] content-center gap-5">
+        <div className="flex h-[338px] flex-col justify-center gap-5">
           {title}
           {form}
         </div>
