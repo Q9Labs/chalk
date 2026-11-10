@@ -5,8 +5,9 @@ import { BoardIcon } from "./BoardIcon";
 import type { BoardToast } from "./board-toasts";
 
 /** Whoever the board belongs to loses it when it is cleared, so the dialog says how many people that is. */
-export function clearConfirmBody(people: number): string {
-  return people > 1 ? `Everything on it goes for the ${people} people here. You can undo right after.` : "Everything on it goes. You can undo right after.";
+export function clearConfirmBody(people: number, canUndo: boolean): string {
+  const goes = people > 1 ? `Everything on it goes for the ${people} people here.` : "Everything on it goes.";
+  return canUndo ? `${goes} You can undo right after.` : goes;
 }
 
 /**
@@ -47,7 +48,7 @@ export function useClearBoard({
         <AlertDialog.Backdrop className="chalk-board-scrim" />
         <AlertDialog.Popup className="chalk-board-dialog" data-sheet={sheet || undefined} initialFocus={cancel}>
           <AlertDialog.Title className="chalk-board-dialog-title">Clear the board for everyone?</AlertDialog.Title>
-          <AlertDialog.Description className="chalk-board-dialog-body">{clearConfirmBody(people)}</AlertDialog.Description>
+          <AlertDialog.Description className="chalk-board-dialog-body">{clearConfirmBody(people, canDraw)}</AlertDialog.Description>
           <div className="chalk-board-dialog-actions">
             <AlertDialog.Close ref={cancel} type="button">
               Cancel

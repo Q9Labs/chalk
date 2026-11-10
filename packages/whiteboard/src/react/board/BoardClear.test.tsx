@@ -80,3 +80,12 @@ it("says so plainly when the clear fails, and offers no Undo", async () => {
   await press("Clear board");
   expect(toast).toHaveBeenCalledWith({ type: "error", message: "Could not clear the board. Try again." });
 });
+
+it("does not promise an Undo to someone who cannot draw", async () => {
+  const engine = { clearWithUndo: vi.fn(async () => async () => undefined) };
+  await act(async () => root.render(<Host engine={engine} toast={vi.fn()} people={3} canDraw={false} />));
+  await press("Open clear");
+  const body = document.querySelector('[role="alertdialog"]')?.textContent;
+  expect(body).toContain("Everything on it goes for the 3 people here.");
+  expect(body).not.toContain("undo");
+});

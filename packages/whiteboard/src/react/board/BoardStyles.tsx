@@ -167,6 +167,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-stroke[data-popup-open], .chalk-board-stroke[aria-expanded="true"] {background:var(--chalk-pressed) !important;}
 .chalk-board-stroke-disc {width:20px; height:20px; flex:none; border-radius:50%; box-shadow:0 0 0 1.5px var(--chalk-line-strong);}
 .chalk-board-stroke-bar {width:14px; flex:none; border-radius:99px; background:var(--chalk-text);}
+@media (max-width:374px) {.chalk-board-zoom {translate:0 -56px;}}
 @media (pointer:coarse) {.chalk-board-stroke {height:44px; min-width:56px; padding:0 10px;}}
 .chalk-board[data-presentation="mobile"] .chalk-board-stroke {height:44px; min-width:56px; padding:0 10px;}
 .chalk-board-grip {width:22px; height:40px; flex:none; display:grid !important; place-items:center; border-radius:12px; color:var(--chalk-muted-text) !important; cursor:grab !important; touch-action:none;}

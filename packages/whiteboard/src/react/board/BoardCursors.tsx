@@ -101,7 +101,7 @@ export function BoardCursors({
         if (!state.tag) {
           const name = element.querySelector<HTMLElement>(".chalk-board-cursor-name");
           const avatar = element.querySelector<HTMLElement>(".chalk-board-cursor-avatar");
-          if (name) state.tag = { width: Math.max(NAME_INDENT_PX + name.offsetWidth, avatar?.offsetWidth ?? 0), height: Math.max(name.offsetHeight, avatar?.offsetHeight ?? 0) };
+          if (name && name.textContent === state.name.split(" ")[0]) state.tag = { width: Math.max(NAME_INDENT_PX + name.offsetWidth, avatar?.offsetWidth ?? 0), height: Math.max(name.offsetHeight, avatar?.offsetHeight ?? 0) };
         }
         const flip = state.tag ? tagFlip(screen, state.tag, viewport) : { x: false, y: false };
         element.dataset.flipX = String(flip.x);
