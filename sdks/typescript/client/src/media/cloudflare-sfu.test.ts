@@ -2294,6 +2294,95 @@ it.each(["microphone", "camera"] as const)("ownership: production replacement fe
   }
 });
 
+describe("a withdrawn receiver that owns the BUNDLE transport", () => {
+  // A guest that joins second pulls the others' media before its own publish, so the first receiver is m-section 0, the
+  // BUNDLE tag. Stopping a receiver moves no SDP, so the guest's NEXT offer (its own mute) is the one that rejects that
+  // m-section. Chrome drops the whole transport when the rejected section is the tag, and the SFU session goes with it.
+  type Remote = { readonly participantId: string; readonly source: "microphone" | "camera"; readonly publicationId: string };
+  const remote = (name: string, participantId: string, source: Remote["source"]): Remote => ({ participantId, source, publicationId: versionedPublicationID(name, source === "camera" ? "1" : "0", source) });
+
+  async function joinSecond(publications: readonly Remote[]) {
+    const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
+    const harness = createHarness({ replaceMediaConnection });
+    harness.transport.uniqueRemoteMids = true;
+    harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+    const stream = fakeStream(new FakeTrack("microphone", "audio"));
+    await harness.client.start(stream, async () => {
+      await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks).toHaveLength(publications.length));
+      return stream;
+    });
+    const peer = harness.peers[0]!;
+    peer.dropsTransportWhenTagRejected = true;
+    const section = (mid: string) => peer.getTransceivers().find((transceiver) => transceiver.mid === mid)!;
+    const withdraw = async (remaining: readonly Remote[]) => {
+      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: remaining };
+      harness.client.remotePublicationsChanged(remaining.map((publication) => ({ ...publication, enabled: true })));
+      await harness.client.refreshRemotePublications();
+    };
+    // The guest's own mute is the next offer after the withdrawal.
+    const muteOwnMicrophone = async () => {
+      const offers = peer.descriptionLog.length;
+      await harness.client.closeForcedLocalPublication("microphone");
+      expect(peer.descriptionLog.slice(offers)).toContain("setLocal:offer");
+    };
+    return { harness, peer, section, withdraw, muteOwnMicrophone, replaceMediaConnection };
+  }
+
+  it("is parked, not stopped, so the guest's next offer keeps the transport", async () => {
+    const speaker = remote("bundle-tag-audio", "participant-2", "microphone");
+    const call = await joinSecond([speaker]);
+    try {
+      expect(call.peer.localDescription?.sdp).toMatch(/a=group:BUNDLE remote-0 0\b/);
+      await call.withdraw([]);
+      await call.muteOwnMicrophone();
+      expect(call.peer.transportDropped).toBe(false);
+      expect(call.peer.connectionState).toBe("connected");
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+      expect(call.section("remote-0").direction).toBe("inactive");
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  it("is stopped as before when another receiver owns the transport", async () => {
+    const tag = remote("bundle-tag-first", "participant-2", "microphone");
+    const leaving = remote("bundle-tag-second", "participant-3", "microphone");
+    const call = await joinSecond([tag, leaving]);
+    try {
+      await call.withdraw([tag]);
+      expect(call.section("remote-1").direction).toBe("stopped");
+      expect(call.section("remote-0").direction).toBe("recvonly");
+      await call.muteOwnMicrophone();
+      expect(call.peer.transportDropped).toBe(false);
+      expect(call.peer.connectionState).toBe("connected");
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  it("is parked when a hidden video tile is unpulled and its camera is the first thing pulled", async () => {
+    const camera = remote("bundle-tag-video", "participant-2", "camera");
+    vi.useFakeTimers();
+    setVideoTileVisibility(camera.publicationId, { width: 640, height: 360 });
+    const call = await joinSecond([camera]);
+    try {
+      expect(call.peer.localDescription?.sdp).toMatch(/a=group:BUNDLE remote-0 0\b/);
+      setVideoTileVisibility(camera.publicationId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      expect(call.harness.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ publicationId: camera.publicationId })] })]);
+      await call.muteOwnMicrophone();
+      expect(call.peer.transportDropped).toBe(false);
+      expect(call.peer.connectionState).toBe("connected");
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+      expect(call.section("remote-0").direction).toBe("inactive");
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+});
+
 it.each(["microphone", "camera"] as const)("replaces conservatively on %s retirement without BUNDLE information", async (source) => {
   const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
   const harness = createHarness({ replaceMediaConnection });
@@ -4907,6 +4996,12 @@ class FakePeerConnection extends EventTarget {
   readonly transceiverInits: RTCRtpTransceiverInit[] = [];
   refuseSimulcast = false;
   refuseSimulcastOffer = false;
+  /** Chrome drops the whole transport when an offer rejects the m-section that owns the BUNDLE group (the first one). */
+  dropsTransportWhenTagRejected = false;
+  transportDropped = false;
+  /** Every m-section in the order the browser added it, local and remote, so the BUNDLE group has a real tag. */
+  readonly #sectionMids: string[] = [];
+  #bundleTag: string | undefined;
   readonly #activeTransceivers = new Set<RTCRtpTransceiver>();
   readonly #autoConnect: boolean;
   readonly #transceivers: RTCRtpTransceiver[] = [];
@@ -4939,13 +5034,16 @@ class FakePeerConnection extends EventTarget {
     let transceiver: RTCRtpTransceiver;
     transceiver = {
       mid: String(this.#transceivers.length),
+      direction: init.direction ?? "sendrecv",
       sender,
       receiver: { track: new FakeTrack("unused-receiver", track.kind) },
       stop: () => {
         if (this.throwOnCleanup) throw new Error("transceiver stop failed");
+        transceiver.direction = "stopped" as RTCRtpTransceiverDirection;
         this.#activeTransceivers.delete(transceiver);
       },
     } as unknown as RTCRtpTransceiver;
+    this.#sectionMids.push(transceiver.mid!);
     this.#transceivers.push(transceiver);
     this.#activeTransceivers.add(transceiver);
     return transceiver;
@@ -4957,10 +5055,10 @@ class FakePeerConnection extends EventTarget {
   async createOffer(options?: RTCOfferOptions): Promise<RTCSessionDescriptionInit> {
     this.offerOptions.push(options);
     if (this.refuseSimulcastOffer && this.getSenders().some((sender) => sender.track && sender.getParameters().encodings.length > 1)) throw new DOMException("Simulcast unsupported", "NotSupportedError");
-    return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#transceivers.map((transceiver) => transceiver.mid).join(" ")}\r\n` };
+    return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
   async createAnswer(): Promise<RTCSessionDescriptionInit> {
-    return { type: "answer", sdp: `v=0\r\na=group:BUNDLE ${this.#transceivers.map((transceiver) => transceiver.mid).join(" ")}\r\n` };
+    return { type: "answer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
   availableOutgoingBitrate: number | undefined;
   refuseSenderParameters = false;
@@ -4985,6 +5083,12 @@ class FakePeerConnection extends EventTarget {
       this.signalingState = "stable";
     } else if (description?.type === "offer") {
       this.signalingState = "have-local-offer";
+      this.#bundleTag ??= this.#sectionMids[0];
+      const tag = this.getTransceivers().find((transceiver) => transceiver.mid === this.#bundleTag);
+      if (this.dropsTransportWhenTagRejected && (tag?.direction as string | undefined) === "stopped") {
+        this.transportDropped = true;
+        this.setStates("new", "new");
+      }
     } else if (description?.type === "answer") {
       this.signalingState = "stable";
     }
@@ -5023,7 +5127,17 @@ class FakePeerConnection extends EventTarget {
   }
   emitTrack(mid: string, track: FakeTrack): void {
     this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
-    this.#remoteTransceivers.push({ mid, receiver: this.#receivers.get(mid), stop: () => track.stop() } as unknown as RTCRtpTransceiver);
+    this.#sectionMids.push(mid);
+    const transceiver = {
+      mid,
+      direction: "recvonly",
+      receiver: this.#receivers.get(mid),
+      stop: () => {
+        transceiver.direction = "stopped";
+        track.stop();
+      },
+    };
+    this.#remoteTransceivers.push(transceiver as unknown as RTCRtpTransceiver);
     const event = new Event("track");
     Object.defineProperties(event, {
       track: { value: track as unknown as MediaStreamTrack },
