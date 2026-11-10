@@ -102,7 +102,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
   try {
     await dependencies.control.heartbeat({ assignment, context: journey });
     const chunkDurationSeconds = (assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs) / 1_000;
-    if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new Error("audio duration bound exceeded");
+    if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new AssignmentError("audio duration bound exceeded");
     const audio = await fetchAudioChunk({
       fetch: dependencies.fetch,
       url: assignment.chunk.inputUrl,
@@ -208,15 +208,14 @@ export async function reportAssignmentFailure(error: unknown, assignment: Transc
   const terminal = kind === "nonretryable" || kind === "schema";
   if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
   const errorCode = safeErrorCode(error);
-  logger.warn("dispatcher_assignment_failed", { errorCode, kind, terminal, attempt: assignment.attempt, ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}), reason: failureReason(error) });
+  logger.warn("dispatcher_assignment_failed", { jobId: assignment.jobId, journeyId: journey.journeyId, errorCode, kind, terminal, attempt: assignment.attempt, ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}), reason: failureReason(error) });
   await safeRetry(control, assignment, journey, errorCode, terminal, logger);
 }
 
-// Messages of our own errors are fixed strings; library errors can carry URLs, so those log only their class.
+// Only our own errors have fixed messages; anything else can carry a signed URL or provider data, so it logs only its class.
 function failureReason(error: unknown): string {
   if (error instanceof AssignmentError || error instanceof ProviderError) return error.message;
-  if (error instanceof Error) return error.constructor === Error ? error.message : error.name;
-  return typeof error;
+  return error instanceof Error ? error.name : typeof error;
 }
 
 async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
