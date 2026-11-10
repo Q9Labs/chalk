@@ -6,14 +6,6 @@ on:
         description: Exact held release revision approved for promotion
         type: string
         required: true
-      leave_baseline_median_ms:
-        description: Same-session 5.2.6 production Leave median in milliseconds
-        type: string
-        required: true
-      leave_baseline_evidence_sha256:
-        description: SHA-256 of the encrypted baseline comparison evidence
-        type: string
-        required: true
       scorecard_override:
         description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
@@ -45,8 +37,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
           SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
-          LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
-          LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
         run: python3 scripts/releases/release.py select
   approve:
     needs: select

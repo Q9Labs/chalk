@@ -88,8 +88,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.enterContext(patch.dict(os.environ, GITHUB_OUTPUT=str(self.output),
                                     GITHUB_STEP_SUMMARY=str(Path(directory) / 'summary'),
                                     SCORECARD_OVERRIDE='',
-                                    EXPECTED_RELEASE_SHA=SHA, LEAVE_BASELINE_MEDIAN_MS='150',
-                                    LEAVE_BASELINE_EVIDENCE_SHA256='c' * 64))
+                                    EXPECTED_RELEASE_SHA=SHA))
         # Unrelated archive, media, Gate and rollback validation has its own boundaries.
         self.enterContext(patch.object(release, 'validate_choice', side_effect=lambda github, item: payload(item)))
         self.enterContext(patch.object(release, 'manifest_bytes', return_value=b'{"images":{}}'))
