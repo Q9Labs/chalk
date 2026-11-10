@@ -163,7 +163,15 @@ func TestCaptureStopsWaitingForLateMidAfterLateTrackWait(t *testing.T) {
 	r := startSilentTrackRun(t, false, 50*time.Millisecond)
 	waitClosed(t, r.runCtx, r.liveTrack.readStarted, "live track read")
 	waitClosed(t, r.runCtx, r.deadWaitEnded, "late track wait end")
-	time.Sleep(50 * time.Millisecond)
+	// The loop takes a queued late result before any plan checkpoint, so two checkpoints after the wait ended mean the expiry is processed.
+	seen := r.coordinator.Checkpoints()
+	for r.coordinator.Checkpoints() < seen+2 {
+		select {
+		case <-r.runCtx.Done():
+			t.Fatal("capture loop stopped taking checkpoints")
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
 	// A plan change that keeps the expired binding must neither wait for it nor attach it.
 	close(r.replan)
 	deadline := time.Now().Add(2 * time.Second)

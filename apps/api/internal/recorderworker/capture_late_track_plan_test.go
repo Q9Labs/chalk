@@ -207,18 +207,11 @@ func TestCaptureSupersededLateBindingDoesNotFailAttempt(t *testing.T) {
 	}
 	// A still-running WaitForTrack for the old binding can wake on the new MID.
 	oldBound, oldErr := a.bindTrack(ctx, old)
-	_, err = late.handle(lateTrackResult{track: old, bound: oldBound, err: oldErr})
+	_, _, err = late.handle(lateTrackResult{track: old, bound: oldBound, err: oldErr})
 	if err != nil {
 		t.Fatalf("superseded MID produced an attempt-fatal error after its replacement was applied: %v", err)
 	}
 }
-
-type boundAtTrack struct {
-	*capturePlanWatchTrack
-	boundAt time.Time
-}
-
-func (t boundAtTrack) BoundAt() time.Time { return t.boundAt }
 
 func TestLateCaptureTrackFirstPacketKeepsTheTimeThePeerBoundIt(t *testing.T) {
 	expected := capturePlanWatchPulledTrack(t, "1", "late")
@@ -226,11 +219,10 @@ func TestLateCaptureTrackFirstPacketKeepsTheTimeThePeerBoundIt(t *testing.T) {
 	inner.packets = make(chan *rtp.Packet, 1)
 	inner.packets <- &rtp.Packet{Header: rtp.Header{SequenceNumber: 1, SSRC: 7}}
 	boundAt := time.Now().Add(-3 * time.Second)
-	track := lateCaptureTrack{boundAtTrack{inner, boundAt}}
 	events := make(chan captureRuntimeEvent, 4)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", track, 50*time.Millisecond, 0, events)
+	stop, err := startCaptureReaderAt(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events, boundAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +252,7 @@ func TestEarlyCaptureTrackFirstPacketKeepsItsReadTime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	before := time.Now()
-	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", boundAtTrack{inner, before.Add(-3 * time.Second)}, 50*time.Millisecond, 0, events)
+	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events)
 	if err != nil {
 		t.Fatal(err)
 	}

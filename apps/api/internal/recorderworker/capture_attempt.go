@@ -586,7 +586,35 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 	defer readerCancel()
 
+	// A late track's first packet is already queued, so it attaches before the
+	// loop takes any other event.
+	attachLate := func(result lateTrackResult) error {
+		bound, boundAt, err := late.handle(result)
+		if err != nil || bound == nil {
+			return err
+		}
+		next := make(map[string]CaptureMediaTrack, len(readers)+1)
+		for mid, track := range readers {
+			next[mid] = track
+		}
+		mid := string(bound.MID())
+		next[mid] = bound
+		if err := a.applyBoundTracks(runCtx, writer, plan, next, readers, readerCancels, events, map[string]time.Time{mid: boundAt}); err != nil {
+			return err
+		}
+		readers = next
+		return nil
+	}
 	for {
+		select {
+		case result := <-late.results:
+			if err := attachLate(result); err != nil {
+				cancel(nil)
+				return finish(err, writer)
+			}
+			continue
+		default:
+		}
 		select {
 		case <-runCtx.Done():
 			return finish(runCtx.Err(), writer)
@@ -606,24 +634,10 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				return finish(err, writer)
 			}
 		case result := <-late.results:
-			bound, err := late.handle(result)
-			if err != nil {
+			if err := attachLate(result); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
-			if bound == nil {
-				continue
-			}
-			next := make(map[string]CaptureMediaTrack, len(readers)+1)
-			for mid, track := range readers {
-				next[mid] = track
-			}
-			next[string(bound.MID())] = bound
-			if err := a.applyBoundTracks(runCtx, writer, plan, next, readers, readerCancels, events); err != nil {
-				cancel(nil)
-				return finish(err, writer)
-			}
-			readers = next
 		case event := <-planEvents:
 			if event.checkpointNoRTP {
 				if err := writer.checkpointNoRTP(runCtx, event.at); err != nil {
@@ -664,7 +678,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel(nil)
 				return a.finishSuccess(writer)
 			}
-			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events); err != nil {
+			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, nil); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
@@ -930,11 +944,11 @@ func (w *lateTrackWatch) start(track captureplane.PulledCaptureTrack) {
 
 // handle applies one wait result. It returns the bound track when the MID
 // attached, and an error only when the attempt must fail.
-func (w *lateTrackWatch) handle(result lateTrackResult) (CaptureMediaTrack, error) {
+func (w *lateTrackWatch) handle(result lateTrackResult) (CaptureMediaTrack, time.Time, error) {
 	mid := string(result.track.MID)
 	entry, ok := w.watching[mid]
 	if !ok || entry.track != result.track {
-		return nil, nil
+		return nil, time.Time{}, nil
 	}
 	entry.cancel()
 	delete(w.watching, mid)
@@ -943,30 +957,21 @@ func (w *lateTrackWatch) handle(result lateTrackResult) (CaptureMediaTrack, erro
 	case result.err == nil:
 		slog.InfoContext(w.ctx, "recording capture track sent its first RTP late and is attached",
 			"event", "recording.capture_track_attached", "mid", mid, "kind", string(result.track.Kind), "source", string(result.track.Source), "waited_ms", waitedMS)
-		return lateCaptureTrack{result.bound}, nil
+		var boundAt time.Time
+		if bound, ok := result.bound.(interface{ BoundAt() time.Time }); ok {
+			boundAt = bound.BoundAt()
+		}
+		return result.bound, boundAt, nil
 	case w.ctx.Err() != nil:
-		return nil, w.ctx.Err()
+		return nil, time.Time{}, w.ctx.Err()
 	case errors.Is(result.err, errCaptureTrackSilent):
 		w.expired[mid] = result.track
 		slog.WarnContext(w.ctx, "recording capture track never sent RTP; the Recording has no media for it",
 			"event", "recording.capture_track_missing", "mid", mid, "kind", string(result.track.Kind), "source", string(result.track.Source), "waited_ms", waitedMS)
-		return nil, nil
+		return nil, time.Time{}, nil
 	default:
-		return nil, result.err
+		return nil, time.Time{}, result.err
 	}
-}
-
-// lateCaptureTrack marks a track that attached after the others. Its reader
-// stamps the first packet with the time the peer bound the track, not the time
-// the reader got to it, so the track keeps its true place on the Recording's
-// clock however long the capture loop was busy.
-type lateCaptureTrack struct{ CaptureMediaTrack }
-
-func (t lateCaptureTrack) FirstPacketAt() time.Time {
-	if bound, ok := t.CaptureMediaTrack.(interface{ BoundAt() time.Time }); ok {
-		return bound.BoundAt()
-	}
-	return time.Time{}
 }
 
 func (w *lateTrackWatch) stop() {
@@ -1116,7 +1121,7 @@ func captureRuntimeEventMatchesPlannedReaders(event captureRuntimeEvent, readers
 	return false
 }
 
-func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, next, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent) error {
+func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, next, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent, firstPacketAt map[string]time.Time) error {
 	if err := writer.reconcileTracks(ctx, plan, next, a.config.Now()); err != nil {
 		return err
 	}
@@ -1133,7 +1138,7 @@ func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captu
 		if previousTrack, ok := previous[mid]; ok && sameCaptureBinding(previousTrack, track) {
 			continue
 		}
-		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
+		cancel, err := startCaptureReaderAt(ctx, a.peer, mid, track, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt[mid])
 		if err != nil {
 			return err
 		}
@@ -1415,6 +1420,13 @@ func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[strin
 }
 
 func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (func(), error) {
+	return startCaptureReaderAt(ctx, peer, mid, track, deadline, keyFrameInterval, events, time.Time{})
+}
+
+// startCaptureReaderAt stamps the first packet with firstPacketAt when it is set
+// and earlier than the read. A late track passes the time the peer bound it, so
+// the track's clock keeps its place however long the loop was busy.
+func startCaptureReaderAt(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent, firstPacketAt time.Time) (func(), error) {
 	if peer == nil || track == nil || strings.TrimSpace(mid) == "" || deadline <= 0 {
 		return nil, ErrInvalidCaptureAttempt
 	}
@@ -1461,10 +1473,8 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 			receivedAt := time.Now()
 			if !stamped {
 				stamped = true
-				if late, ok := track.(interface{ FirstPacketAt() time.Time }); ok {
-					if boundAt := late.FirstPacketAt(); !boundAt.IsZero() && boundAt.Before(receivedAt) {
-						receivedAt = boundAt
-					}
+				if !firstPacketAt.IsZero() && firstPacketAt.Before(receivedAt) {
+					receivedAt = firstPacketAt
 				}
 			}
 			if !packetWindow.accept(packet.SSRC, packet.SequenceNumber) {
