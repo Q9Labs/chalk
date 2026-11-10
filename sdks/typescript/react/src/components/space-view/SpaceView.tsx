@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
@@ -13,14 +13,11 @@ import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";
-import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
-import { KnockNotice } from "../admission-panel/KnockNotice";
 import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
-import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
@@ -39,6 +36,11 @@ import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+
+// The People list and the knock notice are not needed to start a call, so they load when first shown.
+const ParticipantsPanel = lazy(() => import("../participants-panel/ParticipantsPanel").then((module) => ({ default: module.ParticipantsPanel })));
+const AdmissionPanel = lazy(() => import("../admission-panel/AdmissionPanel").then((module) => ({ default: module.AdmissionPanel })));
+const KnockNotice = lazy(() => import("../admission-panel/KnockNotice").then((module) => ({ default: module.KnockNotice })));
 
 export type SpacePanel = "chat" | "participants" | "admission";
 
@@ -404,20 +406,26 @@ export function SpaceView({
             <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
               {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
               {drawer.panel === "participants" && feature("participants") ? (
-                <ParticipantsPanel
-                  onParticipantClick={(id) => {
-                    setPinnedId((current) => (current === id ? null : id));
-                    if (phone) setActivePanel(null);
-                  }}
-                  variant="mobile"
-                  handOrders={handOrders}
-                  admissionEnabled={feature("admission")}
-                  generatedAvatars={generatedAvatars}
-                  onCommandError={onCommandError}
-                  onClose={() => setActivePanel(null)}
-                />
+                <Suspense fallback={null}>
+                  <ParticipantsPanel
+                    onParticipantClick={(id) => {
+                      setPinnedId((current) => (current === id ? null : id));
+                      if (phone) setActivePanel(null);
+                    }}
+                    variant="mobile"
+                    handOrders={handOrders}
+                    admissionEnabled={feature("admission")}
+                    generatedAvatars={generatedAvatars}
+                    onCommandError={onCommandError}
+                    onClose={() => setActivePanel(null)}
+                  />
+                </Suspense>
               ) : null}
-              {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "admission" && feature("admission") ? (
+                <Suspense fallback={null}>
+                  <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} />
+                </Suspense>
+              ) : null}
             </CallCard>
           }
           toasts={
@@ -438,7 +446,11 @@ export function SpaceView({
           }
           overlays={
             <>
-              {feature("admission") && activePanel !== "participants" ? <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel("participants")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} /> : null}
+              {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
+                <Suspense fallback={null}>
+                  <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />
+                </Suspense>
+              ) : null}
               <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
               {overlay}
               {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
