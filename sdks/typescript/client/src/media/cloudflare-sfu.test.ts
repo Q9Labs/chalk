@@ -14,7 +14,7 @@ import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { CloudflareSFUClient, CloudflareSFUError, createCloudflareSFUHTTPTransport, parseCloudflareSFUPublicationID } from "./cloudflare-sfu";
 import { markMediaFetchFailure } from "./failure-diagnostics";
 import { setVideoRenderSize } from "./video-render-size";
-import { HIDDEN_PAGE_CLOSE_MS, HIDDEN_TILE_CLOSE_MS, setVideoTileVisibility, UNREPORTED_TILE_WAIT_MS } from "./video-tile-visibility";
+import { HIDDEN_PAGE_CLOSE_MS, HIDDEN_TILE_CLOSE_MS, JOIN_UNREPORTED_VIDEO_LIMIT, setVideoTileVisibility, UNREPORTED_TILE_WAIT_MS } from "./video-tile-visibility";
 import type {
   CloudflareSFUBootstrap,
   CloudflareSFUClientOptions,
@@ -2410,10 +2410,10 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
   type Remote = { readonly participantId: string; readonly source: "microphone" | "camera"; readonly publicationId: string };
   const remote = (name: string, participantId: string, source: Remote["source"]): Remote => ({ participantId, source, publicationId: versionedPublicationID(name, source === "camera" ? "1" : "0", source) });
 
-  async function joinSecond(publications: readonly Remote[]) {
+  async function joinSecond(publications: readonly Remote[], unreportedVideoTileWaitMs = 0) {
     const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
     const events: ConnectionReportTransportEvent[] = [];
-    const harness = createHarness({ replaceMediaConnection, onReceiveHealth: (event) => events.push(event) });
+    const harness = createHarness({ replaceMediaConnection, unreportedVideoTileWaitMs, onReceiveHealth: (event) => events.push(event) });
     harness.transport.uniqueRemoteMids = true;
     harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
     const stream = fakeStream(new FakeTrack("microphone", "audio"));
@@ -2676,6 +2676,47 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     } finally {
       call.harness.client.stop();
       vi.useRealTimers();
+    }
+  });
+});
+
+describe("the join's first pull carries the video with the audio, in both join orders", () => {
+  // The first guest's microphone on at join makes the first m-section audio; off, the camera is the first thing pulled and
+  // m-section 0 is video. Either way that section owns the BUNDLE transport and the first pull is one request.
+  const mic = { participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("l1-order-mic", "0", "microphone") };
+  const cam = { participantId: "participant-2", source: "camera" as const, publicationId: versionedPublicationID("l1-order-cam", "1", "camera") };
+
+  it.each([
+    { name: "audio is m-section 0 (microphone on at join)", publications: [mic, cam], first: "audio" },
+    { name: "video is m-section 0 (microphone off at join)", publications: [cam], first: "video" },
+  ])("$name: one pull, and the guest's next offer keeps the transport", async ({ publications, first }) => {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, replaceMediaConnection: vi.fn(async () => bootstrap("connection-2")) });
+    harness.transport.uniqueRemoteMids = true;
+    harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+    const stream = fakeStream(new FakeTrack("microphone", "audio"));
+    try {
+      await harness.client.start(stream, async () => {
+        await vi.waitFor(() => expect(harness.client.getSnapshot().remoteTracks).toHaveLength(publications.length));
+        return stream;
+      });
+      expect(remotePullCount(harness)).toBe(1);
+      const peer = harness.peers[0]!;
+      const owner = peer.getTransceivers().find((transceiver) => transceiver.mid === "remote-0")!;
+      expect(owner.receiver.track?.kind).toBe(first === "audio" ? "audio" : "video");
+      expect(peer.localDescription?.sdp).toMatch(/a=group:BUNDLE remote-0 /);
+
+      peer.dropsTransportWhenTagRejected = true;
+      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+      harness.client.remotePublicationsChanged([]);
+      await harness.client.refreshRemotePublications();
+      const offers = peer.descriptionLog.length;
+      await harness.client.closeForcedLocalPublication("microphone");
+      expect(peer.descriptionLog.slice(offers)).toContain("setLocal:offer");
+      expect(peer.transportDropped).toBe(false);
+      expect(peer.connectionState).toBe("connected");
+      expect(owner.direction).toBe("inactive");
+    } finally {
+      harness.client.stop();
     }
   });
 });
@@ -7007,16 +7048,69 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
-  it("pulls every video after the report wait for a UI that never reports tiles", async () => {
+  it("pulls every video for a UI that never reports tiles: the first screen with the audio, the rest after the report wait", async () => {
     vi.useFakeTimers();
     const call = tileCall("m8-silent", 8);
     try {
       await call.join();
       expect(call.pulls("microphone")).toHaveLength(8);
-      expect(call.pulls("camera")).toEqual([]);
+      expect(call.pulls("camera")).toHaveLength(JOIN_UNREPORTED_VIDEO_LIMIT);
+      expect(remotePullCount(call.harness)).toBe(1);
       await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
       expect(remotePullCount(call.harness)).toBe(2);
       expect(call.pulls("camera")).toHaveLength(8);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("sends the join's first pull with the audio and the visible video in one request, before any timer fires", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("l1-first", 3);
+    const [visible, hidden] = call.cameras as [string, string, string];
+    try {
+      setVideoTileVisibility(visible, onScreen);
+      setVideoTileVisibility(hidden, null);
+      await call.join();
+      expect(remotePullCount(call.harness)).toBe(1);
+      expect(call.pulls("microphone")).toHaveLength(3);
+      expect(call.held("camera")).toEqual([visible, call.cameras[2]]);
+      expect(call.held("microphone")).toHaveLength(3);
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("never holds the audio back for a video the UI has not reported or has reported off screen", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("l1-audio", 6);
+    try {
+      call.cameras.slice(0, 2).forEach((camera) => setVideoTileVisibility(camera, null));
+      await call.join();
+      expect(call.held("microphone")).toHaveLength(6);
+      expect(remotePullCount(call.harness)).toBe(1);
+      // Two tiles are off screen, so the limit counts only the unreported ones that remain.
+      expect(call.held("camera")).toEqual(call.cameras.slice(2, 2 + JOIN_UNREPORTED_VIDEO_LIMIT));
+    } finally {
+      call.harness.client.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the report wait for a video published after the join", async () => {
+    vi.useFakeTimers();
+    const call = tileCall("l1-later", 2);
+    try {
+      await call.join();
+      expect(call.held("camera")).toEqual(call.cameras);
+      const late = versionedPublicationID("l1-later-late", "1", "camera");
+      call.harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [...call.publications, { participantId: "l1-later-person-9", source: "camera", publicationId: late }] };
+      await call.harness.client.refreshRemotePublications();
+      expect(call.held("camera")).toEqual(call.cameras);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
+      expect(call.held("camera")).toContain(late);
     } finally {
       call.harness.client.stop();
       vi.useRealTimers();
@@ -7087,7 +7181,7 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
-  it("waits briefly for an unreported tile in a UI that reports, then pulls it as before", async () => {
+  it("pulls an unreported tile with the join's first pull while a UI that reports keeps its on-screen and off-screen choices", async () => {
     vi.useFakeTimers();
     const call = tileCall("m8-late", 3);
     const [first, second, third] = call.cameras as [string, string, string];
@@ -7095,11 +7189,10 @@ describe("visible-tile video subscriptions", () => {
       setVideoTileVisibility(first, onScreen);
       setVideoTileVisibility(second, null);
       await call.join();
-      expect(call.held("camera")).toEqual([first]);
-      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS - 1);
-      expect(call.held("camera")).toEqual([first]);
-      await vi.advanceTimersByTimeAsync(2);
       expect(call.held("camera")).toEqual([first, third]);
+      await vi.advanceTimersByTimeAsync(UNREPORTED_TILE_WAIT_MS + 1);
+      expect(call.held("camera")).toEqual([first, third]);
+      expect(call.held("camera")).not.toContain(second);
     } finally {
       call.harness.client.stop();
       vi.useRealTimers();
