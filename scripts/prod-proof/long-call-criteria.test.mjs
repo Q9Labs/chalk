@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { accessLifetimeMs, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, planRefreshToggles, refreshIntervalMs, refreshToggles, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { accessLifetimeMs, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshToggles, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const startedAtMs = Date.parse("2026-11-10T02:00:00Z");
@@ -57,6 +57,9 @@ function healthyCall({ durationMs = callDurationMs, toggles = toggleSchedule() }
   return { ticks, participants, refreshes, toggles, startedAtMs };
 }
 const judged = (call) => judgeLongCall(call).failures;
+const replacedMedia = (failure) => failure.includes("replaced its media connection");
+/** The failures that are not the SDK replacing a media connection, for tests of the grant arithmetic that a replacement moves. */
+const otherThanReplacement = (call) => judged(call).filter((failure) => !replacedMedia(failure));
 const onlyGuest = (call, guest, change) => ({ ...call, ticks: call.ticks.map((tick) => ({ ...tick, guests: tick.guests.map((sample, index) => (index === guest ? change(sample, tick.t - startedAtMs) : sample)) })) });
 
 test("the call outlives two access lifetimes and refreshes at the numbers the code uses", () => {
@@ -196,10 +199,10 @@ test("the observed nightly run: a replacement moved guest 2's refresh to +367 s,
   const { observed, toggles, refreshes } = observedNightly();
   const call = (list) => ({ ...healthyCall({ durationMs: observed.durationMs, toggles: list }), refreshes, toggles: list });
   // What the fixed schedule did: the +367 s refresh had no toggle. The old judge also called the shifted refresh count a failure; the grants are consistent.
-  assert.deepEqual(judged(call(toggles)), ["1 access refresh(es) at +367s had no mic or camera toggle on each side within 10 s, so they were not tested"]);
-  assert.deepEqual(mediaReplacementNotes(refreshes, startedAtMs), ["Guest 2 replaced its media connection at +127s (retry, status 201)"]);
+  assert.deepEqual(otherThanReplacement(call(toggles)), ["1 access refresh(es) at +367s had no mic or camera toggle on each side within 10 s, so they were not tested"]);
+  assert.deepEqual(judged(call(toggles)).filter(replacedMedia), ["Guest 2 replaced its media connection at +127s (retry, status 201) with no fault injected"]);
   const planned = [...toggles, ...refreshToggles(366_900)].sort((a, b) => a.atMs - b.atMs);
-  assert.deepEqual(judged(call(planned)), []);
+  assert.deepEqual(otherThanReplacement(call(planned)), []);
 });
 
 test("refreshes of different guests a few seconds apart each get their own toggles on both sides", () => {
@@ -244,11 +247,11 @@ test("a refresh shifted into the last 10 s is renewed and noted, but needs no to
   const renewals = [grant(115_000, { replace: true }), grant(355_000), grant(595_000)];
   const toggles = [...call.toggles, ...refreshToggles(355_000)].sort((a, b) => a.atMs - b.atMs);
   const result = judgeLongCall({ ...call, refreshes: late(renewals).refreshes, toggles });
-  assert.deepEqual(result.failures, []);
+  assert.deepEqual(result.failures, ["Guest 2 replaced its media connection at +115s (retry, status 201) with no fault injected"]);
   assert.deepEqual(result.notes, ["The access refresh at +595s fell in the last 10 s of the call, so no toggle could follow it; it was not toggle-tested"]);
   // The same shift still fails when the +595 s renewal never came and the grant is overdue, or when a refresh before the last 10 s has no toggle.
   assert.ok(judged({ ...late(renewals.slice(0, 2)), toggles: call.toggles }).some((failure) => failure.includes("1 access refresh(es) at +355s")));
-  assert.deepEqual(judged({ ...late([grant(115_000, { replace: true }), grant(355_000)]), toggles }), []);
+  assert.deepEqual(otherThanReplacement({ ...late([grant(115_000, { replace: true }), grant(355_000)]), toggles }), []);
   const overdue = healthyCall({ durationMs: 598_000 });
   assert.ok(
     judged({ ...overdue, refreshes: [overdue.refreshes[0], guestWith(1, [grant(50_000, { replace: true }), grant(290_000)]), overdue.refreshes[2]], toggles: [...overdue.toggles, ...refreshToggles(290_000)] }).some((failure) => failure.startsWith("Guest 2 did not renew its access, due at +530s")),
@@ -270,4 +273,40 @@ test("one group of refresh toggles has a toggle on each side of a refresh within
     assert.ok(toggles.some((toggle) => toggle.atMs >= at - bounds.acrossRefreshMs && toggle.atMs <= at));
     assert.ok(toggles.some((toggle) => toggle.atMs >= at && toggle.atMs <= at + bounds.acrossRefreshMs));
   }
+});
+
+test("guest 1 mutes and unmutes its microphone, then guest 2 does, before the first baseline toggle", () => {
+  const [first, second, third, fourth, fifth] = toggleSchedule();
+  assert.deepEqual(
+    [first, second, third, fourth].map(({ guest, kind, enabled }) => [guest, kind, enabled]),
+    [
+      [0, "microphone", false],
+      [0, "microphone", true],
+      [1, "microphone", false],
+      [1, "microphone", true],
+    ],
+  );
+  assert.ok(second.atMs < third.atMs && third.atMs - second.atMs <= bounds.acrossRefreshMs, "guest 2 mutes right after guest 1 is back");
+  assert.ok(fourth.atMs < fifth.atMs, "the relay ends before the baseline starts");
+});
+
+test("a peer connection that leaves connected fails once, whatever it leaves for, and a new one that is still connecting does not", () => {
+  const call = healthyCall();
+  // The nightly shape: guest 2's only live connection went back to new in place at its first toggle, then a successor connected.
+  const dropped = judged(onlyGuest(call, 1, (sample, at) => (at >= 120_000 && at < 128_000 ? { ...sample, pcs: ["closed", "new"] } : sample)));
+  assert.deepEqual(dropped, ["Guest 2 peer connection 2 left connected for new at +120s"]);
+  const disconnected = judged(onlyGuest(call, 0, (sample, at) => (at >= 200_000 && at < 202_000 ? { ...sample, pcs: ["closed", "disconnected"] } : sample)));
+  assert.deepEqual(disconnected, ["Guest 1 peer connection 2 left connected for disconnected at +200s"]);
+  const closed = judged(onlyGuest(call, 2, (sample, at) => (at >= 300_000 ? { ...sample, pcs: ["closed", "closed", "connected"] } : sample)));
+  assert.deepEqual(closed, ["Guest 3 peer connection 2 left connected for closed at +300s"]);
+  // A connection that starts out new or connecting and then connects, and an unanswered page, are not leaving connected.
+  const joining = judged(onlyGuest(call, 1, (sample, at) => (at < 6000 ? { ...sample, pcs: ["connecting"] } : at < 10_000 ? unreachableSample : sample)));
+  assert.deepEqual(joining, []);
+});
+
+test("a media-connection replacement fails the call because the proof injects no fault", () => {
+  const call = healthyCall();
+  const refreshes = [call.refreshes[0], call.refreshes[1], guestWith(2, [grant(126_800, { replace: true }), grant(366_800), grant(606_800 - 1000)])];
+  const failures = judged({ ...call, refreshes }).filter(replacedMedia);
+  assert.deepEqual(failures, ["Guest 3 replaced its media connection at +127s (retry, status 201) with no fault injected"]);
 });
