@@ -3,6 +3,7 @@ defmodule ChalkSync.Live.ConnectionQualityPostgresTest do
 
   alias ChalkSync.Auth.DevTokenVerifier
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestWSClient, as: Client
 
