@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reportAssignmentFailure } from "../src/dispatcher.js";
 import { AssignmentError, ProviderError } from "../src/errors.js";
+import { classifyProviderStatus } from "../src/provider-utils.js";
 import type { DispatcherLogger, RetryInput } from "../src/types.js";
 
 const lease = { jobId: "job-1", attempt: 1, leaseToken: "lease-token" };
@@ -31,5 +32,17 @@ describe("reporting a failed assignment", () => {
     expect((await report(new AssignmentError("audio duration bound exceeded"))).logs[0]?.fields).toMatchObject({ errorCode: "assignment_invalid", terminal: true, reason: "audio duration bound exceeded" });
     expect((await report(new Error("PUT https://bucket.example/chunk?signature=secret failed"))).logs[0]?.fields).toMatchObject({ errorCode: "dispatcher_failure", terminal: true, reason: "Error" });
     expect((await report(new SyntaxError("Unexpected token in https://bucket.example/chunk?signature=secret"))).logs[0]?.fields).toMatchObject({ reason: "SyntaxError" });
+  });
+
+  it("retries an OpenRouter 402 after a wait, and still ends other 4xx failures", async () => {
+    expect(classifyProviderStatus(402, "openrouter")).toBe("retryable");
+    expect(classifyProviderStatus(402, "deepinfra")).toBe("nonretryable");
+    expect(classifyProviderStatus(401, "openrouter")).toBe("nonretryable");
+    const before = Date.now();
+    const { retries, logs } = await report(new ProviderError("OpenRouter request failed", classifyProviderStatus(402, "openrouter"), { status: 402 }));
+    expect(retries).toMatchObject([{ attempt: 1, terminal: false }]);
+    expect(Date.parse(retries[0]?.retryAt ?? "")).toBeGreaterThanOrEqual(before + 45_000);
+    expect(logs[0]?.fields).toMatchObject({ providerStatus: 402, kind: "retryable", terminal: false });
+    expect((await report(new ProviderError("OpenRouter request failed", "nonretryable", { status: 401 }))).retries[0]?.retryAt).toBeUndefined();
   });
 });

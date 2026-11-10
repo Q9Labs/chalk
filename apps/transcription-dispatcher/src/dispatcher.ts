@@ -209,7 +209,13 @@ export async function reportAssignmentFailure(error: unknown, assignment: Transc
   if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
   const errorCode = safeErrorCode(error);
   logger.warn("dispatcher_assignment_failed", { jobId: assignment.jobId, journeyId: journey.journeyId, errorCode, kind, terminal, attempt: assignment.attempt, ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}), reason: failureReason(error) });
-  await safeRetry(control, assignment, journey, errorCode, terminal, logger);
+  await safeRetry(control, assignment, journey, errorCode, terminal, logger, creditRetryAt(error, assignment));
+}
+
+// A short account credit usually ends when the automatic reload lands, so the attempts wait 45, 90 and 135 seconds instead of burning the control plane's four attempts at once.
+function creditRetryAt(error: unknown, assignment: Pick<TranscriptionAssignment, "attempt">): string | undefined {
+  if (!(error instanceof ProviderError) || error.status !== 402 || error.kind !== "retryable") return undefined;
+  return new Date(Date.now() + 45_000 * assignment.attempt).toISOString();
 }
 
 // Only our own errors have fixed messages; anything else can carry a signed URL or provider data, so it logs only its class.
@@ -218,7 +224,7 @@ function failureReason(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
+async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger, retryAt?: string): Promise<void> {
   try {
     await control.retry({
       jobId: assignment.jobId,
@@ -226,6 +232,7 @@ async function safeRetry(control: Pick<ControlApi, "retry">, assignment: Transcr
       leaseToken: assignment.leaseToken,
       errorCode,
       terminal,
+      ...(retryAt === undefined ? {} : { retryAt }),
       context,
     });
   } catch (retryError) {

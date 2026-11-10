@@ -229,6 +229,8 @@ export function classifyProviderStatus(status: number, provider: "deepinfra" | "
     return "nonretryable";
   }
   if (status === 408 || status === 425 || status === 429 || status >= 500) return "retryable";
+  // OpenRouter answers 402 while the account credit is short, for example during an automatic reload, so a later attempt can succeed.
+  if (provider === "openrouter" && status === 402) return "retryable";
   return "nonretryable";
 }
 

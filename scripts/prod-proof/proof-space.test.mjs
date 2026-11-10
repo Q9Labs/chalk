@@ -155,6 +155,22 @@ test("a Space setup mismatch keeps its bounded public reason", () => {
   assert.deepEqual(lines, ["PROOF setup-or-capture: failed (media-plane-config)"]);
 });
 
+test("an evidence assertion prints its measured message, and a nested one prints every message", () => {
+  const lines = [];
+  const write = (line) => lines.push(line);
+  publicFailure("call-artifacts", new ProofError("evidence-assertion", "Transcript terminal_failure"), write);
+  const both = new AggregateError([new ProofError("evidence-assertion", "Recording shows no live video in guest 3's tile"), new ProofError("evidence-assertion", "Transcript is empty")]);
+  publicFailure("call-artifacts", both, write);
+  publicFailure("call-artifacts", new ProofError("configuration", "private detail"), write);
+  publicFailure("call-artifacts", new Error("https://signed.example/?sig=secret"), write);
+  assert.deepEqual(lines, [
+    "PROOF call-artifacts: failed (evidence-assertion): Transcript terminal_failure",
+    "PROOF call-artifacts: failed (evidence-assertion): Recording shows no live video in guest 3's tile; Transcript is empty",
+    "PROOF call-artifacts: failed (configuration)",
+    "PROOF call-artifacts: failed (unknown)",
+  ]);
+});
+
 // Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the own-SFU lane
 // takes the Space an operator moved, which the workflow hands to the proof as CHALK_PROOF_SPACE_ID_CHALK_SFU.
 test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {

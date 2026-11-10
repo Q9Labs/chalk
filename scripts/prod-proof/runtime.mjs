@@ -157,8 +157,16 @@ function failureReason(error, depth = 0) {
   if (["AbortError", "TimeoutError"].includes(error.name)) return "timeout";
   return nestedFailure(error, depth);
 }
+// An evidence assertion is written in this repo and holds only measured values, so its message is safe for the public log; any other error keeps its message private.
+function assertionMessages(error, depth = 0) {
+  if (error?.reason === "evidence-assertion") return [error.message];
+  if (depth >= 3 || !(error instanceof AggregateError)) return [];
+  return error.errors.flatMap((inner) => assertionMessages(inner, depth + 1));
+}
 export function publicFailure(phase, error, output = console.error) {
-  output(`PROOF ${phase}: failed (${failureReason(error ?? {})})`);
+  const messages = assertionMessages(error);
+  const detail = messages.length ? `: ${messages.join("; ").slice(0, 1500)}` : "";
+  output(`PROOF ${phase}: failed (${failureReason(error ?? {})})${detail}`);
 }
 function maskCredential(name, value) {
   if (!value || !/secret|token|credential|jwt/i.test(name)) return;
