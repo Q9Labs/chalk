@@ -50,6 +50,7 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   if (pinned) {
     const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
     checkSpacePlane(existing, plane);
+    checkSpacePolicy(existing, policy);
     await save(`${run.directory}/space.json`, existing);
     return existing;
   }
@@ -65,10 +66,13 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     admission_policy: { mode: "open" },
   });
   checkSpacePlane(space, plane);
-  check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
-  check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
+  checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);
   return space;
+}
+function checkSpacePolicy(space, policy) {
+  check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");
+  check(space.transcription_policy === policy.transcription, `A proof Space has Transcription policy ${space.transcription_policy}, not ${policy.transcription}`, "media-plane-config");
 }
 function checkSpacePlane(space, plane) {
   const got = space.effective_media_plane ?? space.media_plane;
@@ -94,6 +98,9 @@ export function episodeEnd(run, path) {
 }
 export async function createEpisode(run, space, policy = manualPolicy) {
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  // A reused Space is not the run's own, so cleanup learns of this Episode from the ownership file.
+  run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
+  await saveOwnership(run);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const effective = episode.config_snapshot.artifact_policy;

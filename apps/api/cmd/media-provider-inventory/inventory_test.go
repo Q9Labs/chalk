@@ -161,6 +161,13 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 		exec(`select set_config('chalk.operator_write', 'on', true)`)
 		exec(`insert into tenants(id, name, default_media_plane, default_media_plane_approved, media_plane_provider_config) values($1, 'inventory', $2, coalesce($2::text = 'chalk_sfu', false), $3::jsonb)`, id.Bytes(), defaultPlane, document)
 		exec(`select set_config('chalk.operator_write', 'off', true)`)
+		var approved bool
+		if err := tx.QueryRow(ctx, `select default_media_plane_approved from tenants where id=$1`, id.Bytes()).Scan(&approved); err != nil {
+			t.Fatal(err)
+		}
+		if want := defaultPlane != nil && *defaultPlane == "chalk_sfu"; approved != want {
+			t.Fatalf("fixture Tenant approval = %v, want %v", approved, want)
+		}
 		return id
 	}
 	space := func(tenantID utilities.ID, mediaPlane string, archived bool, preset ...utilities.ID) utilities.ID {

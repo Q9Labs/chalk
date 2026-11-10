@@ -92,6 +92,13 @@ export async function cleanupByRunId(config, runId, directory = resolve(".privat
       }
     }
   });
+  // Episodes the run created in a reused Space, whatever the Space's name or metadata.
+  for (const tracked of known.episodes ?? []) {
+    await attempt("tracked-episode", tracked.id, async () => {
+      const path = `${base}/spaces/${tracked.space_id}/episodes`;
+      await endEpisode(call, path, await call("GET", `${path}/${tracked.id}`));
+    });
+  }
   await cleanupWebhook(call, config, known, base, attempt);
   await save(`${directory}/remote-cleanup.json`, results);
   if (failures.length) throw new AggregateError(failures, "Remote cleanup failed");
