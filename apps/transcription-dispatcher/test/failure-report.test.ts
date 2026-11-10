@@ -45,6 +45,8 @@ describe("reporting a failed assignment", () => {
     expect(logs[0]?.fields).toMatchObject({ providerStatus: 402, kind: "retryable", terminal: false });
     const named = await report(new ProviderError("OpenRouter request failed", "retryable", { status: 402, providerCode: "in_flight_budget_exhausted" }));
     expect(named.logs[0]?.fields).toMatchObject({ providerReason: "in_flight_budget_exhausted" });
+    const numeric = await report(new ProviderError("Cloudflare request failed", "retryable", { status: 408, providerCode: "3007" }));
+    expect(numeric.logs[0]?.fields).toMatchObject({ providerReason: "3007" });
     const echoed = await report(new ProviderError("DeepInfra request failed", "nonretryable", { status: 400, providerCode: "Bearer sk-secret echoed" }));
     expect(echoed.logs[0]?.fields).not.toHaveProperty("providerReason");
     expect((await report(new ProviderError("OpenRouter request failed", "nonretryable", { status: 401 }))).retries[0]?.retryAt).toBeUndefined();

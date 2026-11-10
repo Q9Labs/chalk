@@ -234,8 +234,8 @@ export function classifyProviderStatus(status: number, provider: "deepinfra" | "
   return "nonretryable";
 }
 
-// OpenRouter names why it refused a request in error.metadata.reason (for example in_flight_budget_exhausted). Only a short snake_case word is kept, so the body's free text never reaches a log.
-const REASON_WORD = /^[a-z][a-z_]{0,63}$/;
+// OpenRouter names why it refused a request in error.metadata.reason (for example in_flight_budget_exhausted). Only a short snake_case word or number is kept, so the body's free text never reaches a log.
+const REASON_WORD = /^(?:[a-z][a-z_]{0,63}|\d{1,6})$/;
 
 export function isReasonWord(value: string): boolean {
   return REASON_WORD.test(value);
