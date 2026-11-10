@@ -200,7 +200,7 @@ Episode keeps the plane its binding pinned, so guests who reload and rejoin a li
 Episode land on the same plane again. Moving a live call means ending the Episode and
 starting a new one.
 
-1. Read the Space and confirm the ids are the ones you mean:
+1. From `apps/api`, read the Space and confirm the ids are the ones you mean:
 
    ```sh
    CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
@@ -216,7 +216,8 @@ starting a new one.
    ```
 
    The command prints one JSON line with `before` and `after`. Keep that line in the
-   incident log: it is the record of who moved the Space and from what. Use
+   incident log beside your name: the line records the Space and the planes, not the
+   operator. Use
    `--plane cf_sfu` and not `inherit` for the fallback, because `inherit` hands the
    choice to the Tenant default and the deployment default, which may be `chalk_sfu`.
 
@@ -234,8 +235,12 @@ starting a new one.
    provider ([provider inventory](../../docs/sfu/provider-inventory.md)).
 
 5. Return the Space with the same command and `--plane chalk_sfu`, then repeat step 3
-   for a call that should move back. The Space must still be on
-   `CHALK_SFU_ALLOWED_SPACES`, or the Episode starts on Cloudflare anyway.
+   for a call that should move back. The setting only selects the plane. The new
+   Episode binds the own SFU only when the Space is on `CHALK_SFU_ALLOWED_SPACES`, the
+   SDK declares `chalk_sfu`, and a node has room; otherwise it starts on Cloudflare
+   when overflow is on, or the create fails. Treat the return as done when the new
+   Episode's join grant reports `media.provider` as `chalk_sfu`, not when `get`
+   says so.
 
 To stop every new Episode instead of one Space, set `CHALK_SFU_NEW_EPISODES=off` in
 the private API settings and reload the API (see the order above). Use the Space
