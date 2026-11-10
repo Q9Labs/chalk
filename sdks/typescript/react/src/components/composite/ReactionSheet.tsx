@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { ChalkSheet } from "../chalk-ui";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { useHaptics } from "../../internal/useHaptics";
@@ -7,6 +7,7 @@ import type { ReactionTrayProps } from "./ReactionTray";
 /** Long enough for the pressed state to show before the sheet slides away. */
 const CLOSE_DELAY_MS = 120;
 const FIRST_ROW = 6;
+const NOTICE_GAP = 12;
 
 const REACTION_SHEET_CSS = `.chalk-sheet-center {
   justify-content: center;
@@ -55,7 +56,27 @@ const REACTION_SHEET_CSS = `.chalk-sheet-center {
 /** The reactions tray on a phone: a bottom sheet with no scrim, so the emoji floating up over the tiles stay bright. */
 export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose"> & { readonly open: boolean }) {
   const [more, setMore] = useState(false);
+  const [sheet, setSheet] = useState<HTMLElement | null>(null);
+  const findSheet = useCallback((node: HTMLElement | null) => setSheet(node?.closest<HTMLElement>(".chalk-sheet") ?? null), []);
   const { trigger } = useHaptics();
+  // Raise the call's notices above the open sheet, as the desktop tray does, so they do not cover its rows.
+  useLayoutEffect(() => {
+    const frame = document.querySelector<HTMLElement>("[data-part='call-frame']");
+    const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");
+    if (!open || !sheet || !frame || !notices) return;
+    const lift = () => {
+      if (!(notices.offsetParent instanceof HTMLElement)) return;
+      const baseline = notices.offsetParent.getBoundingClientRect().bottom - Number.parseFloat(getComputedStyle(notices).bottom);
+      frame.style.setProperty("--chalk-reaction-toast-lift", `${Math.max(0, baseline - (window.innerHeight - sheet.offsetHeight) + NOTICE_GAP)}px`);
+    };
+    lift();
+    const resize = new ResizeObserver(lift);
+    resize.observe(sheet);
+    return () => {
+      resize.disconnect();
+      frame.style.removeProperty("--chalk-reaction-toast-lift");
+    };
+  }, [open, sheet]);
   const send = (emoji: string) => {
     void trigger("success");
     onSelect(emoji);
@@ -89,7 +110,7 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
           </button>
         </div>
       ) : null}
-      <div className="chalk-sheet-emoji" data-expanded={more || undefined} role="toolbar" aria-label="Reactions">
+      <div ref={findSheet} className="chalk-sheet-emoji" data-expanded={more || undefined} role="toolbar" aria-label="Reactions">
         {(more ? reactions : reactions.slice(0, FIRST_ROW)).map((emoji) => (
           <button key={emoji} type="button" aria-label={`React with ${emoji}`} onClick={() => send(emoji)}>
             <span aria-hidden="true">{emoji}</span>
