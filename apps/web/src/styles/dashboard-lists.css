@@ -84,6 +84,7 @@
   width: 72px;
   height: 40px;
   border-radius: var(--corner-md);
+  /* token-ratchet-ignore: a poster stands for a video, so it is dark in both themes */
   background: linear-gradient(160deg, #1b1d22, #0c0d10);
   box-shadow: var(--ring-line);
   display: grid;
@@ -91,6 +92,7 @@
   position: relative;
   overflow: hidden;
   flex: none;
+  /* token-ratchet-ignore: the play glyph on that always-dark poster */
   color: rgba(255, 255, 255, 0.55);
 }
 
@@ -110,6 +112,7 @@
   right: 0;
   bottom: 0;
   height: 3px;
+  /* token-ratchet-ignore: the progress track on that always-dark poster */
   background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
 }
@@ -610,6 +613,7 @@
   .site .dash .slist.ses .lr > .chev {
     grid-column: 3;
     grid-row: 1;
+    /* token-ratchet-ignore: a 2px optical nudge that lines the two-line cell up with the row's other text */
     margin-top: 2px;
   }
 
@@ -642,6 +646,7 @@
     grid-row: 1 / span 2;
     width: 64px;
     height: 36px;
+    /* token-ratchet-ignore: a 2px optical nudge that lines the two-line cell up with the row's other text */
     margin-top: 2px;
   }
 
@@ -703,6 +708,7 @@
 .site .dash .dev .side a .dot {
   width: 6px;
   height: 6px;
+  /* token-ratchet-ignore: the 5px side margin lines the divider up with the text inside the icon buttons */
   margin: 0 5px;
   border-radius: 50%;
   background: var(--faint-text);
@@ -792,6 +798,7 @@
 
 .site .dash .btn.dz {
   background: var(--chalk-danger);
+  /* token-ratchet-ignore: white text on the danger fill; the kit has no on-danger token */
   color: #fff;
 }
 
@@ -1068,6 +1075,7 @@
   .site .dash .dev .wjr .when {
     display: block;
     color: var(--chalk-muted-text);
+    /* token-ratchet-ignore: the 38px indent lines the line up with the name, past a 26px avatar and its gap */
     padding-left: 38px;
   }
 }
