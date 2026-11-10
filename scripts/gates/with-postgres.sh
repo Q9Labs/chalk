@@ -32,17 +32,30 @@ if [[ "$1" == "--" ]]; then
   fi
 fi
 
-# Service suites can leave fixtures behind; each gate needs its own database.
+# Service suites can leave fixtures behind; each gate needs its own database. Each gate waits on timers and
+# sockets more than on CPU, so they run side by side, each as its own process group with its own PostgreSQL.
 if ((command_mode == 0 && $# > 1)); then
-  # shellcheck source=scripts/gates/owned-command.sh
-  source "$(dirname "$0")/owned-command.sh"
-  # Each gate's own wrapper bounds its stop and cleanup, so this one waits longer before it uses KILL.
-  owned_grace=$((owned_grace + 5))
-  trap stop_owned EXIT
+  group_pids=()
+  stop_all() {
+    local pid
+    for pid in "${group_pids[@]}"; do kill -"$1" -- "-${pid}" 2>/dev/null || true; done
+    wait 2>/dev/null || true
+    exit "$2"
+  }
+  trap 'stop_all TERM 143' TERM
+  trap 'stop_all INT 130' INT
+  set -m
   for gate in "$@"; do
-    run_owned bash "${BASH_SOURCE[0]}" "${gate}"
+    label="${gate#apps/}"
+    bash "${BASH_SOURCE[0]}" "${gate}" </dev/null > >(sed -u "s|^|[${label%%/*}] |") 2>&1 &
+    group_pids+=("$!")
   done
-  exit 0
+  set +m
+  status=0
+  for pid in "${group_pids[@]}"; do
+    wait "${pid}" || status=$?
+  done
+  exit "${status}"
 fi
 
 repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
