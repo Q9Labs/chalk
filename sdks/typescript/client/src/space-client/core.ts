@@ -1,4 +1,5 @@
 import { Clock, Context, Duration, Effect, Layer } from "effect";
+import type { DirectPathMode } from "../direct-path";
 import { requireParsedAccessGrant, type AccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
@@ -17,6 +18,8 @@ export type SpaceClientPlatform = {
   readonly syncUrl?: string;
   /** Direct Sync URL tried before `syncUrl`, with fallback. Unset (the default) keeps today's single path. */
   readonly syncDirectUrl?: string;
+  /** `off` keeps Sync and SFU signalling on the Tunnel even when the grant advertises a direct door; for a control run. Default `auto`. */
+  readonly directPath?: DirectPathMode;
   readonly whiteboardUrl?: string | null;
   readonly dependencies?: Partial<ConnectionDependencies>;
   /** Private adapter seam for runtimes that need the full refresh request. */
@@ -33,7 +36,7 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
+  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
     access: async (request) => requireParsedAccessGrant(await fetchAccessGrant({ request, options, platform })),

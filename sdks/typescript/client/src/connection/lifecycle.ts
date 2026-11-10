@@ -7,7 +7,7 @@ import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
-import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
+import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionMediaDevices, type ConnectionSyncClient } from "./dependencies";
 import { releaseTracks, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
@@ -182,11 +182,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         now: () => clock.currentTimeMillisUnsafe(),
         ...options.diagnostics,
         onEvent: (event) => {
-          reporter?.recordDiagnostic(event);
+          if (isReportedDiagnostic(event)) reporter?.recordDiagnostic(event);
           options.diagnostics?.onEvent?.(event);
         },
       });
       const onTransportDiagnostic = (event: import("./report").ConnectionReportTransportEvent) => reporter?.recordTransport(event);
+      const onTransportPath = (transport: import("../direct-path").TransportPath) => diagnostics.record({ event: "transport_path", state: model.state, epoch: model.epoch, transport });
       const snapshotRef = yield* SubscriptionRef.make<ConnectionLifecycleSnapshot>(idleSnapshot());
       const queue = yield* Queue.unbounded<Work>();
       const listeners = new Set<() => void>();
@@ -516,6 +517,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                             return replacement.media;
                           }),
                     onTransportDiagnostic,
+                    onTransportPath,
                     traceparent: reporter?.traceparent,
                     onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
@@ -527,7 +529,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -919,7 +921,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               model.syncBindingCleanup?.();
               model.sync = null;
               const sync = yield* Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
                 catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
               });
               model.sync = sync;

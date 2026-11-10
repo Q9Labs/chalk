@@ -1,9 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ownSFUGrant } from "../space-client/core.test.helpers";
 import { createDefaultConnectionDependencies, bindConnectionMediaClient } from "./production";
+import type { ConnectionMediaClient } from "./dependencies";
 
 const whiteboard = vi.hoisted(() => vi.fn());
+const syncClient = vi.hoisted(() => vi.fn());
+const mediaTransport = vi.hoisted(() => vi.fn());
 vi.mock("../whiteboard", async (original) => ({ ...(await original<typeof import("../whiteboard")>()), createChalkWhiteboardV1Client: whiteboard }));
+vi.mock("../sync", async (original) => ({ ...(await original<typeof import("../sync")>()), createV1SyncClient: syncClient }));
+vi.mock("../media", async (original) => ({ ...(await original<typeof import("../media")>()), createCloudflareSFUHTTPTransport: mediaTransport }));
 
 describe("production whiteboard adapter", () => {
   it("forwards the shared core's watchdog recorder", () => {
@@ -59,5 +65,66 @@ describe("production media adapter", () => {
     expect(source.closeForcedLocalPublication).toHaveBeenCalledWith("camera");
     expect(source.remotePublicationsChanged).toHaveBeenCalledOnce();
     expect(source.remotePublicationResumed).toHaveBeenCalledOnce();
+  });
+});
+
+describe("direct door", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "RTCPeerConnection",
+      class {
+        addEventListener() {}
+        close() {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const advertised = ownSFUGrant({ unifiedSignaling: true, directSignalingUrl: "https://direct.example.test" });
+  const silent = ownSFUGrant({ unifiedSignaling: true });
+  const syncInput = (access: typeof advertised, onTransportPath = vi.fn()) => ({ access, token: async () => "token", media: {} as ConnectionMediaClient, onTransportPath });
+  const mediaInput = (access: typeof advertised, onTransportPath = vi.fn()) => ({ access, credential: async () => "token", onFailure: vi.fn(), onScreenEnded: vi.fn(), onTransportPath });
+  const syncOptions = () => syncClient.mock.lastCall?.[0];
+  const transportOptions = () => mediaTransport.mock.lastCall?.[0];
+
+  it("dials Sync and sends signalling to the door the grant advertises", () => {
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1/sync" });
+
+    dependencies.createSyncClient(syncInput(advertised));
+    dependencies.createMediaClient(mediaInput(advertised));
+
+    expect(syncOptions().webSocket).toBeDefined();
+    expect(transportOptions()).toMatchObject({ apiBaseURL: "https://api.test", directBaseURL: "https://direct.example.test" });
+  });
+
+  it("keeps both on the Tunnel when the grant advertises none, and reports the Tunnel for Sync", () => {
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1/sync" });
+    const onPath = vi.fn();
+
+    dependencies.createSyncClient(syncInput(silent, onPath));
+    dependencies.createMediaClient(mediaInput(silent));
+
+    expect(syncOptions().webSocket).toBeUndefined();
+    expect(transportOptions()).not.toHaveProperty("directBaseURL");
+    expect(onPath).toHaveBeenCalledWith({ plane: "sync", path: "tunnel", fellBack: false });
+  });
+
+  it("keeps both on the Tunnel when the platform turns the door off, even for a configured Sync door", () => {
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1/sync", syncDirectURL: "wss://configured.example.test/v1/sync", directPath: "off" });
+    const onPath = vi.fn();
+
+    dependencies.createSyncClient(syncInput(advertised, onPath));
+    dependencies.createMediaClient(mediaInput(advertised));
+
+    expect(syncOptions().webSocket).toBeUndefined();
+    expect(transportOptions()).not.toHaveProperty("directBaseURL");
+    expect(onPath).toHaveBeenCalledWith({ plane: "sync", path: "tunnel", fellBack: false });
+  });
+
+  it("prefers a configured Sync door over the advertised one, so the lobby warm socket is adopted", () => {
+    const dependencies = createDefaultConnectionDependencies({ apiBaseURL: "https://api.test", syncURL: "wss://sync.test/v1/sync", syncDirectURL: "wss://configured.example.test/v1/sync" });
+
+    dependencies.createSyncClient(syncInput(silent));
+
+    expect(syncOptions().webSocket).toBeDefined();
   });
 });
