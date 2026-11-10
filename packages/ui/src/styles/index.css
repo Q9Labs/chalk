@@ -1670,6 +1670,9 @@
   flex: none;
   color: var(--chalk-soft-text);
 }
+.chalk-sheet-row:active {
+  background: var(--chalk-pressed);
+}
 .chalk-sheet-row:disabled {
   opacity: 0.5;
 }
@@ -1678,22 +1681,6 @@
 }
 .chalk-sheet-group + .chalk-sheet-group {
   margin-top: var(--space-2);
-}
-.chalk-sheet-label {
-  padding: var(--space-3) var(--space-4) var(--space-1-5);
-  font-size: var(--type-caption);
-  font-weight: 600;
-  color: var(--chalk-muted-text);
-}
-.chalk-sheet-label:first-child {
-  padding-top: var(--space-1);
-}
-.chalk-sheet-lead {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 20px;
-  color: var(--chalk-soft-text);
 }
 .chalk-sheet-label-text {
   flex: none;
@@ -1726,54 +1713,6 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-}
-.chalk-sheet .chalk-shell-preview {
-  height: 188px;
-  margin-bottom: var(--space-2);
-  border-radius: var(--corner-2xl);
-}
-.chalk-sheet-row .chalk-shell-level {
-  width: 48px;
-  flex: none;
-}
-.chalk-sheet-row[role="switch"] .chalk-switch {
-  flex: none;
-}
-.chalk-sheet-center {
-  justify-content: center;
-  font-weight: 600;
-}
-.chalk-sheet-center[aria-pressed="true"] {
-  background: var(--chalk-warning);
-  color: var(--chalk-accent-text);
-}
-.chalk-sheet-emoji {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  margin-top: var(--space-2);
-  padding: var(--space-1);
-  background: var(--chalk-raised);
-  border-radius: var(--corner-2xl);
-}
-.chalk-sheet-emoji[data-expanded] {
-  grid-auto-flow: row;
-  grid-template-columns: repeat(7, 1fr);
-}
-.chalk-sheet-emoji > button {
-  display: grid;
-  place-items: center;
-  height: 56px;
-  border-radius: var(--corner-xl);
-  font:
-    var(--type-headline) / 1 "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Noto Color Emoji",
-    sans-serif;
-}
-.chalk-sheet-emoji > button:active,
-.chalk-sheet-row:active {
-  background: var(--chalk-pressed);
 }
 .chalk-sheet-row[data-part="dock-layout-row"] {
   box-shadow: var(--elevation-divider-top);
@@ -2236,13 +2175,6 @@
 .chalk-sheet[data-variant="panel"] .chalk-sheet-handle {
   height: 13px;
   flex: none;
-}
-.chalk-sheet[data-variant="reactions"] {
-  border-top: 1px solid var(--chalk-line-strong);
-  box-shadow: var(--elevation-menu);
-}
-[data-chalk][data-chalk-theme="light"] .chalk-sheet[data-variant="reactions"] {
-  box-shadow: var(--elevation-menu-light);
 }
 [data-chalk][data-chalk-theme="light"] .chalk-sheet[data-variant="details"] {
   box-shadow: var(--elevation-menu-light);

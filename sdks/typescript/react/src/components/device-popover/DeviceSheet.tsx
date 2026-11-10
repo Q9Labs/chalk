@@ -26,6 +26,35 @@ interface DeviceSheetProps {
   readonly onTestSpeaker?: () => void;
 }
 
+const DEVICE_SHEET_CSS = `.chalk-sheet-label {
+  padding: var(--space-3) var(--space-4) var(--space-1-5);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  color: var(--chalk-muted-text);
+}
+.chalk-sheet-label:first-child {
+  padding-top: var(--space-1);
+}
+.chalk-sheet-lead {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  color: var(--chalk-soft-text);
+}
+.chalk-sheet .chalk-shell-preview {
+  height: 188px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--corner-2xl);
+}
+.chalk-sheet-row .chalk-shell-level {
+  width: 48px;
+  flex: none;
+}
+.chalk-sheet-row[role="switch"] .chalk-switch {
+  flex: none;
+}`;
+
 function Check({ on }: { readonly on: boolean }) {
   return (
     <span className="chalk-sheet-lead" aria-hidden="true">
@@ -97,6 +126,9 @@ export default function DeviceSheet({
   const label = mic ? "Microphone" : "Camera";
   return (
     <ChalkSheet variant="details" open={open} onOpenChange={onOpenChange} title={mic ? "Audio" : "Camera"}>
+      <style href="chalk-device-sheet" precedence="default">
+        {DEVICE_SHEET_CSS}
+      </style>
       {mic ? null : <CameraPreview onDeviceId={setPreviewDeviceId} track={track} mirrored={mirrored} open={open} selectedDeviceId={selectedDeviceId} captureCameraPreview={captureCameraPreview} />}
       <div className="chalk-sheet-label">{label}</div>
       <div className="chalk-sheet-group" role="radiogroup" aria-label={label}>

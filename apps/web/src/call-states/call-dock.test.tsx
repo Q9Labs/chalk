@@ -134,6 +134,7 @@ it("shows reactions as a sheet with no scrim and closes it 120 ms after an emoji
     const client = await mount();
     const send = vi.spyOn(client.reactions, "send").mockReturnValue(new Promise(() => {}));
     await click(button("Reactions"));
+    await settle();
     expect(sheet()).not.toBeNull();
     expect(host.querySelector("[data-part=sheet-scrim]")).toBeNull();
     expect(sheet()?.contains(tray())).toBe(true);

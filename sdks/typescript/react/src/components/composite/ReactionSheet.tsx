@@ -8,8 +8,52 @@ import type { ReactionTrayProps } from "./ReactionTray";
 const CLOSE_DELAY_MS = 120;
 const FIRST_ROW = 6;
 
+const REACTION_SHEET_CSS = `.chalk-sheet-center {
+  justify-content: center;
+  font-weight: 600;
+}
+.chalk-sheet-center[aria-pressed="true"] {
+  background: var(--chalk-warning);
+  color: var(--chalk-accent-text);
+}
+.chalk-sheet-emoji {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  margin-top: var(--space-2);
+  padding: var(--space-1);
+  background: var(--chalk-raised);
+  border-radius: var(--corner-2xl);
+}
+.chalk-sheet-emoji[data-expanded] {
+  grid-auto-flow: row;
+  grid-template-columns: repeat(7, 1fr);
+}
+.chalk-sheet-emoji > button {
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border-radius: var(--corner-xl);
+  font:
+    var(--type-headline) / 1 "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Noto Color Emoji",
+    sans-serif;
+}
+.chalk-sheet-emoji > button:active,
+.chalk-sheet-row:active {
+  background: var(--chalk-pressed);
+}
+.chalk-sheet[data-variant="reactions"] {
+  border-top: 1px solid var(--chalk-line-strong);
+  box-shadow: var(--elevation-menu);
+}
+[data-chalk][data-chalk-theme="light"] .chalk-sheet[data-variant="reactions"] {
+  box-shadow: var(--elevation-menu-light);
+}`;
+
 /** The reactions tray on a phone: a bottom sheet with no scrim, so the emoji floating up over the tiles stay bright. */
-export function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose"> & { readonly open: boolean }) {
+export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions, onSelect, onClose }: Pick<ReactionTrayProps, "isHandRaised" | "onToggleHandRaise" | "reactions" | "onSelect" | "onClose"> & { readonly open: boolean }) {
   const [more, setMore] = useState(false);
   const { trigger } = useHaptics();
   const send = (emoji: string) => {
@@ -26,6 +70,9 @@ export function ReactionSheet({ open, isHandRaised, onToggleHandRaise, reactions
       }}
       title="Reactions"
     >
+      <style href="chalk-reaction-sheet" precedence="default">
+        {REACTION_SHEET_CSS}
+      </style>
       {onToggleHandRaise ? (
         <div className="chalk-sheet-group">
           <button
