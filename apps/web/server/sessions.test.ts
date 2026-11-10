@@ -4,7 +4,8 @@ import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/
 import { handleDashboard } from "./application";
 import type { Engine } from "./engine";
 import type { IdentityProvider } from "./identity";
-import { CALL_CAP, PAGE_ROWS, recordingsPage, sessionsPage } from "./sessions";
+import { PAGE_ROWS } from "../src/lib/dashboard/lists";
+import { CALL_CAP, recordingsPage, sessionsPage } from "./sessions";
 import type { SessionListDTO } from "../src/lib/dashboard/contracts";
 
 afterEach(() => vi.restoreAllMocks());

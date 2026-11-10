@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListDTO, SessionRowDTO } from "./contracts";
-import { appendPage, bounds, dayValue, mergeFirstPage, recordingBadge, recordingsQueryOf, sessionsQueryOf, timeInCalls, transcriptBadge } from "./lists";
+import { appendPage, bounds, dayValue, mergeFirstPage, PAGE_ROWS, recordingBadge, recordingsQueryOf, refreshable, sessionsQueryOf, timeInCalls, transcriptBadge } from "./lists";
 import { parseRecordingsSearch, parseSessionsSearch } from "./search";
 
 const now = new Date(2026, 10, 10, 15, 30);
@@ -100,5 +100,10 @@ describe("lists that grow and refresh", () => {
     const merged = mergeFirstPage(list([row(2, day(2))], "old"), list([row(3, day(3)), row(2, day(2))], null));
     expect(merged.rows).toHaveLength(2);
     expect(merged.nextCursor).toBeNull();
+  });
+
+  it("a poll can only change the first page, so older loaded rows are not watched", () => {
+    const rows = Array.from({ length: PAGE_ROWS + 2 }, (_, index) => row(index, day(5)));
+    expect(refreshable(list(rows, null))).toEqual(rows.slice(0, PAGE_ROWS));
   });
 });

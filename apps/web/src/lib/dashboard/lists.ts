@@ -3,6 +3,9 @@ import { rangeDay } from "./format";
 import type { RangeKind, RecordingsSearch, SessionsSearch } from "./search";
 import { videoGroup, type VideoGroup, type VideoState } from "./recording";
 
+/** Sessions per page. Each row costs one attendance read. */
+export const PAGE_ROWS = 10;
+
 export const RANGE_LABEL: Record<Exclude<RangeKind, "custom">, string> = { today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", month: "This month" };
 
 const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -108,6 +111,9 @@ export function appendPage(current: SessionListDTO, page: SessionListDTO): Sessi
 
 /** Rows sort newest first, so a row is older than another when it started earlier, or at the same time with a smaller ID. */
 const older = (row: SessionRowDTO, than: SessionRowDTO) => Date.parse(row.episode.startedAt) < Date.parse(than.episode.startedAt) || (row.episode.startedAt === than.episode.startedAt && row.episode.id < than.episode.id);
+
+/** A poll reads the first page only, so only these rows can still change. Rows from older pages stay as they were loaded. */
+export const refreshable = (list: SessionListDTO) => list.rows.slice(0, PAGE_ROWS);
 
 /**
  * The first page read again is the truth for the days it covers: rows that stopped matching leave, new ones arrive, the rest

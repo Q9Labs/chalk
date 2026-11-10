@@ -6,6 +6,7 @@ import type { Engine } from "./engine";
 import { attendance, run } from "./engine";
 import { recordingDTO } from "./dto";
 import { DashboardError } from "./http";
+import { PAGE_ROWS } from "../src/lib/dashboard/lists";
 import { keptRecording, videoGroup, videoState, type VideoGroup } from "../src/lib/dashboard/recording";
 import type { RecordingsQuery, SessionListDTO, SessionRowDTO, SessionsQuery, SessionTotalsDTO } from "../src/lib/dashboard/contracts";
 
@@ -16,8 +17,6 @@ import type { RecordingsQuery, SessionListDTO, SessionRowDTO, SessionsQuery, Ses
  * A request is stateless: the cursor is the position in the sorted list, and each page reads the scan again.
  */
 
-/** Sessions per page. Each row costs one attendance read. */
-export const PAGE_ROWS = 10;
 /** The engine's own maximum page, MaxPageSize in apps/api/internal/pagination/pagination.go. */
 const LIST = 100;
 /** Space reads: three pages of 100, which is also what one activity read covers (300 ids). */

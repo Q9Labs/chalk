@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import type { SessionListDTO, SessionRowDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, duration, sessionDay } from "../../lib/dashboard/format";
-import { appendPage, bounds, recordingsQueryOf, rowModel, VIDEO_BADGE } from "../../lib/dashboard/lists";
+import { appendPage, bounds, recordingsQueryOf, refreshable, rowModel, VIDEO_BADGE } from "../../lib/dashboard/lists";
 import type { RecordingsSearch } from "../../lib/dashboard/search";
 import { VIDEO, videoGroup, videoState, type VideoGroup } from "../../lib/dashboard/recording";
 import { Icon } from "../site/Icon";
@@ -33,7 +33,7 @@ export function RecordingsPage({ search }: { readonly search: RecordingsSearch }
   const query = recordingsQueryOf(search, now);
   const { state, reload, update } = useLoad(() => readPage("recordings", query), JSON.stringify(query), {
     visibility: "status",
-    interval: (data) => (data.totals.video.processing || data.rows.some((row) => row.transcript === "processing" || (row.recording && videoGroup(row.recording.video) === "processing")) ? POLL_MS : undefined),
+    interval: (data) => (data.totals.video.processing || refreshable(data).some((row) => row.transcript === "processing" || (row.recording && videoGroup(row.recording.video) === "processing")) ? POLL_MS : undefined),
     read: async () => refreshed(await readPage("recordings", query)),
   });
   const [deleting, setDeleting] = useState<SessionRowDTO | null>(null);
