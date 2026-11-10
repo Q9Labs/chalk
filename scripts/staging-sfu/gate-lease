@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Runs a gating command under the staging SFU lease and names a lease failure.
+#
+#   gate-lease <holder> <purpose> <run-id> -- <command> [args...]
+#
+# It takes the lease with staging-lock (waiting STAGING_LEASE_WAIT seconds, default 1800) and returns the
+# command's exit status. When staging-lock itself exits 75, it says why on the run: the lease was never
+# acquired (staging-sfu-lease-timeout) or it was lost while the command ran (staging-sfu-lease-lost).
+# The reason goes to the step output `failure` and to an error annotation. A command that exits 75 by
+# itself, with the lease intact, is passed through unnamed. The lease rules stay in staging-lock.
+set -uo pipefail
+
+if [ "$#" -lt 5 ] || [ "$4" != -- ]; then
+  echo "usage: gate-lease <holder> <purpose> <run-id> -- <command> [args...]" >&2
+  exit 2
+fi
+holder=$1
+purpose=$2
+run_id=$3
+shift 4
+
+lock=${STAGING_LOCK:-$(dirname "${BASH_SOURCE[0]}")/staging-lock}
+wait_seconds=${STAGING_LEASE_WAIT:-1800}
+evidence=$(mktemp)
+trap 'rm -f "$evidence"' EXIT
+
+status=0
+"$lock" --holder "$holder" --purpose "$purpose" --run-id "$run_id" --wait "$wait_seconds" --evidence "$evidence" -- "$@" || status=$?
+if [ "$status" -ne 75 ]; then
+  exit "$status"
+fi
+
+reason=
+if ! jq -e '.acquired == true' "$evidence" > /dev/null 2>&1; then
+  reason=staging-sfu-lease-timeout
+  held=$(jq -r '.previous // empty | "\(.holder) (\(.purpose), run \(.run_id))"' "$evidence" 2> /dev/null || true)
+  message="Another lane held the staging SFU lease for the whole ${wait_seconds}-second wait${held:+ (last holder: $held)}, so ${purpose} did not run."
+elif jq -e '.lost == true' "$evidence" > /dev/null 2>&1; then
+  reason=staging-sfu-lease-lost
+  message="The staging SFU lease was lost while ${purpose} ran, so its workload was stopped."
+fi
+if [ -n "$reason" ]; then
+  echo "::error title=${reason}::${message}"
+  echo "${reason}: ${message}"
+  [ -z "${GITHUB_OUTPUT:-}" ] || echo "failure=${reason}" >> "$GITHUB_OUTPUT"
+  [ -z "${GITHUB_STEP_SUMMARY:-}" ] || echo "**${reason}**: ${message}" >> "$GITHUB_STEP_SUMMARY"
+fi
+exit 75

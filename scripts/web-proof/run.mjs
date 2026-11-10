@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createRun, loadConfig, save, maskCredentials, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
-import { prepareIntegration } from "../prod-proof/proofs.mjs";
+import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
+import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
 
@@ -36,20 +36,26 @@ try {
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
   await prepareIntegration(run, false);
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `web-proof-${randomUUID()}`,
-    metadata: { proof_run_id: runId },
-    media_plane: "cf_sfu",
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  // The public API refuses to create an own-SFU Space, so chalk_sfu reuses the Space an operator moved (CHALK_PROOF_SPACE_ID_CHALK_SFU).
+  const space =
+    mediaPlane === "chalk_sfu"
+      ? await createSpace(run, mediaPlane)
+      : await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
+          name: run.label,
+          slug: `web-proof-${randomUUID()}`,
+          metadata: { proof_run_id: runId },
+          media_plane: "cf_sfu",
+          recording_policy: "manual",
+          transcription_policy: "on_demand",
+          default_episode_duration_seconds: 1800,
+          maximum_episode_duration_seconds: 1800,
+          linger_window_seconds: 60,
+          admission_policy: { mode: "open" },
+        });
   await save(`${directory}/space.json`, space);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
+  // A reused Space is not the run's own, so cleanup learns of this Episode from the ownership file.
+  if (mediaPlane === "chalk_sfu") await trackEpisode(run, space, episode);
   await save(`${directory}/episode.json`, episode);
   const invite = await run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}/public-invite`, { enabled: true });
   const url = new URL(invite.canonical_url);

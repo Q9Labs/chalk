@@ -406,6 +406,7 @@ def record(github, args):
     info = json.loads(env('RELEASE'))
     info['target_sha'] = env('TARGET_SHA')
     info['web'] = json.loads(info.get('web') or '{}')
+    # The gate: the chalk_sfu real-call proof. own_sfu below adds the latency run and decides promotion only.
     real_call = os.environ.get('PROOF_RESULT', 'failed')
     web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
     own_sfu = os.environ.get('OWN_SFU_RESULT', 'skipped')
