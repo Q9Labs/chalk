@@ -1,6 +1,6 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
-import { deviceAccessReason, detectBrowser, detectPlatform, isDeviceAccessFailure, type DeviceAccessReason, type DeviceKind, type PermissionAnswer } from "./model";
-import { readPermission, watchPermission, watchRecovery, type DevicePorts } from "./ports";
+import { isDeviceAccessFailure, type DeviceAccessReason, type DeviceKind, type PermissionAnswer } from "./model";
+import { watchPermission, type DevicePorts } from "./ports";
 
 export interface DeviceIssue {
   readonly reason: DeviceAccessReason;
@@ -52,18 +52,19 @@ export class DeviceAccessStore {
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
     if (!isDeviceAccessFailure(failure, device)) return;
     const attempt = this.#nextAttempt(device);
-    const permission = device === "screen" ? "unknown" : await readPermission(this.#ports, device);
+    const { resolveAccess } = await import("./resolve");
+    const resolved = await resolveAccess(this.#ports, device, failure);
     if (this.#attempt.get(device) !== attempt) return;
-    const reason = deviceAccessReason(failure, device, { browser: detectBrowser(this.#ports.userAgent), platform: detectPlatform(this.#ports.userAgent), permission });
-    if (!reason) {
+    if (!resolved) {
       this.clear(device);
       return;
     }
+    const { reason, watch } = resolved;
     this.#retries.set(device, retry);
     this.#recoveries.get(device)?.();
     this.#recoveries.set(
       device,
-      watchRecovery(this.#ports, device, reason, () => void this.retry(device)),
+      watch(() => void this.retry(device)),
     );
     this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, open: true } } });
   }

@@ -27,35 +27,6 @@ export function isDeviceAccessFailure(failure: ClientFailure, device: string | u
   return failure.code === "media.permission_denied" || failure.code === "media.device_busy" || failure.code === "media.device_not_found";
 }
 
-/**
- * The card for one failure, or null when nothing should show.
- * A refusal while the browser says "granted" can only come from the operating system, and so can Chrome's "Permission denied by system".
- * A screen refusal without that signal is the person cancelling the browser picker.
- */
-export function deviceAccessReason(failure: ClientFailure, device: DeviceKind, environment: AccessEnvironment): DeviceAccessReason | null {
-  if (!isDeviceAccessFailure(failure, device)) return null;
-  if (failure.code === "media.device_busy") return { kind: "busy" };
-  if (failure.code === "media.device_not_found") return { kind: "missing" };
-  const system = failure.permissionBlock === "system" || (device !== "screen" && environment.permission === "granted");
-  if (device === "screen") return system && environment.platform === "mac" ? { kind: "blocked-system", platform: "mac", browser: environment.browser } : null;
-  if (system && environment.platform !== "other") return { kind: "blocked-system", platform: environment.platform, browser: environment.browser };
-  return { kind: "blocked-browser", browser: environment.browser };
-}
-
-export function detectBrowser(userAgent: string): BrowserName {
-  if (/Firefox\/|FxiOS\//.test(userAgent)) return "firefox";
-  if (/Edg(?:e|A|iOS)?\//.test(userAgent)) return "edge";
-  if (/Safari\//.test(userAgent) && !/Chrome\/|Chromium\/|CriOS\//.test(userAgent)) return "safari";
-  return "chrome";
-}
-
-export function detectPlatform(userAgent: string): Platform {
-  if (/iPhone|iPad|iPod|Android/.test(userAgent)) return "other";
-  if (/Macintosh|Mac OS X/.test(userAgent)) return "mac";
-  if (/Windows/.test(userAgent)) return "windows";
-  return "other";
-}
-
 export function accessTooltip(device: DeviceKind, reason: DeviceAccessReason): string {
   const name = DEVICE_NAMES[device];
   if (reason.kind === "busy") return `${name} is in use. Click to fix.`;

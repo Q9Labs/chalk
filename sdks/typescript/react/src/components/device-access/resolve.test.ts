@@ -1,6 +1,7 @@
 import { SpaceClientError, type ErrorCode } from "@q9labsai/chalk-client";
 import { describe, expect, it } from "vitest";
-import { deviceAccessReason, detectBrowser, detectPlatform, type AccessEnvironment, type PermissionAnswer } from "./model";
+import type { AccessEnvironment, PermissionAnswer } from "./model";
+import { deviceAccessReason, detectBrowser, detectPlatform } from "./resolve";
 
 const failure = (code: ErrorCode, permissionBlock?: "system") => new SpaceClientError({ code, recoverable: true, message: code, permissionBlock });
 const env = (permission: PermissionAnswer, platform: AccessEnvironment["platform"] = "mac"): AccessEnvironment => ({ browser: "chrome", platform, permission });
