@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import type { FakeDeviceSetup } from "./media";
+import type { FakeDeviceSetup } from "./pre-join-devices";
 import type { Action, CallState } from "./states";
 
 /** The step loads on demand, so the other states do not pay for it in the harness bundle. */
