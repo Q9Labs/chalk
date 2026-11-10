@@ -45,7 +45,7 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
 
   # The URL the production SDK opens: it asks Sync to own the entry, so confirmation
   # happens later on `entered` and not inside hello.
-  @production_path "/v1/sync?participant_devices=1&participant_device_admissions=2&media_off_reason=1&entry_generation=new&entry_confirmation=1"
+  @production_path "/v1/sync?participant_devices=1&participant_device_admissions=2&media_off_reason=1&connection_quality=1&entry_generation=new&entry_confirmation=1"
 
   test "a production socket entry stays within its Postgres round trip budget", ctx do
     [identity | _] = ctx.seed.identities

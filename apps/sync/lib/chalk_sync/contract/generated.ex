@@ -700,14 +700,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         {:error, :invalid_hello}
     end
   end
-  defp decode_connection_quality_set(%{"quality" => quality} = frame) when quality in @connection_qualities,
-      do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set,
-      quality}}, else: {:error, :invalid_connection_quality})
-  defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}
 
   defp decode_hello(%{"protocol" => protocol}) when is_integer(protocol), do: {:error,
       :unsupported_protocol}
   defp decode_hello(_frame), do: {:error, :invalid_hello}
+
+  defp decode_connection_quality_set(%{"quality" => quality} = frame) when quality in @connection_qualities,
+      do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set,
+      quality}}, else: {:error, :invalid_connection_quality})
+  defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}
 
   defp decode_command(%{"command_id" => command_id, "name" => name,
       "payload" => payload} = frame) do
