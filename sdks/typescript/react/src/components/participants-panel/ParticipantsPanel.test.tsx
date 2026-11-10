@@ -24,7 +24,7 @@ it("lists you first, then raised hands in order, then hosts, then the rest, with
   const people = [person("Zed"), person("Boss", { isHost: true }), person("Late", { isHandRaised: true, handOrder: 2 }), person("Me", { isLocal: true }), person("Early", { isHandRaised: true, handOrder: 1 }), ...crowd];
   const { element, unmount } = await mount(<ParticipantsPanelSurface participants={people} />);
   expect(names(element).slice(0, 5)).toEqual(["Me", "Early", "Late", "Boss", "Zed"]);
-  expect([...element.querySelectorAll(".call-people-section")].map((node) => node.textContent)).toEqual(["Raised hands 2", "In the call 12"]);
+  expect([...element.querySelectorAll(".call-people-section")].map((node) => node.textContent)).toEqual(["Raised hands 2", "In the call 11"]);
   expect([...element.querySelectorAll(".call-hand")].map((node) => node.getAttribute("aria-label"))).toEqual(["Hand raised, number 1", "Hand raised, number 2"]);
   await unmount();
 });
