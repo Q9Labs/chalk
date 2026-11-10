@@ -44,7 +44,7 @@ export async function withProofCall({ app, screen }, run) {
 function throwErrors(errors, message) {
   const failures = [...new Set(errors.flatMap(flattenErrors))];
   if (failures.length === 1) throw failures[0];
-  if (failures.length) throw new AggregateError(failures, message);
+  if (failures.length) throw new AggregateError(failures, `${message}: ${failures.map((failure) => String(failure?.message ?? failure).split("\n")[0]).join("; ")}`);
 }
 
 async function leaveWebCall(screen, joined) {
