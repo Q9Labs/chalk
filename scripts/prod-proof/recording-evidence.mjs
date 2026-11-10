@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { analyzeAudio, findFlashes, frameRate, markerHz, screenHz } from "./call-script.mjs";
+import { analyzeAudio, findFlashes, frameRate, markerHz } from "./call-script.mjs";
 import { cameraEvidence, frameSize } from "./recording-rejoin.mjs";
 import { decodeFrames, tileEvidence, tileFailure } from "./tile-frames.mjs";
 
@@ -72,7 +72,8 @@ export async function recordingEvidence(file, guestCount) {
 
 const audioRate = 16_000;
 const thumbnail = { width: 96, height: 54 };
-const screenGreen = [34, 197, 94]; // The proof's shared screen draws a green square on a dark blue page.
+// The proof browsers run with --use-fake-device-for-media-stream, so a screen share is Chromium's fake display: dark green (about 0, 150, 0) with a lighter green pie and a timer.
+const screenGreenPixel = (red, green, blue) => green > 110 && red < 110 && blue < 80;
 
 /** The script's marks as found in the Recording: tones, silences and levels from the audio, flashes and the shared screen from the picture. */
 async function audioSignals(file, frequencies) {
@@ -84,7 +85,7 @@ async function audioSignals(file, frequencies) {
 export const trackSignals = (file) => audioSignals(file, markerHz);
 
 export async function recordingSignals(file) {
-  const audio = await audioSignals(file, [...markerHz, screenHz]);
+  const audio = await audioSignals(file, markerHz);
   const { stdout: raw } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-an", "-vf", `fps=${frameRate},scale=${thumbnail.width}:${thumbnail.height}`, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { encoding: "buffer" });
   const pixels = thumbnail.width * thumbnail.height;
   const lumas = [];
@@ -94,7 +95,7 @@ export async function recordingSignals(file) {
     let match = 0;
     for (let index = offset; index < offset + pixels * 3; index += 3) {
       luma += raw[index] * 0.299 + raw[index + 1] * 0.587 + raw[index + 2] * 0.114;
-      if (Math.abs(raw[index] - screenGreen[0]) + Math.abs(raw[index + 1] - screenGreen[1]) + Math.abs(raw[index + 2] - screenGreen[2]) < 90) match++;
+      if (screenGreenPixel(raw[index], raw[index + 1], raw[index + 2])) match++;
     }
     lumas.push(luma / pixels);
     green.push({ time: green.length / frameRate, share: match / pixels });

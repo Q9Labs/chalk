@@ -4,7 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { analyzeAudio, bounds, expectedSounds, findFlashes, frameRate, judgeScript, longestScriptedSilenceMs, markerHz, markerTimes, phraseDelaySeconds, screenHz, silenceBoundMs } from "./call-script.mjs";
+import { analyzeAudio, bounds, expectedSounds, findFlashes, frameRate, judgeScript, longestScriptedSilenceMs, markerHz, markerTimes, phraseDelaySeconds, silenceBoundMs } from "./call-script.mjs";
 import { recordingSignals } from "./recording-evidence.mjs";
 import { trackVerdicts } from "./track-verdicts.mjs";
 
@@ -58,14 +58,14 @@ function render(script, { drop = () => false, lingerMs = 300, flashLagSeconds = 
   const lag = lingerMs / 1000;
   const held = (from, to, hz) => tone(rec((from - wall) / 1000), rec((to - wall) / 1000) + lag, hz, 0.2);
   if (only === undefined || only === script.hold.guest) held(script.hold.startMs, script.hold.muteMs, markerHz[script.hold.guest]);
-  if (only === undefined) held(script.screen.startMs, script.screen.stopMs, screenHz);
+  if (only === undefined || only === 0) held(script.screen.startMs, script.screen.stopMs, markerHz[0]);
   if (only === undefined || only === script.stop.guest) held(script.stop.holdStartMs, script.stop.stopMs, markerHz[script.stop.guest]);
   if (hole) samples.fill(0, Math.round(rec(hole[0]) * rate), Math.round(rec(hole[1]) * rate));
   const green = Array.from({ length: Math.round(duration * frameRate) }, (_, frame) => {
     const time = frame / frameRate;
-    return { time, share: shareFrames && time >= rec((script.screen.startMs - wall) / 1000) && time <= rec((script.screen.stopMs - wall) / 1000) + lag ? 0.01 : 0 };
+    return { time, share: shareFrames && time >= rec((script.screen.startMs - wall) / 1000) && time <= rec((script.screen.stopMs - wall) / 1000) + lag ? 0.66 : 0.01 };
   });
-  return { signals: { ...analyzeAudio(samples, rate, [...markerHz, screenHz]), flashes, green }, duration };
+  return { signals: { ...analyzeAudio(samples, rate, markerHz), flashes, green }, duration };
 }
 
 const judge = (script, options) => {
