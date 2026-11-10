@@ -244,18 +244,18 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-qr-card {margin:var(--space-1) 0;padding:var(--space-2) var(--space-4);display:grid;place-items:center;}
 .chalk-shell-qr-card[hidden] {display:none;}
 .chalk-shell-connection-bars {display:inline-flex;align-items:flex-end;gap:var(--space-0-5);height:14px;}
-.chalk-shell-connection-bars i {width:3px;border-radius:1px;background:var(--chalk-line-strong);}
+.chalk-shell-connection-bars i {width:3px;border-radius:var(--corner-xs);background:var(--chalk-line-strong);}
 .chalk-shell-connection-bars[data-level="4"] > i {background:var(--chalk-positive);}
 .chalk-shell-connection-bars[data-level="3"] > i:nth-child(-n+3),.chalk-shell-connection-bars[data-level="2"] > i:nth-child(-n+2) {background:var(--chalk-warning);}
 .chalk-shell-connection-bars[data-level="1"] > i:nth-child(1) {background:var(--chalk-danger-text);}
-.chalk-shell-detail-helper {padding:0 var(--space-3) var(--space-2) 42px;margin-top:calc(var(--space-1) * -1);font-size:var(--type-caption);color:var(--chalk-muted-text);}
+.chalk-shell-detail-helper {padding:0 var(--space-3) var(--space-2) calc(var(--space-10) + var(--space-0-5));margin-top:calc(var(--space-1) * -1);font-size:var(--type-caption);color:var(--chalk-muted-text);}
 .chalk-shell-charts {display:grid;gap:var(--space-4);padding:var(--space-2) var(--space-3);}
 .chalk-shell-chart-top {display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--space-1-5);font-size:var(--type-caption);color:var(--chalk-muted-text);}
 .chalk-shell-chart-top b {color:var(--chalk-text);font-size:var(--type-body-sm);font-weight:600;font-variant-numeric:tabular-nums;}
 .chalk-shell-chart-top small {margin-inline-start:var(--space-0-5);color:var(--chalk-muted-text);font-size:var(--type-caption);font-weight:500;}
 .chalk-shell-chart svg {display:block;width:100%;height:36px;overflow:visible;}
 .chalk-shell-chart-legend {display:inline-flex;gap:var(--space-2);}
-.chalk-shell-chart-legend i {display:inline-block;width:8px;height:2px;margin-inline-end:var(--space-1);border-radius:1px;vertical-align:middle;}
+.chalk-shell-chart-legend i {display:inline-block;width:8px;height:2px;margin-inline-end:var(--space-1);border-radius:var(--corner-xs);vertical-align:middle;}
 .chalk-shell-chart-axis {display:flex;justify-content:space-between;margin-top:calc(var(--space-1) * -1);font-size:var(--type-micro);color:var(--chalk-muted-text);}
 .chalk-shell-diagnostics {
   display: grid;
@@ -367,7 +367,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   margin-top: var(--space-2);
 }
 .chalk-shell-report-field {display:flex;flex-direction:column;min-height:72px;margin:0 var(--space-1-5);padding:var(--space-2-5) var(--space-3);border-radius:var(--corner-xl);background:var(--chalk-hover);font-size:var(--type-body);}
-.chalk-shell-report-field:focus-within {box-shadow:0 0 0 1px var(--chalk-text);}
+.chalk-shell-report-field:focus-within {box-shadow:var(--elevation-outline);}
 .chalk-shell-report-field textarea {flex:1;min-height:0;padding:0;border:0;outline:0;background:transparent;resize:none;font:inherit;}
 .chalk-shell-report-count {align-self:flex-end;margin-top:auto;font-size:var(--type-caption);color:var(--chalk-muted-text);}
 .chalk-shell-report-check {display:flex;align-items:center;gap:var(--space-3);margin:0 var(--space-1-5);padding:var(--space-3) var(--space-1);font-size:var(--type-body-sm);}
