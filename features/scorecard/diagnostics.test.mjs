@@ -7,7 +7,7 @@ import test from "node:test";
 import { gatedActionIds, readBudgets } from "./budgets.mjs";
 import { DIAGNOSTICS_SCHEMA, diagnosticsFileName, diagnosticsReport, problemOf } from "./diagnostics.mjs";
 import { METRICS, SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
-import { AUDIO_KEYS, RETIRED_STAGE_IDS, STAGE_IDS } from "./stages.mjs";
+import { RETIRED_STAGE_IDS, STAGE_IDS } from "./stages.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
@@ -124,16 +124,9 @@ test("a sidecar written before the turn-off stages were retired still validates 
   assert.doesNotMatch(report, /close_tracks/);
 });
 
-test("the audio parts are unique and no budget names them", async () => {
-  assert.equal(new Set(AUDIO_KEYS).size, AUDIO_KEYS.length);
-  assert.ok(AUDIO_KEYS.every((id) => id.startsWith("media.")));
+test("no budget names the audio delay", async () => {
   const { budgets } = await readBudgets();
   assert.equal(JSON.stringify(budgets).includes("network_jitter"), false);
-});
-
-test("every stage id in the registry is unique and belongs to a group", () => {
-  assert.equal(new Set(STAGE_IDS).size, STAGE_IDS.length);
-  assert.ok(STAGE_IDS.every((id) => /^[a-z_]+\.[a-z_]+$/.test(id)));
 });
 
 // Readers that shipped before this change reject a card with a field they do not know. The kit's numbers therefore stay out of

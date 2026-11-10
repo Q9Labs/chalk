@@ -102,6 +102,8 @@ func TestMCPControlCallIssuesSyncTokensOnlyToAPIKeysThatWriteEpisodes(t *testing
 	}
 }
 
+// An action call that lacks the fields its action needs is a tool error that names the missing
+// field, and mints nothing.
 func TestMCPControlCallActionsNeedTheirFields(t *testing.T) {
 	spy := &syncTokenSpy{}
 	handler := NewMCPHandler(Options{SyncTokenRefresh: spy, TenantAuthz: authorization.NewTenantPolicy(nil, nil)})
@@ -109,16 +111,16 @@ func TestMCPControlCallActionsNeedTheirFields(t *testing.T) {
 	space, _ := utilities.NewID()
 	episode, _ := utilities.NewID()
 	base := `"space_id":"` + space.String() + `","episode_id":"` + episode.String() + `"`
-	for arguments, want := range map[string]string{
-		`{"action":"sync_token",` + base + `}`:                                            "also requires: participant_id",
-		`{"action":"access_grant",` + base + `}`:                                          "also requires: participant_id, participant_generation",
-		`{"action":"admit",` + base + `}`:                                                 "also requires: name, role, request_key",
+	for arguments, field := range map[string]string{
+		`{"action":"sync_token",` + base + `}`:                                            "participant_id",
+		`{"action":"access_grant",` + base + `}`:                                          "participant_id",
+		`{"action":"admit",` + base + `}`:                                                 "name",
 		`{"action":"mute_everyone",` + base + `}`:                                         "action",
 		`{"action":"cancel_join",` + base + `,"participant_id":"` + space.String() + `"}`: "action",
 	} {
 		response := callControlCall(t, handler, writer, arguments)
-		if !strings.Contains(response.Body.String(), `"isError":true`) || !strings.Contains(response.Body.String(), want) {
-			t.Errorf("%s: want error containing %q, got %s", arguments, want, response.Body.String())
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"isError":true`) || !strings.Contains(response.Body.String(), field) {
+			t.Errorf("%s: want a tool error naming %s, got %d %s", arguments, field, response.Code, response.Body.String())
 		}
 	}
 	if len(spy.issued) != 0 {

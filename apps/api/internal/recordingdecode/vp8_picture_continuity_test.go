@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -33,11 +34,13 @@ func (pictureFixtureRunner) Run(context.Context, string, ...string) ([]byte, err
 	return nil, errPictureFixtureComplete
 }
 
-// The fixture retains twelve complete consecutive pictures from a captured
-// camera stream, including sequence gaps occupied by stale replay traffic.
+// loadPictureFixture builds the RTP packets of the captured camera stream and the
+// index of the first one that follows a sequence gap. The fixture retains twelve
+// complete consecutive pictures, including gaps occupied by stale replay traffic.
 // Identifiers and clock origins are replaced; descriptors and frame headers
-// below contain no recorded media. This exercises assembly, not libvpx.
-func TestVP8ConsecutivePicturesBridgeReplaySequenceGaps(t *testing.T) {
+// contain no recorded media. This exercises assembly, not libvpx.
+func loadPictureFixture(t *testing.T) ([]recordingbundle.RTPPacket, int) {
+	t.Helper()
 	encoded, err := os.ReadFile("testdata/vp8-consecutive-pictures.json")
 	if err != nil {
 		t.Fatal(err)
@@ -46,75 +49,124 @@ func TestVP8ConsecutivePicturesBridgeReplaySequenceGaps(t *testing.T) {
 	if err := json.Unmarshal(encoded, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	for _, scenario := range []string{"consecutive", "picture_loss", "packet_loss", "ssrc_change", "without_picture_id", "timestamp_gap", "picture_wrap"} {
-		t.Run(scenario, func(t *testing.T) {
-			root := t.TempDir()
-			state := &sourceState{
-				track:        recordingbundle.TrackIdentity{TrackID: "camera", Epoch: 1, Codec: "vp8"},
-				spoolPath:    filepath.Join(root, "camera.spool"),
-				presentation: recordingpresentation.MediaSource{SourceID: "camera", Kind: recordingpresentation.MediaKindCamera},
+	packets := make([]recordingbundle.RTPPacket, 0, len(fixture))
+	var gapAt int
+	for i, value := range fixture {
+		if i > 0 && value.Sequence != fixture[i-1].Sequence+1 && gapAt == 0 {
+			gapAt = i
+		}
+		payload := []byte{0x80, 0x80, 0, 0}
+		if value.Start {
+			payload[0] |= 0x10
+		}
+		body := make([]byte, 10)
+		body[0] = 1
+		if value.Key {
+			body[0] = 0
+			copy(body[3:6], []byte{0x9d, 0x01, 0x2a})
+			binary.LittleEndian.PutUint16(body[6:8], value.Width)
+			binary.LittleEndian.PutUint16(body[8:10], value.Height)
+		}
+		packet := recordingbundle.RTPPacket{SequenceNumber: uint16(value.Sequence), ExtendedSequenceNumber: value.Sequence,
+			Timestamp: value.Timestamp, SSRC: 1, Marker: value.Marker, Payload: append(payload, body...)}
+		setPictureID(&packet, value.PictureID)
+		packets = append(packets, packet)
+	}
+	if gapAt == 0 {
+		t.Fatal("fixture must contain a sequence gap")
+	}
+	return packets, gapAt
+}
+
+// setPictureID writes a 15-bit picture ID into the descriptor of a fixture packet.
+func setPictureID(packet *recordingbundle.RTPPacket, id uint16) {
+	packet.Payload[2], packet.Payload[3] = byte(id>>8)|0x80, byte(id)
+}
+
+func pictureID(packet recordingbundle.RTPPacket) uint16 {
+	return uint16(packet.Payload[2]&0x7f)<<8 | uint16(packet.Payload[3])
+}
+
+// decodePictureFixture spools the packets as one camera fragment and assembles
+// them up to the codec conversion, which the runner stops.
+func decodePictureFixture(t *testing.T, packets []recordingbundle.RTPPacket) (*sourceState, error) {
+	t.Helper()
+	root := t.TempDir()
+	state := &sourceState{
+		track:        recordingbundle.TrackIdentity{TrackID: "camera", Epoch: 1, Codec: "vp8"},
+		spoolPath:    filepath.Join(root, "camera.spool"),
+		presentation: recordingpresentation.MediaSource{SourceID: "camera", Kind: recordingpresentation.MediaKindCamera},
+	}
+	if err := appendFragmentRun(context.Background(), state, recordingbundle.RTPFragment{Track: state.track, Packets: packets}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := finalizeSourceSpool(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := decodeVP8Source(context.Background(), pictureFixtureRunner{}, "ffmpeg", root, root, state, 3_000, true)
+	return state, err
+}
+
+func requireNoDroppedPictures(t *testing.T, state *sourceState, err error) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), errPictureFixtureComplete.Error()) || state.degradation.DroppedFrames != 0 {
+		t.Fatalf("consecutive pictures must reach conversion without drops: %v %+v", err, state.degradation)
+	}
+}
+
+func TestVP8ConsecutivePicturesBridgeReplaySequenceGaps(t *testing.T) {
+	packets, _ := loadPictureFixture(t)
+	state, err := decodePictureFixture(t, packets)
+	requireNoDroppedPictures(t, state, err)
+}
+
+func TestVP8PictureIDsWrappingAcrossAReplayGapAreConsecutive(t *testing.T) {
+	packets, _ := loadPictureFixture(t)
+	for i := range packets {
+		setPictureID(&packets[i], (pictureID(packets[i])-1000+32766)&0x7fff)
+	}
+	state, err := decodePictureFixture(t, packets)
+	requireNoDroppedPictures(t, state, err)
+}
+
+// Replay may bridge a sequence gap only when the pictures on both sides are
+// consecutive. Every kind of real loss must still discard pictures.
+func TestVP8RealLossStillDiscardsPictures(t *testing.T) {
+	for name, damage := range map[string]func(packets []recordingbundle.RTPPacket, gapAt int) []recordingbundle.RTPPacket{
+		"picture loss": func(packets []recordingbundle.RTPPacket, gapAt int) []recordingbundle.RTPPacket {
+			for i := gapAt; i < len(packets); i++ {
+				setPictureID(&packets[i], pictureID(packets[i])+1)
 			}
-			packets := make([]recordingbundle.RTPPacket, 0, len(fixture))
-			var gapAt int
-			for i, value := range fixture {
-				if i > 0 && value.Sequence != fixture[i-1].Sequence+1 && gapAt == 0 {
-					gapAt = i
-				}
-				pictureID := value.PictureID
-				if scenario == "picture_wrap" {
-					pictureID = (pictureID - 1000 + 32766) & 0x7fff
-				}
-				if scenario == "picture_loss" && gapAt > 0 && i >= gapAt {
-					pictureID++
-				}
-				payload := []byte{0x80, 0x80, byte(pictureID>>8) | 0x80, byte(pictureID)}
-				if value.Start {
-					payload[0] |= 0x10
-				}
-				body := make([]byte, 10)
-				body[0] = 1
-				if value.Key {
-					body[0] = 0
-					copy(body[3:6], []byte{0x9d, 0x01, 0x2a})
-					binary.LittleEndian.PutUint16(body[6:8], value.Width)
-					binary.LittleEndian.PutUint16(body[8:10], value.Height)
-				}
-				if scenario == "without_picture_id" {
-					payload = []byte{payload[0] & 0x7f}
-				}
-				packet := recordingbundle.RTPPacket{SequenceNumber: uint16(value.Sequence), ExtendedSequenceNumber: value.Sequence,
-					Timestamp: value.Timestamp, SSRC: 1, Marker: value.Marker, Payload: append(payload, body...)}
-				if scenario == "packet_loss" && i == 1 {
-					continue
-				}
-				if gapAt > 0 && i >= gapAt {
-					if scenario == "ssrc_change" {
-						packet.SSRC = 2
-					}
-					if scenario == "timestamp_gap" {
-						packet.Timestamp += 90_000
-					}
-				}
-				packets = append(packets, packet)
+			return packets
+		},
+		"packet loss": func(packets []recordingbundle.RTPPacket, _ int) []recordingbundle.RTPPacket {
+			return slices.Delete(packets, 1, 2)
+		},
+		"ssrc change": func(packets []recordingbundle.RTPPacket, gapAt int) []recordingbundle.RTPPacket {
+			for i := gapAt; i < len(packets); i++ {
+				packets[i].SSRC = 2
 			}
-			if gapAt == 0 {
-				t.Fatal("fixture must contain a sequence gap")
+			return packets
+		},
+		"without picture id": func(packets []recordingbundle.RTPPacket, _ int) []recordingbundle.RTPPacket {
+			for i := range packets {
+				packets[i].Payload = append([]byte{packets[i].Payload[0] & 0x7f}, packets[i].Payload[4:]...)
 			}
-			if err := appendFragmentRun(context.Background(), state, recordingbundle.RTPFragment{Track: state.track, Packets: packets}, 0); err != nil {
-				t.Fatal(err)
+			return packets
+		},
+		"timestamp gap": func(packets []recordingbundle.RTPPacket, gapAt int) []recordingbundle.RTPPacket {
+			for i := gapAt; i < len(packets); i++ {
+				packets[i].Timestamp += 90_000
 			}
-			if err := finalizeSourceSpool(context.Background(), state); err != nil {
-				t.Fatal(err)
-			}
-			_, _, err := decodeVP8Source(context.Background(), pictureFixtureRunner{}, "ffmpeg", root, root, state, 3_000, true)
-			if scenario == "consecutive" || scenario == "picture_wrap" {
-				if err == nil || !strings.Contains(err.Error(), errPictureFixtureComplete.Error()) || state.degradation.DroppedFrames != 0 {
-					t.Fatalf("consecutive pictures must reach conversion without drops: %v %+v", err, state.degradation)
-				}
-			} else if state.degradation.DroppedFrames == 0 {
+			return packets
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			packets, gapAt := loadPictureFixture(t)
+			state, err := decodePictureFixture(t, damage(packets, gapAt))
+			if state.degradation.DroppedFrames == 0 {
 				t.Fatalf("real loss must still discard pictures: %v %+v", err, state.degradation)
 			}
-
 		})
 	}
 }

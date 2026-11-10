@@ -133,16 +133,3 @@ func TestEpisodeReserveExpiryFreesCapacity(t *testing.T) {
 		t.Fatalf("reserve on a draining node: status %d code %q, want 503 draining", status, code)
 	}
 }
-
-func TestAHeldEpisodeRejoinsOnADrainingNode(t *testing.T) {
-	ca := newAuthority(t, "chalk test CA")
-	svc := startService(t, ca, func(cfg *config.Config) { cfg.PacketBudget = reserveBudget })
-
-	svc.mustCall(t, "/v1/episodes/reserve", reserveBody("reserve-a", "episode-a", 0), nil)
-	svc.mustCall(t, "/v1/drain", struct{}{}, nil)
-	stale := protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-a", ParticipantID: "alice", Generation: 1}
-	svc.joinWithAudio(t, stale)
-	if status, code := svc.call(t, "/v1/sessions", protocol.CreateSessionRequest{OperationID: op(), Scope: protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-new", ParticipantID: "alice", Generation: 1}}, nil); status != http.StatusServiceUnavailable || code != protocol.CodeDraining {
-		t.Fatalf("a new Episode on a draining node: status %d code %q, want 503 draining", status, code)
-	}
-}

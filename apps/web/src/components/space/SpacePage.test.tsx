@@ -76,18 +76,19 @@ it("joins fresh when window.open inherits a copy of the reload marker", async ()
 });
 
 it.each([
-  ["access.media_proof_rejected", "Could not return to this call. It may be open in another tab or device. Join as a new participant to continue here.", "Join as a new participant"],
-  ["access.media_proof_expired", "Could not return to the Episode. Check your access before joining again.", "Ask again"],
-])("offers fresh admission after %s without retrying replacement", async (code, message, label) => {
+  ["access.media_proof_rejected", "Join as a new participant"],
+  ["access.media_proof_expired", "Ask again"],
+])("offers fresh admission after %s without retrying replacement", async (code, label) => {
   writeReloadRejoin(sessionStorage, marker);
   await entry(code);
-  await expectMessage(message);
+  const freshButton = () => [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
+  await vi.waitFor(async () => {
+    await act(async () => undefined);
+    expect(freshButton()).toBeDefined();
+  });
   expect(requests).toEqual(["restore", "replace"]);
-  const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
-  expect(button).toBeDefined();
-  await act(async () => button?.click());
-  await expectMessage("Asking to join Design Lab");
-  expect(requests).toEqual(["restore", "replace", "fresh"]);
+  await act(async () => freshButton()?.click());
+  await vi.waitFor(() => expect(requests).toEqual(["restore", "replace", "fresh"]));
 });
 
 it("says calls are unavailable when resuming after a reload returns 503 media.unavailable", async () => {

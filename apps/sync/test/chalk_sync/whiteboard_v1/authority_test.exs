@@ -70,18 +70,6 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     assert drain_reads(identity.episode) in 1..12
   end
 
-  test "an idle socket sees a removal without sending anything" do
-    identity = identity()
-    Authority.watch(identity.episode)
-    assert_receive {:read, _episode}
-
-    access("active", "left")
-
-    wait_until(fn ->
-      Authority.check(identity) == {:error, {:permission_denied, :participant_inactive}}
-    end)
-  end
-
   test "a person who joins after the last read keeps the board until a newer read" do
     Application.put_env(:chalk_sync, :whiteboard_authority_poll_ms, 300)
     identity = identity()

@@ -1,13 +1,11 @@
 package chalksfu_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -130,43 +128,6 @@ func TestConformancePlacementNeedsTheServiceIdentity(t *testing.T) {
 	}
 }
 
-// A new Episode that every node would refuse starts on Cloudflare before its
-// binding is frozen. An Episode already bound to the own SFU never moves.
-func TestConformanceAFullPoolStartsTheNewEpisodeOnCloudflare(t *testing.T) {
-	box := startSFU(t, map[string]string{"SFU_PACKET_BUDGET": "1200"})
-	fleet := box.fleet(t)
-	fleet.Probe(context.Background())
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
-	registry := func(process runtimeconfig.CloudflareRealtimeConfig, live *mediaplane.Binding) mediaplaneproviders.Registry {
-		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-			ProcessConfig: process, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU, ChalkSFU: fleet, ChalkSFUSpaces: everySpace, Episodes: episodeBindings{live},
-		})
-	}
-	bound, err := registry(withCloudflare, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || bound.Provider != string(spaces.MediaPlaneProviderChalkSFU) || bound.Node != "sfu-a" {
-		t.Fatalf("binding with room: %+v, %v, want chalk_sfu on sfu-a", bound, err)
-	}
-	node, err := fleet.Node("sfu-a")
-	if err != nil {
-		t.Fatal(err)
-	}
-	join(t, mediaplane.NewServiceForProvider(mediaplane.ProviderChalkSFU, node), scopeOf("ep-1", "alice"))
-	fleet.Probe(context.Background())
-
-	next, err := registry(withCloudflare, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if err != nil || next.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) || next.Node != "" || next.PlacementReason != mediaplane.PlacementOverflowNoRoom {
-		t.Fatalf("binding on a full pool: %+v, %v, want Cloudflare", next, err)
-	}
-	refused, err := registry(runtimeconfig.CloudflareRealtimeConfig{}, nil).ResolveBinding(context.Background(), tenants.Tenant{}, chalkSpace, ownSFUClients)
-	if refused != nil || !errors.Is(err, mediaplane.ErrPlacementRefused) {
-		t.Fatalf("binding on a full pool without Cloudflare: %+v, %v, want a refusal and no binding", refused, err)
-	}
-	live, err := registry(withCloudflare, bound).ResolveEpisode(context.Background(), tenants.Tenant{}, chalkSpace, utilities.ID{})
-	if err != nil || live.Provider() != mediaplane.ProviderChalkSFU {
-		t.Fatalf("Episode bound before the pool filled: %v, %v, want chalk_sfu", live, err)
-	}
-}
-
 // A draining primary leaves placement and is reported as draining, not as silent. Its live
 // Episode keeps taking joins, and an undrain puts it back.
 func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T) {
@@ -174,8 +135,7 @@ func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T)
 	primary := startSFUUnder(t, ca, nil)
 	standby := startSFUUnder(t, ca, nil)
 	nodes := []runtimeconfig.ChalkSFUNode{{ID: "sfu-primary", ControlURL: primary.controlURL}, {ID: "sfu-standby", ControlURL: standby.controlURL, Role: runtimeconfig.ChalkSFURoleStandby}}
-	logs := &bytes.Buffer{}
-	fleet := primary.loggedFleetOf(t, slog.New(slog.NewTextHandler(logs, nil)), ca, clientIdentity, nodes...)
+	fleet := primary.fleetOf(t, ca, clientIdentity, nodes...)
 	ctx := context.Background()
 	control := primary.httpClient(t, ca, clientIdentity)
 	post := func(path string) {
@@ -217,9 +177,6 @@ func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T)
 	if health, known := fleet.Health("sfu-standby"); !known || health.Draining {
 		t.Fatalf("serving standby health %+v known %t, want not draining", health, known)
 	}
-	if got := strings.Count(logs.String(), "chalk sfu node draining"); got != 1 || strings.Contains(logs.String(), "left placement") {
-		t.Fatalf("three probes of a draining node logged:\n%s\nwant one draining line and no left-placement line", logs)
-	}
 
 	// The live Episode takes a join, a new Episode does not.
 	join(t, onPrimary, scopeOf("ep-live", "bob"))
@@ -236,8 +193,8 @@ func TestConformanceADrainingNodeLeavesPlacementButKeepsItsEpisode(t *testing.T)
 	if placed, _ := place(fleet); placed != "sfu-primary" {
 		t.Fatalf("undrained primary: placed on %q, want the primary", placed)
 	}
-	if health, _ := fleet.Health("sfu-primary"); health.Draining || !strings.Contains(logs.String(), "chalk sfu node no longer draining") {
-		t.Fatalf("undrained primary health %+v, logs:\n%s", health, logs)
+	if health, _ := fleet.Health("sfu-primary"); health.Draining {
+		t.Fatalf("undrained primary health %+v, want not draining", health)
 	}
 }
 

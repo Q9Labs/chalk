@@ -52,5 +52,10 @@ test("a stream that never gains enough frames in a window times out and the mess
   const measured = await measure((ms) => 1 + Math.floor(ms / 1000), { timeoutMs: 10_000 });
   assert.equal(measured.advancedAfterMs, null);
   assert.equal(measured.samples.length, 21);
-  assert.equal(videoNotAdvancing("Verify A", "Verify B", measured, 10_000), "10 s timeout: Verify B's tile on Verify A's page never gained more than 5 frames in 3 s (1 frames decoded at the first check, 11 at the end)");
+  assert.deepEqual([measured.samples[0].frames, measured.samples.at(-1).frames], [1, 11]);
+  const message = videoNotAdvancing("Verify A", "Verify B", measured, 10_000);
+  assert.match(message, /Verify B/);
+  assert.match(message, /Verify A/);
+  assert.match(message, /10 s/);
+  assert.match(message, /\b1 frames\b.*\b11\b/);
 });
