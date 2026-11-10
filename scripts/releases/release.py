@@ -406,6 +406,7 @@ def webrefs(github, args):
 def record(github, args):
     info = json.loads(env('RELEASE'))
     info['target_sha'] = env('TARGET_SHA')
+    info['transcribed'] = os.environ.get('TRANSCRIBE') == 'true'
     info['web'] = json.loads(info.get('web') or '{}')
     # The gate: the chalk_sfu real-call proof. own_sfu below adds the latency run and decides promotion only.
     real_call = os.environ.get('PROOF_RESULT', 'failed')

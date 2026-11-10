@@ -586,8 +586,8 @@ class TranscribeOncePerDayTests(unittest.TestCase):
     NOW = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
 
     @staticmethod
-    def record(channel, created_at, proof_result='passed'):
-        return dict(id=1, created_at=created_at, payload=dict(channel=channel, proof_result=proof_result))
+    def record(channel, created_at, proof_result='passed', transcribed=True):
+        return dict(id=1, created_at=created_at, payload=dict(channel=channel, proof_result=proof_result, transcribed=transcribed))
 
     def test_the_first_cut_of_a_utc_day_transcribes(self):
         yesterday = self.record('nightly-cut', '2026-11-09T23:59:00Z')
@@ -601,6 +601,11 @@ class TranscribeOncePerDayTests(unittest.TestCase):
         attempt = self.record('nightly-attempt', '2026-11-10T01:00:00Z')
         failed = self.record('nightly-cut', '2026-11-10T02:00:00Z', proof_result='failed')
         self.assertTrue(first_cut_of_day([attempt, failed], self.NOW))
+
+    def test_a_cut_that_did_not_check_a_transcript_does_not_use_up_the_day(self):
+        # A cut planned late the day before finishes after midnight; it was recorded today but never paid for a Transcript.
+        skipped = self.record('nightly-cut', '2026-11-10T00:05:00Z', transcribed=False)
+        self.assertTrue(first_cut_of_day([skipped], self.NOW))
 
     def test_a_manual_cut_always_transcribes(self):
         self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))

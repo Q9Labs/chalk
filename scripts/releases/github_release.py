@@ -61,10 +61,10 @@ def cut_decision(target, deployments, now, manual=False):
 
 
 def first_cut_of_day(deployments, now, manual=False):
-    """A cut pays for a Transcript until a cut of the same UTC day has passed its proof; a manual cut always does."""
+    """A cut pays for a Transcript until a cut recorded today has passed its proof with one; a manual cut always does."""
     if manual:
         return True
-    return not any(datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() == now.astimezone(timezone.utc).date()
+    return not any(payload(item).get('transcribed') and datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() == now.astimezone(timezone.utc).date()
                    for item in held_candidates(deployments, held=False))
 
 

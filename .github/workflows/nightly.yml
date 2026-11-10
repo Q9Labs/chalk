@@ -120,6 +120,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+          TRANSCRIBE: ${{ needs.plan.outputs.transcribe }}
           RELEASE: ${{ toJSON(needs.release.outputs) }}
           DEPLOY_RESULT: ${{ needs.release.result }}
           # The gate is the chalk_sfu proof job; a lease timeout is named in PROOF_FAILURE.
