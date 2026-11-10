@@ -2303,7 +2303,8 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
 
   async function joinSecond(publications: readonly Remote[]) {
     const replaceMediaConnection = vi.fn(async () => bootstrap("connection-2"));
-    const harness = createHarness({ replaceMediaConnection });
+    const events: ConnectionReportTransportEvent[] = [];
+    const harness = createHarness({ replaceMediaConnection, onReceiveHealth: (event) => events.push(event) });
     harness.transport.uniqueRemoteMids = true;
     harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
     const stream = fakeStream(new FakeTrack("microphone", "audio"));
@@ -2325,7 +2326,7 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
       await harness.client.closeForcedLocalPublication("microphone");
       expect(peer.descriptionLog.slice(offers)).toContain("setLocal:offer");
     };
-    return { harness, peer, section, withdraw, muteOwnMicrophone, replaceMediaConnection };
+    return { harness, peer, section, withdraw, muteOwnMicrophone, replaceMediaConnection, closeEvents: () => events.filter((event) => event.event === "receivers_closed") };
   }
 
   it("is parked, not stopped, so the guest's next offer keeps the transport", async () => {
@@ -2339,6 +2340,7 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
       expect(call.peer.connectionState).toBe("connected");
       expect(call.replaceMediaConnection).not.toHaveBeenCalled();
       expect(call.section("remote-0").direction).toBe("inactive");
+      expect(call.closeEvents()).toEqual([{ event: "receivers_closed", receivers_stopped: 1, bundle_tag_held: true }]);
     } finally {
       call.harness.client.stop();
     }
@@ -2352,6 +2354,7 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
       await call.withdraw([tag]);
       expect(call.section("remote-1").direction).toBe("stopped");
       expect(call.section("remote-0").direction).toBe("recvonly");
+      expect(call.closeEvents()).toEqual([{ event: "receivers_closed", receivers_stopped: 1, bundle_tag_held: false }]);
       await call.muteOwnMicrophone();
       expect(call.peer.transportDropped).toBe(false);
       expect(call.peer.connectionState).toBe("connected");
