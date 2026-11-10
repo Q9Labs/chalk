@@ -4,6 +4,7 @@ import type { DevicePorts } from "./ports";
 
 export interface DeviceIssue {
   readonly reason: DeviceAccessReason;
+  readonly label: string;
   readonly open: boolean;
 }
 
@@ -60,11 +61,11 @@ export class DeviceAccessStore {
       this.clear(device);
       return;
     }
-    const { reason, watch } = resolved;
+    const { reason, label, watch } = resolved;
     pending.stop?.();
     pending.retry = retry;
     pending.stop = watch(() => void this.retry(device));
-    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, open: true } } });
+    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, label, open: true } } });
   }
 
   /** The command worked, or something else turned the device on. */

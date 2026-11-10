@@ -56,7 +56,7 @@ describe("DeviceAccessStore", () => {
   it("opens the browser card for a refused microphone", async () => {
     const { store } = setup();
     await store.report("microphone", failure("media.permission_denied"), async () => {});
-    expect(store.getSnapshot().issues.microphone).toEqual({ reason: { kind: "blocked-browser", browser: "chrome" }, open: true });
+    expect(store.getSnapshot().issues.microphone).toEqual({ reason: { kind: "blocked-browser", browser: "chrome" }, label: "Microphone is blocked. Click to fix.", open: true });
   });
 
   it("does not retry a refusal while the browser already says granted", async () => {
@@ -150,7 +150,7 @@ describe("DeviceAccessStore", () => {
     const { store } = setup();
     await store.report("camera", failure("media.device_busy"), async () => {});
     store.setOpen("camera", false);
-    expect(store.getSnapshot().issues.camera).toEqual({ reason: { kind: "busy" }, open: false });
+    expect(store.getSnapshot().issues.camera).toEqual({ reason: { kind: "busy" }, label: "Camera is in use. Click to fix.", open: false });
     store.setOpen("camera", true);
     expect(store.getSnapshot().issues.camera?.open).toBe(true);
   });

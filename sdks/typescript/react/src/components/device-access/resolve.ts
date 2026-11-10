@@ -1,5 +1,6 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
 import { isDeviceAccessFailure, type AccessEnvironment, type BrowserName, type DeviceAccessReason, type DeviceKind, type PermissionAnswer, type Platform } from "./model";
+import { accessTooltip } from "./card-copy";
 import type { DevicePorts } from "./ports";
 
 function answerOf(state: string): PermissionAnswer {
@@ -100,6 +101,7 @@ export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: De
 
 export interface ResolvedAccess {
   readonly reason: DeviceAccessReason;
+  readonly label: string;
   /** Starts watching for the fix. Returns the function that stops it. */
   readonly watch: (recovered: () => void) => () => void;
 }
@@ -108,5 +110,5 @@ export interface ResolvedAccess {
 export async function resolveAccess(ports: DevicePorts, device: DeviceKind, failure: ClientFailure): Promise<ResolvedAccess | null> {
   const permission = device === "screen" ? "unknown" : await readPermission(ports, device);
   const reason = deviceAccessReason(failure, device, { browser: detectBrowser(ports.userAgent), platform: detectPlatform(ports.userAgent), permission });
-  return reason && { reason, watch: (recovered) => watchRecovery(ports, device, reason, recovered) };
+  return reason && { reason, label: accessTooltip(device, reason), watch: (recovered) => watchRecovery(ports, device, reason, recovered) };
 }

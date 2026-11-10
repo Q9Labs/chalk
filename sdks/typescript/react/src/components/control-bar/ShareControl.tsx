@@ -5,7 +5,6 @@ import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk
 import { ShellIcon } from "./ShellIcon";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
-import { accessTooltip } from "../device-access/model";
 
 function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   return (
@@ -49,7 +48,7 @@ export function ShareControl({
   const [surface, setSurface] = useState<ScreenShareSurface>("window");
   const [audio, setAudio] = useState(true);
   const [replace, setReplace] = useState(false);
-  const accessLabel = access ? accessTooltip("screen", access.reason) : undefined;
+  const accessLabel = access?.label;
   const start = (next: ScreenShareSurface) => {
     if (disabled || startDisabled) return;
     setSurface(next);

@@ -11,7 +11,6 @@ import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
-import { accessTooltip } from "../device-access/model";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
@@ -193,7 +192,7 @@ export function DevicePopover({
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
   const pressOpensCard = access && !busy;
-  const accessLabel = pressOpensCard ? accessTooltip(mic ? "microphone" : "camera", access.reason) : undefined;
+  const accessLabel = pressOpensCard ? access.label : undefined;
   return (
     <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={access ? true : undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />

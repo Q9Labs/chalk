@@ -4,12 +4,14 @@ import { useMediaQuery } from "../../internal/useMediaQuery";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { BROWSER_MARKS } from "./browser-marks";
 import { DeviceAccessStyles } from "./DeviceAccessStyles";
-import { cardCopy, systemSettingsLink } from "./card-copy";
-import { DEVICE_NAMES, type BrowserName, type DeviceAccessReason, type DeviceKind } from "./model";
+import { cardCopy, DEVICE_NAMES, systemSettingsLink } from "./card-copy";
+import { type BrowserName, type DeviceAccessReason, type DeviceKind } from "./model";
 
 /** What a dock button needs to show its problem and open the card. */
 export interface DeviceAccessControl {
   readonly reason: DeviceAccessReason;
+  /** The dock button's tooltip and label. */
+  readonly label: string;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onRetry: () => void;

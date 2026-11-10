@@ -1,5 +1,6 @@
-import { DEVICE_NAMES, type BrowserName, type DeviceAccessReason, type DeviceKind, type Platform } from "./model";
+import type { BrowserName, DeviceAccessReason, DeviceKind, Platform } from "./model";
 
+export const DEVICE_NAMES = { microphone: "Microphone", camera: "Camera", screen: "Screen sharing" } as const satisfies Record<DeviceKind, string>;
 const BROWSER_NAMES = { chrome: "Chrome", edge: "Edge", safari: "Safari", firefox: "Firefox" } as const satisfies Record<BrowserName, string>;
 
 /** The operating system pane that holds the switch, when a link can open it. */
@@ -31,4 +32,12 @@ export function cardCopy(device: DeviceKind, reason: DeviceAccessReason): CardCo
     case "missing":
       return { title: `No ${name.toLowerCase()} found`, detail: "Connect one and Chalk switches to it.", danger: false };
   }
+}
+
+/** The dock button's tooltip and label while the card is available. */
+export function accessTooltip(device: DeviceKind, reason: DeviceAccessReason): string {
+  const name = DEVICE_NAMES[device];
+  if (reason.kind === "busy") return `${name} is in use. Click to fix.`;
+  if (reason.kind === "missing") return `No ${name.toLowerCase()} found. Click for details.`;
+  return `${name} is blocked. Click to fix.`;
 }
