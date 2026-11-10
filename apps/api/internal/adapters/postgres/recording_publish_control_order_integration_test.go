@@ -56,6 +56,8 @@ func TestRecordingCaptureCallbackLocksControlBeforeRecording(t *testing.T) {
 			break
 		}
 		select {
+		case err := <-callback:
+			t.Fatalf("capture callback returned without waiting for the control row: %v", err)
 		case <-t.Context().Done():
 			t.Fatalf("capture callback never waited on the Sync transaction: %v", t.Context().Err())
 		case <-time.After(10 * time.Millisecond):
