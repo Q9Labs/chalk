@@ -1,144 +1,226 @@
 # Production rollout to the own SFU
 
-This runbook takes real production Spaces from `cf_sfu` to `chalk_sfu`. It holds names and commands only. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git.
+This runbook takes production from `cf_sfu` to `chalk_sfu`. It holds names and commands only. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git. Nothing here runs until the lead names the green sha.
 
-Every step has its undo written first. Do not start a step until its undo is ready, and do not start the next step until the watch of the one before it is clean.
+Every step has its undo written first. Do not start a step before its undo is ready, and do not start the next step before the one before it is clean.
+
+## Targets
+
+| Step                  | Target       |
+| --------------------- | ------------ |
+| Promote dispatched    | about 21:15Z |
+| 60-minute window done | about 22:30Z |
+| Real Space moves      | about 23:00Z |
+
+## Spaces
+
+Three Q9-owned Spaces of the production proof Tenant carry every proof. No two Episodes ever share a Space.
+
+| Space (name)                        | Used for                                                           | Policies                                  |
+| ----------------------------------- | ------------------------------------------------------------------ | ----------------------------------------- |
+| `sfu-canary-…` (existing)           | Promote's manual proof, then the kill-switch drill                 | manual Recording, on-demand Transcription |
+| `m7-evidence-20261110`              | M7 evidence (20 joins, 10 fault trials)                            | manual Recording, on-demand Transcription |
+| `promote-proof-chalk-sfu-automatic` | Promote's `call-artifacts`, then M10's production `call-artifacts` | automatic Recording and Transcription     |
+
+IDs live in `~/.chalk-rollout/proof-spaces.env` (private) and `~/sfu-ops/prod/proof-space.env` (the evidence lane reads it). All three are in the private `CHALK_SFU_ALLOWED_SPACES` source. **Undo per Space:** `POST /v1/tenants/<proof tenant>/spaces/<space>/archive` with the proof Tenant key.
 
 ## Order
 
-1. A green cut: a held nightly whose own-SFU proof passed.
-2. Prepare: proof Spaces, allowlist, operator checks (below).
-3. Promote with `expected_sha`.
-4. Watch for 60 minutes.
-5. Kill-switch drill, timed.
-6. M7 evidence: 20 joins and 10 fault trials.
-7. Move real production Spaces once `call-artifacts` (Recording and Transcript) has passed on staging (M10), Recording-disabled ones first. Until then only the proof and canary Spaces are on `chalk_sfu`.
-8. Watch again with the alerts live.
+1. One production deploy (Promote) carries the allowlist and the capture flags.
+2. One 60-minute window on the proof Spaces only: the watch, the timed kill-switch drill, M7 and M10 `call-artifacts`.
+3. When the window is green, move real Spaces, then `CHALK_NEW_SPACE_MEDIA_PLANE`.
 
-## How a changed allowlist reaches the running API
+## How a changed value reaches the running API
 
-`CHALK_SFU_ALLOWED_SPACES` lives in the SecureString `/chalk/production/managed-episode/api.env` (region `ap-southeast-1`, Advanced tier, key `alias/aws/ssm`). The deploy controller reads it again at every deploy (`fetch_deployment_inputs`) and writes it to `/run/chalk/env/api.env`, which `chalk-api.container` loads with `EnvironmentFile=`. The API reads the file only when it starts. So a changed value reaches the running API in one of two ways:
+The private API environment is the SecureString `/chalk/production/managed-episode/api.env` (region `ap-southeast-1`, Advanced tier, key `alias/aws/ssm`). The deploy controller re-fetches it at every deploy and writes `/run/chalk/env/api.env`, which `chalk-api.container` loads with `EnvironmentFile=`. The API reads that file only when it starts. A change therefore reaches the running API in one of two ways:
 
-- **A deploy.** The next Promote or Release re-fetches every input. A Release dispatch on master with `deploy_managed=true` and no application change is classified runtime-only and re-fetches without building images; this path has not been run for a config change.
-- **A host edit and restart**, without a deploy (below). The next deploy overwrites the file from SSM, so SSM and the host must hold the same value.
+- **A deploy.** The next Promote or Release re-fetches every input. A Release dispatch on master with `deploy_managed=true` and no application change is classified runtime-only and re-fetches without building images. Not run for a config change.
+- **A host edit and restart**, without a deploy (below). The next deploy overwrites the host file from SSM, so SSM and the host must hold the same value.
 
-Never print `api.env`: change one line and print only an entry count.
+Never print `api.env`. Change one line and print only a count. Run these snippets with `bash`.
 
-Change the allowlist in SSM (edit one line, keep the old line privately):
+Set or change one line in SSM (`NAME` and `VALUE` are the variable and its new value; the old line is saved privately):
 
 ```sh
 set -euo pipefail
-p=/chalk/production/managed-episode/api.env; k="--profile q9labs --region ap-southeast-1"
-tmp=$(umask 077; mktemp); trap 'rm -f "$tmp" "$tmp.bak"' EXIT
-aws $k ssm get-parameter --name $p --with-decryption --query Parameter.Value --output text > "$tmp"
-mkdir -p ~/.chalk-rollout && chmod 700 ~/.chalk-rollout
-( umask 077; sed -n 's/^CHALK_SFU_ALLOWED_SPACES=//p' "$tmp" > ~/.chalk-rollout/allowlist.before )
-new="$(cat ~/.chalk-rollout/allowlist.before),<space id>"
-sed -i.bak "s|^CHALK_SFU_ALLOWED_SPACES=.*|CHALK_SFU_ALLOWED_SPACES=$new|" "$tmp"
-aws $k ssm put-parameter --name $p --type SecureString --tier Advanced --overwrite --value "file://$tmp" --query Version
+p=/chalk/production/managed-episode/api.env
+aws() { command aws --profile q9labs --region ap-southeast-1 "$@"; }
+mkdir -p ~/.chalk-rollout /tmp/chalk-rollout-sfu && chmod 700 ~/.chalk-rollout /tmp/chalk-rollout-sfu
+work=/tmp/chalk-rollout-sfu/api.env
+aws ssm get-parameter --name $p --with-decryption --query Parameter.Value --output text > $work
+[ "$(wc -l < $work)" -gt 50 ] || { echo "read failed"; exit 1; }
+# Keep the old line (empty when the variable is absent) so the undo restores it exactly.
+( umask 077; sed -n "s/^$NAME=//p" $work > ~/.chalk-rollout/$NAME.before )
+python3 - "$NAME" "$VALUE" <<'EOF'
+import re, sys, pathlib
+name, value = sys.argv[1:]
+f = pathlib.Path("/tmp/chalk-rollout-sfu/api.env")
+t = f.read_text()[:-1]  # `--output text` adds one newline the value does not have
+new, n = re.subn(rf"^{name}=.*$", lambda _: f"{name}={value}", t, flags=re.M)
+f.write_text(new if n else t.rstrip("\n") + f"\n{name}={value}\n")
+EOF
+aws ssm put-parameter --name $p --type SecureString --tier Advanced --overwrite --value file://$work --query Version
+rm -f $work
 ```
 
-Apply it to the running API without a deploy, on the production host (SSM Run Command on `CHALK_MANAGED_INSTANCE_ID`): save the file, change the same one line, restart.
+Apply the same line to the running API without a deploy, on the production host (SSM Run Command on `CHALK_MANAGED_INSTANCE_ID`):
 
 ```sh
 f=/run/chalk/env/api.env
-cp -p $f /run/chalk/env/api.env.before-allowlist
-sed -i "s|^CHALK_SFU_ALLOWED_SPACES=.*|CHALK_SFU_ALLOWED_SPACES=<same new value as SSM>|" $f
+cp -p $f /run/chalk/env/api.env.before-change
+# change or append the one line, with the same value as SSM
 runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) systemctl --user restart chalk-api.service
 ```
 
-Then check `/healthz` on the API and that a new join grant still works. The restart interrupts API requests for a few seconds (join grants, Space calls); live media and Sync are separate services and stay up. Do it in a quiet minute.
+Then read `/healthz` and `/readyz` and check that a new join grant still works. The restart interrupts API requests for a few seconds (join grants, Space calls); live media and Sync are separate services and stay up. Do it in a quiet minute.
 
-**Undo.** Put the old line back in both places. In SSM, run the first script again with `new` set to the saved `~/.chalk-rollout/allowlist.before` value. On the host, restore `/run/chalk/env/api.env.before-allowlist` over `api.env` and run the same restart command. SSM keeps every version (`get-parameter-history`).
+**Undo.** Put the old line back in both places. In SSM, run the script again with the saved `~/.chalk-rollout/<NAME>.before` value (an empty file means delete the line). On the host, copy `/run/chalk/env/api.env.before-change` back over `api.env` and run the same restart. SSM keeps every version (`get-parameter-history`).
 
-## Production settings checked 2026-11-10 (names and counts only)
+## 1. One deploy carries everything
 
-`CHALK_SFU_ENABLED=true`. `CHALK_SFU_NODES` has one entry. `CHALK_SFU_ALLOWED_SPACES` has one entry, the existing `sfu-canary-…` Space. `CHALK_SFU_NEW_EPISODES` is absent, so new Episodes may bind the own SFU. `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu`. Check these again the same way before Promote.
+### State on 2026-11-10 (names and counts only)
 
-## Prepare (before the first Promote)
+| Setting                                                                                        | Production                                                                  | Staging (`nightly`) |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------- |
+| `CHALK_SFU_ENABLED`                                                                            | `true`                                                                      | `true`              |
+| `CHALK_RECORDING_ENABLED`                                                                      | `true`                                                                      | `true`              |
+| `CHALK_TRANSCRIPTION_ENABLED`                                                                  | `true`                                                                      | `true`              |
+| `CHALK_SFU_CAPTURE_ENABLED`                                                                    | absent (default off)                                                        | `true`              |
+| `CHALK_SFU_NEW_EPISODES`                                                                       | absent (new Episodes allowed)                                               | not read            |
+| `CHALK_DEFAULT_MEDIA_PLANE`                                                                    | `cf_sfu`                                                                    | not read            |
+| `CHALK_SFU_NODES`                                                                              | 1 entry                                                                     | 1 or more           |
+| Provider bridge (`CHALK_PROVIDER_BRIDGE_*`) and fleet issuer (`CHALK_RECORDER_FLEET_ISSUER_*`) | present                                                                     | present             |
+| `CHALK_SFU_ALLOWED_SPACES`                                                                     | 3 entries: the three proof Spaces (SSM version 31; version 29 held 1 entry) | not read            |
 
-Production runs a release before the per-Space setting, so `media-settings` does not exist there yet. The only way to put a proof Space on `chalk_sfu` before the deploy is the public API on an allowlisted Space. Promote's own deploy comes after that check, so its re-fetch does not help the check: the running API must already hold the allowlist.
+Production already records and transcribes on Cloudflare, so its recorder fleet exists. Only `CHALK_SFU_CAPTURE_ENABLED` is new. Check these again before Promote with names and counts only.
 
-1. Pin the manual proof Space to the existing `sfu-canary-…` Space, which is already on `chalk_sfu` and allowlisted:
+### The capture flag depends on M10 on staging
 
-   ```sh
-   gh variable set CHALK_PROOF_SPACE_ID_CHALK_SFU --env production --body <space id>
-   ```
-
-2. Create the automatic proof Space (Recording and Transcription automatic). The run fails at the PATCH and names the Space; that is expected.
-
-   ```sh
-   gh workflow run real-call-proof.yml --ref master -f environment=production -f proofs=own-sfu-spaces -f media_plane=chalk_sfu
-   ```
-
-3. Read its ID from the Tenant's Space list (slug `promote-proof-chalk-sfu-automatic`). Add it to the allowlist in SSM and on the running API as in the section above.
-4. Run step 2 again. Both proof Spaces must report `chalk_sfu`.
-5. Check the SFU alerts are live (see Watch).
-
-**Undo.** Revert the PR that last changed Promote. Put the automatic proof Space back with `media-settings set --tenant <tenant> --space <space> --plane cf_sfu`. Restore the saved allowlist line in SSM and on the host, and run `gh variable delete CHALK_PROOF_SPACE_ID_CHALK_SFU --env production`.
-
-## Promote
+Add `CHALK_SFU_CAPTURE_ENABLED=true` to the private environment **only if** M10's staging `call-artifacts` (run 42876791977) passed with the same flag set as the table shows for staging (Recording, Transcription, capture on, provider bridge present). If it did not pass, leave the flag out, dispatch Promote with `capture_proofs=false` so the production proof does not demand a Recording, and add the flag in a second deploy.
 
 ```sh
-gh workflow run promote.yml --ref master -f expected_sha=<held release sha>
+NAME=CHALK_SFU_CAPTURE_ENABLED VALUE=true  # then the SSM script above
 ```
 
-Promote selects, waits for production approval, checks the proof Spaces (`own-sfu-spaces`), deploys, runs the throwaway two-guest proof on `chalk_sfu` (`leave-own-sfu camera-share call-artifacts`), scores the Leave result, and rolls back by itself when the proof or scorecard fails. A failure before `release` deploys nothing.
+### Before dispatch (about T-10 minutes)
 
-**Undo.** Promote rolls back on a failed proof. To roll back after a pass, dispatch Promote's rollback path as `docs/managed-release.md` describes, or promote the previous held release with its `expected_sha`. Pinned live calls finish on the plane they started on.
+1. Confirm no real class is live (`/readyz` sessions and allocations, the Sync presence of real Spaces).
+2. Pin the manual proof Space: `gh variable set CHALK_PROOF_SPACE_ID_CHALK_SFU --env production --body <sfu-canary id>`. The automatic proof Space is found by its slug.
+3. **Apply the allowlist to the running API** with the host edit and restart above (the SSM value is already set). This is not optional: Promote's first job, `own-sfu-spaces`, runs before the deploy on the release still in production, and that release lets the public API move a Space to `chalk_sfu` only when the running API already lists it. The deploy's own re-fetch comes after that check and does not help it. The job moves `promote-proof-chalk-sfu-automatic` to `chalk_sfu` and finds the pinned canary Space already there.
+4. Check the SFU alerts are live (see the watch).
 
-## Watch (60 minutes)
+### Dispatch
 
-Read these every five minutes, from the [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md):
+```sh
+gh workflow run promote.yml --ref master -f expected_sha=<green sha>
+# if the capture flag is not in this deploy:
+gh workflow run promote.yml --ref master -f expected_sha=<green sha> -f capture_proofs=false
+```
 
-| Read                                                            | Roll back when                                                                                                                                            |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chalk_sfu` join failures (`join_failed`, `media_start_failed`) | any join failure on `chalk_sfu` that repeats twice, or one that blocks a real class                                                                       |
-| Node health and `sfu-readiness` reasons                         | node down (4 of 5 unhealthy minute samples, or DigitalOcean ping fails 2 minutes), `packet_budget` at 90% or more, any `admission_*` reason for 5 minutes |
-| Host CPU, memory, disk                                          | CPU or memory above 85%, or disk above 80%, for 5 minutes                                                                                                 |
-| `chalk_sfu.overflow` events                                     | any in the last 2 minutes while the node is healthy                                                                                                       |
-| Recording and Transcription                                     | a Recording failed for 15 minutes or stuck stopping for 2 minutes                                                                                         |
-| Proof Spaces                                                    | a `leave-own-sfu` or `camera-share` re-run fails                                                                                                          |
+Promote selects, waits for production approval, runs `own-sfu-spaces`, deploys, runs `leave-own-sfu camera-share call-artifacts` on `chalk_sfu` (without `call-artifacts` when `capture_proofs=false`), scores Leave, and rolls back by itself when the proof fails.
+
+### After the deploy is live
+
+1. Read the API `/healthz` and `/readyz`. Read the node `sfu-readiness`.
+2. Move the M7 Space to `chalk_sfu` (the canary and the automatic proof Space already are):
+
+   ```sh
+   media-settings set --tenant <proof tenant> --space <m7 space> --plane chalk_sfu
+   media-settings get --tenant <proof tenant> --space <m7 space>
+   ```
+
+### What rolls back if the API does not start
+
+With capture on and the recorder fleet missing, the API fails at startup (the API's configuration check refuses the combination). The deploy controller treats a candidate that fails its health check as failed, runs `rollback_to_stable`, fences the candidate and reports the failure; Promote's `release` job fails and its rollback job restores the Pages deployment, the media pins and the npm tags it saved. The previous API release serves again. The controller's rollback of the environment file is not proven. SSM keeps the new values, so the next deploy would carry the same fault: remove the capture flag from SSM before anything redeploys.
+
+### Undo for the deploy
+
+- Remove `CHALK_SFU_CAPTURE_ENABLED` from SSM and the host (script above, empty old value), then redeploy: Promote of the previous held release, or a runtime-only Release.
+- Put each moved Space back: `media-settings set --tenant <tenant> --space <space> --plane cf_sfu` (not `inherit`).
+- Remove the proof Space IDs from the allowlist the same way. Revert the Promote PR if its change is at fault.
+
+## 2. The 60-minute window
+
+### Conditions before it starts
+
+- `/readyz` shows sessions 0, allocations 0 and cleanupDebt 0, and no real class is live.
+- The drill and M7 never share a Space or an Episode. M7 and M10 `call-artifacts` start together only after the drill ends.
+
+### Schedule
+
+| Minutes  | Runs                                                                         | Space                                                          |
+| -------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 0 to 15  | Kill-switch drill, alone on the node, timed                                  | `sfu-canary-…`                                                 |
+| 15 to 60 | M7 (20 joins, 10 fault trials) and M10 production `call-artifacts`, together | `m7-evidence-20261110` and `promote-proof-chalk-sfu-automatic` |
+| 0 to 60  | The watch, every 5 minutes                                                   | n/a                                                            |
+
+### The watch
+
+Read every five minutes, from the [SFU runbook](../../infrastructure/observability/production-alerts/sfu-runbook.md):
+
+| Read                                                            | Roll back when                                                                      | During the M7 fault window                                                                                |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `chalk_sfu` join failures (`join_failed`, `media_start_failed`) | the same failure twice, or any that blocks a real class                             | joins on `m7-evidence-…` inside a fault trial are expected to stall; count only other Spaces              |
+| Node health                                                     | 4 of 5 unhealthy minute samples, or DigitalOcean ping fails for 2 minutes           | the fault blocks UDP at the runner, not at the node, so a node-down alarm is real                         |
+| `sfu-readiness`                                                 | `packet_budget` at 90% or more, or any `admission_*` reason for 5 minutes           | packet loss and ICE restarts on the M7 Episode are expected inside the 5 s fault plus up to 15 s recovery |
+| Host CPU or memory, disk                                        | above 85%, or above 80% for disk, for 5 minutes                                     | not expected                                                                                              |
+| `chalk_sfu.overflow` events                                     | any in the last 2 minutes while the node is healthy                                 | not expected                                                                                              |
+| Recording and Transcription                                     | a Recording failed for 15 minutes, or stuck stopping for 2 minutes                  | the M10 Episode is the only expected Recording                                                            |
+| Proof results                                                   | the drill misses a threshold, M7 misses `meetsM7Minimum`, or `call-artifacts` fails | n/a                                                                                                       |
 
 Roll back with the kill switch: first the Space setting for the affected Space, then `CHALK_SFU_NEW_EPISODES=off` with an API reload if more than one Space is affected. New Episodes go to Cloudflare; live calls finish where they are.
 
-## Kill-switch drill (timed)
+### Kill-switch drill (timed)
 
-Run it on a proof Space with a real two-guest call, following [Send one Space back to Cloudflare, and return it](../../infrastructure/sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Record, in seconds: the operator command, the first new join grant that reports `cloudflare_sfu`, and the return to `chalk_sfu`. The drill passes when the first new Episode after the flip reports `cloudflare_sfu` and the return reports `chalk_sfu`.
+Follow [Send one Space back to Cloudflare, and return it](../../infrastructure/sfu/README.md#send-one-space-back-to-cloudflare-and-return-it) on the canary Space with a real two-guest call. Record in seconds: the operator command, the first new join grant that reports `cloudflare_sfu`, and the return to `chalk_sfu`. It passes when the first new Episode after the flip reports `cloudflare_sfu` and the return reports `chalk_sfu`. **Undo:** `media-settings set --plane chalk_sfu` on the same Space.
 
-**Undo.** The return command, `media-settings set --plane chalk_sfu` on the same Space.
-
-## M7 evidence
-
-On a machine with the fault commands set (no values here):
+### M7 evidence
 
 ```sh
 export CHALK_CANARY_FAULT_DOWN='<command that blocks UDP to the media address>'
 export CHALK_CANARY_FAULT_UP='<command that restores it>'
-CHALK_CANARY_SPACE_ID=<allowlisted proof Space> CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
+CHALK_CANARY_SPACE_ID=<m7 space> CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:canary --joins 20 --faults 10
 ```
 
-The report must show `meetsM7Minimum`, every join within 10 s, and every fault recovered within 15 s.
+It passes with `meetsM7Minimum`, every join within 10 s and every fault recovered within 15 s. **Undo:** `FAULT_UP` runs after each trial; if the run stops early, run it by hand and check the block is gone.
 
-**Undo.** `FAULT_UP` runs after each trial; if a run stops early, run it by hand and check the block is gone.
+### M10 `call-artifacts` on production
 
-## Moving production Spaces
+The M10 lane runs `call-artifacts` against `promote-proof-chalk-sfu-automatic` (recording object exists, decrypts and plays, audio and video present, duration matches, transcript plausible). It needs the capture flag in this deploy. **Undo:** archive the Space's Episode output; nothing else changes.
 
-Order: real Spaces move only after `call-artifacts` has passed on staging, Recording-disabled Spaces first. Recording and Transcription both use the capture plane, so a Space with Transcription automatic needs capture even when Recording is disabled.
+## 3. Moving real Spaces
 
-Per Space (the candidate list with IDs lives in private operator notes):
+Start only when the window is green. Two blockers sit in front of every real Space:
+
+1. **Transcription auto-language.** All 165 active Spaces use automatic language (`transcript_language` null), and Transcription is automatic on all but the proof Spaces. The production transcription dispatcher Lambda has no `CODESWITCH_PROVIDER` or `OPENROUTER_TOKEN_PARAMETER_ARN`, so Auto transcription has no provider (DeepInfra Whisper only, and Auto never falls back to Whisper). No Space with Transcription auto-language moves until it is wired. Wiring is a separate step, not a Promote release item: Promote ships the API reader and dispatcher ZIP, then an operator runs the checked migration (the production parameter `/chalk/production/transcription/openrouter-token` exists):
+
+   ```sh
+   python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <production openrouter-token parameter ARN>          # plan, review it
+   python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <production openrouter-token parameter ARN> --apply
+   ```
+
+   **Undo:** `configure-mai.py --environment production --disable --apply` pauses Auto and keeps fixed languages.
+
+2. **M10 passed in production** (the window's `call-artifacts`), because every real Space records or transcribes.
+
+Order after both: Spaces with Recording disabled first, then Spaces with Recording automatic or manual. Spaces keep their Recording and Transcription settings; those are product decisions. For each batch:
 
 ```sh
+# 1. add the batch to the allowlist (SSM script), apply on the host once, restart once
+# 2. flip the Spaces one at a time, no reload needed
 media-settings get --tenant <tenant> --space <space>
 media-settings set --tenant <tenant> --space <space> --plane chalk_sfu
 ```
 
-Move a few Spaces, then watch for 30 minutes before the next group. Each Space must be on `CHALK_SFU_ALLOWED_SPACES` (the AND), so add each batch to it first with the SSM edit and host restart above. Spaces keep their Recording and Transcription settings: those are product decisions. Real Spaces, recording-disabled ones included, move only after `call-artifacts` (Recording and Transcript) passes on staging. Until then only the proof and canary Spaces are on `chalk_sfu`.
+Watch 30 minutes between batches with the table above. **Undo per Space:** `media-settings set --tenant <tenant> --space <space> --plane cf_sfu` (not `inherit`, because the Tenant default may be `chalk_sfu`). Only new Episodes move; end a live Episode to move that call.
 
-**Undo per Space.** `media-settings set --tenant <tenant> --space <space> --plane cf_sfu`. Use `cf_sfu`, not `inherit`, because the Tenant default may be `chalk_sfu`. Only new Episodes move; end a live Episode to move that call.
+### `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` (last step)
+
+Set it only after every earlier step is green and the capture flag is live. The API refuses to start with it set to `chalk_sfu` while either new-Space policy default is not `disabled` and `CHALK_SFU_CAPTURE_ENABLED` is off, so a refusal at deploy means the check does not allow it: do not force it. `CHALK_SFU_ALLOWED_SPACES` still applies as an AND, so a new Space runs on `chalk_sfu` only if it is listed. **Undo:** remove the line from SSM and the host and restart `chalk-api.service`.
 
 ## Not proven
 
 - `leave-own-sfu` has not run against a real SDK session.
-- The allowlist path is read from the controller and the quadlet, not run: the SSM edit, the host edit and restart, and the runtime-only Release re-fetch.
-- Capture on `chalk_sfu` (M10) is not proven in production.
+- The allowlist path is read from the controller and the quadlet, not run: the SSM edit (run once, version 31), the host edit and restart, and the runtime-only Release re-fetch.
+- Whether the controller's rollback restores the previous environment file.
+- Capture on `chalk_sfu` in production (M10) is not proven.

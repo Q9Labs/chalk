@@ -107,7 +107,7 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 ## Promote
 
 Dispatch `Promote newest held nightly` from master with one required input,
-`expected_sha` (the held release revision you approve), and the optional `scorecard_override`.
+`expected_sha` (the held release revision you approve), and the optional `scorecard_override`. `capture_proofs` (default true) runs `call-artifacts`; set it false only when this deploy does not turn the capture flags on.
 Selection fails before deployment if the newest held release is not `expected_sha`.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
