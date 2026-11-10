@@ -13,6 +13,14 @@ export interface DeviceAccessSnapshot {
   readonly permissions: Readonly<Record<"microphone" | "camera", PermissionAnswer>>;
 }
 
+/** What one device is waiting on: the newest report, the command to run again, and the listener that fixes it. */
+interface Pending {
+  attempt: number;
+  retry?: () => Promise<unknown>;
+  stop?: () => void;
+  running?: boolean;
+}
+
 const PROMPTABLE = ["microphone", "camera"] as const;
 
 /**
@@ -22,10 +30,7 @@ const PROMPTABLE = ["microphone", "camera"] as const;
 export class DeviceAccessStore {
   readonly #ports: DevicePorts;
   readonly #listeners = new Set<() => void>();
-  readonly #recoveries = new Map<DeviceKind, () => void>();
-  readonly #retries = new Map<DeviceKind, () => Promise<unknown>>();
-  readonly #running = new Set<DeviceKind>();
-  readonly #attempt = new Map<DeviceKind, number>();
+  readonly #pending = new Map<DeviceKind, Pending>();
   #stopPermissionWatch: readonly (() => void)[] = [];
   #snapshot: DeviceAccessSnapshot = { issues: {}, permissions: { microphone: "unknown", camera: "unknown" } };
 
@@ -41,8 +46,11 @@ export class DeviceAccessStore {
       if (this.#listeners.size > 0) return;
       for (const stop of this.#stopPermissionWatch) stop();
       this.#stopPermissionWatch = [];
-      for (const device of this.#recoveries.keys()) this.#forget(device);
-      for (const device of [...this.#attempt.keys()]) this.#nextAttempt(device);
+      for (const pending of this.#pending.values()) {
+        pending.attempt++;
+        pending.stop?.();
+        pending.stop = undefined;
+      }
     };
   };
 
@@ -51,28 +59,28 @@ export class DeviceAccessStore {
   /** Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed. */
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
     if (!isDeviceAccessFailure(failure, device)) return;
-    const attempt = this.#nextAttempt(device);
+    const pending = this.#entry(device);
+    const attempt = ++pending.attempt;
     const { resolveAccess } = await import("./resolve");
     const resolved = await resolveAccess(this.#ports, device, failure);
-    if (this.#attempt.get(device) !== attempt) return;
+    if (pending.attempt !== attempt) return;
     if (!resolved) {
       this.clear(device);
       return;
     }
     const { reason, watch } = resolved;
-    this.#retries.set(device, retry);
-    this.#recoveries.get(device)?.();
-    this.#recoveries.set(
-      device,
-      watch(() => void this.retry(device)),
-    );
+    pending.stop?.();
+    pending.retry = retry;
+    pending.stop = watch(() => void this.retry(device));
     this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, open: true } } });
   }
 
   /** The command worked, or something else turned the device on. */
   clear(device: DeviceKind): void {
-    this.#nextAttempt(device);
-    this.#forget(device);
+    const pending = this.#entry(device);
+    pending.attempt++;
+    pending.stop?.();
+    pending.stop = pending.retry = undefined;
     if (!this.#snapshot.issues[device]) return;
     const { [device]: _cleared, ...issues } = this.#snapshot.issues;
     this.#set({ issues });
@@ -85,26 +93,22 @@ export class DeviceAccessStore {
 
   /** Runs the failed command again. A second request while one is running is ignored. */
   async retry(device: DeviceKind): Promise<void> {
-    const retry = this.#retries.get(device);
-    if (!retry || this.#running.has(device)) return;
-    this.#running.add(device);
+    const pending = this.#pending.get(device);
+    if (!pending?.retry || pending.running) return;
+    pending.running = true;
     try {
-      await retry();
+      await pending.retry();
     } finally {
-      this.#running.delete(device);
+      pending.running = false;
     }
   }
 
-  #nextAttempt(device: DeviceKind): number {
-    const attempt = (this.#attempt.get(device) ?? 0) + 1;
-    this.#attempt.set(device, attempt);
-    return attempt;
-  }
-
-  #forget(device: DeviceKind): void {
-    this.#recoveries.get(device)?.();
-    this.#recoveries.delete(device);
-    this.#retries.delete(device);
+  #entry(device: DeviceKind): Pending {
+    const found = this.#pending.get(device);
+    if (found) return found;
+    const created: Pending = { attempt: 0 };
+    this.#pending.set(device, created);
+    return created;
   }
 
   #set(change: Partial<DeviceAccessSnapshot>): void {
