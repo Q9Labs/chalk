@@ -99,7 +99,7 @@ try {
       await openPicker();
       await pickerRow("Blur").click();
       await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
-      await page.keyboard.press("Escape");
+      await page.locator("[data-part=sheet-scrim]").click({ position: { x: 20, y: 20 } });
       await page.getByRole("dialog").waitFor({ state: "hidden" });
     } else {
       await openPicker();
