@@ -614,10 +614,20 @@ class TranscribeOncePerDayTests(unittest.TestCase):
         yesterday = dict(id=1, created_at='2026-11-09T22:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
         with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
             github = GitHub()
-        github.request = Mock(return_value=[newest, earlier, yesterday])
+        statuses = {3: 'success', 2: 'success', 1: 'success'}
+        github.request = Mock(side_effect=lambda route: [dict(state=statuses[int(route.split('/')[1])])] if route.startswith('deployments/') else [newest, earlier, yesterday])
         cuts = github.cuts_on(self.NOW.date())
         self.assertEqual([item['id'] for item in cuts], [3, 2])
         self.assertFalse(first_cut_of_day(cuts, self.NOW))
+
+    def test_a_cut_without_a_final_status_does_not_count(self):
+        # `record` creates the deployment before it posts the final status; a failure in between leaves it pending.
+        unfinished = dict(id=2, created_at='2026-11-10T03:00:00Z', payload=dict(channel='nightly-cut', proof_result='passed', transcribed=True))
+        with patch.dict(os.environ, {'GITHUB_REPOSITORY': 'Q9Labs/chalk'}):
+            github = GitHub()
+        github.request = Mock(side_effect=lambda route: [] if route.startswith('deployments/') else [unfinished])
+        self.assertEqual(github.cuts_on(self.NOW.date()), [])
+        self.assertTrue(first_cut_of_day(github.cuts_on(self.NOW.date()), self.NOW))
 
     def test_a_manual_cut_always_transcribes(self):
         self.assertTrue(first_cut_of_day([self.record('nightly-cut', '2026-11-10T01:00:00Z')], self.NOW, manual=True))

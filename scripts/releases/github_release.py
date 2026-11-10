@@ -180,7 +180,7 @@ class GitHub:
         return []
 
     def cuts_on(self, day):
-        """Every passed nightly cut recorded on the UTC date `day`, newest first: `deployments` stops at the newest one."""
+        """Every finished, passed nightly cut recorded on the UTC date `day`, newest first: `deployments` stops at the newest one."""
         cuts = []
         page = 1
         while True:
@@ -189,7 +189,12 @@ class GitHub:
                 created = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date()
                 if created < day:
                     return cuts
-                if created == day:
+                if created != day or payload(item).get('channel') != 'nightly-cut' or payload(item).get('proof_result') != 'passed':
+                    continue
+                status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
+                item['latest_status'] = status[0]['state'] if status else 'pending'
+                # A cut whose final status was never posted did not finish, so it does not count (as in `deployments`).
+                if item['latest_status'] not in ('pending', 'queued', 'in_progress'):
                     cuts.append(item)
             if len(items) < 100:
                 return cuts
