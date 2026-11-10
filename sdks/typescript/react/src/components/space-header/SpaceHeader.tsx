@@ -9,7 +9,6 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
-import { ConnectionNotice } from "../connection-notice/ConnectionNotice";
 import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
 import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
@@ -17,6 +16,8 @@ export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 // The menu body loads when the menu first opens, so a call that never opens it never downloads it.
 const CallDetails = lazy(() => import("./CallDetails").then((module) => ({ default: module.CallDetails })));
+// The chip loads the first time the link turns weak, so a call on a good link never downloads it.
+const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
@@ -74,17 +75,19 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   );
   const noticeSlot = notice ? (
     <div data-part="connection-notice-slot" data-phone={phone || undefined} className="chalk-connection-notice-slot">
-      <ConnectionNotice
-        tier={notice.tier}
-        reason={notice.reason}
-        videoOn={props.videoOn === true}
-        onOpenDetails={() => {
-          setRevealConnection(true);
-          setOpen(true);
-        }}
-        onTurnOffVideo={() => props.onTurnOffVideo?.()}
-        onDismiss={() => setDismissed(notice.tier)}
-      />
+      <Suspense fallback={null}>
+        <ConnectionNotice
+          tier={notice.tier}
+          reason={notice.reason}
+          videoOn={props.videoOn === true}
+          onOpenDetails={() => {
+            setRevealConnection(true);
+            setOpen(true);
+          }}
+          onTurnOffVideo={() => props.onTurnOffVideo?.()}
+          onDismiss={() => setDismissed(notice.tier)}
+        />
+      </Suspense>
     </div>
   ) : null;
   return (

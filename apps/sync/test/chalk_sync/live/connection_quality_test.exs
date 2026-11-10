@@ -3,6 +3,7 @@ defmodule ChalkSync.Live.ConnectionQualityTest do
 
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
+  alias ChalkSync.Live.Projection
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Stateholder.Memory
@@ -51,7 +52,7 @@ defmodule ChalkSync.Live.ConnectionQualityTest do
   end
 
   test "a seat shows no quality until its socket reports one", %{live: live} do
-    assert [item] = ChalkSync.Live.Projection.items(live.presence_projection)
+    assert [item] = Projection.items(live.presence_projection)
     refute Map.has_key?(item, "connection_quality")
   end
 

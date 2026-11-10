@@ -176,12 +176,16 @@ defmodule ChalkSync.Live.Projection do
           &Map.has_key?(item, &1)
         )
     ) and
-      valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
-      valid_connection_quality?(item) and
+      valid_presence_hints?(item) and
       item["state"] in ["connected", "disconnected"] and
       canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and
       valid_presence_activity?(item)
+  end
+
+  defp valid_presence_hints?(item) do
+    valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
+      valid_connection_quality?(item)
   end
 
   defp valid_presence_activity?(%{"state" => "connected"}), do: true
