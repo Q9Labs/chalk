@@ -4,8 +4,11 @@ This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert
 
 ## Where alerts come from and where they go
 
+Which path covers which alert:
+
 | Alert                                                       | Source                                                             | Fires when                                                                                                             | Goes to         |
 | ----------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------- |
+| Node down                                                   | Axiom `sfu-readiness` branch, reason `unreachable`                 | At least 4 unhealthy minute samples in 5 minutes, latest still unhealthy (the API host cannot reach `/readyz`)         | Discord, Oncall |
 | Node down                                                   | DigitalOcean ping check `chalk-sfu-<env>-ping`                     | The node fails the ping check from every region for 2 minutes                                                          | Discord         |
 | CPU, memory or disk high                                    | DigitalOcean alert policies `chalk-sfu-<env>: ...`                 | CPU above 85%, memory above 85% or disk above 80% for 5 minutes                                                        | Discord         |
 | Node unreachable, refusing calls, or near its packet budget | Axiom `sfu-readiness` branch, from the collector's `/readyz` probe | At least 4 unhealthy minute samples in 5 minutes, latest still unhealthy                                               | Discord, Oncall |
@@ -13,53 +16,60 @@ This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert
 | Recording failed or stranded                                | Axiom `recording` and `recording-stop` branches                    | A Recording Capture failed in the last 15 minutes, or a stop is stuck for 2 minutes                                    | Discord, Oncall |
 | Overflow to `cf_sfu`                                        | Axiom `sfu-overflow` branch                                        | One or more `chalk_sfu.overflow` events in the last 2 minutes                                                          | Discord, Oncall |
 
-Two limits shape this table. DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL, so the two DigitalOcean alerts (node down, and CPU, memory or disk high) reach Discord only, never Oncall. The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor, and Oncall is a Slack-type notifier. A paid Axiom plan would lift the Axiom limits; confirm its price on the Axiom billing page before buying. The plan to close the DigitalOcean gap is in [Follow-up: DigitalOcean alerts to Oncall](#follow-up-digitalocean-alerts-to-oncall).
+The rule of thumb: every alert that goes through the collector and Axiom reaches Discord and Oncall. The DigitalOcean alerts reach Discord only. DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL. So a node that is down reaches Oncall through the collector's `sfu-readiness` rule (the API host fails to read `/readyz`), and the DigitalOcean ping check is the second, independent signal in Discord. CPU, memory and disk high have no Oncall path: a host that is busy but still answers `/readyz` pages Oncall only once the node closes admission itself (`admission_cpu_busy` and the other admission reasons). The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor, and Oncall is a Slack-type notifier. A paid Axiom plan would lift the Axiom limits; confirm its price on the Axiom billing page before buying. The plan to close the DigitalOcean gap is in [Follow-up: DigitalOcean alerts to Oncall](#follow-up-digitalocean-alerts-to-oncall).
 
-The `sfu-readiness` branch needs the collector probe to be on. **It is off on the production host today**, so that branch has no data and cannot alert. Until an operator enables it with [the host change below](#enable-the-readiness-probe-host-change-not-applied), node health reaches the team only through the DigitalOcean alerts, and the overflow alert is the signal that the node stopped taking new classes.
+The collector probe is on for the production host (see [the readiness probe](#the-readiness-probe-on-the-production-host)). If it is ever turned off, the `sfu-readiness` branch has no data and cannot alert, so node health reaches the team only through the DigitalOcean alerts.
 
 Set the DigitalOcean side with `do-monitoring.sh <env> plan|apply|remove` and the Axiom side with `provision.py`. The `remove` action deletes everything the script made.
 
-## Enable the readiness probe (host change, not applied)
+## The readiness probe on the production host
 
-This is a change to the production API host, so it needs approval. It turns on the collector's `/readyz` probe for the production node. Run it as root on the API host (by SSM or SSH). The variables and what the probe reports are in [Own SFU readiness](README.md#own-sfu-readiness). The collector already runs every minute as the `chalk` user and reads `/run/chalk/env/api.env`; the probe reuses the API's own node address and client certificate, so no new secret is created and no value is printed.
+The collector's `/readyz` probe is on for the production node. It runs every minute as part of `chalk-alert-state.service`, which runs as the `chalk` user with `/run/chalk/env/api.env` and, when present, `/etc/chalk-alerts/collector.env`. The variables and what the probe reports are in [Own SFU readiness](README.md#own-sfu-readiness). Use the steps below to enable it on a new host, to renew its certificate copies, or to see how it was set up. Run them as root on the API host (by SSM or SSH).
 
-1. Confirm the installed collector knows the probe. The count must be at least 1. If it is 0, build the current collector as in the README and install it at `/opt/chalk-alerts/collector`, after `cp -p /opt/chalk-alerts/collector /opt/chalk-alerts/collector.before-sfu-probe`.
+The probe needs the API's mutual-TLS client certificate, key and CA. On the production host the API reads them from podman secrets mounted only inside its container, so there are no readable host files. Step 2 copies them out of the `chalk` user's podman secret store into `/etc/chalk-alerts/sfu/` (owner `chalk`, mode `0400`). No value is printed.
+
+1. Install a collector build that knows the probe, and keep the old one for the undo. The count of `CHALK_ALERT_SFU_READY_URL` in the binary must be at least 1. Build as in the README, copy the file to the host, check its `sha256sum` against the one you built, then:
 
    ```sh
+   cp -p /opt/chalk-alerts/collector /opt/chalk-alerts/collector.before-sfu-probe
+   install -m 0755 collector.new /opt/chalk-alerts/collector
    grep -c CHALK_ALERT_SFU_READY_URL /opt/chalk-alerts/collector
    ```
 
-2. Add the settings. The script copies the old file first, takes the node URL and certificate paths from the API's settings, and stops if one is missing.
+2. Copy the three files out of the podman secrets, then add the settings. The script finds each secret by the path the API's quadlet mounts it at, stops if one is missing, and copies `collector.env` first.
 
    ```sh
    set -euo pipefail
+   unitf=/home/chalk/.config/containers/systemd/chalk-api.container
    api=/run/chalk/env/api.env
    val() { sed -n "s/^$1=//p" "$api" | head -1; }
+   install -d -m 0700 -o chalk -g chalk /etc/chalk-alerts /etc/chalk-alerts/sfu
+   for var in CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
+     path="$(val $var)"; [ -n "$path" ] || { echo "missing $var"; exit 1; }
+     name="$(grep -E "^Secret=[^,]+,.*target=${path}(,|\$)" "$unitf" | sed -E 's/^Secret=([^,]+),.*/\1/' | head -1)"
+     [ -n "$name" ] || { echo "no secret mounted at the path of $var"; exit 1; }
+     dest="/etc/chalk-alerts/sfu/$(basename "$path")"
+     ( umask 077; runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) podman secret inspect --showsecret --format '{{.SecretData}}' "$name" | tee "$dest" >/dev/null )
+     chown chalk:chalk "$dest"; chmod 0400 "$dest"
+   done
    node="$(val CHALK_SFU_NODES | cut -d, -f1 | cut -d= -f2-)"
    server_name="$(val CHALK_SFU_SERVER_NAME)"
-   ca_file="$(val CHALK_SFU_CA_FILE)"
-   cert_file="$(val CHALK_SFU_CLIENT_CERT_FILE)"
-   key_file="$(val CHALK_SFU_CLIENT_KEY_FILE)"
-   for setting in "$node" "$server_name" "$ca_file" "$cert_file" "$key_file"; do
-     [ -n "$setting" ] || { echo "missing SFU setting in api.env" >&2; exit 1; }
-   done
-   cp -p /etc/chalk-alerts/collector.env /etc/chalk-alerts/collector.env.before-sfu-probe 2>/dev/null || install -m 0640 -o root -g chalk /dev/null /etc/chalk-alerts/collector.env
+   [ -n "$node" ] && [ -n "$server_name" ] || { echo "missing node or server name"; exit 1; }
+   if [ -e /etc/chalk-alerts/collector.env ]; then cp -p /etc/chalk-alerts/collector.env /etc/chalk-alerts/collector.env.before-sfu-probe; fi
+   umask 027
    {
      echo "CHALK_ALERT_SFU_READY_URL=${node}/readyz"
      echo "CHALK_ALERT_SFU_SERVER_NAME=${server_name}"
-     echo "CHALK_ALERT_SFU_CA=${ca_file}"
-     echo "CHALK_ALERT_SFU_CLIENT_CERT=${cert_file}"
-     echo "CHALK_ALERT_SFU_CLIENT_KEY=${key_file}"
+     echo "CHALK_ALERT_SFU_CA=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CA_FILE)")"
+     echo "CHALK_ALERT_SFU_CLIENT_CERT=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CLIENT_CERT_FILE)")"
+     echo "CHALK_ALERT_SFU_CLIENT_KEY=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CLIENT_KEY_FILE)")"
    } >>/etc/chalk-alerts/collector.env
+   chown root:chalk /etc/chalk-alerts/collector.env; chmod 0640 /etc/chalk-alerts/collector.env
    ```
 
-3. Check that the `chalk` user can read the three certificate files. If one fails, copy it to `/etc/chalk-alerts/sfu/` with mode `0640` and group `chalk` and point the variable there. A probe that cannot read a file reports `tls_config` and, after 4 minutes, pages.
+   Check the copies: `openssl x509 -in <file> -noout -enddate` for the certificate and the CA, and `openssl pkey -in <file> -noout` for the key.
 
-   ```sh
-   for k in CA CLIENT_CERT CLIENT_KEY; do f="$(sed -n "s/^CHALK_ALERT_SFU_$k=//p" /etc/chalk-alerts/collector.env | tail -1)"; runuser -u chalk -- test -r "$f" && echo "$k readable" || echo "$k NOT readable"; done
-   ```
-
-4. Run the collector once and read one `sfu-readiness` row with value 0 and reason `ready`:
+3. Run the collector once and read one `sfu-readiness` row with value 0:
 
    ```sh
    systemctl start chalk-alert-state.service && journalctl -u chalk-alert-state.service -n 15 --no-pager
@@ -67,16 +77,22 @@ This is a change to the production API host, so it needs approval. It turns on t
 
    Then look for `chalk_alert_rule == 'sfu-readiness'` rows in the log dataset (Axiom). Do not turn the probe on while a deploy has the node draining: the probe would report `draining` and pages after 4 minutes.
 
-**Undo.** Restore the old settings, or remove the lines, and run the service once. The rows stop and the branch goes idle on its own:
+**Renewal.** The copies in `/etc/chalk-alerts/sfu/` do not follow the API's secrets. When the API's client certificate or CA is renewed, run step 2 again. A stale or missing copy shows as `tls_config` and pages after 4 minutes.
+
+**Undo.** Restore the previous binary and settings, remove the copies and run the service once. The rows stop and the branch goes idle on its own:
 
 ```sh
-if [ -f /etc/chalk-alerts/collector.env.before-sfu-probe ]; then cp -p /etc/chalk-alerts/collector.env.before-sfu-probe /etc/chalk-alerts/collector.env; else sed -i '/^CHALK_ALERT_SFU_/d' /etc/chalk-alerts/collector.env; fi
+cd /opt/chalk-alerts && cp -p collector.before-sfu-probe collector
+if [ -f /etc/chalk-alerts/collector.env.before-sfu-probe ]; then cp -p /etc/chalk-alerts/collector.env.before-sfu-probe /etc/chalk-alerts/collector.env; else mv /etc/chalk-alerts/collector.env /etc/chalk-alerts/collector.env.removed-by-undo; fi
+mv /etc/chalk-alerts/sfu /etc/chalk-alerts/sfu.removed-by-undo
 systemctl start chalk-alert-state.service
 ```
 
+To stop only the probe and keep the new binary, comment out `CHALK_ALERT_SFU_READY_URL` in `/etc/chalk-alerts/collector.env` and run the service once.
+
 ## Follow-up: DigitalOcean alerts to Oncall
 
-Not built here. DigitalOcean alert policies can post only to a Slack-format receiver, and the Oncall webhook is not one, so node down and CPU, memory or disk high reach Discord only. The plan is a small free forwarder: one Cloudflare Worker that accepts DigitalOcean's Slack-format POST, re-posts it to the Oncall webhook in Oncall's payload shape and to Discord, and is set as the policies' Slack URL in `do-monitoring.sh`. Until it exists, the readiness probe above is the way Oncall hears of a down node, through the `sfu-readiness` rule.
+Not built here. DigitalOcean alert policies can post only to a Slack-format receiver, and the Oncall webhook is not one, so node down and CPU, memory or disk high reach Discord only. The plan is a small free forwarder: one Cloudflare Worker that accepts DigitalOcean's Slack-format POST, re-posts it to the Oncall webhook in Oncall's payload shape and to Discord, and is set as the policies' Slack URL in `do-monitoring.sh`. Until it exists, the readiness probe is the way Oncall hears of a down node, through the `sfu-readiness` rule.
 
 ## Drill an alert without paging Oncall
 
