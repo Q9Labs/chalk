@@ -635,6 +635,7 @@ that SFU before the API (see M11 release order).
    without a passing scorecard unless `scorecard_override` gives a written reason.
    When counts show every Tenant and Space on the own provider, the SFU lead sets
    `CHALK_SFU_CLOUDFLARE_OVERFLOW` off; that moment starts M13's window.
+   Second node trigger: one s-2vcpu-2gb production node carries 5 classes of 3 guests (soak C, measured) and 2 classes of 6 guests (derived). Alert and ask the SFU lead for a second node when the evening peak passes 3 concurrent 3-guest classes or the first 6-guest class appears ([capacity calibration](capacity-calibration.md#decision)).
    No production Promote of a commit that contains #965 until the production SFU
    runs a build that accepts `allocationGeneration`.
 5. **Rollback rehearsal.** Default-on rollback: new Episodes return to Cloudflare,
