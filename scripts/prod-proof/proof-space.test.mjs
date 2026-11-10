@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { createEpisode, createSpace } from "./proofs.mjs";
 import { ProofError, publicFailure } from "./runtime.mjs";
 
@@ -74,4 +75,24 @@ test("a Space setup mismatch keeps its bounded public reason", () => {
   const lines = [];
   publicFailure("setup-or-capture", new ProofError("media-plane-config", "private detail"), (line) => lines.push(line));
   assert.deepEqual(lines, ["PROOF setup-or-capture: failed (media-plane-config)"]);
+});
+
+// Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the own-SFU lane
+// takes the Space an operator moved, which the workflow hands to the proof as CHALK_PROOF_SPACE_ID_CHALK_SFU.
+test("the Cloudflare lane and the own-SFU lane each land on their own plane", async () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/real-call-proof.yml", import.meta.url), "utf8");
+  for (const name of ["CHALK_PROOF_SPACE_ID_CF_SFU", "CHALK_PROOF_SPACE_ID_CHALK_SFU"]) {
+    assert.equal(workflow.split(`${name}: \${{ vars.${name} }}`).length - 1, 2, `${name} reaches both the proofs step and the latency step`);
+  }
+  const deployment = (method) => (method === "GET" ? { id: "chalk-space", effective_media_plane: "chalk_sfu", ...policyApplied } : { id: "new", effective_media_plane: "cf_sfu", ...policyApplied });
+  const cloudflareLane = await fakeRun(deployment);
+  assert.equal((await createSpace(cloudflareLane, "cf_sfu")).effective_media_plane, "cf_sfu");
+  process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "chalk-space";
+  try {
+    const ownSfuLane = await fakeRun(deployment);
+    assert.equal((await createSpace(ownSfuLane, "chalk_sfu")).id, "chalk-space");
+    assert.equal((await createSpace(ownSfuLane, "cf_sfu")).effective_media_plane, "cf_sfu");
+  } finally {
+    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
+  }
 });

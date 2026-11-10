@@ -261,7 +261,9 @@ set `CHALK_CANARY_SPACE_ID` to a Space an operator moved with
 `go run ./cmd/media-settings set`, or leave the plane out where the deployment gives
 new Spaces the own SFU (`CHALK_NEW_SPACE_MEDIA_PLANE`). The two-plane latency benchmark
 (`prod:latency`) cannot name a plane either, so set `CHALK_PROOF_SPACE_ID_CF_SFU` and
-`CHALK_PROOF_SPACE_ID_CHALK_SFU` to Spaces an operator moved; it stops at once when a Space
+`CHALK_PROOF_SPACE_ID_CHALK_SFU` to Spaces an operator moved (the real-call workflow reads them from
+the environment's variables of the same names; the nightly own-SFU lane needs the second one, and the
+Cloudflare lane leaves the first unset); it stops at once when a Space
 is not on the plane it asked for. The proof's
 clients declare both media providers, so the Episode binds the Space's choice.
 The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`

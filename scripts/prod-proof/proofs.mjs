@@ -96,11 +96,15 @@ export function episodeEnd(run, path) {
     },
   };
 }
-export async function createEpisode(run, space, policy = manualPolicy) {
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  // A reused Space is not the run's own, so cleanup learns of this Episode from the ownership file.
+// A reused Space is not the run's own, so cleanup learns of an Episode created in it from the
+// ownership file, which this writes before the Episode is used.
+export async function trackEpisode(run, space, episode) {
   run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
   await saveOwnership(run);
+}
+export async function createEpisode(run, space, policy = manualPolicy) {
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  await trackEpisode(run, space, episode);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const effective = episode.config_snapshot.artifact_policy;
