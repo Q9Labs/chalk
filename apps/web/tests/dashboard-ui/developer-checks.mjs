@@ -1,6 +1,6 @@
 // The Developer page: secrets never show in full unless asked, Copy copies the whole key, the key picker and the language picker work from the keyboard, and icons come from Chalk's own origin.
-const MINTED = "chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG";
-const MINTED_MIDDLE = "2LqN0vXc4TzJ7hKp1sYd9mBaE";
+const MINTED = "chalk_sk_Rw8f2LqN0vXc.4TzJ7hKp1sYd9mBaE3uG";
+const MINTED_MIDDLE = "4TzJ7hKp1sYd9mBaE";
 const TENANT = "00000000-0000-4000-8000-000000000001";
 
 export async function developerChecks({ open, check, origin }) {

@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { KeyDTO } from "../../lib/dashboard/contracts";
 import { publicAPIBaseURL } from "../../lib/chalk-access";
 import { Icon, type IconName } from "../site/Icon";
-import { REDACTED_TAIL, SNIPPET_TABS, snippetLines, snippetNote, snippetText, type SnippetLine, type SnippetTab, type Token } from "./developer-snippets";
+import { publicPrefix, REDACTED_TAIL, SNIPPET_TABS, snippetLines, snippetNote, snippetText, type SnippetLine, type SnippetTab, type Token } from "./developer-snippets";
 import { CopyAction, useCopy } from "./kit";
 
 export type FreshSecret = { readonly secret: string; readonly keyId: string | null };
@@ -83,9 +83,8 @@ function KeyPicker({ keys, selected, onPick, onCreateKey }: { readonly keys: rea
   function choose(index: number) {
     const chosen = keys[index];
     if (chosen) onPick(chosen.id);
-    else onCreateKey();
-    if (chosen) close();
-    else setOpen(false);
+    close();
+    if (!chosen) onCreateKey();
   }
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     switch (event.key) {
@@ -152,7 +151,7 @@ function KeyPicker({ keys, selected, onPick, onCreateKey }: { readonly keys: rea
         }}
       >
         <span className="kn ell">{selected.name}</span>
-        <span className="kp mono">{selected.prefix}…</span>
+        <span className="kp mono">{publicPrefix(selected.prefix)}…</span>
         <Icon name="down" size={16} />
       </button>
       {open ? (
@@ -161,7 +160,7 @@ function KeyPicker({ keys, selected, onPick, onCreateKey }: { readonly keys: rea
             <div key={item.id} id={`${id}-${index}`} role="option" aria-selected={item.id === selected.id} className={index === active ? "o hl" : "o"} onPointerEnter={() => setActive(index)} onClick={() => choose(index)}>
               {item.id === selected.id ? <Icon name="check" size={16} className="ck" /> : <span className="ph0" />}
               <span className="kn">{item.name}</span>
-              <span className="kp mono">{item.prefix}…</span>
+              <span className="kp mono">{publicPrefix(item.prefix)}…</span>
             </div>
           ))}
           <hr />
@@ -179,7 +178,7 @@ function renderToken(token: Token, apiKey: KeyDTO | null, index: number) {
   if (token.kind === "secret") {
     return (
       <span className="secret" key={index}>
-        {apiKey?.prefix}
+        {apiKey ? publicPrefix(apiKey.prefix) : null}
         <i>{REDACTED_TAIL}</i>
       </span>
     );

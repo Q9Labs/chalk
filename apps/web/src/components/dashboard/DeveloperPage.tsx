@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
 import { errorMessage, readPage } from "../../lib/dashboard/client";
-import { ago, expiresSoon } from "../../lib/dashboard/format";
+import { ago, expiresSoon, hasExpired } from "../../lib/dashboard/format";
 import { Icon, type IconName } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
@@ -65,7 +65,9 @@ export function DeveloperPage() {
     );
 
   const data = state.data;
-  const keys = data.keys.filter((key) => !key.revokedAt);
+  const listed = data.keys.filter((key) => !key.revokedAt);
+  // Expired keys stay in the table so they can be rotated or revoked, but they are not usable, so they are not counted or offered for the snippets.
+  const keys = listed.filter((key) => !hasExpired(key.expiresAt));
   const origins = data.allowedWebsites.filter((origin) => origin !== dashboardWebsiteOrigin);
   const opened = expanded === undefined ? (data.webhooks[0]?.id ?? null) : expanded;
   const setWebsites = (allowedWebsites: readonly string[]) => update((value): DeveloperDTO => ({ ...value, allowedWebsites }));
@@ -90,10 +92,10 @@ export function DeveloperPage() {
 
   return (
     <Shell nav={<SectionNav keys={keys.length} soon={soon.length > 0} websites={origins.length + 1} failing={failing.length > 0} />}>
-      <Summary keys={keys} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} failing={failing.length} />
+      <Summary keys={keys} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
       <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
       <KeysPanel
-        keys={keys}
+        keys={listed}
         nextCursor={data.nextKeyCursor}
         fresh={fresh}
         onCreate={() => setOpen({ kind: "create-key" })}
@@ -265,12 +267,28 @@ function SectionNav({ keys, soon, websites, failing }: { readonly keys: number; 
 }
 
 /** Four numbers the page really has: it never invents usage the API doesn't return. */
-function Summary({ keys, soon, websites, webhooks, failing }: { readonly keys: readonly KeyDTO[]; readonly soon: readonly KeyDTO[]; readonly websites: number; readonly webhooks: readonly WebhookDTO[]; readonly failing: number }) {
+function Summary({
+  keys,
+  moreKeys,
+  soon,
+  websites,
+  webhooks,
+  moreWebhooks,
+  failing,
+}: {
+  readonly keys: readonly KeyDTO[];
+  readonly moreKeys: boolean;
+  readonly soon: readonly KeyDTO[];
+  readonly websites: number;
+  readonly webhooks: readonly WebhookDTO[];
+  readonly moreWebhooks: boolean;
+  readonly failing: number;
+}) {
   const lastUsed = keys.reduce<KeyDTO | null>((latest, key) => (key.lastUsedAt && (!latest?.lastUsedAt || key.lastUsedAt > latest.lastUsedAt) ? key : latest), null);
   const soonest = soon[0];
   return (
     <div className="card stats" role="group" aria-label="Summary">
-      <Stat icon="key" label="Active API keys" value={String(keys.length)}>
+      <Stat icon="key" label="Active API keys" value={`${keys.length}${moreKeys ? "+" : ""}`}>
         {!keys.length ? (
           "Create one to start"
         ) : soonest ? (
@@ -288,7 +306,7 @@ function Summary({ keys, soon, websites, webhooks, failing }: { readonly keys: r
       <Stat icon="globe" label="Allowed websites" value={String(websites)}>
         1 always allowed
       </Stat>
-      <Stat icon="hook" label="Webhook endpoints" value={String(webhooks.length)}>
+      <Stat icon="hook" label="Webhook endpoints" value={`${webhooks.length}${moreWebhooks ? "+" : ""}`}>
         {failing ? (
           <span className="pill bad">
             <span className="d" />

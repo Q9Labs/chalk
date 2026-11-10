@@ -1,10 +1,10 @@
 import type { DeveloperDTO, KeyDTO } from "../../lib/dashboard/contracts";
 import { readPage } from "../../lib/dashboard/client";
-import { ago, expiresSoon, fullDate } from "../../lib/dashboard/format";
+import { ago, expiresSoon, fullDate, hasExpired } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { accessLabel } from "./DeveloperDialogs";
 import type { FreshSecret } from "./DeveloperConnect";
-import { KEY_PREFIX_LENGTH } from "./developer-snippets";
+import { KEY_PREFIX_LENGTH, publicPrefix } from "./developer-snippets";
 import { Menu, MenuItem, MoreButton } from "./kit";
 import { SecretField } from "./SecretField";
 
@@ -41,7 +41,7 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
           <div className="t">
             <b>{freshKey.name} is ready</b>
             <p>Copy the secret now. Chalk shows the full key once, and never again.</p>
-            <SecretField secret={fresh.secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" copiedMessage="Secret copied" />
+            <SecretField key={fresh.secret} secret={fresh.secret} prefixLength={KEY_PREFIX_LENGTH} copyLabel="Copy key" copiedMessage="Secret copied" />
           </div>
         </div>
       ) : null}
@@ -81,6 +81,7 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
 
 function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO; readonly fresh: boolean; readonly onRotate: (key: KeyDTO) => void; readonly onRevoke: (key: KeyDTO) => void }) {
   const soon = expiresSoon(apiKey.expiresAt);
+  const expired = hasExpired(apiKey.expiresAt);
   return (
     <div className={fresh ? "row new" : "row"} role="row">
       <div className="nm" role="cell">
@@ -92,7 +93,7 @@ function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO
       </div>
       <div role="cell">
         <span className="mono">
-          <span className="pre">{apiKey.prefix}</span>
+          <span className="pre">{publicPrefix(apiKey.prefix)}</span>
           <span className="redact">••••••••</span>
         </span>
       </div>
@@ -101,6 +102,12 @@ function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO
       </div>
       <div className="exp" role="cell">
         <span className="num">{fullDate(apiKey.expiresAt)}</span>
+        {expired ? (
+          <span className="pill bad">
+            <span className="d" />
+            Expired
+          </span>
+        ) : null}
         {soon ? (
           <span className="pill warn">
             <Icon name="clock" size={12} />

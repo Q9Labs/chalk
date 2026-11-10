@@ -68,14 +68,14 @@ function richAccount() {
       {
         id: uuid(0x300),
         name: "TH portal production",
-        prefix: "chalk_sk_7Hq2",
+        prefix: "chalk_sk_7Hq2mXc9LpTz",
         scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"],
         expiresAt: at(-319, 12, 0),
         revokedAt: null,
         lastUsedAt: new Date(Date.now() - 2 * 60000).toISOString(),
       },
-      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91P", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null, lastUsedAt: at(1, 15, 20) },
-      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4m", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null, lastUsedAt: at(21, 9, 40) },
+      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91PvB3nWd8Q", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null, lastUsedAt: at(1, 15, 20) },
+      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4mRy6uHa2J", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null, lastUsedAt: at(21, 9, 40) },
     ],
     webhooks: [
       { id: uuid(0x400), name: "TH attendance", url: "https://api.tuitionhighway.com/chalk/…", enabled: true, revision: 3, eventTypes: ["participant.joined", "participant.left", "episode.started", "episode.ended"] },
@@ -467,11 +467,11 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { allowedWebsites: data.origins });
     case "create-key": {
       const id = uuid(0x3000 + data.keys.length);
-      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null, lastUsedAt: null });
-      return send(response, 200, { id, secret: "chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG" });
+      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f2LqN0vXc", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null, lastUsedAt: null });
+      return send(response, 200, { id, secret: ["chalk_sk_Rw8f2LqN0vXc", "4TzJ7hKp1sYd9mBaE3uG"].join(".") });
     }
     case "rotate-key":
-      return send(response, 200, { id: action.keyId, secret: "chalk_sk_Pq3m8VtL1wXn6RzK2hJc9yBd4sFaG7eU" });
+      return send(response, 200, { id: action.keyId, secret: ["chalk_sk_Pq3m8VtL1wXn", "6RzK2hJc9yBd4sFaG7eU"].join(".") });
     case "revoke-key":
       data.keys.find((key) => key.id === action.keyId).revokedAt = new Date().toISOString();
       return send(response, 200, { ok: true });

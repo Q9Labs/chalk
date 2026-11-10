@@ -23,7 +23,9 @@ harness compiles named Functions separately; the OAuth smoke harness excludes
 ## Browser contract
 
 Import DTOs and request schemas from `src/lib/dashboard/contracts.ts`.
-All responses, including errors and redirects, are `Cache-Control: no-store`.
+All responses, including errors and redirects, are `Cache-Control: no-store`,
+except `GET /dashboard-api/favicon`, whose icons are `private` and cached (a day
+when found, an hour when the site has none).
 POST JSON with `Origin` exactly equal to `DASHBOARD_ORIGIN` and `X-CSRF-Token`
 obtained from `GET /auth/session`. Apple is the only cross-site POST exception:
 its callback accepts only form data with `Origin: https://appleid.apple.com`,

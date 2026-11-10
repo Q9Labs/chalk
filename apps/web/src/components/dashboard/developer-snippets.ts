@@ -29,9 +29,14 @@ export function maskSecret(secret: string, prefixLength: number): string {
 /** The dots the snippet draws after a key's prefix. */
 export const REDACTED_TAIL = REDACTION.repeat(14);
 
-/** The key as the snippet draws it: its prefix and a row of dots. */
+/** The part of a key's prefix the page lists, `chalk_sk_9Wm4`. The API's prefix runs on to the 12 characters that name the key. */
+export function publicPrefix(prefix: string): string {
+  return prefix.slice(0, KEY_PREFIX_LENGTH);
+}
+
+/** The key as the snippet draws it: its public prefix and a row of dots. */
 export function redactedKey(prefix: string): string {
-  return `${prefix}${REDACTED_TAIL}`;
+  return `${publicPrefix(prefix)}${REDACTED_TAIL}`;
 }
 
 const t = (kind: Exclude<Token["kind"], "secret">, text: string): Token => ({ kind, text });
