@@ -12,14 +12,54 @@ Every step has its undo written first. Do not start a step until its undo is rea
 4. Watch for 60 minutes.
 5. Kill-switch drill, timed.
 6. M7 evidence: 20 joins and 10 fault trials.
-7. Move production Spaces, non-recording first, then Spaces with Recording or Transcription once `call-artifacts` has passed on staging (M10).
+7. Move real production Spaces once `call-artifacts` (Recording and Transcript) has passed on staging (M10), Recording-disabled ones first. Until then only the proof and canary Spaces are on `chalk_sfu`.
 8. Watch again with the alerts live.
+
+## How a changed allowlist reaches the running API
+
+`CHALK_SFU_ALLOWED_SPACES` lives in the SecureString `/chalk/production/managed-episode/api.env` (region `ap-southeast-1`, Advanced tier, key `alias/aws/ssm`). The deploy controller reads it again at every deploy (`fetch_deployment_inputs`) and writes it to `/run/chalk/env/api.env`, which `chalk-api.container` loads with `EnvironmentFile=`. The API reads the file only when it starts. So a changed value reaches the running API in one of two ways:
+
+- **A deploy.** The next Promote or Release re-fetches every input. A Release dispatch on master with `deploy_managed=true` and no application change is classified runtime-only and re-fetches without building images; this path has not been run for a config change.
+- **A host edit and restart**, without a deploy (below). The next deploy overwrites the file from SSM, so SSM and the host must hold the same value.
+
+Never print `api.env`: change one line and print only an entry count.
+
+Change the allowlist in SSM (edit one line, keep the old line privately):
+
+```sh
+set -euo pipefail
+p=/chalk/production/managed-episode/api.env; k="--profile q9labs --region ap-southeast-1"
+tmp=$(umask 077; mktemp); trap 'rm -f "$tmp" "$tmp.bak"' EXIT
+aws $k ssm get-parameter --name $p --with-decryption --query Parameter.Value --output text > "$tmp"
+mkdir -p ~/.chalk-rollout && chmod 700 ~/.chalk-rollout
+( umask 077; sed -n 's/^CHALK_SFU_ALLOWED_SPACES=//p' "$tmp" > ~/.chalk-rollout/allowlist.before )
+new="$(cat ~/.chalk-rollout/allowlist.before),<space id>"
+sed -i.bak "s|^CHALK_SFU_ALLOWED_SPACES=.*|CHALK_SFU_ALLOWED_SPACES=$new|" "$tmp"
+aws $k ssm put-parameter --name $p --type SecureString --tier Advanced --overwrite --value "file://$tmp" --query Version
+```
+
+Apply it to the running API without a deploy, on the production host (SSM Run Command on `CHALK_MANAGED_INSTANCE_ID`): save the file, change the same one line, restart.
+
+```sh
+f=/run/chalk/env/api.env
+cp -p $f /run/chalk/env/api.env.before-allowlist
+sed -i "s|^CHALK_SFU_ALLOWED_SPACES=.*|CHALK_SFU_ALLOWED_SPACES=<same new value as SSM>|" $f
+runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) systemctl --user restart chalk-api.service
+```
+
+Then check `/healthz` on the API and that a new join grant still works. The restart interrupts API requests for a few seconds (join grants, Space calls); live media and Sync are separate services and stay up. Do it in a quiet minute.
+
+**Undo.** Put the old line back in both places. In SSM, run the first script again with `new` set to the saved `~/.chalk-rollout/allowlist.before` value. On the host, restore `/run/chalk/env/api.env.before-allowlist` over `api.env` and run the same restart command. SSM keeps every version (`get-parameter-history`).
+
+## Production settings checked 2026-11-10 (names and counts only)
+
+`CHALK_SFU_ENABLED=true`. `CHALK_SFU_NODES` has one entry. `CHALK_SFU_ALLOWED_SPACES` has one entry, the existing `sfu-canary-…` Space. `CHALK_SFU_NEW_EPISODES` is absent, so new Episodes may bind the own SFU. `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu`. Check these again the same way before Promote.
 
 ## Prepare (before the first Promote)
 
-Production runs a release before the per-Space setting, so `media-settings` does not exist there yet. The only way to put a proof Space on `chalk_sfu` before the deploy is the public API on an allowlisted Space. The running API reads `CHALK_SFU_ALLOWED_SPACES` from `/run/chalk/env/api.env`, which the deploy controller writes from the private API environment at each deploy, so the allowlist reaches the running API only through a deploy or a host edit followed by an API restart.
+Production runs a release before the per-Space setting, so `media-settings` does not exist there yet. The only way to put a proof Space on `chalk_sfu` before the deploy is the public API on an allowlisted Space. Promote's own deploy comes after that check, so its re-fetch does not help the check: the running API must already hold the allowlist.
 
-1. Pin the manual proof Space to one that is already on `chalk_sfu` and already allowlisted: set the `production` environment variable `CHALK_PROOF_SPACE_ID_CHALK_SFU` to its ID. No allowlist change is needed for it.
+1. Pin the manual proof Space to the existing `sfu-canary-…` Space, which is already on `chalk_sfu` and allowlisted:
 
    ```sh
    gh variable set CHALK_PROOF_SPACE_ID_CHALK_SFU --env production --body <space id>
@@ -31,12 +71,11 @@ Production runs a release before the per-Space setting, so `media-settings` does
    gh workflow run real-call-proof.yml --ref master -f environment=production -f proofs=own-sfu-spaces -f media_plane=chalk_sfu
    ```
 
-3. Read the new Space ID from the Tenant's Space list (slug `promote-proof-chalk-sfu-automatic`). Add it to `CHALK_SFU_ALLOWED_SPACES` in the private API environment, then make the running API read it. Use a deploy that re-fetches the API inputs when one exists; otherwise edit `/run/chalk/env/api.env` on the host and restart `chalk-api.service`, and keep the private value and the host value equal so the next deploy keeps it.
-4. Confirm the production API settings by name only: `CHALK_SFU_NODES` set, `CHALK_SFU_NEW_EPISODES` not `off`, `CHALK_DEFAULT_MEDIA_PLANE` not changed by this rollout. Print no values.
-5. Run step 2 again. Both proof Spaces must report `chalk_sfu`.
-6. Check the SFU alerts are live (see Watch).
+3. Read its ID from the Tenant's Space list (slug `promote-proof-chalk-sfu-automatic`). Add it to the allowlist in SSM and on the running API as in the section above.
+4. Run step 2 again. Both proof Spaces must report `chalk_sfu`.
+5. Check the SFU alerts are live (see Watch).
 
-**Undo.** Revert the PR that last changed Promote. Put each proof Space back with `media-settings set --tenant <tenant> --space <space> --plane cf_sfu`. Remove the added ID from `CHALK_SFU_ALLOWED_SPACES` in the private environment and on the host, and delete the pinned variable with `gh variable delete CHALK_PROOF_SPACE_ID_CHALK_SFU --env production`.
+**Undo.** Revert the PR that last changed Promote. Put the automatic proof Space back with `media-settings set --tenant <tenant> --space <space> --plane cf_sfu`. Restore the saved allowlist line in SSM and on the host, and run `gh variable delete CHALK_PROOF_SPACE_ID_CHALK_SFU --env production`.
 
 ## Promote
 
@@ -94,12 +133,12 @@ media-settings get --tenant <tenant> --space <space>
 media-settings set --tenant <tenant> --space <space> --plane chalk_sfu
 ```
 
-Move a few Spaces, then watch for 30 minutes before the next group. Each Space must be on `CHALK_SFU_ALLOWED_SPACES` (the AND), so add each moved Space to it first.
+Move a few Spaces, then watch for 30 minutes before the next group. Each Space must be on `CHALK_SFU_ALLOWED_SPACES` (the AND), so add each batch to it first with the SSM edit and host restart above. Spaces keep their Recording and Transcription settings: those are product decisions. Real Spaces, recording-disabled ones included, move only after `call-artifacts` (Recording and Transcript) passes on staging. Until then only the proof and canary Spaces are on `chalk_sfu`.
 
 **Undo per Space.** `media-settings set --tenant <tenant> --space <space> --plane cf_sfu`. Use `cf_sfu`, not `inherit`, because the Tenant default may be `chalk_sfu`. Only new Episodes move; end a live Episode to move that call.
 
 ## Not proven
 
 - `leave-own-sfu` has not run against a real SDK session.
-- The running API's allowlist reload path is read from the controller, not run.
+- The allowlist path is read from the controller and the quadlet, not run: the SSM edit, the host edit and restart, and the runtime-only Release re-fetch.
 - Capture on `chalk_sfu` (M10) is not proven in production.
