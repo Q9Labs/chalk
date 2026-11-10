@@ -9,7 +9,8 @@ export const DIRECT_SYNC_FAILURE_MEMORY_MS = DIRECT_PATH_FAILURE_MEMORY_MS;
 
 type Clock = Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
 
-const defaultClock: Clock = {
+/** The browser clock, shared with the connection dependencies. */
+export const defaultClock: Clock = {
   now: () => Date.now(),
   setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
   clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),

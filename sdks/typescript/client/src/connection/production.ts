@@ -2,7 +2,7 @@ import { EpisodeStatusError, retryAfterMilliseconds } from "./episode-status";
 import { ConnectionReporter } from "./report";
 import { CloudflareSFUClient, createCloudflareSFUHTTPTransport } from "../media";
 import { createChalkChatFileHttpTransport } from "../chat-files";
-import { createBrowserWebSocketFactory, createV1SyncClient, directFirstSyncOptions } from "../sync";
+import { createBrowserWebSocketFactory, createV1SyncClient, defaultClock, directFirstSyncOptions } from "../sync";
 import { createChalkWhiteboardV1Client, createChalkWhiteboardV1FileDownloadTransport } from "../whiteboard";
 import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type ConnectionDependencies, type ConnectionMediaFactoryInput, type ConnectionMediaClient, type ConnectionSyncFactoryInput, type ConnectionWhiteboardFactoryInput } from "./dependencies";
 import { createBrowserMediaDevices } from "./media-devices";
@@ -12,11 +12,7 @@ import { directOrigin, directSyncUrl, type DirectPathMode } from "../direct-path
 const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
-    clock: {
-      now: () => Date.now(),
-      setTimeout: (callback, milliseconds) => globalThis.setTimeout(callback, milliseconds),
-      clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
-    },
+    clock: defaultClock,
     createConnectionReporter: (access) => {
       const random = globalThis.crypto;
       if (!random?.randomUUID) return undefined;

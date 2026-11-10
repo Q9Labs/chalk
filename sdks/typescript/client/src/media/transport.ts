@@ -32,10 +32,15 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const directAnswers = async (): Promise<boolean> => {
     if (!direct || directPathBlocked(directMemory, direct.host, Date.now())) return false;
     probe ??= probeDirectPath(direct, options.fetch ?? globalThis.fetch.bind(globalThis)).then((answered) => {
-      if (!answered) markDirectPathFailed(directMemory, direct.host, Date.now());
+      if (!answered) forgetDirectProbe();
       return answered;
     });
     return probe;
+  };
+  /** Marks the door failed for the memory period and drops the probe result, so a recovered door is probed again once the memory expires. */
+  const forgetDirectProbe = () => {
+    if (direct) markDirectPathFailed(directMemory, direct.host, Date.now());
+    probe = undefined;
   };
   if (direct) void directAnswers();
   let announced: string | undefined;
@@ -116,8 +121,13 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           announce("direct", false);
           return result;
         } catch (error) {
-          if (!neverReachedApi(error)) throw error;
-          markDirectPathFailed(directMemory, direct.host, Date.now());
+          // A write that left the browser may have been applied; the protocol has no idempotency key, so only a read is sent twice.
+          const unreachable = neverReachedApi(error);
+          if (unreachable) forgetDirectProbe();
+          if (!(unreachable && method === "GET")) {
+            announce("direct", false);
+            throw error;
+          }
         }
       }
       announce("tunnel", direct !== null);

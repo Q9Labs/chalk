@@ -7,7 +7,7 @@ import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
-import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
+import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionMediaDevices, type ConnectionSyncClient } from "./dependencies";
 import { releaseTracks, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
@@ -182,7 +182,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         now: () => clock.currentTimeMillisUnsafe(),
         ...options.diagnostics,
         onEvent: (event) => {
-          reporter?.recordDiagnostic(event);
+          if (isReportedDiagnostic(event)) reporter?.recordDiagnostic(event);
           options.diagnostics?.onEvent?.(event);
         },
       });

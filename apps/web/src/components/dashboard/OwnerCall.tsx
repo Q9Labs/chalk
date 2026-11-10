@@ -14,7 +14,7 @@ import { ErrorPanel } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./transcript-languages";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
-import { publicAPIBaseURL } from "../../lib/chalk-access";
+import { publicAPIBaseURL, publicDirectPathControl, publicSyncDirectURL } from "../../lib/chalk-access";
 const isOwnerReloadIntent = Schema.is(Schema.Struct({ ownerJoinKey: Schema.String.check(Schema.isUUID()), ownerUserId: Schema.String }));
 
 function readOwnerReload(spaceId: string, userId: string) {
@@ -175,7 +175,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     setStartError(null);
   }, [spaceId]);
   useEffect(() => {
-    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined, syncDirectUrl: import.meta.env.VITE_CHALK_SYNC_DIRECT_URL?.trim() || undefined });
+    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined, syncDirectUrl: publicSyncDirectURL().syncDirectURL, ...publicDirectPathControl() });
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };
