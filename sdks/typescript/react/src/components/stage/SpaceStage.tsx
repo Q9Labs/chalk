@@ -17,7 +17,21 @@ function BoardOpening() {
   );
 }
 
-const Board = lazy(() => import("../board/Board").then((module) => ({ default: module.Board })));
+/** Shown when the board chunk cannot be fetched, so a bad connection does not take the call view down with it. */
+function BoardUnavailable() {
+  return (
+    <div role="alert" className="grid h-full place-content-center rounded-[inherit] bg-[var(--chalk-surface)] px-6 text-center text-sm text-[var(--chalk-muted-text)]">
+      The board could not load. Check your connection and rejoin to try again.
+    </div>
+  );
+}
+
+const Board = lazy(() =>
+  import("../board/Board").then(
+    (module) => ({ default: module.Board }),
+    () => ({ default: BoardUnavailable }),
+  ),
+);
 
 export interface SpaceStageProps {
   readonly pinnedId?: string | null;
