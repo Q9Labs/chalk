@@ -560,3 +560,82 @@ func TestAttachingAParkedSectionToAClosedSessionFails(t *testing.T) {
 		t.Fatalf("attach on a closed session returned %v, want ErrSessionGone", err)
 	}
 }
+
+// A held section answers only with the extensions a live section negotiates. The set in hold.go must
+// stay equal to what the node's engine puts in its own offers.
+func TestHeldSectionsAnswerOnlyWithExtensionsTheNodeNegotiates(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+	_, cam := pullBoth(t, subscriber, publisher, viewer)
+
+	// The live offers of a fresh subscriber name every extension the node's engine negotiates.
+	live := map[string]bool{}
+	fresh := node.newTestSession(t, testScope("carol", 1))
+	freshViewer := newTestPeer(t)
+	for _, name := range []string{"mic", "cam"} {
+		pulled, err := fresh.AddTracks(context.Background(), pullRequest(fresh, publisher, name))
+		if err != nil || pulled.SessionDescription == nil {
+			t.Fatalf("pull %s: %+v, %v", name, pulled, err)
+		}
+		var description sdp.SessionDescription
+		if err := description.Unmarshal([]byte(pulled.SessionDescription.SDP)); err != nil {
+			t.Fatal(err)
+		}
+		for _, media := range description.MediaDescriptions {
+			for _, attribute := range media.Attributes {
+				if fields := strings.Fields(attribute.Value); attribute.Key == sdp.AttrKeyExtMap {
+					live[fields[len(fields)-1]] = true
+				}
+			}
+		}
+		answer := freshViewer.answer(t, pulled.SessionDescription)
+		if err := fresh.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: fresh.scope, SessionDescription: answer}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for uri := range live {
+		if !answerableExtensions[uri] {
+			t.Fatalf("the node's own offer carries %s, which the held sections would not echo", uri)
+		}
+	}
+	for uri := range answerableExtensions {
+		if !live[uri] {
+			t.Fatalf("answerableExtensions lists %s, which the node's own offer never carries", uri)
+		}
+	}
+
+	// An extension the node does not negotiate, offered on a held section, is left out of the answer.
+	offer := viewer.offer(t)
+	offer.SDP = setDirection(t, offer.SDP, cam, "inactive")
+	offer.SDP = withExtension(t, offer.SDP, cam, "13 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time")
+	forceClose(t, subscriber, cam)
+	closed, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: offer, Tracks: []protocol.CloseTrack{{Mid: cam}}})
+	if err != nil || closed.SessionDescription == nil {
+		t.Fatalf("close: %+v, %v", closed, err)
+	}
+	if got := extensionsOf(t, closed.SessionDescription.SDP, cam); slices.Contains(got, "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time") || !slices.Contains(got, sdp.SDESRTPStreamIDURI) {
+		t.Fatalf("the held camera section answers with %v, want the negotiated extensions and not abs-send-time", got)
+	}
+}
+
+// withExtension adds one extmap line to a section.
+func withExtension(t *testing.T, raw, mid, value string) string {
+	t.Helper()
+	var description sdp.SessionDescription
+	if err := description.Unmarshal([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	for _, media := range description.MediaDescriptions {
+		if got, _ := media.Attribute(sdp.AttrKeyMID); got == mid {
+			media.Attributes = append(media.Attributes, sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: value})
+		}
+	}
+	out, err := description.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}

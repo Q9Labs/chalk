@@ -2,9 +2,22 @@ package media
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pion/sdp/v3"
 )
+
+// answerableExtensions are the header extensions the node's media engine negotiates (newPeerFactory):
+// the ones it registers and the transport-wide sequence number of the feedback it sends. A held
+// section answers with these among the client's offered extensions and no others, so it never
+// claims an extension a live section would not accept.
+var answerableExtensions = map[string]bool{
+	sdp.AudioLevelURI:            true,
+	sdp.SDESMidURI:               true,
+	sdp.SDESRTPStreamIDURI:       true,
+	sdp.SDESRepairRTPStreamIDURI: true,
+	sdp.TransportCCURI:           true,
+}
 
 // Pion stops a local transceiver when a client offer marks its mid inactive, and a stopped
 // transceiver cannot send again. The SDK parks every closed receiver as inactive and repeats that in
@@ -54,7 +67,7 @@ func releaseParked(answer, offer string, held []string) (string, error) {
 	extensions := map[string][]sdp.Attribute{}
 	for _, media := range offered.MediaDescriptions {
 		if mid, ok := media.Attribute(sdp.AttrKeyMID); ok && mids[mid] {
-			extensions[mid] = withKey(media.Attributes, sdp.AttrKeyExtMap)
+			extensions[mid] = answerable(media.Attributes)
 		}
 	}
 	for _, media := range answered.MediaDescriptions {
@@ -78,10 +91,15 @@ func releaseParked(answer, offer string, held []string) (string, error) {
 	return string(out), nil
 }
 
-func withKey(attributes []sdp.Attribute, key string) []sdp.Attribute {
+// answerable returns the offered extmap lines for extensions the node negotiates.
+func answerable(attributes []sdp.Attribute) []sdp.Attribute {
 	var found []sdp.Attribute
 	for _, attribute := range attributes {
-		if attribute.Key == key {
+		if attribute.Key != sdp.AttrKeyExtMap {
+			continue
+		}
+		fields := strings.Fields(attribute.Value)
+		if len(fields) > 0 && answerableExtensions[fields[len(fields)-1]] {
 			found = append(found, attribute)
 		}
 	}
