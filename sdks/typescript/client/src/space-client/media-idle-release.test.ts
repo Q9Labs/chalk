@@ -234,6 +234,7 @@ describe("a join that fails after the devices opened", () => {
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
       {
         ...base,
+        apiBaseUrl: "http://localhost:8080",
         dependencies: {
           ...base.dependencies,
           mediaDevices: { getUserMedia: async () => mediaStream(microphone), getDisplayMedia: async () => mediaStream(microphone), enumerateDevices: async () => [], releaseTrack },
