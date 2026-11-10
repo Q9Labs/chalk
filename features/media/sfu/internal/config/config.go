@@ -167,7 +167,7 @@ func Load(lookup Lookup) (Config, error) {
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
 		MaxCapturesPerEpisode:      r.integer("SFU_MAX_CAPTURES_PER_EPISODE", 2, 0, 8),
 		MaxCaptureSubscriptions:    r.integer("SFU_MAX_CAPTURE_SUBSCRIPTIONS", 64, 1, 128),
-		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 256<<10, 4<<10, 1<<20)),
+		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 384<<10, 4<<10, 1<<20)),
 		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 300, 1, 10000),
 		CameraUplinkCost:           r.integer("SFU_CAMERA_UPLINK_COST", 390, 1, 10000),
