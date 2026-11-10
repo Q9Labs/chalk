@@ -212,17 +212,26 @@ function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
         <Lockup />
       </Link>
       <nav className="ttabs" aria-label="Dashboard">
-        <Link to="/dashboard" activeOptions={{ exact: true }} aria-current={section === "home" ? "page" : undefined}>
-          Home
+        <Link to="/dashboard" activeOptions={{ exact: true }} aria-label="Home" aria-current={section === "home" ? "page" : undefined}>
+          <Icon name="home" size={16} />
+          <span>Home</span>
         </Link>
-        <Link to="/dashboard/apps" aria-current={section === "apps" ? "page" : undefined}>
-          AI apps
+        <Link to="/dashboard/apps" aria-label="AI apps" aria-current={section === "apps" ? "page" : undefined}>
+          <Icon name="grid" size={16} />
+          <span>AI apps</span>
         </Link>
-        <Link to="/dashboard/developer" aria-current={section === "developer" ? "page" : undefined}>
-          Developer
+        <Link to="/dashboard/developer" aria-label="Developer" aria-current={section === "developer" ? "page" : undefined}>
+          <Icon name="code" size={16} />
+          <span>Developer</span>
         </Link>
       </nav>
-      <div className="acct">{profile ? <AccountMenu profile={profile} /> : null}</div>
+      <div className="acct">
+        <Link to="/docs" className="docs">
+          <Icon name="book" size={16} />
+          Docs
+        </Link>
+        {profile ? <AccountMenu profile={profile} /> : null}
+      </div>
     </header>
   );
 }

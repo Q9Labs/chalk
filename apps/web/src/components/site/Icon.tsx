@@ -201,6 +201,15 @@ const PATHS = {
       <path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4" />
     </>
   ),
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  eyeOff: <path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.7C3.8 8.5 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 0 0 4.2 4.2" />,
+  terminal: <path d="M4 17l6-6-6-6M12 19h8" />,
+  hash: <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />,
   cmd: <path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" />,
 } satisfies Record<string, ReactElement>;
 

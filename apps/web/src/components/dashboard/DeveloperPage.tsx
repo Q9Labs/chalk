@@ -1,15 +1,20 @@
-import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
-import type { DeliveryDTO, DeveloperDTO, RecordingRenderSettingsDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
+import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
 import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
-import { act, errorMessage, readPage } from "../../lib/dashboard/client";
-import { ago, clock, expiresSoon, fullDate, sessionDay } from "../../lib/dashboard/format";
-import { Icon } from "../site/Icon";
+import { errorMessage, readPage } from "../../lib/dashboard/client";
+import { ago, expiresSoon } from "../../lib/dashboard/format";
+import { Icon, type IconName } from "../site/Icon";
+import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
-import { accessLabel, EndpointDialog, AddWebsiteDialog, CreateKeyDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
-import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
+import { ConnectPanel, type FreshSecret } from "./DeveloperConnect";
+import { CallsPanel } from "./DeveloperCalls";
+import { AddWebsiteDialog, CreateKeyDialog, EndpointDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";
+import { KeysPanel } from "./DeveloperKeys";
+import { SitesPanel } from "./DeveloperSites";
+import { isFailing, WebhooksPanel } from "./DeveloperWebhooks";
+import { ErrorPanel, Sk, SkeletonRows, useToast } from "./kit";
 
 type Open =
   | null
@@ -21,45 +26,42 @@ type Open =
   | { readonly kind: "remove-website"; readonly origin: string }
   | { readonly kind: "secret"; readonly secret: Secret };
 
+const SECTIONS: readonly { readonly id: string; readonly label: string; readonly icon: IconName }[] = [
+  { id: "connect", label: "Connect", icon: "link" },
+  { id: "keys", label: "API keys", icon: "key" },
+  { id: "websites", label: "Websites", icon: "globe" },
+  { id: "webhooks", label: "Webhooks", icon: "hook" },
+  { id: "calls", label: "Calls", icon: "rec" },
+  { id: "apps", label: "AI apps", icon: "grid" },
+];
+
 export function DeveloperPage() {
   const { state, reload, update } = useLoad(() => readPage("developer", {}), "developer");
   const [open, setOpen] = useState<Open>(null);
   const [expanded, setExpanded] = useState<string | null | undefined>(undefined);
+  // The full secret of a key just made or rotated. It lives only here, in memory, until the page closes.
+  const [fresh, setFresh] = useState<FreshSecret | null>(null);
   const toast = useToast();
   const close = () => setOpen(null);
 
-  const intro = (
-    <>
-      <div className="pgh">
-        <h1>Developer</h1>
-      </div>
-      <p className="intro">
-        Recording preferences, API keys, allowed websites and webhooks for your app. Here a call is a Space and one session is an Episode, the same words the API uses. <a href="/docs/quickstart">Read the docs</a>
-      </p>
-    </>
-  );
   if (state.kind === "loading")
     return (
-      <div className="wrap">
-        {intro}
+      <Shell>
         {[3, 2, 2].map((count, index) => (
-          <div key={index}>
-            <div className="secth">
+          <div key={index} className="card">
+            <div className="ph">
               <Sk width={["120px", "150px", "180px"][index] ?? "120px"} height={18} />
             </div>
             <SkeletonRows count={count} />
           </div>
         ))}
-      </div>
+      </Shell>
     );
   if (state.kind === "error")
     return (
-      <div className="wrap">
-        {intro}
-        <div style={{ marginTop: "var(--space-8)" }}>
-          <ErrorPanel title="Couldn’t load your developer settings" detail={errorMessage(state.error)} onRetry={reload} />
-        </div>
-      </div>
+      <Shell>
+        <ErrorPanel title="Couldn’t load your developer settings" detail={errorMessage(state.error)} onRetry={reload} />
+      </Shell>
     );
 
   const data = state.data;
@@ -67,110 +69,69 @@ export function DeveloperPage() {
   const origins = data.allowedWebsites.filter((origin) => origin !== dashboardWebsiteOrigin);
   const opened = expanded === undefined ? (data.webhooks[0]?.id ?? null) : expanded;
   const setWebsites = (allowedWebsites: readonly string[]) => update((value): DeveloperDTO => ({ ...value, allowedWebsites }));
+  const soon = keys.filter((key) => expiresSoon(key.expiresAt));
+  const failing = data.webhooks.filter(isFailing);
+
+  /** Re-reads the first page of keys in place, since a full reload would unmount the button a dialog returns focus to. Gives back the key whose secret this is. */
+  async function refreshKeys(secret: string, fallbackId: string | null): Promise<string | null> {
+    try {
+      const page = await readPage("developer", {});
+      update((value) => ({ ...value, keys: page.keys, nextKeyCursor: page.nextKeyCursor }));
+      return page.keys.find((key) => secret.startsWith(key.prefix))?.id ?? fallbackId;
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
+      return fallbackId;
+    }
+  }
+  function showSecret(secret: Secret, fallbackId: string | null) {
+    setOpen({ kind: "secret", secret });
+    if (secret.kind === "key") void refreshKeys(secret.secret, fallbackId).then((keyId) => setFresh({ secret: secret.secret, keyId }));
+  }
 
   return (
-    <div className="wrap">
-      {intro}
-      <RecordingSettings mode={data.recordingRenderMode} onSaved={(recordingRenderMode) => update((value) => ({ ...value, recordingRenderMode }))} />
-      <section style={{ marginTop: "var(--space-8)" }} aria-label="Transcripts">
-        <TranscriptLanguageSettings
-          value={data.transcriptLanguage ?? "auto"}
-          onSave={async (value) => {
-            if (value === null) return;
-            const saved = await act("developer", { action: "set-default-transcript-language", transcriptLanguage: value });
-            update((current) => ({ ...current, ...saved }));
-          }}
-        />
+    <Shell nav={<SectionNav keys={keys.length} soon={soon.length > 0} websites={origins.length + 1} failing={failing.length > 0} />}>
+      <Summary keys={keys} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} failing={failing.length} />
+      <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
+      <KeysPanel
+        keys={keys}
+        nextCursor={data.nextKeyCursor}
+        fresh={fresh}
+        onCreate={() => setOpen({ kind: "create-key" })}
+        onRotate={(apiKey) => setOpen({ kind: "rotate-key", apiKey })}
+        onRevoke={(apiKey) => setOpen({ kind: "revoke-key", apiKey })}
+        onMore={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))}
+      />
+      <SitesPanel origins={origins} onAdd={() => setOpen({ kind: "add-website" })} onRemove={(origin) => setOpen({ kind: "remove-website", origin })} />
+      <WebhooksPanel
+        webhooks={data.webhooks}
+        nextCursor={data.nextWebhookCursor}
+        opened={opened}
+        onToggle={(id) => setExpanded(opened === id ? null : id)}
+        onAdd={() => setOpen({ kind: "add-endpoint" })}
+        onRotate={(webhook) => setOpen({ kind: "rotate-webhook", webhook })}
+        onEdit={(webhook) => setOpen({ kind: "edit-endpoint", webhook })}
+        onMore={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))}
+      />
+      <CallsPanel renderMode={data.recordingRenderMode} language={data.transcriptLanguage ?? "auto"} onRenderMode={(recordingRenderMode) => update((value) => ({ ...value, recordingRenderMode }))} onLanguage={(transcriptLanguage) => update((value) => ({ ...value, transcriptLanguage }))} />
+      <section className="panel card" id="apps" aria-labelledby="apps-title">
+        <div className="apps">
+          <span className="marks">
+            <AppLogo name="Claude" size="sm" />
+            <AppLogo name="ChatGPT" size="sm" />
+          </span>
+          <div className="tx">
+            <b id="apps-title">AI apps</b>
+            <span className="mu">Let Claude, ChatGPT and other AI apps use Chalk for you.</span>
+          </div>
+          <Link className="btn out" to="/dashboard/apps">
+            Connect an AI app
+            <Icon name="arrowR" size={16} />
+          </Link>
+        </div>
       </section>
-      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
-        <h2>API keys</h2>
-        <button type="button" className="btn sec" onClick={() => setOpen({ kind: "create-key" })}>
-          <Icon name="plus" />
-          Create API key
-        </button>
-      </div>
-      <div style={{ marginBottom: "var(--space-6)" }}>
-        <h3 className="lbl">Tenant ID</h3>
-        <div className="linkrow">
-          <code className="mono" style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
-            {data.tenantId}
-          </code>
-          <CopyAction text={data.tenantId} label="Copy tenant ID" pill toastMessage="Tenant ID copied" />
-        </div>
-        <p className="help">Use this tenant ID with your API key to connect your app to Chalk.</p>
-      </div>
-      <KeysTable keys={keys} onRotate={(apiKey) => setOpen({ kind: "rotate-key", apiKey })} onRevoke={(apiKey) => setOpen({ kind: "revoke-key", apiKey })} />
-      {data.nextKeyCursor ? <MoreButton label="Show more keys" cursor={data.nextKeyCursor} load={(keyCursor) => readPage("developer", { keyCursor })} onLoaded={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
 
-      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
-        <h2>Allowed websites</h2>
-        <button type="button" className="btn sec" onClick={() => setOpen({ kind: "add-website" })}>
-          <Icon name="plus" />
-          Add website
-        </button>
-      </div>
-      <div className="list origins">
-        <div className="orow">
-          <span className="mono">{dashboardWebsiteOrigin}</span>
-          <span className="tag">Always allowed</span>
-        </div>
-        {origins.map((origin) => (
-          <div className="orow" key={origin}>
-            <span className="mono">{origin}</span>
-            <button type="button" className="ib" aria-label={`Remove ${origin}`} data-tip onClick={() => setOpen({ kind: "remove-website", origin })}>
-              <Icon name="trash" />
-            </button>
-          </div>
-        ))}
-      </div>
-      {origins.length ? null : <p className="ohelp">Add the website where your app runs, and Chalk calls can load inside it with this account’s keys.</p>}
-
-      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
-        <h2>Webhook endpoints</h2>
-        <button type="button" className="btn sec" onClick={() => setOpen({ kind: "add-endpoint" })}>
-          <Icon name="plus" />
-          Add endpoint
-        </button>
-      </div>
-      {data.webhooks.length === 0 ? (
-        <div className="list">
-          <div className="empty">
-            <b>No endpoints yet</b>
-            <p>Add one to hear when an Episode starts or ends, a Participant joins or leaves, or a Recording is ready.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="list">
-          {data.webhooks.map((webhook) => (
-            <Endpoint key={webhook.id} webhook={webhook} open={opened === webhook.id} onToggle={() => setExpanded(opened === webhook.id ? null : webhook.id)} onRotate={() => setOpen({ kind: "rotate-webhook", webhook })} onEdit={() => setOpen({ kind: "edit-endpoint", webhook })} />
-          ))}
-        </div>
-      )}
-      {data.nextWebhookCursor ? (
-        <MoreButton label="Show more endpoints" cursor={data.nextWebhookCursor} load={(webhookCursor) => readPage("developer", { webhookCursor })} onLoaded={(page) => update((value) => ({ ...value, webhooks: [...value.webhooks, ...page.webhooks], nextWebhookCursor: page.nextWebhookCursor }))} />
-      ) : null}
-
-      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
-        <h2>AI apps</h2>
-      </div>
-      <p className="ohelp">
-        Let Claude, ChatGPT and other AI apps use Chalk for you. <Link to="/dashboard/apps">Connect an AI app</Link>
-      </p>
-
-      {open?.kind === "create-key" ? (
-        <CreateKeyDialog
-          onClose={close}
-          onCreated={(secret) => {
-            // Refetch in place: a full reload would unmount the button the secret dialog returns focus to.
-            readPage("developer", {}).then(
-              (page) => update((value) => ({ ...value, keys: page.keys, nextKeyCursor: page.nextKeyCursor })),
-              (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
-            );
-            setOpen({ kind: "secret", secret: { kind: "key", secret } });
-          }}
-        />
-      ) : null}
-      {open?.kind === "rotate-key" ? <RotateKeyDialog apiKey={open.apiKey} onClose={close} onRotated={(secret) => setOpen({ kind: "secret", secret: { kind: "key", secret, rotated: { name: open.apiKey.name, stoppedOld: true } } })} /> : null}
+      {open?.kind === "create-key" ? <CreateKeyDialog onClose={close} onCreated={(secret) => showSecret({ kind: "key", secret }, null)} /> : null}
+      {open?.kind === "rotate-key" ? <RotateKeyDialog apiKey={open.apiKey} onClose={close} onRotated={(secret) => showSecret({ kind: "key", secret, rotated: { name: open.apiKey.name, stoppedOld: true } }, open.apiKey.id)} /> : null}
       {open?.kind === "revoke-key" ? (
         <RevokeKeyDialog
           apiKey={open.apiKey}
@@ -227,316 +188,131 @@ export function DeveloperPage() {
         />
       ) : null}
       {open?.kind === "secret" ? <SecretDialog secret={open.secret} onClose={close} /> : null}
-    </div>
+    </Shell>
   );
 }
 
-function KeysTable({ keys, onRotate, onRevoke }: { readonly keys: readonly KeyDTO[]; readonly onRotate: (key: KeyDTO) => void; readonly onRevoke: (key: KeyDTO) => void }) {
-  const phone = usePhone();
-  if (!keys.length)
-    return (
-      <div className="list">
-        <div className="empty">
-          <b>No API keys yet</b>
-          <p>Create one to call the API from your server. Keep it there: browsers get an AccessGrant, never a key.</p>
+/** The page frame: the section nav beside the heading and the panels. */
+function Shell({ nav, children }: { readonly nav?: ReactNode; readonly children: ReactNode }) {
+  return (
+    <div className="dev">
+      <div className="dshell">
+        {nav}
+        <div className="dmain">
+          <div className="pagehead">
+            <span className="tile">
+              <Icon name="code" size={20} />
+            </span>
+            <div>
+              <h1>Developer</h1>
+              <p>API keys, allowed websites, webhooks and call settings for your app. A call is a Space; one session is an Episode, as in the API.</p>
+            </div>
+            <a className="btn out end" href="/docs">
+              <Icon name="book" size={16} />
+              Read the docs
+            </a>
+          </div>
+          {children}
         </div>
       </div>
-    );
-  return (
-    <div className="list">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Key</th>
-            <th scope="col">Access</th>
-            <th scope="col">Expires</th>
-            <th scope="col">Last used</th>
-            <th scope="col">
-              <span className="sr">Actions</span>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((key) => {
-            const soon = expiresSoon(key.expiresAt);
-            return (
-              <tr key={key.id}>
-                <td>
-                  <span className="nm">{key.name}</span>
-                </td>
-                <td>
-                  <span className="mono">{key.prefix}…</span>
-                </td>
-                <td className="phh">{accessLabel(key.scopes)}</td>
-                <td>
-                  {soon ? (
-                    <span className="wn">
-                      <Icon name="warn" />
-                      {fullDate(key.expiresAt)}, {soon}
-                    </span>
-                  ) : (
-                    `${phone ? "Expires " : ""}${fullDate(key.expiresAt)}`
-                  )}
-                </td>
-                <td className="phh">{key.lastUsedAt ? ago(key.lastUsedAt) : "Never"}</td>
-                <td className="act">
-                  <Menu label={`Actions for ${key.name}`}>
-                    {(close) => (
-                      <>
-                        <MenuItem
-                          icon="retry"
-                          onSelect={() => {
-                            close();
-                            onRotate(key);
-                          }}
-                        >
-                          Rotate secret
-                        </MenuItem>
-                        <div className="msep" />
-                        <MenuItem
-                          icon="trash"
-                          danger
-                          onSelect={() => {
-                            close();
-                            onRevoke(key);
-                          }}
-                        >
-                          Revoke key
-                        </MenuItem>
-                      </>
-                    )}
-                  </Menu>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
 
-const DELIVERY: Record<string, readonly [string, string]> = {
-  delivered: ["d-ok", "Delivered"],
-  failed: ["d-dg", "Failed"],
-  retrying: ["d-wn", "Retrying"],
-  pending: ["d-in", "Queued"],
-};
-const deliveryState = (state: string) => DELIVERY[state] ?? (["d-mu", state] as const);
-
-function Endpoint({ webhook, open, onToggle, onRotate, onEdit }: { readonly webhook: WebhookDTO; readonly open: boolean; readonly onToggle: () => void; readonly onRotate: () => void; readonly onEdit: () => void }) {
-  const phone = usePhone();
-  // The list carries each endpoint's last delivery; once the details load, their newest row is fresher.
-  const [latest, setLatest] = useState<DeliveryDTO | null | undefined>(undefined);
-  const last = latest === undefined ? webhook.lastDelivery : latest;
-  const [dot, label] = !webhook.enabled ? ["d-mu", "Paused"] : last ? deliveryState(last.state) : ["d-mu", last === null ? "No deliveries yet" : ""];
-
-  return (
-    <div className="ep">
-      <button type="button" className="eph" aria-expanded={open} aria-controls={`endpoint-${webhook.id}`} onClick={onToggle}>
-        <Icon name="right" />
-        <span style={{ minWidth: 0 }}>
-          <b>{webhook.name}</b>
-          <span className="mono">{webhook.url}</span>
-        </span>
-        <span className="mu phh">{webhook.eventTypes.length} events</span>
-        <span className="status">
-          {label ? <span className={`dot ${dot}`} /> : null}
-          {label}
-          {last && !phone ? <span className="mu"> · {clock(last.createdAt)}</span> : null}
-        </span>
-      </button>
-      {open ? <EndpointDetails webhook={webhook} onRotate={onRotate} onEdit={onEdit} onLatest={setLatest} /> : null}
-    </div>
-  );
-}
-
-/** An open endpoint. Its deliveries load only while it's open, since each one costs engine reads. */
-function EndpointDetails({ webhook, onRotate, onEdit, onLatest }: { readonly webhook: WebhookDTO; readonly onRotate: () => void; readonly onEdit: () => void; readonly onLatest: (delivery: DeliveryDTO | null) => void }) {
-  const toast = useToast();
-  const intents = useIntentKeys();
-  const { state, reload, update } = useLoad(() => act("developer", { action: "webhook-deliveries", webhookId: webhook.id }), `deliveries:${webhook.id}`);
-  const deliveries = state.kind === "ready" ? state.data.deliveries : null;
-  const newest = deliveries ? (deliveries[0] ?? null) : undefined;
+/** The section the reader is in: the last one whose top has passed the top bar. */
+function useActiveSection(ids: readonly string[]) {
+  const [active, setActive] = useState(ids[0] ?? "");
   useEffect(() => {
-    if (newest !== undefined) onLatest(newest);
-  }, [newest, onLatest]);
+    const update = () => {
+      const passed = ids.filter((id) => (document.getElementById(id)?.getBoundingClientRect().top ?? Infinity) <= 120);
+      setActive(passed.at(-1) ?? ids[0] ?? "");
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, [ids]);
+  return [active, setActive] as const;
+}
 
-  async function test() {
-    try {
-      await act("developer", { action: "test-webhook", webhookId: webhook.id, idempotencyKey: intents.key("test") });
-      intents.done("test");
-      toast("Test event sent. It shows in recent deliveries.", { icon: "send" });
-      reload();
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    }
-  }
-  async function redeliver(delivery: DeliveryDTO) {
-    try {
-      await act("developer", { action: "redeliver-webhook", webhookId: webhook.id, deliveryId: delivery.id, idempotencyKey: intents.key(`redeliver:${delivery.id}`) });
-      intents.done(`redeliver:${delivery.id}`);
-      update((value) => ({ ...value, deliveries: value.deliveries.map((item) => (item.id === delivery.id ? { ...item, state: "pending" } : item)) }));
-      toast("The delivery is queued again");
-    } catch (error) {
-      toast(errorMessage(error), { icon: "alert" });
-    }
-  }
+const SECTION_IDS = SECTIONS.map((section) => section.id);
 
+function SectionNav({ keys, soon, websites, failing }: { readonly keys: number; readonly soon: boolean; readonly websites: number; readonly failing: boolean }) {
+  const [active, setActive] = useActiveSection(SECTION_IDS);
   return (
-    <div className="epd" id={`endpoint-${webhook.id}`}>
-      <dl className="kv">
-        <dt>Events</dt>
-        <dd>
-          {webhook.eventTypes.map((type) => (
-            <span className="chip" key={type}>
-              {type}
-            </span>
-          ))}
-          <button type="button" className="btn gh sm" onClick={onEdit}>
-            <Icon name="edit" />
-            Edit events
-          </button>
-        </dd>
-        <dt>Signing secret</dt>
-        <dd>
-          <span className="mono mu">whsec_••••••••</span>
-          <button type="button" className="btn sec sm" onClick={onRotate}>
-            <Icon name="retry" />
-            Rotate secret
-          </button>
-          <p>The secret is shown once, when it’s made. Rotating keeps the old one working for 24 hours unless you stop it.</p>
-        </dd>
-        <dt>Test</dt>
-        <dd>
-          <button type="button" className="btn sec sm" onClick={() => void test()}>
-            <Icon name="send" />
-            Send test event
-          </button>
-          <p>Sends a signed test Event to this URL and adds it to recent deliveries.</p>
-        </dd>
-      </dl>
-      <div className="dtbl">
-        <h3>Recent deliveries</h3>
-        {state.kind === "loading" ? (
-          <SkeletonRows count={2} />
-        ) : state.kind === "error" ? (
-          <ErrorPanel title="Couldn’t load deliveries" detail={errorMessage(state.error)} onRetry={reload} />
-        ) : !deliveries?.length ? (
-          <p className="tempty">No deliveries yet. Send a test event to try the endpoint.</p>
+    <nav className="side" aria-label="On this page">
+      <div className="cap">On this page</div>
+      {SECTIONS.map((section) => (
+        <a
+          key={section.id}
+          href={`#${section.id}`}
+          aria-current={active === section.id ? "location" : undefined}
+          onClick={(event) => {
+            event.preventDefault();
+            setActive(section.id);
+            document.getElementById(section.id)?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+          }}
+        >
+          <Icon name={section.icon} size={16} />
+          {section.label}
+          {section.id === "keys" && soon ? <span className="pip" title="A key expires soon" /> : null}
+          {section.id === "keys" && !soon && keys ? <span className="ct">{keys}</span> : null}
+          {section.id === "websites" ? <span className="ct">{websites}</span> : null}
+          {section.id === "webhooks" && failing ? <span className="pip bad" title="An endpoint is failing" /> : null}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+/** Four numbers the page really has: it never invents usage the API doesn't return. */
+function Summary({ keys, soon, websites, webhooks, failing }: { readonly keys: readonly KeyDTO[]; readonly soon: readonly KeyDTO[]; readonly websites: number; readonly webhooks: readonly WebhookDTO[]; readonly failing: number }) {
+  const lastUsed = keys.reduce<KeyDTO | null>((latest, key) => (key.lastUsedAt && (!latest?.lastUsedAt || key.lastUsedAt > latest.lastUsedAt) ? key : latest), null);
+  const soonest = soon[0];
+  return (
+    <div className="card stats" role="group" aria-label="Summary">
+      <Stat icon="key" label="Active API keys" value={String(keys.length)}>
+        {!keys.length ? (
+          "Create one to start"
+        ) : soonest ? (
+          <span className="pill warn">
+            <Icon name="clock" size={12} />
+            {soon.length === 1 ? `1 expires ${expiresSoon(soonest.expiresAt)}` : `${soon.length} expire this week`}
+          </span>
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th scope="col">Event</th>
-                <th scope="col">Status</th>
-                <th scope="col" className="r">
-                  Response
-                </th>
-                <th scope="col" className="r">
-                  Attempts
-                </th>
-                <th scope="col">Time</th>
-                <th scope="col">
-                  <span className="sr">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {deliveries.map((delivery) => {
-                const [deliveryDot, deliveryLabel] = deliveryState(delivery.state);
-                return (
-                  <tr key={delivery.id}>
-                    <td>
-                      <span className="mono">{delivery.eventType}</span>
-                    </td>
-                    <td>
-                      <span className="status">
-                        <span className={`dot ${deliveryDot}`} />
-                        {deliveryLabel}
-                      </span>
-                    </td>
-                    <td className="r mono num phh">{delivery.status ?? "–"}</td>
-                    <td className="r num phh">{delivery.attempts}</td>
-                    <td className="phh">
-                      {sessionDay(delivery.createdAt)}, {clock(delivery.createdAt)}
-                    </td>
-                    <td className="act">
-                      {delivery.state === "failed" ? (
-                        <button type="button" className="btn sec sm" onClick={() => void redeliver(delivery)}>
-                          Redeliver
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          "None expiring soon"
         )}
-      </div>
+      </Stat>
+      <Stat icon="clock" label="Last key use" value={lastUsed?.lastUsedAt ? ago(lastUsed.lastUsedAt) : "–"}>
+        {lastUsed ? <span className="ell">{lastUsed.name}</span> : "No calls yet"}
+      </Stat>
+      <Stat icon="globe" label="Allowed websites" value={String(websites)}>
+        1 always allowed
+      </Stat>
+      <Stat icon="hook" label="Webhook endpoints" value={String(webhooks.length)}>
+        {failing ? (
+          <span className="pill bad">
+            <span className="d" />
+            {failing} failing
+          </span>
+        ) : webhooks.length ? (
+          "No failures"
+        ) : (
+          "None yet"
+        )}
+      </Stat>
     </div>
   );
 }
 
-function RecordingSettings({ mode, onSaved }: { readonly mode: RecordingRenderSettingsDTO["recordingRenderMode"]; readonly onSaved: (mode: RecordingRenderSettingsDTO["recordingRenderMode"]) => void }) {
-  const [draft, setDraft] = useState(mode);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const toast = useToast();
-  useEffect(() => setDraft(mode), [mode]);
+function Stat({ icon, label, value, children }: { readonly icon: IconName; readonly label: string; readonly value: string; readonly children: ReactNode }) {
   return (
-    <form
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (busy || draft === mode) return;
-        setBusy(true);
-        setError(null);
-        try {
-          const result = await act("developer", { action: "set-recording-render-mode", mode: draft });
-          onSaved(result.recordingRenderMode);
-          toast("Recording settings saved");
-        } catch (cause) {
-          setError(errorMessage(cause));
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      <div className="secth">
-        <h2>Recordings</h2>
+    <div className="stat">
+      <div className="l">
+        <Icon name={icon} size={14} />
+        {label}
       </div>
-      <div className="field" style={{ maxWidth: 520 }}>
-        <label className="lbl" htmlFor="recording-render-mode">
-          Make recording videos
-        </label>
-        <select
-          className="inp"
-          style={{ maxWidth: 320 }}
-          id="recording-render-mode"
-          value={draft}
-          disabled={busy}
-          onChange={(event) => {
-            setDraft(event.target.value === "automatic" ? "automatic" : "on_demand");
-          }}
-          aria-describedby="recording-render-help"
-        >
-          <option value="on_demand">On demand</option>
-          <option value="automatic">Automatically</option>
-        </select>
-        <p className="help" id="recording-render-help">
-          On demand makes an MP4 when you request a video. Automatic makes it after each recorded call ends. This applies to all calls in your account.
-        </p>
-      </div>
-      {error ? (
-        <p className="err" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <button type="submit" className="btn pri" style={{ marginTop: "var(--space-4)" }} disabled={busy || draft === mode}>
-        {busy ? "Saving…" : "Save recording settings"}
-      </button>
-    </form>
+      <div className="v">{value}</div>
+      <div className="s">{children}</div>
+    </div>
   );
 }

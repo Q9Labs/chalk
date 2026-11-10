@@ -5,7 +5,9 @@ import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
-import { CopyAction, Dialog, Seg, useIntentKeys, useToast } from "./kit";
+import { KEY_PREFIX_LENGTH, SIGNING_PREFIX_LENGTH } from "./developer-snippets";
+import { Dialog, Seg, useIntentKeys, useToast } from "./kit";
+import { SecretField } from "./SecretField";
 
 type CreateKey = Extract<DeveloperAction, { action: "create-key" }>;
 type Scope = CreateKey["scopes"][number];
@@ -49,7 +51,7 @@ export function accessLabel(scopes: readonly string[]): string {
 
 function Cancel({ onClose }: { readonly onClose: () => void }) {
   return (
-    <button type="button" className="btn gh" onClick={onClose}>
+    <button type="button" className="btn gh lg" onClick={onClose}>
       Cancel
     </button>
   );
@@ -69,30 +71,39 @@ export type Secret = { readonly kind: "key" | "webhook"; readonly secret: string
 export function SecretDialog({ secret, onClose }: { readonly secret: Secret; readonly onClose: () => void }) {
   const key = secret.kind === "key";
   const title = key ? (secret.rotated ? `New secret for ${secret.rotated.name}` : "Copy your secret key") : secret.rotated ? "New signing secret" : "Copy your signing secret";
-  const body = key ? "Store it in your server’s secrets now. Chalk shows it only once, so if you lose it, rotate the key to get a new one." : "Use it to check that each request came from Chalk. Chalk shows it only once.";
+  const body = key ? "Store it in your server’s secrets now. Chalk shows the full key once, so if you lose it, rotate the key to get a new one." : "Use it to check that each request came from Chalk. Chalk shows it only once.";
   const after = !secret.rotated ? null : key || secret.rotated.stoppedOld ? "The old secret has stopped working." : "The old secret keeps working for 24 hours, so you can switch over.";
   return (
     <Dialog
+      icon="check"
+      tone="ok"
       title={title}
       description={body}
+      hint={
+        <>
+          <Icon name="lock" size={14} />
+          Only the first and last characters show
+        </>
+      }
       onClose={onClose}
       actions={
-        <button type="button" className="btn pri" onClick={onClose}>
+        <button type="button" className="btn pri lg" onClick={onClose}>
           Done
         </button>
       }
     >
-      <div className="secret">
-        <div className="linkbox">
-          <span>{secret.secret}</span>
+      <div>
+        <div className="lbl">
+          <Icon name="key" size={14} />
+          {key ? "Secret key" : "Signing secret"}
         </div>
-        <CopyAction text={secret.secret} label="Copy" pill toastMessage="Secret copied" />
+        <SecretField secret={secret.secret} prefixLength={key ? KEY_PREFIX_LENGTH : SIGNING_PREFIX_LENGTH} noun={key ? "key" : "secret"} />
+        <p className="help">Copy puts the full {key ? "key" : "secret"} on your clipboard. Chalk never shows it on screen unless you choose to.</p>
       </div>
-      {after ? (
-        <p className="help" style={{ marginTop: "var(--space-3)" }}>
-          {after}
-        </p>
-      ) : null}
+      <div className="warnbox">
+        <Icon name="warn" size={16} />
+        <span>{after ?? (key ? "If you lose it, rotate the key to get a new one. The old secret stops working at once." : "If you lose it, rotate the secret to get a new one.")}</span>
+      </div>
     </Dialog>
   );
 }
@@ -133,6 +144,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
 
   return (
     <Dialog
+      icon="key"
       title="Create API key"
       description="Use the key on your server. It can do what its access allows, until it expires or you revoke it."
       wide={access === "custom"}
@@ -141,7 +153,7 @@ export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () =
       actions={
         <>
           <Cancel onClose={onClose} />
-          <button type="submit" className="btn pri" disabled={saving}>
+          <button type="submit" className="btn pri lg" disabled={saving}>
             Create key
           </button>
         </>
@@ -229,6 +241,7 @@ export function RotateKeyDialog({ apiKey, onClose, onRotated }: { readonly apiKe
   return (
     <Dialog
       alert
+      icon="retry"
       title={`Rotate the secret for ${apiKey.name}?`}
       description="The current secret stops working at once. Anything still using it fails until you give it the new one."
       onClose={onClose}
@@ -237,7 +250,7 @@ export function RotateKeyDialog({ apiKey, onClose, onRotated }: { readonly apiKe
           <Cancel onClose={onClose} />
           <button
             type="button"
-            className="btn pri"
+            className="btn pri lg"
             onClick={() =>
               act("developer", { action: "rotate-key", keyId: apiKey.id, expiresAt: apiKey.expiresAt, idempotencyKey: intents.key("rotate") }).then(
                 ({ secret }) => onRotated(secret),
@@ -258,6 +271,7 @@ export function RevokeKeyDialog({ apiKey, onClose, onRevoked }: { readonly apiKe
   return (
     <Dialog
       alert
+      icon="trash"
       title={`Revoke ${apiKey.name}?`}
       description="Anything using this key stops working at once. You can’t undo this."
       onClose={onClose}
@@ -266,7 +280,7 @@ export function RevokeKeyDialog({ apiKey, onClose, onRevoked }: { readonly apiKe
           <Cancel onClose={onClose} />
           <button
             type="button"
-            className="btn dz"
+            className="btn dz lg"
             onClick={() =>
               act("developer", { action: "revoke-key", keyId: apiKey.id }).then(
                 () => {
@@ -329,6 +343,7 @@ export function EndpointDialog(props: EndpointDialogProps) {
 
   return (
     <Dialog
+      icon="hook"
       title={webhook ? `Events for ${webhook.name}` : "Add endpoint"}
       description={
         webhook ? (
@@ -345,7 +360,7 @@ export function EndpointDialog(props: EndpointDialogProps) {
       actions={
         <>
           <Cancel onClose={onClose} />
-          <button type="submit" className="btn pri" disabled={saving}>
+          <button type="submit" className="btn pri lg" disabled={saving}>
             {webhook ? "Save events" : "Add endpoint"}
           </button>
         </>
@@ -419,6 +434,7 @@ export function RotateWebhookDialog({ webhook, onClose, onRotated }: { readonly 
   return (
     <Dialog
       alert
+      icon="retry"
       title="Rotate the signing secret?"
       description={`Chalk signs ${webhook.name} events with a new secret from now on. The old one keeps working for 24 hours, so you can switch without missing events.`}
       onClose={onClose}
@@ -487,6 +503,7 @@ export function AddWebsiteDialog({ origins, onClose, onSaved }: { readonly origi
   }
   return (
     <Dialog
+      icon="globe"
       title="Add website"
       description="Chalk calls can then load inside this website, using this account’s keys."
       onClose={onClose}
@@ -494,7 +511,7 @@ export function AddWebsiteDialog({ origins, onClose, onSaved }: { readonly origi
       actions={
         <>
           <Cancel onClose={onClose} />
-          <button type="submit" className="btn pri" disabled={saving}>
+          <button type="submit" className="btn pri lg" disabled={saving}>
             Add website
           </button>
         </>
@@ -538,6 +555,7 @@ export function RemoveWebsiteDialog({ origin, origins, onClose, onSaved }: { rea
   return (
     <Dialog
       alert
+      icon="trash"
       title="Remove this website?"
       description={
         <>
@@ -550,7 +568,7 @@ export function RemoveWebsiteDialog({ origin, origins, onClose, onSaved }: { rea
           <Cancel onClose={onClose} />
           <button
             type="button"
-            className="btn dz"
+            className="btn dz lg"
             onClick={() =>
               act("developer", { action: "set-allowed-websites", origins: origins.filter((item) => item !== origin) }).then(
                 ({ allowedWebsites }) => {

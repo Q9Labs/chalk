@@ -11,6 +11,17 @@
   --provider-apple-light-hover: #1c1c1e;
 }
 
+/* Tints and the faint text step, derived from the call's own colors so both themes follow. */
+.site .dash {
+  --tint-accent: color-mix(in srgb, var(--chalk-accent) 12%, transparent);
+  --tint-positive: color-mix(in srgb, var(--chalk-positive) 12%, transparent);
+  --tint-warning: color-mix(in srgb, var(--chalk-warning) 12%, transparent);
+  --tint-danger: color-mix(in srgb, var(--chalk-danger) 12%, transparent);
+  --faint-text: color-mix(in srgb, var(--chalk-muted-text) 62%, var(--chalk-canvas));
+  --ring-line: 0 0 0 1px var(--chalk-line-strong);
+  --ring-line-inset: inset 0 0 0 1px var(--chalk-line-strong);
+}
+
 /* The dashboard: sign-in, Home, a call, a past session and Developer, in the call's kit. Rules are scoped to `.dash`, so the docs' own dialogs and menus keep theirs. */
 
 .site .dash .inp {
@@ -1109,12 +1120,13 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  height: 64px;
+  height: 56px;
   display: flex;
   align-items: center;
-  gap: var(--space-6);
+  gap: var(--space-5);
   padding: 0 var(--space-6);
   background: var(--chalk-canvas);
+  border-bottom: 1px solid var(--chalk-line);
 }
 
 .site .dash .ttabs {
@@ -1125,12 +1137,17 @@
 .site .dash .ttabs a {
   display: flex;
   align-items: center;
-  height: 36px;
+  gap: var(--space-1-5);
+  height: 32px;
   padding: 0 var(--space-3);
   border-radius: var(--corner-pill);
-  font-size: var(--type-body);
+  font-size: var(--type-body-sm);
   font-weight: 500;
   color: var(--chalk-soft-text);
+}
+
+.site .dash .ttabs a svg.site-icon {
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .ttabs a:hover {
@@ -1140,12 +1157,36 @@
 
 .site .dash .ttabs a[aria-current="page"] {
   color: var(--chalk-text);
-  background: var(--chalk-raised);
+  background: var(--chalk-hover);
   font-weight: 600;
+}
+
+.site .dash .ttabs a[aria-current="page"] svg.site-icon {
+  color: var(--chalk-text);
 }
 
 .site .dash .acct {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.site .dash .docs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--corner-pill);
+  font-size: var(--type-body-sm);
+  font-weight: 500;
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .docs:hover {
+  color: var(--chalk-text);
+  background: var(--chalk-raised);
 }
 
 .site .dash .avb {
@@ -2028,126 +2069,6 @@
   padding: var(--space-1-5) var(--space-2);
 }
 
-.site .dash .wn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1-5);
-}
-
-.site .dash .wn svg.site-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--chalk-warning);
-}
-
-.site .dash .ep {
-  border-radius: var(--corner-xl);
-}
-
-.site .dash .eph {
-  position: relative;
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto auto;
-  gap: var(--space-3);
-  align-items: center;
-  width: 100%;
-  min-height: 64px;
-  padding: var(--space-2-5) var(--space-3);
-  border-radius: var(--corner-xl);
-  text-align: left;
-}
-
-.site .dash .eph:hover {
-  background: var(--chalk-raised);
-}
-
-.site .dash .eph > svg.site-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--chalk-muted-text);
-  transition: transform 0.15s ease-out;
-}
-
-.site .dash .eph[aria-expanded="true"] > svg.site-icon {
-  transform: rotate(90deg);
-}
-
-.site .dash .eph b {
-  display: block;
-  font-size: var(--type-body-lg);
-  font-weight: 600;
-}
-
-.site .dash .eph .mono {
-  display: block;
-  font-size: var(--type-caption);
-  color: var(--chalk-muted-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.site .dash .eph .mu {
-  font-size: var(--type-body);
-  white-space: nowrap;
-}
-
-.site .dash .epd {
-  padding: var(--space-1) var(--space-4) var(--space-5) var(--space-12);
-}
-
-.site .dash .kv {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: var(--space-3) var(--space-5);
-  padding: var(--space-3) 0 var(--space-4);
-  align-items: start;
-}
-
-.site .dash .kv dt {
-  font-size: var(--type-body);
-  font-weight: 600;
-  padding-top: var(--space-1-5);
-}
-
-.site .dash .kv dd {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.site .dash .kv dd p {
-  width: 100%;
-  font-size: var(--type-body-sm);
-  color: var(--chalk-muted-text);
-}
-
-.site .dash .chip {
-  display: inline-flex;
-  align-items: center;
-  height: 28px;
-  padding: 0 var(--space-2-5);
-  border-radius: var(--corner-pill);
-  background: var(--chalk-raised);
-  font: 500 var(--type-caption) var(--chalk-font-mono);
-}
-
-.site .dash .dtbl {
-  border-radius: var(--corner-2xl);
-  overflow: hidden;
-  background: var(--chalk-surface);
-  padding: var(--space-1) var(--space-2) var(--space-2);
-}
-
-.site .dash .dtbl h3 {
-  font-size: var(--type-body-sm);
-  font-weight: 600;
-  color: var(--chalk-soft-text);
-  padding: var(--space-2-5) var(--space-1) var(--space-1);
-}
-
 .site .dash .chk {
   display: flex;
   align-items: flex-start;
@@ -2211,27 +2132,6 @@
   color: var(--chalk-muted-text);
 }
 
-.site .dash .secret {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-
-.site .dash .secret .linkbox {
-  font-size: var(--type-body-sm);
-}
-
-.site .dash .secret .linkbox {
-  height: auto;
-  min-height: 44px;
-  padding: var(--space-2-5) var(--space-4);
-  border-radius: var(--corner-2xl);
-  white-space: normal;
-  word-break: break-all;
-  line-height: 1.45;
-}
-
 .site .dash fieldset {
   border: 0;
   padding: 0;
@@ -2268,34 +2168,12 @@
   margin-top: var(--space-0-5);
 }
 
-.site .dash .orow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 52px;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-  border-radius: var(--corner-xl);
-}
-
 .site .dash .knock .ract {
   gap: var(--space-2);
 }
 
 .site .dash .rt > span.err {
   color: var(--chalk-danger-text);
-}
-
-.site .dash .orow > .mono {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--type-body-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.site .dash .orow .tag {
-  margin-right: var(--space-2);
 }
 
 .site .dash .ohelp {
@@ -2467,13 +2345,20 @@
   }
 
   .site .dash .topb {
-    height: 60px;
     padding: 0 var(--space-1-5) 0 var(--space-4);
     gap: var(--space-2-5);
   }
 
   .site .dash .ttabs a {
-    padding: 0 var(--space-3);
+    padding: 0 var(--space-2-5);
+  }
+
+  .site .dash .ttabs a:not([aria-current="page"]) span {
+    display: none;
+  }
+
+  .site .dash .docs {
+    display: none;
   }
 
   .site .dash .avb {
@@ -2589,38 +2474,8 @@
     display: none;
   }
 
-  .site .dash .eph {
-    grid-template-columns: 18px minmax(0, 1fr) auto;
-    padding: var(--space-3);
-  }
-
-  .site .dash .eph .phh {
-    display: none;
-  }
-
-  .site .dash .epd {
-    padding: var(--space-1) var(--space-3) var(--space-4);
-  }
-
-  .site .dash .kv {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-1-5);
-  }
-
-  .site .dash .kv dd + dt {
-    margin-top: var(--space-2-5);
-  }
-
   .site .dash .evgrid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .site .dash .secret {
-    flex-wrap: wrap;
-  }
-
-  .site .dash .secret .btn {
-    width: 100%;
   }
 
   .site .dash .pgh .meta {
@@ -2630,19 +2485,6 @@
 
   .site .dash .pgh > .mw {
     order: 2;
-  }
-
-  .site .dash .epd {
-    padding-top: 0;
-  }
-
-  .site .dash .kv {
-    padding-top: var(--space-0-5);
-  }
-
-  .site .dash .orow {
-    min-height: 56px;
-    padding-left: var(--space-2-5);
   }
 
   .site .dash .knock {
@@ -2682,27 +2524,34 @@
   max-width: 320px;
 }
 
+/* One ring only: the open state and the keyboard ring are told apart by the border, never by two outlines. */
 .site .dash .lp-trigger {
   display: flex;
   align-items: center;
-  gap: var(--space-2-5);
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 248px;
+  max-width: 100%;
+  height: 36px;
+  padding: 0 var(--space-2-5);
+  border: 1px solid var(--chalk-line-strong);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-canvas);
+  color: var(--chalk-text);
+  font-size: var(--type-body-sm);
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
-.site .dash .lp-chip .lp-pop:not(.sheet) {
-  left: auto;
-  right: 0;
+.site .dash .lp-trigger:hover {
+  border-color: var(--edge);
 }
 
-.site .dash .lp-chip .lp-trigger {
-  gap: var(--space-2);
-}
-
-.site .dash .lp-trigger:focus-visible,
-.site .dash .lp-opt.on {
-  outline: 2px solid var(--chalk-text);
-  outline-offset: 2px;
+.site .dash .lp-trigger:focus-visible {
+  outline: 2px solid var(--chalk-accent);
+  outline-offset: 1px;
+  border-color: transparent;
 }
 
 .site .dash .lp-trigger:disabled {
@@ -2710,51 +2559,86 @@
   cursor: not-allowed;
 }
 
+.site .dash .lp-trigger[aria-busy="true"] {
+  color: var(--chalk-muted-text);
+  opacity: 1;
+}
+
 .site .dash .lp-trigger[aria-expanded="true"] {
-  border-color: var(--chalk-text);
+  border-color: var(--edge);
+  background: var(--chalk-raised);
+}
+
+.site .dash .lp-chip .lp-trigger {
+  width: auto;
+  min-width: 0;
+  border-color: transparent;
+  background: var(--chalk-hover);
+}
+
+.site .dash .lp-chip .lp-trigger:hover {
+  background: var(--chalk-pressed);
+}
+
+.site .dash .lp-chip .lp-trigger[aria-expanded="true"] {
+  border-color: var(--edge);
 }
 
 .site .dash .lp-chev {
   flex: none;
+  margin-left: auto;
   color: var(--chalk-muted-text);
+  transition: transform 0.15s ease-out;
 }
 
+.site .dash .lp-trigger[aria-expanded="true"] .lp-chev {
+  transform: rotate(180deg);
+  color: var(--chalk-text);
+}
+
+/* The name keeps its own width, so its native name sits right beside it. */
 .site .dash .lp-name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 500;
 }
 
 .site .dash .lp-native {
   flex: none;
-  font-size: var(--type-body-sm);
   font-weight: 400;
   color: var(--chalk-muted-text);
 }
 
-.site .dash .lp-flag {
-  display: inline-grid;
+/* Every leading mark sits in a slot of one width, so names line up whether the mark is a flag, a code or an icon. */
+.site .dash .lp-slot {
+  display: grid;
   place-items: center;
   flex: none;
   width: 24px;
-  height: 16px;
-  border-radius: var(--corner-xs);
+  height: 20px;
+  color: var(--chalk-soft-text);
+}
+
+.site .dash .lp-flag {
+  display: block;
+  width: 20px;
+  height: 14px;
+  border-radius: var(--corner-sm);
   object-fit: cover;
   box-shadow: var(--elevation-hairline-strong);
 }
 
-.site .dash .lp-code,
-.site .dash .lp-glyph {
+.site .dash .lp-code {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 18px;
+  border-radius: var(--corner-sm);
   background: var(--chalk-hover);
   color: var(--chalk-soft-text);
-}
-
-.site .dash .lp-code {
-  font-size: var(--type-micro);
-  font-weight: 700;
+  font-size: var(--type-caption);
+  font-weight: 600;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -2766,7 +2650,7 @@
   left: 0;
   display: flex;
   flex-direction: column;
-  width: 372px;
+  width: 352px;
   max-width: calc(100vw - 32px);
   background: var(--chalk-popover);
   border: 1px solid var(--chalk-line-strong);
@@ -2776,13 +2660,25 @@
   animation: dash-pin 0.22s var(--ease);
 }
 
+/* The popover lines up with whichever edge of the control keeps it inside the screen. */
+.site .dash .lp-pop.end:not(.sheet),
+.site .dash .lp-chip .lp-pop:not(.sheet) {
+  left: auto;
+  right: 0;
+}
+
+.site .dash .lp-pop.up:not(.sheet) {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .site .dash .lp-search {
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex: none;
-  height: 48px;
+  height: 44px;
   padding: 0 var(--space-1-5) 0 var(--space-3);
   border-bottom: 1px solid var(--chalk-line);
   color: var(--chalk-muted-text);
@@ -2796,7 +2692,7 @@
   outline: 0;
   background: transparent;
   color: var(--chalk-text);
-  font-size: var(--type-body);
+  font-size: var(--type-body-sm);
   appearance: none;
 }
 
@@ -2808,6 +2704,19 @@
   display: none;
 }
 
+.site .dash .lp-search kbd {
+  display: grid;
+  place-items: center;
+  flex: none;
+  height: 18px;
+  margin-right: var(--space-1-5);
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-sm);
+  box-shadow: var(--elevation-hairline-strong);
+  color: var(--chalk-muted-text);
+  font: 500 var(--type-micro) / 1 var(--chalk-font-family);
+}
+
 .site .dash .lp-status {
   position: absolute;
   width: 1px;
@@ -2817,14 +2726,14 @@
 }
 
 .site .dash .lp-list {
-  max-height: 392px;
+  max-height: 340px;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: var(--space-1) var(--space-1-5) var(--space-2);
+  padding: 0 var(--space-1) var(--space-1);
 }
 
 .site .dash .lp-head {
-  padding: var(--space-2-5) var(--space-2-5) var(--space-1);
+  padding: var(--space-2-5) var(--space-2) var(--space-1);
   font-size: var(--type-caption);
   font-weight: 600;
   color: var(--chalk-muted-text);
@@ -2833,21 +2742,30 @@
 .site .dash .lp-opt {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  min-height: 44px;
-  padding: var(--space-1) var(--space-2-5);
+  gap: var(--space-2-5);
+  min-height: 36px;
+  padding: 0 var(--space-2);
   border-radius: var(--corner-lg);
-  font-size: var(--type-body);
+  font-size: var(--type-body-sm);
   cursor: pointer;
 }
 
-.site .dash .lp-opt.sel {
-  background: var(--chalk-raised);
+.site .dash .lp-opt:has(small) {
+  min-height: 44px;
 }
 
+/* A row is marked by its background alone: focus stays in the search box, so the row never gets a ring. */
 .site .dash .lp-opt.on {
   background: var(--chalk-hover);
-  outline-offset: -2px;
+}
+
+.site .dash .lp-opt.sel {
+  background: var(--tint-accent);
+  font-weight: 600;
+}
+
+.site .dash .lp-opt.sel.on {
+  background: color-mix(in srgb, var(--chalk-accent) 20%, transparent);
 }
 
 .site .dash .lp-text {
@@ -2859,11 +2777,14 @@
 
 .site .dash .lp-text small {
   font-size: var(--type-caption);
+  font-weight: 400;
+  line-height: 1.3;
   color: var(--chalk-muted-text);
 }
 
 .site .dash .lp-check {
   flex: none;
+  color: var(--chalk-accent);
 }
 
 .site .dash .lp-none {
@@ -2900,6 +2821,10 @@
     max-width: none;
   }
 
+  .site .dash .lp-trigger {
+    min-width: 0;
+  }
+
   .site .dash .lp-pop.sheet {
     position: relative;
     top: auto;
@@ -2924,6 +2849,10 @@
 
   .site .dash .lp-pop.sheet .lp-search {
     height: 52px;
+  }
+
+  .site .dash .lp-pop.sheet .lp-search kbd {
+    display: none;
   }
 
   .site .dash .lp-pop.sheet .lp-search input {
