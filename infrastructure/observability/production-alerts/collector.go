@@ -140,7 +140,7 @@ func message(rule string) (headline, impact, next string) {
 	case "sfu-readiness":
 		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
 	case "certificate-expiry":
-		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, or the direct door could not complete a TLS handshake. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, the direct door by checking that its proxy can renew over port 443."
+		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, is not trusted by the collector, or the direct door cannot be verified over TLS. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, the direct door by checking that its proxy can renew over port 443."
 	case "sfu-retirement-debt":
 		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
 	case "export":
@@ -395,9 +395,7 @@ func collectCertificateExpiry(ctx context.Context, probes []sfuProbe, doorURL st
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if notAfter, ok := sfuServerCertificateNotAfter(ctx, probe); ok {
-				nodes[i] = certReading{label: "an own SFU server certificate", notAfter: notAfter}
-			}
+			nodes[i] = sfuServerCertificate(ctx, probe)
 		}()
 	}
 	if doorURL != "" {
@@ -409,7 +407,7 @@ func collectCertificateExpiry(ctx context.Context, probes []sfuProbe, doorURL st
 	}
 	wg.Wait()
 	for _, node := range nodes {
-		if !node.notAfter.IsZero() {
+		if node.label != "" {
 			readings = append(readings, node)
 		}
 	}
@@ -468,21 +466,50 @@ func fileCertificateNotAfter(path string) (time.Time, bool) {
 	}
 }
 
-func sfuServerCertificateNotAfter(ctx context.Context, probe sfuProbe) (time.Time, bool) {
+// sfuServerCertificate reads one node's server certificate. A node that cannot be
+// reached gives no reading: the readiness row owns that. A certificate that does
+// not chain to the configured CA for the configured name is a finding of its own,
+// because an impostor must not be able to hide an expiring or expired certificate.
+func sfuServerCertificate(ctx context.Context, probe sfuProbe) certReading {
 	client, err := sfuClient(probe)
 	if err != nil {
-		return time.Time{}, false
+		return certReading{}
 	}
-	config := client.Transport.(*http.Transport).TLSClientConfig.Clone()
+	config := client.Transport.(*http.Transport).TLSClientConfig
 	chain, ok := serverChain(ctx, probe.URL, config)
 	if !ok {
-		return time.Time{}, false
+		return certReading{}
 	}
-	return chain[0].NotAfter, true
+	reading := certReading{label: "an own SFU server certificate", notAfter: chain[0].NotAfter}
+	if !trustedWhenIssued(chain, config.RootCAs, config.ServerName) {
+		reading.failure = "an own SFU server certificate is untrusted"
+	}
+	return reading
 }
 
-// doorCertificate reads the door's expiry first, then checks the chain, so an
-// expired certificate reads as expired and any other trust failure as a failure.
+// trustedWhenIssued checks the chain and the name at a moment inside the leaf's
+// validity, so only expiry is ignored: the expiry check reads NotAfter itself, and
+// an expired certificate from the right CA must still read as expired.
+func trustedWhenIssued(chain []*x509.Certificate, roots *x509.CertPool, dnsName string) bool {
+	intermediates := x509.NewCertPool()
+	for _, certificate := range chain[1:] {
+		intermediates.AddCert(certificate)
+	}
+	_, err := chain[0].Verify(x509.VerifyOptions{
+		Roots:         roots,
+		Intermediates: intermediates,
+		DNSName:       dnsName,
+		CurrentTime:   chain[0].NotBefore.Add(time.Second),
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	return err == nil
+}
+
+// doorRoots is the door's trust store; nil means the system roots. Tests set it.
+var doorRoots *x509.CertPool
+
+// doorCertificate reads the door's expiry, then checks its chain against the system
+// roots, so an expired certificate reads as expired and an untrusted one as a failure.
 func doorCertificate(ctx context.Context, doorURL string) certReading {
 	reading := certReading{label: "the direct door certificate", failure: "the direct door could not be verified over TLS"}
 	chain, ok := serverChain(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12})
@@ -490,25 +517,17 @@ func doorCertificate(ctx context.Context, doorURL string) certReading {
 		return reading
 	}
 	reading.notAfter = chain[0].NotAfter
-	if !time.Now().Before(reading.notAfter) {
-		reading.failure = ""
-		return reading
-	}
 	target, _ := url.Parse(doorURL)
-	intermediates := x509.NewCertPool()
-	for _, certificate := range chain[1:] {
-		intermediates.AddCert(certificate)
-	}
-	if _, err := chain[0].Verify(x509.VerifyOptions{DNSName: target.Hostname(), Intermediates: intermediates}); err == nil {
+	if trustedWhenIssued(chain, doorRoots, target.Hostname()) {
 		reading.failure = ""
 	}
 	return reading
 }
 
 // serverChain completes a TLS handshake with the URL's host without verifying the
-// server's chain and returns the certificates it presented. Callers verify only
-// when they need to: an expired certificate fails verification, and the expiry
-// check must still see it.
+// server's chain and returns the certificates it presented. Callers verify with
+// trustedWhenIssued, because a plain verification fails on an expired certificate
+// and the expiry check must still see that.
 func serverChain(ctx context.Context, rawURL string, config *tls.Config) ([]*x509.Certificate, bool) {
 	target, err := url.Parse(rawURL)
 	if err != nil || target.Scheme != "https" || target.Hostname() == "" {

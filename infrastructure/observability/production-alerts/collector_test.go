@@ -264,16 +264,30 @@ func TestCertificateExpiryRowOnlyWhenConfigured(t *testing.T) {
 	}
 }
 
-// expiredServer presents a certificate that ended an hour ago and asks for no client
-// certificate, like a node whose server certificate has run out.
-func expiredServer(t *testing.T) *httptest.Server {
+// expiredServer presents a certificate that ended an hour ago, signed by a CA of its
+// own whose PEM file and pool it returns, and asks for no client certificate, like a
+// node whose server certificate has run out.
+func expiredServer(t *testing.T) (*httptest.Server, string, *x509.CertPool) {
 	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(8), Subject: pkix.Name{CommonName: "expired test ca"}, NotBefore: time.Now().Add(-72 * time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	template := &x509.Certificate{SerialNumber: big.NewInt(9), Subject: pkix.Name{CommonName: "expired"}, NotBefore: time.Now().Add(-48 * time.Hour), NotAfter: time.Now().Add(-time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu", "localhost"}, IPAddresses: nil}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	template := &x509.Certificate{SerialNumber: big.NewInt(9), Subject: pkix.Name{CommonName: "expired"}, NotBefore: time.Now().Add(-48 * time.Hour), NotAfter: time.Now().Add(-time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu", "localhost"}}
+	der, err := x509.CreateCertificate(rand.Reader, template, caCert, &key.PublicKey, caKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,20 +295,43 @@ func expiredServer(t *testing.T) *httptest.Server {
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}, MinVersion: tls.VersionTLS13}
 	server.StartTLS()
 	t.Cleanup(server.Close)
-	return server
+	caFile := filepath.Join(t.TempDir(), "expired-ca.pem")
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(caCert)
+	return server, caFile, pool
 }
 
-func TestAnExpiredServerCertificateStillReadsAsExpired(t *testing.T) {
+func TestAnExpiredButTrustedServerCertificateReadsAsExpired(t *testing.T) {
 	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))
-	server := expiredServer(t)
-	probes[0].URL = server.URL + "/readyz"
+	server, caFile, pool := expiredServer(t)
+	probes[0].URL, probes[0].CAFile = server.URL+"/readyz", caFile
 	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
-	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate has expired") {
-		t.Fatalf("an expired SFU server certificate must alert as expired: %+v", items)
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate has expired") || strings.Contains(items[0].Reason, "untrusted") {
+		t.Fatalf("an expired trusted SFU certificate must alert as expired only: %+v", items)
 	}
+	doorRoots = pool
+	t.Cleanup(func() { doorRoots = nil })
 	door := collectCertificateExpiry(context.Background(), nil, strings.Replace(server.URL, "127.0.0.1", "localhost", 1), time.Now())
-	if len(door) != 1 || door[0].Value != 1 || !strings.Contains(door[0].Reason, "the direct door certificate has expired") {
-		t.Fatalf("an expired door certificate must alert as expired: %+v", door)
+	if len(door) != 1 || door[0].Value != 1 || !strings.Contains(door[0].Reason, "the direct door certificate has expired") || strings.Contains(door[0].Reason, "could not be verified") {
+		t.Fatalf("an expired trusted door certificate must alert as expired only: %+v", door)
+	}
+}
+
+func TestAnImpostorCertificateRaisesAnUntrustedFindingInsteadOfHidingExpiry(t *testing.T) {
+	// The fleet's CA is not the impostor's, so the impostor's far-future expiry must not read as healthy.
+	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	impostor, _, _ := expiredServer(t)
+	probes[0].URL = impostor.URL + "/readyz"
+	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate is untrusted") {
+		t.Fatalf("a certificate from another CA must alert as untrusted: %+v", items)
+	}
+	door := collectCertificateExpiry(context.Background(), nil, strings.Replace(impostor.URL, "127.0.0.1", "localhost", 1), time.Now())
+	if len(door) != 1 || door[0].Value != 1 || !strings.Contains(door[0].Reason, "the direct door could not be verified") {
+		t.Fatalf("an untrusted door certificate must alert: %+v", door)
 	}
 }
 

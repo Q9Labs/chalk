@@ -88,8 +88,10 @@ not excluded by name. The own SFU certificates are issued by `features/media/sfu
 certificate lasts 180 days: renew it with `certs <env> server`, then `deploy`. The API's
 SFU client certificate lasts 365 days and is a separate target: renew it with
 `certs <env> api <key file> <current certificate>`, then install it where the API and
-the collector read it. Expiry is read without chain verification, so an expired
-certificate reads as expired instead of vanishing. The checks run in parallel on their
+the collector read it. Each chain is verified against the configured CA and name as of the moment the
+certificate was issued, so only expiry is ignored: an expired certificate from the right
+CA reads as expired, and a certificate that does not chain or match raises an
+`untrusted` finding instead of hiding an expiry. The checks run in parallel on their
 own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
 The direct door's certificate is issued and renewed by its Caddy proxy
 over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the
