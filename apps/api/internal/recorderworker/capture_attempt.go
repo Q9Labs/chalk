@@ -1083,6 +1083,12 @@ func (a *PionCaptureAttempt) finishStopped(writer *captureBundleWriter, stoppedA
 	}
 	callbackCtx, callbackCancel := context.WithTimeout(context.Background(), a.config.CloseTimeout)
 	defer callbackCancel()
+	startedAt := time.Now()
+	attempts := 0
+	failure := func(outcome string, cause error) error {
+		detail := completionFailureDetail(completionStageError{stage: "capture_stopped", outcome: outcome, cause: cause})
+		return fmt.Errorf("%s callback_attempts=%d callback_elapsed_ms=%d: %w", detail, attempts, time.Since(startedAt).Milliseconds(), cause)
+	}
 	stopID := captureLifecycleKey("stopped", a.authority.RecordingID.String(), uint64(a.authority.CaptureEpoch))
 	for {
 		lease := a.currentLease()
@@ -1092,19 +1098,23 @@ func (a *PionCaptureAttempt) finishStopped(writer *captureBundleWriter, stoppedA
 			EnvelopeDigest: hex.EncodeToString(a.authority.EnvelopeDigest), LeaseOwner: lease.Owner, LeaseToken: lease.Token, LeaseExpiresAt: lease.ExpiresAt,
 			At: stoppedAt, IdempotencyKey: stopID,
 		}
+		attempts++
 		err := a.lifecycle.Stopped(callbackCtx, stop)
 		if err == nil {
 			return nil
 		}
 		if !errors.Is(err, ErrControlPlaneRetryable) {
-			return fmt.Errorf("emit capture stopped: %w", err)
+			if callbackCtx.Err() != nil {
+				return failure("timed_out", errors.Join(err, callbackCtx.Err()))
+			}
+			return failure("returned", err)
 		}
 		timer := time.NewTimer(defaultCaptureLifecycleRetry)
 		select {
 		case <-timer.C:
 		case <-callbackCtx.Done():
 			timer.Stop()
-			return fmt.Errorf("emit capture stopped: %w", errors.Join(err, callbackCtx.Err()))
+			return failure("timed_out", errors.Join(err, callbackCtx.Err()))
 		}
 	}
 }
