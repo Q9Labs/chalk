@@ -39,6 +39,12 @@ class LeaseTests(unittest.TestCase):
         _, _, previous = self.store.acquire("lane-b", "latency", "run-2", 180)
         self.assertEqual(previous["holder"], "lane-a")
 
+    def test_a_failing_git_command_is_named_in_the_error(self):
+        args = [sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", str(Path(self.directory.name) / "missing"), "--holder", "lane-a", "--purpose", "retest", "--run-id", "run-1", "--wait", "0", "--", sys.executable, "-c", "pass"]
+        result = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("git ls-remote failed:", result.stderr)
+
     def test_expired_takeover_cannot_be_released_by_previous_owner(self):
         sha, lease, _ = self.store.acquire("lane-a", "retest", "run-1", -1)
         self.store.acquire("lane-b", "latency", "run-2", 180)
@@ -269,6 +275,13 @@ class DeployLeaseTests(unittest.TestCase):
         self.assertIsNotNone(wrapped)
         self.assertEqual(wrapped[1], 'STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-deploy managed-deploy "$GITHUB_RUN_ID" -- node scripts/deploy/deploy-managed-release.mjs "${args[@]}"')
         self.assertEqual(ci.count("deploy-managed-release.mjs"), ci.count("deploy-managed-release.mjs \"${args[@]}\" --dry-run") + 2)
+
+    def test_the_deploy_checkout_keeps_no_credentials_because_staging_lock_sends_its_own(self):
+        # A persisted extraheader plus the one staging-lock adds from GH_TOKEN is two Authorization headers, and GitHub rejects the request.
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        checkout = job[job.index("Checkout deployment tooling") :]
+        self.assertIn("persist-credentials: false", checkout[: checkout.index("- name: Setup Node")])
 
     def test_the_deploy_job_and_every_caller_may_write_the_lease_ref(self):
         ci = (self.workflows / "ci.yml").read_text()
