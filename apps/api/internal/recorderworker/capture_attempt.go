@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"sort"
 	"strings"
@@ -28,6 +29,7 @@ import (
 const (
 	defaultCaptureInitialPlanWait  = 10 * time.Second
 	defaultCapturePlanWait         = 2 * time.Second
+	defaultCaptureLateTrackWait    = time.Minute
 	defaultCaptureRTPDeadline      = 250 * time.Millisecond
 	defaultCaptureCloseTimeout     = 15 * time.Second
 	defaultCaptureLifecycleRetry   = 100 * time.Millisecond
@@ -232,6 +234,10 @@ type CaptureAttemptConfig struct {
 	Environment     string
 	InitialPlanWait time.Duration
 	PlanWait        time.Duration
+	// LateTrackWait bounds how long a planned track that sent no RTP at bind
+	// time is still attached when its first packet arrives. After it the
+	// track is reported missing and stays out of the Recording.
+	LateTrackWait   time.Duration
 	RTPReadDeadline time.Duration
 	CloseTimeout    time.Duration
 	// KeyFrameInterval asks each video sender for a keyframe at least this
@@ -254,6 +260,9 @@ func (c CaptureAttemptConfig) normalized() CaptureAttemptConfig {
 	}
 	if c.InitialPlanWait > captureplan.MaximumWait {
 		c.InitialPlanWait = captureplan.MaximumWait
+	}
+	if c.LateTrackWait <= 0 {
+		c.LateTrackWait = defaultCaptureLateTrackWait
 	}
 	if c.PlanWait <= 0 {
 		c.PlanWait = defaultCapturePlanWait
@@ -546,9 +555,11 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	if emptyBootstrap {
 		startPlanLoop(plan.Revision())
 	}
+	late := newLateTrackWatch(runCtx, a)
+	defer late.stop()
 	if len(snapshot.Tracks) > 0 {
 		var stopped bool
-		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil)
+		readers, plan, stopped, err = a.bindTracksWhileWatchingPlans(runCtx, writer, plan, snapshot, planEvents, nil, nil, late)
 		if err != nil {
 			return finish(err, writer)
 		}
@@ -569,13 +580,42 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
-	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
+	firstPacketAt := bindAnchors(writer, late, readers, nil)
+	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt)
 	if startErr != nil {
 		return finish(startErr, writer)
 	}
 	defer readerCancel()
 
+	// A late track's first packet is already queued, so it attaches before the
+	// loop takes any other event.
+	attachLate := func(result lateTrackResult) error {
+		bound, boundAt, err := late.handle(result)
+		if err != nil || bound == nil {
+			return err
+		}
+		next := make(map[string]CaptureMediaTrack, len(readers)+1)
+		for mid, track := range readers {
+			next[mid] = track
+		}
+		mid := string(bound.MID())
+		next[mid] = bound
+		if err := a.applyBoundTracks(runCtx, writer, plan, next, readers, readerCancels, events, map[string]time.Time{mid: writer.clampAnchor(boundAt)}); err != nil {
+			return err
+		}
+		readers = next
+		return nil
+	}
 	for {
+		select {
+		case result := <-late.results:
+			if err := attachLate(result); err != nil {
+				cancel(nil)
+				return finish(err, writer)
+			}
+			continue
+		default:
+		}
 		select {
 		case <-runCtx.Done():
 			return finish(runCtx.Err(), writer)
@@ -591,6 +631,11 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				return finish(event.err, writer)
 			}
 			if err := a.consumeQueuedPackets(runCtx, writer, event, events, func(next captureRuntimeEvent) bool { return captureRuntimeEventMatchesReaders(next, readers) }); err != nil {
+				cancel(nil)
+				return finish(err, writer)
+			}
+		case result := <-late.results:
+			if err := attachLate(result); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
@@ -625,7 +670,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel(nil)
 				return a.finishSuccess(writer)
 			}
-			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers)
+			updatedReaders, appliedPlan, stopped, err := a.bindTracksWhileWatchingPlans(runCtx, writer, event.plan, snapshot, planEvents, events, readers, late)
 			if err != nil {
 				cancel(nil)
 				return finish(err, writer)
@@ -634,7 +679,7 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 				cancel(nil)
 				return a.finishSuccess(writer)
 			}
-			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events); err != nil {
+			if err := a.applyBoundTracks(runCtx, writer, appliedPlan, updatedReaders, readers, readerCancels, events, bindAnchors(writer, late, updatedReaders, readers)); err != nil {
 				cancel(nil)
 				return finish(err, writer)
 			}
@@ -770,41 +815,231 @@ func sendCapturePlanEvent(ctx context.Context, output chan<- capturePlanEvent, e
 	}
 }
 
-func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []captureplane.PulledCaptureTrack) (map[string]CaptureMediaTrack, error) {
+// bindTracks binds every expected MID that sends its first RTP packet before ctx
+// ends. A MID that stays silent is returned in missing instead of failing the
+// attempt, so one dead microphone cannot cost the Recording of everyone else.
+// With nothing bound at all the attempt still fails: the pull itself is broken.
+func (a *PionCaptureAttempt) bindTracks(ctx context.Context, tracks []captureplane.PulledCaptureTrack) (map[string]CaptureMediaTrack, []captureplane.PulledCaptureTrack, error) {
 	ordered := append([]captureplane.PulledCaptureTrack(nil), tracks...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].MID < ordered[j].MID })
 	bound := make(map[string]CaptureMediaTrack, len(ordered))
+	var missing []captureplane.PulledCaptureTrack
+	var firstMiss error
 	for _, expected := range ordered {
-		track, err := a.peer.WaitForTrack(ctx, expected.MID)
-		if err != nil {
-			return nil, fmt.Errorf("wait for capture MID %s: %w", expected.MID, err)
-		}
-		if track == nil || track.MID() != expected.MID {
-			return nil, fmt.Errorf("%w: expected MID %s", ErrInvalidCaptureAttempt, expected.MID)
-		}
-		identity := track.CaptureTrack()
-		if identity.MID != expected.MID || identity.TrackReference != expected.TrackReference || identity.OwnerReference != expected.OwnerReference {
-			return nil, fmt.Errorf("%w: capture MID %s identity changed", ErrInvalidCaptureAttempt, expected.MID)
-		}
-		if err := validateCaptureCodec(expected.Kind, track.Codec()); err != nil {
-			return nil, fmt.Errorf("capture MID %s: %w", expected.MID, err)
-		}
-		if expected.Kind == captureplane.TrackKindVideo {
-			if err := a.peer.RequestKeyFrame(expected.MID); err != nil {
-				return nil, fmt.Errorf("request keyframe for capture MID %s: %w", expected.MID, err)
+		track, err := a.bindTrack(ctx, expected)
+		switch {
+		case err == nil:
+			bound[string(expected.MID)] = track
+		case errors.Is(err, errCaptureTrackSilent):
+			missing = append(missing, expected)
+			if firstMiss == nil {
+				firstMiss = err
 			}
+		default:
+			return nil, nil, err
 		}
-		bound[string(expected.MID)] = track
 	}
-	return bound, nil
+	if len(bound) == 0 && firstMiss != nil {
+		return nil, nil, firstMiss
+	}
+	return bound, missing, nil
+}
+
+// bindAnchors returns the first-packet time for each track that is new in next
+// while a planned track is still silent. The bind then waited before any reader
+// started, so a reader's first read can be seconds after the track's first
+// packet. Stamping with the bind time keeps all of these tracks on one clock
+// basis. With nothing silent the readers are unchanged.
+func bindAnchors(writer *captureBundleWriter, late *lateTrackWatch, next, previous map[string]CaptureMediaTrack) map[string]time.Time {
+	if len(late.watching) == 0 {
+		return nil
+	}
+	anchors := make(map[string]time.Time, len(next))
+	for mid, track := range next {
+		if before, ok := previous[mid]; ok && sameCaptureBinding(before, track) {
+			continue
+		}
+		if bound, ok := track.(interface{ BoundAt() time.Time }); ok {
+			anchors[mid] = writer.clampAnchor(bound.BoundAt())
+		}
+	}
+	return anchors
+}
+
+// lateTrackWatch waits for planned MIDs that sent no RTP when the attempt bound
+// the others. Each MID has its own bounded wait that starts when it is first
+// missing and ends in an attach or in a recording.capture_track_missing line.
+// Waiting on the first packet itself, not on a checkpoint, starts the reader the
+// moment the track arrives, so the late track keeps its true place on the
+// Recording's clock. An expired binding stays recorded so a later plan change
+// cannot start its wait again.
+type lateTrackWatch struct {
+	attempt  *PionCaptureAttempt
+	ctx      context.Context
+	results  chan lateTrackResult
+	watching map[string]*lateTrackEntry
+	expired  map[string]captureplane.PulledCaptureTrack
+}
+
+type lateTrackEntry struct {
+	track  captureplane.PulledCaptureTrack
+	since  time.Time
+	cancel context.CancelFunc
+}
+
+type lateTrackResult struct {
+	track captureplane.PulledCaptureTrack
+	bound CaptureMediaTrack
+	err   error
+}
+
+func newLateTrackWatch(ctx context.Context, attempt *PionCaptureAttempt) *lateTrackWatch {
+	return &lateTrackWatch{
+		attempt: attempt, ctx: ctx, results: make(chan lateTrackResult, 16),
+		watching: make(map[string]*lateTrackEntry), expired: make(map[string]captureplane.PulledCaptureTrack),
+	}
+}
+
+// bindable returns the planned tracks the bind should wait for: those that are
+// neither waiting on a late first packet nor expired.
+func (w *lateTrackWatch) bindable(planned []captureplane.PulledCaptureTrack) []captureplane.PulledCaptureTrack {
+	bindable := make([]captureplane.PulledCaptureTrack, 0, len(planned))
+	for _, track := range planned {
+		if entry, ok := w.watching[string(track.MID)]; ok && entry.track == track {
+			continue
+		}
+		if expired, ok := w.expired[string(track.MID)]; ok && expired == track {
+			continue
+		}
+		bindable = append(bindable, track)
+	}
+	return bindable
+}
+
+// update drops watches and expiries whose binding left the plan, then starts a
+// wait for each newly missing track.
+func (w *lateTrackWatch) update(planned, missing []captureplane.PulledCaptureTrack) {
+	inPlan := make(map[string]captureplane.PulledCaptureTrack, len(planned))
+	for _, track := range planned {
+		inPlan[string(track.MID)] = track
+	}
+	for mid, entry := range w.watching {
+		if track, ok := inPlan[mid]; !ok || track != entry.track {
+			entry.cancel()
+			delete(w.watching, mid)
+		}
+	}
+	for mid, track := range w.expired {
+		if current, ok := inPlan[mid]; !ok || current != track {
+			delete(w.expired, mid)
+		}
+	}
+	for _, track := range missing {
+		w.start(track)
+	}
+}
+
+func (w *lateTrackWatch) start(track captureplane.PulledCaptureTrack) {
+	mid := string(track.MID)
+	if _, ok := w.watching[mid]; ok {
+		return
+	}
+	waitCtx, cancel := context.WithTimeout(w.ctx, w.attempt.config.LateTrackWait)
+	w.watching[mid] = &lateTrackEntry{track: track, since: w.attempt.config.Now(), cancel: cancel}
+	slog.WarnContext(w.ctx, "recording capture track sent no RTP; attaching it if media starts",
+		"event", "recording.capture_track_pending", "mid", mid, "kind", string(track.Kind), "source", string(track.Source),
+		"give_up_after_ms", w.attempt.config.LateTrackWait.Milliseconds())
+	go func() {
+		result := lateTrackResult{track: track}
+		defer func() {
+			if recover() != nil {
+				result.err = capturePanicError()
+			}
+			select {
+			case w.results <- result:
+			case <-w.ctx.Done():
+			}
+		}()
+		result.bound, result.err = w.attempt.bindTrack(waitCtx, track)
+	}()
+}
+
+// handle applies one wait result. It returns the bound track when the MID
+// attached, and an error only when the attempt must fail.
+func (w *lateTrackWatch) handle(result lateTrackResult) (CaptureMediaTrack, time.Time, error) {
+	mid := string(result.track.MID)
+	entry, ok := w.watching[mid]
+	if !ok || entry.track != result.track {
+		return nil, time.Time{}, nil
+	}
+	entry.cancel()
+	delete(w.watching, mid)
+	waitedMS := w.attempt.config.Now().Sub(entry.since).Milliseconds()
+	switch {
+	case result.err == nil:
+		slog.InfoContext(w.ctx, "recording capture track sent its first RTP late and is attached",
+			"event", "recording.capture_track_attached", "mid", mid, "kind", string(result.track.Kind), "source", string(result.track.Source), "waited_ms", waitedMS)
+		var boundAt time.Time
+		if bound, ok := result.bound.(interface{ BoundAt() time.Time }); ok {
+			boundAt = bound.BoundAt()
+		}
+		return result.bound, boundAt, nil
+	case w.ctx.Err() != nil:
+		return nil, time.Time{}, w.ctx.Err()
+	case errors.Is(result.err, errCaptureTrackSilent):
+		w.expired[mid] = result.track
+		slog.WarnContext(w.ctx, "recording capture track never sent RTP; the Recording has no media for it",
+			"event", "recording.capture_track_missing", "mid", mid, "kind", string(result.track.Kind), "source", string(result.track.Source), "waited_ms", waitedMS)
+		return nil, time.Time{}, nil
+	default:
+		return nil, time.Time{}, result.err
+	}
+}
+
+func (w *lateTrackWatch) stop() {
+	for _, entry := range w.watching {
+		entry.cancel()
+	}
+}
+
+// errCaptureTrackSilent marks a planned MID that sent no RTP before the wait ended.
+var errCaptureTrackSilent = errors.New("capture track sent no RTP")
+
+// bindTrack waits for one MID's first packet. It wraps errCaptureTrackSilent only
+// when the wait itself ran out while the attempt is still live.
+func (a *PionCaptureAttempt) bindTrack(ctx context.Context, expected captureplane.PulledCaptureTrack) (CaptureMediaTrack, error) {
+	track, err := a.peer.WaitForTrack(ctx, expected.MID)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("wait for capture MID %s: %w: %w", expected.MID, errCaptureTrackSilent, err)
+		}
+		return nil, fmt.Errorf("wait for capture MID %s: %w", expected.MID, err)
+	}
+	if track == nil || track.MID() != expected.MID {
+		return nil, fmt.Errorf("%w: expected MID %s", ErrInvalidCaptureAttempt, expected.MID)
+	}
+	identity := track.CaptureTrack()
+	if identity.MID != expected.MID || identity.TrackReference != expected.TrackReference || identity.OwnerReference != expected.OwnerReference {
+		return nil, fmt.Errorf("%w: capture MID %s identity changed", ErrInvalidCaptureAttempt, expected.MID)
+	}
+	if err := validateCaptureCodec(expected.Kind, track.Codec()); err != nil {
+		return nil, fmt.Errorf("capture MID %s: %w", expected.MID, err)
+	}
+	if expected.Kind == captureplane.TrackKindVideo {
+		if err := a.peer.RequestKeyFrame(expected.MID); err != nil {
+			return nil, fmt.Errorf("request keyframe for capture MID %s: %w", expected.MID, err)
+		}
+	}
+	return track, nil
 }
 
 type captureTrackBindResult struct {
-	tracks map[string]CaptureMediaTrack
-	err    error
+	tracks  map[string]CaptureMediaTrack
+	missing []captureplane.PulledCaptureTrack
+	err     error
 }
 
-func (a *PionCaptureAttempt) bindTracksWhileWatchingPlans(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, snapshot recordercapture.Snapshot, planEvents <-chan capturePlanEvent, runtimeEvents <-chan captureRuntimeEvent, currentReaders map[string]CaptureMediaTrack) (map[string]CaptureMediaTrack, captureplan.Plan, bool, error) {
+func (a *PionCaptureAttempt) bindTracksWhileWatchingPlans(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, snapshot recordercapture.Snapshot, planEvents <-chan capturePlanEvent, runtimeEvents <-chan captureRuntimeEvent, currentReaders map[string]CaptureMediaTrack, late *lateTrackWatch) (map[string]CaptureMediaTrack, captureplan.Plan, bool, error) {
 	if err := writer.observePlan(plan); err != nil {
 		return nil, captureplan.Plan{}, false, err
 	}
@@ -812,7 +1047,7 @@ bindPlan:
 	for {
 		bindCtx, cancelBind := context.WithTimeout(ctx, a.config.InitialPlanWait)
 		result := make(chan captureTrackBindResult, 1)
-		expected := append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
+		expected := late.bindable(snapshot.Tracks)
 		go func() {
 			var bound captureTrackBindResult
 			defer func() {
@@ -821,7 +1056,7 @@ bindPlan:
 				}
 				result <- bound
 			}()
-			bound.tracks, bound.err = a.bindTracks(bindCtx, expected)
+			bound.tracks, bound.missing, bound.err = a.bindTracks(bindCtx, expected)
 		}()
 
 		for {
@@ -832,6 +1067,12 @@ bindPlan:
 				return nil, captureplan.Plan{}, false, ctx.Err()
 			case bound := <-result:
 				cancelBind()
+				if err := ctx.Err(); err != nil {
+					return nil, captureplan.Plan{}, false, err
+				}
+				if bound.err == nil {
+					late.update(snapshot.Tracks, bound.missing)
+				}
 				return bound.tracks, plan, false, bound.err
 			case event := <-runtimeEvents:
 				if !captureRuntimeEventMatchesPlannedReaders(event, currentReaders, snapshot.Tracks) {
@@ -902,7 +1143,7 @@ func captureRuntimeEventMatchesPlannedReaders(event captureRuntimeEvent, readers
 	return false
 }
 
-func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, next, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent) error {
+func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captureBundleWriter, plan captureplan.Plan, next, previous map[string]CaptureMediaTrack, readerCancels map[string]func(), events chan<- captureRuntimeEvent, firstPacketAt map[string]time.Time) error {
 	if err := writer.reconcileTracks(ctx, plan, next, a.config.Now()); err != nil {
 		return err
 	}
@@ -919,7 +1160,7 @@ func (a *PionCaptureAttempt) applyBoundTracks(ctx context.Context, writer *captu
 		if previousTrack, ok := previous[mid]; ok && sameCaptureBinding(previousTrack, track) {
 			continue
 		}
-		cancel, err := startCaptureReader(ctx, a.peer, mid, track, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
+		cancel, err := startCaptureReaderAt(ctx, a.peer, mid, track, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt[mid])
 		if err != nil {
 			return err
 		}
@@ -1175,14 +1416,14 @@ type captureRuntimeEvent struct {
 	err    error
 }
 
-func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (map[string]func(), func(), error) {
+func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent, firstPacketAt map[string]time.Time) (map[string]func(), func(), error) {
 	if len(tracks) == 0 {
 		return make(map[string]func()), func() {}, nil
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
 	cancels := make(map[string]func(), len(tracks))
 	for mid, track := range tracks {
-		readerCancel, err := startCaptureReader(readerCtx, peer, mid, track, deadline, keyFrameInterval, events)
+		readerCancel, err := startCaptureReaderAt(readerCtx, peer, mid, track, deadline, keyFrameInterval, events, firstPacketAt[mid])
 		if err != nil {
 			cancel()
 			for _, stop := range cancels {
@@ -1201,12 +1442,20 @@ func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[strin
 }
 
 func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (func(), error) {
+	return startCaptureReaderAt(ctx, peer, mid, track, deadline, keyFrameInterval, events, time.Time{})
+}
+
+// startCaptureReaderAt stamps the first packet with firstPacketAt when it is set
+// and earlier than the read. A late track passes the time the peer bound it, so
+// the track's clock keeps its place however long the loop was busy.
+func startCaptureReaderAt(ctx context.Context, peer CapturePeer, mid string, track CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent, firstPacketAt time.Time) (func(), error) {
 	if peer == nil || track == nil || strings.TrimSpace(mid) == "" || deadline <= 0 {
 		return nil, ErrInvalidCaptureAttempt
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	video := track.CaptureTrack().Kind == captureplane.TrackKindVideo
+	stamped := false
 	stopReports := startCaptureSenderReports(readerCtx, mid, track, deadline, events)
 	go func() {
 		defer close(done)
@@ -1244,6 +1493,12 @@ func startCaptureReader(ctx context.Context, peer CapturePeer, mid string, track
 				return
 			}
 			receivedAt := time.Now()
+			if !stamped {
+				stamped = true
+				if !firstPacketAt.IsZero() && firstPacketAt.Before(receivedAt) {
+					receivedAt = firstPacketAt
+				}
+			}
 			if !packetWindow.accept(packet.SSRC, packet.SequenceNumber) {
 				continue
 			}
@@ -1410,6 +1665,7 @@ type captureBundleWriter struct {
 	hasLayout      bool
 	clocks         map[string]*captureTrackClock
 	lastMono       int64
+	recoveryStart  time.Time
 	lastMedia      int64
 	terminalGap    bool
 }
@@ -1428,6 +1684,7 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 	writer := &captureBundleWriter{attempt: attempt, active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
 	if attempt.authority.CaptureReadyAt != nil {
 		writer.origin = attempt.authority.CaptureReadyAt.UTC()
+		writer.recoveryStart = attempt.config.Now().UTC()
 		// A replacement epoch has no authoritative prior bundle end in its
 		// envelope. Start its no-RTP bookkeeping at the local recovery boundary;
 		// the decoder represents the interval from the prior epoch as recovery.
@@ -1436,6 +1693,16 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 		writer.lastMedia = recoveryStart
 	}
 	return writer
+}
+
+// clampAnchor keeps a first-packet time out of the recovery gap: a replacement
+// attempt starts its clock at its own recovery boundary. A first attempt has
+// none, so tracks bound during negotiation keep their offsets from each other.
+func (w *captureBundleWriter) clampAnchor(at time.Time) time.Time {
+	if at.Before(w.recoveryStart) {
+		return w.recoveryStart
+	}
+	return at
 }
 
 func (w *captureBundleWriter) setOrigin(origin time.Time) {
