@@ -243,20 +243,15 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 		if track.TrackName == "" {
 			return false, fmt.Errorf("%w: tracks[%d].trackName is required", ErrInvalidRequest, index)
 		}
-		if index == 0 {
-			local = track.Location == protocol.LocationLocal
+		if track.Location != protocol.LocationLocal && track.Location != protocol.LocationRemote {
+			return false, fmt.Errorf("%w: tracks[%d].location must be local or remote", ErrInvalidRequest, index)
 		}
-		want := protocol.LocationRemote
-		if local {
-			want = protocol.LocationLocal
-		}
-		if track.Location != want {
-			return false, fmt.Errorf("%w: tracks[%d].location must be %q; a request is all local or all remote", ErrInvalidRequest, index, want)
-		}
-		if local && (track.Mid == "" || !validSource(track.Source)) {
-			return false, fmt.Errorf("%w: tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
-		}
-		if !local && track.SessionID == "" {
+		if track.Location == protocol.LocationLocal {
+			local = true
+			if track.Mid == "" || !validSource(track.Source) {
+				return false, fmt.Errorf("%w: tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
+			}
+		} else if track.SessionID == "" {
 			return false, fmt.Errorf("%w: tracks[%d].sessionId is required for a remote track", ErrInvalidRequest, index)
 		}
 	}
@@ -274,17 +269,56 @@ func validSource(source string) bool {
 }
 
 func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (protocol.TracksResponse, error) {
-	sections, existing, err := s.checkOffer(request)
+	// A join also pulls: the offer's recvonly sections bind, by kind and order, to the sendonly
+	// transceivers subscribe adds before the offer is applied.
+	var response protocol.TracksResponse
+	var added []*subscription
+	var pulls int
+	pushes := request
+	pushes.Tracks = nil
+	var deferred []protocol.Track
+	for _, track := range request.Tracks {
+		if track.Location == protocol.LocationLocal {
+			pushes.Tracks = append(pushes.Tracks, track)
+			continue
+		}
+		if request.PullPublished {
+			deferred = append(deferred, track)
+			continue
+		}
+		pulls++
+		subscription, code, message := s.subscribe(track, added)
+		if code != "" {
+			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: code, Message: message})
+			continue
+		}
+		added = append(added, subscription)
+	}
+	sections, existing, err := s.checkOffer(pushes, pulls)
 	if err != nil {
 		if errors.Is(err, ErrInvalidRequest) || errors.Is(err, ErrCapacityExceeded) {
 			return protocol.TracksResponse{}, err
 		}
 		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
 	}
+	t0 := time.Now()
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
 	}
-	var response protocol.TracksResponse
+	t1 := time.Now()
+	// A pull that failed leaves its section without a sender; the answer marks it inactive.
+	for _, transceiver := range s.pc.GetTransceivers() {
+		if transceiver.Direction() == webrtc.RTPTransceiverDirectionSendonly && transceiver.Sender().Track() == nil {
+			if err := transceiver.Stop(); err != nil {
+				s.node.log.Warn("stop unbound section", "connectionId", s.id, "error", err)
+			}
+		}
+	}
+	for _, subscription := range added {
+		if subscription.transceiver.Mid() == "" {
+			return protocol.TracksResponse{}, s.failNegotiation("bind pulled tracks", errors.New("the offer has fewer receiving sections than pulled tracks"))
+		}
+	}
 	var refused []*webrtc.RTPTransceiver
 	named := make(map[string]bool, len(request.Tracks))
 	s.mu.Lock()
@@ -294,7 +328,7 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		s.mu.Unlock()
 		return protocol.TracksResponse{}, ErrSessionGone
 	}
-	for _, track := range request.Tracks {
+	for _, track := range pushes.Tracks {
 		if named[track.Mid] {
 			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: protocol.TrackCodeDuplicate, Message: "the request names this mid twice"})
 			continue
@@ -321,7 +355,9 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		}
 	}
 
+	t2 := time.Now()
 	answer, err := s.pc.CreateAnswer(nil)
+	t3 := time.Now()
 	if err == nil {
 		err = s.pc.SetLocalDescription(answer)
 	}
@@ -332,6 +368,36 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	if err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("gather ICE candidates", err)
 	}
+	if len(added) > 0 {
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return protocol.TracksResponse{}, ErrSessionGone
+		}
+		for _, subscription := range added {
+			subscription.mid = subscription.transceiver.Mid()
+			s.subscribed[subscription.mid] = subscription
+			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: subscription.mid, TrackName: subscription.pub.name, SessionID: subscription.pub.session.id})
+		}
+		s.mu.Unlock()
+		for _, subscription := range added {
+			subscription.start()
+			if !s.node.track(func() { subscription.readFeedback() }) {
+				return protocol.TracksResponse{}, ErrDraining
+			}
+		}
+	}
+	if len(deferred) > 0 {
+		followUp, err := s.pull(ctx, protocol.TracksRequest{Scope: request.Scope, Tracks: deferred})
+		if err != nil {
+			return protocol.TracksResponse{}, err
+		}
+		response.Tracks = append(response.Tracks, followUp.Tracks...)
+		response.TrackErrors = append(response.TrackErrors, followUp.TrackErrors...)
+		response.FollowUpOffer = followUp.SessionDescription
+		response.RequiresImmediateRenegotiation = followUp.RequiresImmediateRenegotiation
+	}
+	s.node.log.Info("spike join timing", "setRemote", t1.Sub(t0).Microseconds(), "createAnswer", t3.Sub(t2).Microseconds(), "setLocalAndGather", time.Since(t3).Microseconds(), "pulls", len(added))
 	response.SessionDescription = description
 	return response, nil
 }
@@ -340,7 +406,7 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 // new section must belong to a track of the request, and the new tracks must fit the
 // publication and section limits, so the peer connection never allocates for an offer the
 // node would not accept. It returns the parsed sections and the MIDs the connection already has.
-func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSection, map[string]bool, error) {
+func (s *Session) checkOffer(request protocol.TracksRequest, pulls int) (map[string]offerSection, map[string]bool, error) {
 	sections, err := parseOffer(request.SessionDescription.SDP)
 	if err != nil {
 		return nil, nil, err
@@ -360,7 +426,11 @@ func (s *Session) checkOffer(request protocol.TracksRequest) (map[string]offerSe
 			continue
 		}
 		if !named[mid] {
-			return nil, nil, fmt.Errorf("%w: the offer has a section that no track of the request names", ErrInvalidRequest)
+			// A section the client only receives in belongs to a pulled track.
+			if pulls == 0 || sections[mid].sending {
+				return nil, nil, fmt.Errorf("%w: the offer has a section that no track of the request names", ErrInvalidRequest)
+			}
+			pulls--
 		}
 		added++
 	}

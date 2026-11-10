@@ -16,7 +16,7 @@ const (
 )
 
 // MaxTracksPerRequest bounds one push, pull or close batch.
-const MaxTracksPerRequest = 16
+const MaxTracksPerRequest = 32
 
 // Scope is the authorization context the API verified for one request. The SFU
 // never derives it from track names. Every operation after create must present
@@ -105,9 +105,13 @@ type TracksRequest struct {
 	Scope              Scope               `json:"scope"`
 	SessionDescription *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks             []Track             `json:"tracks"`
+	// PullPublished (prototype name) asks a push to pull its remote tracks after the answer and
+	// return the server offer as FollowUpOffer.
+	PullPublished bool `json:"pullPublished,omitempty"`
 }
 
 type TracksResponse struct {
+	FollowUpOffer                  *SessionDescription `json:"followUpOffer,omitempty"`
 	SessionDescription             *SessionDescription `json:"sessionDescription,omitempty"`
 	Tracks                         []Track             `json:"tracks,omitempty"`
 	TrackErrors                    []TrackError        `json:"trackErrors,omitempty"`
