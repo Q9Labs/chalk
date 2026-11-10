@@ -115,3 +115,20 @@ test("the automatic-policy proof reuses its own Space and never the manual one",
     delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC;
   }
 });
+
+test("Promote's own-SFU proof finds its Space by slug and never creates one", async () => {
+  process.env.CHALK_PROOF_SPACE_BY_SLUG = "true";
+  try {
+    const found = { id: "s", slug: "promote-proof-chalk-sfu", media_plane: "chalk_sfu", ...policyApplied };
+    const run = await fakeRun((method) => (method === "GET" ? { spaces: [found], pagination: { next_cursor: "" } } : assert.fail("created a Space")));
+    assert.equal((await createSpace(run, "chalk_sfu")).id, "s");
+    assert.deepEqual(
+      run.requests.map((request) => request.method),
+      ["GET"],
+    );
+    const missing = await fakeRun(() => ({ spaces: [], pagination: { next_cursor: "" } }));
+    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /ensure-own-sfu-spaces/.test(error.message));
+  } finally {
+    delete process.env.CHALK_PROOF_SPACE_BY_SLUG;
+  }
+});

@@ -1,0 +1,70 @@
+import { check, ProofError } from "./runtime.mjs";
+
+// The two proof Spaces Promote reuses on the own SFU. The public API of a release with the per-Space
+// setting refuses chalk_sfu, so they must reach chalk_sfu BEFORE that release deploys: the previous
+// release lets the public API set it on an allowlisted Space, and a plane stored that way survives the
+// upgrade. They are found by slug, so no Space ID lives in a variable or a log.
+export const manualPolicy = { recording: "manual", transcription: "on_demand" };
+export const automaticPolicy = { recording: "automatic", transcription: "automatic" };
+export const ownSfuSpaces = {
+  manual: { slug: "promote-proof-chalk-sfu", policy: manualPolicy },
+  automatic: { slug: "promote-proof-chalk-sfu-automatic", policy: automaticPolicy },
+};
+
+// The release before the per-Space setting has no effective_media_plane.
+export const spacePlane = (space) => space.effective_media_plane ?? space.media_plane;
+
+export function ownSfuSpaceKind(policy) {
+  if (policy.recording === manualPolicy.recording && policy.transcription === manualPolicy.transcription) return "manual";
+  if (policy.recording === automaticPolicy.recording && policy.transcription === automaticPolicy.transcription) return "automatic";
+  return undefined;
+}
+
+export async function findSpaceBySlug(apiRequest, tenantPath, slug) {
+  let cursor = "";
+  do {
+    const query = new URLSearchParams({ page_size: "100", cursor });
+    const page = await apiRequest("GET", `${tenantPath}/spaces?${query}`);
+    check(Array.isArray(page.spaces), "Invalid Space listing");
+    const found = page.spaces.find((space) => space.slug === slug && !space.archived);
+    if (found) return found;
+    cursor = (page.pagination ?? page.page)?.next_cursor ?? "";
+  } while (cursor);
+  return undefined;
+}
+
+function checkPolicy(space, { slug, policy }) {
+  check(space.recording_policy === policy.recording && space.transcription_policy === policy.transcription, `The proof Space ${slug} has other Recording or Transcription policies than the proof needs`, "media-plane-config");
+}
+
+async function ensureOne(run, kind) {
+  const wanted = ownSfuSpaces[kind];
+  const path = `${run.tenantPath}/spaces`;
+  let space = await findSpaceBySlug(run.apiRequest, run.tenantPath, wanted.slug);
+  space ??= await run.apiRequest("POST", path, {
+    name: wanted.slug,
+    slug: wanted.slug,
+    recording_policy: wanted.policy.recording,
+    transcription_policy: wanted.policy.transcription,
+    default_episode_duration_seconds: 1800,
+    maximum_episode_duration_seconds: 1800,
+    linger_window_seconds: 60,
+    admission_policy: { mode: "open" },
+  });
+  checkPolicy(space, wanted);
+  if (spacePlane(space) !== "chalk_sfu") {
+    try {
+      space = await run.apiRequest("PATCH", `${path}/${space.id}`, { media_plane: "chalk_sfu" });
+    } catch (error) {
+      if (!(error instanceof ProofError) || ![400, 403].includes(error.status)) throw error;
+      throw new ProofError("media-plane-config", `The API refused chalk_sfu for the proof Space ${wanted.slug} (${error.apiCode}). Before the per-Space setting: add this Space to CHALK_SFU_ALLOWED_SPACES, then run this step again. After it: run media-settings set --plane chalk_sfu for this Space`);
+    }
+  }
+  check(spacePlane(space) === "chalk_sfu", `The proof Space ${wanted.slug} is on ${spacePlane(space)}, not chalk_sfu`, "media-plane-config");
+  console.log(`Proof Space ${wanted.slug} is on chalk_sfu`);
+  return { slug: wanted.slug, plane: "chalk_sfu" };
+}
+
+export async function ensureOwnSfuSpaces(run) {
+  return { manual: await ensureOne(run, "manual"), automatic: await ensureOne(run, "automatic") };
+}

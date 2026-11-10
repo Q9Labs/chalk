@@ -48,6 +48,11 @@ async function observeDeparture(page, scenario) {
   // keep it held; the fault scenario delivers 403 as the Leave is sent. Never
   // delay the outbound Leave or its server acknowledgement.
   await armPublications(page, scenario === "publications-403");
+  return measureLeave(page, scenario);
+}
+
+// Leave from the page and report what the observation installed by observeLeave saw.
+export function measureLeave(page, scenario) {
   return page.evaluate(async (name) => {
     async function attemptLeave() {
       try {

@@ -10,6 +10,7 @@ import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
+import { findSpaceBySlug, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -39,7 +40,6 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
@@ -47,9 +47,8 @@ const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // run that cannot get one stops at once with reason media-plane-config.
 export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
   const pinName = pinnedSpaceVariable(plane, policy);
-  const pinned = pinName && process.env[pinName];
-  if (pinned) {
-    const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+  const existing = await pinnedSpace(run, plane, policy, pinName);
+  if (existing) {
     checkSpacePlane(existing, plane, pinName);
     checkSpacePolicy(existing, policy);
     await save(`${run.directory}/space.json`, existing);
@@ -71,6 +70,17 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   await save(`${run.directory}/space.json`, space);
   return space;
 }
+// A Space ID variable wins. Otherwise CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) finds the proof Space
+// that the ensure-own-sfu-spaces step moved, by its fixed slug.
+async function pinnedSpace(run, plane, policy, pinName) {
+  const pinned = pinName && process.env[pinName];
+  if (pinned) return run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+  const kind = ownSfuSpaceKind(policy);
+  if (plane !== "chalk_sfu" || !kind || process.env.CHALK_PROOF_SPACE_BY_SLUG !== "true") return undefined;
+  const found = await findSpaceBySlug(run.apiRequest, run.tenantPath, ownSfuSpaces[kind].slug);
+  check(found, `The proof Space ${ownSfuSpaces[kind].slug} does not exist: run the ensure-own-sfu-spaces proof first`, "media-plane-config");
+  return found;
+}
 function checkSpacePolicy(space, policy) {
   check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");
   check(space.transcription_policy === policy.transcription, `A proof Space has Transcription policy ${space.transcription_policy}, not ${policy.transcription}`, "media-plane-config");
@@ -85,7 +95,7 @@ function pinnedSpaceVariable(plane, policy) {
   return undefined;
 }
 function checkSpacePlane(space, plane, pinName) {
-  const got = space.effective_media_plane ?? space.media_plane;
+  const got = spacePlane(space);
   check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or ${pinName ?? `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`} for a Space moved with media-settings)`, "media-plane-config");
 }
 export function episodeEnd(run, path) {

@@ -66,19 +66,6 @@ jobs:
           SELECTION: ${{ needs.select.outputs.selection }}
           SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
         run: python3 scripts/releases/release.py recheck
-      - name: Require the production own-SFU proof Spaces before anything deploys
-        # The proof below cannot create an own-SFU Space (the public API refuses it), so an unset variable would fail the proof after the deploy and roll production back.
-        env:
-          PROOF_SPACE: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
-          PROOF_SPACE_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
-        run: |
-          missing=()
-          [[ -n "$PROOF_SPACE" ]] || missing+=(CHALK_PROOF_SPACE_ID_CHALK_SFU)
-          [[ -n "$PROOF_SPACE_AUTOMATIC" ]] || missing+=(CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC)
-          if [[ "${#missing[@]}" -gt 0 ]]; then
-            echo "Set these variables in the production environment to Spaces an operator moved to chalk_sfu with media-settings: ${missing[*]}" >&2
-            exit 1
-          fi
       - name: Select the explicit production Pages destination
         run: |
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
@@ -131,8 +118,19 @@ jobs:
             previous-media.json
             previous-npm.json
           retention-days: 90
-  release:
+  own-sfu-spaces:
+    # Runs before the deploy, on the release still in production. That release lets the public API move an allowlisted Space to chalk_sfu, and a plane stored that way survives the upgrade; the release that adds the per-Space setting refuses it. It runs the proof code of this master revision. A failure stops Promote before anything deploys.
+    permissions:
+      contents: read
     needs: [select, approve]
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      proofs: ensure-own-sfu-spaces
+      media_plane: chalk_sfu
+    secrets: inherit
+  release:
+    needs: [select, approve, own-sfu-spaces]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
@@ -150,31 +148,15 @@ jobs:
       promotion_audit: ${{ toJSON(fromJSON(needs.select.outputs.selection).scorecard_override) }}
     secrets: inherit
   proof:
-    # Leave compares the candidate with the published 5.2.6 client, which predates the own SFU and runs only on Cloudflare, so it stays on the default plane.
     permissions:
       contents: read
     needs: [select, release]
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave
-      release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
-    secrets: inherit
-  proof-chalk-sfu:
-    # The Recording, export and transcript proofs (smoke, transcript) run only on Cloudflare. camera-share and call-artifacts prove the call, the Recording and the Transcript on chalk_sfu, in the proof Spaces the approve job checked.
-    permissions:
-      contents: read
-    needs: [select, release, proof]
-    if: needs.proof.result == 'success' && needs.proof.outputs.result == 'passed'
-    uses: ./.github/workflows/real-call-proof.yml
-    with:
-      environment: production
-      proofs: camera-share call-artifacts
+      proofs: leave-own-sfu camera-share call-artifacts
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      scorecard_label: chalk-sfu
     secrets: inherit
   scorecard:
     # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
@@ -223,10 +205,9 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave
+      proofs: leave-own-sfu
+      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
       scorecard_label: rerun
     secrets: inherit
   scorecard-final:
@@ -255,10 +236,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json
   rollback:
-    needs: [select, approve, release, proof, proof-chalk-sfu]
+    needs: [select, approve, release, proof]
     if: >-
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
-      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed' || needs.proof-chalk-sfu.result != 'success' || needs.proof-chalk-sfu.outputs.result != 'passed')
+      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).previous.target_sha }}
@@ -276,10 +257,10 @@ jobs:
       pages_rollback_id: ${{ needs.approve.outputs.pages_deployment_id }}
     secrets: inherit
   rollback-npm:
-    needs: [select, approve, release, proof, proof-chalk-sfu, rollback]
+    needs: [select, approve, release, proof, rollback]
     if: >-
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&
-      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed' || needs.proof-chalk-sfu.result != 'success' || needs.proof-chalk-sfu.outputs.result != 'passed')
+      (needs.release.result != 'success' || needs.proof.result != 'success' || needs.proof.outputs.result != 'passed')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -303,7 +284,7 @@ jobs:
           PREVIOUS_NPM_LATEST: ${{ needs.approve.outputs.npm_latest }}
         run: python3 scripts/releases/npm_dist_tags.py restore
   result:
-    needs: [select, approve, release, proof, proof-chalk-sfu, rollback, rollback-npm]
+    needs: [select, approve, release, proof, rollback, rollback-npm]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -311,7 +292,7 @@ jobs:
         if: always() && needs.approve.result == 'success' && needs.release.result != 'skipped'
         env:
           DEPLOY_RESULT: ${{ needs.release.result }}
-          PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result == 'passed' && needs.proof-chalk-sfu.result == 'success' && needs.proof-chalk-sfu.outputs.result == 'passed' && 'passed' || 'failed' }}
+          PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
           ROLLBACK_RESULT: ${{ needs.rollback.result }}
           NPM_ROLLBACK_RESULT: ${{ needs.rollback-npm.result }}
           SELECTION: ${{ needs.select.outputs.selection }}
