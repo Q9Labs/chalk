@@ -90,23 +90,36 @@ try {
     };
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
-    await openPicker();
-    await pickerRow("Blur").click();
-    if (phone) { await page.waitForTimeout(3000); console.log("DEBUG", JSON.stringify(await page.locator("[role=dialog]").first().innerText({ timeout: 2000 }).catch((e) => String(e).slice(0, 60))), JSON.stringify(await page.locator("[role=radio]").evaluateAll((els) => els.map((e) => e.textContent + ":" + e.getAttribute("aria-checked") + ":" + e.disabled)))); }
+    // The menu stays open while an effect loads; the phone sheet covers the call, so it closes after each choice.
+    const choose = async (name) => {
+      if (phone) await openPicker();
+      await pickerRow(name).click();
+    };
+    const closePicker = async () => {
+      if (phone) {
+        await page.keyboard.press("Escape");
+        await page.getByRole("dialog").waitFor({ state: "hidden" });
+      }
+    };
+    if (!phone) await openPicker();
+    await choose("Blur");
+    if (phone) await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
+    await closePicker();
     const blurred = await waitForProcessedPixels("blur", [original]);
-    await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
-    await page.keyboard.press("Escape");
-    await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
-    await openPicker();
-    // Stop measuring the previous effect while the image preset loads on software WebGL.
-    await pickerRow("None").click();
-    await waitForProcessedPixels("none", [blurred]);
-    await pickerRow("Office").click();
-    await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
-    if (phone) {
+    if (!phone) {
+      await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
       await page.keyboard.press("Escape");
-      await page.getByRole("dialog").waitFor({ state: "hidden" });
-    } else {
+    }
+    await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
+    if (!phone) await openPicker();
+    // Stop measuring the previous effect while the image preset loads on software WebGL.
+    await choose("None");
+    await closePicker();
+    await waitForProcessedPixels("none", [blurred]);
+    await choose("Office");
+    await closePicker();
+    await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
+    if (!phone) {
       await page.getByRole("button", { name: "Select camera", exact: true }).click();
       await page.getByRole("menu").waitFor({ state: "hidden" });
     }
