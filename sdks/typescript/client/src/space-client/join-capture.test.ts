@@ -126,7 +126,7 @@ describe("join with unavailable capture devices", () => {
     client.on("error", error);
     try {
       await client.join();
-      expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ audio: true, video: true });
+      expect(getUserMedia).toHaveBeenCalledExactlyOnceWith({ audio: true, video: true }, expect.any(AbortSignal));
       expect(error).not.toHaveBeenCalled();
     } finally {
       client.dispose();
@@ -318,7 +318,7 @@ describe("join with media on", () => {
       await left;
       getUserMedia.mockClear();
       await client.join();
-      expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything() }));
+      expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: expect.anything() }), expect.any(AbortSignal));
     } finally {
       client.dispose();
     }
