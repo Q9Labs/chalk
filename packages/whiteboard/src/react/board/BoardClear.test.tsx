@@ -34,10 +34,6 @@ afterEach(async () => {
 
 const button = (name: string) => [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === name);
 const press = (name: string) => act(async () => void button(name)?.click());
-const opened = async () => {
-  await vi.waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBeNull());
-  await act(async () => undefined);
-};
 
 it("asks first, and cancelling leaves the board alone", async () => {
   const engine = { clearWithUndo: vi.fn(async () => async () => undefined) };
@@ -45,7 +41,6 @@ it("asks first, and cancelling leaves the board alone", async () => {
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
 
   await press("Open clear");
-  await opened();
   const dialog = document.querySelector('[role="alertdialog"]');
   expect(dialog?.textContent).toContain("Clear the board for everyone?");
   expect(dialog?.textContent).toContain("Everything on it goes for the 3 people here. You can undo right after.");
@@ -63,7 +58,6 @@ it("clears after the confirm and keeps the Undo toast, which puts the drawing ba
   await act(async () => root.render(<Host engine={engine} toast={toast} people={2} />));
 
   await press("Open clear");
-  await opened();
   await press("Clear board");
   expect(engine.clearWithUndo).toHaveBeenCalledTimes(1);
   expect(document.querySelector('[role="alertdialog"]')).toBeNull();
@@ -82,7 +76,6 @@ it("says so plainly when the clear fails, and offers no Undo", async () => {
   await act(async () => root.render(<Host engine={engine} toast={toast} people={1} />));
 
   await press("Open clear");
-  await opened();
   expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Everything on it goes. You can undo right after.");
   await press("Clear board");
   expect(toast).toHaveBeenCalledWith({ type: "error", message: "Could not clear the board. Try again." });
@@ -92,7 +85,6 @@ it("does not promise an Undo to someone who cannot draw", async () => {
   const engine = { clearWithUndo: vi.fn(async () => async () => undefined) };
   await act(async () => root.render(<Host engine={engine} toast={vi.fn()} people={3} canDraw={false} />));
   await press("Open clear");
-  await opened();
   const body = document.querySelector('[role="alertdialog"]')?.textContent;
   expect(body).toContain("Everything on it goes for the 3 people here.");
   expect(body).not.toContain("undo");
