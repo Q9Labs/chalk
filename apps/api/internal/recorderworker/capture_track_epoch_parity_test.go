@@ -49,8 +49,8 @@ func TestCaptureBindWatcherKeepsFirstPlanEpochForLateTrack(t *testing.T) {
 	writer.attempt.config.InitialPlanWait = time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	bound, _, plan, stopped, err := writer.attempt.bindTracksWhileWatchingPlans(ctx, writer, first,
-		recordercapture.Snapshot{PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{binding}}, planEvents, nil, nil)
+	bound, plan, stopped, err := writer.attempt.bindTracksWhileWatchingPlans(ctx, writer, first,
+		recordercapture.Snapshot{PlanRevision: 1, Tracks: []captureplane.PulledCaptureTrack{binding}}, planEvents, nil, nil, newLateTrackWatch(ctx, writer.attempt))
 	if err != nil || stopped || plan.Revision() != 2 || binds != 2 {
 		t.Fatalf("bind result: revision=%d stopped=%v binds=%d error=%v", plan.Revision(), stopped, binds, err)
 	}
