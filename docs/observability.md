@@ -556,9 +556,13 @@ The `no_capacity` reason stays readable on bindings an earlier release wrote. Th
 committed Episodes: placement runs inside the creation transaction, so a request that
 later rolls back (for example an Episode already live in the Space) still counts once.
 Read it as a rate of placement attempts by outcome. The binding frozen on a committed
-Episode is the record of what was kept. No production alert reads this counter, because the
-Axiom monitors read logs and no log line records `no_capacity` or an overflow to Cloudflare; only a
-refusal with overflow off is logged (below), and it counts toward the API 5xx alert.
+Episode is the record of what was kept. Every overflow decision also writes one API log line
+at warn level with `event` `chalk_sfu.overflow`, the `provider` the Episode went to (`cf_sfu`
+when it moved to Cloudflare, `chalk_sfu` when overflow is off and it was refused) and the
+bounded `placement_reason`. The line carries no Tenant, Space, Episode or node identity, adds
+no journey-ledger event, and like the counter it counts decisions, so a request whose creation
+rolls back still logs once. Axiom monitors read this line, not the counter. A refusal with
+overflow off also counts toward the API 5xx alert.
 
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
 no node can take is then refused with `503 media.unavailable`. It is counted under its
