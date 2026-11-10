@@ -2,6 +2,7 @@ import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
+import type { VideoGroup, VideoState } from "./recording";
 
 const id = z.uuid();
 export const spaceNameMaxCodePoints = ChalkCodePointLimits["CreateSpaceRequest.name"];
@@ -31,6 +32,16 @@ const spaceIds = (most: number) =>
 export const homeStatusQuery = z.union([z.strictObject({ home: z.literal("1"), spaceIds: spaceIds(HOME_STATUS_ROWS).default([]) }), z.strictObject({ home: z.undefined().optional(), spaceIds: spaceIds(30) })]);
 export type HomeStatusQuery = z.infer<typeof homeStatusQuery>;
 export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.string().max(1024).optional() });
+const instant = z.iso.datetime({ offset: true });
+const listFilters = { cursor: z.string().max(1024).optional(), q: z.string().trim().max(200).optional(), from: instant.optional(), to: instant.optional(), spaceId: id.optional() };
+export const sessionShows = ["all", "recording", "transcript", "none"] as const;
+export const recordingStatuses = ["ready", "processing", "prepare", "failed", "expired"] as const;
+/** Past sessions across every call. `show` narrows to what a session kept. */
+export const sessionsQuery = z.strictObject({ ...listFilters, show: z.enum(sessionShows).optional() });
+/** Recorded sessions across every call. `status` is the state of the video. */
+export const recordingsQuery = z.strictObject({ ...listFilters, status: z.enum(recordingStatuses).optional() });
+export type SessionsQuery = z.infer<typeof sessionsQuery>;
+export type RecordingsQuery = z.infer<typeof recordingsQuery>;
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 /** The one-time handle the API puts in the consent link. It is a secret until the request is decided. */
 const consentHandle = z.string().regex(/^chalk_oar_[A-Za-z0-9_-]{20,100}$/);
@@ -173,6 +184,28 @@ export type CallPageDTO = {
   knocks: { handle: string; name: string; requestedAt: string; expiresAt: string; state: string; decisionState: z.infer<typeof knockDecisionState>; decisionAction: z.infer<typeof knockDecisionAction> }[];
 };
 export type PastSessionDTO = { callName: string; episode: EpisodeDTO; attendance: AttendanceDTO; recordings: RecordingDTO[]; nextCursor: string | null };
+/** One past session of one call, with what it kept. `recording` is the session's newest completed recording, else its newest. */
+export type SessionRowDTO = {
+  spaceId: string;
+  callName: string;
+  episode: EpisodeDTO;
+  participantCount: number;
+  recording: { id: string; video: VideoState; failureMessage: string | null } | null;
+  transcript: "none" | "ready" | "processing";
+  /** The recording's transcripts that still exist, which is what deleting its transcript removes. */
+  transcriptIds: string[];
+};
+/** Counts over every session the filters match, not only the page. */
+export type SessionTotalsDTO = { sessions: number; seconds: number; recorded: number; transcripts: number; video: Record<VideoGroup, number> };
+export type SessionListDTO = {
+  rows: SessionRowDTO[];
+  totals: SessionTotalsDTO;
+  /** The calls with sessions in the range, most recent first, for the Call filter. */
+  calls: { id: string; name: string }[];
+  nextCursor: string | null;
+  /** More calls or sessions matched than one answer reads, so the oldest are left out. */
+  truncated: boolean;
+};
 export type AllowedWebsitesDTO = { allowedWebsites: readonly string[] };
 export type TranscriptLanguageSettingsDTO = { transcriptLanguage: TranscriptLanguage };
 export type RecordingRenderSettingsDTO = { recordingRenderMode: Tenant["recording_render_mode"] };
