@@ -131,7 +131,23 @@ names one wins:
 
 The guards below the order still apply: a Space outside the allowlist, an SDK that
 cannot run the own SFU, and a pool with no room all send the Episode to
-Cloudflare, and an Episode that already has a binding keeps it.
+Cloudflare, and an Episode that already has a binding keeps it. A Tenant on its own
+Cloudflare credentials, or with media disabled, never gets the own SFU, whoever chose
+it. If such a Tenant switches after an Episode started, that Episode keeps resolving
+from its binding; only the next Episode starts on Cloudflare.
+
+One rule covers a rollback: a stored choice is authoritative only while the legacy
+column it was written beside still holds the same value. The previous release does not
+read `media_plane_setting` or `default_media_plane_approved`, and it keeps writing
+`spaces.media_plane` and `tenants.default_media_plane`. A Space's setting is the
+value an operator wrote only while `media_plane` is unchanged; after a rollback and a
+redeploy, a `media_plane` the older release wrote is the Space's choice (`chalk_sfu` or
+`cf_sfu`; anything else means inherit). A Tenant default is approved only while it
+equals the value the operator approved, so a default the older release wrote needs
+an operator again. An operator who writes the same value the older release left is
+a fresh write. Proof runs name no plane in Create Space: the deployment fills it
+(`CHALK_NEW_SPACE_MEDIA_PLANE`), the operator sets the Tenant default, or
+`CHALK_CANARY_SPACE_ID` names a Space moved with `media-settings`.
 
 Only an operator sets `chalk_sfu`. The public API refuses it with 403
 `space.media_plane_not_permitted` or `tenant.media_plane_not_permitted`, and

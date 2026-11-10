@@ -106,7 +106,10 @@ The public API never accepts `chalk_sfu` in a request; only an operator sets it,
 with `cmd/media-settings` (see `infrastructure/sfu/README.md`). A Space whose
 request names no plane gets `CHALK_NEW_SPACE_MEDIA_PLANE` when its Tenant can
 serve it. A Tenant's `default_media_plane` counts only when it names a known
-plane, and `chalk_sfu` counts only when an operator wrote it. Responses carry `media_plane_setting` (null
+plane, and `chalk_sfu` counts only when an operator wrote it. A stored choice is
+authoritative only while the legacy column it was written beside (`media_plane`,
+`default_media_plane`) still equals it, so a write by the previous release after a
+rollback wins; a live Episode always resolves from its stored binding. Responses carry `media_plane_setting` (null
 means inherit) and the read-only `effective_media_plane`. Spaces that
 public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
 instead, so that setting moves them separately.

@@ -35,7 +35,8 @@ insert into spaces (
     tenant_id,
     slug,
     media_plane,
-    media_plane_setting,
+    media_plane_setting_written,
+    media_plane_setting_against,
     metadata,
     recurring_policy,
     admission_policy,
@@ -54,6 +55,7 @@ select
     sqlc.arg(slug),
     sqlc.arg(media_plane),
     sqlc.narg(media_plane_setting)::text,
+    case when sqlc.narg(media_plane_setting)::text is null then null else btrim(sqlc.arg(media_plane)) end,
     sqlc.narg(metadata),
     sqlc.narg(recurring_policy),
     sqlc.narg(admission_policy),
@@ -126,6 +128,8 @@ select
     inserted.tenant_id,
     inserted.slug,
     inserted.media_plane,
+    inserted.media_plane_setting_written,
+    inserted.media_plane_setting_against,
     inserted.media_plane_setting,
     inserted.metadata,
     inserted.recurring_policy,
@@ -201,6 +205,8 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     media_plane_setting,
     metadata,
     recurring_policy,
@@ -227,6 +233,8 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     media_plane_setting,
     metadata,
     recurring_policy,
@@ -274,9 +282,15 @@ set
         when sqlc.arg(media_plane_set)::boolean then sqlc.arg(media_plane)::text
         else media_plane
     end,
-    media_plane_setting = case
+    media_plane_setting_written = case
         when sqlc.arg(media_plane_setting_set)::boolean then sqlc.narg(media_plane_setting)::text
-        else media_plane_setting
+        else media_plane_setting_written
+    end,
+    media_plane_setting_against = case
+        when sqlc.arg(media_plane_setting_set)::boolean then
+            case when sqlc.narg(media_plane_setting)::text is null then null
+            else btrim(case when sqlc.arg(media_plane_set)::boolean then sqlc.arg(media_plane)::text else media_plane end) end
+        else media_plane_setting_against
     end,
     metadata = case
         when sqlc.arg(metadata_set)::boolean then sqlc.narg(metadata)::jsonb
@@ -321,6 +335,8 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     media_plane_setting,
     metadata,
     recurring_policy,
@@ -349,6 +365,8 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     media_plane_setting,
     metadata,
     recurring_policy,
@@ -377,6 +395,8 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     media_plane_setting,
     metadata,
     recurring_policy,
@@ -633,7 +653,8 @@ returning
 -- while the Space still has no setting and still stores that plane, and the Tenant can still serve
 -- the own SFU, so a choice made after the caller looked is never overwritten.
 update spaces
-set media_plane_setting = sqlc.arg(plane)::text
+set media_plane_setting_written = sqlc.arg(plane)::text,
+    media_plane_setting_against = sqlc.arg(plane)::text
 where spaces.tenant_id = sqlc.arg(tenant_id)
   and spaces.id = sqlc.arg(id)
   and spaces.media_plane_setting is null

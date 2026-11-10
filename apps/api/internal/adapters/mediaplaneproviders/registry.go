@@ -272,6 +272,14 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantChalkManaged
 		return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
 	case providercontracts.ModeTenantManaged:
+		if pin == spaces.MediaPlaneProviderChalkSFU {
+			// The Tenant switched to its own Cloudflare credentials after this Episode
+			// started on the own SFU. The binding decides where the Episode runs; the
+			// document only describes the next one.
+			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
+			resolution.Mode = providercontracts.ModeChalkManaged
+			return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
+		}
 		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantManaged
 		providerConfig, err := r.tenantManagedConfig(providerName, providerConfig)
 		if err != nil {

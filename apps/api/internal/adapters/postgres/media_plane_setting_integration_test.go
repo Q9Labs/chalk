@@ -39,13 +39,13 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 	if space, err = utilities.NewID(); err != nil {
 		t.Fatal(err)
 	}
-	mustExec(t, pool, `insert into tenants (id,name,default_media_plane,default_media_plane_approved) values ($1,'Plane setting proof',$2,$2::text is not null)`, tenant.Bytes(), tenantDefault)
+	mustExec(t, pool, `insert into tenants (id,name,default_media_plane,default_media_plane_approved_value) values ($1,'Plane setting proof',$2,$2)`, tenant.Bytes(), tenantDefault)
 	t.Cleanup(func() {
 		for _, statement := range []string{`delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from tenants where id=$1`} {
 			mustExec(t, pool, statement, tenant.Bytes())
 		}
 	})
-	mustExec(t, pool, `insert into spaces (id,tenant_id,name,slug,media_plane,media_plane_setting) values ($1,$2,'Plane setting proof','plane-setting-proof',$3,$4)`, space.Bytes(), tenant.Bytes(), stored, setting)
+	mustExec(t, pool, `insert into spaces (id,tenant_id,name,slug,media_plane,media_plane_setting_written,media_plane_setting_against) values ($1,$2,'Plane setting proof','plane-setting-proof',$3,$4,case when $4::text is null then null else $3::text end)`, space.Bytes(), tenant.Bytes(), stored, setting)
 	return tenant, space
 }
 
@@ -203,7 +203,7 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	}
 
 	// The database refuses a value that is not a plane.
-	if _, err := pool.Exec(t.Context(), `update spaces set media_plane_setting='bogus' where id=$1`, space.Bytes()); err == nil {
+	if _, err := pool.Exec(t.Context(), `update spaces set media_plane_setting_written='bogus' where id=$1`, space.Bytes()); err == nil {
 		t.Fatal("the check constraint accepted an unknown plane")
 	}
 }
@@ -294,5 +294,110 @@ func TestAdoptingAStoredPlaneRechecksEverythingInTheWrite(t *testing.T) {
 	mustExec(t, pool, `update tenants set media_plane_provider_config='{"mode":"chalk_managed"}'::jsonb where id=$1`, tenant.Bytes())
 	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || !wrote {
 		t.Fatalf("Chalk-managed Tenant: wrote=%v err=%v", wrote, err)
+	}
+}
+
+// The previous release does not know the setting and keeps writing media_plane. After a
+// rollback and a redeploy its write must win over a setting written before it, and a Space
+// with no setting must stay inheriting.
+func TestAnOlderReleaseWritingMediaPlaneWinsOverTheStoredSetting(t *testing.T) {
+	pool := settingsPool(t)
+	repository := NewSpaceRepository(sqlc.New(pool), pool)
+	own, cloudflare := "chalk_sfu", "cf_sfu"
+	setting := func(space utilities.ID) *string {
+		t.Helper()
+		var got *string
+		if err := pool.QueryRow(t.Context(), `select media_plane_setting from spaces where id=$1`, space.Bytes()).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	olderRelease := func(space utilities.ID, plane string) {
+		t.Helper()
+		mustExec(t, pool, `update spaces set media_plane=$2, updated_at=now() where id=$1`, space.Bytes(), plane)
+	}
+
+	tenant, space := seedSettingsSpace(t, pool, nil, &own, "chalk_sfu")
+	if got := setting(space); got == nil || *got != own {
+		t.Fatalf("operator setting = %v, want chalk_sfu", got)
+	}
+	olderRelease(space, "cf_sfu")
+	if got := setting(space); got == nil || *got != cloudflare {
+		t.Fatalf("after the older release wrote cf_sfu: setting = %v, want cf_sfu", got)
+	}
+	if read, err := repository.GetSpace(t.Context(), tenant, space); err != nil || read.MediaPlaneSetting == nil || *read.MediaPlaneSetting != spaces.MediaPlaneProviderCloudflareSFU {
+		t.Fatalf("the application read = %v, %v, want cf_sfu", read.MediaPlaneSetting, err)
+	}
+	olderRelease(space, "")
+	if got := setting(space); got != nil {
+		t.Fatalf("after the older release cleared media_plane: setting = %v, want inherit", got)
+	}
+
+	// The operator's next write is a fresh choice again.
+	chalk := spaces.MediaPlaneProviderChalkSFU
+	if _, err := repository.UpdateSpace(t.Context(), tenant, space, spaces.UpdateSpaceInput{
+		MediaPlane:        utilities.OptionalString{Set: true, Value: &own},
+		MediaPlaneSetting: spaces.OptionalMediaPlaneSetting{Set: true, Value: &chalk},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := setting(space); got == nil || *got != own {
+		t.Fatalf("after a new operator write: setting = %v, want chalk_sfu", got)
+	}
+
+	// A Space that never had a setting stays inheriting, whatever the older release stores.
+	_, inheriting := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	olderRelease(inheriting, "cf_sfu")
+	if got := setting(inheriting); got != nil {
+		t.Fatalf("a Space with no setting: setting = %v, want inherit", got)
+	}
+}
+
+// An operator approves one value. A later write of the default from the previous release,
+// which knows nothing of approvals, leaves the new value unapproved.
+func TestALegacyWriteOfTheTenantDefaultDoesNotInheritTheApproval(t *testing.T) {
+	pool := settingsPool(t)
+	repository := NewTenantRepository(sqlc.New(pool))
+	cloudflare, own := "cf_sfu", "chalk_sfu"
+	tenant, _ := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	mustExec(t, pool, `insert into tenant_artifact_policies (tenant_id) values ($1) on conflict do nothing`, tenant.Bytes())
+	t.Cleanup(func() { mustExec(t, pool, `delete from tenant_artifact_policies where tenant_id=$1`, tenant.Bytes()) })
+	approved := func() bool {
+		t.Helper()
+		var got bool
+		if err := pool.QueryRow(t.Context(), `select default_media_plane_approved from tenants where id=$1`, tenant.Bytes()).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	operatorWrites := func(plane *string) {
+		t.Helper()
+		if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{
+			DefaultMediaPlane: utilities.OptionalString{Set: true, Value: plane}, DefaultMediaPlaneApproved: plane != nil,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	operatorWrites(&cloudflare)
+	if !approved() {
+		t.Fatal("the operator's cf_sfu is not approved")
+	}
+	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), own)
+	if approved() {
+		t.Fatal("a legacy write of chalk_sfu inherited the approval of cf_sfu")
+	}
+	operatorWrites(&own)
+	if !approved() {
+		t.Fatal("the operator's chalk_sfu is not approved")
+	}
+	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), cloudflare)
+	mustExec(t, pool, `update tenants set default_media_plane=$2 where id=$1`, tenant.Bytes(), "bogus")
+	if approved() {
+		t.Fatal("a legacy write kept an approval")
+	}
+	operatorWrites(nil)
+	if approved() {
+		t.Fatal("a cleared default is approved")
 	}
 }

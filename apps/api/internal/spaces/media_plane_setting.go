@@ -44,6 +44,16 @@ func tenantDefault(tenant tenants.Tenant) *MediaPlaneProvider {
 // inherits, because dual-writes store the platform default for those. This bridge goes
 // with the allowlist in the next release.
 func SelectPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
+	selected, err := chosenPlane(platform, tenant, space)
+	if err == nil && selected == MediaPlaneProviderChalkSFU && !tenantRunsEveryProvider(tenant) {
+		// A Tenant on its own Cloudflare credentials cannot reach the own SFU, whoever chose
+		// it earlier. Its next Episode starts on Cloudflare; its live Episodes keep their binding.
+		return MediaPlaneProviderCloudflareSFU, nil
+	}
+	return selected, err
+}
+
+func chosenPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
 	if space.MediaPlaneSetting != nil {
 		return *space.MediaPlaneSetting, nil
 	}

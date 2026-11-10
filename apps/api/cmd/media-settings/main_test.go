@@ -198,7 +198,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 
 	// A value no operator approved never selects the own SFU, and an operator can repair one
 	// that names no plane at all, with the raw value in the audit line.
-	exec(`update tenants set default_media_plane='chalk_sfu', default_media_plane_approved=false where id=$1`, tenantID.Bytes())
+	exec(`update tenants set default_media_plane='chalk_sfu', default_media_plane_approved_value=null where id=$1`, tenantID.Bytes())
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
 		t.Fatalf("an unapproved legacy chalk_sfu default selected %v", got[0]["effective_plane"])
 	}
@@ -211,9 +211,9 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	}
 
 	// The backfill writes only a Space that still qualifies when the write runs.
-	exec(`update spaces set media_plane_setting=null, media_plane='chalk_sfu' where id=$1`, listed.Bytes())
+	exec(`update spaces set media_plane_setting_written=null, media_plane_setting_against=null, media_plane='chalk_sfu' where id=$1`, listed.Bytes())
 	settings := newSettings(pool, spaces.PlanePolicy{Platform: spaces.MediaPlaneProviderCloudflareSFU}, &bytes.Buffer{})
-	exec(`update spaces set media_plane_setting='cf_sfu', media_plane='cf_sfu' where id=$1`, listed.Bytes())
+	exec(`update spaces set media_plane_setting_written='cf_sfu', media_plane_setting_against='cf_sfu', media_plane='cf_sfu' where id=$1`, listed.Bytes())
 	if wrote, err := settings.operator.AdoptStoredChalkSFU(t.Context(), tenantID, listed, false); err != nil || wrote {
 		t.Fatalf("a Space that pinned Cloudflare after it was listed: wrote=%v err=%v", wrote, err)
 	}

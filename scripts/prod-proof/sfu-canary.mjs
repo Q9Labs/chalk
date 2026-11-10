@@ -73,7 +73,7 @@ async function microphoneState(page) {
 // openCall records the Episode's owner in `owned` before any guest launches, so a failed setup can still end it.
 async function openCall(run, receiver, owned) {
   const space = process.env.CHALK_CANARY_SPACE_ID ? await run.apiRequest("GET", `${run.tenantPath}/spaces/${process.env.CHALK_CANARY_SPACE_ID}`) : await createSpace(run);
-  check(space.media_plane === mediaPlane, `Space uses ${space.media_plane}, not ${mediaPlane}`);
+  check((space.effective_media_plane ?? space.media_plane) === mediaPlane, `Space uses ${space.effective_media_plane ?? space.media_plane}, not ${mediaPlane}`);
   await save(`${run.directory}/space.json`, space);
   const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId } });

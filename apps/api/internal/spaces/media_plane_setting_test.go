@@ -65,6 +65,27 @@ func TestEffectivePlanePrecedence(t *testing.T) {
 	}
 }
 
+// A Tenant on its own Cloudflare credentials cannot reach the own SFU, so whatever chose the
+// own SFU earlier, its next Episode starts on Cloudflare.
+func TestATenantOnItsOwnCredentialsNeverSelectsTheOwnSFU(t *testing.T) {
+	cf, own := MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU
+	policy := PlanePolicy{Platform: cf, Allowed: allowAll(t)}
+	ownText := string(own)
+	tenant := tenants.Tenant{
+		DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true,
+		MediaPlaneProviderConfig: []byte(`{"provider":"cf_sfu","mode":"tenant_managed","cloudflare":{"sfu":{"app_id":"a","app_secret":"b"}}}`),
+	}
+	for name, space := range map[string]Space{
+		"tenant default": {MediaPlane: "cf_sfu"},
+		"space setting":  {MediaPlane: "chalk_sfu", MediaPlaneSetting: planePtr(own)},
+		"stored choice":  {MediaPlane: "chalk_sfu"},
+	} {
+		if got, err := policy.Effective(tenant, space); err != nil || got != cf {
+			t.Errorf("%s: got %q, %v, want Cloudflare", name, got, err)
+		}
+	}
+}
+
 func TestPublicWritePlaneIsThePlatformDefault(t *testing.T) {
 	if got := (PlanePolicy{}).PublicWritePlane(); got != MediaPlaneProviderCloudflareSFU {
 		t.Errorf("no platform default: got %q", got)

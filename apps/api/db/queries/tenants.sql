@@ -147,9 +147,10 @@ set
         when sqlc.arg(default_media_plane_set)::boolean then sqlc.narg(default_media_plane)::text
         else default_media_plane
     end,
-    default_media_plane_approved = case
-        when sqlc.arg(default_media_plane_set)::boolean then sqlc.arg(default_media_plane_approved)::boolean
-        else default_media_plane_approved
+    default_media_plane_approved_value = case
+        when sqlc.arg(default_media_plane_set)::boolean then
+            case when sqlc.arg(default_media_plane_approved)::boolean then sqlc.narg(default_media_plane)::text else null end
+        else default_media_plane_approved_value
     end,
     media_plane_provider_config = case
         when sqlc.arg(media_plane_provider_config_set)::boolean then sqlc.narg(media_plane_provider_config)::jsonb

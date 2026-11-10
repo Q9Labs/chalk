@@ -45,7 +45,6 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: plane,
     recording_policy: policy.recording,
     transcription_policy: policy.transcription,
     default_episode_duration_seconds: 1800,
@@ -53,6 +52,9 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
+  // The public API refuses a request that names the own SFU, so the proof names no plane and the
+  // deployment (or the Tenant an operator configured) decides. A mismatch is a setup error.
+  check((space.effective_media_plane ?? space.media_plane) === plane, `A new Space gets ${space.effective_media_plane ?? space.media_plane}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or CHALK_CANARY_SPACE_ID for a Space moved with media-settings)`);
   check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
   check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
   await save(`${run.directory}/space.json`, space);

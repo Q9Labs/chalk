@@ -403,9 +403,10 @@ set
         when $5::boolean then $6::text
         else default_media_plane
     end,
-    default_media_plane_approved = case
-        when $5::boolean then $7::boolean
-        else default_media_plane_approved
+    default_media_plane_approved_value = case
+        when $5::boolean then
+            case when $7::boolean then $6::text else null end
+        else default_media_plane_approved_value
     end,
     media_plane_provider_config = case
         when $8::boolean then $9::jsonb

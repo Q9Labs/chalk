@@ -989,6 +989,8 @@ type Space struct {
 	TenantID                      pgtype.UUID        `json:"tenant_id"`
 	Slug                          string             `json:"slug"`
 	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
 	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
 	Metadata                      []byte             `json:"metadata"`
 	RecurringPolicy               []byte             `json:"recurring_policy"`
@@ -1537,22 +1539,23 @@ type SyncWhiteboardScene struct {
 }
 
 type Tenant struct {
-	RecordingRenderMode       string             `json:"recording_render_mode"`
-	ID                        pgtype.UUID        `json:"id"`
-	Name                      string             `json:"name"`
-	DefaultRegion             pgtype.Text        `json:"default_region"`
-	DefaultMediaPlane         pgtype.Text        `json:"default_media_plane"`
-	DefaultMediaPlaneApproved bool               `json:"default_media_plane_approved"`
-	MediaPlaneProviderConfig  []byte             `json:"media_plane_provider_config"`
-	AiProviderConfig          []byte             `json:"ai_provider_config"`
-	StorageProviderConfig     []byte             `json:"storage_provider_config"`
-	CorsAllowedOrigins        []string           `json:"cors_allowed_origins"`
-	LogoKey                   pgtype.Text        `json:"logo_key"`
-	Website                   pgtype.Text        `json:"website"`
-	UpdatedAt                 pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt                 pgtype.Timestamptz `json:"created_at"`
-	CreatedByServiceID        pgtype.Text        `json:"created_by_service_id"`
-	ExternalID                pgtype.Text        `json:"external_id"`
+	RecordingRenderMode            string             `json:"recording_render_mode"`
+	ID                             pgtype.UUID        `json:"id"`
+	Name                           string             `json:"name"`
+	DefaultRegion                  pgtype.Text        `json:"default_region"`
+	DefaultMediaPlane              pgtype.Text        `json:"default_media_plane"`
+	DefaultMediaPlaneApprovedValue pgtype.Text        `json:"default_media_plane_approved_value"`
+	DefaultMediaPlaneApproved      bool               `json:"default_media_plane_approved"`
+	MediaPlaneProviderConfig       []byte             `json:"media_plane_provider_config"`
+	AiProviderConfig               []byte             `json:"ai_provider_config"`
+	StorageProviderConfig          []byte             `json:"storage_provider_config"`
+	CorsAllowedOrigins             []string           `json:"cors_allowed_origins"`
+	LogoKey                        pgtype.Text        `json:"logo_key"`
+	Website                        pgtype.Text        `json:"website"`
+	UpdatedAt                      pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt                      pgtype.Timestamptz `json:"created_at"`
+	CreatedByServiceID             pgtype.Text        `json:"created_by_service_id"`
+	ExternalID                     pgtype.Text        `json:"external_id"`
 }
 
 type TenantArtifactPolicy struct {
