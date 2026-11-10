@@ -1,5 +1,5 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
-import { classifyProviderStatus, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
+import { classifyProviderStatus, openRouterReason, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
 import { prepareSpeechAudio } from "./speech-audio.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
 
@@ -110,8 +110,8 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     try {
       const response = await this.options.fetch(`https://openrouter.ai/api/v1/${path}`, { method: "POST", headers: { authorization: `Bearer ${this.options.token}`, "content-type": "application/json" }, body: JSON.stringify({ ...body, provider: { zdr: true, data_collection: "deny" } }), signal });
       if (!response.ok) {
-        await response.body?.cancel();
-        throw new ProviderError("OpenRouter request failed", classifyProviderStatus(response.status, "openrouter"), { status: response.status });
+        const providerCode = await openRouterReason(response);
+        throw new ProviderError("OpenRouter request failed", classifyProviderStatus(response.status, "openrouter"), { status: response.status, ...(providerCode === undefined ? {} : { providerCode }) });
       }
       return response;
     } catch (error) {

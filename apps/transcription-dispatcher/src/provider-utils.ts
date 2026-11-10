@@ -234,6 +234,19 @@ export function classifyProviderStatus(status: number, provider: "deepinfra" | "
   return "nonretryable";
 }
 
+// OpenRouter names why it refused a request in error.metadata.reason (for example in_flight_budget_exhausted). Only a short snake_case word is kept, so the body's free text never reaches a log.
+export async function openRouterReason(response: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = parseJson(await readBoundedBody(response, 4096));
+    if (!body || typeof body !== "object" || !("error" in body) || !body.error || typeof body.error !== "object" || !("metadata" in body.error)) return undefined;
+    const metadata = body.error.metadata;
+    if (!metadata || typeof metadata !== "object" || !("reason" in metadata)) return undefined;
+    return typeof metadata.reason === "string" && /^[a-z][a-z_]{0,63}$/.test(metadata.reason) ? metadata.reason : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function errorCodeFromBody(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const row = value as Record<string, unknown>;

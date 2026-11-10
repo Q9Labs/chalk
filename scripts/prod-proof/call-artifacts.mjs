@@ -7,7 +7,7 @@ import { availableSource, createEpisode, createSpace } from "./proofs.mjs";
 import { recordingEvidence, recordingFailures, recordingSignals } from "./recording-evidence.mjs";
 import { recorderTracks } from "./recorder-tracks.mjs";
 import { trackVerdicts } from "./track-verdicts.mjs";
-import { check, mediaPlane, save, waitFor } from "./runtime.mjs";
+import { measured, mediaPlane, save, waitFor } from "./runtime.mjs";
 
 const automatic = { recording: "automatic", transcription: "automatic" };
 /** CHALK_PROOF_TRANSCRIBE=false records the call without paying for a Transcript: the Space asks for one on demand only, and the Transcript check is skipped. */
@@ -38,7 +38,7 @@ const keywords = [
 /** Whether the automatic Capture is recording; a failed one throws with the failure code the SDK reports. */
 export function captureReady(current) {
   if (!current) return false;
-  check(current.status !== "failed", `Capture failed before readiness: ${current.failureCode ?? "no failure code"}`);
+  measured(current.status !== "failed", `Capture failed before readiness: ${current.failureCode ?? "no failure code"}`);
   return current.status === "recording";
 }
 
@@ -97,7 +97,7 @@ export async function captureCall(run, receiver) {
   run.recordingId = listed.id;
   const recording = await availableSource(run);
   const wanted = transcribes() ? "automatic" : "on_demand";
-  check(recording.transcription_policy === wanted, `Recording effective transcription policy is not ${wanted}`);
+  measured(recording.transcription_policy === wanted, `Recording effective transcription policy is not ${wanted}`);
   return { script, recordingId: run.recordingId, participants: guests.participants };
 }
 
@@ -106,7 +106,7 @@ async function transcriptText(run, transcriptId) {
     headers: { Authorization: `Bearer ${run.apiKey}`, Origin: run.config.web_url, "User-Agent": "Chalk-Production-Proof/1.0" },
     signal: AbortSignal.timeout(30_000),
   });
-  check(response.ok, `Transcript text download failed: HTTP ${response.status}`);
+  measured(response.ok, `Transcript text download failed: HTTP ${response.status}`);
   return response.text();
 }
 
@@ -128,9 +128,9 @@ export function transcriptEvidence(text) {
 }
 
 export function checkTranscript(evidence) {
-  check(evidence.wordCount > 0, "Transcript is empty");
+  measured(evidence.wordCount > 0, "Transcript is empty");
   const silent = evidence.guests.filter((guest) => guest.heard.length === 0).map((guest) => guest.guest);
-  check(!silent.length, `Spoken words missing from Transcript for guest ${silent.join(", ")}`);
+  measured(!silent.length, `Spoken words missing from Transcript for guest ${silent.join(", ")}`);
 }
 
 async function automaticTranscript(run) {
@@ -141,7 +141,7 @@ async function automaticTranscript(run) {
       const current = value.transcripts.find((entry) => entry.status !== "deleted");
       if (!current) return false;
       await save(`${run.directory}/transcript-state.json`, current);
-      check(!["failed", "terminal_failure", "expired"].includes(current.status), `Transcript ${current.status}`);
+      measured(!["failed", "terminal_failure", "expired"].includes(current.status), `Transcript ${current.status}`);
       return ["complete", "completed"].includes(current.status) ? current : false;
     },
     600_000,
@@ -182,7 +182,7 @@ export async function callArtifactsProof(run, captured) {
     const source = await run.apiRequest("GET", `${run.tenantPath}/recordings/${run.recordingId}`);
     await save(`${run.directory}/recording.json`, source);
     failures.push(...bundleFailures(source));
-    check(!failures.length, failures.join("; "));
+    measured(!failures.length, failures.join("; "));
     return evidence;
   };
   // Run both so one failure never hides the other's evidence.

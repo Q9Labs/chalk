@@ -28,6 +28,13 @@ export class ProofError extends Error {
 export function check(condition, message, reason = "evidence-assertion") {
   if (!condition) throw new ProofError(reason, message);
 }
+// The message of a failed measured check goes to the public log, so it may hold counts, durations and fixed codes, and never free text from a service.
+export function measured(condition, message) {
+  if (condition) return;
+  const error = new ProofError("evidence-assertion", message);
+  error.measured = true;
+  throw error;
+}
 export async function waitFor(label, probe, timeoutMs = 120_000, intervalMs = 2000, signal) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -157,9 +164,9 @@ function failureReason(error, depth = 0) {
   if (["AbortError", "TimeoutError"].includes(error.name)) return "timeout";
   return nestedFailure(error, depth);
 }
-// An evidence assertion is written in this repo and holds only measured values, so its message is safe for the public log; any other error keeps its message private.
+// Only a failed measured() check prints its message; every other error keeps its message private.
 function assertionMessages(error, depth = 0) {
-  if (error?.reason === "evidence-assertion") return [error.message];
+  if (error?.measured === true) return [error.message];
   if (depth >= 3 || !(error instanceof AggregateError)) return [];
   return error.errors.flatMap((inner) => assertionMessages(inner, depth + 1));
 }
