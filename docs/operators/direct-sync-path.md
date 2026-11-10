@@ -49,6 +49,23 @@ The warm lobby socket opens before a grant exists, so it can only use the static
 
 The SDK records one `transport_path` diagnostic per use of each plane: `{ plane: "sync" | "signalling", path: "direct" | "tunnel", fellBack }`. `fellBack` is true when a door was available and the Tunnel carried the use anyway (a failed attempt, or the 10 minute memory skipping the door). A Tunnel use with no door advertised has `fellBack: false`. The records stay in the client's diagnostics (`getDiagnostics()`) and are not part of the problem report schema. The trial harness reads them to split joins into arms and to count the fallback rate.
 
+## Production
+
+The production door does not exist yet, and production keeps running on the Tunnel until it does. Nothing in this section has been done.
+
+**Prerequisites, in order.** Each needs the owner's go-ahead, because DNS and the production security group change.
+
+1. Apply the OpenTofu root in `infrastructure/managed-episode/direct-sync/opentofu/` for production. It creates the security group and the DNS record for the production door host.
+2. Install the proxy on the production managed host with `direct-sync-proxy install`, then run `direct-sync-proxy status` until it reports a valid certificate.
+3. Check from outside the VPC that TCP 443 answers on the door host, that a Sync upgrade and an SFU preflight succeed, and that every other path returns 404.
+4. Run the trial on nightly first: at least 30 joins per arm from at least 2 Pakistani ISPs, a median at least 0.5 s faster, and a fallback rate of at most 2%.
+5. Plan for abuse: the door discloses the host's public address, and the bounds stop one noisy client, not a distributed flood.
+6. Set `CHALK_API_DIRECT_URL` in the production API environment and redeploy the API. Grants then advertise the door, and the SDK uses it for SFU signalling and Sync with no web build change.
+
+`scripts/releases/web.py` refuses a static `CHALK_WEB_SYNC_DIRECT_URL` on a production web build (#1082), and the release workflow passes an empty value for production. Keep that guard: the grant door does not need the static value. Only change it if production should also use the door for the lobby's warm socket, and do that in its own change.
+
+**Undo in production.** Unset `CHALK_API_DIRECT_URL` and restart the API: new grants carry no door and every client returns to the Tunnel with no deploy of the web app. Clients that already hold a grant keep the door until it expires or the 10 minute failure memory moves them off. To stop all direct traffic at once, run `systemctl stop chalk-direct-sync-proxy` on the host. The rows under Undo cover the rest.
+
 ## Turn it on for one environment
 
 Start with nightly. The OpenTofu root accepts only `environment = "nightly"` and fails validation for anything else, and `build-web` passes the direct URL to the nightly build only. Staging and production each need a reviewed change to both before they can use the path. Every step is reversible; see the next section.

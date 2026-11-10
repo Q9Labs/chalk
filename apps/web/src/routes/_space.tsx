@@ -26,10 +26,10 @@ function SpaceRoute() {
       const inviteURL = new URL(inviteLink);
       const code = parseInviteCode(inviteURL.pathname.slice(1));
       if (code) {
-        await navigate({ to: "/$code", params: { code }, replace: true });
+        await navigate({ to: "/$code", params: { code }, search: true, replace: true });
         return;
       }
-      await navigate({ to: "/space/$slug", params: { slug: canonicalSlug }, hash: inviteURL.hash.slice(1), replace: true });
+      await navigate({ to: "/space/$slug", params: { slug: canonicalSlug }, hash: inviteURL.hash.slice(1), search: true, replace: true });
     },
     [navigate],
   );
