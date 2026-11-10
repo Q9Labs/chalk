@@ -41,15 +41,21 @@ if ((command_mode == 0 && $# > 1)); then
   # Each gate's own wrapper bounds its stop and cleanup, so this one waits longer before it uses KILL.
   owned_grace=$((owned_grace + 5))
   trap stop_owned EXIT
-  run_owned bash -c '
-    for gate in "${@:2}"; do
-      label="${gate#apps/}"
-      bash "$1" "$gate" </dev/null > >(sed -u "s|^|[${label%%/*}] |") 2>&1 &
-    done
-    status=0
-    for pid in $(jobs -p); do wait "$pid" || status=$?; done
-    exit "$status"
-  ' _ "${BASH_SOURCE[0]}" "$@"
+  # Background jobs of a non-interactive shell ignore INT, so the launcher forwards either signal as TERM.
+  launcher=$(cat <<'LAUNCHER'
+pids=()
+trap 'kill -TERM "${pids[@]}" 2>/dev/null; wait; exit 143' INT TERM
+for gate in "${@:2}"; do
+  label="${gate#apps/}"
+  bash "$1" "$gate" </dev/null > >(sed -u "s|^|[${label%%/*}] |") 2>&1 &
+  pids+=("$!")
+done
+status=0
+for pid in "${pids[@]}"; do wait "$pid" || status=$?; done
+exit "$status"
+LAUNCHER
+  )
+  run_owned bash -c "${launcher}" _ "${BASH_SOURCE[0]}" "$@"
   exit 0
 fi
 
