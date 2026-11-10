@@ -42,6 +42,7 @@ function Options({ controls, deviceId, menu: { Label, Item } }: { readonly contr
   const [failed, setFailed] = useState(false);
   if (!controls.cameraBackgroundAvailable(deviceId)) return null;
   const select = async (background: CameraBackground) => {
+    console.info('DBG select', deviceId, background);
     setBusy(true);
     setFailed(false);
     try {
