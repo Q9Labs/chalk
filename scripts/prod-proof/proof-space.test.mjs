@@ -3,6 +3,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { createEpisode, createSpace } from "./proofs.mjs";
+import { ProofError, publicFailure } from "./runtime.mjs";
 
 // The public API refuses a Create Space request that names the own SFU, so a proof names no
 // plane and fails at once when the Space it gets is not on the plane it asked for.
@@ -67,4 +68,10 @@ test("an Episode in a reused Space is recorded in the ownership file before anyt
   await createEpisode(run, { id: "pinned" });
   assert.deepEqual(run.ownership.episodes, [{ space_id: "pinned", id: "e1" }]);
   assert.deepEqual(JSON.parse(await readFile(`${run.directory}/ownership.json`, "utf8")).episodes, [{ space_id: "pinned", id: "e1" }]);
+});
+
+test("a Space setup mismatch keeps its bounded public reason", () => {
+  const lines = [];
+  publicFailure("setup-or-capture", new ProofError("media-plane-config", "private detail"), (line) => lines.push(line));
+  assert.deepEqual(lines, ["PROOF setup-or-capture: failed (media-plane-config)"]);
 });
