@@ -573,7 +573,9 @@ at warn level with `event` `chalk_sfu.overflow`, the `provider` the Episode went
 when it moved to Cloudflare, `chalk_sfu` when overflow is off and it was refused) and the
 bounded `placement_reason`. The line carries no Tenant, Space, Episode or node identity, adds
 no journey-ledger event, and like the counter it counts decisions, so a request whose creation
-rolls back still logs once. Axiom monitors read this line, not the counter. A refusal with
+rolls back still logs once. Axiom monitors read this line, not the counter: the `sfu-overflow` branch of the first production
+monitor alerts on any `chalk_sfu.overflow` line in the last two minutes (see the
+[SFU runbook](../infrastructure/observability/production-alerts/sfu-runbook.md)). A refusal with
 overflow off also counts toward the API 5xx alert.
 
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that

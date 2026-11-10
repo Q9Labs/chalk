@@ -69,11 +69,12 @@ fi
 if [[ -n "$check_id" ]] && jq -e --arg t "$node_address" '.enabled == true and .target == $t' <<<"$existing_check" >/dev/null; then
   echo "uptime check ${check_name}: keep"
 else
+  verb="$([[ -z "$check_id" ]] && echo create || echo recreate)"
   if [[ "$action" == apply ]]; then
     [[ -z "$check_id" ]] || doctl monitoring uptime delete "$check_id"
     check_id="$(doctl monitoring uptime create "$check_name" --type ping --target "$node_address" --regions se_asia,eu_west,us_east --enabled true --output json | jq -r '.[0].id // .id')"
   fi
-  echo "uptime check ${check_name}: $([[ -z "$check_id" ]] && echo create || echo recreate)"
+  echo "uptime check ${check_name}: ${verb}"
 fi
 if [[ "$action" == apply ]]; then
   alert_id="$(doctl monitoring uptime alert list "$check_id" --output json | jq -r --arg n "${check_name}-down" '[.[] | select(.name == $n) | .id][0] // empty')"
