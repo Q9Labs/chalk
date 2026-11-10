@@ -197,15 +197,29 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       logger.warn("dispatcher_late_or_duplicate_completion_rejected");
       return "failed";
     }
-    const kind = providerFailureKind(error);
-    const terminal = kind === "nonretryable" || kind === "schema";
-    if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
-    await safeRetry(dependencies.control, assignment, journey, safeErrorCode(error), terminal, logger);
+    await reportAssignmentFailure(error, assignment, journey, dependencies.control, logger);
     return "failed";
   }
 }
 
-async function safeRetry(control: ControlApi, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
+// The error code is stored only by the control plane, so a terminal failure needs this line to have a reason anywhere else.
+export async function reportAssignmentFailure(error: unknown, assignment: TranscriptionAssignment, journey: JourneyContext, control: Pick<ControlApi, "retry">, logger: DispatcherLogger): Promise<void> {
+  const kind = providerFailureKind(error);
+  const terminal = kind === "nonretryable" || kind === "schema";
+  if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
+  const errorCode = safeErrorCode(error);
+  logger.warn("dispatcher_assignment_failed", { errorCode, kind, terminal, attempt: assignment.attempt, ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}), reason: failureReason(error) });
+  await safeRetry(control, assignment, journey, errorCode, terminal, logger);
+}
+
+// Messages of our own errors are fixed strings; library errors can carry URLs, so those log only their class.
+function failureReason(error: unknown): string {
+  if (error instanceof AssignmentError || error instanceof ProviderError) return error.message;
+  if (error instanceof Error) return error.constructor === Error ? error.message : error.name;
+  return typeof error;
+}
+
+async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
   try {
     await control.retry({
       jobId: assignment.jobId,
