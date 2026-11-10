@@ -280,7 +280,7 @@ type captureBoundAtTrack struct {
 
 func (t captureBoundAtTrack) BoundAt() time.Time { return t.boundAt }
 
-func TestCaptureAnchorsNeverPrecedeTheAttemptStart(t *testing.T) {
+func TestCaptureAnchorsNeverEnterTheRecoveryGap(t *testing.T) {
 	start := time.UnixMilli(10_000).UTC()
 	writer, _ := newCaptureTestWriter(t, start)
 	mid := "1"
@@ -296,6 +296,12 @@ func TestCaptureAnchorsNeverPrecedeTheAttemptStart(t *testing.T) {
 	after := bindAnchors(writer, late, map[string]CaptureMediaTrack{mid: track(start.Add(3 * time.Second))}, nil)
 	if got := after[mid]; !got.Equal(start.Add(3 * time.Second)) {
 		t.Fatalf("anchor for a track bound after the attempt start = %s, want its bind time", got)
+	}
+	first, _ := newCaptureTestWriter(t, start)
+	first.recoveryStart = time.Time{}
+	staggered := bindAnchors(first, late, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
+	if got := staggered[mid]; !got.Equal(start.Add(-5 * time.Second)) {
+		t.Fatalf("anchor in a first attempt = %s, want the bind time kept so negotiation-time offsets survive", got)
 	}
 	if got := bindAnchors(writer, &lateTrackWatch{}, map[string]CaptureMediaTrack{mid: track(start)}, nil); got != nil {
 		t.Fatalf("anchors with nothing silent = %v, want none", got)

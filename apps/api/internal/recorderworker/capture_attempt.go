@@ -1665,7 +1665,7 @@ type captureBundleWriter struct {
 	hasLayout      bool
 	clocks         map[string]*captureTrackClock
 	lastMono       int64
-	startedAt      time.Time
+	recoveryStart  time.Time
 	lastMedia      int64
 	terminalGap    bool
 }
@@ -1681,9 +1681,10 @@ type pendingCaptureObject struct {
 }
 
 func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
-	writer := &captureBundleWriter{attempt: attempt, startedAt: attempt.config.Now().UTC(), active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
+	writer := &captureBundleWriter{attempt: attempt, active: make(map[string]recordingbundle.TrackIdentity), bindings: make(map[string]captureplane.PulledCaptureTrack), clocks: make(map[string]*captureTrackClock)}
 	if attempt.authority.CaptureReadyAt != nil {
 		writer.origin = attempt.authority.CaptureReadyAt.UTC()
+		writer.recoveryStart = attempt.config.Now().UTC()
 		// A replacement epoch has no authoritative prior bundle end in its
 		// envelope. Start its no-RTP bookkeeping at the local recovery boundary;
 		// the decoder represents the interval from the prior epoch as recovery.
@@ -1694,12 +1695,12 @@ func newCaptureBundleWriter(attempt *PionCaptureAttempt) *captureBundleWriter {
 	return writer
 }
 
-// clampAnchor keeps a first-packet time inside this attempt: a replacement
-// attempt starts its clock at its own recovery boundary, and the interval before
-// it belongs to the recovery gap.
+// clampAnchor keeps a first-packet time out of the recovery gap: a replacement
+// attempt starts its clock at its own recovery boundary. A first attempt has
+// none, so tracks bound during negotiation keep their offsets from each other.
 func (w *captureBundleWriter) clampAnchor(at time.Time) time.Time {
-	if at.Before(w.startedAt) {
-		return w.startedAt
+	if at.Before(w.recoveryStart) {
+		return w.recoveryStart
 	}
 	return at
 }
