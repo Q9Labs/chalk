@@ -57,26 +57,27 @@ defmodule ChalkSync.Live.ConnectionQualityPostgresTest do
     {welcome, _items, sender} = session(port, path, guest)
     assert welcome["connection_quality"] == true
 
-    # The host asked for the extension and sees no tier until the guest reports one.
-    {host_welcome, host_items, observer} = session(port, path, host)
+    # The host asked for the extension and sees the guest's tier as a presence event.
+    {host_welcome, _items, observer} = session(port, path, host)
     assert host_welcome["connection_quality"] == true
-    refute Map.has_key?(item_of(host_items, guest), "connection_quality")
 
     sender = send_quality(sender, "weak")
     assert {%{"connection_quality" => "weak"}, observer} = next_presence_item(observer, guest)
 
-    # A live change reaches the same observer as a presence event.
     sender = send_quality(sender, "poor")
     assert {%{"connection_quality" => "poor"}, observer} = next_presence_item(observer, guest)
 
     # An earlier SDK never sees the key, and a frame from it is a protocol error.
-    {old_welcome, old_items, old} = session(port, "/v1/sync", host)
+    {old_welcome, _items, old} = session(port, "/v1/sync", host)
     refute Map.has_key?(old_welcome, "connection_quality")
-    refute Map.has_key?(item_of(old_items, guest), "connection_quality")
+    sender = send_quality(sender, "weak")
+    assert {item, old} = next_presence_item(old, guest)
+    refute Map.has_key?(item, "connection_quality")
     old = Client.send_json(old, %{"type" => "connection_quality_set", "quality" => "weak"})
     assert {:json, %{"type" => "error", "code" => "protocol_error"}, _old} = Client.recv(old)
 
     # When the guest leaves, the tier goes with the seat.
+    assert {%{"connection_quality" => "weak"}, observer} = next_presence_item(observer, guest)
     Client.close_tcp(sender)
     assert {%{"state" => "disconnected"} = gone, observer} = next_presence_item(observer, guest)
     refute Map.has_key?(gone, "connection_quality")
@@ -120,9 +121,6 @@ defmodule ChalkSync.Live.ConnectionQualityPostgresTest do
 
   defp send_quality(client, quality),
     do: Client.send_json(client, %{"type" => "connection_quality_set", "quality" => quality})
-
-  defp item_of(items, identity),
-    do: Enum.find(items, &(&1["participant_id"] == identity.participant_id))
 
   defp next_presence_item(client, identity) do
     case Client.recv(client) do
