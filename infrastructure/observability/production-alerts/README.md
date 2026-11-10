@@ -6,7 +6,11 @@ holds transcription Lambda and deployment logs; it does not cover all these
 failures. No hosted Grafana was found on the managed runtime host.
 
 Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at the Discord webhook. Three grouped monitors fit the
-current monitor allowance. Keep the live organization, dataset names, monitor
+current monitor allowance. When `ONCALL_WEBHOOK_URL` is set, `provision.py` also reconciles a second
+notifier, a free Slack-type one aimed at the Q9 Oncall webhook, and attaches both notifiers to every monitor
+(the plan has no custom-webhook feature for a new notifier). The on-call guide for the Chalk SFU alerts,
+including the DigitalOcean node-down, CPU, memory and disk alerts that `do-monitoring.sh` sets, is
+[sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
 | Rule                          | Production source                        | Evaluation                                                                                                                                                       |
@@ -23,6 +27,7 @@ IDs and Discord webhook in private configuration, never in this public repo.
 | Own SFU retirement debt stuck | Collector read of `sfu_retirement_debts` | Oldest unpaid debt above 15 minutes in at least 4 distinct minute samples in 5 minutes; latest sample still above and newer than 90 seconds                      |
 | TURN credentials fail         | Axiom API logs                           | At least 3 `cloudflare_turn.credentials_failed` or `chalk_sfu.turn_credentials_failed` events in 5 minutes                                                       |
 | Own SFU recovery refused      | Axiom API logs                           | `chalk_sfu.recovery_refused` logged in at least 3 distinct minutes of the last 5                                                                                 |
+| New class left the Chalk SFU  | Axiom API logs                           | At least one `chalk_sfu.overflow` event in the last 2 minutes; the alert names the provider (`cf_sfu` moved, `chalk_sfu` refused) and the placement reason       |
 
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
@@ -296,9 +301,11 @@ the SDK/API emit accepted reports with that trigger and diagnostic event.
 ## Reconcile the native monitors
 
 Load these values privately: `AXIOM_TOKEN` (monitor/notifier management),
-`AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, and `DISCORD_WEBHOOK_URL`.
+`AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, and `DISCORD_WEBHOOK_URL`, plus
+`ONCALL_WEBHOOK_URL` to create or update the Oncall notifier. With the URL unset, an Oncall notifier that
+already exists stays attached to every monitor; only `--detach-oncall` removes it (see the delivery test below).
 The Discord URL lives in 1Password vault `dev`, item
-**Chalk production alerts Discord webhook**.
+**Chalk production alerts Discord webhook**; the Oncall URL is the item **Oncall webhook URL**.
 
 ```sh
 python3 infrastructure/observability/production-alerts/provision.py
@@ -333,11 +340,15 @@ and existing telemetry health checks, not by a new claim of complete telemetry.
 
 ## Prove delivery and reset
 
-All rules share one route: Axiom monitor → custom webhook notifier → Discord.
+All Axiom rules share one route: Axiom monitor → custom webhook notifier → Discord, and, when attached, Axiom monitor → Slack-type notifier → Oncall.
 A direct webhook POST proves the endpoint only, not this route.
 
 1. With production monitors enabled, run `collector --test`. This emits a dedicated
-   `delivery-test` group, with no database write or induced user failure.
+   `delivery-test` group, with no database write or induced user failure. The test
+   reaches every notifier on the monitor, so it would also start an Oncall run. To keep
+   Oncall out, first run `provision.py --apply --detach-oncall` (an apply without the
+   Oncall URL leaves the notifier attached), and run `provision.py --apply` with
+   `ONCALL_WEBHOOK_URL` again after step 3, so production paging comes back.
 2. Wait for the native monitor evaluation using its history/completion evidence.
    Confirm the **TEST: Chalk alert delivery** message in the actual
    Discord channel. Record the monitor history and channel/message evidence privately.
