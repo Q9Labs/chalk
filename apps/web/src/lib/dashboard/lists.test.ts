@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { SessionListDTO, SessionRowDTO } from "./contracts";
-import { appendPage, bounds, dayValue, mergeFirstPage, PAGE_ROWS, recordingBadge, recordingsQueryOf, refreshable, sessionsQueryOf, timeInCalls, transcriptBadge } from "./lists";
+import { PAGE_ROWS, type SessionListDTO, type SessionRowDTO } from "./contracts";
+import { appendPage, bounds, dayValue, mergeFirstPage, recordingBadge, recordingsQueryOf, refreshable, sessionsQueryOf, timeInCalls, transcriptBadge } from "./lists";
 import { parseRecordingsSearch, parseSessionsSearch } from "./search";
 
 const now = new Date(2026, 10, 10, 15, 30);

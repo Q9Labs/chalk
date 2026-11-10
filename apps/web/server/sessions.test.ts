@@ -4,7 +4,7 @@ import { createChalkEffectClient, TenantIdSchema } from "@q9labsai/chalk-client/
 import { handleDashboard } from "./application";
 import type { Engine } from "./engine";
 import type { IdentityProvider } from "./identity";
-import { PAGE_ROWS } from "../src/lib/dashboard/lists";
+import { PAGE_ROWS } from "../src/lib/dashboard/contracts";
 import { CALL_CAP, recordingsPage, sessionsPage } from "./sessions";
 import type { SessionListDTO } from "../src/lib/dashboard/contracts";
 

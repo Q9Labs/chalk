@@ -1,10 +1,7 @@
-import type { RecordingsQuery, SessionListDTO, SessionRowDTO, SessionsQuery } from "./contracts";
+import { PAGE_ROWS, type RecordingsQuery, type SessionListDTO, type SessionRowDTO, type SessionsQuery } from "./contracts";
 import { rangeDay } from "./format";
 import type { RangeKind, RecordingsSearch, SessionsSearch } from "./search";
 import { videoGroup, type VideoGroup, type VideoState } from "./recording";
-
-/** Sessions per page. Each row costs one attendance read. */
-export const PAGE_ROWS = 10;
 
 export const RANGE_LABEL: Record<Exclude<RangeKind, "custom">, string> = { today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", month: "This month" };
 

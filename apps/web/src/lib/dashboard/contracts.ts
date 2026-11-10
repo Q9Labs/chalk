@@ -195,6 +195,8 @@ export type SessionRowDTO = {
   transcriptIds: string[];
 };
 /** Counts over every session the filters match, not only the page. */
+/** Sessions per page. Each row costs one attendance read. */
+export const PAGE_ROWS = 10;
 export type SessionTotalsDTO = { sessions: number; seconds: number; recorded: number; transcripts: number; video: Record<VideoGroup, number> };
 export type SessionListDTO = {
   rows: SessionRowDTO[];

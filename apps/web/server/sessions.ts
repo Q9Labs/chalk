@@ -6,9 +6,8 @@ import type { Engine } from "./engine";
 import { attendance, run } from "./engine";
 import { recordingDTO } from "./dto";
 import { DashboardError } from "./http";
-import { PAGE_ROWS } from "../src/lib/dashboard/lists";
 import { keptRecording, videoGroup, videoState, type VideoGroup } from "../src/lib/dashboard/recording";
-import type { RecordingsQuery, SessionListDTO, SessionRowDTO, SessionsQuery, SessionTotalsDTO } from "../src/lib/dashboard/contracts";
+import { PAGE_ROWS, type RecordingsQuery, type SessionListDTO, type SessionRowDTO, type SessionsQuery, type SessionTotalsDTO } from "../src/lib/dashboard/contracts";
 
 /*
  * The API lists Episodes only inside one Space, so an account-wide list reads each Space that was active in the range.
