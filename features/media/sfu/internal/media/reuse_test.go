@@ -254,6 +254,56 @@ func TestANegotiatedCloseFreesTheMidAndARejectedSectionIsNeverReused(t *testing.
 	}
 }
 
+// boundPayloadType is the payload type a subscription's sender writes, from its egress binding.
+func boundPayloadType(t *testing.T, s *Session, mid string) uint8 {
+	t.Helper()
+	s.mu.Lock()
+	subscription := s.subscribed[mid]
+	s.mu.Unlock()
+	if subscription == nil {
+		t.Fatalf("no subscription on mid %s", mid)
+	}
+	binding := subscription.track.binding.Load()
+	if binding == nil {
+		t.Fatalf("mid %s has no negotiated binding", mid)
+	}
+	return binding.payloadType
+}
+
+// A client that offers VP8 on its own payload type fixes what the node sends to it. A reused
+// section must send on that payload type and not on the node's default.
+func TestReusedSectionSendsTheNegotiatedPayloadType(t *testing.T) {
+	const clientPayloadType = 120
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t, webrtc.RTPCodecParameters{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, PayloadType: clientPayloadType})
+	viewer.sendOnly(t, webrtc.RTPCodecTypeVideo, 1)
+	offer := viewer.offer(t)
+	own, err := subscriber.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: offer,
+		Tracks: []protocol.Track{{Location: protocol.LocationLocal, Mid: viewer.mids()[0], TrackName: "own", Source: "camera"}}})
+	if err != nil || own.SessionDescription == nil {
+		t.Fatalf("publish: %+v, %v", own, err)
+	}
+	if err := viewer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: own.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+
+	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if got := boundPayloadType(t, subscriber, mid); got != clientPayloadType {
+		t.Fatalf("first pull sends on payload type %d, want the negotiated %d", got, clientPayloadType)
+	}
+	forceClose(t, subscriber, mid)
+	reused, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if reused != mid {
+		t.Fatalf("the second pull got mid %s, want the reused %s", reused, mid)
+	}
+	if got := boundPayloadType(t, subscriber, reused); got != clientPayloadType {
+		t.Fatalf("the reused section sends on payload type %d, want the negotiated %d", got, clientPayloadType)
+	}
+}
+
 // rejectSection sets the port of one section to 0, as a browser's offer does for a stopped transceiver.
 func rejectSection(t *testing.T, raw, mid string) string {
 	t.Helper()
