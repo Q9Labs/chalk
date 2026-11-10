@@ -265,25 +265,25 @@ class OwnSfuPromotionTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'selected nightly changed or is no longer held'):
                         release.recheck(self.github(item), None)
 
-    def test_record_binds_all_own_sfu_outcomes_to_cut_sha_and_run_without_changing_cf_gate(self):
+    def test_record_binds_all_own_sfu_outcomes_to_cut_sha_and_run_with_the_chalk_sfu_proof_as_the_gate(self):
         for result in ('passed', 'failed', 'skipped'):
-            for cf_result in ('passed', 'failed'):
-                with self.subTest(result=result, cf_result=cf_result):
+            for gate_result in ('passed', 'failed'):
+                with self.subTest(result=result, gate_result=gate_result):
                     info = dict(run_id=RUN, release_id='release', applied_release_id='release')
                     api = Mock(spec=GitHub)
                     api.deployments.return_value = [dict(id=1, created_at='2026-11-08T02:00:00Z',
                                                         payload=dict(channel='nightly-write', **info))]
                     api.record.return_value = 2
                     with patch.dict(os.environ, RELEASE=json.dumps(info), TARGET_SHA=SHA, GITHUB_RUN_ID=RUN,
-                                    OWN_SFU_RESULT=result, DEPLOY_RESULT='success', PROOF_RESULT=cf_result,
+                                    OWN_SFU_RESULT=result, DEPLOY_RESULT='success', PROOF_RESULT=gate_result,
                                     WEB_E2E_RESULT='passed'):
                         release.record(api, None)
                     target, saved, passed = api.record.call_args.args
                     self.assertEqual((target, saved['target_sha'], saved['proof_run_id']), (SHA, SHA, RUN))
                     self.assertEqual(saved['own_sfu_proof_result'], result)
-                    self.assertEqual(saved['real_call_proof_result'], cf_result)
-                    self.assertEqual(saved['proof_result'], cf_result)
-                    self.assertEqual(passed, cf_result == 'passed')
+                    self.assertEqual(saved['real_call_proof_result'], gate_result)
+                    self.assertEqual(saved['proof_result'], gate_result)
+                    self.assertEqual(passed, gate_result == 'passed')
 
     def test_real_nightly_breaches_and_passing_cards_flow_through_record_to_promotion(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())

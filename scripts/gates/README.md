@@ -4,7 +4,9 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
+q9gate concurrency 1; each of those environment variables, when already set, replaces the default.
+`instabox-run.sh` sets `VITEST_MAX_WORKERS=4`, because most test files wait on timers.
+“gate.report.json” records every selected/skipped lane.
 
 Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
@@ -75,7 +77,7 @@ build caches, so pull requests and queue groups start from the latest master cac
 The Metro cache is no longer saved; the mobile export starts cold.
 The API job sets `-count=1` because a cached Go test result would not see a
 migration or database change. CI calls `scripts/gates/commit.sh` directly with
-`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the
+`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=4` instead of the
 one-CPU `pnpm gate` alias, and installs the pinned Gitleaks and OSV-Scanner
 releases through `.github/actions/setup-scanners` instead of compiling them with
 `go run`.

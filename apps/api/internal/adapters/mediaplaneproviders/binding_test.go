@@ -153,3 +153,68 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// A new Episode starts on the own SFU only for a caller whose SDK declares it.
+// With no fleet configured, an attempt on the own SFU fails as unavailable, so a
+// Cloudflare binding shows the selector never tried it for the old caller.
+func TestOldSDKNeverStartsANewEpisodeOnTheOwnSFU(t *testing.T) {
+	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
+	onlyListed, err := spaces.ParseChalkSFUAllowlist([]string{listed.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	everyone, err := spaces.ParseChalkSFUAllowlist([]string{"*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	own, cloudflare := spaces.MediaPlaneProviderChalkSFU, spaces.MediaPlaneProviderCloudflareSFU
+	ownText := string(own)
+	tests := []struct {
+		name    string
+		allowed spaces.ChalkSFUAllowlist
+		tenant  tenants.Tenant
+		space   spaces.Space
+	}{
+		{"operator pin on the Space", everyone, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
+		{"operator pin on one allowlisted Space", onlyListed, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
+		{"approved Tenant default (automatic policy)", everyone, tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{ID: listed, MediaPlane: "cf_sfu"}},
+		{"stored own SFU plane without a setting", everyone, tenants.Tenant{}, spaces.Space{ID: listed, MediaPlane: ownText}},
+		{"Space setting over a Tenant on Cloudflare", everyone, tenants.Tenant{DefaultMediaPlane: strPtr("cf_sfu")}, spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}},
+	}
+	for _, test := range tests {
+		for _, paused := range []bool{false, true} {
+			registry := NewRegistry(Config{
+				DefaultProvider: cloudflare, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
+				ChalkSFUSpaces: test.allowed, ChalkSFUNewEpisodesPaused: paused,
+			})
+			for header, clients := range map[string]mediaplane.ClientProviders{
+				"no header":              mediaplane.ParseClientProviders(""),
+				"Cloudflare only header": mediaplane.ParseClientProviders("cloudflare_sfu"),
+				"unknown names only":     mediaplane.ParseClientProviders("later_sfu"),
+			} {
+				binding, err := registry.ResolveBinding(context.Background(), test.tenant, test.space, clients)
+				if err != nil || binding == nil || binding.Provider != string(cloudflare) {
+					t.Errorf("%s, kill switch %v, %s: %#v %v, want a Cloudflare binding", test.name, paused, header, binding, err)
+				}
+			}
+			// The declaring caller reaches the own SFU, unless the kill switch holds it back.
+			binding, err := registry.ResolveBinding(context.Background(), test.tenant, test.space, mediaplane.ParseClientProviders("chalk_sfu"))
+			switch {
+			case paused && (err != nil || binding == nil || binding.Provider != string(cloudflare)):
+				t.Errorf("%s with the kill switch on, declaring caller: %#v %v, want Cloudflare", test.name, binding, err)
+			case !paused && !errors.Is(err, providercontracts.ErrAdapterUnavailable):
+				t.Errorf("%s, declaring caller: %#v %v, want the own SFU to be tried", test.name, binding, err)
+			}
+		}
+	}
+
+	// A Space off the allowlist is never moved, whoever asks.
+	off := spaces.Space{ID: listed, MediaPlane: ownText, MediaPlaneSetting: &own}
+	registry := NewRegistry(Config{DefaultProvider: cloudflare, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"}})
+	for _, clients := range []mediaplane.ClientProviders{mediaplane.ParseClientProviders(""), mediaplane.ParseClientProviders("chalk_sfu")} {
+		binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, off, clients)
+		if err != nil || binding == nil || binding.Provider != string(cloudflare) {
+			t.Errorf("Space off the allowlist: %#v %v, want Cloudflare", binding, err)
+		}
+	}
+}

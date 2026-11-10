@@ -323,7 +323,7 @@ It prints one line, `Long call: <guests> guests, <seconds>s, <n> access refreshe
 
 `pnpm prod:proof long-call --dry-run` prints the duration, thresholds and toggle schedule without configuration or network.
 
-Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `own-sfu` job, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
+Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `proof` job of `Cut nightly`, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
 
 ### Offers stay flat under toggles, and nobody goes deaf (`toggle-offers`)
 
