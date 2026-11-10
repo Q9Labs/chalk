@@ -30,6 +30,7 @@ import type {
   SFUMediaCapabilities,
 } from "./types";
 import type { PublicationCursor } from "./tracks";
+import { measureOffer, OFFER_BYTES_HARD_LIMIT, shouldReplaceForOfferSize } from "./offer-size";
 type LocalTrackState = {
   readonly source: MediaPublicationSource;
   readonly track: MediaStreamTrack;
@@ -78,6 +79,7 @@ const TRANSIENT_PULL_RETRY_MS = [500, 1000, 2000];
 const RECEIVER_RETIREMENT_ATTEMPTS = 3;
 const RECEIVER_RETIREMENT_LIMIT = 64;
 // The SFU rejects a close that names more tracks than this.
+const OFFER_REPLACEMENT_COOLDOWN_MS = 60_000;
 const TRACKS_PER_REQUEST = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
@@ -152,6 +154,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #generation = 0;
   #negotiatedGeneration: number | null = null;
   #replacementAttemptedGeneration: number | null = null;
+  #offerBudgetCooldownUntil = 0;
   #remoteRecoveryGeneration: number | null = null;
   #polling = false;
   #pollAfterCurrent = false;
@@ -367,7 +370,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // new one is pulled before the registry listing confirms it. The listing that follows stays the authority: it prunes,
   // recovers and retries. A failed early pull only leaves the publication to that listing.
   async #pullSyncAdvertisedPublications(generation: number): Promise<void> {
-    const pending = this.#pendingSyncAdvertisedPulls();
+    const pending = await this.#pendingSyncAdvertisedPulls();
     if (pending.length === 0) return;
     const epoch = this.#connectionEpoch;
     let pulled: readonly CloudflareSFURemoteTrack[] | null;
@@ -387,7 +390,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#commitEarlyPulledTracks(pulled);
   }
-  #pendingSyncAdvertisedPulls(): CloudflareSFUPublication[] {
+  async #pendingSyncAdvertisedPulls(): Promise<CloudflareSFUPublication[]> {
     if (!this.#started || !this.#capabilities().subscriptionState) return [];
     const named = this.#syncPublications.flatMap(({ participantId, source, enabled, publicationId }) => (enabled && publicationId !== null ? [{ participantId, source, publicationId }] : []));
     const advertised = desiredRemotePublications(
@@ -395,7 +398,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#participantId,
     );
     const fresh = new Map([...this.#visibleRemotePublications(advertised)].filter(([key, publication]) => this.#remoteTracks.get(key)?.publicationId !== publication.publicationId));
-    return this.#pendingRemotePulls(fresh);
+    const pending = this.#pendingRemotePulls(fresh);
+    // The listing that follows owns the replacement (#pullWithRecovery); an early pull would only add a section to an offer that is already too large.
+    return pending.length > 0 && (await this.#hasSpentOfferBudget(false, false)) ? [] : pending;
   }
   #commitEarlyPulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
     const next = new Map(this.#remoteTracks);
@@ -873,9 +878,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // A user mute leaves the SDP alone: parked on the SFU when it can hold, else closed over the kept BUNDLE transport.
   async #retireWithoutRenegotiation(publication: OwnedLocalPublication, phase: Extract<OwnedLocalPublication["lifecycle"], { kind: "retiring" }>, handle: LocalPublicationHandle): Promise<boolean> {
     if (this.#canHoldOnUserPause(publication, phase) && (await this.#holdOwnedPublication(publication, phase, handle))) return true;
-    if (!this.#shouldKeepBundleTransportOnUserPause(publication, connectionIsClosed(publication.connection))) return false;
-    await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
-    return true;
+    // The close offer carries every closed section. Past the size budget it could reach the node's cap, so close without SDP and let the next pull or publish replace the connection.
+    const keep = this.#shouldKeepBundleTransportOnUserPause(publication, connectionIsClosed(publication.connection)) || (!connectionIsClosed(publication.connection) && shouldReplaceForOfferSize(await this.#measureLocalOffer(publication.connection)));
+    if (keep) await this.#closeOwnedPublicationKeepingBundleTransport(publication, phase, handle);
+    return keep;
   }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     const phase = publication.lifecycle;
@@ -1153,7 +1159,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #prepareConnectionForPublication(states: readonly LocalTrackState[], generation: number): Promise<readonly LocalTrackState[]> {
     if (this.#retiredLocalConnection !== this.#connection || !this.#replaceMediaConnection) {
       await this.#replaceDormantConnectionBeforeNegotiation(generation);
-      return states;
+      if (!(await this.#hasSpentOfferBudget(true))) return states;
+      await this.#replaceForOfferSize(() => this.#replaceMediaConnectionForRecovery(generation, "section_budget"));
+      return this.#tracksToPublish(states);
     }
     // Retiring the bundled sender can expire the Cloudflare SFU connection.
     // Rebuild before publishing, retaining only other provider-authorized sources.
@@ -1548,6 +1556,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #pullWithRecovery(desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
     const pending = this.#pendingRemotePulls(desired);
+    if (pending.length > 0 && (await this.#hasSpentOfferBudget())) return this.#replaceForOfferSize(() => this.#retryRemotePullOnReplacement([...desired.values()], cursor, generation, "section_budget"));
     const stalled = pending.filter((publication) => this.#receiveProgress.isStalled(publication.publicationId));
     if (stalled.length) return this.#recoverStalledRemotePublications(stalled, desired, cursor, generation);
     const publications = pending;
@@ -1560,6 +1569,32 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         throw error;
       }
       return this.#retryRemotePullOnReplacement(publications, cursor, generation);
+    }
+  }
+  async #measureLocalOffer(connection: RTCPeerConnection): Promise<ReturnType<typeof measureOffer>> {
+    return measureOffer((await connection.createOffer()).sdp ?? "");
+  }
+  // A safety valve: the media node reuses closed sections, so the offer should not grow this far. When it does, the replacement is logged here and reported to the API as cause section_budget.
+  async #hasSpentOfferBudget(inQueue = false, announce = true): Promise<boolean> {
+    if (!this.#replaceMediaConnection) return false;
+    const connection = this.#connection;
+    const measure = () => this.#measureLocalOffer(connection);
+    const size = inQueue ? await measure() : await this.#serializeSDP(measure);
+    if (!shouldReplaceForOfferSize(size)) return false;
+    // Below the hard limit the cooldown (which a failed attempt also starts) spaces out replacements. Near the node's cap every operation tries the replacement first: the node would refuse the offer, and a failed attempt fails that operation once, for its caller's own retry to handle.
+    if (size.bytes < OFFER_BYTES_HARD_LIMIT && Date.now() < this.#offerBudgetCooldownUntil) return false;
+    if (announce) console.warn(`Chalk media: replacing the media connection because its next offer is ${size.bytes} bytes (${size.reclaimableBytes} in closed or parked sections) and the media node refuses offers over 65536. Closed sections should not pile up; report this.`);
+    return true;
+  }
+  // The size budget is not a recovery from a failure, so it neither needs nor spends the generation's one recovery replacement.
+  // Whatever its outcome, the next one waits out the cooldown, except near the node's cap, where there is no cooldown.
+  async #replaceForOfferSize<T>(replace: () => Promise<T>): Promise<T> {
+    this.#offerBudgetCooldownUntil = Date.now() + OFFER_REPLACEMENT_COOLDOWN_MS;
+    this.#replacementAttemptedGeneration = null;
+    try {
+      return await replace();
+    } finally {
+      this.#replacementAttemptedGeneration = null;
     }
   }
   async #recoverStalledRemotePublications(stalled: readonly CloudflareSFUPublication[], desired: ReadonlyMap<string, CloudflareSFUPublication>, cursor: PublicationCursor, generation: number): Promise<readonly CloudflareSFURemoteTrack[] | null> {
