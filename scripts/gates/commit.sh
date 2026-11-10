@@ -12,12 +12,12 @@ if [[ "${1:-}" == "--" ]]; then
   shift
 fi
 
-# --fast is the pre-commit profile: only the lanes that are quick and staged-scoped.
-# Everything else runs in the Gate workflow on the pull request, or via pnpm run gate.
+# --fast is the pre-commit profile: only the lanes that finish in about a second and are staged-scoped.
+# Everything else, including the generated-files check, runs in the Gate workflow on the pull request, or via pnpm run gate.
 if [[ "${1:-}" == "--fast" ]]; then
   shift
   pnpm run check:tracker
-  exec q9gate run --lane scope --lane format --lane hygiene --lane secrets --lane generated "$@"
+  exec q9gate run --lane scope --lane format --lane hygiene --lane secrets "$@"
 fi
 
 pnpm run check:tracker
