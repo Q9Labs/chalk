@@ -57,7 +57,7 @@ export function ConnectionNotice({ tier, reason, videoOn, onOpenDetails, onTurnO
   );
 }
 
-const NOTICE_CSS = `.chalk-connection-notice {display:inline-flex;align-items:center;gap:var(--space-1);height:36px;max-width:100%;min-width:0;padding:0 var(--space-1) 0 0;border-radius:var(--corner-pill);background:var(--chalk-raised);box-shadow:0 0 0 1px var(--chalk-line-strong);font-size:var(--type-body-sm);pointer-events:auto;}
+const NOTICE_CSS = `.chalk-connection-notice {display:inline-flex;align-items:center;gap:var(--space-1);height:36px;max-width:100%;min-width:0;padding:0 var(--space-1) 0 0;border-radius:var(--corner-pill);background:var(--chalk-raised);border:1px solid var(--chalk-line-strong);font-size:var(--type-body-sm);pointer-events:auto;}
 .chalk-connection-notice-main {display:inline-flex;align-items:center;gap:var(--space-2);flex:0 1 auto;min-width:0;height:36px;padding:0 var(--space-2) 0 var(--space-3);border-radius:var(--corner-pill);}
 .chalk-connection-notice-main:hover {background:var(--chalk-hover);}
 .chalk-connection-notice-what {font-weight:600;white-space:nowrap;}
