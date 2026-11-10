@@ -681,7 +681,10 @@ func (s *Session) park(sub *subscription) {
 	// A capture session never reuses a section. The recorder keeps one receiver per mid and follows
 	// the node's new track through the browser-side track event, which a reused SSRC does not fire,
 	// so its replacement subscription would never find its track. It gets a fresh section, as before.
-	if binding == nil || s.kind == kindCapture {
+	// Chromium can retain a silent audio track when its MID/SSRC is reused, even
+	// though inbound RTP and sample counters advance. Video reuse is
+	// verified separately; audio needs a fresh receiver (see the SDK toggle repro).
+	if binding == nil || s.kind == kindCapture || !sub.pub.video() {
 		_ = sec.transceiver.Stop()
 		return
 	}

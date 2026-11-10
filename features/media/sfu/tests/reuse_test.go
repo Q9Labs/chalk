@@ -145,12 +145,12 @@ func (v *viewer) seen() map[webrtc.SSRC]stream {
 	return copy
 }
 
-// TestClosedSectionsCarryTheNextTrackWithoutStaleMedia pulls and closes tracks of two publishers 100 times,
-// audio and video, on one subscriber connection. The node reuses the closed track's section, mid and
-// SSRC, so the client holds one audio and one video section and the transport one stream per section.
+// TestClosedVideoSectionsCarryTheNextTrackWithoutStaleMedia pulls and closes tracks of two publishers 100 times,
+// on one subscriber connection. Video reuses the closed track's section, mid and SSRC, so the client
+// holds one video section and the transport one stream. Audio gets fresh sections (SDK toggle repro).
 // Every pull delivers only the packets of the track pulled, in the codec of its kind, and a closed
 // stream stays silent.
-func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
+func TestClosedVideoSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
 	svc.grantSources(t, scopeA, scopeB, scopeD)
@@ -164,27 +164,20 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 	defer dave.stop()
 	bob := newViewer(t, svc, connB, scopeB)
 
-	type pullKind struct {
-		track string
-		kind  webrtc.RTPCodecType
-		mime  string
-	}
-	kinds := []pullKind{{audioName, webrtc.RTPCodecTypeAudio, webrtc.MimeTypeOpus}, {videoName, webrtc.RTPCodecTypeVideo, webrtc.MimeTypeVP8}}
 	publishers := []struct {
 		conn string
-		tags [2]byte
-	}{{connA, [2]byte{'x', 'p'}}, {connD, [2]byte{'y', 'r'}}}
+		tag  byte
+	}{{connA, 'p'}, {connD, 'r'}}
 
 	const cycles = 100
 	mids := map[string]bool{}
 	for cycle := range cycles {
-		kindIndex, publisher := cycle%2, publishers[(cycle/2)%2]
-		want := kinds[kindIndex]
+		publisher := publishers[cycle%2]
 		before := bob.seen()
-		mid := bob.pull(publisher.conn, want.track)
+		mid := bob.pull(publisher.conn, videoName)
 		mids[mid] = true
 
-		wantTag := publisher.tags[kindIndex]
+		wantTag := publisher.tag
 		var got stream
 		eventually(t, "five packets of the pulled track on its mid", 10*time.Second, func() bool {
 			for ssrc, s := range bob.seen() {
@@ -201,14 +194,14 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 			}
 			return false
 		})
-		if got.kind != want.kind || got.mime != want.mime {
-			t.Fatalf("cycle %d: mid %s carries %v %s, want %v %s", cycle, mid, got.kind, got.mime, want.kind, want.mime)
+		if got.kind != webrtc.RTPCodecTypeVideo || got.mime != webrtc.MimeTypeVP8 {
+			t.Fatalf("cycle %d: mid %s carries %v %s, want %v %s", cycle, mid, got.kind, got.mime, webrtc.RTPCodecTypeVideo, webrtc.MimeTypeVP8)
 		}
 		if len(got.tags) != 1 || got.tags[wantTag] == 0 {
 			t.Fatalf("cycle %d: mid %s received payload tags %v since the pull, want only %q", cycle, mid, got.tags, wantTag)
 		}
-		if len(bob.peer.pc.GetTransceivers()) > 2 {
-			t.Fatalf("cycle %d: the client holds %d sections, want 2", cycle, len(bob.peer.pc.GetTransceivers()))
+		if len(bob.peer.pc.GetTransceivers()) > 1 {
+			t.Fatalf("cycle %d: the client holds %d sections, want 1", cycle, len(bob.peer.pc.GetTransceivers()))
 		}
 
 		bob.closeTrack(mid)
@@ -223,18 +216,18 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 			}
 		}
 	}
-	if len(mids) != 2 {
+	if len(mids) != 1 {
 		var used []string
 		for mid := range mids {
 			used = append(used, mid)
 		}
 		sort.Strings(used)
-		t.Fatalf("%d pulls used mids %v, want 2", cycles, used)
+		t.Fatalf("%d pulls used mids %v, want 1", cycles, used)
 	}
 	// One SSRC per section for the life of the connection: the transport keeps replay state for
 	// each SSRC it has seen, so a new SSRC per pull would grow it with the pulls.
-	if streams := bob.seen(); len(streams) != 2 {
-		t.Fatalf("%d pulls produced %d distinct streams, want 2 (one per section)", cycles, len(streams))
+	if streams := bob.seen(); len(streams) != 1 {
+		t.Fatalf("%d pulls produced %d distinct streams, want 1 (video)", cycles, len(streams))
 	}
 }
 
@@ -274,7 +267,7 @@ func TestAReusedSectionKeepsSendingSenderReports(t *testing.T) {
 // TestAReusedSectionContinuesItsStream checks what the client's replay protection and jitter buffer
 // need from a section that keeps its SSRC: across a close and the next pull, sequence numbers go on
 // forward by a small step, and timestamps go forward by about the time that passed, never back and
-// never far ahead, even when the next track comes from another publisher. Audio and video, three reuses each.
+// never far ahead, even when the next track comes from another publisher. Video, three reuses. Audio intentionally gets a fresh SSRC.
 func TestAReusedSectionContinuesItsStream(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
@@ -294,7 +287,7 @@ func TestAReusedSectionContinuesItsStream(t *testing.T) {
 	for _, track := range []struct {
 		name  string
 		clock float64
-	}{{audioName, 48000}, {videoName, 90000}} {
+	}{{videoName, 90000}} {
 		var mid string
 		for use := range 4 {
 			before := map[webrtc.SSRC]int{}

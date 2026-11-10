@@ -10,7 +10,7 @@ import (
 // so one set of SSRCs, from its first track to the end of the session. Pion holds the SRTP
 // rollover and replay state of every SSRC until the transport closes, and its RTCP sender reports
 // and negotiated parameters belong to the sender its own connection made. A new sender for each
-// pull would grow that state without bound and lose both. A closed subscription parks the
+// pull would grow that state without bound and lose both. A closed video subscription parks the
 // section, and the next pull of the same kind takes it, so what a session holds follows its
 // sections and not its pulls.
 type section struct {
