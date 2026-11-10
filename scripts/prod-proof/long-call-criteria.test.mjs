@@ -94,9 +94,16 @@ test("the refresh boundaries follow the first credential expiry of the call", ()
 });
 
 test("a healthy call passes and prints one evidence line", () => {
-  const result = judge(healthyCall());
+  const result = judge({ ...healthyCall(), signalBytes: [20_000, 14_000, 15_000] });
   assert.deepEqual(result.failures, []);
-  assert.equal(evidenceLine(result.evidence), `Long call: 3 guests, ${callDurationMs / 1000}s, 2 access refreshes seen, ${toggleSchedule().length} mic/camera toggles, 0 failures`);
+  assert.equal(evidenceLine(result.evidence), `Long call: 3 guests, ${callDurationMs / 1000}s, 2 access refreshes seen, ${toggleSchedule().length} mic/camera toggles, largest signaling request 20000 bytes, 0 failures`);
+});
+
+test("a guest whose signaling request nears the node's 64 KiB offer cap fails before the node answers 400", () => {
+  const failures = judged({ ...healthyCall(), signalBytes: [20_000, bounds.signalBytes + 1, 15_000] });
+  assert.equal(failures.length, 1, failures.join("\n"));
+  assert.match(failures[0], /^Guest 2 sent a signaling request of \d+ bytes, over the \d+ byte limit/);
+  assert.deepEqual(judged({ ...healthyCall(), signalBytes: [bounds.signalBytes, 0, 0] }), []);
 });
 
 test("the recorded rehearsal where the microphone stopped publishing after a refresh fails", () => {
@@ -344,4 +351,30 @@ test("a listener page that closed during the hearing check fails the call naming
     hearing.speaker === 0 && hearing.atMs === toggle.atMs ? { ...hearing, verdicts: hearing.verdicts.map((verdict) => (verdict.listener === 2 ? { listener: 2, speaker: 1, pass: false, why: "the listener's page failed: Target page, context or browser has been closed" } : verdict)) } : hearing,
   );
   assert.deepEqual(judged({ ...call, hearings }), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (the listener's page failed: Target page, context or browser has been closed); turned back on at +26s"]);
+});
+
+test("a rotation the SDK reports is planned and matched to its own replacement and closed connection; any other replacement or closed connection still fails", () => {
+  const call = healthyCall();
+  const recovery = (failure) => replacedMedia(failure) || failure.includes("left connected");
+  const judgedRecovery = (call, ...rotationsMs) => judged({ ...call, budgetReplacements: [[], [], rotationsMs.map((atMs) => startedAtMs + atMs)] }).filter(recovery);
+  const withRefreshes = (renewals) => ({ ...call, refreshes: [call.refreshes[0], call.refreshes[1], guestWith(2, renewals)] });
+  const closedFrom = (call, closings) => onlyGuest(call, 2, (sample, at) => ({ ...sample, pcs: [...Array(closings.filter((closedAt) => at >= closedAt).length + 1).fill("closed"), "connected"] }));
+  const rotated = closedFrom(withRefreshes([grant(126_800, { replace: true }), grant(366_800), grant(606_800 - 1000)]), [127_000]);
+
+  // One reported rotation near the request plans the guest's replacement request and its closed connection.
+  assert.deepEqual(judgedRecovery(rotated, 128_000), []);
+  // The same events with no rotation reported are unexpected recovery.
+  assert.equal(judgedRecovery(rotated).length, 2);
+  // A rotation far from the events does not explain them.
+  assert.equal(judgedRecovery(rotated, 400_000).length, 2);
+
+  // An unplanned recovery before a rotation keeps failing, and the rotation still plans its own request.
+  const both = closedFrom(withRefreshes([grant(60_000, { replace: true }), grant(126_800, { replace: true }), grant(366_800), grant(606_800 - 1000)]), [60_000, 127_000]);
+  const failures = judgedRecovery(both, 128_000);
+  assert.equal(failures.length, 2);
+  assert.ok(failures.every((failure) => failure.includes("+60s") || failure.includes("+65s") || failure.includes("+55s")));
+
+  // Only a closure belongs to a rotation: a connection that disconnects near one, then closes, still fails.
+  const dropped = onlyGuest(rotated, 2, (sample, at) => (at >= 125_000 && at < 127_000 ? { ...sample, pcs: ["closed", "disconnected"] } : sample));
+  assert.equal(judgedRecovery(dropped, 128_000).filter((failure) => failure.includes("left connected for disconnected")).length, 1);
 });

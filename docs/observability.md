@@ -781,7 +781,8 @@ Retirement causes distinguish `user_pause`, `moderation_pause`,
 `publish_failure`, `enable_failure`, `projection_mismatch` and the legacy
 `forced_pause` fallback.
 Other replacement causes are `local_signaling_failure`,
-`remote_signaling_failure`, `dormant_connection`, `receive_stalled` and `access_refresh` for an
+`remote_signaling_failure`, `dormant_connection`, `receive_stalled`, `section_budget` (the connection
+held too many closed media sections for the node's offer size limit) and `access_refresh` for an
 externally refreshed binding. Capture interruptions detach microphone/camera
 senders and retain their publication for short interruptions. Fresh user consent
 within 20 seconds reattaches capture without replacing a healthy session. Longer

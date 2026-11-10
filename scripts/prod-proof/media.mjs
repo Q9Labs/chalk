@@ -39,6 +39,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
   const participants = [];
   const refreshes = [];
   const networks = [];
+  // The largest signaling request body each guest sent, kept across page reopenings: the node refuses an SDP offer over 64 KiB.
+  const signalBytes = Array.from({ length: guestCount }, () => 0);
+  // When each guest's SDK reported replacing its connection because the offer neared that cap (replacement cause section_budget).
+  const budgetReplacements = Array.from({ length: guestCount }, () => []);
   const admissions = [];
   for (let guest = 0; guest < guestCount; guest++) {
     const admitStartedAt = performance.now();
@@ -93,7 +97,10 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         const operation = signalingOperation(request.url());
         if (!operation) return;
         requests.set(request, performance.now());
-        record({ type: "signaling-request", operation, method: request.method() });
+        const body = signalingBody(request.postData(), request.url());
+        signalBytes[guest] = Math.max(signalBytes[guest], body.bytes);
+        if (body.replacementCause === "section_budget") budgetReplacements[guest].push(Date.now());
+        record({ type: "signaling-request", operation, method: request.method(), ...(body.op ? { op: body.op } : {}), bytes: body.bytes });
       });
       page.on("response", (response) => {
         const operation = signalingOperation(response.url());
@@ -169,6 +176,8 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     admissions,
     tones, // True when each guest publishes its own tone (audio-decode.mjs), false when all play speech.
     refreshes,
+    signalBytes,
+    budgetReplacements,
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);
@@ -205,13 +214,28 @@ function signalingFailure(request) {
   return /^net::ERR_[A-Z_]+$/.test(error) ? error : "request_failed";
 }
 
+/** The size of a signaling request body, the operation a unified-route body names, and the replacement cause the request reports: in the JSON body on the unified route and in the query string on the per-operation routes. */
+export function signalingBody(postData, url = "") {
+  let op = null;
+  let replacementCause = url ? new URL(url).searchParams.get("replacement_cause") : null;
+  if (!postData) return { op, replacementCause, bytes: 0 };
+  try {
+    const parsed = JSON.parse(postData);
+    if (typeof parsed?.op === "string") op = parsed.op;
+    if (typeof parsed?.replacement_cause === "string") replacementCause = parsed.replacement_cause;
+  } catch {
+    // A body that is not JSON still has a size.
+  }
+  return { op, replacementCause, bytes: Buffer.byteLength(postData) };
+}
+
 export function signalingOperation(url) {
   const path = new URL(url).pathname;
   const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
   return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
 }
 
-export function installTransportDiagnostics() {
+function installTransportDiagnostics() {
   const NativePC = window.RTCPeerConnection;
   const events = (window.proofTransportDiagnostics = []);
   window.RTCPeerConnection = class extends NativePC {
@@ -236,7 +260,7 @@ export function installTransportDiagnostics() {
   };
 }
 
-export function browserStats() {
+function browserStats() {
   function sourceFor(row, cameraMids, screenMids, remote) {
     if (row.type === "inbound-rtp") return remote.find((entry) => entry.track.id === row.trackIdentifier)?.source;
     const sources = new Map([...cameraMids.map((mid) => [mid, "camera"]), ...screenMids.map((mid) => [mid, "screen"])]);
@@ -297,7 +321,7 @@ export function browserStats() {
 export async function stats(pages) {
   return Promise.all(pages.map((page) => page.evaluate(browserStats)));
 }
-export function movingLayers(before, after) {
+function movingLayers(before, after) {
   const outbound = after.filter((row) => row.type === "outbound-rtp" && row.camera && row.rid);
   return outbound.filter((row) => before.some((previous) => previous.id === row.id && previous.connection === row.connection && row.framesEncoded > previous.framesEncoded));
 }

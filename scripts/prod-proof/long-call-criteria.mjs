@@ -24,6 +24,8 @@ export const bounds = {
   /** A grant's successor must be requested within this long after the grant's refresh point (its expiry less the refresh window). */
   refreshLateMs: 30_000,
   sampleIntervalMs: 2000,
+  /** The Chalk SFU node refuses an SDP offer over 64 KiB (HTTP 400). A signaling request this large means the offer is about to hit that cliff, so fail while the call still works. */
+  signalBytes: 48 * 1024,
 };
 
 const baselineToggleMs = [60_000, 120_000, 180_000, 330_000, 390_000, 540_000];
@@ -155,28 +157,48 @@ function grantChainFailures({ initialExpiry, requests }, endMs, startedAtMs) {
   return failures;
 }
 
-/** The proof injects no fault, so a media-connection replacement is the SDK recovering from a break it should not have had. */
-function replacementFailures(refreshes, startedAtMs) {
-  return refreshes.flatMap(({ guest, requests }) =>
-    requests.filter((request) => request.replaceMediaConnection).map((request) => `Guest ${guest} replaced its media connection at +${seconds(Date.parse(request.startedAt) - startedAtMs)}s (${request.reason ?? "no reason"}, status ${request.status ?? "none"}) with no fault injected`),
-  );
+/** How far from a reported section_budget rotation a replacement request or a closed peer connection can be and still belong to it. */
+const rotationMatchMs = 30_000;
+
+/** The events no reported rotation explains. Each rotation (the epoch time of its signaling request) explains the nearest unexplained event within the window, so an unplanned event keeps failing whatever its order. */
+function unplanned(events, rotations) {
+  const free = [...rotations].sort((a, b) => a - b);
+  return events.filter(({ atMs }) => {
+    const index = free.findIndex((rotationMs) => Math.abs(rotationMs - atMs) <= rotationMatchMs);
+    if (index < 0) return true;
+    free.splice(index, 1);
+    return false;
+  });
+}
+
+/** The proof injects no fault, so a media-connection replacement is the SDK recovering from a break it should not have had, unless its own report says it rotated for the offer size. */
+function replacementFailures(refreshes, startedAtMs, budgetReplacements) {
+  return refreshes.flatMap(({ guest, requests }) => {
+    const replacements = requests.filter((request) => request.replaceMediaConnection).map((request) => ({ request, atMs: Date.parse(request.startedAt) }));
+    return unplanned(replacements, budgetReplacements[guest - 1] ?? []).map(({ request, atMs }) => `Guest ${guest} replaced its media connection at +${seconds(atMs - startedAtMs)}s (${request.reason ?? "no reason"}, status ${request.status ?? "none"}) with no fault injected`);
+  });
 }
 
 /** Peer connections that left "connected" after reaching it, once each. A closed one counts: the SDK only closes a connection it replaces. */
-function leftConnectedFailures(own, label, firstTick) {
+function leftConnectedFailures(own, label, firstTick, budgetReplacements) {
   const connected = new Set();
   const reported = new Set();
-  const failures = [];
+  const left = [];
   for (const sample of own.filter((entry) => entry.reachable)) {
     sample.pcs.forEach((state, index) => {
       if (state === "connected") connected.add(index);
       else if (connected.has(index) && !reported.has(index)) {
         reported.add(index);
-        failures.push(`${label} peer connection ${index + 1} left connected for ${state} at +${seconds(sample.t - firstTick)}s`);
+        left.push({ atMs: sample.t, state, failure: `${label} peer connection ${index + 1} left connected for ${state} at +${seconds(sample.t - firstTick)}s` });
       }
     });
   }
-  return failures;
+  // A rotation closes the old connection; a connection that disconnects or fails first left for another reason, whatever the rotations.
+  const closures = unplanned(
+    left.filter(({ state }) => state === "closed"),
+    budgetReplacements,
+  );
+  return left.filter((event) => event.state !== "closed" || closures.includes(event)).map(({ failure }) => failure);
 }
 
 /** Every microphone turned back on was decoded again by each other guest. A turn-on nobody checked fails too, so the check cannot be skipped by leaving it out. */
@@ -201,7 +223,8 @@ function hearingFailures({ toggles, hearings, guests }) {
  *   (audio-decode.mjs hearAfterUnmute) with a verdict for every other guest. Advancing bytes do not count, so a guest left deaf by a re-publish fails here.
  * @returns `{ failures, notes, evidence }`; the run passes when `failures` is empty.
  */
-export function judgeLongCall({ ticks, participants, refreshes, toggles, hearings, startedAtMs }) {
+/** `signalBytes` is the largest signaling request body each guest sent and `budgetReplacements` the epoch time of each signaling request in which a guest's SDK reported replacing its connection to keep offers under the node's cap, when the proof measured them. */
+export function judgeLongCall({ ticks, participants, refreshes, toggles, hearings, startedAtMs, signalBytes = [], budgetReplacements = [] }) {
   const failures = [];
   const guests = participants.length;
   const label = (guest) => `Guest ${guest + 1}`;
@@ -215,7 +238,9 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
     for (const stretch of stretches(own, (sample) => sample.reachable && !sample.pcs.includes("connected"), bounds.disconnectedMs)) {
       failures.push(`${label(guest)} had no connected peer connection for more than ${seconds(bounds.disconnectedMs)} s (${span(stretch)}); a closed one was not replaced`);
     }
-    failures.push(...leftConnectedFailures(own, label(guest), ticks[0].t));
+    failures.push(...leftConnectedFailures(own, label(guest), ticks[0].t, budgetReplacements[guest] ?? []));
+    if ((signalBytes[guest] ?? 0) > bounds.signalBytes)
+      failures.push(`${label(guest)} sent a signaling request of ${signalBytes[guest]} bytes, over the ${bounds.signalBytes} byte limit that keeps its offer clear of the node's 64 KiB cap; the offer grows with every media section the connection has closed`);
     for (const stretch of stalls(own, (sample) => ({ on: sample.mic, bytes: sample.outAudio }), bounds.outboundStallMs)) {
       failures.push(`${label(guest)} sent no audio for ${seconds(stretch.toMs - stretch.fromMs)} s (${span(stretch)}) while its microphone showed on`);
     }
@@ -252,7 +277,7 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
   for (const at of refreshMs.filter((at) => !testable.includes(at))) notes.push(`The access refresh at +${seconds(at)}s fell in the last ${seconds(bounds.acrossRefreshMs)} s of the call, so no toggle could follow it; it was not toggle-tested`);
   const untested = testable.filter((at) => !toggles.some((toggle) => toggle.atMs >= at - bounds.acrossRefreshMs && toggle.atMs <= at) || !toggles.some((toggle) => toggle.atMs >= at && toggle.atMs <= at + bounds.acrossRefreshMs));
   if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle on each side within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
-  failures.push(...replacementFailures(refreshes, startedAtMs));
+  failures.push(...replacementFailures(refreshes, startedAtMs, budgetReplacements));
   failures.push(...hearingFailures({ toggles, hearings, guests }));
   for (const refresh of refreshes) failures.push(...grantChainFailures(refresh, endMs, startedAtMs).map((text) => `${label(refresh.guest - 1)} ${text}`));
   const fewest = Math.min(...grantCounts);
@@ -266,11 +291,12 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
       durationSeconds: seconds((ticks.at(-1)?.t ?? 0) - (ticks[0]?.t ?? 0)),
       refreshesSeen: fewest,
       toggles: toggles.length,
+      maxSignalBytes: Math.max(0, ...signalBytes),
       failureCount: failures.length,
     },
   };
 }
 
-export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, failureCount }) {
-  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, ${failureCount} failures`;
+export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, maxSignalBytes, failureCount }) {
+  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, largest signaling request ${maxSignalBytes} bytes, ${failureCount} failures`;
 }

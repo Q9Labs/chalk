@@ -10,7 +10,7 @@ import { useToasts } from "../primitives/toast/ToastStack";
 import { playSound, type SoundName } from "../sounds/sounds";
 import { useTheme } from "../theme/theme";
 import type { Palette } from "../theme/tokens";
-import { mediaFailureMessage } from "./media-failure-copy";
+import { describeMediaFailure, mediaFailureMessage } from "./media-failure-copy";
 import { callNotices, firstName, type Notice } from "./notices";
 
 /** A device the call asks the OS for. */
@@ -23,6 +23,8 @@ export type CallEventToasts = {
   readonly noteOwnMicrophoneChange: () => void;
   /** Says why turning on the microphone or camera failed, with the way forward (F1, K1, K2). */
   readonly reportMediaFailure: (permission: Permission, cause: unknown, retry: () => Promise<void>) => void;
+  /** Logs why turning the microphone or camera off failed, then says so. There is nothing to retry. */
+  readonly reportMediaOffFailure: (permission: Permission, cause: unknown) => void;
 };
 
 export type CallEventToastsOptions = {
@@ -72,6 +74,7 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
 
   const reportMediaFailure = useCallback(
     function reportMediaFailure(permission: Permission, cause: unknown, retry: () => Promise<void>): void {
+      console.warn(`Failed to turn on the ${permission}\n${describeMediaFailure(cause)}`);
       const code = cause instanceof SpaceClientError ? cause.code : null;
       const icon: IconName = permission === "microphone" ? "micOff" : "camOff";
       const leading = <Icon color={latest.current.colors.dangerText} name={icon} />;
@@ -130,7 +133,15 @@ export function useCallEventToasts({ onOpenSettings, resumedAfterSettings }: Cal
     [onOpenSettings, toasts],
   );
 
-  return { noteOwnMicrophoneChange, reportMediaFailure };
+  const reportMediaOffFailure = useCallback(
+    function reportMediaOffFailure(permission: Permission, cause: unknown): void {
+      console.warn(`Failed to turn off the ${permission}\n${describeMediaFailure(cause)}`);
+      toasts.show({ kind: "error", dismissible: true, message: permission === "microphone" ? "Couldn’t mute your microphone." : "Couldn’t turn off your camera." });
+    },
+    [toasts],
+  );
+
+  return { noteOwnMicrophoneChange, reportMediaFailure, reportMediaOffFailure };
 }
 
 /** After Open Settings on iOS the OS restarts Chalk; once the call is live again, say why it rejoined. */
