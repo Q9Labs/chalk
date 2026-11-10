@@ -1979,20 +1979,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#reportPendingLocalOffer(connection, "remote_offer");
     await this.#rollbackLocalOffer(connection);
     await connection.setRemoteDescription(description);
-    this.#reviveInactiveTransceivers(connection, description.sdp);
+    this.#reviveInactiveTransceivers(connection, description.sdp, response);
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
     await this.#signal(() => this.#requireTransport().renegotiate({ connectionId: owner.connectionId, sessionDescription: requireDescription(answer) }), owner);
     this.#requireGeneration(owner.generation);
   }
   // An answer cannot enable a section that this side set inactive. The SFU reuses a closed mid for its next pull: the mid of a
-  // parked receiver, or of our own muted microphone or camera. So a transceiver that is inactive and that the offer turns on
-  // must receive again before the answer is made. An offer that keeps the mid inactive still gets an inactive answer.
-  #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string): void {
+  // parked receiver, or of our own muted microphone or camera. So an inactive transceiver that the request's response names and
+  // that the offer turns on must receive again before the answer is made. cf_sfu keeps offering every closed mid as sendonly (the
+  // 2026-11-10 Orb churn probe), so only the mids the response names are revived; the others stay parked and get an inactive answer.
+  #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string, response: CloudflareSFUTracksResponse): void {
+    const named = new Set((response.tracks ?? []).flatMap((track) => (track.mid === undefined ? [] : [track.mid])));
     const active = new Set<string>();
     for (const section of offerSDP.split(/\r?\n(?=m=)/)) {
       const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
-      if (mid !== undefined && !/\r?\na=(?:recvonly|inactive)\b/.test(section)) active.add(mid);
+      if (mid !== undefined && named.has(mid) && !/\r?\na=(?:recvonly|inactive)\b/.test(section)) active.add(mid);
     }
     for (const transceiver of connection.getTransceivers()) {
       if (transceiver.direction === "inactive" && transceiver.mid !== null && active.has(transceiver.mid)) transceiver.direction = "recvonly";

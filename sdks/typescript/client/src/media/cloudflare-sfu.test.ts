@@ -2524,6 +2524,24 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     }
   });
 
+  it("keeps a parked mid inactive while the SFU keeps offering it sendonly for a pull on another mid", async () => {
+    const call = await joinSecond([remote("kept-offered-0", "participant-2", "microphone")]);
+    try {
+      await call.withdraw([]);
+      const next = remote("kept-offered-1", "participant-2", "microphone");
+      call.harness.transport.immediateRenegotiation = true;
+      call.harness.transport.remoteOfferSDP = `v=0\r\n${offerSection("remote-0", "sendonly")}${offerSection("remote-1", "sendonly")}`;
+      call.harness.transport.snapshot = { incarnation: 1, sequence: call.nextSequence(), publications: [next] };
+      call.harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+      await call.harness.client.refreshRemotePublications();
+      expect(call.peer.answerDirections["remote-1"]).toBe("recvonly");
+      expect(call.peer.answerDirections["remote-0"]).toBe("inactive");
+      expect(call.section("remote-0").direction).toBe("inactive");
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
   it("keeps a parked mid inactive when the SFU's offer keeps it inactive", async () => {
     const call = await joinSecond([remote("kept-inactive-0", "participant-2", "microphone")]);
     try {
