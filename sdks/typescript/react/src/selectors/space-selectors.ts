@@ -53,7 +53,8 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isVideoEnabled: participant.media.camera === "active" && Boolean(media?.camera),
       isScreenSharing: participant.media.screenShare === "active" && Boolean(media?.screen),
       isHandRaised: participant.handRaised,
-      ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
+      ...tileSignal(participant),
+      ...(media?.cameraPausedForNetwork || (participant.presence.connectionQuality === "poor" && participant.media.camera === "active") ? { isVideoPausedForNetwork: true } : {}),
       videoTrack: media?.camera,
       screenShareTrack: media?.screen,
       videoPublicationId: participant.media.cameraPublicationId,
@@ -61,6 +62,15 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     });
   }
   return result;
+}
+
+/** What a guest's own rating and presence say about their tile. Unknown shows no signal at all. */
+const TILE_BARS = { good: 4, weak: 2, poor: 1 } as const;
+
+function tileSignal(participant: SpaceParticipant): Pick<Participant, "connectionQuality" | "isReconnecting"> {
+  const { connectionQuality, state } = participant.presence;
+  const quality = connectionQuality === undefined ? undefined : TILE_BARS[connectionQuality];
+  return { ...(quality === undefined ? {} : { connectionQuality: quality }), ...(state === "disconnected" ? { isReconnecting: true } : {}) };
 }
 
 export function toAudioParticipants(remoteMedia: readonly RemoteMedia[]): AudioParticipant[] {

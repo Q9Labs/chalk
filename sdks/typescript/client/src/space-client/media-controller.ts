@@ -1694,7 +1694,10 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && left.link?.tier === right.link?.tier && left.link?.reason === right.link?.reason;
+  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && sameLink(left.link, right.link);
+}
+function sameLink(left: MediaSlice["link"], right: MediaSlice["link"]): boolean {
+  return left?.tier === right?.tier && left?.reason === right?.reason;
 }
 function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
   return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;

@@ -81,29 +81,29 @@ export function createLinkTracker(options: { readonly now?: () => number } = {})
     quality = next.tier === "good" ? GOOD : next;
   };
 
+  const rise = (window: LinkWindow, entered: LinkTier): void => {
+    falling = null;
+    rising = { count: (rising?.count ?? 0) + 1, tier: rising ? lower(rising.tier, entered) : entered };
+    if (rising.count < LINK_ENTER_WINDOWS) return;
+    set({ tier: rising.tier, reason: reasonOf(window) });
+    rising = null;
+  };
+
+  const fall = (window: LinkWindow, held: LinkTier): void => {
+    falling = { count: (falling?.count ?? 0) + 1, tier: falling ? higher(falling.tier, held) : held };
+    const settled = falling.count >= LINK_LEAVE_WINDOWS;
+    const stayedLongEnough = falling.tier !== "good" || now() - shownAt >= LINK_MIN_SHOWN_MS;
+    if (!settled || !stayedLongEnough) return;
+    set({ tier: falling.tier, reason: reasonOf(window) });
+    falling = null;
+  };
+
   const step = (window: LinkWindow): void => {
     const entered = enterTier(window);
     const held = holdTier(window);
-    if (RANK[entered] > RANK[quality.tier]) {
-      falling = null;
-      rising = { count: (rising?.count ?? 0) + 1, tier: rising ? lower(rising.tier, entered) : entered };
-      if (rising.count >= LINK_ENTER_WINDOWS) {
-        set({ tier: rising.tier, reason: reasonOf(window) });
-        rising = null;
-      }
-      return;
-    }
+    if (RANK[entered] > RANK[quality.tier]) return rise(window, entered);
     rising = null;
-    if (RANK[held] < RANK[quality.tier]) {
-      falling = { count: (falling?.count ?? 0) + 1, tier: falling ? higher(falling.tier, held) : held };
-      const settled = falling.count >= LINK_LEAVE_WINDOWS;
-      const stayedLongEnough = falling.tier !== "good" || now() - shownAt >= LINK_MIN_SHOWN_MS;
-      if (settled && stayedLongEnough) {
-        set({ tier: falling.tier, reason: reasonOf(window) });
-        falling = null;
-      }
-      return;
-    }
+    if (RANK[held] < RANK[quality.tier]) return fall(window, held);
     falling = null;
     if (quality.tier !== "good") quality = { tier: quality.tier, reason: reasonOf(window) ?? quality.reason };
   };

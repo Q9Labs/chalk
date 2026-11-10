@@ -31,7 +31,10 @@ export interface Participant {
   screenShareHasAudio?: boolean;
   screenShareAspect?: number;
   screenShareState?: "live" | "connecting" | "paused" | "low-quality";
+  /** 0 or absent means unknown and shows nothing; 1 is very poor and 2 is weak, and both show a signal. */
   connectionQuality?: 0 | 1 | 2 | 3 | 4;
+  /** The person's seat dropped from the call and Sync is waiting for it to come back. */
+  isReconnecting?: boolean;
   avatarUrl?: string;
   videoTrack?: MediaStreamTrack | null;
   screenShareTrack?: MediaStreamTrack | null;
