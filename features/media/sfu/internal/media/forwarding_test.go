@@ -589,3 +589,64 @@ func TestAFullNACKReportRepeatedAtOnceResendsNothing(t *testing.T) {
 		t.Fatal("a resend was refused after the first records expired")
 	}
 }
+
+// A section that keeps its SSRC for the next track must continue the outgoing stream: the client
+// keeps replay state per SSRC and a jitter buffer that expects timestamps to follow wall time.
+// The next track comes from a publisher whose sequence numbers, timestamps and VP8 ids are unrelated.
+func TestAContinuedStreamStartsTheNextTrackWhereTheLastOneStopped(t *testing.T) {
+	const ms = int64(1_000_000)
+	pause := 500 * ms
+	t.Run("audio", func(t *testing.T) {
+		tr := translator{clockRate: 48000}
+		var last outgoing
+		var lastArrival int64
+		for i := range 5 {
+			p := rtpPacket{extSeq: 65530 + uint64(i), timestamp: 4_000_000_000 + uint32(i)*960, payload: []byte{1, 'x'}, arrival: int64(i) * 20 * ms}
+			if i == 0 {
+				last = tr.begin(-1, &p)
+			} else {
+				last, _ = tr.forward(&p)
+			}
+			lastArrival = p.arrival
+		}
+		next := tr.continued()
+		p := rtpPacket{extSeq: 12, timestamp: 77, payload: []byte{1, 'y'}, arrival: lastArrival + pause}
+		got := next.begin(-1, &p)
+		if got.seq != last.seq+1 {
+			t.Fatalf("sequence %d after %d, want the next one", got.seq, last.seq)
+		}
+		ticks := got.timestamp - last.timestamp
+		if want := uint32(pause / ms * 48); ticks < want || ticks > want+960 {
+			t.Fatalf("timestamp moved %d ticks over a %d ms pause, want about %d", ticks, pause/ms, want)
+		}
+	})
+	t.Run("video", func(t *testing.T) {
+		tr := translator{clockRate: 90000}
+		var last outgoing
+		var lastArrival int64
+		for i := range 5 {
+			p := vp8Packet(100+uint64(i), 9000+uint32(i)*3000, uint8(125+i), uint8(10+i), true, i == 0)
+			p.arrival = int64(i) * 33 * ms
+			if i == 0 {
+				last = tr.begin(0, &p)
+			} else {
+				last, _ = tr.forward(&p)
+			}
+			lastArrival = p.arrival
+		}
+		next := tr.continued()
+		p := vp8Packet(40000, 5, 3, 200, true, true)
+		p.arrival = lastArrival + pause
+		got := next.begin(0, &p)
+		if got.seq != last.seq+1 {
+			t.Fatalf("sequence %d after %d, want the next one", got.seq, last.seq)
+		}
+		ticks := got.timestamp - last.timestamp
+		if want := uint32(pause / ms * 90); ticks < want || ticks > want+3000 {
+			t.Fatalf("timestamp moved %d ticks over a %d ms pause, want about %d", ticks, pause/ms, want)
+		}
+		if got.vp8.pictureID != (last.vp8.pictureID+1)&0x7f || got.vp8.tl0 != last.vp8.tl0+1 {
+			t.Fatalf("picture ID %d TL0 %d after %d %d, want both to continue", got.vp8.pictureID, got.vp8.tl0, last.vp8.pictureID, last.vp8.tl0)
+		}
+	})
+}

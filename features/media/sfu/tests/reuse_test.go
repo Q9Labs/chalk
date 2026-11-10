@@ -21,8 +21,18 @@ type stream struct {
 	payloadType uint8
 	tags        map[byte]int
 	count       int
-	reports     int // RTCP sender reports received on the stream
+	reports     int    // RTCP sender reports received on the stream
+	packets     []mark // the stream's packets in arrival order, up to markLimit
 }
+
+// mark is the header of one received packet.
+type mark struct {
+	seq uint16
+	ts  uint32
+	at  time.Time
+}
+
+const markLimit = 20000
 
 // viewer is one subscriber peer that stays connected while it pulls and closes tracks.
 type viewer struct {
@@ -74,6 +84,9 @@ func newViewer(t *testing.T, svc *service, conn string, scope protocol.Scope) *v
 			}
 			v.mu.Lock()
 			s.count++
+			if len(s.packets) < markLimit {
+				s.packets = append(s.packets, mark{packet.SequenceNumber, packet.Timestamp, time.Now()})
+			}
 			if len(packet.Payload) > 1 {
 				s.tags[packet.Payload[1]]++
 			}
@@ -126,6 +139,7 @@ func (v *viewer) seen() map[webrtc.SSRC]stream {
 		}
 		entry := copy[ssrc]
 		entry.tags = tags
+		entry.packets = s.packets[:len(s.packets):len(s.packets)]
 		copy[ssrc] = entry
 	}
 	return copy
@@ -253,6 +267,81 @@ func TestAReusedSectionKeepsSendingSenderReports(t *testing.T) {
 			})
 			t.Logf("%s use %d on mid %s received a sender report", track, use, mid)
 			bob.closeTrack(mid)
+		}
+	}
+}
+
+// TestAReusedSectionContinuesItsStream checks what the client's replay protection and jitter buffer
+// need from a section that keeps its SSRC: across a close and the next pull, sequence numbers go on
+// forward by a small step, and timestamps go forward by about the time that passed, never back and
+// never far ahead, even when the next track comes from another publisher. Audio and video, three reuses each.
+func TestAReusedSectionContinuesItsStream(t *testing.T) {
+	ca := newAuthority(t, "chalk test CA")
+	svc := startService(t, ca)
+	svc.grantSources(t, scopeA, scopeB, scopeD)
+	connA := svc.createSession(t, "create-continue-alice", scopeA)
+	connD := svc.createSession(t, "create-continue-dave", scopeD)
+	connB := svc.createSession(t, "create-continue-bob", scopeB)
+	alice := publishTaggedMedia(t, svc, connA, scopeA, 'x', 'p')
+	defer alice.stop()
+	dave := publishTaggedMedia(t, svc, connD, scopeD, 'y', 'r')
+	defer dave.stop()
+	bob := newViewer(t, svc, connB, scopeB)
+	// Each use pulls from the other publisher, whose own sequence numbers and timestamps are unrelated.
+	publishers := []string{connA, connD}
+
+	const idle = 400 * time.Millisecond
+	for _, track := range []struct {
+		name  string
+		clock float64
+	}{{audioName, 48000}, {videoName, 90000}} {
+		var mid string
+		for use := range 4 {
+			mid = bob.pull(publishers[use%2], track.name)
+			want := 0
+			for _, s := range bob.seen() {
+				if s.mid == mid {
+					want = s.count + 10
+				}
+			}
+			eventually(t, "ten more packets on the pulled mid", 10*time.Second, func() bool {
+				for _, s := range bob.seen() {
+					if s.mid == mid && s.count >= want {
+						return true
+					}
+				}
+				return false
+			})
+			bob.closeTrack(mid)
+			time.Sleep(idle)
+			if use == 3 {
+				break
+			}
+		}
+		var packets []mark
+		for _, s := range bob.seen() {
+			if s.mid == mid {
+				packets = s.packets
+			}
+		}
+		gaps := 0
+		for index := 1; index < len(packets); index++ {
+			before, after := packets[index-1], packets[index]
+			step := int16(after.seq - before.seq)
+			ticks := int32(after.ts - before.ts)
+			elapsed := after.at.Sub(before.at).Seconds() * track.clock
+			if step <= 0 || step > 64 {
+				t.Fatalf("%s: packet %d follows sequence %d with %d (step %d); a reused section must continue forward", track.name, index, before.seq, after.seq, step)
+			}
+			if ticks < 0 || float64(ticks) > elapsed+track.clock/2 {
+				t.Fatalf("%s: packet %d timestamp moved %d ticks in %.0f ticks of wall time", track.name, index, ticks, elapsed)
+			}
+			if after.at.Sub(before.at) > idle/2 {
+				gaps++
+			}
+		}
+		if gaps != 3 {
+			t.Fatalf("%s: saw %d pauses between uses, want 3", track.name, gaps)
 		}
 	}
 }
