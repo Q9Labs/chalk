@@ -88,7 +88,7 @@ calls ride out a burst on the headroom above.
 
 ## Not proved
 
-- The five-hour, three-class staging soak at budget 22,000 remains unproved. Its capacity figure comes from the model above.
+- The five-hour, three-class staging soak at budget 22,000 on a 1 vCPU staging node has one pass and one fail. Rerun A passed with no stalls over 500 ms and a steal maximum of 37.4%. Rerun B failed with 47 microphone stalls over 500 ms and 8 screen-share stalls, all within the first minute, when steal spiked to 54% and own CPU reached 59%. The two runs do not separate the cause: a start-up ramp or the steal spike could explain the rerun B stalls. The capacity figure comes from the model above, not from a passing soak.
 - Production's five-class, three-hour result is proved only at the measured traffic below 36,000 packets/s. Capacity above 15 participants, toward the 36,000 packet budget, remains unproved.
 - The soak C summary does not hold paired 10 s steal and own-CPU samples. Its 40% guard setting is now confirmed from the node (see Deployed values).
 - The 06:47Z event is unexplained by steal.
