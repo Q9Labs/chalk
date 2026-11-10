@@ -31,6 +31,7 @@ require_root() {
 }
 
 # Downloads the pinned Caddy release for this machine and writes the verified binary to $1.
+# Each failure removes the private work folder before it stops.
 fetch_caddy() {
   local dest="$1" arch expected work archive
   case "$(uname -m)" in
@@ -41,17 +42,23 @@ fetch_caddy() {
   work="$(mktemp -d)"
   archive="caddy_${caddy_version}_linux_${arch}.tar.gz"
   curl --fail --silent --show-error --location --output "${work}/${archive}" \
-    "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}"
-  [[ "$(sha512sum "${work}/${archive}" | cut -d' ' -f1)" == "$expected" ]] || fail "checksum mismatch for ${archive}"
-  tar -xzf "${work}/${archive}" -C "$work" caddy
-  install -m 0755 "${work}/caddy" "$dest"
+    "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}" \
+    || { rm -rf "$work"; fail "could not download ${archive}"; }
+  [[ "$(sha512sum "${work}/${archive}" | cut -d' ' -f1)" == "$expected" ]] \
+    || { rm -rf "$work"; fail "checksum mismatch for ${archive}"; }
+  { tar -xzf "${work}/${archive}" -C "$work" caddy && install -m 0755 "${work}/caddy" "$dest"; } \
+    || { rm -rf "$work"; fail "could not unpack ${archive}"; }
   rm -rf "$work"
 }
 
 # Replaces $2 with the staged file $1 in one rename, so a reader never sees a half-written file.
+# The caller sits in a conditional chain where errexit is off: a failed copy must stop here, before the rename.
 replace_file() {
   local staged="$1" target="$2" mode="$3"
-  install -m "$mode" "$staged" "${target}.new"
+  if ! install -m "$mode" "$staged" "${target}.new"; then
+    rm -f "${target}.new"
+    return 1
+  fi
   mv -f "${target}.new" "$target"
 }
 
