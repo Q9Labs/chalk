@@ -151,13 +151,14 @@ file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on 
 
 Commit and push first: `box run` fetches the pushed HEAD, not working-tree edits.
 Run Linux gates and browser suites on Instabox, never on the laptop or M4.
-The disposable machine is deleted when the command ends. Keep the single-worker
-settings above: the 4-vCPU / 8-GB machine has no room for extra workers.
+The disposable machine is deleted when the command ends. Use `--size 2x4` (2 vCPU / 4 GiB, half the price of the
+default 4x8): every lane of the full gate peaks at or below 2.5 GiB there, and the full gate takes about as long as on 4x8.
+Keep the single-worker settings above: there is no room for extra workers.
 
 ```sh
-box run -- 'bash scripts/gates/instabox-run.sh --browser'
-box run -- 'bash scripts/gates/instabox-run.sh apps/api/scripts/gate.sh'
-box run -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh --browser'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh apps/api/scripts/gate.sh'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
 ```
 
 `scripts/gates/instabox-run.sh` installs locked dependencies and the missing Ruby/lsof

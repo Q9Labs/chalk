@@ -6,6 +6,8 @@ script_directory="$(cd "$(dirname "$0")" && pwd)"
 # --no-resolve avoids the Python transitive resolver crash, not input discovery.
 args=(scan source --recursive --no-ignore --no-resolve --all-packages --experimental-exclude 'r:(^|/)(node_modules|\.git|\.worktrees)$')
 
+# Without a limit the scanner's heap grows until the kernel kills it on a 4 GiB machine; with 1 GiB the machine peaks at 2.3 GiB.
+export GOMEMLIMIT="${GOMEMLIMIT:-1GiB}"
 osv_scanner() {
   if command -v osv-scanner >/dev/null 2>&1; then
     osv-scanner "$@"
