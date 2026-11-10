@@ -80,8 +80,8 @@ export function KeysPanel({ keys, nextCursor, fresh, onCreate, onRotate, onRevok
 }
 
 function KeyRow({ apiKey, fresh, onRotate, onRevoke }: { readonly apiKey: KeyDTO; readonly fresh: boolean; readonly onRotate: (key: KeyDTO) => void; readonly onRevoke: (key: KeyDTO) => void }) {
-  const soon = expiresSoon(apiKey.expiresAt);
   const expired = hasExpired(apiKey.expiresAt);
+  const soon = expired ? undefined : expiresSoon(apiKey.expiresAt);
   return (
     <div className={fresh ? "row new" : "row"} role="row">
       <div className="nm" role="cell">

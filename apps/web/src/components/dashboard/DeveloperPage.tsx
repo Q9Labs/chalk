@@ -92,7 +92,8 @@ export function DeveloperPage() {
 
   return (
     <Shell nav={<SectionNav keys={keys.length} soon={soon.length > 0} websites={origins.length + 1} failing={failing.length > 0} />}>
-      <Summary keys={keys} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
+      <Summary keys={keys} used={listed} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
+      {keys.length === 0 && data.nextKeyCursor ? <LiveKeySearch cursor={data.nextKeyCursor} onPage={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
       <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
       <KeysPanel
         keys={listed}
@@ -269,6 +270,7 @@ function SectionNav({ keys, soon, websites, failing }: { readonly keys: number; 
 /** Four numbers the page really has: it never invents usage the API doesn't return. */
 function Summary({
   keys,
+  used,
   moreKeys,
   soon,
   websites,
@@ -277,6 +279,7 @@ function Summary({
   failing,
 }: {
   readonly keys: readonly KeyDTO[];
+  readonly used: readonly KeyDTO[];
   readonly moreKeys: boolean;
   readonly soon: readonly KeyDTO[];
   readonly websites: number;
@@ -284,7 +287,7 @@ function Summary({
   readonly moreWebhooks: boolean;
   readonly failing: number;
 }) {
-  const lastUsed = keys.reduce<KeyDTO | null>((latest, key) => (key.lastUsedAt && (!latest?.lastUsedAt || key.lastUsedAt > latest.lastUsedAt) ? key : latest), null);
+  const lastUsed = used.reduce<KeyDTO | null>((latest, key) => (key.lastUsedAt && (!latest?.lastUsedAt || key.lastUsedAt > latest.lastUsedAt) ? key : latest), null);
   const soonest = soon[0];
   return (
     <div className="card stats" role="group" aria-label="Summary">
@@ -333,4 +336,24 @@ function Stat({ icon, label, value, children }: { readonly icon: IconName; reado
       <div className="s">{children}</div>
     </div>
   );
+}
+
+/** The first pages of keys can all be expired while a live key sits on a later page, so the Connect card keeps loading pages until it has one. */
+function LiveKeySearch({ cursor, onPage }: { readonly cursor: string; readonly onPage: (page: DeveloperDTO) => void }) {
+  const toast = useToast();
+  useEffect(() => {
+    let current = true;
+    readPage("developer", { keyCursor: cursor }).then(
+      (page) => {
+        if (current) onPage(page);
+      },
+      (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+    );
+    return () => {
+      current = false;
+    };
+    // The cursor alone names the page to fetch; `onPage` and `toast` are new on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursor]);
+  return null;
 }
