@@ -8,7 +8,10 @@ Type=simple
 Environment=CHALK_DIRECT_SYNC_HOST=__DIRECT_SYNC_HOST__
 Environment=XDG_DATA_HOME=/var/lib/chalk-direct-sync
 Environment=XDG_CONFIG_HOME=/var/lib/chalk-direct-sync
+# The leading + runs the firewall steps as root, outside DynamicUser; the caps exist only while the proxy runs.
+ExecStartPre=+/usr/sbin/nft -f /etc/chalk-direct-sync/chalk-direct-sync-proxy.nft
 ExecStart=/opt/chalk-direct-sync/caddy run --config /etc/chalk-direct-sync/Caddyfile --adapter caddyfile
+ExecStopPost=+-/usr/sbin/nft delete table inet chalk_direct_proxy
 DynamicUser=yes
 StateDirectory=chalk-direct-sync
 AmbientCapabilities=CAP_NET_BIND_SERVICE

@@ -1,6 +1,6 @@
 # Direct Sync path
 
-The direct Sync path lets a client open its Sync WebSocket straight to the managed host over TLS, without the Cloudflare Tunnel. It is off everywhere by default. With it off, clients, Sync and the host behave exactly as before.
+The direct Sync path lets a client open its Sync WebSocket straight to the managed host over TLS, without the Cloudflare Tunnel. The same door also forwards the API's SFU signalling routes (no client uses them yet). It is off everywhere by default. With it off, clients, Sync and the host behave exactly as before.
 
 ## Why
 
@@ -16,13 +16,13 @@ The trial did not run in production, with real clients, or under load. Treat the
 
 ## What exists
 
-| Part                   | Where                                                                            | Default                          |
-| ---------------------- | -------------------------------------------------------------------------------- | -------------------------------- |
-| Client flag            | SDK option `syncDirectUrl`, web build value `CHALK_WEB_SYNC_DIRECT_URL`          | unset, so off                    |
-| Direct-first socket    | `sdks/typescript/client/src/sync/direct-first.ts`                                | not used while the flag is unset |
-| TLS proxy on the host  | `infrastructure/managed-episode/direct-sync/` (`direct-sync-proxy`, `Caddyfile`) | not installed                    |
-| Security group and DNS | `infrastructure/managed-episode/direct-sync/opentofu/`                           | not applied                      |
-| Sync connection bounds | `apps/sync/lib/chalk_sync/transport/direct_limits.ex`                            | active only for proxied requests |
+| Part                   | Where                                                                                                           | Default                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Client flag            | SDK option `syncDirectUrl`, web build value `CHALK_WEB_SYNC_DIRECT_URL`                                         | unset, so off                    |
+| Direct-first socket    | `sdks/typescript/client/src/sync/direct-first.ts`                                                               | not used while the flag is unset |
+| TLS proxy on the host  | `infrastructure/managed-episode/direct-sync/` (`direct-sync-proxy`, `Caddyfile`, `chalk-direct-sync-proxy.nft`) | not installed                    |
+| Security group and DNS | `infrastructure/managed-episode/direct-sync/opentofu/`                                                          | not applied                      |
+| Sync connection bounds | `apps/sync/lib/chalk_sync/transport/direct_limits.ex`                                                           | active only for proxied requests |
 
 No hostname, address or account identifier is stored in Git. The operator supplies them when applying.
 
@@ -39,7 +39,7 @@ The whiteboard socket does not use the direct path. Only `/v1/sync` is proxied.
 Start with nightly. The OpenTofu root accepts only `environment = "nightly"` and fails validation for anything else, and `build-web` passes the direct URL to the nightly build only. Staging and production each need a reviewed change to both before they can use the path. Every step is reversible; see the next section.
 
 1. **Network.** Apply the OpenTofu root in `infrastructure/managed-episode/direct-sync/opentofu/` with the environment, region, instance id, hostname, zone id and the host's public address as variables. It creates one security group that allows inbound TCP 443 and nothing else, attaches it to the host's network interface, and creates DNS-only A records. The host address must survive stop and start, so use an Elastic IP; the nightly host is a spot instance that stops on interruption.
-2. **Proxy.** On the host, run `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` as root (through the environment's SSM document). It downloads a pinned Caddy release, checks its SHA-512, validates the config and starts `chalk-direct-sync-proxy.service`. The proxy only forwards `/v1/sync` to the local Sync port. It replaces `Cf-Connecting-Ip` with the TCP peer address and sets `X-Chalk-Ingress: direct`, which is how Sync knows to apply its direct bounds. Every other path returns 404.
+2. **Proxy.** On the host, run `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` as root (through the environment's SSM document). It downloads a pinned Caddy release, checks its SHA-512, validates the config and starts `chalk-direct-sync-proxy.service`. The proxy forwards two kinds of request and answers 404 to everything else. `/v1/sync` goes to the local Sync port. The SFU signalling routes of the API (`/v1/tenants/*/spaces/*/episodes/*/participants/*/media/sfu/*`, with the `GET`, `POST`, `PUT` and `OPTIONS` methods and a 1 MiB body cap) go to the local API port, so login, admin, OAuth and MCP are never served here. For both, it replaces `Cf-Connecting-Ip` and `X-Forwarded-For` with the TCP peer address and sets `X-Chalk-Ingress: direct`; the API and Sync trust those headers only from this proxy. The proxy adds no CORS headers: the API answers preflights itself. The unit also loads an nftables table, `chalk_direct_proxy`, that drops a source's new connections above 30 a second (burst 100) and its connections above 512 (the count follows connection tracking, so closed connections count until they leave TIME_WAIT). The table is removed when the unit stops.
 3. **Certificate.** Caddy issues the certificate itself over TLS-ALPN-01 on port 443 as soon as DNS points at the host and the security group is open. No DNS token or other secret is on the host. Run `direct-sync-proxy status` to confirm it serves a certificate.
 4. **Sync bounds.** The defaults apply without configuration. To change them, set these in the Sync environment file and restart Sync: `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_IP` (64), `CHALK_SYNC_DIRECT_MAX_UNAUTHENTICATED_PER_IP` (8), `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT` (512), `CHALK_SYNC_DIRECT_UPGRADES_PER_IP_WINDOW` (20 per 10 seconds). Raise the per-IP values before a large event behind one office network.
 5. **Flag.** Set the repository variable `CHALK_NIGHTLY_SYNC_DIRECT_URL` to `wss://<hostname>/v1/sync` (the OpenTofu output `direct_sync_url`) and cut a nightly web release. The `build-web` job passes it to the nightly build only, as `CHALK_WEB_SYNC_DIRECT_URL`, so the production artifact in the same run never gets it. Production needs its own wiring change in that job. Native apps pass `syncDirectUrl` to `createNativeSpaceClient`. The web release fails if the value is not a `wss://` URL ending in `/v1/sync`.
@@ -65,7 +65,7 @@ The flag does not switch off without a deploy. The first row is the no-deploy un
 
 **Sync logs and traces.** A client that sends a frame over 64 KiB is closed with code 1009 and Bandit logs `max_frame_size_exceeded` at error level. A single one is a broken client; a stream of them from one address is abuse. Sockets that exceed a bound close with 1013 ("try again later"), and Sync records the reason `direct_limit` on `sync.websocket.closed`. Direct sockets carry `ingress=direct` on `sync.websocket.handshake`, so split latency and closes by ingress.
 
-**Proxy and certificate.** Run `direct-sync-proxy status` from a check or by hand. It fails when the service is down, when no certificate is served, or when the certificate expires within 14 days. Caddy renews at about two thirds of the certificate's life and logs every attempt in the journal (`journalctl -u chalk-direct-sync-proxy | grep -i acme`). A failed renewal shows up first as that log line, then as `status` failing 14 days before expiry, and last as clients falling back to the Tunnel when the certificate has expired. Certificates live in `/var/lib/chalk-direct-sync` and survive a restart of the host.
+**Proxy and certificate.** Run `direct-sync-proxy status` from a check or by hand. It fails when the service is down, when the nftables caps are not loaded, when no certificate is served, or when the certificate expires within 14 days. Caddy renews at about two thirds of the certificate's life and logs every attempt in the journal (`journalctl -u chalk-direct-sync-proxy | grep -i acme`). A failed renewal shows up first as that log line, then as `status` failing 14 days before expiry, and last as clients falling back to the Tunnel when the certificate has expired. Certificates live in `/var/lib/chalk-direct-sync` and survive a restart of the host.
 
 **Client latency.** The nightly scorecard's Sync connect and join stages should drop for far clients. If they do not, check that the direct socket opened: a Sync upgrade near 800 ms from a far network means the client fell back.
 
