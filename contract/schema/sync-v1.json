@@ -148,7 +148,7 @@
     },
     {
       "id": "live",
-      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      "accepts": ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
       "heartbeat": {
         "intervalMs": 20000,
         "missedDeadlinesBeforeClose": 5
@@ -430,6 +430,12 @@
       "optional": true,
       "value": true,
       "description": "Present on a connection that negotiated media_off_reason=1: this Sync sends off_reason and off_revision on media items. A client that does not see it must not rely on them."
+    },
+    "connectionQuality": {
+      "wireName": "connection_quality",
+      "optional": true,
+      "value": true,
+      "description": "Present on a connection that negotiated connection_quality=1: this Sync accepts connection_quality_set and sends connection_quality on presence items. A client that does not see it must not send the frame."
     },
     "entryGeneration": {
       "wireName": "entry_generation",
@@ -1179,10 +1185,12 @@
         "kind": "array",
         "maxItems": 500,
         "exactFields": ["participant_id", "state", "speaking", "active_speaker"],
-        "optionalFields": ["identity_id", "device_type", "admission_revision"],
+        "optionalFields": ["identity_id", "device_type", "admission_revision", "connection_quality"],
+        "connectionQuality": ["good", "weak", "poor"],
         "identityId": "uuid",
         "deviceType": ["phone", "tablet", "computer"],
         "negotiation": "participant_devices=1 WebSocket query opts into identity and coarse device hints; omitted for older clients",
+        "connectionQualityNegotiation": "connection_quality=1 WebSocket query opts into connection_quality, the quality this person reported for their own link; omitted when nothing was reported and for older clients",
         "participantId": "uuid",
         "state": ["connected", "disconnected"],
         "speaking": {
@@ -1241,6 +1249,13 @@
   "enteredAck": {
     "direction": "server-to-client",
     "type": "entered_ack"
+  },
+  "connectionQualitySet": {
+    "direction": "client-to-server",
+    "type": "connection_quality_set",
+    "exactFields": ["type", "quality"],
+    "quality": ["good", "weak", "poor"],
+    "description": "A guest rates their own link; the rating rides the presence stream until they disconnect. Sent only on a connection whose welcome carried connection_quality, and only when the rating changes."
   },
   "ping": {
     "direction": "client-to-server",

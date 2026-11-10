@@ -46,6 +46,8 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly link?: LinkJudge;
   /** Whether the connected Sync advertised `media_off_reason`. Absent means no. */
   readonly offReasonNegotiated?: () => boolean;
+  /** Tells the other guests how well this link carries the call. Does nothing when this Sync did not offer the extension. */
+  readonly setConnectionQuality?: (quality: import("../media/link-quality").LinkTier) => void;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
   readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;

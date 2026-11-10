@@ -1461,6 +1461,31 @@ describe("V1SyncClient", () => {
     await recovering;
     expect(client.getSnapshot().connection.phase).toBe("connecting");
   });
+  // Quality is sent only on a connection whose welcome echoed `connection_quality`, so an older Sync never sees a frame it rejects.
+  it("asks for connection quality, sends it only when the welcome echoed it, and reads it from presence", async () => {
+    const clock = new TestClock();
+    const { client, socket, state, urls } = await liveClient({ clock, reconnectDelayMs: 1 });
+    try {
+      expect(new URL(urls[0]!).searchParams.get("connection_quality")).toBe("1");
+      client.setConnectionQuality("weak");
+      expect(socket.frames().filter((frame) => frame.type === "connection_quality_set")).toHaveLength(0);
+      socket.close(1012);
+      clock.advance(0);
+      await settle();
+      clock.advance(1);
+      socket.open();
+      await settle();
+      await recoverSocket(client, socket, state, await wireSnapshot(state), "up_to_date", true, undefined, false, true);
+      client.setConnectionQuality("weak");
+      expect(socket.frames().filter((frame) => frame.type === "connection_quality_set")).toEqual([{ type: "connection_quality_set", quality: "weak" }]);
+      const applied = snapshotWhen(client, (snapshot) => snapshot.presence?.sequence === 1);
+      socket.receive({ type: "projection_event", stream: "presence", projection_id: projectionId, sequence: 1, item: { participant_id: ownerId, state: "connected", speaking: false, active_speaker: false, connection_quality: "poor" } });
+      await applied;
+      expect(client.getSnapshot().presence?.items[0]).toMatchObject({ participantId: ownerId, connectionQuality: "poor" });
+    } finally {
+      client.stop();
+    }
+  });
   it("asks Sync for media off reasons and reads them from the media projection", async () => {
     const { client, socket, urls } = await liveClient();
     expect(new URL(urls[0]!).searchParams.get("media_off_reason")).toBe("1");
@@ -2854,7 +2879,7 @@ async function liveCollaborationClient(overrides: Partial<ConstructorParameters<
   expect(socket.closeCalls).toEqual([]);
   return { client, socket, state, recover };
 }
-async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false): Promise<void> {
+async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1ControlState, snapshot: Snapshot, mode: "snapshot" | "up_to_date", entryConfirmation = true, entryGeneration?: number, mediaOffReason = false, connectionQuality = false): Promise<void> {
   const recoveryAcks = () => socket.frames().filter((frame) => frame.type === "recovery_ack").length;
   const acksBefore = recoveryAcks();
   socket.receive({
@@ -2869,6 +2894,7 @@ async function recoverSocket(client: V1SyncClient, socket: TestSocket, state: V1
     ...(entryConfirmation ? { entry_confirmation: true } : {}),
     ...(entryGeneration === undefined ? {} : { entry_generation: entryGeneration }),
     ...(mediaOffReason ? { media_off_reason: true } : {}),
+    ...(connectionQuality ? { connection_quality: true } : {}),
   });
   socket.receive({ type: "projection_snapshot", stream: "media", projection_id: projectionId, sequence: 0, items: [] });
   socket.receive({ type: "projection_snapshot", stream: "presence", projection_id: projectionId, sequence: 0, items: [] });

@@ -40,7 +40,7 @@ export const SyncProtocolMetadata = {
     },
     {
       id: "live",
-      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "ping"],
+      accepts: ["entered", "command", "live_target", "directed_request", "delivery_ack", "request_ack", "reaction_send", "chat_send", "chat_page_request", "chat_read_set", "chat_reaction_set", "connection_quality_set", "ping"],
       heartbeat: {
         intervalMs: 20000,
         missedDeadlinesBeforeClose: 5,
@@ -529,6 +529,8 @@ function strictClientFrame(value: unknown): boolean {
       return exactObject(value, ["type", "stream", "revision", "state_digest"]);
     case "recovery_ack":
       return exactObject(value, ["type", "recovery_id", "revision", "state_digest"]);
+    case "connection_quality_set":
+      return exactObject(value, ["type", "quality"]);
     case "entered":
       return exactObject(value, ["type"]);
     case "ping":
@@ -618,7 +620,13 @@ function strictProjectionItem(value: unknown, stream: unknown): boolean {
   if (stream === "presence")
     return (
       isObject(value) &&
-      exactObject(value, [...["participant_id", "state", "speaking", "active_speaker"], ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []), ...(Object.hasOwn(value, "device_type") ? ["device_type"] : []), ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : [])])
+      exactObject(value, [
+        ...["participant_id", "state", "speaking", "active_speaker"],
+        ...(Object.hasOwn(value, "identity_id") ? ["identity_id"] : []),
+        ...(Object.hasOwn(value, "device_type") ? ["device_type"] : []),
+        ...(Object.hasOwn(value, "admission_revision") ? ["admission_revision"] : []),
+        ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
+      ])
     );
   return false;
 }
@@ -633,11 +641,13 @@ function strictWelcome(value: Record<string, unknown>): boolean {
     isObject(extension) && ["collaboration_v1", "collaboration_v2"].includes(String(extension.name)) && exactObject(extension, ["name", "capabilities", "participant_capabilities", "chat_head_sequence", "retained_floor_sequence", "read_receipts"]) && Array.isArray(extension.read_receipts);
   if (Object.hasOwn(value, "entry_confirmation") && value.entry_confirmation !== true) return false;
   if (Object.hasOwn(value, "media_off_reason") && value.media_off_reason !== true) return false;
+  if (Object.hasOwn(value, "connection_quality") && value.connection_quality !== true) return false;
   const fields = [
     ...base,
     ...(extensionValid ? ["extensions"] : []),
     ...(Object.hasOwn(value, "entry_confirmation") ? ["entry_confirmation"] : []),
     ...(Object.hasOwn(value, "media_off_reason") ? ["media_off_reason"] : []),
+    ...(Object.hasOwn(value, "connection_quality") ? ["connection_quality"] : []),
     ...(Object.hasOwn(value, "entry_generation") ? ["entry_generation"] : []),
     ...(Object.hasOwn(value, "participant_identity_id") ? ["participant_identity_id"] : []),
   ];
@@ -1303,6 +1313,7 @@ const WelcomeBase = {
   head: ControlCursorSchema,
   entry_confirmation: Schema.optionalKey(Schema.Literal(true)),
   media_off_reason: Schema.optionalKey(Schema.Literal(true)),
+  connection_quality: Schema.optionalKey(Schema.Literal(true)),
   entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(9007199254740991))),
 };
 const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };
@@ -1365,6 +1376,7 @@ export const PresenceProjectionItemSchema = Schema.Struct({
   identity_id: Schema.optional(UuidSchema),
   device_type: Schema.optional(Schema.Literals(["phone", "tablet", "computer"])),
   admission_revision: Schema.optional(PositiveIntegerSchema),
+  connection_quality: Schema.optional(Schema.Literals(["good", "weak", "poor"])),
 }).check(Schema.makeFilter((item) => (item.state !== "disconnected" || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: "disconnected presence cannot be speaking or active speaker" })));
 export const MediaProjectionSnapshotFrameSchema = Schema.Struct({
   type: Schema.Literal("projection_snapshot"),
@@ -1501,6 +1513,7 @@ export const RetryableErrorFrameSchema = Schema.Struct({ type: Schema.Literal("r
 export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal("error"), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(1024), ...ServerCorrelationFields });
 export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal("entered") });
 export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal("entered_ack"), ...ServerCorrelationFields });
+export const ConnectionQualitySetFrameSchema = Schema.Struct({ type: Schema.Literal("connection_quality_set"), quality: Schema.Union([Schema.Literal("good"), Schema.Literal("weak"), Schema.Literal("poor")]) });
 export const PingFrameSchema = Schema.Struct({ type: Schema.Literal("ping") });
 export const PongFrameSchema = Schema.Struct({ type: Schema.Literal("pong"), ...ServerCorrelationFields });
 
@@ -1537,6 +1550,7 @@ export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((f
         DeliveryAckFrameSchema,
         RecoveryAckFrameSchema,
         EnteredFrameSchema,
+        ConnectionQualitySetFrameSchema,
         PingFrameSchema,
       ]),
     ),

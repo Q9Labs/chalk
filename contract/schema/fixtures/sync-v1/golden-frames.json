@@ -196,6 +196,10 @@
       "limit": 50
     },
     {
+      "type": "connection_quality_set",
+      "quality": "weak"
+    },
+    {
       "type": "ping"
     }
   ],
@@ -414,6 +418,19 @@
       }
     },
     {
+      "type": "projection_event",
+      "stream": "presence",
+      "projection_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c26",
+      "sequence": 2,
+      "item": {
+        "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+        "state": "connected",
+        "speaking": false,
+        "active_speaker": false,
+        "connection_quality": "poor"
+      }
+    },
+    {
       "type": "live_target_result",
       "operation_id": "operation-0000001",
       "name": "set_microphone_enabled",
@@ -458,6 +475,20 @@
       },
       "mode": "up_to_date",
       "entry_confirmation": true
+    },
+    {
+      "type": "welcome",
+      "protocol": 1,
+      "participant_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c21",
+      "participant_generation": 1,
+      "recovery_id": "018f2f65-2a77-7a44-8e9a-5b0b6f8d4c22",
+      "head": {
+        "revision": 18,
+        "state_schema_version": 1,
+        "state_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "mode": "up_to_date",
+      "connection_quality": true
     },
     {
       "type": "reaction",

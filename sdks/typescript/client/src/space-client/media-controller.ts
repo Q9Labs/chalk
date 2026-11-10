@@ -2,6 +2,7 @@ import { otherDeviceHasMicrophone } from "./same-identity";
 import { Clock, Context, Deferred, Effect, Exit, Layer, Scope, Semaphore } from "effect";
 import type { ConnectionMediaSnapshot, MediaSource } from "../media";
 import type { LocalPublicationRetirementCause } from "../media/plane";
+import { createLinkTracker, type LinkTier, type LinkTracker } from "../media/link-quality";
 import { cameraEffectFailure } from "../media/camera-effects";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
@@ -165,6 +166,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   readonly #tracks = new Map<MediaSource, MediaStreamTrack>();
   readonly #sources: Record<MediaSource, SourceWorker> = { microphone: sourceWorker(true), camera: sourceWorker(true), screen: sourceWorker(false) };
   #syncLive = false;
+  readonly #link: LinkTracker;
+  #reportedTier: LinkTier = "good";
   #disposed = false;
   /** The wanted-on sources when recovery began, with the intent revision each one had then. */
   #recovering: ReadonlyMap<MediaSource, number> | null = null;
@@ -195,6 +198,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#gates = gates;
     this.#now = now;
     this.#fork = fork;
+    this.#link = createLinkTracker({ now });
     this.#projection = new MediaProjectionMonitor({
       now,
       schedule: connection.scheduleUnsafe,
@@ -1367,6 +1371,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#unsubscribeSync = null;
     this.#ports = ports;
     this.#projection.reset();
+    this.#link.reset(ports?.media.getSnapshot().callStats?.at(-1));
+    this.#reportedTier = "good";
     this.#syncLive = false;
     this.#cancelOffRetries();
     this.#cancelInitialOnRetries();
@@ -1593,6 +1599,11 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #screenShareHasAudio(snapshot: ConnectionMediaSnapshot | undefined): boolean {
     return Boolean(this.#screenAudioTrack?.readyState === "live" && snapshot?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live"));
   }
+  #reportLink(tier: LinkTier): void {
+    if (!this.#syncLive || tier === this.#reportedTier) return;
+    this.#reportedTier = tier;
+    this.#ports?.sync.setConnectionQuality?.(tier);
+  }
   #publish(): void {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
@@ -1603,6 +1614,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
       camera: this.#confirmedLocal("camera"),
       screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
+    const link = this.#link.observe(snapshot?.callStats?.at(-1), current.connection.syncHealth === "degraded");
+    this.#reportLink(link.tier);
     const pausedForNetwork = pausedPublicationIds(snapshot);
     const remote = Object.freeze(
       (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
@@ -1619,6 +1632,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       },
       incomingRequests: this.#requests,
       callStats: snapshot?.callStats,
+      link,
     });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
@@ -1680,7 +1694,7 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats;
+  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats && left.link?.tier === right.link?.tier && left.link?.reason === right.link?.reason;
 }
 function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
   return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;

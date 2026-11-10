@@ -113,6 +113,8 @@ export class V1SyncClient implements V1CollaborationClient {
   #lastHeartbeatReplyAt: number | null = null;
   /** Whether this connection's welcome advertised `media_off_reason`; reset for each connection. */
   #offReasonNegotiated = false;
+  /** Whether this connection's welcome advertised `connection_quality`; reset for each connection. */
+  #connectionQualityNegotiated = false;
   readonly #watch: LinkWatch;
   /** Tells a recovery whether the drop was proven short. */
   readonly link: LinkJudge;
@@ -253,6 +255,11 @@ export class V1SyncClient implements V1CollaborationClient {
   /** True when the connected Sync advertised `media_off_reason` in its welcome, so media items may carry `off_reason`. */
   offReasonNegotiated(): boolean {
     return this.#offReasonNegotiated;
+  }
+  /** Tells the other guests how well this link carries the call. A Sync without the extension is never sent the frame. */
+  setConnectionQuality(quality: "good" | "weak" | "poor"): void {
+    if (!this.#connectionQualityNegotiated || this.#phase.phase !== "live") return;
+    this.#send({ type: "connection_quality_set", quality });
   }
   getSnapshot(): V1EpisodeSnapshot {
     const pendingCommands = this.#commandScheduler.pendingCommands;
@@ -425,6 +432,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#emit();
     this.#entryNegotiated = false;
     this.#offReasonNegotiated = false;
+    this.#connectionQualityNegotiated = false;
     let socket: V1Socket;
     try {
       socket = this.#options.webSocket.connect(syncEntryUrl(this.#options.url, this.#entryGeneration, this.#options.entryConfirmation === true));
@@ -666,6 +674,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#collaborationState.acceptWelcome(frame);
     this.#entryNegotiated = frame.entry_confirmation === true;
     this.#offReasonNegotiated = frame.media_off_reason === true;
+    this.#connectionQualityNegotiated = frame.connection_quality === true;
     this.#entryGeneration = frame.entry_generation ?? this.#entryGeneration;
     this.#participantId = frame.participant_id;
     this.#participantGeneration = frame.participant_generation;
@@ -1135,7 +1144,16 @@ function mediaItem(item: typeof MediaProjectionItemSchema.Type): V1MediaPublicat
   };
 }
 function presenceItem(item: typeof import("../generated/sync").PresenceProjectionItemSchema.Type): V1Presence {
-  return { participantId: item.participant_id, admissionRevision: item.admission_revision, identityId: item.identity_id, deviceType: item.device_type, state: item.state, speaking: item.speaking, activeSpeaker: item.active_speaker };
+  return {
+    participantId: item.participant_id,
+    admissionRevision: item.admission_revision,
+    identityId: item.identity_id,
+    deviceType: item.device_type,
+    state: item.state,
+    speaking: item.speaking,
+    activeSpeaker: item.active_speaker,
+    ...(item.connection_quality === undefined ? {} : { connectionQuality: item.connection_quality }),
+  };
 }
 function mediaKey(item: V1MediaPublication): string {
   return `${item.participantId}:${item.source}`;

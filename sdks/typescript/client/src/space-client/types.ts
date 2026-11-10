@@ -119,6 +119,8 @@ export type ParticipantPresence = {
   readonly state: "connected" | "disconnected" | "unknown";
   readonly speaking: boolean;
   readonly activeSpeaker: boolean;
+  /** How well this person's own link carries the call, as they rate it. Absent when unknown. */
+  readonly connectionQuality?: import("../media/link-quality").LinkTier;
 };
 export type Participant = {
   /** Stable person identity, independent of the per-device participant ID. */
@@ -182,6 +184,8 @@ export type MediaSlice = {
   readonly incomingRequests: readonly IncomingMediaRequest[];
   /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
   readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];
+  /** How well this person's own link carries the call, steadied over several windows. Omitted before the first window closes. */
+  readonly link?: import("../media/link-quality").LinkQuality;
 };
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;
