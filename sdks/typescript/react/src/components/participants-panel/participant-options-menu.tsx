@@ -1,6 +1,8 @@
-import { Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { useState } from "react";
 import { cn } from "../../utils/cn";
+import { Crown01Icon, Edit02Icon, Microphone01Icon, MicrophoneOff01Icon, Monitor01Icon, UserRemove01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { VolumeSlider } from "../atomic";
+import { ChalkButton } from "../chalk-ui";
 import { runParticipantAction, type ParticipantOptionsMenuProps } from "./participant-options-menu-contract";
 
 export function ParticipantOptionsMenu({
@@ -22,21 +24,41 @@ export function ParticipantOptionsMenu({
 }: ParticipantOptionsMenuProps) {
   const hasVolumeControl = !participant.isLocal && !!participantVolumes && !!onParticipantVolumeChange;
   const hasLocalActions = !!onEditName;
-  const hasManageActions = canManageParticipants && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || !!onAssignRole || !!onStopParticipantScreenShare);
+  const hasManageActions = canManageParticipants && !participant.isLocal && (!!onMuteParticipant || !!onRequestUnmute || !!onStopParticipantCamera || !!onRequestStartCamera || !!onRemoveParticipant || !!onAssignRole || !!onStopParticipantScreenShare);
 
   const volume = participantVolumes?.get(participant.id) ?? 100;
   const volumeMuted = volume <= 0;
 
-  const menuItemClassName = cn("flex w-full items-center gap-3 rounded-(--corner-lg) px-3 py-2.5 text-left text-sm font-medium text-[var(--chalk-app-text)] transition-colors hover:bg-[var(--chalk-app-control-hover)]");
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const menuItemClassName = "call-menu-item";
+  const dividerClassName = "call-menu-sep";
 
-  const dividerClassName = "my-1.5 h-px bg-[var(--chalk-app-line)]";
+  if (confirmingRemove && onRemoveParticipant) {
+    const firstName = participant.displayName.split(" ")[0] ?? participant.displayName;
+    return (
+      <div className="call-menu-confirm">
+        <b>
+          Remove <bdi>{firstName}</bdi> from the call?
+        </b>
+        <p>
+          <bdi>{firstName}</bdi> leaves right away. Everyone else stays in the call.
+        </p>
+        <div className="call-menu-confirm-actions">
+          <ChalkButton onClick={() => setConfirmingRemove(false)}>Cancel</ChalkButton>
+          <ChalkButton variant="solid" tone="danger" onClick={() => void runParticipantAction(() => onRemoveParticipant(participant.id), onClose, onCommandError)}>
+            Remove
+          </ChalkButton>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
       {hasLocalActions ? (
         <button type="button" onClick={onEditName} className={menuItemClassName}>
-          <Edit02Icon className="h-4 w-4" />
-          Edit Name
+          <Edit02Icon />
+          Edit name
         </button>
       ) : null}
 
@@ -74,7 +96,7 @@ export function ParticipantOptionsMenu({
               }}
               className={menuItemClassName}
             >
-              <MicrophoneOff01Icon className="h-4 w-4" />
+              <MicrophoneOff01Icon />
               Mute
             </button>
           ) : null}
@@ -87,7 +109,7 @@ export function ParticipantOptionsMenu({
               }}
               className={menuItemClassName}
             >
-              <Microphone01Icon className="h-4 w-4" />
+              <Microphone01Icon />
               Ask to unmute
             </button>
           ) : null}
@@ -100,7 +122,7 @@ export function ParticipantOptionsMenu({
               }}
               className={menuItemClassName}
             >
-              <VideoOffIcon className="h-4 w-4" />
+              <VideoOffIcon />
               Stop camera
             </button>
           ) : null}
@@ -113,13 +135,14 @@ export function ParticipantOptionsMenu({
               }}
               className={menuItemClassName}
             >
-              <Video01Icon className="h-4 w-4" />
+              <Video01Icon />
               Ask to start camera
             </button>
           ) : null}
 
           {participant.isScreenSharing && onStopParticipantScreenShare ? (
             <button type="button" className={menuItemClassName} onClick={() => void runParticipantAction(() => onStopParticipantScreenShare(participant.id), onClose, onCommandError)}>
+              <Monitor01Icon />
               Stop screen share
             </button>
           ) : null}
@@ -128,21 +151,21 @@ export function ParticipantOptionsMenu({
                 ?.filter((role) => role !== participant.role)
                 .map((role) => (
                   <button type="button" key={role} className={menuItemClassName} onClick={() => void runParticipantAction(() => onAssignRole(participant.id, role), onClose, onCommandError)}>
-                    Make <bdi>{role}</bdi>
+                    <Crown01Icon />
+                    <span>
+                      Make <bdi>{role}</bdi>
+                    </span>
                   </button>
                 ))
             : null}
           {onRemoveParticipant ? (
-            <button
-              type="button"
-              onClick={() => {
-                void runParticipantAction(() => onRemoveParticipant(participant.id), onClose, onCommandError);
-              }}
-              className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-[var(--chalk-app-danger)] transition-colors hover:bg-[var(--chalk-app-danger)]/10"
-            >
-              <UserRemove01Icon className="h-4 w-4" />
-              Remove
-            </button>
+            <>
+              <div className={dividerClassName} />
+              <button type="button" onClick={() => setConfirmingRemove(true)} className={cn(menuItemClassName, "is-danger")}>
+                <UserRemove01Icon />
+                Remove
+              </button>
+            </>
           ) : null}
         </>
       ) : null}

@@ -511,6 +511,96 @@ ${phoneRules(`
 .chalk-shell-people-pill:active {
   transform: scale(0.97);
 }
+.chalk-shell-people-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--corner-pill);
+  background: var(--chalk-accent);
+  color: var(--chalk-accent-text);
+  font-size: var(--type-caption);
+  font-weight: 700;
+}
+.chalk-knock-notice {
+  position: absolute;
+  z-index: 46;
+  top: 60px;
+  right: var(--space-3);
+  width: 348px;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--corner-2xl);
+  background: var(--chalk-popover);
+  border: 1px solid var(--chalk-line-strong);
+  box-shadow: var(--chalk-shadow);
+}
+.chalk-knock-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.chalk-knock-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.chalk-knock-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body-lg);
+  font-weight: 600;
+}
+.chalk-knock-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body-sm);
+  color: var(--chalk-muted-text);
+}
+.chalk-knock-stack {
+  display: inline-flex;
+  flex: none;
+}
+.chalk-knock-stack > * + * {
+  margin-inline-start: calc(var(--space-2-5) * -1);
+}
+.chalk-knock-stack > * {
+  box-shadow: 0 0 0 2px var(--chalk-popover);
+}
+.chalk-knock-hide {
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--chalk-muted-text);
+}
+.chalk-knock-hide:hover {
+  background: var(--chalk-hover);
+  color: var(--chalk-text);
+}
+.chalk-knock-hide svg {
+  width: 16px;
+  height: 16px;
+}
+.chalk-knock-notice > p {
+  font-size: var(--type-body-sm);
+  color: var(--chalk-danger-text);
+}
+.chalk-knock-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.chalk-knock-actions .chalk-pill-button {
+  flex: 1;
+  height: 36px;
+}
 .chalk-shell-faces {
   display: flex;
 }
@@ -600,6 +690,17 @@ ${phoneRules(`
     height: 44px;
   }
 `)}
+@media (max-width: 767px) {
+  .chalk-knock-notice {
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+    top: 64px;
+  }
+  .chalk-knock-actions .chalk-pill-button {
+    height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-emoji,
   .chalk-shell-people-pill {

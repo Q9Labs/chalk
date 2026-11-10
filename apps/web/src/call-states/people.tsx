@@ -63,9 +63,9 @@ export const PEOPLE_STATES: readonly CallState[] = (["dark", "light"] as const).
 );
 
 const guestScreens = {
-  waiting: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." action={{ label: "Cancel", onClick: () => undefined }} />,
-  declined: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="The host declined your request to join." action={{ label: "Ask again", onClick: () => undefined }} />,
-  expired: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="Your request to join expired or is no longer available." action={{ label: "Ask again", onClick: () => undefined }} />,
+  waiting: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." joiningAs="Rania Aziz" action={{ label: "Cancel", onClick: () => undefined }} />,
+  declined: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="The host declined your request to join." glyph="declined" action={{ label: "Ask again", onClick: () => undefined }} />,
+  expired: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message="Your request to join expired or is no longer available." glyph="expired" action={{ label: "Ask again", onClick: () => undefined }} />,
   entering: (scheme: Scheme) => <CallLimbo theme={{ colorScheme: scheme }} spaceName={SPACE_NAME} message={`Joining ${SPACE_NAME}…`} />,
 } as const;
 

@@ -1,10 +1,11 @@
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { useState, useRef, useEffect } from "react";
-import { ChalkPopoverPrimitive as Popover } from "../chalk-ui";
-import { MicrophoneOff01Icon, VideoOffIcon, Edit02Icon } from "../../utils/icons";
+import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
+import { HandIcon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
 import { Avatar } from "../atomic";
-import { cn } from "../../utils/cn";
+import { useIsMobile } from "../../internal/useMediaQuery";
+import { splitMatch } from "./participant-search";
 import { ParticipantOptionsMenu } from "./participant-options-menu";
 
 export function ParticipantRow({
@@ -28,6 +29,8 @@ export function ParticipantRow({
   menuOpen,
   onMenuToggle,
   onMenuClose,
+  query = "",
+  handNumber,
 }: ParticipantRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(participant.displayName);
@@ -60,76 +63,123 @@ export function ParticipantRow({
     }
   };
 
-  const optionsButtonClassName =
-    variant === "mobile" ? "text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)]" : variant === "sidebar" ? "opacity-70 text-[var(--chalk-app-text-muted)] hover:text-[var(--chalk-app-text)] hover:opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
+  const phone = useIsMobile();
+  const [before, match, after] = splitMatch(participant.displayName, query);
+  const subLine = participant.isReconnecting ? "Reconnecting…" : participant.isScreenSharing ? "Sharing screen" : participant.deviceHint;
+  const menu = (
+    <ParticipantOptionsMenu
+      participant={participant}
+      variant={variant}
+      canManageParticipants={canManageParticipants}
+      onClose={onMenuClose}
+      onAssignRole={onAssignRole}
+      onStopParticipantScreenShare={onStopParticipantScreenShare}
+      onMuteParticipant={onMuteParticipant}
+      onRequestUnmute={onRequestUnmute}
+      onStopParticipantCamera={onStopParticipantCamera}
+      onRequestStartCamera={onRequestStartCamera}
+      onRemoveParticipant={onRemoveParticipant}
+      onEditName={
+        participant.isLocal
+          ? () => {
+              setIsEditing(true);
+              onMenuClose();
+            }
+          : undefined
+      }
+      participantVolumes={participantVolumes}
+      onParticipantVolumeChange={onParticipantVolumeChange}
+      onCommandError={onCommandError}
+    />
+  );
+  const optionsLabel = `Options for ${participant.displayName}`;
 
   return (
     <div
       ref={rootRef}
-      className="call-person-row group"
+      className="call-person-row"
+      data-reconnecting={participant.isReconnecting || undefined}
+      data-open={menuOpen || undefined}
       onClick={(event) => {
         if (event.target instanceof Element && event.currentTarget.contains(event.target) && !event.target.closest("button, input, [role=menu]")) onParticipantClick?.(participant.id);
       }}
     >
-      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <div className="relative">
-          <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" gradientPreference={participantGradientPreference} />
-        </div>
+      <span className="call-person-avatar" data-speaking={participant.isSpeaking || undefined}>
+        <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" generated={generatedAvatars} className="!h-8 !w-8" gradientPreference={participantGradientPreference} />
+      </span>
 
-        <div className="flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 w-full">
-            {isEditing ? (
-              <div className="flex items-center gap-1 flex-1">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  aria-label="Your name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onBlur={handleSave}
-                  className="w-full min-w-0 rounded border border-[var(--chalk-app-control-active-line)]/30 bg-[var(--chalk-app-input)] px-1.5 py-0.5 text-sm font-normal text-[var(--chalk-app-text)] outline-none focus:border-[var(--chalk-app-control-active-line)]"
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="min-w-0 truncate text-left text-sm font-medium text-[var(--chalk-app-text)]"
-                onClick={() => {
-                  if (onParticipantClick) onParticipantClick(participant.id);
-                  else if (participant.isLocal && onUpdateDisplayName) setIsEditing(true);
-                }}
-                aria-label={onParticipantClick ? `Show ${participant.displayName} on main screen` : participant.displayName}
-              >
-                <bdi>{participant.displayName}</bdi>
-              </button>
-            )}
-            {participant.isHost && !isEditing ? <span className="shrink-0 text-xs text-[var(--chalk-app-text-muted)]">Host</span> : null}
-            {participant.isLocal && !isEditing && (
-              <span className="flex shrink-0 items-center gap-1 text-xs text-[var(--chalk-app-text-muted)]">
-                (You)
-                {onUpdateDisplayName && (
-                  <button type="button" onClick={() => setIsEditing(true)} aria-label="Edit your name" className="call-edit-name">
-                    <Edit02Icon className="w-3 h-3" />
-                  </button>
-                )}
-              </span>
-            )}
-          </div>
-          {participant.deviceHint ? <div className="text-xs text-[var(--chalk-app-text-muted)]">{participant.deviceHint}</div> : null}
+      <div className="call-person-who">
+        <div className="call-person-name-line">
+          {isEditing ? (
+            <input ref={inputRef} type="text" aria-label="Your name" value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={handleKeyDown} onBlur={handleSave} className="call-person-name-input" />
+          ) : (
+            <button
+              type="button"
+              className="call-person-name"
+              onClick={() => {
+                if (onParticipantClick) onParticipantClick(participant.id);
+                else if (participant.isLocal && onUpdateDisplayName) setIsEditing(true);
+              }}
+              aria-label={onParticipantClick ? `Show ${participant.displayName} on main screen` : participant.displayName}
+            >
+              <bdi>
+                {before}
+                {match ? <mark>{match}</mark> : null}
+                {after}
+              </bdi>
+            </button>
+          )}
+          {participant.isLocal && !isEditing ? <i className="call-person-tag">You</i> : null}
+          {participant.isHost && !isEditing ? <i className="call-person-tag is-host">Host</i> : null}
         </div>
+        {subLine ? <div className="call-person-sub">{subLine}</div> : null}
       </div>
 
-      <div className="flex items-center gap-1 shrink-0">
-        {participant.isMuted ? <MicrophoneOff01Icon className="h-4 w-4 text-[var(--chalk-danger-text)]" aria-label="Microphone off" role="img" /> : null}
-
+      <div className="call-person-state-slots">
         {participant.isHandRaised ? (
-          <span className="call-hand" role="img" aria-label={`Hand raised${participant.handOrder ? `, number ${participant.handOrder}` : ""}`}>
-            ✋{participant.handOrder}
+          <span className="call-hand" data-solo={handNumber === undefined || undefined} role="img" aria-label={`Hand raised${handNumber ? `, number ${handNumber}` : ""}`}>
+            <HandIcon />
+            {handNumber}
           </span>
         ) : null}
-        {!participant.isVideoEnabled ? <VideoOffIcon className="h-4 w-4 text-[var(--chalk-app-text-muted)]" aria-label="Camera off" role="img" /> : null}
-        {showMenuButton && !isEditing && (
+        {participant.isSpeaking && !participant.isMuted ? (
+          <span className="call-person-state" role="img" aria-label="Speaking">
+            <span className="call-eq" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          </span>
+        ) : participant.isMuted ? (
+          <MicrophoneOff01Icon className="call-person-state mo" aria-label="Microphone off" role="img" />
+        ) : (
+          <Microphone01Icon className="call-person-state" aria-label="Microphone on" role="img" />
+        )}
+        {participant.isVideoEnabled ? <Video01Icon className="call-person-state" aria-label="Camera on" role="img" /> : <VideoOffIcon className="call-person-state off" aria-label="Camera off" role="img" />}
+      </div>
+
+      {showMenuButton && !isEditing ? (
+        phone ? (
+          <>
+            <button type="button" className="call-person-options" aria-label={optionsLabel} aria-expanded={menuOpen} onClick={onMenuToggle}>
+              <MoreIcon />
+            </button>
+            <ChalkSheet open={menuOpen} onOpenChange={(open) => (open ? onMenuToggle() : onMenuClose())} title={optionsLabel}>
+              <div className="call-sheet-menu">
+                <div className="call-sheet-who">
+                  <Avatar name={participant.displayName} src={participant.avatarUrl} size="md" generated={generatedAvatars} gradientPreference={participantGradientPreference} />
+                  <div>
+                    <b>
+                      <bdi>{participant.displayName}</bdi>
+                    </b>
+                    <span>{participant.isHandRaised ? `Hand raised${handNumber ? `, number ${handNumber}` : ""}` : participant.isLocal ? "You" : participant.isHost ? "Host" : "Guest"}</span>
+                  </div>
+                </div>
+                {menu}
+              </div>
+            </ChalkSheet>
+          </>
+        ) : (
           <Popover.Root
             open={menuOpen}
             onOpenChange={(open) => {
@@ -137,45 +187,30 @@ export function ParticipantRow({
               else onMenuClose();
             }}
           >
-            <Popover.Trigger className={cn("call-person-options", optionsButtonClassName)} aria-label={`Options for ${participant.displayName}`}>
-              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h.01M12 12h.01M19 12h.01" />
-              </svg>
+            <Popover.Trigger className="call-person-options" aria-label={optionsLabel}>
+              <MoreIcon />
             </Popover.Trigger>
             <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
               <Popover.Positioner side="bottom" align="end" sideOffset={6} collisionPadding={8} className="chalk-popover-positioner">
-                <Popover.Popup aria-label={`Options for ${participant.displayName}`} className="chalk-menu w-60">
-                  <ParticipantOptionsMenu
-                    participant={participant}
-                    variant={variant}
-                    canManageParticipants={canManageParticipants}
-                    onClose={onMenuClose}
-                    onAssignRole={onAssignRole}
-                    onStopParticipantScreenShare={onStopParticipantScreenShare}
-                    onMuteParticipant={onMuteParticipant}
-                    onRequestUnmute={onRequestUnmute}
-                    onStopParticipantCamera={onStopParticipantCamera}
-                    onRequestStartCamera={onRequestStartCamera}
-                    onRemoveParticipant={onRemoveParticipant}
-                    onEditName={
-                      participant.isLocal
-                        ? () => {
-                            setIsEditing(true);
-                            onMenuClose();
-                          }
-                        : undefined
-                    }
-                    participantVolumes={participantVolumes}
-                    onParticipantVolumeChange={onParticipantVolumeChange}
-                    onCommandError={onCommandError}
-                  />
+                <Popover.Popup aria-label={optionsLabel} className="chalk-menu call-row-menu">
+                  {menu}
                 </Popover.Popup>
               </Popover.Positioner>
             </Popover.Portal>
           </Popover.Root>
-        )}
-      </div>
+        )
+      ) : (
+        <span className="call-person-options-slot" />
+      )}
     </div>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h.01M12 12h.01M19 12h.01" />
+    </svg>
   );
 }
 
@@ -197,6 +232,10 @@ export interface ParticipantRowProps {
   onParticipantVolumeChange?: (id: string, volume: number) => void;
   participantGradientPreference?: ParticipantGradientPreference;
   generatedAvatars?: boolean;
+  /** Search text to highlight in the name. */
+  query?: string;
+  /** The hand's place in the queue, set only while two or more hands are up. */
+  handNumber?: number;
   menuOpen: boolean;
   onMenuToggle: () => void;
   onMenuClose: () => void;

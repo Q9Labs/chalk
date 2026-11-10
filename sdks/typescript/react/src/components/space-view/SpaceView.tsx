@@ -14,6 +14,8 @@ import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
+import { KnockNotice } from "../admission-panel/KnockNotice";
+import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
@@ -173,6 +175,8 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
+  const [hiddenKnocks, setHiddenKnocks] = useState<ReadonlySet<string>>(new Set());
+  const handOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((person) => person.handRaised).map((person) => person.participantId), [participantsSlice.roster]));
   const [previousInitialPanel, setPreviousInitialPanel] = useState(initialPanel);
   if (previousInitialPanel !== initialPanel) {
     setPreviousInitialPanel(initialPanel);
@@ -202,10 +206,6 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName],
   );
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Open the participants drawer when admission inputs change; do not force it open on every render after a user closes it.
-  useEffect(() => {
-    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
-  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -410,6 +410,7 @@ export function SpaceView({
                     if (phone) setActivePanel(null);
                   }}
                   variant="mobile"
+                  handOrders={handOrders}
                   admissionEnabled={feature("admission")}
                   generatedAvatars={generatedAvatars}
                   onCommandError={onCommandError}
@@ -437,6 +438,7 @@ export function SpaceView({
           }
           overlays={
             <>
+              {feature("admission") && activePanel !== "participants" ? <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel("participants")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} /> : null}
               <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
               {overlay}
               {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
