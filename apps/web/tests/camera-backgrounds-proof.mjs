@@ -90,21 +90,21 @@ try {
     };
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
-    // The menu stays open while an effect loads; the phone sheet covers the call, so it closes after each choice.
-    const choose = async (name) => {
-      if (phone) await openPicker();
-      await pickerRow(name).click();
+    const choose = async (name, id) => {
+      if (!phone) return pickerRow(name).click();
+      // The phone sheet covers the call and slows software WebGL, so only the first choice goes through it.
+      await page.evaluate((id) => window.cameraBackgroundProof.background(id), id);
     };
-    const closePicker = async () => {
-      if (phone) {
-        await page.keyboard.press("Escape");
-        await page.getByRole("dialog").waitFor({ state: "hidden" });
-      }
-    };
-    if (!phone) await openPicker();
-    await choose("Blur");
-    if (phone) await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
-    await closePicker();
+    if (phone) {
+      await openPicker();
+      await pickerRow("Blur").click();
+      await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
+      await page.keyboard.press("Escape");
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+    } else {
+      await openPicker();
+      await choose("Blur");
+    }
     const blurred = await waitForProcessedPixels("blur", [original]);
     if (!phone) {
       await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
@@ -113,11 +113,9 @@ try {
     await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
     if (!phone) await openPicker();
     // Stop measuring the previous effect while the image preset loads on software WebGL.
-    await choose("None");
-    await closePicker();
+    await choose("None", "none");
     await waitForProcessedPixels("none", [blurred]);
-    await choose("Office");
-    await closePicker();
+    await choose("Office", "modern-acoustic-office");
     await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
     if (!phone) {
       await page.getByRole("button", { name: "Select camera", exact: true }).click();
