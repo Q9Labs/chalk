@@ -29,7 +29,9 @@ Run browser suites in a configured M4 checkout, not a developer laptop. Keep its
 proof configuration and evidence in that checkout. For hosted runs,
 `.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only
 when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
-deploy and after the recording/transcript proof. Both workflows share the same
+deploy and after the `chalk_sfu` real-call proof, on `chalk_sfu` (the Space an operator
+moved, `CHALK_PROOF_SPACE_ID_CHALK_SFU`, under the staging SFU lease). A manual dispatch
+takes `media_plane`, `cf_sfu` by default. Both workflows share the same
 environment lock because existing proof cleanup resets the webhook. Both must pass to hold a cut;
 the deployment record retains `real_call_proof_result` and `web_e2e_result`.
 

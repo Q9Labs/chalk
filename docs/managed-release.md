@@ -9,7 +9,7 @@ omits recorder control, media builds and dispatcher binding, even if the build
 baseline enabled them. Set `CHALK_RECORDING_ENABLED=false` and
 `CHALK_TRANSCRIPTION_ENABLED=false` in nightly's API runtime configuration first;
 this input does not rewrite SSM values. This mode is not a held nightly. Cut still
-enables recording and requires `smoke transcript` plus the web-call proof.
+enables recording and requires the own-SFU (`chalk_sfu`) real-call proof (`camera-share`, `call-artifacts`, `long-call`) plus the web-call proof on the same plane.
 Promote rejects held records without immutable media. Release also rejects any
 production manifest without recorder control
 before writing the deployment envelope or acquiring deployment credentials.
@@ -87,7 +87,13 @@ the cut. Production Promote records the previous media members before mutation,
 including the legacy first-promotion baseline, and rollback restores those pins.
 
 Release builds changed backend images and two target-specific web archives.
-After nightly deployment, the real-call workflow runs `smoke transcript`.
+After nightly deployment, the real-call workflow runs `camera-share`, `call-artifacts`
+and `long-call` on the own SFU (`chalk_sfu`) under the staging SFU lease, and the
+web-call proof runs on the same plane. The latency run is a separate job: it blocks
+Promote, never the cut. A lease that stays busy for the whole 30-minute wait fails
+the gate as `staging-sfu-lease-timeout`; a lease lost mid-run is
+`staging-sfu-lease-lost`, and a lease tool failure before the lease is taken is
+`staging-sfu-lease-error`. The `record` job prints the name.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
 SHA256 hashes, applied identity and proof result. Actions artifacts are retained for 90 days (the public-repository maximum).
@@ -114,13 +120,16 @@ The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
-Nightly also records `own_sfu_proof_result` (`passed`, `failed` or `skipped`),
-bound to the cut's `target_sha` and `proof_run_id`. Promote requires a passed
+The cut is held by the `chalk_sfu` real-call proof (recorded as `real_call_proof_result`)
+and the web-call proof on `chalk_sfu` (`web_e2e_result`). Nightly also records `own_sfu_proof_result`
+(`passed`, `failed` or `skipped`), the proof together with the latency run,
+bound to the cut's `target_sha` and `proof_run_id`. A failed latency run never holds
+the cut. Promote requires a passed
 own-SFU proof for that exact SHA, both at selection and in the approval recheck.
 Missing results (including older cuts), skipped proofs and failed proofs block
 promotion with an error naming the SHA and nightly run unless the existing
-`scorecard_override` input supplies a written reason. The existing Cloudflare
-proof and held-cut rules are unchanged.
+`scorecard_override` input supplies a written reason. Promote's own production
+proof (`leave smoke transcript`) still runs on the production Space's plane.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
 It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
 newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
