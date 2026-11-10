@@ -85,6 +85,63 @@ it("closes the receiver of a remote publication that is withdrawn or replaced, s
   });
 });
 
+it("bounds the sections it keeps for closed receivers when the SFU hands out a fresh MID for every pull", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    let sequence = 0;
+    const refresh = async (trackName?: string) => {
+      h.transport.snapshot = remoteMicrophoneRoster(++sequence, trackName);
+      await h.client.refreshRemotePublications();
+    };
+
+    for (let cycle = 0; cycle < 40; cycle++) {
+      await refresh(`microphone-${cycle}`);
+      expect(peer.liveRemoteTransceiverCount()).toBe(1);
+      await refresh();
+      expect(peer.liveRemoteTransceiverCount()).toBe(0);
+      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16);
+    }
+    expect(peer.retainedRemoteSectionCount()).toBe(16);
+  });
+});
+
+it("retires the receivers of pulls that failed after their tracks arrived, so none stays live without a roster entry", async () => {
+  await withTimedHarness(async (h) => {
+    h.transport.uniqueRemoteMids = true;
+    h.transport.immediateRenegotiation = true;
+    await h.client.start(fakeStream());
+    const peer = h.peers[0]!;
+    let sequence = 0;
+    const roster = (newest: number): CloudflareSFUPublicationSnapshot => ({
+      incarnation: 1,
+      sequence: ++sequence,
+      publications: [
+        { participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", "microphone-healthy") },
+        ...(newest > 0 ? [{ participantId: "participant-3", source: "microphone" as const, publicationId: versionedPublicationID("remote-2", "0", `microphone-${newest}`) }] : []),
+      ],
+    });
+
+    h.transport.snapshot = roster(0);
+    await h.client.refreshRemotePublications();
+    expect(peer.liveRemoteTransceiverCount()).toBe(1);
+
+    h.transport.failRenegotiation = true;
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      h.transport.snapshot = roster(attempt);
+      await h.client.refreshRemotePublications().catch(() => undefined);
+    }
+    h.transport.failRenegotiation = false;
+    h.transport.snapshot = roster(9);
+    await h.client.refreshRemotePublications();
+
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(2);
+    expect(peer.liveRemoteTransceiverCount()).toBe(2);
+    expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(8);
+  });
+});
+
 it("retires the receiver of a withdrawn remote publication on a later poll when its close failed", async () => {
   await withTimedHarness(async (h) => {
     h.transport.uniqueRemoteMids = true;
@@ -951,6 +1008,10 @@ class FakePeerConnection extends EventTarget {
   /** The receive m-lines still receiving in the session: a closed receiver is parked inactive and never stopped. */
   liveRemoteTransceiverCount(): number {
     return this.#remoteTransceivers.filter((transceiver) => transceiver.direction !== "inactive" && !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
+  }
+  /** Every receive m-line the session still carries, parked or receiving; a stopped one is gone from the offer. */
+  retainedRemoteSectionCount(): number {
+    return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
   }
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];
