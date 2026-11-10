@@ -26,36 +26,50 @@ Set the DigitalOcean side with `do-monitoring.sh <env> plan|apply|remove` and th
 
 The collector's `/readyz` probe is on for the production node. It runs every minute as part of `chalk-alert-state.service`, which runs as the `chalk` user with `/run/chalk/env/api.env` and, when present, `/etc/chalk-alerts/collector.env`. The variables and what the probe reports are in [Own SFU readiness](README.md#own-sfu-readiness). Use the steps below to enable it on a new host, to renew its certificate copies, or to see how it was set up. Run them as root on the API host (by SSM or SSH).
 
-The probe needs the API's mutual-TLS client certificate, key and CA. On the production host the API reads them from podman secrets mounted only inside its container, so there are no readable host files. Step 2 copies them out of the `chalk` user's podman secret store into `/etc/chalk-alerts/sfu/` (owner `chalk`, mode `0400`). No value is printed.
+The probe needs the API's mutual-TLS client certificate, key and CA. On the production host the API reads them from podman secrets mounted only inside its container, so there are no readable host files. Step 2 copies them out of the `chalk` user's podman secret store into `/etc/chalk-alerts/sfu/`. The directories and files belong to root, so a compromised collector cannot change its own settings: `/etc/chalk-alerts` is `root:root 0755`, the `sfu` directory `root:chalk 0750`, and the files `root:chalk 0440`. No value is printed.
 
 1. Install a collector build that knows the probe, and keep the old one for the undo. The count of `CHALK_ALERT_SFU_READY_URL` in the binary must be at least 1. Build as in the README, copy the file to the host, check its `sha256sum` against the one you built, then:
 
    ```sh
    cp -p /opt/chalk-alerts/collector /opt/chalk-alerts/collector.before-sfu-probe
    install -m 0755 collector.new /opt/chalk-alerts/collector
-   grep -c CHALK_ALERT_SFU_READY_URL /opt/chalk-alerts/collector
+   grep -a -c CHALK_ALERT_SFU_READY_URL /opt/chalk-alerts/collector
    ```
 
-2. Copy the three files out of the podman secrets, then add the settings. The script finds each secret by the path the API's quadlet mounts it at, stops if one is missing, and copies `collector.env` first.
+2. Copy the three files out of the podman secrets. The script finds each secret by the path the API's quadlet mounts it at, writes to a new file first and replaces the old copy only when the whole read worked, so a failed read leaves the working copy in place. It is safe to run again (see Renewal).
 
    ```sh
    set -euo pipefail
    unitf=/home/chalk/.config/containers/systemd/chalk-api.container
    api=/run/chalk/env/api.env
    val() { sed -n "s/^$1=//p" "$api" | head -1; }
-   install -d -m 0700 -o chalk -g chalk /etc/chalk-alerts /etc/chalk-alerts/sfu
+   install -d -m 0755 -o root -g root /etc/chalk-alerts
+   install -d -m 0750 -o root -g chalk /etc/chalk-alerts/sfu
    for var in CHALK_SFU_CA_FILE CHALK_SFU_CLIENT_CERT_FILE CHALK_SFU_CLIENT_KEY_FILE; do
      path="$(val $var)"; [ -n "$path" ] || { echo "missing $var"; exit 1; }
      name="$(grep -E "^Secret=[^,]+,.*target=${path}(,|\$)" "$unitf" | sed -E 's/^Secret=([^,]+),.*/\1/' | head -1)"
      [ -n "$name" ] || { echo "no secret mounted at the path of $var"; exit 1; }
      dest="/etc/chalk-alerts/sfu/$(basename "$path")"
-     ( umask 077; runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) podman secret inspect --showsecret --format '{{.SecretData}}' "$name" | tee "$dest" >/dev/null )
-     chown chalk:chalk "$dest"; chmod 0400 "$dest"
+     ( umask 077; runuser -u chalk -- env XDG_RUNTIME_DIR=/run/user/$(id -u chalk) podman secret inspect --showsecret --format '{{.SecretData}}' "$name" >"$dest.new" )
+     [ -s "$dest.new" ] || { rm -f "$dest.new"; echo "empty secret for $var"; exit 1; }
+     chown root:chalk "$dest.new"; chmod 0440 "$dest.new"; mv -f "$dest.new" "$dest"
    done
+   ```
+
+   Check the copies: `openssl x509 -in <file> -noout -enddate` for the certificate and the CA, and `openssl pkey -in <file> -noout` for the key.
+
+3. Add the settings, once. The script does nothing if the probe is already set, so a repeat never adds a second line or overwrites the backup of the pre-probe file.
+
+   ```sh
+   set -euo pipefail
+   api=/run/chalk/env/api.env
+   env_file=/etc/chalk-alerts/collector.env
+   val() { sed -n "s/^$1=//p" "$api" | head -1; }
+   if grep -q '^CHALK_ALERT_SFU_READY_URL=' "$env_file" 2>/dev/null; then echo "probe already set"; exit 0; fi
    node="$(val CHALK_SFU_NODES | cut -d, -f1 | cut -d= -f2-)"
    server_name="$(val CHALK_SFU_SERVER_NAME)"
    [ -n "$node" ] && [ -n "$server_name" ] || { echo "missing node or server name"; exit 1; }
-   if [ -e /etc/chalk-alerts/collector.env ]; then cp -p /etc/chalk-alerts/collector.env /etc/chalk-alerts/collector.env.before-sfu-probe; fi
+   if [ -e "$env_file" ] && [ ! -e "$env_file.before-sfu-probe" ]; then cp -p "$env_file" "$env_file.before-sfu-probe"; fi
    umask 027
    {
      echo "CHALK_ALERT_SFU_READY_URL=${node}/readyz"
@@ -63,13 +77,11 @@ The probe needs the API's mutual-TLS client certificate, key and CA. On the prod
      echo "CHALK_ALERT_SFU_CA=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CA_FILE)")"
      echo "CHALK_ALERT_SFU_CLIENT_CERT=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CLIENT_CERT_FILE)")"
      echo "CHALK_ALERT_SFU_CLIENT_KEY=/etc/chalk-alerts/sfu/$(basename "$(val CHALK_SFU_CLIENT_KEY_FILE)")"
-   } >>/etc/chalk-alerts/collector.env
-   chown root:chalk /etc/chalk-alerts/collector.env; chmod 0640 /etc/chalk-alerts/collector.env
+   } >>"$env_file"
+   chown root:chalk "$env_file"; chmod 0640 "$env_file"
    ```
 
-   Check the copies: `openssl x509 -in <file> -noout -enddate` for the certificate and the CA, and `openssl pkey -in <file> -noout` for the key.
-
-3. Run the collector once and read one `sfu-readiness` row with value 0:
+4. Run the collector once and read one `sfu-readiness` row with value 0:
 
    ```sh
    systemctl start chalk-alert-state.service && journalctl -u chalk-alert-state.service -n 15 --no-pager
@@ -77,9 +89,9 @@ The probe needs the API's mutual-TLS client certificate, key and CA. On the prod
 
    Then look for `chalk_alert_rule == 'sfu-readiness'` rows in the log dataset (Axiom). Do not turn the probe on while a deploy has the node draining: the probe would report `draining` and pages after 4 minutes.
 
-**Renewal.** The copies in `/etc/chalk-alerts/sfu/` do not follow the API's secrets. When the API's client certificate or CA is renewed, run step 2 again. A stale or missing copy shows as `tls_config` and pages after 4 minutes.
+**Renewal.** The copies in `/etc/chalk-alerts/sfu/` do not follow the API's secrets. When the API's client certificate or CA is renewed, run step 2 and then step 4. Do not run step 3 again: the settings point at the same file names. A stale copy often still handshakes until the node's trust changes, so it can look fine and then show as `tls_config` or `unreachable` and page after 4 minutes; renew the copies in the same change as the certificate.
 
-**Undo.** Restore the previous binary and settings, remove the copies and run the service once. The rows stop and the branch goes idle on its own:
+**Undo.** Restore the previous binary and settings, move the copies away and run the service once. The rows stop and the branch goes idle on its own. The backup of the pre-probe settings exists only if the file existed before step 3, and it is never overwritten by a repeat:
 
 ```sh
 cd /opt/chalk-alerts && cp -p collector.before-sfu-probe collector
