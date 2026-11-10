@@ -6,6 +6,7 @@ import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
+import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
@@ -54,6 +55,8 @@ export const CALL_STATES: readonly CallState[] = [
   ...SHELL_STATES,
   ...STAGE_STATES,
   ...CARD_STATES,
+  ...PEOPLE_STATES,
+  ...PEOPLE_GUEST_STATES,
   ...STATES_LANE,
   ...INTEGRATION_STATES,
   { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
