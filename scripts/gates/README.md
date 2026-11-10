@@ -4,7 +4,9 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
+q9gate concurrency 1; each of those environment variables, when already set, replaces the default.
+`instabox-run.sh` sets `VITEST_MAX_WORKERS=4`, because most test files wait on timers.
+“gate.report.json” records every selected/skipped lane.
 
 Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
