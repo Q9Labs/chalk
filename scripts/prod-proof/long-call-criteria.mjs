@@ -27,9 +27,15 @@ export const bounds = {
 
 const baselineToggleMs = [60_000, 120_000, 180_000, 330_000, 390_000, 540_000];
 
+/**
+ * Guest 1 mutes its microphone and unmutes it, and guest 2 (the second to join, so the one that pulled guest 1's microphone first) does the same right after.
+ * Guest 2 must keep its peer connection through guest 1's mute and through its own, and that is early enough to fail the call before the long hold.
+ */
+const muteRelay = [...offOn(20_000, 0, "microphone"), ...offOn(30_000, 1, "microphone")];
+
 /** The baseline toggles, which do not depend on when a refresh happens. */
 export function baselineToggles() {
-  return baselineToggleMs.flatMap((atMs, index) => offOn(atMs, index % 2, index % 4 < 2 ? "microphone" : "camera"));
+  return [...muteRelay, ...baselineToggleMs.flatMap((atMs, index) => offOn(atMs, index % 2, index % 4 < 2 ? "microphone" : "camera"))];
 }
 
 function offOn(atMs, guest, kind) {
@@ -148,11 +154,28 @@ function grantChainFailures({ initialExpiry, requests }, endMs, startedAtMs) {
   return failures;
 }
 
-/** The media-connection replacements a call made, as notes. They move the next refresh and are worth reading, but are not failures by themselves. */
-export function mediaReplacementNotes(refreshes, startedAtMs) {
+/** The proof injects no fault, so a media-connection replacement is the SDK recovering from a break it should not have had. */
+function replacementFailures(refreshes, startedAtMs) {
   return refreshes.flatMap(({ guest, requests }) =>
-    requests.filter((request) => request.replaceMediaConnection).map((request) => `Guest ${guest} replaced its media connection at +${seconds(Date.parse(request.startedAt) - startedAtMs)}s (${request.reason ?? "no reason"}, status ${request.status ?? "none"})`),
+    requests.filter((request) => request.replaceMediaConnection).map((request) => `Guest ${guest} replaced its media connection at +${seconds(Date.parse(request.startedAt) - startedAtMs)}s (${request.reason ?? "no reason"}, status ${request.status ?? "none"}) with no fault injected`),
   );
+}
+
+/** Peer connections that left "connected" after reaching it, once each. A closed one counts: the SDK only closes a connection it replaces. */
+function leftConnectedFailures(own, label, firstTick) {
+  const connected = new Set();
+  const reported = new Set();
+  const failures = [];
+  for (const sample of own.filter((entry) => entry.reachable)) {
+    sample.pcs.forEach((state, index) => {
+      if (state === "connected") connected.add(index);
+      else if (connected.has(index) && !reported.has(index)) {
+        reported.add(index);
+        failures.push(`${label} peer connection ${index + 1} left connected for ${state} at +${seconds(sample.t - firstTick)}s`);
+      }
+    });
+  }
+  return failures;
 }
 
 /**
@@ -176,6 +199,7 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, started
     for (const stretch of stretches(own, (sample) => sample.reachable && !sample.pcs.includes("connected"), bounds.disconnectedMs)) {
       failures.push(`${label(guest)} had no connected peer connection for more than ${seconds(bounds.disconnectedMs)} s (${span(stretch)}); a closed one was not replaced`);
     }
+    failures.push(...leftConnectedFailures(own, label(guest), ticks[0].t));
     for (const stretch of stalls(own, (sample) => ({ on: sample.mic, bytes: sample.outAudio }), bounds.outboundStallMs)) {
       failures.push(`${label(guest)} sent no audio for ${seconds(stretch.toMs - stretch.fromMs)} s (${span(stretch)}) while its microphone showed on`);
     }
@@ -212,6 +236,7 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, started
   for (const at of refreshMs.filter((at) => !testable.includes(at))) notes.push(`The access refresh at +${seconds(at)}s fell in the last ${seconds(bounds.acrossRefreshMs)} s of the call, so no toggle could follow it; it was not toggle-tested`);
   const untested = testable.filter((at) => !toggles.some((toggle) => toggle.atMs >= at - bounds.acrossRefreshMs && toggle.atMs <= at) || !toggles.some((toggle) => toggle.atMs >= at && toggle.atMs <= at + bounds.acrossRefreshMs));
   if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle on each side within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
+  failures.push(...replacementFailures(refreshes, startedAtMs));
   for (const refresh of refreshes) failures.push(...grantChainFailures(refresh, endMs, startedAtMs).map((text) => `${label(refresh.guest - 1)} ${text}`));
   const fewest = Math.min(...grantCounts);
   const fewestScheduled = Math.min(...scheduledCounts);

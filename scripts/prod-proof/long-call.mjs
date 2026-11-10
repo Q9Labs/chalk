@@ -1,6 +1,6 @@
 import { launchGuests } from "./media.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
-import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
 const guestCount = 3;
@@ -95,7 +95,7 @@ export async function longCallProof(run, receiver) {
   failures.push(...judged.failures);
   const evidence = { ...judged.evidence, failureCount: failures.length };
   console.log(evidenceLine(evidence));
-  for (const note of [...mediaReplacementNotes(guests.refreshes, startedAtMs), ...judged.notes]) console.log(`Long call note: ${note}`);
+  for (const note of judged.notes) console.log(`Long call note: ${note}`);
   for (const failure of failures) console.log(`Long call failure: ${failure}`);
   await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, ticks });
   await end();
