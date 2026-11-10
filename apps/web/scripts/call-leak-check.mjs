@@ -122,7 +122,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   console.log(`Leak shard coverage: all ${LEAK_JOURNEYS.length} journeys and self-tests passed`);
 }
 
-export async function checkLeaks({ browser, origin, budgets, directory, boardCss, selfTest = false, repeats = 1, journeys = LEAK_JOURNEYS }) {
+export async function checkLeaks({ browser, origin, budgets, directory, boardCss, selfTest = false, repeats = 1, journeys = LEAK_JOURNEYS, journeyConcurrency = 1 }) {
   if (!journeys.length || journeys.some((journey) => !LEAK_JOURNEYS.includes(journey))) throw new Error("Unknown leak journey");
   if (!Number.isInteger(budgets.cycles) || budgets.cycles < 20 || !Number.isFinite(budgets.settleMs) || budgets.settleMs < 500) throw new Error("Leak check requires 20 cycles and at least 500 ms settling");
   for (const metric of ["heapMiB", "domNodes", "listeners", "documents", "videos", "audios", "liveTracks", "audioContexts", "intervals", "animationFrames", "rosterCacheKeys"]) {
@@ -131,12 +131,13 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
   }
   await mkdir(directory, { recursive: true });
   directory = await mkdtemp(resolve(directory, "run-"));
-  const results = [];
-  for (let repeat = 0; repeat < repeats; repeat++) {
-    for (const journey of journeys) results.push(await run(journey, null, repeat));
-  }
-  const tests = [];
-  if (selfTest) {
+  // Journeys wait on timers and garbage collection, so the browser is mostly idle: each runs in its own context
+  // (its own renderer process), and a few at once keep the same measurements in a fraction of the time.
+  // The reactions journey waits 4.3 s per cycle, so it starts first and does not set the finish time.
+  const ordered = journeys.toSorted((a, b) => Number(b === "reactions") - Number(a === "reactions"));
+  const journeyJobs = Array.from({ length: repeats }, (_, repeat) => ordered.map((journey) => () => run(journey, null, repeat))).flat();
+  const selfTestJob = async () => {
+    const tests = [];
     const probe = await observerProbe(browser, budgets.settleMs);
     tests.push({ injection: "resource-lifecycle", detected: probe.detected, result: probe });
     const selfTestCycles = 5;
@@ -146,9 +147,13 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
       tests.push({ injection, detected: result.failures.some((failure) => failure.startsWith(`${metric}:`)), result });
     }
     const clean = await run("panels", null, repeats);
-    results.push(clean);
     tests.push({ injection: "none", detected: clean.samples.length === budgets.cycles + 1 && clean.failures.length === 0, result: clean });
-  }
+    return { tests, clean };
+  };
+  const outcomes = await runPool(selfTest ? [selfTestJob, ...journeyJobs] : journeyJobs, journeyConcurrency);
+  const selfTested = selfTest ? outcomes.shift() : undefined;
+  const results = selfTested ? [...outcomes, selfTested.clean] : outcomes;
+  const tests = selfTested?.tests ?? [];
   return { results, selfTest: tests, failures: [...results.flatMap((result) => result.failures.map((failure) => `${result.journey}/${result.repeat}: ${failure}`)), ...tests.filter((test) => !test.detected).map((test) => `Leak self-test failed: ${test.injection}`)] };
 
   async function run(journey, injection, repeat, cycles = budgets.cycles) {
@@ -266,6 +271,19 @@ export async function checkLeaks({ browser, origin, budgets, directory, boardCss
       await context.close();
     }
   }
+}
+
+async function runPool(jobs, concurrency) {
+  const results = new Array(jobs.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < jobs.length) {
+      const index = next++;
+      results[index] = await jobs[index]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
+  return results;
 }
 
 async function observerProbe(browser, settleMs) {
