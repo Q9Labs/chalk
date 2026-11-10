@@ -948,9 +948,9 @@ class FakePeerConnection extends EventTarget {
   readonly #receivers = new Map<string, RTCRtpReceiver>();
   readonly #remoteTransceivers: RTCRtpTransceiver[] = [];
   readonly #stoppedRemoteMids = new Set<string>();
-  /** The receive m-lines still live in the session: a stopped transceiver is rejected in the next negotiation. */
+  /** The receive m-lines still receiving in the session: a closed receiver is parked inactive and never stopped. */
   liveRemoteTransceiverCount(): number {
-    return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
+    return this.#remoteTransceivers.filter((transceiver) => transceiver.direction !== "inactive" && !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
   }
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];

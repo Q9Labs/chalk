@@ -237,12 +237,14 @@ it("re-pulls only a stalled publication and retires its previous receiver", asyn
       const livePeers = h.peers.filter((peer) => !peer.closed);
       expect(livePeers).toHaveLength(1);
       expect(
-        livePeers.flatMap((peer) => peer.getReceivers()).filter((receiver) => receiver.track.readyState === "live"),
-        "only current receive allocations should remain",
+        livePeers.flatMap((peer) => peer.getTransceivers()).filter((transceiver) => transceiver.direction === "recvonly"),
+        "only current receive allocations should remain receiving",
       ).toHaveLength(2);
       expect(h.peers.slice(0, -1).every((peer) => peer.closed)).toBe(true);
       expect(replacements).toBe(0);
-      expect(original.readyState).toBe("ended");
+      // The previous receiver is parked, not stopped: the SFU reuses its mid and a stopped track would stay ended.
+      expect(original.readyState).toBe("live");
+      expect(livePeers[0]!.getTransceivers().find((transceiver) => transceiver.receiver?.track === original)?.direction).toBe("inactive");
       expect(h.client.getSnapshot().remoteTracks.find((track) => track.source === "camera")!.track).toBe(healthy);
       // The re-pull closes the stalled receiver once; retiring the dropped receiver does not close it again.
       expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ source: "microphone" })] })]);
@@ -2315,8 +2317,9 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     const peer = harness.peers[0]!;
     peer.dropsTransportWhenTagRejected = true;
     const section = (mid: string) => peer.getTransceivers().find((transceiver) => transceiver.mid === mid)!;
+    let sequence = 1;
     const withdraw = async (remaining: readonly Remote[]) => {
-      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: remaining };
+      harness.transport.snapshot = { incarnation: 1, sequence: ++sequence, publications: remaining };
       harness.client.remotePublicationsChanged(remaining.map((publication) => ({ ...publication, enabled: true })));
       await harness.client.refreshRemotePublications();
     };
@@ -2326,7 +2329,8 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
       await harness.client.closeForcedLocalPublication("microphone");
       expect(peer.descriptionLog.slice(offers)).toContain("setLocal:offer");
     };
-    return { harness, peer, section, withdraw, muteOwnMicrophone, replaceMediaConnection, closeEvents: () => events.filter((event) => event.event === "receivers_closed") };
+    const nextSequence = () => ++sequence;
+    return { harness, peer, section, withdraw, nextSequence, muteOwnMicrophone, replaceMediaConnection, closeEvents: () => events.filter((event) => event.event === "receivers_closed") };
   }
 
   it("is parked, not stopped, so the guest's next offer keeps the transport", async () => {
@@ -2346,13 +2350,13 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     }
   });
 
-  it("is stopped as before when another receiver owns the transport", async () => {
+  it("is parked too when another receiver owns the transport", async () => {
     const tag = remote("bundle-tag-first", "participant-2", "microphone");
     const leaving = remote("bundle-tag-second", "participant-3", "microphone");
     const call = await joinSecond([tag, leaving]);
     try {
       await call.withdraw([tag]);
-      expect(call.section("remote-1").direction).toBe("stopped");
+      expect(call.section("remote-1").direction).toBe("inactive");
       expect(call.section("remote-0").direction).toBe("recvonly");
       expect(call.closeEvents()).toEqual([{ event: "receivers_closed", receivers_stopped: 1, bundle_tag_held: false }]);
       await call.muteOwnMicrophone();
@@ -2374,6 +2378,56 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
         .mockRejectedValueOnce(new CloudflareSFUError("close failed", "signaling_failed", { status: 503 }));
       await call.withdraw([]).catch(() => undefined);
       expect(call.closeEvents()).toEqual([{ event: "receivers_closed", receivers_stopped: 16, bundle_tag_held: true }]);
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  const offerSection = (mid: string, direction: "sendonly" | "inactive") => `m=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:${mid}\r\na=${direction}\r\n`;
+
+  it("hears the guest again after every re-publish: a parked mid the SFU reuses is answered recvonly and its track unmutes", async () => {
+    const call = await joinSecond([remote("reuse-audio-0", "participant-2", "microphone")]);
+    try {
+      call.peer.reusesMids = true;
+      const track = call.section("remote-0").receiver.track as unknown as FakeTrack;
+      for (let republish = 1; republish <= 3; republish++) {
+        await call.withdraw([]);
+        expect(call.section("remote-0").direction).toBe("inactive");
+        expect(track.readyState).toBe("live");
+        // The guest unmutes. The SFU puts the new track on the mid it just closed and offers that section on again.
+        const next = remote(`reuse-audio-${republish}`, "participant-2", "microphone");
+        call.harness.transport.reuseRemoteMids.push("remote-0");
+        call.harness.transport.immediateRenegotiation = true;
+        call.harness.transport.remoteOfferSDP = `v=0\r\n${offerSection("remote-0", "sendonly")}`;
+        call.harness.transport.snapshot = { incarnation: 1, sequence: call.nextSequence(), publications: [next] };
+        call.harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+        await call.harness.client.refreshRemotePublications();
+        expect(call.peer.answerDirections["remote-0"]).toBe("recvonly");
+        expect(call.section("remote-0").direction).toBe("recvonly");
+        expect(track.muted).toBe(false);
+        expect(track.readyState).toBe("live");
+        expect(call.harness.client.getSnapshot().remoteTracks.map((entry) => entry.track as unknown)).toEqual([track]);
+      }
+      expect(call.peer.transportDropped).toBe(false);
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  it("keeps a parked mid inactive when the SFU's offer keeps it inactive", async () => {
+    const call = await joinSecond([remote("kept-inactive-0", "participant-2", "microphone")]);
+    try {
+      await call.withdraw([]);
+      const next = remote("kept-inactive-1", "participant-2", "microphone");
+      call.harness.transport.immediateRenegotiation = true;
+      call.harness.transport.remoteOfferSDP = `v=0\r\n${offerSection("remote-0", "inactive")}${offerSection("remote-1", "sendonly")}`;
+      call.harness.transport.snapshot = { incarnation: 1, sequence: call.nextSequence(), publications: [next] };
+      call.harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+      await call.harness.client.refreshRemotePublications();
+      expect(call.peer.answerDirections["remote-0"]).toBe("inactive");
+      expect(call.section("remote-0").direction).toBe("inactive");
+      expect(call.peer.answerDirections["remote-1"]).toBe("recvonly");
     } finally {
       call.harness.client.stop();
     }
@@ -3559,7 +3613,7 @@ describe("remote publication recovery", () => {
       harness.transport.failedRemoteTrackNames.set("microphone-new", "unknown");
       await harness.client.refreshRemotePublications();
       expect(harness.client.getSnapshot().remoteTracks).toHaveLength(0);
-      expect(previous?.readyState).toBe("ended");
+      expect(previous?.readyState).toBe("live");
       harness.transport.failedRemoteTrackNames.clear();
       await vi.advanceTimersByTimeAsync(750);
       expect(harness.client.getSnapshot().remoteTracks.map((remote) => remote.publicationId)).toEqual(["replacement-connection|microphone-new"]);
@@ -3953,7 +4007,7 @@ describe("shared tab audio publications", () => {
       harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
       await harness.client.refreshRemotePublications();
       expect(harness.client.getSnapshot().remoteTracks).toEqual([]);
-      expect(remote?.track.readyState).toBe("ended");
+      expect(remote?.track.readyState).toBe("live");
     } finally {
       harness.client.stop();
     }
@@ -4818,6 +4872,10 @@ function createHarness(
 }
 class FakeTransport implements CloudflareSFUSignalingTransport {
   uniqueRemoteMids = false;
+  /** MIDs the SFU hands out again for the next pulls, as it does for a mid whose track was closed. */
+  readonly reuseRemoteMids: string[] = [];
+  /** The SDP of the SFU's offer after a pull. */
+  remoteOfferSDP: string | undefined;
   #nextRemoteMid = 0;
   #localPublicationRevision = 0;
   readonly addInputs: {
@@ -4877,7 +4935,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
       }
       const tracks = input.tracks
         .filter((track) => !this.omittedRemoteTrackNames.has(track.trackName) && !this.failedRemoteTrackNames.has(track.trackName) && !this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`))
-        .map((track, index) => ({ ...track, mid: `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
+        .map((track, index) => ({ ...track, mid: this.reuseRemoteMids.shift() ?? `remote-${this.uniqueRemoteMids ? this.#nextRemoteMid++ : index}` }));
       const trackErrors = input.tracks.flatMap((track) => {
         const code = this.failedRemoteTrackNames.get(track.trackName) ?? (this.#withdrawnRemoteTrackKeys.has(`${track.sessionId}|${track.trackName}`) ? "publication_unavailable" : undefined);
         return code && track.sessionId ? [{ connectionId: track.sessionId, trackName: track.trackName, code }] : [];
@@ -4889,7 +4947,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
         tracks,
         trackErrors,
         requiresImmediateRenegotiation,
-        sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: "remote-offer" } : undefined,
+        sessionDescription: requiresImmediateRenegotiation ? { type: "offer", sdp: this.remoteOfferSDP ?? "remote-offer" } : undefined,
       };
     }
     if (this.failNextLocalPublish) {
@@ -4972,6 +5030,7 @@ class FakeTransport implements CloudflareSFUSignalingTransport {
 }
 class FakeTrack extends EventTarget {
   enabled = true;
+  muted = false;
   readyState: MediaStreamTrackState = "live";
   stopCalls = 0;
   readonly id: string;
@@ -5017,6 +5076,11 @@ class FakePeerConnection extends EventTarget {
   /** Chrome drops the whole transport when an offer rejects the m-section that owns the BUNDLE group (the first one). */
   dropsTransportWhenTagRejected = false;
   transportDropped = false;
+  /** The direction each remote section was answered with, by mid; an offer that turns a section on needs a receiving transceiver. */
+  readonly answerDirections: Record<string, string> = {};
+  #lastOffer = "";
+  /** A pull on a mid that already has a transceiver lands on that transceiver and its track, as in a browser. */
+  reusesMids = false;
   /** Every m-section in the order the browser added it, local and remote, so the BUNDLE group has a real tag. */
   readonly #sectionMids: string[] = [];
   #bundleTag: string | undefined;
@@ -5076,6 +5140,14 @@ class FakePeerConnection extends EventTarget {
     return { type: "offer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
   async createAnswer(): Promise<RTCSessionDescriptionInit> {
+    for (const section of this.#lastOffer.split(/\r?\n(?=m=)/)) {
+      const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
+      const transceiver = this.#remoteTransceivers.find((item) => item.mid === mid);
+      if (!mid || !transceiver) continue;
+      const offeredOn = !/\r?\na=(?:recvonly|inactive)\b/.test(section);
+      this.answerDirections[mid] = offeredOn && transceiver.direction === "recvonly" ? "recvonly" : "inactive";
+      (transceiver.receiver.track as unknown as FakeTrack).muted = this.answerDirections[mid] === "inactive";
+    }
     return { type: "answer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
   availableOutgoingBitrate: number | undefined;
@@ -5115,6 +5187,7 @@ class FakePeerConnection extends EventTarget {
     this.descriptionLog.push(`setRemote:${description?.type}`);
     if (description?.type === "offer" && this.signalingState === "have-local-offer") throw new DOMException("Called in wrong state: have-local-offer", "InvalidStateError");
     this.signalingState = description?.type === "offer" ? "have-remote-offer" : "stable";
+    if (description?.type === "offer") this.#lastOffer = description.sdp ?? "";
     if (this.#nextRemoteDescriptionStates) {
       const next = this.#nextRemoteDescriptionStates;
       this.#nextRemoteDescriptionStates = null;
@@ -5144,6 +5217,14 @@ class FakePeerConnection extends EventTarget {
     this.#nextRemoteDescriptionStates = { connection, ice };
   }
   emitTrack(mid: string, track: FakeTrack): void {
+    const reused = this.reusesMids ? this.#remoteTransceivers.find((transceiver) => transceiver.mid === mid) : undefined;
+    if (reused) {
+      // The SFU reused this mid: the browser fires the track event on the existing transceiver with its existing track.
+      const event = new Event("track");
+      Object.defineProperties(event, { track: { value: reused.receiver.track }, transceiver: { value: reused } });
+      this.dispatchEvent(event);
+      return;
+    }
     this.#receivers.set(mid, { track, getParameters: () => ({ codecs: [{ mimeType: "audio/opus", sdpFmtpLine: this.receiveDTX ? "useinbandfec=1;usedtx=1" : "useinbandfec=1" }] }) } as unknown as RTCRtpReceiver);
     this.#sectionMids.push(mid);
     const transceiver = {
