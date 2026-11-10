@@ -119,3 +119,17 @@ it("has no scrim for the reactions sheet and a scrim for the others", async () =
   await open({ variant: "default" });
   expect(host.querySelector("[data-part=sheet-scrim]")).not.toBeNull();
 });
+
+it("keeps the reactions sheet open when a tap lands on a call notice", async () => {
+  const { onOpenChange } = await open({ variant: "reactions" });
+  const toasts = document.createElement("div");
+  toasts.className = "chalk-toasts";
+  const dismiss = toasts.appendChild(document.createElement("button"));
+  host.append(toasts);
+  await act(async () => dismiss.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  await act(async () => dismiss.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(onOpenChange).not.toHaveBeenCalled();
+  await act(async () => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  await act(async () => document.body.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+});

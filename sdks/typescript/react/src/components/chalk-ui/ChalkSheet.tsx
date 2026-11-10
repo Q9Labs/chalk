@@ -22,7 +22,18 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
   const attach = useCallback((element: HTMLElement | null) => setContainer(element?.closest<HTMLElement>("[data-chalk]") ?? element), []);
   return (
     <span ref={attach} style={{ display: "contents" }}>
-      <Dialog.Root open={open} onOpenChange={onOpenChange} modal={variant !== "reactions"}>
+      <Dialog.Root
+        open={open}
+        onOpenChange={(next, details) => {
+          // The reactions sheet has no scrim, so a tap on a call notice's button must reach the notice and leave the sheet open.
+          if (variant === "reactions" && details.reason === "outside-press" && details.event.target instanceof Element && details.event.target.closest(".chalk-toasts")) {
+            details.cancel();
+            return;
+          }
+          onOpenChange(next);
+        }}
+        modal={variant !== "reactions"}
+      >
         {container ? (
           <Dialog.Portal container={container}>
             {variant === "reactions" ? null : <Dialog.Backdrop ref={scrim} data-part="sheet-scrim" className="chalk-sheet-scrim" />}
