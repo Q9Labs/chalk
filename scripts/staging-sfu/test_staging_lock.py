@@ -76,9 +76,10 @@ class LeaseTests(unittest.TestCase):
 
     def test_measurement_timeout_stops_with_lease_before_release(self):
         source = (Path(__file__).resolve().parents[2] / "features/scorecard/staging-latency.mjs").read_text()
-        args = json.loads(re.search(r'workload\("timeout", (\[[^\n]*?\]),', source)[1])
+        # Only the options before "pnpm" matter here; the rest of the command holds the sample count, which can come from the environment.
+        options = json.loads("[" + re.search(r'workload\(\s*"timeout",\s*\[(.*?)"pnpm"', source, re.S)[1] + '"pnpm"]')
         # Exercise the real measurement command's timeout options, not a mirrored flag list.
-        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *args[:args.index("pnpm")]])
+        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *options[:-1]])
 
     def assert_group_stopped_before_release(self, cancel, command_prefix=()):
         directory = Path(self.directory.name)
