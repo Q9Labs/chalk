@@ -20,6 +20,32 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-layout.chalk-icon-button {width:40px;height:40px;background:var(--chalk-surface);}
 .chalk-shell-layout.chalk-icon-button:hover {background:var(--chalk-raised);}
 .chalk-shell-danger {color:var(--chalk-danger-text);}
+.chalk-sheet-label-text {
+  flex: none;
+  white-space: nowrap;
+}
+.chalk-sheet-value {
+  flex: 1;
+  min-width: 0;
+  text-align: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-body);
+  color: var(--chalk-muted-text);
+}
+.chalk-sheet-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-lg);
+  background: var(--chalk-accent);
+  color: var(--chalk-accent-text);
+  font-size: var(--type-caption);
+  font-weight: 700;
+}
 .chalk-shell-dock > * {
   pointer-events: auto;
   flex-shrink: 0;

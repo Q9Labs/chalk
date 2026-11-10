@@ -26,7 +26,10 @@ interface DeviceSheetProps {
   readonly onTestSpeaker?: () => void;
 }
 
-const DEVICE_SHEET_CSS = `.chalk-sheet-label {
+const DEVICE_SHEET_CSS = `.chalk-sheet-row:disabled {
+  opacity: 0.5;
+}
+.chalk-sheet-label {
   padding: var(--space-3) var(--space-4) var(--space-1-5);
   font-size: var(--type-caption);
   font-weight: 600;

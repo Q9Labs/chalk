@@ -1673,40 +1673,11 @@
 .chalk-sheet-row:active {
   background: var(--chalk-pressed);
 }
-.chalk-sheet-row:disabled {
-  opacity: 0.5;
-}
 .chalk-sheet-group > .chalk-sheet-row + .chalk-sheet-row {
   box-shadow: var(--elevation-divider-top);
 }
 .chalk-sheet-group + .chalk-sheet-group {
   margin-top: var(--space-2);
-}
-.chalk-sheet-label-text {
-  flex: none;
-  white-space: nowrap;
-}
-.chalk-sheet-value {
-  flex: 1;
-  min-width: 0;
-  text-align: end;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-body);
-  color: var(--chalk-muted-text);
-}
-.chalk-sheet-badge {
-  display: grid;
-  place-items: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 var(--space-1-5);
-  border-radius: var(--corner-lg);
-  background: var(--chalk-accent);
-  color: var(--chalk-accent-text);
-  font-size: var(--type-caption);
-  font-weight: 700;
 }
 .chalk-sheet-body {
   min-height: 0;
