@@ -404,6 +404,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #commitEarlyPulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
     const next = new Map(this.#remoteTracks);
     for (const publication of pulled) next.set(publicationKey(publication), publication);
+    const dropped = droppedRemoteTracks(this.#remoteTracks, next);
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
     for (const publication of pulled) {
@@ -412,6 +413,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#publishSnapshot();
     this.#emitRemote();
+    // The listing that follows retires them, as it does for a reconcile.
+    this.#queueDroppedReceivers(dropped);
   }
   // The registry drops a publication when listeners keep failing to pull it.
   // A publisher that still believes it is sending must publish again, so
@@ -1341,11 +1344,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#publishSnapshot();
     this.#emitRemote();
+    this.#queueDroppedReceivers(dropped);
+    await this.#retireDroppedReceivers(generation);
+  }
+  #queueDroppedReceivers(dropped: readonly CloudflareSFURemoteTrack[]): void {
     for (const publication of dropped) {
       if (this.#unretiredReceivers.size >= RECEIVER_RETIREMENT_LIMIT) break;
       this.#unretiredReceivers.set(publication, 0);
     }
-    await this.#retireDroppedReceivers(generation);
   }
   #commitRemoteTracks(desired: ReadonlyMap<string, CloudflareSFUPublication>, pulled: readonly CloudflareSFURemoteTrack[], unclosed: readonly RemoteTrackEntry[], parked: readonly RemoteTrackEntry[], cursor: PublicationCursor, inputRevision: number): readonly CloudflareSFURemoteTrack[] {
     const next = reconcileRemoteTracks(desired, pulled, this.#remoteTracks);

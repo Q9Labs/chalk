@@ -556,6 +556,28 @@ it("pulls a Sync-advertised publication once when the same item arrives twice", 
   );
 });
 
+it("retires the receiver a newer Sync-advertised publication of the same source displaces", async () => {
+  await withTimedHarness(
+    async (h) => {
+      h.transport.uniqueRemoteMids = true;
+      await startReceiver(h);
+      const peer = h.peers[0]!;
+      for (let cycle = 0; cycle < 150; cycle++) {
+        const publication = remoteMicrophone("remote-connection", `microphone-${cycle}`);
+        h.transport.snapshot = { incarnation: 1, sequence: cycle + 1, publications: [publication] };
+        h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(peer.liveRemoteTransceiverCount()).toBe(1);
+        expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(128 + 1);
+      }
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+      expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(149);
+    },
+    { bootstrap: { ...bootstrap("connection-1"), capabilities: SYNC_PULL_CAPABILITIES } },
+  );
+});
+
 const micOn = { operationId: "mic-on", participantId: "participant-1", source: "microphone" as const, enabled: true };
 const muteInPlaceBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, muteInPlace: true } };
 type Harness = ReturnType<typeof createHarness>;
