@@ -450,8 +450,8 @@ try {
 
     const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
-    const created = await keyResponse.json();
-    const keyId = created.id;
+    const createdKey = await keyResponse.json();
+    const keyId = createdKey.id;
     const yearExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     const yearKey = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "One year", scopes: ["spaces:read"], expiresAt: yearExpiry, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(yearKey.status, 200, await yearKey.clone().text());
@@ -493,7 +493,7 @@ try {
     const developerDTO = await developer.json();
     assert.equal(developerDTO.tenantId, firstTenant);
     assert.equal(developerDTO.keys.find((key) => key.id === keyId).lastUsedAt, "2026-10-18T00:00:00Z");
-    assert.ok(created.secret.startsWith(developerDTO.keys.find((key) => key.id === keyId).prefix), "a new secret starts with its row's prefix");
+    assert.ok(createdKey.secret.startsWith(developerDTO.keys.find((key) => key.id === keyId).prefix), "a new secret starts with its row's prefix");
     const lastDelivery = developerDTO.webhooks.find((hook) => hook.id === webhookId).lastDelivery;
     assert.equal(lastDelivery.id, testDeliveryId);
     assert(lastDelivery.eventType);
