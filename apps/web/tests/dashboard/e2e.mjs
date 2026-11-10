@@ -255,6 +255,9 @@ try {
     const count = requests.length;
     assert.equal((await post(ada, "/dashboard-api/home", {}, session.csrfToken, { Origin: "https://evil.example" })).status, 403);
     assert.equal((await post(ada, "/dashboard-api/home", {}, "")).status, 403);
+    // The icon route needs a session and refuses hosts that are not public DNS names, before any request leaves.
+    assert.equal((await browser().request("/dashboard-api/favicon?host=example.com")).status, 401);
+    for (const host of ["127.0.0.1", "localhost", "169.254.169.254", "printer.local", "example.com:8443"]) assert.equal((await ada.request(`/dashboard-api/favicon?host=${encodeURIComponent(host)}`)).status, 400, host);
     assert.equal((await post(ada, "/dashboard-api/home", {}, other.csrfToken)).status, 403);
     assert.equal(requests.length, count);
     const apple = browser();
