@@ -46,24 +46,24 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 
 **Meaning.** The node is near the limit where it closes admission itself (the host guard closes at 90% busy CPU). Calls already running keep working; new Episodes start to overflow.
 
-**Check.** Read the DigitalOcean graphs for the Droplet. On the node, `top` and `journalctl --user -M chalk-sfu@ -u chalk-sfu -n 200` show the media telemetry lines. `/readyz` reports `admissionClosed` and its reason.
+**Check.** Read the DigitalOcean graphs for the Droplet. On the node, `top` and `journalctl _SYSTEMD_USER_UNIT=chalk-sfu.service -n 200` show the media telemetry lines. `/readyz` reports `admissionClosed` and its reason.
 
-**Fix.** If the load is real classes, nothing breaks; plan capacity before the next class (a larger Droplet needs a rebuild, a second node needs a `CHALK_SFU_NODES` change). If one process runs away, restart the service. If disk is full, remove old journal files with `journalctl --vacuum-size=200M` and old container images with `podman image prune`.
+**Fix.** If the load is real classes, nothing breaks; plan capacity before the next class (a larger Droplet needs a rebuild, a second node needs a `CHALK_SFU_NODES` change). If one process runs away, restart the service. If disk is full, remove old journal files with `journalctl --vacuum-size=200M` and unused container images with `runuser -u chalk-sfu -- podman image prune`.
 
 ### Node unreachable, refusing calls, or near its packet budget (`sfu-readiness`)
 
 **Meaning.** The alert text names the latest readiness reason:
 
-| Reason                                                                     | Meaning                                                                    | First check                            |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------- |
-| `unreachable`                                                              | The API host could not connect, handshake or finish `/readyz` in 5 seconds | Node down checklist above              |
-| `tls_config`                                                               | A certificate, key or CA file for the probe is missing or invalid          | Collector environment and cert files   |
-| `draining`                                                                 | The node answers 503 because it is draining for a deploy                   | A deploy is running or crashed         |
-| `http_status`, `invalid_response`                                          | The node answers, but not with a valid ready response                      | Node journal; wrong build              |
-| `admission_cpu_steal`, `admission_cpu_busy`, `admission_scheduler_latency` | The node closed admission itself because the host is overloaded            | CPU graph; noisy neighbour on the host |
-| `admission_pacer_drops`                                                    | The packet pacer drops packets: the node cannot send media fast enough     | CPU graph; packet rate on `/readyz`    |
-| `admission_udp_buffer_errors`                                              | The kernel drops UDP packets: socket buffers are too small or full         | `netstat -su` on the node              |
-| `packet_budget`                                                            | Reserved packets are at least 90% of the node's packet budget              | Count of live Episodes on the node     |
+| Reason                                                                     | Meaning                                                                    | First check                                                   |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `unreachable`                                                              | The API host could not connect, handshake or finish `/readyz` in 5 seconds | Node down checklist above                                     |
+| `tls_config`                                                               | A certificate, key or CA file for the probe is missing or invalid          | Collector environment and cert files                          |
+| `draining`                                                                 | The node answers 503 because it is draining for a deploy                   | A deploy is running or crashed                                |
+| `http_status`, `invalid_response`                                          | The node answers, but not with a valid ready response                      | Node journal; wrong build                                     |
+| `admission_cpu_steal`, `admission_cpu_busy`, `admission_scheduler_latency` | The node closed admission itself because the host is overloaded            | CPU graph; noisy neighbour on the host                        |
+| `admission_pacer_drops`                                                    | The packet pacer drops packets: the node cannot send media fast enough     | CPU graph; packet rate on `/readyz`                           |
+| `admission_udp_buffer_errors`                                              | The kernel drops UDP packets: socket buffers are too small or full         | `grep Udp /proc/net/snmp` on the node (`RcvbufErrors` rising) |
+| `packet_budget`                                                            | Reserved packets are at least 90% of the node's packet budget              | Count of live Episodes on the node                            |
 
 **Fix.** The packet and admission reasons clear on their own when load falls. If they stay, restart the service during a quiet minute; if the host itself is overloaded, move future classes to a second node (add it to `CHALK_SFU_NODES`) or lower `CHALK_SFU_NEW_EPISODES`, and see the kill-switch section below.
 
