@@ -231,7 +231,10 @@ export class AudioReceiveHealth {
       snapshot.element_state = observation.element.paused ? "paused" : "playing";
       snapshot.play_result = observation.result;
     }
-    if (entry.pull !== "pull_succeeded" || track.readyState !== "live") return snapshot;
+    if (track.readyState !== "live") return snapshot;
+    // Playback of a live track with growing bytes outranks the pull record: a pull stage that was never recorded must not hide audio the element is playing.
+    const proven = flowing && observation?.playing === true;
+    if (entry.pull !== "pull_succeeded" && !proven) return snapshot;
     snapshot.receive_state = "track_received";
     if (!flowing) return snapshot;
     snapshot.receive_state = "bytes_flowing";
