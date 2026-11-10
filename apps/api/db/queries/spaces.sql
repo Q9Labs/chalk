@@ -35,6 +35,7 @@ insert into spaces (
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -52,6 +53,7 @@ select
     tenant_facts.id,
     sqlc.arg(slug),
     sqlc.arg(media_plane),
+    sqlc.narg(media_plane_setting)::text,
     sqlc.narg(metadata),
     sqlc.narg(recurring_policy),
     sqlc.narg(admission_policy),
@@ -124,6 +126,7 @@ select
     inserted.tenant_id,
     inserted.slug,
     inserted.media_plane,
+    inserted.media_plane_setting,
     inserted.metadata,
     inserted.recurring_policy,
     inserted.admission_policy,
@@ -198,6 +201,7 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -223,6 +227,7 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -269,6 +274,10 @@ set
         when sqlc.arg(media_plane_set)::boolean then sqlc.arg(media_plane)::text
         else media_plane
     end,
+    media_plane_setting = case
+        when sqlc.arg(media_plane_setting_set)::boolean then sqlc.narg(media_plane_setting)::text
+        else media_plane_setting
+    end,
     metadata = case
         when sqlc.arg(metadata_set)::boolean then sqlc.narg(metadata)::jsonb
         else metadata
@@ -312,6 +321,7 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -339,6 +349,7 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -366,6 +377,7 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,

@@ -283,6 +283,8 @@ create table spaces (
     slug text not null,
     -- cf_sfu
     media_plane text not null,
+    -- The Space's own plane choice; null inherits the Tenant, then the platform default.
+    media_plane_setting text check (media_plane_setting in ('cf_sfu', 'chalk_sfu')),
     metadata jsonb,
     -- recurring_policy is null for non-recurring spaces.
     -- Example:

@@ -989,6 +989,7 @@ type Space struct {
 	TenantID                      pgtype.UUID        `json:"tenant_id"`
 	Slug                          string             `json:"slug"`
 	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
 	Metadata                      []byte             `json:"metadata"`
 	RecurringPolicy               []byte             `json:"recurring_policy"`
 	AdmissionPolicy               []byte             `json:"admission_policy"`

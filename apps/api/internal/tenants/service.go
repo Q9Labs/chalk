@@ -25,6 +25,8 @@ var (
 	ErrInvalidRequestKey     = errors.New("invalid tenant onboarding request key")
 	ErrIdempotencyConflict   = errors.New("tenant onboarding idempotency conflict")
 	ErrInvalidArtifactPolicy = errors.New("invalid Tenant Artifact policy")
+	// ErrMediaPlaneNotPermitted is a write of a default plane that only an operator may set.
+	ErrMediaPlaneNotPermitted = errors.New("tenant media plane not permitted")
 )
 
 type RecordingRenderMode string
@@ -64,6 +66,10 @@ type TenantRepository interface {
 
 type Service struct {
 	repository TenantRepository
+	// publicMediaPlane is the only default plane a Tenant owner may choose for the Tenant.
+	// Any other known plane is an operator decision.
+	publicMediaPlane string
+	knownMediaPlane  func(string) bool
 }
 
 type CreateTenantInput struct {
@@ -132,6 +138,24 @@ func NewService(repository TenantRepository) Service {
 	return Service{repository: repository}
 }
 
+// WithMediaPlanes sets the only default plane that CreateTenant and UpdateTenant
+// accept besides null, and which strings name a plane at all. Without it they accept
+// no plane.
+func (s Service) WithMediaPlanes(public string, known func(string) bool) Service {
+	s.publicMediaPlane, s.knownMediaPlane = public, known
+	return s
+}
+
+// SetDefaultMediaPlane writes the Tenant's default plane with operator authority, or
+// clears it with nil. No public route reaches it. The caller checks that the Tenant can
+// serve the plane.
+func (s Service) SetDefaultMediaPlane(ctx context.Context, id utilities.ID, plane *string) (Tenant, error) {
+	if id.IsZero() {
+		return Tenant{}, ErrInvalidTenantID
+	}
+	return s.repository.UpdateTenant(ctx, id, UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: plane}})
+}
+
 func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Tenant, error) {
 	id, err := utilities.NewID()
 	if err != nil {
@@ -148,8 +172,24 @@ func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Ten
 	if err := prepareCreateTenantInput(&input); err != nil {
 		return Tenant{}, err
 	}
+	if err := s.checkPublicMediaPlane(input.DefaultMediaPlane); err != nil {
+		return Tenant{}, err
+	}
 
 	return s.repository.CreateTenant(ctx, input)
+}
+
+func (s Service) checkPublicMediaPlane(plane *string) error {
+	if plane == nil {
+		return nil
+	}
+	if s.knownMediaPlane == nil || !s.knownMediaPlane(*plane) {
+		return ErrInvalidTenantField
+	}
+	if *plane != s.publicMediaPlane {
+		return ErrMediaPlaneNotPermitted
+	}
+	return nil
 }
 
 func (s Service) GetTenant(ctx context.Context, id utilities.ID) (Tenant, error) {
@@ -170,6 +210,11 @@ func (s Service) UpdateTenant(ctx context.Context, id utilities.ID, input Update
 	}
 	if err := prepareUpdateTenantInput(&input); err != nil {
 		return Tenant{}, err
+	}
+	if input.DefaultMediaPlane.Set {
+		if err := s.checkPublicMediaPlane(input.DefaultMediaPlane.Value); err != nil {
+			return Tenant{}, err
+		}
 	}
 
 	return s.repository.UpdateTenant(ctx, id, input)

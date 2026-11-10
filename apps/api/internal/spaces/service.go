@@ -1,7 +1,6 @@
 package spaces
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -90,11 +89,14 @@ func DefaultRoles() []DefaultRole {
 }
 
 type Space struct {
-	ID                            utilities.ID
-	Name                          string
-	TenantID                      utilities.ID
-	Slug                          string
+	ID       utilities.ID
+	Name     string
+	TenantID utilities.ID
+	Slug     string
+	// MediaPlane is what the previous release reads. The Space's own choice is
+	// MediaPlaneSetting, and nil means it inherits.
 	MediaPlane                    string
+	MediaPlaneSetting             *MediaPlaneProvider
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
@@ -145,11 +147,10 @@ type FilteredRepository interface {
 }
 
 type Service struct {
-	repository        Repository
-	defaultMediaPlane MediaPlaneProvider
-	newSpace          NewSpaceDefaults
-	tenants           TenantReader
-	chalkSFUAllowed   ChalkSFUAllowlist
+	repository Repository
+	newSpace   NewSpaceDefaults
+	tenants    TenantReader
+	planes     PlanePolicy
 }
 
 // TenantReader gives Create Space the Tenant's media plane settings, so a new
@@ -176,13 +177,19 @@ type NewSpaceDefaults struct {
 }
 
 type CreateSpaceInput struct {
-	ID                            utilities.ID
-	PublicInviteHandle            [32]byte
-	Name                          string
-	TenantID                      utilities.ID
-	Slug                          string
-	MediaPlane                    string
-	MediaPlaneSet                 bool
+	ID                 utilities.ID
+	PublicInviteHandle [32]byte
+	Name               string
+	TenantID           utilities.ID
+	Slug               string
+	MediaPlane         string
+	MediaPlaneSet      bool
+	// MediaPlaneFromConfig means MediaPlane comes from deployment configuration, not
+	// from a caller's request, so the public write gate does not apply to it.
+	MediaPlaneFromConfig bool
+	// MediaPlaneSetting is the Space's own choice; nil inherits. The service fills
+	// it and MediaPlane from the request, so a caller sets only MediaPlane.
+	MediaPlaneSetting             *MediaPlaneProvider
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
@@ -200,9 +207,12 @@ type CreateSpaceInput struct {
 }
 
 type UpdateSpaceInput struct {
-	Name                          utilities.OptionalString
-	Slug                          utilities.OptionalString
+	Name utilities.OptionalString
+	Slug utilities.OptionalString
+	// MediaPlane is the request value: a plane, or null to inherit. The service
+	// turns it into MediaPlaneSetting and the dual-written stored value.
 	MediaPlane                    utilities.OptionalString
+	MediaPlaneSetting             OptionalMediaPlaneSetting
 	Metadata                      utilities.OptionalJSON
 	RecurringPolicy               utilities.OptionalJSON
 	AdmissionPolicy               utilities.OptionalJSON
@@ -212,6 +222,12 @@ type UpdateSpaceInput struct {
 	DefaultEpisodeDurationSeconds OptionalInt32
 	MaximumEpisodeDurationSeconds OptionalInt32
 	LingerWindowSeconds           OptionalInt32
+}
+
+// OptionalMediaPlaneSetting is an omitted, cleared (Value nil) or concrete setting.
+type OptionalMediaPlaneSetting struct {
+	Set   bool
+	Value *MediaPlaneProvider
 }
 
 // OptionalInt32 preserves omitted, explicit null, and concrete numeric JSON
@@ -258,14 +274,13 @@ func NewService(repository Repository) Service {
 }
 
 func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaPlaneProvider) Service {
-	return Service{repository: repository, defaultMediaPlane: defaultProvider}
+	return Service{repository: repository, planes: PlanePolicy{Platform: defaultProvider}}
 }
 
-// WithChalkSFUAllowlist lets the listed Spaces choose the own SFU. It is empty by
-// default, so the selector cannot name a provider the deployment has not turned
-// on, and a Space outside the list cannot select it.
-func (s Service) WithChalkSFUAllowlist(allowed ChalkSFUAllowlist) Service {
-	s.chalkSFUAllowed = allowed
+// WithPlanePolicy sets the deployment's plane policy: the platform default that new
+// Spaces inherit, and the own-SFU kill switch and allowlist that Effective applies.
+func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
+	s.planes = policy
 	return s
 }
 
@@ -292,10 +307,10 @@ func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (p
 			return s.newSpace.MediaPlane, true, nil
 		}
 	}
-	if s.defaultMediaPlane != "" && s.defaultMediaPlane != MediaPlaneProviderCloudflareSFU {
+	if s.planes.Platform != "" && s.planes.Platform != MediaPlaneProviderCloudflareSFU {
 		return "", false, ErrInvalidMediaPlane
 	}
-	return s.defaultMediaPlane, false, nil
+	return s.planes.Platform, false, nil
 }
 
 // tenantModeChalkManaged is mediaplaneproviders.ModeChalkManaged, which this
@@ -303,28 +318,9 @@ func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (p
 const tenantModeChalkManaged = "chalk_managed"
 
 // tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
-// and the Tenant names no plane of its own. A Tenant with its own credentials
-// serves only that provider, and a Tenant default plane is its own choice.
+// and the Tenant names no plane of its own. A Tenant default plane is its own choice.
 func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
-	if tenant.DefaultMediaPlane != nil {
-		return false
-	}
-	raw := bytes.TrimSpace(tenant.MediaPlaneProviderConfig)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return true
-	}
-	var config struct {
-		Enabled *bool  `json:"enabled"`
-		Mode    string `json:"mode"`
-	}
-	if err := json.Unmarshal(raw, &config); err != nil {
-		return false
-	}
-	return (config.Enabled == nil || *config.Enabled) && strings.TrimSpace(config.Mode) == tenantModeChalkManaged
-}
-
-func (s Service) selectable(provider string, spaceID utilities.ID) bool {
-	return provider != string(MediaPlaneProviderChalkSFU) || s.chalkSFUAllowed.Allows(spaceID)
+	return tenant.DefaultMediaPlane == nil && tenantRunsEveryProvider(tenant)
 }
 
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
@@ -333,8 +329,10 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 		return Space{}, err
 	}
 	input.ID = id
+	input.MediaPlaneSetting = nil
+	explicitPlane := input.MediaPlaneSet || input.MediaPlane != ""
 	newSpacePlane := false
-	if !input.MediaPlaneSet && input.MediaPlane == "" {
+	if !explicitPlane {
 		plane, isNewSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
 		if err != nil {
 			return Space{}, err
@@ -353,8 +351,21 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	if !s.selectable(input.MediaPlane, input.ID) {
-		return Space{}, ErrInvalidMediaPlane
+	// The request names a plane only when the caller may; a Space that names none
+	// inherits, except that the configured new-Space plane is the Space's own choice.
+	provider := MediaPlaneProvider(input.MediaPlane)
+	switch {
+	case explicitPlane:
+		if !input.MediaPlaneFromConfig {
+			if err := s.planes.publicWriteAllowed(provider); err != nil {
+				return Space{}, err
+			}
+		}
+		input.MediaPlaneSetting = &provider
+	case newSpacePlane:
+		input.MediaPlaneSetting = &provider
+	default:
+		input.MediaPlane = s.planes.legacyPlane(nil)
 	}
 	if input.RequestKey != "" {
 		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
@@ -409,8 +420,22 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	if err := prepareUpdateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	if input.MediaPlane.Set && input.MediaPlane.Value != nil && !s.selectable(*input.MediaPlane.Value, spaceID) {
-		return Space{}, ErrInvalidMediaPlane
+	input.MediaPlaneSetting = OptionalMediaPlaneSetting{}
+	if input.MediaPlane.Set {
+		var setting *MediaPlaneProvider
+		if input.MediaPlane.Value != nil {
+			provider := MediaPlaneProvider(*input.MediaPlane.Value)
+			if err := s.planes.publicWriteAllowed(provider); err != nil {
+				return Space{}, err
+			}
+			setting = &provider
+		}
+		stored := s.planes.legacyPlane(setting)
+		if stored == "" {
+			return Space{}, ErrInvalidMediaPlane
+		}
+		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true, Value: setting}
+		input.MediaPlane.Value = &stored
 	}
 
 	return s.repository.UpdateSpace(ctx, tenantID, spaceID, input)
@@ -515,11 +540,7 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 	if err != nil {
 		return err
 	}
-	input.MediaPlane, err = requiredOptionalString(input.MediaPlane, ErrInvalidMediaPlane)
-	if err != nil {
-		return err
-	}
-	if input.MediaPlane.Set {
+	if input.MediaPlane.Set && input.MediaPlane.Value != nil {
 		provider, parseErr := ParseMediaPlaneProvider(*input.MediaPlane.Value)
 		if parseErr != nil {
 			return ErrInvalidMediaPlane

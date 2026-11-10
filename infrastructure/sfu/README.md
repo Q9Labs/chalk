@@ -108,13 +108,41 @@ CHALK_SFU_ALLOWED_SPACES=<space id>,<space id>
 ```
 
 The list holds Space IDs, comma separated. An empty or missing list allows no
-Space even when the switch is on, and `*` allows every Space (staging only). A
-Space outside the list cannot be created or updated with `chalk_sfu`, and an
+Space even when the switch is on, and `*` allows every Space (staging only). An
 Episode of a Space outside the list starts on Cloudflare even when the Space or
-its Tenant default says `chalk_sfu`. Changing the list changes only new
-Episodes: a live Episode keeps the provider its binding pinned. Keep the real
-list in the private API settings, not in Git. Production keeps the switch off
-until the M7 canary.
+its Tenant says `chalk_sfu`. Changing the list changes only new Episodes: a live
+Episode keeps the provider its binding pinned. Keep the real list in the private
+API settings, not in Git. Production keeps the switch off until the M7 canary.
+
+Which plane a new Episode gets is decided in this order, and the first rule that
+names one wins:
+
+1. `CHALK_SFU_NEW_EPISODES=off` sends every new Episode to Cloudflare. It is the
+   kill switch and defaults to `on`. Live Episodes keep their node.
+2. The Space's own setting (`media_plane_setting`), if it has one.
+3. The Tenant's `default_media_plane`.
+4. `CHALK_DEFAULT_MEDIA_PLANE`.
+
+The guards below the order still apply: a Space outside the allowlist, an SDK that
+cannot run the own SFU, and a pool with no room all send the Episode to
+Cloudflare, and an Episode that already has a binding keeps it.
+
+Only an operator sets `chalk_sfu`. The public API refuses it with 403
+`space.media_plane_not_permitted` or `tenant.media_plane_not_permitted`, and
+accepts `null` (inherit) or the deployment's default plane. The operator command
+runs with the API's database and plane settings:
+
+```sh
+CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
+CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane chalk_sfu
+CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane inherit
+CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings backfill --dry-run
+```
+
+Leave out `--space` to act on the Tenant's default. Each change prints one JSON
+line with the before and after values. `backfill` moves Spaces that stored
+`chalk_sfu` before the setting existed, and are on the allowlist, onto the
+setting; a Tenant with its own credentials or with media disabled is skipped.
 
 ## Client sunset
 
@@ -155,10 +183,12 @@ Space, and that its `ChalkAPIError.code` is `media.client_unsupported`.
 ## Run the canary
 
 Move internal Spaces one at a time: add the Space ID to
-`CHALK_SFU_ALLOWED_SPACES`, redeploy the API, then set the Space's
-`media_plane` to `chalk_sfu`. To roll a Space back, set `media_plane` to
-`cf_sfu`; live Episodes finish on the node, and new Episodes use Cloudflare. To
-stop the whole canary, empty the list.
+`CHALK_SFU_ALLOWED_SPACES`, redeploy the API (only while the allowlist exists),
+then run `media-settings set --plane chalk_sfu` for that Space. To roll a Space
+back, run it with `--plane inherit` (or `cf_sfu`); live Episodes finish on the
+node, and new Episodes use Cloudflare. To stop every new own-SFU Episode at once,
+set `CHALK_SFU_NEW_EPISODES=off` and restart the API; no setting needs to change,
+and removing the variable puts everything back.
 
 The scripted check joins two real SDK clients per trial, measures how long both
 take to render audio and video, then blocks UDP to the media provider, proves

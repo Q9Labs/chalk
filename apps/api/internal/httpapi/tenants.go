@@ -27,6 +27,7 @@ var (
 		Scope:       authentication.ScopeTenantsWrite,
 		MinimumRole: memberships.RoleCollaborator,
 	}
+	apiErrorTenantMediaPlaneNotPermitted = APIError{Status: http.StatusForbidden, Code: "tenant.media_plane_not_permitted", Message: "This media plane can only be set by Chalk"}
 	apiErrorInvalidTenantArtifactPolicy  = APIError{Status: http.StatusBadRequest, Code: "tenant.invalid_artifact_policy", Message: "Invalid Tenant Artifact policy"}
 	apiErrorTenantArtifactPolicyConflict = APIError{Status: http.StatusConflict, Code: "tenant.artifact_policy_conflict", Message: "Tenant Artifact policy conflicts with its ceiling"}
 )
@@ -158,6 +159,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 			apiErrorInvalidRequest,
 			apiErrorInvalidTenantName,
 			apiErrorInvalidTenantField,
+			apiErrorTenantMediaPlaneNotPermitted,
 			apiErrorInvalidTenantCORSOrigin,
 			apiErrorRateLimited,
 			apiErrorInternal,
@@ -274,6 +276,7 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorInvalidTenantID,
 			apiErrorInvalidTenantName,
 			apiErrorInvalidTenantField,
+			apiErrorTenantMediaPlaneNotPermitted,
 			apiErrorInvalidTenantCORSOrigin,
 			apiErrorTenantNotFound,
 			apiErrorInvalidTenantArtifactPolicy,
@@ -375,6 +378,8 @@ func tenantServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantName, true
 	case errors.Is(err, tenants.ErrInvalidTenantField):
 		return apiErrorInvalidTenantField, true
+	case errors.Is(err, tenants.ErrMediaPlaneNotPermitted):
+		return apiErrorTenantMediaPlaneNotPermitted, true
 	case errors.Is(err, tenants.ErrInvalidCORSOrigin):
 		return apiErrorInvalidTenantCORSOrigin, true
 	case errors.Is(err, artifactpolicy.ErrDefaultExceedsCeiling):

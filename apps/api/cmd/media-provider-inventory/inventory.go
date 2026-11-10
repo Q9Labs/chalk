@@ -76,7 +76,9 @@ type rawReport struct {
 // enabled=false disables media, and mode picks Chalk-managed or tenant-managed.
 // A malformed document, unknown provider string or unknown mode is invalid.
 //
-// space_class.selected is the Space's own media_plane, else the Tenant default.
+// space_class.selected is the Space's own media_plane_setting (or a stored chalk_sfu that
+// has no setting yet), else the Tenant default, else the stored media_plane, which holds
+// the platform default for a Space that inherits.
 // A chalk_sfu selection outside the allowlist is pinned to Cloudflare.
 // outcome is the provider a new Episode would bind, or none (no provider or
 // media disabled), or unresolvable (the API refuses to create the binding).
@@ -113,14 +115,23 @@ tenant_class as (
 ),
 space_class as (
     select s.id, s.tenant_id, tc.config_source,
-        case when btrim(s.media_plane) <> '' then 'space' else 'tenant_default' end as selection_source,
         case
-            when btrim(s.media_plane) = '' then tc.default_provider
+            when own.plane is not null then 'space'
+            when tc.default_provider <> 'none' then 'tenant_default'
+            else 'space'
+        end as selection_source,
+        case
+            when own.plane is not null then case own.plane when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
+            when tc.default_provider <> 'none' then tc.default_provider
+            when btrim(s.media_plane) = '' then 'none'
             else case btrim(s.media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
         end as selected,
         tc.config_provider, tc.sfu_configured
     from spaces s
     join tenant_class tc on tc.id = s.tenant_id
+    cross join lateral (
+        select coalesce(s.media_plane_setting, case when btrim(s.media_plane) = 'chalk_sfu' then 'chalk_sfu' end) as plane
+    ) own
     where s.archived_at is null
 ),
 space_outcome as (

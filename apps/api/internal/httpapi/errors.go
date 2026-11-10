@@ -43,6 +43,7 @@ var (
 	apiErrorInvalidSpaceName              = APIError{Status: http.StatusBadRequest, Code: "space.invalid_name", Message: "Invalid Space name"}
 	apiErrorInvalidSpaceSlug              = APIError{Status: http.StatusBadRequest, Code: "space.invalid_slug", Message: "Invalid Space slug"}
 	apiErrorInvalidMediaPlane             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_media_plane", Message: "Invalid media plane"}
+	apiErrorSpaceMediaPlaneNotPermitted   = APIError{Status: http.StatusForbidden, Code: "space.media_plane_not_permitted", Message: "This media plane can only be set by Chalk"}
 	apiErrorInvalidSpaceField             = APIError{Status: http.StatusBadRequest, Code: "space.invalid_field", Message: "Invalid Space field"}
 	apiErrorSpaceSlugAlreadyUsed          = APIError{Status: http.StatusConflict, Code: "space.slug_conflict", Message: "Space slug already used"}
 	apiErrorSpaceNotFound                 = APIError{Status: http.StatusNotFound, Code: "space.not_found", Message: "Space not found"}

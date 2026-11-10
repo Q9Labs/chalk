@@ -95,7 +95,17 @@ get no `CHALK_NEW_SPACE_*_POLICY` default. An Episode still starts on Cloudflare
 client SDK does not declare `chalk_sfu` (older than 5.5.0) or no node has room.
 To turn it off, unset the variable (or set `cf_sfu`) and restart; Spaces that
 already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
-`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list. Spaces that
+`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list.
+
+A Space or Tenant can choose its own plane. A new Episode starts on the first of
+these that names a plane: `CHALK_SFU_NEW_EPISODES=off` (the kill switch, default
+`on`, which sends every new Episode to `cf_sfu` and leaves live Episodes alone),
+the Space's `media_plane_setting`, the Tenant's `default_media_plane`, and
+`CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` still applies as well.
+The public API accepts `chalk_sfu` only where the deployment already hands it to
+new Spaces; elsewhere only an operator sets it, with `cmd/media-settings`
+(see `infrastructure/sfu/README.md`). Responses carry `media_plane_setting` (null
+means inherit) and the read-only `effective_media_plane`. Spaces that
 public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
 instead, so that setting moves them separately.
 

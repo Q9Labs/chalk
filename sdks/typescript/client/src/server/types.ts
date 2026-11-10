@@ -42,6 +42,10 @@ export type Space = {
   readonly linger_window_seconds: number;
   readonly maximum_episode_duration_seconds: number;
   readonly media_plane: string;
+  /** The Space's own plane; null means it inherits the Tenant or deployment default. */
+  readonly media_plane_setting: string | null;
+  /** The plane a new Episode would start on, before client capability and node room. Read-only. */
+  readonly effective_media_plane: string | null;
   readonly metadata: unknown;
   readonly name: string;
   readonly recording_policy: RecordingPolicy;
