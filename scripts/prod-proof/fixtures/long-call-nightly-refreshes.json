@@ -1,0 +1,57 @@
+{
+  "source": "Cut nightly 42725337871, own-sfu job, long-call on chalk_sfu. Numbers only, in milliseconds from the first sample of the call.",
+  "durationMs": 598000,
+  "guests": [
+    {
+      "initialExpiryMs": 287000,
+      "requests": [
+        { "atMs": 227000, "reason": "refresh", "replaceMediaConnection": false },
+        { "atMs": 466900, "reason": "refresh", "replaceMediaConnection": false }
+      ]
+    },
+    {
+      "initialExpiryMs": 292000,
+      "requests": [
+        { "atMs": 126800, "reason": "retry", "replaceMediaConnection": true },
+        { "atMs": 366900, "reason": "refresh", "replaceMediaConnection": false }
+      ]
+    },
+    {
+      "initialExpiryMs": 295000,
+      "requests": [
+        { "atMs": 234900, "reason": "refresh", "replaceMediaConnection": false },
+        { "atMs": 474900, "reason": "refresh", "replaceMediaConnection": false }
+      ]
+    }
+  ],
+  "toggles": [
+    [60391, 0, "microphone", false],
+    [66843, 0, "microphone", true],
+    [120399, 1, "microphone", false],
+    [128339, 1, "microphone", true],
+    [180336, 0, "camera", false],
+    [186875, 0, "camera", true],
+    [223619, 0, "microphone", false],
+    [227702, 1, "camera", false],
+    [230113, 0, "microphone", true],
+    [230468, 0, "camera", false],
+    [234218, 1, "camera", true],
+    [234522, 1, "microphone", false],
+    [236088, 0, "camera", true],
+    [240268, 1, "microphone", true],
+    [330344, 1, "camera", false],
+    [336925, 1, "camera", true],
+    [390341, 0, "microphone", false],
+    [396754, 0, "microphone", true],
+    [463720, 0, "microphone", false],
+    [467681, 1, "camera", false],
+    [470139, 0, "microphone", true],
+    [470509, 0, "camera", false],
+    [474199, 1, "camera", true],
+    [474576, 1, "microphone", false],
+    [476228, 0, "camera", true],
+    [480177, 1, "microphone", true],
+    [540404, 1, "microphone", false],
+    [546911, 1, "microphone", true]
+  ]
+}

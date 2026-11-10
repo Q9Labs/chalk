@@ -1,6 +1,6 @@
 import { launchGuests } from "./media.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
-import { bounds, callDurationMs, evidenceLine, judgeLongCall, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, mediaReplacementNotes, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
 const guestCount = 3;
@@ -56,10 +56,8 @@ export async function longCallProof(run, receiver) {
   console.log(`Joining ${guestCount} synthetic camera/voice guests on ${mediaPlane}`);
   const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestCount);
   const startedAtMs = Date.now();
-  const refreshDueMs = guests.refreshes.map(({ initialExpiry }) => initialExpiry - refreshWindowMs - startedAtMs);
-  const firstRefreshMs = refreshDueMs.reduce((sum, due) => sum + due, 0) / refreshDueMs.length;
-  const schedule = toggleSchedule({ firstRefreshMs });
-  console.log(`Holding the call for ${callDurationMs / 1000}s; first access refresh due at +${Math.round(firstRefreshMs / 1000)}s; ${schedule.length} toggles scheduled`);
+  const dueMs = (refresh) => refresh.currentExpiry - refreshWindowMs - startedAtMs;
+  console.log(`Holding the call for ${callDurationMs / 1000}s; first access refresh due at +${Math.round(Math.min(...guests.refreshes.map(dueMs)) / 1000)}s; toggles around each refresh are planned from each guest's current grant`);
 
   const ticks = [];
   const failures = [];
@@ -71,16 +69,24 @@ export async function longCallProof(run, receiver) {
       await run.wait(Math.max(0, bounds.sampleIntervalMs - (Date.now() - t)));
     }
   })();
+  // A media-connection replacement issues a new grant and moves that guest's next refresh, so the toggles around a refresh are planned from the current grants.
   const toggling = (async () => {
-    for (const entry of schedule) {
-      await run.wait(Math.max(0, startedAtMs + entry.atMs - Date.now()));
-      const at = Math.round((Date.now() - startedAtMs) / 1000);
-      try {
-        await toggle(guests.pages[entry.guest], entry);
-        ran.push({ ...entry, atMs: Date.now() - startedAtMs });
-      } catch (error) {
-        failures.push(`Guest ${entry.guest + 1} could not turn its ${entry.kind} ${entry.enabled ? "on" : "off"} at +${at}s: ${String(error.message).split("\n")[0]}`);
+    const pending = baselineToggles();
+    const planned = new Set();
+    while (Date.now() - startedAtMs < callDurationMs) {
+      const now = Date.now() - startedAtMs;
+      pending.push(...planRefreshToggles({ dues: guests.refreshes.map((refresh) => ({ key: `${refresh.guest}:${refresh.currentExpiry}`, dueMs: dueMs(refresh) })), nowMs: now, planned }));
+      pending.sort((a, b) => a.atMs - b.atMs);
+      while (pending.length && pending[0].atMs <= now) {
+        const entry = pending.shift();
+        try {
+          await toggle(guests.pages[entry.guest], entry);
+          ran.push({ ...entry, atMs: Date.now() - startedAtMs });
+        } catch (error) {
+          failures.push(`Guest ${entry.guest + 1} could not turn its ${entry.kind} ${entry.enabled ? "on" : "off"} at +${Math.round(now / 1000)}s: ${String(error.message).split("\n")[0]}`);
+        }
       }
+      await run.wait(500);
     }
   })();
   await Promise.all([sampling, toggling]);
@@ -89,6 +95,7 @@ export async function longCallProof(run, receiver) {
   failures.push(...judged.failures);
   const evidence = { ...judged.evidence, failureCount: failures.length };
   console.log(evidenceLine(evidence));
+  for (const note of [...mediaReplacementNotes(guests.refreshes, startedAtMs), ...judged.notes]) console.log(`Long call note: ${note}`);
   for (const failure of failures) console.log(`Long call failure: ${failure}`);
   await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, ticks });
   await end();
