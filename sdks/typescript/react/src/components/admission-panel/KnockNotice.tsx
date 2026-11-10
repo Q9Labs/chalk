@@ -51,6 +51,7 @@ const styles = `.chalk-knock-notice {
   margin-inline-start: calc(var(--space-2-5) * -1);
 }
 .chalk-knock-stack > * {
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: 0 0 0 2px var(--chalk-popover);
 }
 .chalk-knock-hide {

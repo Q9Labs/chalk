@@ -63,15 +63,18 @@ const styles = `.call-card-tabs {
   padding: 0 var(--space-3);
   border-radius: var(--corner-pill);
   background: var(--chalk-hover);
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px transparent;
   color: var(--chalk-muted-text);
 }
 [data-theme="light"] .call-people-search {
   background: var(--chalk-canvas);
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line);
 }
 .call-people-search:focus-within,
 [data-theme="light"] .call-people-search:focus-within {
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: 0 0 0 2px var(--chalk-accent);
 }
 .call-people-search svg {
@@ -171,6 +174,7 @@ const styles = `.call-card-tabs {
   border-radius: 50%;
 }
 .call-person-avatar[data-speaking] {
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: 0 0 0 2px var(--chalk-surface), 0 0 0 4px var(--chalk-accent-speaking);
 }
 .call-person-who {
@@ -254,6 +258,7 @@ const styles = `.call-card-tabs {
   place-items: center;
   width: 24px;
   height: 24px;
+  /* token-ratchet-ignore: optical inset for the 24px state icon, between the 2px and 4px steps */
   padding: 3px;
   color: color-mix(in srgb, var(--chalk-muted-text) 60%, transparent);
 }
@@ -266,12 +271,12 @@ const styles = `.call-card-tabs {
 .call-eq {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0-5);
   height: 14px;
 }
 .call-eq i {
   width: 3px;
-  border-radius: 2px;
+  border-radius: var(--corner-xs);
   background: var(--chalk-positive);
 }
 .call-eq i:nth-child(1) {
@@ -684,6 +689,7 @@ const styles = `.call-card-tabs {
   background: var(--chalk-raised);
 }
 [data-theme="light"] .call-wait {
+  /* token-ratchet-ignore: ring drawn with box-shadow, the design system has no ring token */
   box-shadow: inset 0 0 0 1px var(--chalk-line);
 }
 .call-wait-label {

@@ -516,7 +516,7 @@ ${phoneRules(`
   place-items: center;
   min-width: 20px;
   height: 20px;
-  padding: 0 6px;
+  padding: 0 var(--space-1-5);
   border-radius: var(--corner-pill);
   background: var(--chalk-accent);
   color: var(--chalk-accent-text);
