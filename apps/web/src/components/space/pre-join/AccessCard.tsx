@@ -37,11 +37,11 @@ export function AccessCard({ reason, requesting, onDismiss, onAllow }: { readonl
   const Icon = blocked ? VideoOffIcon : Video01Icon;
   return (
     <div role="group" aria-labelledby="access-card-title" className="grid gap-2 p-2 text-[var(--chalk-text)]">
-      <div className="grid grid-cols-[40px_1fr] items-start gap-3 px-2 pt-2">
-        <span className={`grid size-10 place-items-center rounded-full bg-[var(--chalk-hover)] ${blocked ? "text-[var(--chalk-danger-text)]" : ""}`}>
+      <div className="flex items-start gap-3 px-2 pt-2">
+        <span className={`grid size-10 flex-none place-items-center rounded-full bg-[var(--chalk-hover)] ${blocked ? "text-[var(--chalk-danger-text)]" : ""}`}>
           <Icon size={20} aria-hidden="true" />
         </span>
-        <div>
+        <div className="min-w-0">
           <h3 id="access-card-title" className="pt-px text-(length:--type-body-lg) font-semibold leading-snug">
             {blocked ? "Camera and microphone are blocked" : "Turn on camera and microphone?"}
           </h3>

@@ -11,15 +11,11 @@ function PreviewButton({ label, on, missing, disabled, onClick, children }: { re
       aria-pressed={on}
       disabled={disabled || missing}
       onClick={onClick}
-      className={cn(
-        "relative grid size-11 place-items-center rounded-full bg-[color-mix(in_srgb,var(--chalk-canvas)_86%,transparent)] text-[var(--chalk-text)] ring-1 ring-[var(--chalk-line)] max-[899px]:size-12",
-        !on && !missing && "text-[var(--chalk-danger-text)]",
-        missing && "text-[var(--chalk-muted-text)]",
-      )}
+      className={cn("relative grid size-12 place-items-center rounded-full bg-[var(--chalk-popover)] text-[var(--chalk-text)] ring-1 ring-[var(--chalk-line)]", !on && !missing && "text-[var(--chalk-danger-text)]", missing && "text-[var(--chalk-muted-text)]")}
     >
       {children}
       {missing ? (
-        <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 grid size-3.5 place-items-center rounded-full bg-[var(--chalk-warning)] text-(length:--type-micro) font-bold leading-none text-[var(--chalk-accent-text)] outline-2 outline-[var(--chalk-tile)]">
+        <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 grid size-3.5 place-items-center rounded-full bg-[var(--chalk-warning)] text-(length:--type-micro) font-bold text-[var(--chalk-accent-text)] ring-1 ring-[var(--chalk-line)]">
           !
         </span>
       ) : null}
@@ -67,8 +63,8 @@ export function PreviewTile({
           {getParticipantInitials(name)}
         </span>
       )}
-      {granted ? <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-full bg-[color-mix(in_srgb,var(--chalk-canvas)_86%,transparent)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)]">Only you see this</span> : null}
-      <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[color-mix(in_srgb,var(--chalk-canvas)_86%,transparent)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
+      {granted ? <span className="absolute left-3 top-3 inline-flex h-7 items-center rounded-full bg-[var(--chalk-popover)] px-2.5 text-(length:--type-caption) font-medium text-[var(--chalk-soft-text)]">Only you see this</span> : null}
+      <span className="absolute bottom-3 left-3 max-w-[40%] truncate rounded-lg bg-[var(--chalk-popover)] px-2.5 py-1 text-(length:--type-caption) font-medium">{name}</span>
       <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-2">
         <PreviewButton label={devices.microphoneOn ? "Turn off microphone" : "Turn on microphone"} on={devices.microphoneOn} missing={devices.microphoneMissing} disabled={locked} onClick={() => onToggle("microphone")}>
           {devices.microphoneOn ? <Microphone01Icon size={20} aria-hidden="true" /> : <MicrophoneOff01Icon size={20} aria-hidden="true" />}

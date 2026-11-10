@@ -39,7 +39,7 @@ function rowViews(devices: PreJoinDevices, compact = false): readonly RowView[] 
 function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevices; readonly kind: Kind; readonly onPick: () => void }) {
   const { list, selected, select } = listFor(devices, kind);
   return (
-    <div role="listbox" aria-label={CAPTION[kind]} className="absolute inset-x-0 bottom-full z-20 mb-2 grid rounded-3xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2">
+    <div role="listbox" aria-label={CAPTION[kind]} className="absolute inset-x-0 bottom-full z-20 mb-2 grid rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2">
       <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
       {list.length ? (
         list.map((device) => (
@@ -106,7 +106,7 @@ function DeviceRow({ view, devices, onNeedAccess, first }: { readonly view: RowV
           Test
         </button>
       ) : null}
-      {view.help ? <p className="pb-3 pl-11 pr-3 text-(length:--type-caption) leading-normal text-[var(--chalk-muted-text)]">{view.help}</p> : null}
+      {view.help ? <p className="pb-3 pl-11 pr-3 text-(length:--type-caption) leading-snug text-[var(--chalk-muted-text)]">{view.help}</p> : null}
     </div>
   );
 }
