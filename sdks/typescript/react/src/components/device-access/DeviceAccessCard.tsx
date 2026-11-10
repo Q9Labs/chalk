@@ -215,7 +215,7 @@ function CardBody({ device, control, onChooseAnother }: { readonly device: Devic
 }
 
 /** The dock button's "!" badge and its card, which live together so both load on the first refusal. */
-export function DeviceAccessCard(props: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl; readonly onChooseAnother?: () => void }) {
+export function DeviceAccessCard(props: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl }) {
   return (
     <>
       <DeviceAccessStyles />
@@ -228,10 +228,18 @@ export function DeviceAccessCard(props: { readonly device: DeviceKind; readonly 
 }
 
 /** One card for every way a microphone, camera or screen share can be refused. Popover above the dock button, bottom sheet on phones. */
-function DeviceAccessSurface({ device, anchor, control, onChooseAnother }: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl; readonly onChooseAnother?: () => void }) {
+function DeviceAccessSurface({ device, anchor, control }: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl }) {
   const phone = useMediaQuery("(max-width: 640px)");
   const popup = useRef<HTMLDivElement>(null);
   const label = cardCopy(device, control.reason).title;
+  // "Choose another" closes the card and opens the device menu beside the button. The phone dock has no microphone menu.
+  const onChooseAnother =
+    device === "microphone" && phone
+      ? undefined
+      : () => {
+          control.onOpenChange(false);
+          anchor?.querySelector<HTMLButtonElement>(".chalk-shell-caret")?.click();
+        };
   const body = <CardBody device={device} control={control} onChooseAnother={onChooseAnother} />;
   if (phone)
     return (

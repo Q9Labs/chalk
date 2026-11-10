@@ -6,7 +6,6 @@ import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
-import { useMediaQuery } from "../../internal/useMediaQuery";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
@@ -47,12 +46,6 @@ export interface DevicePopoverProps {
   appearance?: "default" | "floating";
   /** Set while the browser or the system refuses this device. Pressing the button opens the card instead of toggling. */
   access?: DeviceAccessControl;
-}
-
-/** "Choose another" closes the card and opens the device menu beside the button. */
-function chooseAnother(split: HTMLElement | null, access: DeviceAccessControl) {
-  access.onOpenChange(false);
-  split?.querySelector<HTMLButtonElement>(".chalk-shell-caret")?.click();
 }
 
 function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
@@ -197,8 +190,6 @@ export function DevicePopover({
     () => false,
   );
   const mic = type === "mic";
-  // The phone dock has no microphone menu, so there is nothing for "Choose another" to open.
-  const phone = useMediaQuery("(max-width: 640px)");
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
   const pressOpensCard = access && !busy;
@@ -276,7 +267,7 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
-      {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} /> : null}
+      {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} /> : null}
       {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
