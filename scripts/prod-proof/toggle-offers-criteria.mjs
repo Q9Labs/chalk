@@ -44,7 +44,7 @@ export function judgeOfferGrowth({ baseline, rounds }, limits = bounds) {
 }
 
 /** Toggle count against offer size: the first round, every tenth and the last. A reader checks this for growth. */
-export function offerTable({ baseline, rounds }) {
+function offerTable({ baseline, rounds }) {
   const header = `round | ${baseline.map((size, guest) => `guest ${guest + 1} largest/final (first join ${size})`).join(" | ")}`;
   const shown = rounds.flatMap((round, index) => (index === 0 || (index + 1) % 10 === 0 || index === rounds.length - 1 ? [`${String(index + 1).padStart(5)} | ${round.map((entry) => `${entry.largest}/${entry.final}`).join(" | ")}`] : []));
   return [header, ...shown];

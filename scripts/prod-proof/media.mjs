@@ -231,7 +231,7 @@ export function signalingBody(postData, url = "") {
 }
 
 /** The kind and size of the SDP a signalling request carries; a request without one adds nothing. The body is the guest's own, so the SDP itself stays out of the record. */
-export function sdpOf(request) {
+function sdpOf(request) {
   try {
     const description = JSON.parse(request.postData() ?? "{}").session_description;
     return description?.sdp ? { sdpType: description.type, sdpBytes: description.sdp.length } : {};
@@ -240,7 +240,7 @@ export function sdpOf(request) {
   }
 }
 
-export function signalingOperation(url) {
+function signalingOperation(url) {
   const path = new URL(url).pathname;
   const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
   return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
