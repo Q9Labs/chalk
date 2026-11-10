@@ -16,3 +16,17 @@ func TestJoinAdvertisesUnifiedSignalingOnlyWhenConfigured(t *testing.T) {
 		}
 	}
 }
+
+// The direct door is advertised only while CHALK_API_DIRECT_URL is set; unset leaves the field out.
+func TestJoinAdvertisesDirectSignalingOnlyWhenConfigured(t *testing.T) {
+	join := (&Adapter{directSignalingURL: "https://direct.chalk.test"}).join("episode-ref", "participant-ref", "connection-1", nil)
+	capabilities, _ := join.ClientPayload["capabilities"].(map[string]any)
+	if capabilities["directSignalingUrl"] != "https://direct.chalk.test" {
+		t.Errorf("configured: capabilities %v", capabilities)
+	}
+	join = (&Adapter{}).join("episode-ref", "participant-ref", "connection-1", nil)
+	capabilities, _ = join.ClientPayload["capabilities"].(map[string]any)
+	if _, present := capabilities["directSignalingUrl"]; present {
+		t.Errorf("unset: capabilities %v", capabilities)
+	}
+}

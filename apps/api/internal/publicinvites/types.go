@@ -400,6 +400,8 @@ type PublicAccessCapabilities struct {
 	// UnifiedSignaling says the SDK may send every signalling call to the single signal route.
 	UnifiedSignaling bool
 	MuteInPlace      bool
+	// DirectSignalingURL is the origin of the direct door for signalling; empty when off.
+	DirectSignalingURL string
 }
 
 type SpacePublicInvite = ManagedInvite

@@ -74,9 +74,11 @@ type Adapter struct {
 	iceServers    []mediaplane.ICEServer
 	// unifiedSignaling is advertised in each join so the SDK uses the single signalling URL.
 	unifiedSignaling bool
-	relay            RelaySource
-	backoff          time.Duration
-	captureReplay    *captureplane.ReplayCache
+	// directSignalingURL is advertised in each join when set; empty leaves the field out.
+	directSignalingURL string
+	relay              RelaySource
+	backoff            time.Duration
+	captureReplay      *captureplane.ReplayCache
 	// incarnation is the boot incarnation the Episode was bound to, set by Bound. When set, a
 	// join the node answers for another incarnation is refused as stale.
 	incarnation string
@@ -160,14 +162,15 @@ func newAdapter(config runtimeconfig.ChalkSFUConfig, node runtimeconfig.ChalkSFU
 		return nil, fmt.Errorf("%w: node ID %q", ErrMissingConfig, node.ID)
 	}
 	return &Adapter{
-		node:             node.ID,
-		base:             base,
-		client:           client,
-		applicationID:    config.ApplicationID,
-		iceServers:       iceServersOf(config.STUNURLs),
-		unifiedSignaling: config.UnifiedSignaling,
-		backoff:          retryBackoff,
-		captureReplay:    captureplane.NewReplayCache(captureReplayCapacity),
+		node:               node.ID,
+		base:               base,
+		client:             client,
+		applicationID:      config.ApplicationID,
+		iceServers:         iceServersOf(config.STUNURLs),
+		unifiedSignaling:   config.UnifiedSignaling,
+		directSignalingURL: config.DirectSignalingURL,
+		backoff:            retryBackoff,
+		captureReplay:      captureplane.NewReplayCache(captureReplayCapacity),
 	}, nil
 }
 
@@ -372,6 +375,10 @@ func (a *Adapter) metadata() map[string]string {
 // subscription's delivery state, so the SDK reads that before it repulls. It
 // restarts ICE in place, so the SDK tries that before it replaces the session.
 func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
+	capabilities := map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": advertiseMuteInPlace}
+	if a.directSignalingURL != "" {
+		capabilities["directSignalingUrl"] = a.directSignalingURL
+	}
 	return mediaplane.Join{
 		Provider:       mediaplane.ProviderChalkSFU,
 		ParticipantRef: participantRef,
@@ -380,7 +387,7 @@ func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServe
 			"provider":     string(mediaplane.ProviderChalkSFU),
 			"episodeRef":   episodeRef,
 			"iceServers":   iceServers,
-			"capabilities": map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": advertiseMuteInPlace},
+			"capabilities": capabilities,
 		},
 		Metadata: a.metadata(),
 	}

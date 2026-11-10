@@ -8,6 +8,7 @@ const (
 	PolicyNameTelemetryIntake    = "v1.telemetry.intake"
 	PolicyNameMCPOAuthRegister   = "mcp.oauth.register"
 	PolicyNameMCPOAuthProtocol   = "mcp.oauth.protocol"
+	PolicyNameDirectIngressIP    = "direct.ingress.ip"
 )
 
 const (
