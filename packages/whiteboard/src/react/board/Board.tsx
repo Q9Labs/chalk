@@ -36,6 +36,7 @@ import {
 } from "./board-model";
 import { BoardCursors, rememberCursor, type RemoteCursor } from "./BoardCursors";
 import { BoardIcon } from "./BoardIcon";
+import { useClearBoard } from "./BoardClear";
 import { BoardIsland } from "./BoardIsland";
 import { BoardMenu } from "./BoardMenu";
 import type { WhoCanDraw } from "./board-draw-policy";
@@ -628,15 +629,7 @@ export function Board({
     if (await shareView.current(true)) toast({ message: "Sharing your view with everyone" });
     else toast({ type: "error", message: "Could not share your view. Try again." });
   };
-  const clear = async () => {
-    if (!engine) return;
-    try {
-      const restore = await engine.clearWithUndo();
-      toast({ message: "Board cleared", ...(canDraw ? { action: { label: "Undo", onClick: () => void restore() } } : {}) });
-    } catch {
-      toast({ type: "error", message: "Could not clear the board. Try again." });
-    }
-  };
+  const clearBoard = useClearBoard({ engine, canDraw, toast, people: people.length, sheet: phone, container: root });
   const placeNoteAt = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const container = root.current?.querySelector<HTMLElement>(".excalidraw");
@@ -714,21 +707,25 @@ export function Board({
               onCopy={() => void copy()}
               whoCanDraw={whoCanDraw}
               onBring={isHost && sendView ? bring : undefined}
-              onClear={isHost ? () => void clear() : undefined}
+              onClear={isHost ? clearBoard.ask : undefined}
               onClose={onClose}
             />
           </div>
           <div className="chalk-board-zoom" role="group" aria-label="Zoom">
-            <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
-              <BoardIcon name="minus" size={16} />
-            </button>
+            {phone ? null : (
+              <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
+                <BoardIcon name="minus" size={16} />
+              </button>
+            )}
             <button type="button" aria-label={`Zoom ${Math.round(camera.zoom * 100)}%, reset to 100%`} className="chalk-board-zoom-value" onClick={() => zoomBy(1 / camera.cameraRef.current.zoom)}>
               {Math.round(camera.zoom * 100)}%
             </button>
-            <button type="button" aria-label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
-              <BoardIcon name="plus" size={16} />
-            </button>
-            {presentation === "web" ? (
+            {phone ? null : (
+              <button type="button" aria-label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
+                <BoardIcon name="plus" size={16} />
+              </button>
+            )}
+            {presentation === "web" || phone ? (
               <>
                 <span className="chalk-board-zoom-rule" aria-hidden="true" />
                 <button type="button" aria-label="Fit to content" onClick={fit}>
@@ -761,6 +758,7 @@ export function Board({
           <div className="chalk-board-announcer" aria-live="polite">
             {announcement}
           </div>
+          {clearBoard.dialog}
         </>
       ) : null}
     </div>

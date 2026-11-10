@@ -142,7 +142,7 @@ export type CallStateClient = ReturnType<typeof createCallStateClient>;
 
 /** The preview client plus the two seams Chalk needs from a live client: lifecycle events and a whiteboard transport. */
 /** What the fixture board holds: the plan scene or one small word, the people who move their pointers over it, and a relay channel to other tabs. */
-export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string };
+export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string; readonly pointers?: "roaming" | "edges" };
 
 export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixture = {}) {
   const client = createPreviewClient(snapshot);
@@ -191,7 +191,7 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
     subscribe: (listener) => {
       listeners.add(listener);
       queueMicrotask(() => listener(snapshot()));
-      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)));
+      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)), board.pointers);
       return () => {
         listeners.delete(listener);
         if (listeners.size > 0) return;
