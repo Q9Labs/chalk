@@ -49,9 +49,9 @@ export function writeCookie(response: Response, env: DashboardEnvironment, purpo
   response.headers.append("Set-Cookie", `${cookieName(env, purpose)}=${value}; Path=/; HttpOnly; SameSite=${purpose === "login_apple" && secure ? "None" : "Lax"}${secure}; Max-Age=${maxAge}`);
 }
 /** The readable twin of the session cookie: same lifetime, no value worth stealing. */
-export function writeSignedInHint(response: Response, env: DashboardEnvironment, maxAge = 2592000): void {
+function writeSignedInHint(response: Response, env: DashboardEnvironment, maxAge = 2592000): void {
   const secure = new URL(env.DASHBOARD_ORIGIN).protocol === "https:" ? "; Secure" : "";
-  response.headers.append("Set-Cookie", `${SIGNED_IN_COOKIE}=1; Path=/; SameSite=Lax${secure}; Max-Age=${maxAge}`);
+  response.headers.append("Set-Cookie", `${SIGNED_IN_COOKIE}=${maxAge > 0 ? "1" : ""}; Path=/; SameSite=Lax${secure}; Max-Age=${maxAge}`);
 }
 const bindingSchema = z.object({ userId: z.string(), sessionId: z.string(), expiresAt: z.number() });
 export type SessionBinding = z.infer<typeof bindingSchema>;
