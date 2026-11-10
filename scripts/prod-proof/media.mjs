@@ -12,7 +12,7 @@ const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.j
 const { chromium } = requireSDK("playwright");
 const { build } = requireSDK("esbuild");
 
-// options: sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
+// options: pageProbe (a function run in each page before it joins), sdkEntry, lobby (bundle the preconnect helper; the current client only), camera ({ width, height } of the generated camera, default 1280x720), observeLeave, trace (the latency kit's wire trace), plane (the Space's media plane, default CHALK_PROOF_MEDIA_PLANE),
 // deferJoin (prepare and admit every guest but leave join() to the caller) and headed.
 // A full own SFU falls back to Cloudflare; an own-SFU proof must not pass there.
 function checkMediaPlane(grant, guest, plane) {
@@ -135,6 +135,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
       });
       await page.goto(origin);
       await page.evaluate(installTransportDiagnostics);
+      if (options.pageProbe) await page.evaluate(options.pageProbe);
       await page.addScriptTag({ content: bundle });
       if (options.deferJoin && !replacing) return page;
       try {
@@ -206,7 +207,7 @@ function signalingFailure(request) {
 
 export function signalingOperation(url) {
   const path = new URL(url).pathname;
-  const operation = /\/media\/sfu\/(tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
+  const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
   return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
 }
 

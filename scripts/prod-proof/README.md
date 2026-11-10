@@ -126,6 +126,8 @@ Other checks cover parts of the same journey:
 fault trials pass, plus at least 200 calls and 50 call-hours with no P1. `pnpm prod:canary` proves the thresholds with
 two guests at a time; the fleet runs many 2-to-6-guest calls in parallel on one machine and counts what it ran.
 
+`pnpm prod:canary` reports each join twice. `summary.join` ends on the first 500 ms stats poll that sees video and audio growing at both guests (the long-standing number, rounded up by up to one poll). `summary.joinEvent` (`render-probe.mjs`) ends on the last guest's first presented video frame (`requestVideoFrameCallback` on a hidden muted `<video>`) and first received audio packet (`unmute`), so the poll's delay is not in it. Compare new runs against old ones with `summary.join`.
+
 Every call is a new Episode (in a new Space, or in one of the `--spaces` you list) with real SDK clients in headless
 Chromium and generated camera and tones. A call joins its guests, then works through a shuffled script: a microphone
 mute and unmute, usually a camera off and on, a screen share in `--screen-fraction` of the calls, a hard leave and
