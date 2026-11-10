@@ -13,6 +13,10 @@ func (r EpisodeLifecycleRepository) RequestParticipantRemoval(ctx context.Contex
 	var result episodes.Removal
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// Sync locks the control row before the Episode; lock in that order so the two cannot wait on each other.
+		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
+			return err
+		}
 		operation, err := lockTenantExternalOperation(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, episodes.OperationRemoveParticipant, input.Request)
 		if err == nil {
 			episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
@@ -74,6 +78,10 @@ func (r EpisodeLifecycleRepository) RequestEpisodeEnd(ctx context.Context, input
 	var result episodes.EndRequest
 
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// Sync locks the control row before the Episode; lock in that order so the two cannot wait on each other.
+		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
+			return err
+		}
 		operation, err := lockTenantExternalOperation(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, episodes.OperationTenantEndEpisode, input.Request)
 		if err == nil {
 			episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
