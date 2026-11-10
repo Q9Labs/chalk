@@ -46,6 +46,23 @@ H264 with more than 512 variable frame intervals keeps every decoded frame's
 timestamp in both copy and re-encode paths. Worker and API tests check accepted-failure evidence, trace correlation,
 and redaction; rejected failure reports do not emit accepted-failure evidence.
 
+### Recording stopped callbacks
+
+The API emits `recording.capture_stopped_callback` with `outcome=accepted` only
+when the stopped callback service succeeds, even when successful HTTP request
+logs are disabled. It includes the operational `job_id`, `attempt_count`,
+`capture_epoch`, and `duration_ms` for the API service call. Acceptance does not
+prove the worker received the response or the recording finished processing.
+
+If the worker gives up, its existing `recording.capture_attempt_failed` report
+preserves `stage=capture_stopped`, `outcome=returned` or `outcome=timed_out`, the
+safe error class, HTTP status, API error code, `callback_attempts`, and
+`callback_elapsed_ms`. The elapsed time includes callback calls and retry waits,
+not local media shutdown. These fields survive the failure-detail sanitizer;
+unknown text still does not. Join the two event types by operational job and
+worker attempt, not by a Tenant or Episode identifier. A missing failure report
+is not proof of success: the worker may have lost its lease or its API connection.
+
 ### Follow a user's session
 
 A session is one run of a Chalk app on one device: a browser tab, or an app launch
