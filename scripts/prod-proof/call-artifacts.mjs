@@ -145,7 +145,7 @@ export async function callArtifactsProof(run, captured) {
     await save(`${run.directory}/recording-evidence.json`, evidence);
     const { video, audio, durationSeconds, bytes, guests } = evidence;
     console.log(
-      `Recording: ${durationSeconds.toFixed(1)}s, ${bytes} bytes, ${video?.decodedFrames ?? 0} decoded frames, audio mean ${audio?.meanDb ?? "none"} dB, guests on camera: ${guests.filter(({ camera }) => camera?.visible).length}/${guestCount}, live tile frames per guest: ${guests.map(({ tile }) => (tile ? `${tile.liveFrames}/${tile.intervals}` : "none")).join(" ")}`,
+      `Recording: ${durationSeconds.toFixed(1)}s, ${bytes} bytes, ${video?.decodedFrames ?? 0} decoded frames, audio mean ${audio?.meanDb ?? "none"} dB, guests on camera: ${guests.filter(({ tile }) => tile?.liveFrames > 0).length}/${guestCount}, live tile frames per guest: ${guests.map(({ tile }) => (tile ? `${tile.liveFrames}/${tile.intervals}` : "none")).join(" ")}`,
     );
     const signals = await recordingSignals(file);
     const judged = judgeScript(script, signals, durationSeconds);
