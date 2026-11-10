@@ -2298,6 +2298,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #disposeConnection(stopSenders: boolean): void {
+    // Parked receivers belong to the connection being closed; a later offer must never touch them.
+    this.#parkedReceivers.clear();
     this.#receiveHealth.replaced();
     this.#receiveProgress.replaced();
     this.#disposeConnectionObservation?.();
