@@ -6,6 +6,7 @@ import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
+import { useMediaQuery } from "../../internal/useMediaQuery";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
@@ -196,6 +197,8 @@ export function DevicePopover({
     () => false,
   );
   const mic = type === "mic";
+  // The phone dock has no microphone menu, so there is nothing for "Choose another" to open.
+  const phone = useMediaQuery("(max-width: 640px)");
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   const accessLabel = access ? accessTooltip(mic ? "microphone" : "camera", access.reason) : undefined;
   return (
@@ -277,7 +280,7 @@ export function DevicePopover({
           <span className="chalk-access-badge" aria-hidden="true">
             !
           </span>
-          <DeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={() => chooseAnother(split, access)} />
+          <DeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} />
         </>
       ) : null}
       {warning && !access ? (

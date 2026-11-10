@@ -264,8 +264,11 @@ export function SpaceView({
   };
   const shownFailure = typeof displayedCommandError === "object" ? displayedCommandError : null;
   const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
-  // A refused microphone, camera or screen share is shown by the access card on its dock button, not as a toast.
-  const mappedFailure = shownFailure && commandFailurePresentation(shownFailure, displayedCommandSource, failureAction).card ? null : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
+  const mappedFailure =
+    externalCommandError == null && shownFailure && commandFailurePresentation(shownFailure, displayedCommandSource, failureAction).card
+      ? null
+      : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);

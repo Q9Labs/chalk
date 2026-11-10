@@ -199,9 +199,11 @@ function CardBody({ device, control, onChooseAnother }: { readonly device: Devic
       ) : null}
       {reason.kind === "busy" ? (
         <div className="chalk-access-actions">
-          <button type="button" className="chalk-access-secondary" onClick={onChooseAnother}>
-            Choose another
-          </button>
+          {onChooseAnother ? (
+            <button type="button" className="chalk-access-secondary" onClick={onChooseAnother}>
+              Choose another
+            </button>
+          ) : null}
           <button type="button" className="chalk-access-primary" onClick={control.onRetry}>
             Try again
           </button>

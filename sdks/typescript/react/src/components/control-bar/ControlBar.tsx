@@ -129,7 +129,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             </button>
           ) : null}
           {has("screenshare") && canCaptureDisplay ? (
-            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.onToggleScreenShare}>
+            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
             </button>
