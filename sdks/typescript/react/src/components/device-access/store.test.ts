@@ -121,6 +121,27 @@ describe("DeviceAccessStore", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores a device lookup that finishes after the last subscriber left", async () => {
+    const { store, mediaDevices, stop } = setup();
+    const retry = vi.fn(async () => {});
+    await store.report("microphone", failure("media.device_not_found"), retry);
+    let finish = () => {};
+    mediaDevices.enumerateDevices = () => new Promise((resolve) => (finish = () => resolve([{ kind: "audioinput" }])));
+    mediaDevices.emit("devicechange");
+    stop();
+    finish();
+    await settle();
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("clears the old card when the next failure is not an access problem", async () => {
+    const { store } = setup();
+    await store.report("microphone", failure("media.device_not_found"), async () => {});
+    expect(store.getSnapshot().issues.microphone).toBeDefined();
+    await store.report("microphone", failure("media.timeout"), async () => {});
+    expect(store.getSnapshot().issues.microphone).toBeUndefined();
+  });
+
   it("works in a browser that cannot be asked about permissions", async () => {
     const { store } = setup({ askable: false });
     await store.report("microphone", failure("media.permission_denied"), async () => {});

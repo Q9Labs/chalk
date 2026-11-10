@@ -49,13 +49,18 @@ export class DeviceAccessStore {
 
   readonly getSnapshot = (): DeviceAccessSnapshot => this.#snapshot;
 
-  /** Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed. */
+  /**
+   * Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed.
+   * Rejects when the card code cannot load, so the caller can show the failure another way. Any other failure clears the old card.
+   */
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
-    if (!isDeviceAccessFailure(failure, device)) return;
+    if (!isDeviceAccessFailure(failure, device)) {
+      this.clear(device);
+      return;
+    }
     const pending = this.#entry(device);
     const attempt = ++pending.attempt;
-    const { resolveAccess } = await import("./resolve");
-    const resolved = await resolveAccess(this.#ports, device, failure);
+    const resolved = await import("./resolve").then(({ resolveAccess }) => resolveAccess(this.#ports, device, failure));
     if (pending.attempt !== attempt) return;
     if (!resolved) {
       this.clear(device);

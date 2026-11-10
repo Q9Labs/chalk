@@ -230,18 +230,21 @@ export function SpaceView({
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
   const deviceAccess = useDeviceAccessStore();
+  const [cardFailed, setCardFailed] = useState(false);
   const runCommand = useCallback(
     async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
       try {
         await command();
         if (source && source !== "speaker") deviceAccess.clear(source);
+        setCardFailed(false);
         setCommandError(null);
         setCommandSource(undefined);
         setCommandAction(undefined);
         setRetryCommand(undefined);
       } catch (cause) {
         const failure = commandFailure(cause);
-        if (source && source !== "speaker") void deviceAccess.report(source, failure, () => runCommand(command, source, action));
+        setCardFailed(false);
+        if (source && source !== "speaker") deviceAccess.report(source, failure, () => runCommand(command, source, action)).catch(() => setCardFailed(true));
         setCommandError(failure);
         setCommandSource(source);
         setCommandAction(action);
@@ -266,7 +269,8 @@ export function SpaceView({
   const shownFailure = typeof displayedCommandError === "object" ? displayedCommandError : null;
   const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
   // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
-  const mappedFailure = externalCommandError == null && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource) ? null : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  const mappedFailure =
+    externalCommandError == null && !cardFailed && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource) ? null : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);

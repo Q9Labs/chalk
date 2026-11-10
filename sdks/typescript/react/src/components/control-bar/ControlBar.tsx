@@ -188,8 +188,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice } = useConnectedControlBarBehavior(props);
-  const failure = !props.onCommandError && commandError && !isDeviceAccessFailure(commandError, commandSource) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
+  const { surfaceProps, commandError, commandSource, commandAction, cardFailed, mediaNotice, requestingDevice } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError && (cardFailed || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />

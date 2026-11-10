@@ -238,6 +238,7 @@ interface ConnectedControlBarBehavior {
   readonly commandError: ClientFailure | null;
   readonly mediaNotice?: string;
   /** The device being requested right now. The browser may be showing its own permission prompt for it. */
+  readonly cardFailed: boolean;
   readonly requestingDevice: "microphone" | "camera" | undefined;
   readonly commandSource?: MediaCommandSource;
   readonly commandAction?: MediaCommandAction;
@@ -268,6 +269,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const [noiseSuppression, setNoiseSuppression] = useState(true);
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
+  const [cardFailed, setCardFailed] = useState(false);
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
   const access = useDeviceAccess();
 
@@ -277,12 +279,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
       setCommandSource(undefined);
       setCommandAction(undefined);
       props.onCommandError?.(null, source === "speaker" ? undefined : source, source, action);
+      setCardFailed(false);
       try {
         await command();
         if (source && source !== "speaker") access.store.clear(source);
       } catch (cause) {
         const failure = commandFailure(cause);
-        if (source && source !== "speaker") void access.store.report(source, failure, () => run(command, source, action));
+        if (source && source !== "speaker") access.store.report(source, failure, () => run(command, source, action)).catch(() => setCardFailed(true));
         if (!props.onCommandError) {
           setCommandError(failure);
           setCommandSource(source);
@@ -424,7 +427,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   };
 
   const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
+  return { surfaceProps, commandError, commandSource, commandAction, cardFailed, requestingDevice, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. */

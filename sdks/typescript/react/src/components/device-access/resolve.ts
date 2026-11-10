@@ -88,15 +88,19 @@ export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: De
   }
   if (reason.kind !== "missing" || !ports.mediaDevices) return () => {};
   const mediaDevices = ports.mediaDevices;
+  let stopped = false;
   const changed = () =>
     void mediaDevices.enumerateDevices().then(
       (devices) => {
-        if (devices.some((entry) => entry.kind === KIND_OF[device])) recovered();
+        if (!stopped && devices.some((entry) => entry.kind === KIND_OF[device])) recovered();
       },
       () => undefined,
     );
   mediaDevices.addEventListener("devicechange", changed);
-  return () => mediaDevices.removeEventListener("devicechange", changed);
+  return () => {
+    stopped = true;
+    mediaDevices.removeEventListener("devicechange", changed);
+  };
 }
 
 export interface ResolvedAccess {
