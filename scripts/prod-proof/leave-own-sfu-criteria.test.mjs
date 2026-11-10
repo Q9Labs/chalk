@@ -7,7 +7,7 @@ const good = () => ({
   capture: { live: 2, audio: 1, video: 1 },
   release: { live: 0, audio: 0, video: 0, ms: 300 },
   survivor: { rosterWithoutLeaver: true, remoteWithoutLeaver: true, ownTracksLive: true },
-  episodeStatus: "live",
+  episodeStatus: "active",
 });
 
 test("a clean Leave passes and feeds the scorecard one sample", () => {
@@ -26,7 +26,8 @@ for (const [name, change, message] of [
   ["the leaver in the roster", (s) => (s.survivor.rosterWithoutLeaver = false), /lists the leaver/],
   ["media still arriving from the leaver", (s) => (s.survivor.remoteWithoutLeaver = false), /still receives media/],
   ["the survivor losing its capture", (s) => (s.survivor.ownTracksLive = false), /stopped its own capture/],
-  ["an ended Episode", (s) => (s.episodeStatus = "ended"), /Episode ended/],
+  ["an ended Episode", (s) => (s.episodeStatus = "ended"), /Episode is ended/],
+  ["an Episode already ending", (s) => (s.episodeStatus = "ending"), /Episode is ending, not active/],
 ]) {
   test(`fails on ${name}`, () => {
     const sample = good();

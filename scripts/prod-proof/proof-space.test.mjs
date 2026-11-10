@@ -127,8 +127,24 @@ test("Promote's own-SFU proof finds its Space by slug and never creates one", as
       ["GET"],
     );
     const missing = await fakeRun(() => ({ spaces: [], pagination: { next_cursor: "" } }));
-    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /ensure-own-sfu-spaces/.test(error.message));
+    await assert.rejects(createSpace(missing, "chalk_sfu"), (error) => error.reason === "media-plane-config" && /own-sfu-spaces/.test(error.message));
   } finally {
     delete process.env.CHALK_PROOF_SPACE_BY_SLUG;
+  }
+});
+
+test("Promote's own-SFU proof uses the Space an operator pinned, the same one the ensure step checks", async () => {
+  process.env.CHALK_PROOF_SPACE_BY_SLUG = "true";
+  process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU = "pinned";
+  try {
+    const run = await fakeRun((method) => (method === "GET" ? { id: "pinned", slug: "operator-space", media_plane: "chalk_sfu", ...policyApplied } : assert.fail("created a Space")));
+    assert.equal((await createSpace(run, "chalk_sfu")).id, "pinned");
+    assert.deepEqual(
+      run.requests.map((request) => request.path),
+      ["/v1/tenants/t/spaces/pinned"],
+    );
+  } finally {
+    delete process.env.CHALK_PROOF_SPACE_BY_SLUG;
+    delete process.env.CHALK_PROOF_SPACE_ID_CHALK_SFU;
   }
 });

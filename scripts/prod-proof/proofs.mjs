@@ -10,7 +10,7 @@ import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findSpaceBySlug, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -70,16 +70,18 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   await save(`${run.directory}/space.json`, space);
   return space;
 }
-// A Space ID variable wins. Otherwise CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) finds the proof Space
-// that the ensure-own-sfu-spaces step moved, by its fixed slug.
+// CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) uses the Space the own-sfu-spaces step checked and moved:
+// the pinned Space ID when an operator pinned one, otherwise the Space with the fixed slug (same resolver as the step).
+// Otherwise a Space ID variable reuses the Space an operator moved.
 async function pinnedSpace(run, plane, policy, pinName) {
-  const pinned = pinName && process.env[pinName];
-  if (pinned) return run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
   const kind = ownSfuSpaceKind(policy);
-  if (plane !== "chalk_sfu" || !kind || process.env.CHALK_PROOF_SPACE_BY_SLUG !== "true") return undefined;
-  const found = await findSpaceBySlug(run.apiRequest, run.tenantPath, ownSfuSpaces[kind].slug);
-  check(found, `The proof Space ${ownSfuSpaces[kind].slug} does not exist: run the ensure-own-sfu-spaces proof first`, "media-plane-config");
-  return found;
+  if (plane === "chalk_sfu" && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
+    const found = await findOwnSfuSpace(run.apiRequest, run.tenantPath, kind);
+    check(found, `The proof Space for ${pinName} or ${ownSfuSpaces[kind].slug} does not exist: run the own-sfu-spaces proof first`, "media-plane-config");
+    return found;
+  }
+  const pinned = pinName && process.env[pinName];
+  return pinned ? run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`) : undefined;
 }
 function checkSpacePolicy(space, policy) {
   check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");

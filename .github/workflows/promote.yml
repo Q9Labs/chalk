@@ -126,7 +126,7 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: ensure-own-sfu-spaces
+      proofs: own-sfu-spaces
       media_plane: chalk_sfu
     secrets: inherit
   release:

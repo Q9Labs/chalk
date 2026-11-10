@@ -11,7 +11,7 @@ const needsOf = (job) => [job.needs ?? []].flat();
 test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
   const spaces = promote.jobs["own-sfu-spaces"];
   assert.equal(spaces.uses, "./.github/workflows/real-call-proof.yml");
-  assert.deepEqual([spaces.with.environment, spaces.with.proofs, spaces.with.media_plane], ["production", "ensure-own-sfu-spaces", "chalk_sfu"]);
+  assert.deepEqual([spaces.with.environment, spaces.with.proofs, spaces.with.media_plane], ["production", "own-sfu-spaces", "chalk_sfu"]);
   assert.equal(spaces.with.release_sha, undefined, "the ensure step runs the dispatching master's proof code");
   assert.ok(needsOf(spaces).includes("approve"));
   assert.ok(needsOf(promote.jobs.release).includes("own-sfu-spaces"));

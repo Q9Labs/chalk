@@ -13,7 +13,7 @@ export function evaluateOwnSfuLeave(sample) {
   if (!survivor.rosterWithoutLeaver) failures.push("The remaining guest still lists the leaver as a participant");
   if (!survivor.remoteWithoutLeaver) failures.push("The remaining guest still receives media from the leaver");
   if (!survivor.ownTracksLive) failures.push("The remaining guest stopped its own capture when the other guest left");
-  if (episodeStatus === "ended") failures.push("The Episode ended when one of two guests left");
+  if (episodeStatus !== "active") failures.push(`The Episode is ${episodeStatus}, not active, after one of two guests left`);
   return { passed: failures.length === 0, failures };
 }
 

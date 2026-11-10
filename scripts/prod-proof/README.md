@@ -274,7 +274,7 @@ for the own SFU's call alone and `call-artifacts` for its Recording and Transcri
 current client and one leaves. It fails unless the Sync acknowledgement arrives before the SDK's deadline and within
 5 s, the leaver's microphone and camera tracks end within 10 s, the other guest drops the leaver from its roster and
 its received media and keeps its own capture, and the Episode is not ended. It writes a Leave result in the
-shape the scorecard reads. `pnpm prod:proof ensure-own-sfu-spaces` finds or creates Promote's two proof Spaces by slug
+shape the scorecard reads. `pnpm prod:proof own-sfu-spaces` finds or creates Promote's two proof Spaces by slug
 and moves them to `chalk_sfu` through the public API, which only a release before the per-Space setting accepts
 (an allowlisted Space); `CHALK_PROOF_SPACE_BY_SLUG=true` makes the proofs reuse them.
 

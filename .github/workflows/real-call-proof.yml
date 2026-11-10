@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and ensure-own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -48,7 +48,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and ensure-own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
       latency:
@@ -198,7 +198,7 @@ jobs:
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
-          # Promote's own-SFU proof reuses the two Spaces that ensure-own-sfu-spaces moved, found by slug.
+          # Promote's own-SFU proof reuses the two Spaces that own-sfu-spaces moved, found by slug.
           CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
           # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
           CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
@@ -225,12 +225,12 @@ jobs:
           esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|ensure-own-sfu-spaces) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
             # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != ensure-own-sfu-spaces ]; then
-              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu and ensure-own-sfu-spaces" >&2
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ]; then
+              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces" >&2
               exit 1
             fi
           done
