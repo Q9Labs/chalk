@@ -9,7 +9,8 @@ export function DeviceAccessStyles() {
 const DEVICE_ACCESS_CSS = `
 .chalk-shell-split[data-blocked],
 .chalk-shell-split[data-blocked][data-off="true"] {
-  box-shadow: 0 0 0 1px var(--chalk-danger);
+  outline: 1px solid var(--chalk-danger);
+  outline-offset: -1px;
 }
 .chalk-shell-split[data-blocked] .chalk-shell-main {
   color: var(--chalk-danger-text);
@@ -55,7 +56,7 @@ const DEVICE_ACCESS_CSS = `
   background: var(--chalk-popover);
   border-inline-end: 1px solid var(--chalk-line-strong);
   border-bottom: 1px solid var(--chalk-line-strong);
-  margin-inline-start: -6px;
+  translate: -50% 0;
   transform: rotate(45deg);
 }
 .chalk-access-arrow[data-side="top"] { bottom: -7px; }
@@ -90,7 +91,7 @@ const DEVICE_ACCESS_CSS = `
   display: grid;
   place-items: center;
   color: var(--chalk-muted-text);
-  margin-top: -4px;
+  margin-block-start: calc(var(--space-1) * -1);
 }
 .chalk-access-close svg { width: 18px; height: 18px; }
 .chalk-access-close:hover { background: var(--chalk-hover); }
@@ -131,7 +132,7 @@ const DEVICE_ACCESS_CSS = `
   color: var(--chalk-muted-text);
 }
 .chalk-access-bar .icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--chalk-text); flex: none; }
-.chalk-access-bar .icon[data-hit] { box-shadow: 0 0 0 2px var(--chalk-accent); }
+.chalk-access-bar .icon[data-hit] { outline: 2px solid var(--chalk-accent); }
 .chalk-access-bar .icon[data-off] { color: var(--chalk-danger-text); }
 .chalk-access-bar .icon svg { width: 14px; height: 14px; }
 .chalk-access-bar .grow, .chalk-access-menu .grow { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -169,7 +170,7 @@ const DEVICE_ACCESS_CSS = `
   flex: none;
 }
 .chalk-access-menubar { display: flex; align-items: center; gap: var(--space-3); font-size: var(--type-caption); padding: 0 var(--space-2); color: var(--chalk-muted-text); }
-.chalk-access-menubar b { color: var(--chalk-text); font-weight: 700; border-radius: var(--corner-sm); padding: 0 var(--space-1); box-shadow: 0 0 0 2px var(--chalk-accent); }
+.chalk-access-menubar b { color: var(--chalk-text); font-weight: 700; border-radius: var(--corner-sm); padding: 0 var(--space-1); outline: 2px solid var(--chalk-accent); }
 .chalk-access-menubar .chalk-access-step { margin-inline-start: auto; }
 .chalk-access-dim { position: fixed; inset: 0; z-index: 30; background: var(--chalk-canvas); opacity: 0.45; pointer-events: none; }
 .chalk-access-coach {

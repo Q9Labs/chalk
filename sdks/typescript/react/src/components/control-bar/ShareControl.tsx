@@ -3,7 +3,8 @@ import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { ShellIcon } from "./ShellIcon";
-import { DeviceAccessCard, type DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 import { DeviceAccessStyles } from "../device-access/DeviceAccessStyles";
 import { accessTooltip } from "../device-access/model";
 
@@ -82,7 +83,7 @@ export function ShareControl({
           <span className="chalk-access-badge" aria-hidden="true">
             !
           </span>
-          <DeviceAccessCard device="screen" anchor={split} control={access} />
+          <LazyDeviceAccessCard device="screen" anchor={split} control={access} />
         </>
       ) : null}
       <ChalkMenu

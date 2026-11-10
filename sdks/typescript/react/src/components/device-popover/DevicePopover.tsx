@@ -10,7 +10,8 @@ import { useMediaQuery } from "../../internal/useMediaQuery";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
-import { DeviceAccessCard, type DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 import { DeviceAccessStyles } from "../device-access/DeviceAccessStyles";
 import { accessTooltip } from "../device-access/model";
 
@@ -280,7 +281,7 @@ export function DevicePopover({
           <span className="chalk-access-badge" aria-hidden="true">
             !
           </span>
-          <DeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} />
+          <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={mic && phone ? undefined : () => chooseAnother(split, access)} />
         </>
       ) : null}
       {warning && !access ? (
