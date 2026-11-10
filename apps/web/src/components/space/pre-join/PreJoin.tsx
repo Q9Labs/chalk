@@ -1,8 +1,9 @@
-import { ChalkButton, ChalkSheet, usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { Loading01Icon } from "@q9labsai/chalk-react/utils";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
+import { BottomSheet } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
 
 const STACKED = "(max-width: 899px)";
@@ -105,7 +106,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         className="h-12 w-full rounded-[var(--corner-xl)] border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) text-[var(--chalk-app-text)] outline-none read-only:text-[var(--chalk-muted-text)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
       />
       <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pb-[max(env(safe-area-inset-bottom),var(--space-6))] pt-3" : "grid gap-2"}>
-        <ChalkButton ref={joinButton} type="submit" variant="solid" className="mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
+        <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
               <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -114,7 +115,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           ) : (
             "Join call"
           )}
-        </ChalkButton>
+        </button>
         <p role="status" className="min-h-[18px] text-center text-(length:--type-caption) leading-[1.45] text-[var(--chalk-muted-text)]">
           {joining ? null : joinNote(devices.joinOptions)}
         </p>
@@ -124,9 +125,9 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
 
   const sheet =
     card && stacked ? (
-      <ChalkSheet open onOpenChange={(open) => !open && setDismissed(true)} title="Camera and microphone">
+      <BottomSheet label="Camera and microphone" onClose={() => setDismissed(true)}>
         {card}
-      </ChalkSheet>
+      </BottomSheet>
     ) : null;
   if (stacked)
     return (

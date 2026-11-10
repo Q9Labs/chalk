@@ -1,5 +1,4 @@
 import { Loading01Icon, Video01Icon, VideoOffIcon } from "@q9labsai/chalk-react/utils";
-import { ChalkButton } from "@q9labsai/chalk-react";
 
 export type AccessReason = "ask" | "blocked";
 
@@ -51,12 +50,12 @@ export function AccessCard({ reason, requesting, onDismiss, onAllow }: { readonl
       </div>
       {blocked && isChrome() ? <ChromeSteps /> : null}
       <div className="flex gap-2">
-        <ChalkButton variant="outline" className="!h-10 flex-1" onClick={onDismiss}>
+        <button type="button" data-part="pill-button" data-chalk-variant="outline" data-chalk-tone="neutral" className="chalk-pill-button !h-10 flex-1" onClick={onDismiss}>
           Not now
-        </ChalkButton>
-        <ChalkButton variant="solid" className="!h-10 flex-1" onClick={onAllow} disabled={requesting} aria-busy={requesting || undefined}>
+        </button>
+        <button type="button" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button !h-10 flex-1" onClick={onAllow} disabled={requesting} aria-busy={requesting || undefined}>
           {requesting ? <Loading01Icon size={16} className="animate-spin" aria-hidden="true" /> : blocked ? "Try again" : "Turn on"}
-        </ChalkButton>
+        </button>
       </div>
     </div>
   );
