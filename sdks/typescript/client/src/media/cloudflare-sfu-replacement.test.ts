@@ -367,6 +367,22 @@ describe("pull-published first poll", () => {
     );
   });
 
+  it("closes the receiver of a listed audio track whose Participant the roster does not list", async () => {
+    await withTimedHarness(
+      async (h) => {
+        h.transport.snapshot = room();
+        h.client.remoteParticipantsChanged(["participant-3"]);
+        await h.client.start(fakeStream());
+        await h.client.refreshRemotePublications();
+
+        expect(h.client.getSnapshot().remoteTracks).toHaveLength(0);
+        expect(h.peers[0]!.liveRemoteTransceiverCount()).toBe(0);
+        expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(1);
+      },
+      { bootstrap: pullPublished },
+    );
+  });
+
   it("lists the publications when the plane does not advertise the capability", async () => {
     await withTimedHarness(async (h) => {
       h.transport.snapshot = room();

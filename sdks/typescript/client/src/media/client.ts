@@ -1766,6 +1766,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     }
+    // The server also pulled the tracks of Participants the roster does not list. No roster entry holds those receivers, so the reconcile that follows retires them.
+    const held = this.#heldRemoteTracks();
+    this.#queueDroppedReceivers(pulled.filter((publication) => !held.has(publication.track)));
     return listed.snapshot;
   }
   async #negotiateRemotePull(requested: readonly CloudflareSFUPublication[], generation: number, issue: (connectionId: string) => Promise<{ readonly publications: readonly CloudflareSFUPublication[]; readonly response: CloudflareSFUTracksResponse }>): Promise<readonly CloudflareSFURemoteTrack[]> {
