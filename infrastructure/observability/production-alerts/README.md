@@ -84,10 +84,15 @@ node that cannot be reached is the `sfu-readiness` row's concern, so an unreacha
 node adds nothing here.
 
 The row needs no monitor change: the grouped monitor already matches every rule that is
-not excluded by name. The own SFU server and client certificates last 180 and 365
-days, issued by `features/media/sfu/deploy/certs`; renew them with `certs <env> server`
-and `deploy`. The direct door's certificate is issued and renewed by its Caddy proxy
-over TLS-ALPN-01 on port 443; a warning there means renewal is failing, so check the
+not excluded by name. The own SFU certificates are issued by `features/media/sfu/deploy/certs`. The server
+certificate lasts 180 days: renew it with `certs <env> server`, then `deploy`. The API's
+SFU client certificate lasts 365 days and is a separate target: renew it with
+`certs <env> api <key file> <current certificate>`, then install it where the API and
+the collector read it. Expiry is read without chain verification, so an expired
+certificate reads as expired instead of vanishing. The checks run in parallel on their
+own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
+The direct door's certificate is issued and renewed by its Caddy proxy
+over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the
 proxy journal.
 
 ### Own SFU readiness

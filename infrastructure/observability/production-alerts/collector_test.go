@@ -12,6 +12,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -260,5 +261,85 @@ func TestCertificateExpiryWarnsAtTwentyOneAndSevenDaysAndWhenTheDoorFails(t *tes
 func TestCertificateExpiryRowOnlyWhenConfigured(t *testing.T) {
 	if items := collectCertificateExpiry(context.Background(), nil, "", time.Now()); items != nil {
 		t.Fatalf("nothing configured must emit no row: %+v", items)
+	}
+}
+
+// expiredServer presents a certificate that ended an hour ago and asks for no client
+// certificate, like a node whose server certificate has run out.
+func expiredServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(9), Subject: pkix.Name{CommonName: "expired"}, NotBefore: time.Now().Add(-48 * time.Hour), NotAfter: time.Now().Add(-time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu", "localhost"}, IPAddresses: nil}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.NotFoundHandler())
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}, MinVersion: tls.VersionTLS13}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestAnExpiredServerCertificateStillReadsAsExpired(t *testing.T) {
+	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	server := expiredServer(t)
+	probes[0].URL = server.URL + "/readyz"
+	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate has expired") {
+		t.Fatalf("an expired SFU server certificate must alert as expired: %+v", items)
+	}
+	door := collectCertificateExpiry(context.Background(), nil, strings.Replace(server.URL, "127.0.0.1", "localhost", 1), time.Now())
+	if len(door) != 1 || door[0].Value != 1 || !strings.Contains(door[0].Reason, "the direct door certificate has expired") {
+		t.Fatalf("an expired door certificate must alert as expired: %+v", door)
+	}
+}
+
+func TestSlowNodesCostOneTimeoutNotOneEach(t *testing.T) {
+	var probes []sfuProbe
+	base, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	for range 5 {
+		// Accepts the connection and never answers the handshake.
+		hung, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { hung.Close() })
+		go func() {
+			for {
+				conn, err := hung.Accept()
+				if err != nil {
+					return
+				}
+				t.Cleanup(func() { conn.Close() })
+			}
+		}()
+		probe := base[0]
+		probe.URL = "https://" + hung.Addr().String() + "/readyz"
+		probes = append(probes, probe)
+	}
+	start := time.Now()
+	items := collectCertificateExpiry(context.Background(), probes, "", time.Now())
+	if elapsed := time.Since(start); elapsed > certNodeTimeout+time.Second {
+		t.Fatalf("five hung nodes took %s; the checks must run at once", elapsed)
+	}
+	if len(items) != 1 || strings.Contains(items[0].Reason, "server certificate") {
+		t.Fatalf("an unreachable node is the readiness row's concern: %+v", items)
+	}
+}
+
+func TestADoorFailureDoesNotHideAnSFUExpiryWarning(t *testing.T) {
+	probes, servers := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	expiry := servers[0].Certificate().NotAfter
+	dead := httptest.NewUnstartedServer(http.NotFoundHandler())
+	dead.StartTLS()
+	deadURL := dead.URL
+	dead.Close()
+	items := collectCertificateExpiry(context.Background(), probes, deadURL, expiry.Add(-6*24*time.Hour))
+	if len(items) != 1 || !strings.Contains(items[0].Reason, "the direct door could not be verified") || !strings.Contains(items[0].Reason, "expires within 7 days") {
+		t.Fatalf("every finding must reach the row: %+v", items)
 	}
 }

@@ -66,6 +66,15 @@ func run() error {
 	}
 	var snapshots []snapshot
 	var collectionErr error
+	// Certificate checks run on their own clock, apart from the database and
+	// readiness probes, so a slow node cannot delay or drop any other alert row.
+	var certificates chan []snapshot
+	if mode == "" || mode == "--check" {
+		certificates = make(chan []snapshot, 1)
+		go func() {
+			certificates <- collectCertificateExpiry(context.Background(), sfuProbesFromEnv(), os.Getenv("CHALK_ALERT_DIRECT_DOOR_URL"), time.Now())
+		}()
+	}
 	switch mode {
 	case "--test", "--clear-test":
 		value := int64(1)
@@ -78,8 +87,8 @@ func run() error {
 	default:
 		return errors.New("unknown collector mode")
 	}
-	if mode == "" || mode == "--check" {
-		snapshots = append(snapshots, collectCertificateExpiry(ctx, sfuProbesFromEnv(), os.Getenv("CHALK_ALERT_DIRECT_DOOR_URL"), time.Now())...)
+	if certificates != nil {
+		snapshots = append(snapshots, <-certificates...)
 	}
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
@@ -131,7 +140,7 @@ func message(rule string) (headline, impact, next string) {
 	case "sfu-readiness":
 		return "An own SFU node is refusing new calls or unreachable", "At least one own SFU node was unhealthy in at least four minute samples in five minutes and the latest sample is still unhealthy. New calls may fail to start on it, and live calls may drop if the node is unreachable.", "An engineer must check the SFU nodes' readiness, load and network now."
 	case "certificate-expiry":
-		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, or the direct door could not complete a TLS handshake. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the own SFU certificates with deploy/certs and deploy, the direct door by checking that its proxy can renew over port 443."
+		return "A Chalk certificate is close to expiring", "A certificate that the own SFU or the direct door needs will expire soon, or the direct door could not complete a TLS handshake. Once it expires, calls on that path fail or fall back to the slower Tunnel.", "An engineer must renew it now: the SFU server certificate with certs <env> server then deploy, the API client certificate with certs <env> api, the direct door by checking that its proxy can renew over port 443."
 	case "sfu-retirement-debt":
 		return "An own SFU node is not answering retire requests", "The oldest unpaid retirement debt has stayed above its age limit. A node that never acknowledges a retire keeps the stale sessions of moved or ended Episodes until it restarts.", "An engineer must find the silent node and restart it if it is up but not answering control calls."
 	case "export":
@@ -350,10 +359,14 @@ func collectSFUReadiness(ctx context.Context, probe sfuProbe) snapshot {
 const (
 	certWarnWindow   = 21 * 24 * time.Hour
 	certUrgentWindow = 7 * 24 * time.Hour
+	// Every certificate is read at once, so one slow node costs certNodeTimeout, not
+	// a multiple of it. certOverallCap bounds the whole check well inside run's 30 s.
+	certNodeTimeout = 3 * time.Second
+	certOverallCap  = 8 * time.Second
 )
 
 // certReading is one certificate the collector can see. A failed reading carries
-// the allowlisted reason that needs an engineer; it never holds TLS error text.
+// the allowlisted text that needs an engineer; it never holds TLS error text.
 type certReading struct {
 	label    string
 	notAfter time.Time
@@ -362,45 +375,73 @@ type certReading struct {
 
 // collectCertificateExpiry gives one global row when a certificate source is
 // configured and none otherwise. Value 1 means a certificate expires within 21
-// days, has expired, or the direct door cannot finish a TLS handshake. An SFU node
-// that cannot be reached is the readiness row's concern, not this one's.
+// days, has expired, or the direct door cannot be verified; the reason lists every
+// finding. Expiry is read without chain verification, because an expired
+// certificate fails verification and must still read as expired. An SFU node that
+// cannot be reached is the readiness row's concern, so it adds nothing here.
 func collectCertificateExpiry(ctx context.Context, probes []sfuProbe, doorURL string, now time.Time) []snapshot {
+	ctx, cancel := context.WithTimeout(ctx, certOverallCap)
+	defer cancel()
 	var readings []certReading
 	if len(probes) > 0 {
 		if notAfter, ok := fileCertificateNotAfter(probes[0].ClientCertFile); ok {
 			readings = append(readings, certReading{label: "the API client certificate for the own SFU", notAfter: notAfter})
 		}
 	}
-	for _, probe := range probes {
-		if notAfter, ok := sfuServerCertificateNotAfter(ctx, probe); ok {
-			readings = append(readings, certReading{label: "an own SFU server certificate", notAfter: notAfter})
-		}
+	nodes := make([]certReading, len(probes))
+	var door certReading
+	var wg sync.WaitGroup
+	for i, probe := range probes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if notAfter, ok := sfuServerCertificateNotAfter(ctx, probe); ok {
+				nodes[i] = certReading{label: "an own SFU server certificate", notAfter: notAfter}
+			}
+		}()
 	}
 	if doorURL != "" {
-		readings = append(readings, doorCertificate(ctx, doorURL))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			door = doorCertificate(ctx, doorURL)
+		}()
+	}
+	wg.Wait()
+	for _, node := range nodes {
+		if !node.notAfter.IsZero() {
+			readings = append(readings, node)
+		}
+	}
+	if door.label != "" {
+		readings = append(readings, door)
 	}
 	if len(readings) == 0 {
 		return nil
 	}
 	item := snapshot{Rule: "certificate-expiry", Reason: "all_valid", Time: now.UTC().Format(time.RFC3339Nano)}
-	worst := time.Duration(1<<63 - 1)
+	var findings []string
+	seen := make(map[string]bool)
 	for _, reading := range readings {
-		if reading.failure != "" {
-			item.Value, item.Reason = 1, reading.failure
-			return []snapshot{item}
+		finding := ""
+		left := reading.notAfter.Sub(now)
+		switch {
+		case reading.failure != "":
+			finding = reading.failure
+		case left <= 0:
+			finding = reading.label + " has expired"
+		case left <= certUrgentWindow:
+			finding = reading.label + " expires within 7 days"
+		case left <= certWarnWindow:
+			finding = reading.label + " expires within 21 days"
 		}
-		if left := reading.notAfter.Sub(now); left < worst && left <= certWarnWindow {
-			worst = left
-			item.Value = 1
-			switch {
-			case left <= 0:
-				item.Reason = reading.label + " has expired"
-			case left <= certUrgentWindow:
-				item.Reason = reading.label + " expires within 7 days"
-			default:
-				item.Reason = reading.label + " expires within 21 days"
-			}
+		if finding != "" && !seen[finding] {
+			seen[finding] = true
+			findings = append(findings, finding)
 		}
+	}
+	if len(findings) > 0 {
+		item.Value, item.Reason = 1, strings.Join(findings, "; ")
 	}
 	return []snapshot{item}
 }
@@ -432,43 +473,63 @@ func sfuServerCertificateNotAfter(ctx context.Context, probe sfuProbe) (time.Tim
 	if err != nil {
 		return time.Time{}, false
 	}
-	return leafNotAfter(ctx, probe.URL, client.Transport.(*http.Transport).TLSClientConfig)
+	config := client.Transport.(*http.Transport).TLSClientConfig.Clone()
+	chain, ok := serverChain(ctx, probe.URL, config)
+	if !ok {
+		return time.Time{}, false
+	}
+	return chain[0].NotAfter, true
 }
 
+// doorCertificate reads the door's expiry first, then checks the chain, so an
+// expired certificate reads as expired and any other trust failure as a failure.
 func doorCertificate(ctx context.Context, doorURL string) certReading {
-	reading := certReading{label: "the direct door certificate", failure: "the direct door could not finish a TLS handshake"}
-	notAfter, ok := leafNotAfter(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12})
-	if ok {
-		reading.notAfter, reading.failure = notAfter, ""
+	reading := certReading{label: "the direct door certificate", failure: "the direct door could not be verified over TLS"}
+	chain, ok := serverChain(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12})
+	if !ok {
+		return reading
+	}
+	reading.notAfter = chain[0].NotAfter
+	if !time.Now().Before(reading.notAfter) {
+		reading.failure = ""
+		return reading
+	}
+	target, _ := url.Parse(doorURL)
+	intermediates := x509.NewCertPool()
+	for _, certificate := range chain[1:] {
+		intermediates.AddCert(certificate)
+	}
+	if _, err := chain[0].Verify(x509.VerifyOptions{DNSName: target.Hostname(), Intermediates: intermediates}); err == nil {
+		reading.failure = ""
 	}
 	return reading
 }
 
-// leafNotAfter completes a verified TLS handshake with the URL's host and reads the
-// server certificate's expiry. A TLS error says nothing here: callers decide what
-// a failed handshake means.
-func leafNotAfter(ctx context.Context, rawURL string, config *tls.Config) (time.Time, bool) {
+// serverChain completes a TLS handshake with the URL's host without verifying the
+// server's chain and returns the certificates it presented. Callers verify only
+// when they need to: an expired certificate fails verification, and the expiry
+// check must still see it.
+func serverChain(ctx context.Context, rawURL string, config *tls.Config) ([]*x509.Certificate, bool) {
 	target, err := url.Parse(rawURL)
 	if err != nil || target.Scheme != "https" || target.Hostname() == "" {
-		return time.Time{}, false
+		return nil, false
 	}
 	port := target.Port()
 	if port == "" {
 		port = "443"
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, certNodeTimeout)
 	defer cancel()
+	config = config.Clone()
+	config.InsecureSkipVerify = true
 	dialer := tls.Dialer{Config: config}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(target.Hostname(), port))
 	if err != nil {
-		return time.Time{}, false
+		return nil, false
 	}
 	defer conn.Close()
 	chain := conn.(*tls.Conn).ConnectionState().PeerCertificates
-	if len(chain) == 0 {
-		return time.Time{}, false
-	}
-	return chain[0].NotAfter, true
+	return chain, len(chain) > 0
 }
 
 func sfuClient(probe sfuProbe) (*http.Client, error) {
