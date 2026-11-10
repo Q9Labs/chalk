@@ -54,7 +54,7 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isScreenSharing: participant.media.screenShare === "active" && Boolean(media?.screen),
       isHandRaised: participant.handRaised,
       ...tileSignal(participant),
-      ...(media?.cameraPausedForNetwork || (participant.presence.connectionQuality === "poor" && participant.media.camera === "active") ? { isVideoPausedForNetwork: true } : {}),
+      ...(media?.cameraPausedForNetwork ? { isVideoPausedForNetwork: true } : {}),
       videoTrack: media?.camera,
       screenShareTrack: media?.screen,
       videoPublicationId: participant.media.cameraPublicationId,

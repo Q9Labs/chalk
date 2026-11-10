@@ -860,6 +860,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #reconcileIntents(): void {
     const live = this.#connection.getSnapshot().state === "live" && this.#ports?.sync.getSnapshot().connection.phase === "live";
     if (this.#syncLive && !live) {
+      // Sync drops a rating with its socket, so the next live socket hears the current tier again.
+      this.#reportedTier = "good";
       this.#rememberRecoveryIntents();
       this.#cancelOffRetries();
       this.#cancelInitialOnRetries();

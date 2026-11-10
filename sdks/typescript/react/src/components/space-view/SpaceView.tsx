@@ -23,6 +23,8 @@ import { ParticipantVolumeProvider } from "../participants-panel/participant-vol
 import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
 import { useConnectionPhase } from "../connection-status/use-connection-phase";
 import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
+import { useHeldWhile } from "../../internal/useHeldWhile";
+import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useCallToasts } from "../toast-stack/useCallToasts";
 import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
@@ -131,13 +133,15 @@ export function SpaceView({
   const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
-  const self = useSelf();
-  const participantsSlice = useParticipants();
-  const callLink = useCallLink(participantsSlice.roster.length <= 1);
-  const media = useMedia();
-  const mediaRequest = media.incomingRequests[0];
   const connection = useConnection();
   const connectionPhase = useConnectionPhase(connection.status);
+  // A lost connection clears the roster and the tracks, so the call behind the failure card keeps what it last showed.
+  const connectionLost = connectionPhase.kind === "failed";
+  const self = useHeldWhile(useSelf(), connectionLost);
+  const participantsSlice = useHeldWhile(useParticipants(), connectionLost);
+  const callLink = useCallLink(participantsSlice.roster.length <= 1);
+  const media = useHeldWhile(useMedia(), connectionLost);
+  const mediaRequest = media.incomingRequests[0];
   const offline = useOffline();
   const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
   const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
@@ -194,13 +198,15 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
+  const seenConnected = useSeenConnected(participantsSlice.roster);
   const tiles = useMemo(
     () =>
-      toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map((tile) => ({
+      toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map(({ isReconnecting, ...tile }) => ({
         ...tile,
+        ...(isReconnecting && seenConnected.has(tile.id) ? { isReconnecting } : {}),
         screenShareHasAudio: tile.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === tile.id)?.media.screenShareHasAudio,
       })),
-    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName],
+    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Open the participants drawer when admission inputs change; do not force it open on every render after a user closes it.
   useEffect(() => {

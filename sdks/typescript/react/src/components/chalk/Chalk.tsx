@@ -84,7 +84,7 @@ export type ChalkProps = SpaceIntegration &
     readonly terminalState?: "removed" | "full" | "elsewhere";
   };
 /** A call that could not be recovered stays on screen, dimmed, with a card that offers a way back. */
-const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted" || code === "connection.media_recovery_exhausted";
+const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted";
 
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
