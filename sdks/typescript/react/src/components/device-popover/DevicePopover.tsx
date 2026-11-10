@@ -1,7 +1,7 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
@@ -11,6 +11,7 @@ import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+import { CameraPreview, InputLevel } from "./DevicePreview";
 
 const DeviceSheet = lazy(() => import("./DeviceSheet"));
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
@@ -47,98 +48,6 @@ export interface DevicePopoverProps {
   /** The phone picker sheet. Press and hold on the button opens it; the dock's More sheet opens it too. */
   sheetOpen?: boolean;
   onSheetOpenChange?: (open: boolean) => void;
-}
-
-export function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
-  const [level, setLevel] = useState(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the microphone meter AudioContext and sampling interval; disconnect, close and clear them on track replacement.
-  useEffect(() => {
-    if (!track || track.readyState !== "live") return;
-    const context = new AudioContext();
-    const source = context.createMediaStreamSource(new MediaStream([track]));
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    const samples = new Uint8Array(analyser.fftSize);
-    const timer = window.setInterval(() => {
-      analyser.getByteTimeDomainData(samples);
-      const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length);
-      setLevel(Math.min(100, Math.round(rms * 400)));
-    }, 100);
-    return () => {
-      clearInterval(timer);
-      source.disconnect();
-      void context.close();
-    };
-  }, [track]);
-  return (
-    <span className="chalk-shell-level" role="meter" aria-label="Input level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}>
-      <i style={{ transform: `scaleX(${level / 100})` }} />
-    </span>
-  );
-}
-
-export function CameraPreview({
-  track,
-  mirrored,
-  open,
-  selectedDeviceId,
-  captureCameraPreview,
-  onDeviceId,
-}: {
-  readonly onDeviceId: (deviceId: string | null) => void;
-  readonly track?: MediaStreamTrack | null;
-  readonly mirrored: boolean;
-  readonly open: boolean;
-  readonly selectedDeviceId?: string;
-  readonly captureCameraPreview?: () => Promise<CameraPreviewHandle>;
-}) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const trackEnabled = track?.enabled;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Acquire a camera preview for the mounted open popover; release late captures and the owned preview on cleanup.
-  useEffect(() => {
-    const element = video.current;
-    if (!element || !open) return;
-    let cancelled = false;
-    let preview: CameraPreviewHandle | undefined;
-    setUnavailable(false);
-    onDeviceId(null);
-    if (captureCameraPreview) {
-      void captureCameraPreview().then(
-        (captured) => {
-          if (cancelled) {
-            captured.release();
-            return;
-          }
-          preview = captured;
-          onDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
-          element.srcObject = new MediaStream([captured.track]);
-        },
-        () => {
-          if (!cancelled) setUnavailable(true);
-        },
-      );
-    } else if (track?.enabled && track.readyState === "live") {
-      onDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
-      element.srcObject = new MediaStream([track]);
-    } else {
-      setUnavailable(true);
-    }
-    return () => {
-      cancelled = true;
-      element.srcObject = null;
-      preview?.release();
-    };
-  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId]);
-  return (
-    <>
-      <div className="chalk-shell-preview">
-        <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
-        <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
-      </div>
-    </>
-  );
 }
 
 function DeviceSwitch({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {

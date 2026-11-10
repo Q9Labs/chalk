@@ -1,14 +1,30 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { ChalkSheet } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
-import { CameraPreview, InputLevel, type DevicePopoverProps } from "./DevicePopover";
+import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
+import type { MediaDevice } from "../control-bar/control-bar-behavior";
+import { CameraPreview, InputLevel } from "./DevicePreview";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 
-type DeviceSheetProps = Pick<
-  DevicePopoverProps,
-  "type" | "devices" | "selectedDeviceId" | "onDeviceChange" | "secondaryDevices" | "selectedSecondaryDeviceId" | "onSecondaryDeviceChange" | "track" | "captureCameraPreview" | "noiseSuppression" | "onNoiseSuppressionChange" | "mirrored" | "onMirrorChange" | "onTestSpeaker"
-> & { readonly open: boolean; readonly onOpenChange: (open: boolean) => void };
+interface DeviceSheetProps {
+  readonly type: "mic" | "video";
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly devices: readonly MediaDevice[];
+  readonly selectedDeviceId?: string;
+  readonly onDeviceChange: (deviceId: string) => void;
+  readonly secondaryDevices?: readonly MediaDevice[];
+  readonly selectedSecondaryDeviceId?: string;
+  readonly onSecondaryDeviceChange?: (deviceId: string) => void;
+  readonly track?: MediaStreamTrack | null;
+  readonly captureCameraPreview?: () => Promise<CameraPreviewHandle>;
+  readonly noiseSuppression?: boolean;
+  readonly onNoiseSuppressionChange?: (enabled: boolean) => void;
+  readonly mirrored?: boolean;
+  readonly onMirrorChange?: (mirrored: boolean) => void;
+  readonly onTestSpeaker?: () => void;
+}
 
 function Check({ on }: { readonly on: boolean }) {
   return (
