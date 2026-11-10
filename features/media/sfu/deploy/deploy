@@ -14,7 +14,7 @@
 # --force it sends the node a drain request and waits up to SFU_DRAIN_TIMEOUT
 # seconds (default 3600) until the node reports zero allocations and zero cleanup
 # debt. If that does not happen it reopens the node and exits: a restart then
-# would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. Metrics export
+# would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. SSH uses SFU_SSH_KEY (default ~/.ssh/chalk-sfu-operator_ed25519); the script exits at the start if that file is missing. Metrics export
 # turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
 # which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
@@ -44,8 +44,10 @@ for file in ca.crt server.crt server.key; do
   [[ -f "${dir}/${file}" ]] || { echo "missing ${dir}/${file}; see certs" >&2; exit 1; }
 done
 
-ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts")
-[[ -n "${SFU_SSH_KEY:-}" ]] && ssh_options+=(-i "$SFU_SSH_KEY")
+# Without a readable key, BatchMode ssh fails quietly and the bootstrap wait below would retry for ten minutes.
+ssh_key="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
+[[ -f "$ssh_key" ]] || { echo "no SSH key at ${ssh_key}; set SFU_SSH_KEY to the operator key" >&2; exit 1; }
+ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts" -i "$ssh_key")
 remote() { ssh "${ssh_options[@]}" "root@${host}" "$@"; }
 # as_sfu runs a command as the chalk-sfu user, inside its user session.
 as_sfu() {
