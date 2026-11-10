@@ -2372,13 +2372,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (sender.track) safeStopTrack(sender.track, this.#reportError.bind(this));
       }
     }
-    for (const transceiver of this.#connection.getTransceivers()) {
-      try {
-        transceiver.stop();
-      } catch (error) {
-        this.#reportError(error);
-      }
-    }
+    for (const transceiver of this.#connection.getTransceivers()) safeStopTransceiver(transceiver, this.#reportError.bind(this));
     try {
       this.#connection.close();
     } catch (error) {
@@ -2659,6 +2653,15 @@ function requireTransceiverMid(transceiver: RTCRtpTransceiver): string {
 function safeStopTrack(track: MediaStreamTrack, onError: (error: unknown) => void): void {
   try {
     track.stop();
+  } catch (error) {
+    onError(error);
+  }
+}
+function safeStopTransceiver(transceiver: RTCRtpTransceiver, onError: (error: unknown) => void): void {
+  // On React Native a stopped transceiver is gone natively, so a second stop() rejects with "Could not get transceiver" and nothing can catch it.
+  if (transceiver.direction === "stopped" || transceiver.currentDirection === "stopped") return;
+  try {
+    transceiver.stop();
   } catch (error) {
     onError(error);
   }

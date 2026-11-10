@@ -1257,6 +1257,28 @@ it("retires through a peer that closes while sender detachment is pending", asyn
   }
 });
 
+it("does not stop a transceiver that is already stopped when the call ends", async () => {
+  const harness = createHarness();
+  await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("cam", "video")));
+  const [stopped, live] = harness.peers[0]!.getTransceivers() as [RTCRtpTransceiver, RTCRtpTransceiver];
+  const firstStop = stopped.stop.bind(stopped);
+  // React Native rejects asynchronously, with nothing to catch it, when a stopped transceiver is stopped again. An unhandled rejection fails the test.
+  const stopStopped = vi.spyOn(stopped, "stop").mockImplementation(() => {
+    if (stopped.direction === "stopped") {
+      void Promise.reject(new Error("Could not get transceiver"));
+      return;
+    }
+    firstStop();
+  });
+  const stopLive = vi.spyOn(live, "stop");
+  stopped.stop();
+  stopStopped.mockClear();
+  harness.client.stop();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(stopStopped).not.toHaveBeenCalled();
+  expect(stopLive).toHaveBeenCalledTimes(1);
+});
+
 it.each(["signaling_failed", "invalid_publication"] as const)("attempts screen audio even when an owned video close returns %s", async (code) => {
   const harness = createHarness();
   try {
