@@ -84,7 +84,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
    */
   const request = async <T>(op: SignalOp, body?: Readonly<Record<string, unknown>>, query: Readonly<Record<string, string | true>> = {}): Promise<T> => {
     try {
-      const token = await freshToken(op);
+      let token = await freshToken(op);
       const [method, path] = ROUTES[op];
       const targetAt = (origin: string) => {
         const mediaPath = mediaPathAt(origin);
@@ -118,9 +118,23 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
           }
           return (await response.json()) as T;
         });
+      // A 403 can mean the token and the connection fell out of step for a moment (a grant was reissued), so the request is repeated once with a fresh grant.
+      const sendWithRegrant = async (origin: string): Promise<T> => {
+        try {
+          return await send(origin);
+        } catch (error) {
+          if (!options.refreshCredential || !(error instanceof CloudflareSFUError) || error.options.status !== 403) throw error;
+          const refresh = options.refreshCredential;
+          const regranted = await withDeadline(CREDENTIAL_TIMEOUT_MS, (signal) => refresh(signal));
+          if (!regranted.trim()) throw new CloudflareSFUError("The media credential provider returned an empty token", "signaling_failed");
+          token = regranted;
+          lastToken = token;
+          return await send(origin);
+        }
+      };
       if (direct && (await directAnswers())) {
         try {
-          const result = await send(direct.origin);
+          const result = await sendWithRegrant(direct.origin);
           announce("direct", false);
           return result;
         } catch (error) {
@@ -134,7 +148,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         }
       }
       announce("tunnel", direct !== null);
-      return await send(base);
+      return await sendWithRegrant(base);
     } catch (error) {
       markMediaFailure(error, ROUTES[op][2]);
       throw error;
