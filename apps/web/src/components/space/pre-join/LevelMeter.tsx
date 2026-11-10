@@ -10,7 +10,7 @@ export function LevelMeter({ level, small = false }: { readonly level: number; r
   return (
     <span role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level} className="inline-flex flex-none items-center gap-0.5">
       {Array.from({ length: SEGMENTS }, (_, index) => (
-        <i key={index} className={cn("rounded-full", small ? "h-2.5 w-[3px]" : "h-3.5 w-1", index >= lit ? "bg-[var(--chalk-line-strong)]" : index >= MAX_FROM ? "bg-[var(--chalk-danger-text)]" : index >= HOT_FROM ? "bg-[var(--chalk-warning)]" : "bg-[var(--chalk-positive)]")} />
+        <i key={index} className={cn("rounded-full", small ? "h-3 w-1" : "h-4 w-1", index >= lit ? "bg-[var(--chalk-line-strong)]" : index >= MAX_FROM ? "bg-[var(--chalk-danger-text)]" : index >= HOT_FROM ? "bg-[var(--chalk-warning)]" : "bg-[var(--chalk-positive)]")} />
       ))}
     </span>
   );

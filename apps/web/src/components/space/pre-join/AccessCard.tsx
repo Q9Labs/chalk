@@ -22,7 +22,7 @@ function ChromeSteps() {
         {["Camera", "Microphone"].map((name, index) => (
           <div key={name} className={stepRow}>
             <span className="flex-1">{name}</span>
-            <span className="h-3.5 w-6 flex-none rounded-full bg-[var(--chalk-pressed)]" />
+            <span className="h-4 w-6 flex-none rounded-full bg-[var(--chalk-hover)]" />
             <StepBadge step={index + 2} />
           </div>
         ))}
@@ -50,10 +50,10 @@ export function AccessCard({ reason, requesting, onDismiss, onAllow }: { readonl
       </div>
       {blocked && isChrome() ? <ChromeSteps /> : null}
       <div className="flex gap-2">
-        <button type="button" data-part="pill-button" data-chalk-variant="outline" data-chalk-tone="neutral" className="chalk-pill-button !h-10 flex-1" onClick={onDismiss}>
+        <button type="button" data-part="pill-button" data-chalk-variant="outline" data-chalk-tone="neutral" className="chalk-pill-button flex-1" style={{ height: "var(--space-10)" }} onClick={onDismiss}>
           Not now
         </button>
-        <button type="button" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button !h-10 flex-1" onClick={onAllow} disabled={requesting} aria-busy={requesting || undefined}>
+        <button type="button" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button flex-1" style={{ height: "var(--space-10)" }} onClick={onAllow} disabled={requesting} aria-busy={requesting || undefined}>
           {requesting ? <Loading01Icon size={16} className="animate-spin" aria-hidden="true" /> : blocked ? "Try again" : "Turn on"}
         </button>
       </div>

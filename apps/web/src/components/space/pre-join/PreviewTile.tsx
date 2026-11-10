@@ -15,7 +15,7 @@ function PreviewButton({ label, on, missing, disabled, onClick, children }: { re
     >
       {children}
       {missing ? (
-        <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 grid size-3.5 place-items-center rounded-full bg-[var(--chalk-warning)] text-(length:--type-micro) font-bold text-[var(--chalk-accent-text)] ring-1 ring-[var(--chalk-line)]">
+        <span aria-hidden="true" className="absolute right-0 top-0 grid size-4 place-items-center rounded-full bg-[var(--chalk-warning)] text-(length:--type-micro) font-bold text-[var(--chalk-accent-text)] ring-1 ring-[var(--chalk-line)]">
           !
         </span>
       ) : null}

@@ -106,7 +106,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
         className={`h-12 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-4 text-(length:--type-body-lg) ${joining ? "text-[var(--chalk-muted-text)]" : "text-[var(--chalk-app-text)]"} outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]`}
       />
       <div className={stacked ? "sticky bottom-0 -mx-5 grid gap-2 bg-[var(--chalk-app-canvas)] px-5 pb-[max(env(safe-area-inset-bottom),var(--space-6))] pt-3" : "grid gap-2"}>
-        <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 !h-12 w-full !text-(length:--type-lead)" disabled={!ready} aria-busy={joining || undefined}>
+        <button ref={joinButton} type="submit" data-part="pill-button" data-chalk-variant="solid" data-chalk-tone="neutral" className="chalk-pill-button mt-1 w-full" style={{ height: "var(--space-12)", fontSize: "var(--type-lead)" }} disabled={!ready} aria-busy={joining || undefined}>
           {joining ? (
             <>
               <Loading01Icon size={18} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
