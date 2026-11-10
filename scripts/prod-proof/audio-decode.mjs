@@ -155,14 +155,40 @@ const describe = (verdicts) => verdicts.map((v) => `guest ${v.listener} hearing 
  * @returns the measured verdicts, which the caller saves as evidence
  */
 export async function proveAudioDecoded(guests, { members = allGuests(guests), pairs = pairsOf(members), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {
-  const hzOf = Object.fromEntries(guests.participants.map((id, speaker) => [id, guests.tones ? toneHz(speaker) : null]));
-  await Promise.all([...new Set(pairs.map((pair) => pair.listener))].map((listener) => startProbe(guests.pages[listener], hzOf, criteria)));
-  const judge = guests.tones ? judgeTone : judgeSpeech;
-  const verdicts = await Promise.all(pairs.map((pair) => settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria)));
+  const verdicts = await listen(guests, pairs, timeoutMs, criteria);
   const failed = verdicts.filter((verdict) => !verdict.pass);
   check(failed.length === 0, `Audio bytes advance but are not decoded as ${guests.tones ? "the published tone" : "speech"}: ${describe(failed)}`, "audio-not-decoded");
   return verdicts;
 }
+
+/** Starts the probes the pairs need and judges every pair; it returns the verdicts, failed or not. */
+async function listen(guests, pairs, timeoutMs, criteria) {
+  const hzOf = Object.fromEntries(guests.participants.map((id, speaker) => [id, guests.tones ? toneHz(speaker) : null]));
+  await Promise.all([...new Set(pairs.map((pair) => pair.listener))].map((listener) => startProbe(guests.pages[listener], hzOf, criteria)));
+  const judge = guests.tones ? judgeTone : judgeSpeech;
+  return Promise.all(pairs.map((pair) => settle(guests, pair, (readings) => judge(readings, criteria), timeoutMs, criteria)));
+}
+
+/** How long after a guest turned its microphone back on every other guest must decode it again. */
+export const unmuteHearMs = 5000;
+
+/**
+ * Guest `speaker` has just turned its microphone back on, which publishes it again: every other member must decode its tone (or speech)
+ * within unmuteHearMs. A re-published microphone can keep its bytes advancing while a listener's receiver is dead, so bytes do not
+ * count. It never throws, so a caller that runs other work meanwhile (the long call) records the verdicts; `unheardAfterUnmute` names the failures.
+ */
+export async function hearAfterUnmute(guests, speaker, { members = allGuests(guests), timeoutMs = unmuteHearMs, criteria = decodeCriteria } = {}) {
+  return listen(
+    guests,
+    pairsOf(members).filter((pair) => pair.speaker === speaker),
+    timeoutMs,
+    criteria,
+  );
+}
+
+/** One sentence for each listener that did not decode the re-published guest `speaker` (a guest index) in time. */
+export const unheardAfterUnmute = (speaker, verdicts) =>
+  verdicts.filter((verdict) => !verdict.pass).map((verdict) => `Guest ${verdict.listener} did not decode guest ${speaker + 1} within ${unmuteHearMs / 1000} s of its microphone turning back on (${verdict.why ?? `${verdict.peakDb} dB at bin ${verdict.bin}, floor ${verdict.floorDb} dB`})`);
 
 /** After guest `speaker` mutes, every other member hears silence from that guest. */
 export async function proveSilenceFrom(guests, speaker, { members = allGuests(guests), timeoutMs = 20_000, criteria = decodeCriteria } = {}) {

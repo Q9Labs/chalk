@@ -1,5 +1,6 @@
 // The long-call proof judges a call held across media-access refreshes. This file holds the schedule and the pass/fail rules and does no I/O,
 // so a recorded run can be judged without a browser. long-call.mjs gathers the samples these rules read.
+import { unheardAfterUnmute } from "./audio-decode.mjs";
 
 // apps/api/internal/accessgrants/types.go Lifetime and sdks/typescript/client/src/access/manager.ts DEFAULT_REFRESH_WINDOW_MS.
 // long-call.test.mjs reads both files and fails when either number moves.
@@ -178,14 +179,29 @@ function leftConnectedFailures(own, label, firstTick) {
   return failures;
 }
 
+/** Every microphone turned back on was decoded again by each other guest. A turn-on nobody checked fails too, so the check cannot be skipped by leaving it out. */
+function hearingFailures({ toggles, hearings, guests }) {
+  const failures = [];
+  for (const toggle of toggles.filter((entry) => entry.kind === "microphone" && entry.enabled)) {
+    const found = hearings.find((hearing) => hearing.speaker === toggle.guest && hearing.atMs === toggle.atMs);
+    const at = `+${seconds(toggle.atMs)}s`;
+    if (!found) failures.push(`Guest ${toggle.guest + 1}'s microphone turned back on at ${at} was never checked for being heard`);
+    else if (found.verdicts.length < guests - 1) failures.push(`Guest ${toggle.guest + 1}'s microphone turned back on at ${at} was checked at ${found.verdicts.length} of ${guests - 1} other guests`);
+    else failures.push(...unheardAfterUnmute(toggle.guest, found.verdicts).map((text) => `${text}; turned back on at ${at}`));
+  }
+  return failures;
+}
+
 /**
  * @param ticks `{ t, guests: [sample] }` in time order; a sample is `{ reachable, status, errorCode, mic, camera, pcs, outAudio, remotes: [{ participantId, source, bytes }] }`.
  * @param participants The participant id of each guest, in guest order.
  * @param refreshes What each guest's credential provider saw: `{ guest, requests: [{ status, replaceMediaConnection, startedAt }] }`.
  * @param toggles The toggles that ran, as `{ atMs, guest, kind, enabled }` from the start of the call.
+ * @param hearings What the other guests decoded after each microphone turned back on: `{ speaker, atMs, verdicts: [{ listener, pass, ... }] }`, one per such toggle
+ *   (audio-decode.mjs hearAfterUnmute) with a verdict for every other guest. Advancing bytes do not count, so a guest left deaf by a re-publish fails here.
  * @returns `{ failures, notes, evidence }`; the run passes when `failures` is empty.
  */
-export function judgeLongCall({ ticks, participants, refreshes, toggles, startedAtMs }) {
+export function judgeLongCall({ ticks, participants, refreshes, toggles, hearings, startedAtMs }) {
   const failures = [];
   const guests = participants.length;
   const label = (guest) => `Guest ${guest + 1}`;
@@ -237,6 +253,7 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, started
   const untested = testable.filter((at) => !toggles.some((toggle) => toggle.atMs >= at - bounds.acrossRefreshMs && toggle.atMs <= at) || !toggles.some((toggle) => toggle.atMs >= at && toggle.atMs <= at + bounds.acrossRefreshMs));
   if (untested.length) failures.push(`${untested.length} access refresh(es) at ${untested.map((at) => `+${seconds(at)}s`).join(", ")} had no mic or camera toggle on each side within ${seconds(bounds.acrossRefreshMs)} s, so they were not tested`);
   failures.push(...replacementFailures(refreshes, startedAtMs));
+  failures.push(...hearingFailures({ toggles, hearings, guests }));
   for (const refresh of refreshes) failures.push(...grantChainFailures(refresh, endMs, startedAtMs).map((text) => `${label(refresh.guest - 1)} ${text}`));
   const fewest = Math.min(...grantCounts);
   const fewestScheduled = Math.min(...scheduledCounts);

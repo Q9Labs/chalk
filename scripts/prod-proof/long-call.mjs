@@ -1,4 +1,5 @@
 import { launchGuests } from "./media.mjs";
+import { hearAfterUnmute } from "./audio-decode.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
 import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
@@ -62,6 +63,8 @@ export async function longCallProof(run, receiver) {
   const ticks = [];
   const failures = [];
   const ran = [];
+  // Every microphone turned back on is a re-publish. Each other guest must decode it within a few seconds, checked while the schedule goes on.
+  const hearings = [];
   const sampling = (async () => {
     while (Date.now() - startedAtMs < callDurationMs) {
       const t = Date.now();
@@ -81,7 +84,9 @@ export async function longCallProof(run, receiver) {
         const entry = pending.shift();
         try {
           await toggle(guests.pages[entry.guest], entry);
-          ran.push({ ...entry, atMs: Date.now() - startedAtMs });
+          const turned = { ...entry, atMs: Date.now() - startedAtMs };
+          ran.push(turned);
+          if (entry.kind === "microphone" && entry.enabled) hearings.push(hearAfterUnmute(guests, entry.guest).then((verdicts) => ({ speaker: entry.guest, atMs: turned.atMs, verdicts })));
         } catch (error) {
           failures.push(`Guest ${entry.guest + 1} could not turn its ${entry.kind} ${entry.enabled ? "on" : "off"} at +${Math.round(now / 1000)}s: ${String(error.message).split("\n")[0]}`);
         }
@@ -90,14 +95,15 @@ export async function longCallProof(run, receiver) {
     }
   })();
   await Promise.all([sampling, toggling]);
+  const heard = await Promise.all(hearings);
 
-  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, startedAtMs });
+  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs });
   failures.push(...judged.failures);
   const evidence = { ...judged.evidence, failureCount: failures.length };
   console.log(evidenceLine(evidence));
   for (const note of judged.notes) console.log(`Long call note: ${note}`);
   for (const failure of failures) console.log(`Long call failure: ${failure}`);
-  await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, ticks });
+  await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, hearings: heard, ticks });
   await end();
   for (const page of guests.pages) await page.context().close();
   check(!failures.length, failures.join("; "));

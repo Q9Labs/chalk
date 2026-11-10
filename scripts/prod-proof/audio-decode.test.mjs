@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decodeCriteria, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, toneHz } from "./audio-decode.mjs";
+import { decodeCriteria, hearAfterUnmute, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, toneHz, unheardAfterUnmute, unmuteHearMs } from "./audio-decode.mjs";
 
 const sampleRate = 48_000;
 const { fftSize } = decodeCriteria;
@@ -176,4 +176,35 @@ test("a muted guest whose remote track is gone passes as removed; a track that s
     ),
     (error) => error.reason === "audio-not-silent",
   );
+});
+
+test("after a microphone turns back on, every other guest must decode it; the guest itself is not a listener", async () => {
+  const verdicts = await hearAfterUnmute(
+    fakeCall(true, () => toneFrames),
+    0,
+    { criteria: fixedCriteria, timeoutMs: 50 },
+  );
+  assert.deepEqual(
+    verdicts.map(({ listener, speaker, pass }) => [listener, speaker, pass]),
+    [[2, 1, true]],
+  );
+  assert.deepEqual(unheardAfterUnmute(0, verdicts), []);
+});
+
+test("a re-published microphone whose bytes advance but whose tone is not decoded at a listener fails and names it", async () => {
+  // The listener's receiver is dead: its inbound bytes keep climbing (the callers' byte checks pass) while the analyser reads digital silence.
+  const verdicts = await hearAfterUnmute(
+    fakeCall(true, () => silentFrames),
+    0,
+    { criteria: fixedCriteria, timeoutMs: 20 },
+  );
+  assert.equal(unmuteHearMs, 5000);
+  assert.deepEqual(unheardAfterUnmute(0, verdicts), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (-140 dB at bin 38, floor -140 dB)"]);
+  // A listener with no live remote track yet yields no frames at all: that fails too, with the reason.
+  const none = await hearAfterUnmute(
+    fakeCall(true, () => []),
+    0,
+    { criteria: fixedCriteria, timeoutMs: 20 },
+  );
+  assert.deepEqual(unheardAfterUnmute(0, none), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (no audio frames were analysed)"]);
 });

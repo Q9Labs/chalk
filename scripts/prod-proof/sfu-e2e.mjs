@@ -22,7 +22,7 @@ import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publi
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
-import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
+import { hearAfterUnmute, proveAudioDecoded, proveSilenceFrom, unheardAfterUnmute } from "./audio-decode.mjs";
 
 const shell = (script) => command("sh", ["-c", script]);
 
@@ -124,17 +124,23 @@ const scenarios = {
     return { emulatedVisibility: true, hiddenSeconds: 65, whileHidden, backMs: back.ms, ...(await decoded(guests, everyone(3))) };
   },
 
-  // Tone in => tone detected at the other guests; mute => silence there; unmute => the tone is back.
+  // Tone in => tone detected at the other guests; then each guest in turn: mute => silence there; unmute (a re-publish) => the tone is back at every other guest.
   async audio({ guests }) {
     const { pages } = guests;
     await waitForMovement(pages, everyone(3), 2, 30_000, "before the audio check");
     const heard = await decoded(guests, everyone(3));
-    await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
-    const silenced = await proveSilenceFrom(guests, 0);
-    await pages[0].evaluate(() => window.proofClient.media.setMicrophoneEnabled(true));
-    const back = await proveAudioDecoded(guests, { members: [0, 1] });
     const pick = ({ listener, speaker, peakDb, floorDb, bin, lastDb, track }) => ({ listener, speaker, peakDb, floorDb, bin, lastDb, track });
-    return { ...heard, mutedGuest: 1, silence: silenced.map(pick), unmuted: back.filter((verdict) => verdict.speaker === 1).map(pick) };
+    const rounds = [];
+    for (const speaker of everyone(3)) {
+      await pages[speaker].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
+      const silenced = await proveSilenceFrom(guests, speaker);
+      await pages[speaker].evaluate(() => window.proofClient.media.setMicrophoneEnabled(true));
+      const back = await hearAfterUnmute(guests, speaker);
+      const unheard = unheardAfterUnmute(speaker, back);
+      check(unheard.length === 0, unheard.join("; "), "audio-not-decoded");
+      rounds.push({ mutedGuest: speaker + 1, silence: silenced.map(pick), unmuted: back.map(pick) });
+    }
+    return { ...heard, rounds };
   },
 
   async impair({ guests }) {
