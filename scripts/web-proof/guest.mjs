@@ -12,10 +12,7 @@ export async function withProofCall({ app, screen }, run) {
   const invite = process.env.CHALK_E2E_INVITE;
   const directory = process.env.CHALK_E2E_DIRECTORY;
   if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
-  // CHALK_PROOF_JOIN_ORDER: "web-first" or "guest-first" fixes who is in the Episode before the other joins;
-  // unset, the SDK guest starts while the web app opens, as before.
-  const order = process.env.CHALK_PROOF_JOIN_ORDER;
-  if (order && !["web-first", "guest-first"].includes(order)) throw new Error("CHALK_PROOF_JOIN_ORDER must be web-first or guest-first");
+  const order = joinOrder();
   let guest;
   const errors = [];
   let joined = false;
@@ -39,6 +36,14 @@ export async function withProofCall({ app, screen }, run) {
     });
   }
   throwErrors(errors, "Web proof call or cleanup failed");
+}
+
+// CHALK_PROOF_JOIN_ORDER: "web-first" or "guest-first" fixes who is in the Episode before the other joins;
+// unset, the SDK guest starts while the web app opens, as before.
+function joinOrder() {
+  const order = process.env.CHALK_PROOF_JOIN_ORDER;
+  if (order && !["web-first", "guest-first"].includes(order)) throw new Error("CHALK_PROOF_JOIN_ORDER must be web-first or guest-first");
+  return order;
 }
 
 function throwErrors(errors, message) {

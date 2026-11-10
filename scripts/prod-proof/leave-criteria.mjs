@@ -1,4 +1,4 @@
-export function median(values) {
+function median(values) {
   if (values.length === 0 || values.some((value) => !Number.isFinite(value) || value < 0)) throw new Error("Leave timings must be finite, nonnegative, and nonempty");
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
