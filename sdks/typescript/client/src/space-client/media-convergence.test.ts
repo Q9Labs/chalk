@@ -249,7 +249,7 @@ describe("SpaceClient media convergence", () => {
       return receipt;
     });
     const client = capturedClient(platform, original, {
-      mediaDevices: { getDisplayMedia },
+      mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getDisplayMedia },
       media: {
         setLocalSourceIntent: (_source, enabled) => {
           locallyPaused = !enabled;
@@ -485,7 +485,7 @@ describe("SpaceClient media convergence", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia: capture },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture },
           createSyncClient: () => ({
             ...platform.sync,
             setMicrophoneEnabled: enable,
@@ -659,7 +659,7 @@ describe("SpaceClient media convergence", () => {
       if (source === "screen_audio" && scenario.endsWith("retirement")) await retirement;
     });
     const client = capturedClient(platform, oldVideo, {
-      mediaDevices: { getDisplayMedia },
+      mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getDisplayMedia },
       media: { prepareLocalTrack: () => undefined, clearPreparedLocalTrack: clear },
       sync: { setScreenShareEnabled: async () => ({ operationId: "share", name: "set_screen_share_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) },
     });

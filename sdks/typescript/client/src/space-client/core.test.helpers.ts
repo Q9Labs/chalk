@@ -85,7 +85,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       getEpisodeStatus: async () => "active",
       cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
-      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [] },
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [], releaseTrack: (track) => track.stop() },
       createMediaClient: () => media,
       createSyncClient: () => sync,
     },
