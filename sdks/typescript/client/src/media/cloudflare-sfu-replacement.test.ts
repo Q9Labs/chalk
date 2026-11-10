@@ -808,6 +808,29 @@ it("parks a muted microphone on the SFU and resumes the same publication without
   );
 });
 
+it("resumes a parked microphone with a fresh track after the idle release ended the old one", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await publishMicrophone(h);
+      const released = h.client.getSnapshot().localTracks[0]?.track;
+      await mute(h);
+
+      // The 30 s idle release: the old track ends, and the controller hands the media client a fresh capture.
+      released?.stop();
+      await h.client.clearPreparedLocalTrack("microphone", { stopTrack: false });
+      const fresh = new FakeTrack("fresh-microphone", "audio") as unknown as MediaStreamTrack;
+      h.client.prepareLocalTrack("microphone", fresh);
+
+      await expect(unmute(h)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      expect(h.peers[0]?.getSenders().map((sender) => sender.track)).toEqual([fresh]);
+      expect(h.transport.updateInputs.map((input) => input.tracks[0]?.paused)).toEqual([true, false]);
+      expect(h.transport.closeInputs).toHaveLength(0);
+      expect(microphoneAdds(h)).toHaveLength(1);
+    },
+    { bootstrap: muteInPlaceBootstrap },
+  );
+});
+
 it("keeps a parked microphone parked when Sync acknowledges the mute", async () => {
   await withTimedHarness(
     async (h) => {

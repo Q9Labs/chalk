@@ -34,12 +34,44 @@ After a failed attempt the client skips the direct URL for 10 minutes, shared by
 
 The whiteboard socket does not use the direct path. Only `/v1/sync` is proxied.
 
+### The door a grant advertises
+
+A grant for an own-SFU Space carries `directSignalingUrl` (the API's `CHALK_API_DIRECT_URL`). With `directPath: "auto"`, the SDK default, the client uses it in two places without any build value:
+
+- **SFU signalling.** The media HTTP transport starts one `no-cors` probe of the door when it is created, with the same 2.5 second limit. A call waits for the probe, then goes to the door. The probe checks that the host answers, not the signalling route. A failed probe sends the call to the Tunnel. A call on the door that times out also marks the door failed and drops the probe result. A list read (publications or subscriptions, also when sent as a unified POST) that the door could not pass on (a network error, 429, 502 or 503) is replayed once on the Tunnel. A write (publish, update, close) is never replayed after it left the browser, because the protocol has no idempotency key and a dropped response does not show whether the API applied it: the error goes to the caller's existing retry, and that retry finds the door marked failed and uses the Tunnel. Any failure that marks the door failed also drops the probe result, so the door is probed again after the 10 minute memory expires, even inside one long call. Stats uploads stay on the Tunnel.
+- **Sync.** When the build sets no `syncDirectUrl`, the client uses `wss://<door host>/v1/sync` from the grant. A static `syncDirectUrl` wins when both exist.
+
+`directPath: "off"` keeps both on the Tunnel and ignores the advertised door. The web app sets it from `?direct=off`, which is the control arm of the trial. Login, admin, OAuth and MCP never use the door.
+
+The warm lobby socket opens before a grant exists, so it can only use the static `syncDirectUrl`. A Sync socket opened from the grant alone is a fresh one. Set both the static value and the grant value on the trial arm, or the direct arm pays a socket open the control arm's warm Tunnel socket does not.
+
+### Which path a join used
+
+The SDK records one `transport_path` diagnostic per use of each plane: `{ plane: "sync" | "signalling", path: "direct" | "tunnel", fellBack }`. `fellBack` is true when a door was available and the Tunnel carried the use anyway (a failed attempt, or the 10 minute memory skipping the door). A Tunnel use with no door advertised has `fellBack: false`. The records stay in the client's diagnostics (`getDiagnostics()`) and are not part of the problem report schema. The trial harness reads them to split joins into arms and to count the fallback rate.
+
+## Production
+
+The production door does not exist yet, and production keeps running on the Tunnel until it does. Nothing in this section has been done.
+
+**Prerequisites, in order.** Each needs the owner's go-ahead, because DNS and the production security group change.
+
+1. Apply the OpenTofu root in `infrastructure/managed-episode/direct-sync/opentofu/` for production. It creates the security group and the DNS record for the production door host.
+2. Install the proxy on the production managed host with `direct-sync-proxy install`, then run `direct-sync-proxy status` until it reports a valid certificate.
+3. Check from outside the VPC that TCP 443 answers on the door host, that a Sync upgrade and an SFU preflight succeed, and that every other path returns 404.
+4. Run the trial on nightly first: at least 30 joins per arm from at least 2 Pakistani ISPs, a median at least 0.5 s faster, and a fallback rate of at most 2%.
+5. Plan for abuse: the door discloses the host's public address, and the bounds stop one noisy client, not a distributed flood.
+6. Set `CHALK_API_DIRECT_URL` in the production API environment and redeploy the API. Grants then advertise the door, and the SDK uses it for SFU signalling and Sync with no web build change.
+
+`scripts/releases/web.py` refuses a static `CHALK_WEB_SYNC_DIRECT_URL` on a production web build (#1082), and the release workflow passes an empty value for production. Keep that guard: the grant door does not need the static value. Only change it if production should also use the door for the lobby's warm socket, and do that in its own change.
+
+**Undo in production.** Unset `CHALK_API_DIRECT_URL` and restart the API: new grants carry no door and every client returns to the Tunnel with no deploy of the web app. Clients that already hold a grant keep the door until it expires or the 10 minute failure memory moves them off. To stop all direct traffic at once, run `systemctl stop chalk-direct-sync-proxy` on the host. The rows under Undo cover the rest.
+
 ## Turn it on for one environment
 
 Start with nightly. The OpenTofu root accepts only `environment = "nightly"` and fails validation for anything else, and `build-web` passes the direct URL to the nightly build only. Staging and production each need a reviewed change to both before they can use the path. Every step is reversible; see the next section.
 
 1. **Network.** Apply the OpenTofu root in `infrastructure/managed-episode/direct-sync/opentofu/` with the environment, region, instance id, hostname, zone id and the host's public address as variables. It creates one security group that allows inbound TCP 443 and nothing else, attaches it to the host's network interface, and creates DNS-only A records. The host address must survive stop and start, so use an Elastic IP; the nightly host is a spot instance that stops on interruption.
-2. **Proxy.** On the host, run `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` as root (through the environment's SSM document). It downloads a pinned Caddy release, checks its SHA-512, validates the config and starts `chalk-direct-sync-proxy.service`. The proxy forwards two kinds of request and answers 404 to everything else. `/v1/sync` goes to the local Sync port. The SFU signalling routes of the API (`/v1/tenants/*/spaces/*/episodes/*/participants/*/media/sfu/*`, with the `GET`, `POST`, `PUT` and `OPTIONS` methods and a 1 MiB body cap) go to the local API port, so login, admin, OAuth and MCP are never served here. For both, it replaces `Cf-Connecting-Ip` and `X-Forwarded-For` with the TCP peer address and sets `X-Chalk-Ingress: direct`; the API and Sync trust those headers only from this proxy. The proxy adds no CORS headers: the API answers preflights itself. The unit also loads an nftables table, `chalk_direct_proxy`, that drops a source's new connections above 30 a second (burst 100) and its connections above 512 (the count follows connection tracking, so closed connections count until they leave TIME_WAIT). The table is removed when the unit stops.
+2. **Proxy.** On the host, run `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` as root (through the environment's SSM document). It downloads a pinned Caddy release, checks its SHA-512, validates the Caddyfile and the nftables caps in a staging folder before it replaces anything, and starts `chalk-direct-sync-proxy.service`. The proxy forwards two kinds of request and answers 404 to everything else. `/v1/sync` goes to the local Sync port. The SFU signalling routes of the API (`/v1/tenants/*/spaces/*/episodes/*/participants/*/media/sfu/*`, with the `GET`, `POST`, `PUT` and `OPTIONS` methods and a 1 MiB body cap) go to the local API port, so login, admin, OAuth and MCP are never served here. For both, it replaces `Cf-Connecting-Ip` and `X-Forwarded-For` with the TCP peer address and sets `X-Chalk-Ingress: direct`; the API and Sync trust those headers only from this proxy. The proxy adds no CORS headers: the API answers preflights itself. The unit also loads an nftables table, `chalk_direct_proxy`, that drops a source's new connections above 30 a second (burst 100) and its connections above 512 (the count follows connection tracking, so closed connections count until they leave TIME_WAIT). The table is removed when the unit stops. If validation or the restart fails, the previous install stays or is put back.
 3. **Certificate.** Caddy issues the certificate itself over TLS-ALPN-01 on port 443 as soon as DNS points at the host and the security group is open. No DNS token or other secret is on the host. Run `direct-sync-proxy status` to confirm it serves a certificate.
    3a. **API signalling.** Set `CHALK_API_DIRECT_URL` to the same https origin (no path) in the API environment and restart the API. Each new own-SFU join then carries `directSignalingUrl` in its grant capabilities, and the direct door admits at most 300 requests in 10 seconds from one client address before any credential check (`429` with `Retry-After` over that). No client uses the field yet. Unset it to stop advertising.
 4. **Sync bounds.** The defaults apply without configuration. To change them, set these in the Sync environment file and restart Sync: `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_IP` (64), `CHALK_SYNC_DIRECT_MAX_UNAUTHENTICATED_PER_IP` (8), `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT` (512), `CHALK_SYNC_DIRECT_UPGRADES_PER_IP_WINDOW` (20 per 10 seconds). Raise the per-IP values before a large event behind one office network.
@@ -88,3 +120,4 @@ Ship the A record alone. Add an AAAA record only after the whole chain works, an
 - A live nightly cut with real Karachi clients: the table above comes from one trial from one network.
 - That the proxy unit and Caddy configuration run on the managed host's operating system. The configuration validates and the header handling was checked against a local Caddy, but the unit, `DynamicUser` state directory and TLS-ALPN-01 issuance have not run on the host.
 - Behaviour under a connection flood on a small host.
+- Blocked-door behaviour on real Pakistani ISPs (the probe limit, TLS interception, a middlebox that drops port 443 to an unknown host), the real latency gain, the fallback rate and mobile carrier NAT. Only a real network can show these; a datacentre run proves the Tunnel fallback and the records, not the gain.

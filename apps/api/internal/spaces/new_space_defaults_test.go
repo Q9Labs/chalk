@@ -39,15 +39,6 @@ func validCreateSpaceInput(t *testing.T) CreateSpaceInput {
 	return CreateSpaceInput{TenantID: tenantID, Name: "Team", Slug: "team"}
 }
 
-func everyoneAllowed(t *testing.T) ChalkSFUAllowlist {
-	t.Helper()
-	everyone, err := ParseChalkSFUAllowlist([]string{"*"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return everyone
-}
-
 func create(t *testing.T, service Service, edit func(*CreateSpaceInput)) (CreateSpaceInput, error) {
 	t.Helper()
 	repository := &capturingRepository{}
@@ -65,7 +56,7 @@ var ownSFUDefaults = NewSpaceDefaults{
 }
 
 func TestCreateSpaceAppliesNewSpaceDefaultsOnlyWhenOmitted(t *testing.T) {
-	configured := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithChalkSFUAllowlist(everyoneAllowed(t)).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{})
+	configured := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{})
 
 	omitted, err := create(t, configured, func(*CreateSpaceInput) {})
 	if err != nil {
@@ -113,7 +104,7 @@ func TestNewSpacePlaneFollowsWhatTheTenantCanServe(t *testing.T) {
 		{"Tenant default plane", tenants.Tenant{DefaultMediaPlane: &cloudflare}, cloudflare},
 	}
 	for _, c := range cases {
-		service := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithChalkSFUAllowlist(everyoneAllowed(t)).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{tenant: c.tenant})
+		service := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{tenant: c.tenant})
 		got, err := create(t, service, func(*CreateSpaceInput) {})
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
@@ -129,7 +120,7 @@ func TestNewSpacePlaneFollowsWhatTheTenantCanServe(t *testing.T) {
 
 func TestNewSpacePlaneDefaultNeedsTheTenant(t *testing.T) {
 	lookupFailed := errors.New("tenant lookup failed")
-	service := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithChalkSFUAllowlist(everyoneAllowed(t)).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{err: lookupFailed})
+	service := NewServiceWithDefaultProvider(nil, MediaPlaneProviderCloudflareSFU).WithNewSpaceDefaults(ownSFUDefaults, fixedTenant{err: lookupFailed})
 	if _, err := create(t, service, func(*CreateSpaceInput) {}); !errors.Is(err, lookupFailed) {
 		t.Errorf("got %v, want the Tenant lookup error", err)
 	}

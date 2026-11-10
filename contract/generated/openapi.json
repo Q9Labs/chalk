@@ -1936,7 +1936,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "tenant.media_plane_not_permitted"]
           },
           "413": {
             "content": {
@@ -2354,7 +2354,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "tenant.media_plane_not_permitted"]
           },
           "404": {
             "content": {
@@ -5540,7 +5540,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
           },
           "409": {
             "content": {
@@ -5810,7 +5810,7 @@
               }
             },
             "description": "Forbidden",
-            "x-chalk-error-codes": ["access.forbidden"]
+            "x-chalk-error-codes": ["access.forbidden", "space.media_plane_not_permitted"]
           },
           "404": {
             "content": {
@@ -17078,6 +17078,9 @@
           "default_episode_duration_seconds": {
             "type": "integer"
           },
+          "effective_media_plane": {
+            "type": ["string", "null"]
+          },
           "id": {
             "$ref": "#/components/schemas/SpaceId"
           },
@@ -17089,6 +17092,9 @@
           },
           "media_plane": {
             "type": "string"
+          },
+          "media_plane_setting": {
+            "type": ["string", "null"]
           },
           "metadata": {
             "additionalProperties": true,
@@ -17254,10 +17260,12 @@
           "created_at",
           "created_by_user_id",
           "default_episode_duration_seconds",
+          "effective_media_plane",
           "id",
           "linger_window_seconds",
           "maximum_episode_duration_seconds",
           "media_plane",
+          "media_plane_setting",
           "metadata",
           "name",
           "recording_policy",

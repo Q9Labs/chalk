@@ -35,6 +35,8 @@ export type SFUMediaCapabilities = {
   readonly unifiedSignaling: boolean;
   /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute keeps the track and moves no SDP. */
   readonly muteInPlace: boolean;
+  /** The https origin of the direct door that serves the signalling calls; the Tunnel serves them when it is absent or fails. */
+  readonly directSignalingUrl?: string;
 };
 /** Whether the SFU delivers one remote video of this connection. Revisions only grow for a subscription. */
 export type SFUSubscriptionState = {
@@ -187,6 +189,11 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
+  /**
+   * Fetches a fresh grant for the current media connection and returns its token. The transport calls it once when the API answers 403 and
+   * sends the request again with the new token; a second 403 is final.
+   */
+  readonly refreshCredential?: CloudflareSFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */
   readonly bearerToken?: string;
   readonly tenantId: string;
@@ -198,6 +205,15 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly requestTimeoutMs?: number;
   /** Send every signaling call to the one `signal` route. Set it only when the API advertised `unifiedSignaling` for this connection. */
   readonly unifiedSignaling?: boolean;
+  /**
+   * The https origin of the direct door, from the grant. A probe of it starts with the transport; signalling goes there while it
+   * answers and replays on `apiBaseURL` when a call cannot reach the API through it. Absent: every call uses `apiBaseURL`.
+   */
+  readonly directBaseURL?: string;
+  /** Shared failure memory for the direct door; defaults to the one Sync uses. */
+  readonly directMemory?: import("../direct-path").DirectPathMemory;
+  /** Told when the path that carries signalling changes, and on the first call. */
+  readonly onPath?: (path: import("../direct-path").TransportPath) => void;
 };
 export class CloudflareSFUError extends Error {
   constructor(

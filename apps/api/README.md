@@ -95,7 +95,22 @@ get no `CHALK_NEW_SPACE_*_POLICY` default. An Episode still starts on Cloudflare
 client SDK does not declare `chalk_sfu` (older than 5.5.0) or no node has room.
 To turn it off, unset the variable (or set `cf_sfu`) and restart; Spaces that
 already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
-`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list. Spaces that
+`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list.
+
+A Space or Tenant can choose its own plane. A new Episode starts on the first of
+these that names a plane: `CHALK_SFU_NEW_EPISODES=off` (the kill switch, default
+`on`, which sends every new Episode to `cf_sfu` and leaves live Episodes alone),
+the Space's `media_plane_setting`, the Tenant's `default_media_plane`, and
+`CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` still applies as well.
+The public API never accepts `chalk_sfu` in a request; only an operator sets it,
+with `cmd/media-settings` (see `infrastructure/sfu/README.md`). A Space whose
+request names no plane gets `CHALK_NEW_SPACE_MEDIA_PLANE` when its Tenant can
+serve it. A Tenant's `default_media_plane` counts only when it names a known
+plane, and `chalk_sfu` counts only when an operator wrote it. A stored choice is
+authoritative only while the legacy column it was written beside (`media_plane`) still equals it; a Tenant default is approved only by the operator command (a trigger
+clears the approval on every other write), so a write by the previous release after a
+rollback wins; a live Episode always resolves from its stored binding. Responses carry `media_plane_setting` (null
+means inherit) and the read-only `effective_media_plane`. Spaces that
 public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
 instead, so that setting moves them separately.
 

@@ -9,7 +9,7 @@ it.each([false, true])("no-device preview failure leaves join healthy (devices i
   const platform = createCoreTestPlatform();
   const getUserMedia = vi.fn(noCaptureDevices);
   const start = vi.fn(async () => undefined);
-  const client = captureClient(platform, { mediaDevices: { getUserMedia, enumerateDevices: async () => [] }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) });
+  const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => [] }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) });
   try {
     await client.join({ microphone: enabled, camera: enabled });
     await vi.waitFor(() => expect(client.getSnapshot().connection.status).toBe("live"));
@@ -57,7 +57,7 @@ it("cleans up preview capture that resolves after the client is disposed", async
 it.each(["preview", "selected camera preview", "camera", "microphone", "join", "screen"] as const)("stops every late %s track after leaving, with or without disposal", async (path) => {
   for (const dispose of [false, true]) {
     const { platform, audio, video, capture, release } = pendingMedia();
-    const client = captureClient(platform, { mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] } });
+    const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] } });
     try {
       if (path !== "join") await client.join({ microphone: false, camera: false });
       if (path === "selected camera preview") await client.media.selectCamera("another-camera");
@@ -98,7 +98,7 @@ it.each(["leave", "dispose"] as const)("stops an acquired preview while device r
         })
       : Promise.resolve([]),
   );
-  const client = captureClient(platform, { mediaDevices: { getUserMedia: async () => stream([video]), enumerateDevices } });
+  const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([video]), enumerateDevices } });
   try {
     await client.join({ microphone: false, camera: false });
     refreshPending = true;
@@ -130,7 +130,10 @@ it.each([
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const client = yield* createEffectSpaceClient({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] } } });
+          const client = yield* createEffectSpaceClient(
+            { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+            { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] } } },
+          );
           yield* client.join({ microphone: false, camera: false });
           const request = captureRequest(client);
           const fiber = yield* Effect.forkScoped(request);
@@ -167,7 +170,7 @@ it.each(["enable first", "preview first", "prepared"] as const)("shares one came
   const requests: Promise<unknown>[] = [];
   const prepareLocalTrack = vi.fn();
   const client = captureClient(platform, {
-    mediaDevices: { getUserMedia, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => [] },
     createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), prepareLocalTrack }),
     createSyncClient: (input) => ({
       ...platform.dependencies.createSyncClient(input),
@@ -216,7 +219,7 @@ it("shares the camera acquisition already pending during join", async () => {
   const audio = track("audio");
   const video = track("video");
   const { capture: getUserMedia, release } = pendingCapture();
-  const client = captureClient(platform, { mediaDevices: { getUserMedia, enumerateDevices: async () => [] } });
+  const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => [] } });
   try {
     const joining = client.join();
     await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
@@ -241,7 +244,7 @@ it("shares the camera acquisition already pending during join", async () => {
 it("stops a private preview on leave even after handing it to its caller", async () => {
   const platform = createCoreTestPlatform();
   const video = track("video");
-  const client = captureClient(platform, { mediaDevices: { getUserMedia: async () => stream([video]), enumerateDevices: async () => [] } });
+  const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([video]), enumerateDevices: async () => [] } });
   try {
     await client.join({ microphone: false, camera: false });
     const lease = await client.media.captureCameraPreview();
@@ -291,7 +294,7 @@ it.each(["enable", "join", "selection"] as const)("recaptures on %s after a priv
   const prepared: MediaStreamTrack[] = [];
   const client = captureClient(platform, {
     createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
-    mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, enumerateDevices: async () => [] },
     createMediaClient: (input) => ({
       ...platform.dependencies.createMediaClient(input),
       prepareLocalTrack: (_source, value) => {
@@ -329,7 +332,7 @@ it("publishes removal when selecting a camera while disabled", async () => {
   const video = track("video");
   const client = captureClient(platform, {
     createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: async () => ({ operationId: "enable", name: "set_camera_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) }),
-    mediaDevices: { getUserMedia: async () => stream([video]), enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([video]), enumerateDevices: async () => [] },
   });
   try {
     await client.join({ microphone: false, camera: true });
@@ -354,7 +357,7 @@ it("keeps a borrowed preview live across a rejected enable and retry", async () 
   const prepared: MediaStreamTrackState[] = [];
   let attempts = 0;
   const client = captureClient(platform, {
-    mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, enumerateDevices: async () => [] },
     createMediaClient: (input) => ({
       ...platform.dependencies.createMediaClient(input),
       prepareLocalTrack: (_source, value) => {
@@ -402,7 +405,10 @@ it("keeps an ended shared acquisition in the typed error channel", async () => {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const client = yield* createEffectSpaceClient({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: capture, enumerateDevices: async () => [] } } });
+        const client = yield* createEffectSpaceClient(
+          { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
+          { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, enumerateDevices: async () => [] } } },
+        );
         yield* client.join({ microphone: false, camera: false });
         const first = yield* Effect.forkScoped(
           client.media.captureCameraPreview().pipe(
@@ -435,7 +441,7 @@ it("reuses an already enabled camera publication for a fresh enable", async () =
   const prepare = vi.fn();
   const enable = vi.fn(async () => ({ operationId: "enable", name: "set_camera_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const }));
   const client = captureClient(platform, {
-    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
     createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), clearPreparedLocalTrack: clear, prepareLocalTrack: prepare }),
     createSyncClient: (input) => ({ ...platform.dependencies.createSyncClient(input), setCameraEnabled: enable }),
   });
@@ -460,7 +466,7 @@ it("retires an OS-ended camera advertisement even when prepared-track clearing p
   const camera = track("video");
   const advertised = new Set<string>();
   const client = captureClient(platform, {
-    mediaDevices: { getUserMedia: async () => stream([camera]), getDisplayMedia: noCaptureDevices, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([camera]), getDisplayMedia: noCaptureDevices, enumerateDevices: async () => [] },
     createMediaClient: (input) => {
       const media = platform.dependencies.createMediaClient(input);
       return {
@@ -518,7 +524,7 @@ it.each(["device selection", "ended event", "stopped track", "leave", "failed cl
     if (prepared === retiring) prepared = null;
   });
   const client = captureClient(platform, {
-    mediaDevices: { getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
+    mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: capture, enumerateDevices: async () => [] },
     createMediaClient: (input) => {
       const media = platform.dependencies.createMediaClient(input);
       return {

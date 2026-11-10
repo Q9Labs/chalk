@@ -30,6 +30,52 @@ require_root() {
   [[ "$(id -u)" == 0 ]] || fail 'run as root'
 }
 
+# Downloads the pinned Caddy release for this machine and writes the verified binary to $1.
+# Each failure removes the private work folder before it stops.
+fetch_caddy() {
+  local dest="$1" arch expected work archive
+  case "$(uname -m)" in
+    x86_64) arch=amd64 expected="$caddy_sha512_amd64" ;;
+    aarch64) arch=arm64 expected="$caddy_sha512_arm64" ;;
+    *) fail "unsupported architecture $(uname -m)" ;;
+  esac
+  work="$(mktemp -d)"
+  archive="caddy_${caddy_version}_linux_${arch}.tar.gz"
+  curl --fail --silent --show-error --location --output "${work}/${archive}" \
+    "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}" \
+    || { rm -rf "$work"; fail "could not download ${archive}"; }
+  [[ "$(sha512sum "${work}/${archive}" | cut -d' ' -f1)" == "$expected" ]] \
+    || { rm -rf "$work"; fail "checksum mismatch for ${archive}"; }
+  { tar -xzf "${work}/${archive}" -C "$work" caddy && install -m 0755 "${work}/caddy" "$dest"; } \
+    || { rm -rf "$work"; fail "could not unpack ${archive}"; }
+  rm -rf "$work"
+}
+
+# Replaces $2 with the staged file $1 in one rename, so a reader never sees a half-written file.
+# The caller sits in a conditional chain where errexit is off: a failed copy must stop here, before the rename.
+replace_file() {
+  local staged="$1" target="$2" mode="$3"
+  if ! install -m "$mode" "$staged" "${target}.new"; then
+    rm -f "${target}.new"
+    return 1
+  fi
+  mv -f "${target}.new" "$target"
+}
+
+# Puts back what the install saved in $1, and removes what a first install added.
+restore_install() {
+  local backup="$1" target
+  [[ -e "${backup}/${unit}" ]] || systemctl disable --now "$unit" 2>/dev/null || true
+  for target in "${install_dir}/caddy" "${config_dir}/Caddyfile" "${config_dir}/chalk-direct-sync-proxy.nft" "$unit_path"; do
+    if [[ -e "${backup}/$(basename "$target")" ]]; then
+      cp -p "${backup}/$(basename "$target")" "$target"
+    else
+      rm -f "$target"
+    fi
+  done
+  systemctl daemon-reload
+}
+
 install_proxy() {
   require_root
   local host="${CHALK_DIRECT_SYNC_HOST:-}"
@@ -37,36 +83,41 @@ install_proxy() {
   [[ "$host" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
     || fail 'set CHALK_DIRECT_SYNC_HOST to a lowercase hostname'
 
-  local arch expected
-  case "$(uname -m)" in
-    x86_64) arch=amd64 expected="$caddy_sha512_amd64" ;;
-    aarch64) arch=arm64 expected="$caddy_sha512_arm64" ;;
-    *) fail "unsupported architecture $(uname -m)" ;;
-  esac
-
-  local work archive
+  # Build and check every input in a staging folder first: nothing installed changes until all pass.
+  local work stage backup
   work="$(mktemp -d)"
   # Expand $work now: it is local and out of scope when the EXIT trap runs.
+  # shellcheck disable=SC2064
   trap "rm -rf '${work}'" EXIT
-  archive="caddy_${caddy_version}_linux_${arch}.tar.gz"
-  curl --fail --silent --show-error --location --output "${work}/${archive}" \
-    "https://github.com/caddyserver/caddy/releases/download/v${caddy_version}/${archive}"
-  [[ "$(sha512sum "${work}/${archive}" | cut -d' ' -f1)" == "$expected" ]] || fail "checksum mismatch for ${archive}"
-  tar -xzf "${work}/${archive}" -C "$work" caddy
+  stage="${work}/stage"
+  backup="${work}/backup"
+  mkdir "$stage" "$backup"
+  fetch_caddy "${stage}/caddy"
+  cp "${here}/Caddyfile" "${here}/chalk-direct-sync-proxy.nft" "$stage"
+  sed "s|__DIRECT_SYNC_HOST__|${host}|" "${here}/chalk-direct-sync-proxy.service.in" >"${stage}/${unit}"
+  nft --check --file "${stage}/chalk-direct-sync-proxy.nft" || fail 'the nftables caps do not validate; nothing was installed'
+  CHALK_DIRECT_SYNC_HOST="$host" "${stage}/caddy" validate --config "${stage}/Caddyfile" --adapter caddyfile >/dev/null \
+    || fail 'the Caddyfile does not validate; nothing was installed'
 
+  # Keep the previous install, so a failure while switching over puts it back.
+  local target
+  for target in "${install_dir}/caddy" "${config_dir}/Caddyfile" "${config_dir}/chalk-direct-sync-proxy.nft" "$unit_path"; do
+    if [[ -e "$target" ]]; then cp -p "$target" "${backup}/$(basename "$target")"; fi
+  done
   install -d -m 0755 "$install_dir" "$config_dir"
-  install -m 0755 "${work}/caddy" "${install_dir}/caddy.new"
-  mv -f "${install_dir}/caddy.new" "${install_dir}/caddy"
-  install -m 0644 "${here}/Caddyfile" "${config_dir}/Caddyfile"
-  install -m 0644 "${here}/chalk-direct-sync-proxy.nft" "${config_dir}/chalk-direct-sync-proxy.nft"
-  nft --check --file "${config_dir}/chalk-direct-sync-proxy.nft"
-  CHALK_DIRECT_SYNC_HOST="$host" "${install_dir}/caddy" validate --config "${config_dir}/Caddyfile" --adapter caddyfile >/dev/null
-  sed "s|__DIRECT_SYNC_HOST__|${host}|" "${here}/chalk-direct-sync-proxy.service.in" >"$unit_path"
-  chmod 0644 "$unit_path"
-
-  systemctl daemon-reload
-  systemctl enable "$unit" >/dev/null
-  systemctl restart "$unit"
+  if ! {
+    replace_file "${stage}/caddy" "${install_dir}/caddy" 0755 &&
+      replace_file "${stage}/Caddyfile" "${config_dir}/Caddyfile" 0644 &&
+      replace_file "${stage}/chalk-direct-sync-proxy.nft" "${config_dir}/chalk-direct-sync-proxy.nft" 0644 &&
+      replace_file "${stage}/${unit}" "$unit_path" 0644 &&
+      systemctl daemon-reload &&
+      systemctl enable "$unit" >/dev/null &&
+      systemctl restart "$unit"
+  }; then
+    restore_install "$backup"
+    if [[ -e "${backup}/${unit}" ]]; then systemctl restart "$unit" || true; fi
+    fail 'the install failed; the previous install was put back'
+  fi
   printf 'installed %s for %s; run "direct-sync-proxy status" once DNS and port 443 reach this host\n' "$unit" "$host"
 }
 
@@ -98,6 +149,8 @@ status_proxy() {
   printf 'ok: %s active, certificate valid until %s\n' "$unit" "$not_after"
 }
 
+# The test sources this file to replace fetch_caddy and the folders; running it does the work.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 case "${1:-}" in
   install) install_proxy ;;
   remove) remove_proxy "${2:-}" ;;

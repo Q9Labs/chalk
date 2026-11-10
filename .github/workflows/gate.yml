@@ -130,7 +130,7 @@ jobs:
       # A queue group compares with the exact commit it was built on, so an advisory that master already had does not block it.
       GATE_OSV_BASE_COMMIT: ${{ github.event.merge_group.base_sha || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
-      VITEST_MAX_WORKERS: "2"
+      VITEST_MAX_WORKERS: "4"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -383,7 +383,7 @@ jobs:
     env:
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
-      VITEST_MAX_WORKERS: "2"
+      VITEST_MAX_WORKERS: "4"
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

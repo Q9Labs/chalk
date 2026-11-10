@@ -120,9 +120,13 @@ async function measure() {
       // Keep timeout and the kit in the lease's process group so lease loss stops both.
       const measurementEnv = { ...process.env, CHALK_PROOF_RUN_ID: runId };
       delete measurementEnv.CHALK_AXIOM_METRICS_QUERY_TOKEN;
-      status = await workload("timeout", ["--foreground", "--signal=TERM", "--kill-after=10s", "40m", "pnpm", "prod:latency", "--samples", "60", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"], {
-        env: measurementEnv,
-      });
+      status = await workload(
+        "timeout",
+        ["--foreground", "--signal=TERM", "--kill-after=10s", "40m", "pnpm", "prod:latency", "--samples", process.env.CHALK_LATENCY_SAMPLES || "60", "--planes", "chalk_sfu", "--environment", "staging", "--tier", "nightly", "--region", "github-hosted", "--size", "ubuntu-24-04"],
+        {
+          env: measurementEnv,
+        },
+      );
     }
     const end = Date.now();
     await delay(30_000);

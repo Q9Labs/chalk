@@ -22,6 +22,7 @@ jobs:
     outputs:
       should_cut: ${{ steps.plan.outputs.should_cut }}
       target_sha: ${{ steps.plan.outputs.target_sha }}
+      transcribe: ${{ steps.plan.outputs.transcribe }}
       baseline_run_id: ${{ steps.plan.outputs.baseline_run_id }}
       baseline_artifact_id: ${{ steps.plan.outputs.baseline_artifact_id }}
       recorder_control: ${{ steps.plan.outputs.recorder_control }}
@@ -48,6 +49,11 @@ jobs:
           if [[ "$MANUAL" == true ]]; then args+=(--manual); fi
           python3 scripts/releases/release.py plan "${args[@]}"
   release:
+    permissions:
+      contents: write # The managed deploy takes the shared staging-SFU lease.
+      actions: read
+      deployments: write
+      id-token: write
     needs: plan
     if: needs.plan.outputs.should_cut == 'true'
     uses: ./.github/workflows/ci.yml
@@ -63,40 +69,52 @@ jobs:
       enable_recorder_control: ${{ needs.plan.outputs.recorder_control == 'true' }}
     secrets: inherit
   proof:
-    permissions:
-      contents: read
-    needs: [plan, release]
-    uses: ./.github/workflows/real-call-proof.yml
-    with:
-      environment: nightly
-      proofs: leave smoke transcript
-      release_sha: ${{ needs.plan.outputs.target_sha }}
-    secrets: inherit
-  own-sfu:
+    # The gate. It proves a real call on the own SFU (chalk_sfu) for the cut's revision: the call, its Recording,
+    # export and Transcript, and a long call across media-access refreshes. The staging lease serializes it with
+    # every other lane that drives the staging SFU, and a lease that stays busy fails the gate by name
+    # (staging-sfu-lease-timeout, shown on the run and again by `record`).
     permissions:
       contents: write # Shared staging-SFU Git-ref lease.
-    # Promote requires this result, but it does not change whether the nightly cut is held.
-    # The proof cleans up its Spaces and Episodes in every outcome.
     needs: [plan, release]
-    if: needs.release.result == 'success'
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: nightly
       # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
-      proofs: camera-share long-call
+      proofs: camera-share call-artifacts long-call
+      media_plane: chalk_sfu
+      # Only the first cut of a UTC day pays for a Transcript (the plan decides); every cut still records and checks the call.
+      transcribe: ${{ needs.plan.outputs.transcribe == 'true' }}
+      release_sha: ${{ needs.plan.outputs.target_sha }}
+      scorecard_label: proof
+    secrets: inherit
+  latency:
+    # Promote requires this result, but it does not change whether the nightly cut is held.
+    # It runs after the gate, also when the gate failed, so one run shows both results.
+    # The proof cleans up its Spaces and Episodes in every outcome.
+    permissions:
+      contents: write # Shared staging-SFU Git-ref lease.
+    needs: [plan, release, proof]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: nightly
       media_plane: chalk_sfu
       latency: true
+      latency_only: true
       release_sha: ${{ needs.plan.outputs.target_sha }}
       scorecard_label: chalk_sfu
     secrets: inherit
   web-e2e:
     needs: [release, proof]
+    permissions:
+      contents: write # Shared staging-SFU Git-ref lease.
     uses: ./.github/workflows/web-call-proof.yml
     with:
       environment: nightly
+      media_plane: chalk_sfu
     secrets: inherit
   record:
-    needs: [plan, release, proof, own-sfu, web-e2e, scorecard]
+    needs: [plan, release, proof, latency, web-e2e, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -107,15 +125,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
+          TRANSCRIBE: ${{ needs.plan.outputs.transcribe }}
           RELEASE: ${{ toJSON(needs.release.outputs) }}
           DEPLOY_RESULT: ${{ needs.release.result }}
+          # The gate is the chalk_sfu proof job; a lease timeout is named in PROOF_FAILURE.
           PROOF_RESULT: ${{ needs.proof.result == 'success' && needs.proof.outputs.result || 'failed' }}
+          PROOF_FAILURE: ${{ needs.proof.outputs.failure }}
+          PROOF_RESULTS: ${{ needs.proof.outputs.results }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
-          # The shared job includes proof and latency: a failed latency measurement intentionally blocks promotion.
-          OWN_SFU_RESULT: ${{ needs.own-sfu.result == 'skipped' && 'skipped' || needs.own-sfu.result == 'success' && needs.own-sfu.outputs.result || 'failed' }}
+          # Promote reads the proof and the latency run together: a failed latency measurement intentionally blocks promotion, never the cut.
+          OWN_SFU_RESULT: ${{ needs.latency.result == 'skipped' && 'skipped' || needs.latency.result == 'success' && needs.latency.outputs.result == 'passed' && needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
           SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |
           python3 scripts/releases/release.py record
+          if [ "$DEPLOY_RESULT" = success ] && [ "$PROOF_RESULT" != passed ]; then
+            echo "::error title=Nightly gate failed: chalk_sfu proof::The chalk_sfu proof did not pass (${PROOF_FAILURE:-proof-failed}), so this cut is held. Results: ${PROOF_RESULTS:-none recorded}"
+            echo "Proof results: ${PROOF_RESULTS:-none recorded}" >> "$GITHUB_STEP_SUMMARY"
+          fi
           test "$DEPLOY_RESULT" = success && test "$PROOF_RESULT" = passed && test "$WEB_E2E_RESULT" = passed
   github-release:
     needs: [plan, record]
@@ -136,7 +162,7 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, own-sfu]
+    needs: [plan, proof, latency]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     outputs:

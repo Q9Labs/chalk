@@ -39,6 +39,12 @@ class LeaseTests(unittest.TestCase):
         _, _, previous = self.store.acquire("lane-b", "latency", "run-2", 180)
         self.assertEqual(previous["holder"], "lane-a")
 
+    def test_a_failing_git_command_is_named_in_the_error(self):
+        args = [sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", str(Path(self.directory.name) / "missing"), "--holder", "lane-a", "--purpose", "retest", "--run-id", "run-1", "--wait", "0", "--", sys.executable, "-c", "pass"]
+        result = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("git ls-remote failed:", result.stderr)
+
     def test_expired_takeover_cannot_be_released_by_previous_owner(self):
         sha, lease, _ = self.store.acquire("lane-a", "retest", "run-1", -1)
         self.store.acquire("lane-b", "latency", "run-2", 180)
@@ -76,9 +82,10 @@ class LeaseTests(unittest.TestCase):
 
     def test_measurement_timeout_stops_with_lease_before_release(self):
         source = (Path(__file__).resolve().parents[2] / "features/scorecard/staging-latency.mjs").read_text()
-        args = json.loads(re.search(r'workload\("timeout", (\[[^\n]*?\]),', source)[1])
+        # Only the options before "pnpm" matter here; the rest of the command holds the sample count, which can come from the environment.
+        options = json.loads("[" + re.search(r'workload\(\s*"timeout",\s*\[(.*?)"pnpm"', source, re.S)[1] + '"pnpm"]')
         # Exercise the real measurement command's timeout options, not a mirrored flag list.
-        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *args[:args.index("pnpm")]])
+        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *options[:-1]])
 
     def assert_group_stopped_before_release(self, cancel, command_prefix=()):
         directory = Path(self.directory.name)
@@ -176,7 +183,7 @@ time.sleep(120)
 
     def test_cut_outwaits_a_cloudflare_latency_run_that_owns_the_lease_for_its_whole_step(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/real-call-proof.yml").read_text()
-        wait = int(re.search(r"--holder nightly-proof [^\n]*--wait (\d+)", workflow).group(1))
+        wait = int(re.search(r"STAGING_LEASE_WAIT=(\d+) scripts/staging-sfu/gate-lease nightly-proof ", workflow).group(1))
         step_cap_seconds = 25 * 60
         self.assertIn("|| 25 }}", workflow)
         # The earlier 600-second wait failed here: the cut gave up while the Cloudflare run still held the lease.
@@ -255,6 +262,93 @@ await writeFile("result.json", JSON.stringify({ own, foreign, episode, foreignEp
         self.assertEqual(failed.returncode, 1)
         self.assertIn("Remote cleanup failed", failed.stderr)
         self.assertEqual(self.store.read()[0], held)
+
+
+class DeployLeaseTests(unittest.TestCase):
+    """The nightly managed deploy restarts API, Sync and the SFU node, so it takes the staging lease like the proofs."""
+
+    workflows = Path(__file__).parents[2] / ".github/workflows"
+
+    def test_nightly_deploy_waits_for_the_lease_and_production_does_not(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        wrapped = re.search(r'if \[\[ "\$MANAGED_ENVIRONMENT" == nightly \]\]; then\n\s+#[^\n]*\n\s+(STAGING_LEASE_WAIT=\d+ scripts/staging-sfu/gate-lease [^\n]+)\n\s+else\n\s+(node scripts/deploy/deploy-managed-release.mjs "\$\{args\[@\]\}")\n', ci)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(wrapped[1], 'STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-deploy managed-deploy "$GITHUB_RUN_ID" -- node scripts/deploy/deploy-managed-release.mjs "${args[@]}"')
+        self.assertEqual(ci.count("deploy-managed-release.mjs"), ci.count("deploy-managed-release.mjs \"${args[@]}\" --dry-run") + 2)
+
+    def test_the_deploy_checkout_keeps_no_credentials_because_staging_lock_sends_its_own(self):
+        # A persisted extraheader plus the one staging-lock adds from GH_TOKEN is two Authorization headers, and GitHub rejects the request.
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        checkout = job[job.index("Checkout deployment tooling") :]
+        self.assertIn("persist-credentials: false", checkout[: checkout.index("- name: Setup Node")])
+
+    def test_the_deploy_job_and_every_caller_may_write_the_lease_ref(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        self.assertRegex(job[: job.index("steps:")], r"permissions:\n\s+contents: write")
+        # A caller cannot grant less than a called job asks for, or the whole run fails at startup.
+        for name, jobs in (("nightly.yml", ["release"]), ("promote.yml", ["release", "rollback"])):
+            text = (self.workflows / name).read_text()
+            for job_name in jobs:
+                block = text[text.index(f"\n  {job_name}:") :]
+                self.assertRegex(block[: block.index("uses: ./.github/workflows/ci.yml")], r"permissions:\n\s+contents: write", f"{name} {job_name}")
+
+
+class GateLeaseTests(unittest.TestCase):
+    """gate-lease names why the lease stopped a gating job; staging-lock keeps the lease rules."""
+
+    def run_gate(self, evidence, status, stderr=""):
+        directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, directory, True)
+        fake = directory / "fake-lock"
+        fake.write_text(
+            "#!/usr/bin/env bash\n"
+            'while [ "$#" -gt 0 ]; do case "$1" in --evidence) path=$2; shift 2;; --) shift; break;; *) shift 2;; esac; done\n'
+            + (f"printf '%s' '{json.dumps(evidence)}' > \"$path\"\n" if evidence is not None else "")
+            + f"printf '%s\\n' '{stderr}' >&2\n"
+            f"exit {status}\n"
+        )
+        fake.chmod(0o755)
+        output, summary = directory / "output", directory / "summary"
+        env = {**os.environ, "STAGING_LOCK": str(fake), "GITHUB_OUTPUT": str(output), "GITHUB_STEP_SUMMARY": str(summary), "STAGING_LEASE_WAIT": "30"}
+        gate = Path(__file__).with_name("gate-lease")
+        result = subprocess.run([str(gate), "nightly-proof", "camera-share", "42", "--", "true"], env=env, capture_output=True, text=True, timeout=10)
+        return result, output.read_text() if output.exists() else "", summary.read_text() if summary.exists() else ""
+
+    def test_a_lease_that_was_never_acquired_is_a_named_timeout(self):
+        held = {"holder": "lane-a", "purpose": "retest", "run_id": "7", "token": "secret-token"}
+        result, output, summary = self.run_gate({"previous": held, "acquired": False, "lost": False}, 75, "Staging SFU lease unavailable after bounded wait.")
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("failure=staging-sfu-lease-timeout", output)
+        self.assertIn("::error title=staging-sfu-lease-timeout::", result.stdout)
+        self.assertIn("lane-a (retest, run 7)", result.stdout)
+        self.assertIn("staging-sfu-lease-timeout", summary)
+        self.assertNotIn("secret-token", result.stdout + summary)
+
+    def test_staging_lock_failing_before_the_lease_is_not_a_timeout(self):
+        # A Git failure ends staging-lock before it writes any evidence: the real error must show, not a wait that never happened.
+        result, output, summary = self.run_gate(None, 75, "Staging SFU lease operation failed; workload not authorized to continue.")
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("failure=staging-sfu-lease-error", output)
+        self.assertNotIn("timeout", output + summary)
+        self.assertIn("before it took the lease", result.stdout)
+        self.assertIn("Staging SFU lease operation failed", result.stdout)
+
+    def test_a_lease_lost_while_running_is_a_named_loss(self):
+        result, output, _ = self.run_gate({"previous": None, "acquired": True, "lost": True}, 75)
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("failure=staging-sfu-lease-lost", output)
+
+    def test_an_exit_75_from_the_workload_itself_is_not_named(self):
+        result, output, _ = self.run_gate({"previous": None, "acquired": True, "lost": False}, 75)
+        self.assertEqual(result.returncode, 75)
+        self.assertEqual(output, "")
+
+    def test_other_statuses_pass_through(self):
+        for status in (0, 1):
+            result, output, _ = self.run_gate({"previous": None, "acquired": True, "lost": False}, status)
+            self.assertEqual((result.returncode, output), (status, ""))
 
 
 if __name__ == "__main__":

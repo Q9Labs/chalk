@@ -62,7 +62,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         headless: !options.headed,
         handleSIGINT: false,
         handleSIGTERM: false,
-        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
+        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing"],
       });
       close[guest] = async () => {
         if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);
@@ -100,7 +100,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         const body = signalingBody(request.postData(), request.url());
         signalBytes[guest] = Math.max(signalBytes[guest], body.bytes);
         if (body.replacementCause === "section_budget") budgetReplacements[guest].push(Date.now());
-        record({ type: "signaling-request", operation, method: request.method(), ...(body.op ? { op: body.op } : {}), bytes: body.bytes });
+        record({ type: "signaling-request", operation, method: request.method(), ...(body.op ? { op: body.op } : {}), bytes: body.bytes, ...sdpOf(request) });
       });
       page.on("response", (response) => {
         const operation = signalingOperation(response.url());
@@ -178,6 +178,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
     refreshes,
     signalBytes,
     budgetReplacements,
+    networks, // Each guest's signalling records, in order; toggle-offers.mjs reads the sizes of the offers they sent.
     waitForRefresh: async () => {
       try {
         await waitForCredentialRefresh(run, refreshes, ready);
@@ -227,6 +228,16 @@ export function signalingBody(postData, url = "") {
     // A body that is not JSON still has a size.
   }
   return { op, replacementCause, bytes: Buffer.byteLength(postData) };
+}
+
+/** The kind and size of the SDP a signalling request carries; a request without one adds nothing. The body is the guest's own, so the SDP itself stays out of the record. */
+function sdpOf(request) {
+  try {
+    const description = JSON.parse(request.postData() ?? "{}").session_description;
+    return description?.sdp ? { sdpType: description.type, sdpBytes: description.sdp.length } : {};
+  } catch {
+    return {};
+  }
 }
 
 export function signalingOperation(url) {
