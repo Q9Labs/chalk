@@ -332,6 +332,16 @@ test("a microphone that turned back on and was not decoded by another guest fail
   assert.deepEqual(judged({ ...call, hearings }), ["Guest 3 did not decode guest 2 within 5 s of its microphone turning back on (-140 dB at bin 76, floor -140 dB); turned back on at +36s"]);
 });
 
+test("a microphone muted again inside the hearing window is not judged for being heard", () => {
+  const base = healthyCall();
+  const toggles = [...base.toggles, { atMs: 101_000, guest: 2, kind: "microphone", enabled: false }, { atMs: 103_000, guest: 2, kind: "microphone", enabled: true }, { atMs: 105_000, guest: 2, kind: "microphone", enabled: false }];
+  const call = { ...base, toggles };
+  const hearings = heardEveryUnmute(base);
+  assert.deepEqual(judged({ ...call, hearings }), [], "the 2 s span has no hearing and no failure");
+  const longer = { ...call, toggles: toggles.slice(0, -1) };
+  assert.deepEqual(judged({ ...longer, hearings }), ["Guest 3's microphone turned back on at +103s was never checked for being heard"], "a span that stays on is still checked");
+});
+
 test("every microphone turn-on must be checked at every other guest, by every guest that turns one on", () => {
   const call = healthyCall();
   const turnOns = call.toggles.filter((entry) => entry.kind === "microphone" && entry.enabled);

@@ -1,6 +1,6 @@
 // The long-call proof judges a call held across media-access refreshes. This file holds the schedule and the pass/fail rules and does no I/O,
 // so a recorded run can be judged without a browser. long-call.mjs gathers the samples these rules read.
-import { unheardAfterUnmute } from "./audio-decode.mjs";
+import { unheardAfterUnmute, unmuteHearMs } from "./audio-decode.mjs";
 
 // apps/api/internal/accessgrants/types.go Lifetime and sdks/typescript/client/src/access/manager.ts DEFAULT_REFRESH_WINDOW_MS.
 // long-call.test.mjs reads both files and fails when either number moves.
@@ -205,6 +205,8 @@ function leftConnectedFailures(own, label, firstTick, budgetReplacements) {
 function hearingFailures({ toggles, hearings, guests }) {
   const failures = [];
   for (const toggle of toggles.filter((entry) => entry.kind === "microphone" && entry.enabled)) {
+    // A microphone muted again before the hearing window ends has nothing left to decode, and a listener needs a whole pull cycle (several signalling round trips) first.
+    if (toggles.some((entry) => entry.kind === "microphone" && !entry.enabled && entry.guest === toggle.guest && entry.atMs > toggle.atMs && entry.atMs < toggle.atMs + unmuteHearMs)) continue;
     const found = hearings.find((hearing) => hearing.speaker === toggle.guest && hearing.atMs === toggle.atMs);
     const at = `+${seconds(toggle.atMs)}s`;
     if (!found) failures.push(`Guest ${toggle.guest + 1}'s microphone turned back on at ${at} was never checked for being heard`);
