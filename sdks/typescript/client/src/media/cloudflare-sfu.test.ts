@@ -2364,6 +2364,21 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     }
   });
 
+  it("reports each batch it closed even when a later batch fails", async () => {
+    const speakers = Array.from({ length: 17 }, (_, index) => remote(`bundle-tag-batch-${index}`, `participant-${index + 2}`, "microphone"));
+    const call = await joinSecond(speakers);
+    try {
+      const close = call.harness.transport.closeTracks.bind(call.harness.transport);
+      vi.spyOn(call.harness.transport, "closeTracks")
+        .mockImplementationOnce(close)
+        .mockRejectedValueOnce(new CloudflareSFUError("close failed", "signaling_failed", { status: 503 }));
+      await call.withdraw([]).catch(() => undefined);
+      expect(call.closeEvents()).toEqual([{ event: "receivers_closed", receivers_stopped: 16, bundle_tag_held: true }]);
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
   it("is parked when a hidden video tile is unpulled and its camera is the first thing pulled", async () => {
     const camera = remote("bundle-tag-video", "participant-2", "camera");
     vi.useFakeTimers();

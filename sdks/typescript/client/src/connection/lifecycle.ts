@@ -495,7 +495,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const grant = yield* trace("access_initialize", reason === "access_retry" ? refreshAfterRejection() : access.initialize(reason));
+            const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
             const media = yield* trace(
               "create_media_client",
@@ -580,6 +580,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   if (!retry) yield* recordFailure(failure);
                   model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
+                  if (retry) recordAccessRetry();
                   if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
@@ -642,7 +643,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           }
           return yield* cancelPendingAdmission();
         });
-      const refreshAfterRejection = () => Effect.sync(() => diagnostics.record({ event: "access_retry", state: model.state, epoch: model.epoch })).pipe(Effect.andThen(access.refreshAfterRejection()));
+      const recordAccessRetry = () => diagnostics.record({ event: "access_retry", state: model.state, epoch: model.epoch });
       const publishFreshAccess = (): Effect.Effect<void> =>
         enqueue(
           Effect.gen(function* () {
@@ -671,7 +672,8 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               onFailure: (cause) => {
                 if (!accessRejected(cause)) return Effect.fail(cause);
                 return requireOpen.pipe(
-                  Effect.andThen(refreshAfterRejection()),
+                  Effect.tap(() => Effect.sync(recordAccessRetry)),
+                  Effect.andThen(access.refreshAfterRejection()),
                   Effect.mapError((failure) => (failure instanceof ConnectionAccessFailure ? accessFailure(failure) : failure)),
                   Effect.andThen(publishFreshAccess()),
                   Effect.andThen(run),

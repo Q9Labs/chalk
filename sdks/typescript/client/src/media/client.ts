@@ -1599,7 +1599,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #closeReceivers(receivers: readonly { readonly publication: Pick<CloudflareSFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
     const connectionId = this.#bootstrap.connectionId;
     // The SFU rejects a request of more than 16 tracks. A forced close of a closed track answers alreadyClosed, so a retry after a partial failure is safe.
-    let bundleTagHeld = false;
     for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
       await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
       this.#requireGeneration(generation);
@@ -1608,13 +1607,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         // Stopping moves no SDP, so the next offer of any kind would reject this m-section. Rejecting the BUNDLE tag makes
         // Chrome drop the transport and the SFU session with it, so that one receiver is parked inactive instead.
         if (mid === bundleTagOf(this.#connection)) {
-          bundleTagHeld = true;
           transceiver.direction = "inactive";
           transceiver.receiver.track.stop();
         } else transceiver.stop();
       }
+      this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: batch.length, bundle_tag_held: batch.some(({ mid }) => mid === bundleTagOf(this.#connection)) }));
     }
-    if (receivers.length > 0) this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: receivers.length, bundle_tag_held: bundleTagHeld }));
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
