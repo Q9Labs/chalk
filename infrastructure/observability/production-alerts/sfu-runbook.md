@@ -184,7 +184,9 @@ Recommendation: do not turn on weekly backups. The node holds no state of its ow
 
 ## Kill-switch steps (timed)
 
-<!-- Owned by the kill-switch drill lane. Add the timed steps here; do not copy them elsewhere. -->
+The procedure to send one Space back to Cloudflare, and to return it, is [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it) in the own-SFU README. It holds the commands, who may run them, how to move a live call, the verification, and the measured times. On staging the operator command returned in under 3 s, and both guests of a live call had media on the other plane about 30 s after the flip.
+
+Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`CHALK_SFU_NEW_EPISODES=off`) is the second step and needs an API reload, described in the same section.
 
 ## Direct door / certificate expiry
 
