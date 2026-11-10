@@ -65,10 +65,88 @@ test("a reused Space with other policies than the proof asked for stops the run"
 });
 
 test("an Episode in a reused Space is recorded in the ownership file before anything can fail", async () => {
-  const run = await fakeRun(() => ({ id: "e1", config_snapshot: { artifact_policy: { recording: { mode: "manual" }, transcription: { mode: "on_demand" } } } }));
+  const run = await fakeRun((method) => (method === "GET" ? { episodes: [], pagination: { next_cursor: "" } } : { id: "e1", config_snapshot: { artifact_policy: { recording: { mode: "manual" }, transcription: { mode: "on_demand" } } } }));
   await createEpisode(run, { id: "pinned" });
   assert.deepEqual(run.ownership.episodes, [{ space_id: "pinned", id: "e1" }]);
   assert.deepEqual(JSON.parse(await readFile(`${run.directory}/ownership.json`, "utf8")).episodes, [{ space_id: "pinned", id: "e1" }]);
+});
+
+const episodeBody = { id: "e1", config_snapshot: { artifact_policy: { recording: { mode: "manual" }, transcription: { mode: "on_demand" } } } };
+function busy() {
+  return Object.assign(new ProofError("api", "API POST failed: HTTP 409, episode.capacity_exceeded"), { status: 409, apiCode: "episode.capacity_exceeded" });
+}
+// Episodes already in the Space, then Create Episode answers from `creates` one call at a time.
+function spaceRun(existing, creates) {
+  const waits = [];
+  const ended = [];
+  const run = {
+    runId: "run",
+    ownership: {},
+    directory: undefined,
+    tenantPath: "/v1/tenants/t",
+    wait: async (ms) => waits.push(ms),
+    apiRequest: async (method, path) => {
+      if (method === "GET") return { episodes: existing, pagination: { next_cursor: "" } };
+      if (path.endsWith("/end")) return ended.push(path);
+      const next = creates.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    },
+  };
+  return { run, waits, ended };
+}
+async function withDirectory(run) {
+  run.directory = await mkdtemp(`${tmpdir()}/proof-space-`);
+  return run;
+}
+const pinnedSpace = { id: "pinned", metadata: {} };
+
+test("a reused Space ends a live Episode another proof run left, and no one else's", async () => {
+  const live = [
+    { id: "left", status: "active", metadata: { proof_run_id: "earlier-run" } },
+    { id: "foreign", status: "active", metadata: {} },
+    { id: "done", status: "ended", metadata: { proof_run_id: "earlier-run" } },
+    { id: "own", status: "active", metadata: { proof_run_id: "run" } },
+  ];
+  const { run, ended } = spaceRun(live, [episodeBody]);
+  await createEpisode(await withDirectory(run), pinnedSpace);
+  assert.deepEqual(ended, ["/v1/tenants/t/spaces/pinned/episodes/left/end"]);
+});
+
+test("a Space the run created is not searched for leftovers", async () => {
+  const { run, ended } = spaceRun([{ id: "x", status: "active", metadata: { proof_run_id: "other" } }], [episodeBody]);
+  await createEpisode(await withDirectory(run), { id: "own-space", metadata: { proof_run_id: "run" } });
+  assert.deepEqual(ended, []);
+});
+
+test("Create Episode waits for a busy Space and goes through once it clears", async () => {
+  const { run, waits } = spaceRun([], [busy(), busy(), episodeBody]);
+  const { episode } = await createEpisode(await withDirectory(run), pinnedSpace);
+  assert.equal(episode.id, "e1");
+  assert.deepEqual(waits, [3000, 3000]);
+});
+
+test("a Space that stays busy for 90 seconds fails with proof-space-busy", async () => {
+  const { run, waits } = spaceRun([], Array.from({ length: 40 }, busy));
+  await assert.rejects(createEpisode(await withDirectory(run), pinnedSpace), (error) => error.reason === "proof-space-busy");
+  assert.equal(waits.length, 30);
+  assert.equal(
+    waits.reduce((sum, ms) => sum + ms, 0),
+    90_000,
+  );
+});
+
+test("any other Create Episode failure is not retried", async () => {
+  const other = Object.assign(new ProofError("api", "API POST failed: HTTP 409, idempotency.conflict"), { status: 409, apiCode: "idempotency.conflict" });
+  const { run, waits } = spaceRun([], [other]);
+  await assert.rejects(createEpisode(await withDirectory(run), pinnedSpace), (error) => error === other);
+  assert.deepEqual(waits, []);
+});
+
+test("proof-space-busy is a public failure reason", () => {
+  const lines = [];
+  publicFailure("setup-or-capture", new ProofError("proof-space-busy", "private detail"), (line) => lines.push(line));
+  assert.deepEqual(lines, ["PROOF setup-or-capture: failed (proof-space-busy)"]);
 });
 
 test("a Space setup mismatch keeps its bounded public reason", () => {
