@@ -495,6 +495,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
+            if (retried) recordAccessRetry();
             const grant = yield* trace("access_initialize", reason === "access_retry" ? access.refreshAfterRejection() : access.initialize(reason));
             model.admissionCleanupConfirmed = false;
             const media = yield* trace(
@@ -580,7 +581,6 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   if (!retry) yield* recordFailure(failure);
                   model.admissionCleanupConfirmed = yield* cancelPendingAdmission();
                   yield* stopPorts();
-                  if (retry) recordAccessRetry();
                   if (retry) return yield* performJoin(model.admissionCleanupConfirmed ? "join" : "access_retry", true);
                   yield* transition("failed");
                   return yield* Effect.fail(failure);
