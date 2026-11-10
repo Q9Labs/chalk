@@ -56,11 +56,13 @@ defmodule ChalkSync.Live.ConnectionQualityPostgresTest do
     path = "/v1/sync?connection_quality=1"
     {welcome, _items, sender} = session(port, path, guest)
     assert welcome["connection_quality"] == true
-    sender = send_quality(sender, "weak")
 
-    # The host asked for the extension and sees the guest's tier.
-    {host_welcome, _items, observer} = session(port, path, host)
+    # The host asked for the extension and sees no tier until the guest reports one.
+    {host_welcome, host_items, observer} = session(port, path, host)
     assert host_welcome["connection_quality"] == true
+    refute Map.has_key?(item_of(host_items, guest), "connection_quality")
+
+    sender = send_quality(sender, "weak")
     assert {%{"connection_quality" => "weak"}, observer} = next_presence_item(observer, guest)
 
     # A live change reaches the same observer as a presence event.
