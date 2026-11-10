@@ -135,8 +135,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #unretiredReceivers = new Map<CloudflareSFURemoteTrack, number>();
   // A stopped transceiver keeps its mid until the next negotiation, so a later retirement would find it and close it a second time.
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
-  // Receivers closed and set inactive, waiting for the SFU to reuse their mid.
-  readonly #parkedReceivers = new Set<RTCRtpTransceiver>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
   #viewerLayerUpdating = false;
@@ -1605,9 +1603,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         // Park the receiver inactive; never stop it or its track. Stopping moves no SDP, so the next offer of any kind would
         // reject the m-section (the BUNDLE tag's rejection drops the transport and the SFU session with it), and the SFU
         // reuses a closed mid for the next pull of that guest. A stopped transceiver or track would receive that pull with
-        // nothing to play it. #reviveParkedReceivers turns the receiver on again when the SFU's offer reuses the mid.
+        // nothing to play it. #reviveInactiveTransceivers turns the receiver on again when the SFU's offer reuses the mid.
         transceiver.direction = "inactive";
-        this.#parkedReceivers.add(transceiver);
       }
       this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: batch.length, bundle_tag_held: batch.some(({ mid }) => mid === bundleTagOf(this.#connection)) }));
     }
@@ -1778,11 +1775,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         throw error;
       });
       this.#negotiatedGeneration = generation;
-      await (() => waitFor(() => responseTracks.every((track) => track.mid !== undefined && received.has(track.mid)), 5000))();
+      // The browser fires no track event when the SFU reuses a closed receiver that still receives the same stream, so a revived receiver counts as arrived.
+      const arrived = (mid: string) => received.get(mid) ?? this.#revivedReceiverTrack(connection, mid);
+      await (() => waitFor(() => responseTracks.every((track) => track.mid !== undefined && arrived(track.mid) !== undefined), 5000))();
       this.#requireGeneration(generation);
       return matched.map(({ publication, mid }) => {
-        const track = received.get(mid);
+        const track = arrived(mid);
         if (!track) throw new CloudflareSFUError("A negotiated remote track did not arrive", "media_failed");
+        this.#closedReceiverTracks.delete(track);
         this.#receiveHealth.pullSucceeded([publication.publicationId]);
         return Object.freeze({ ...publication, track });
       });
@@ -1792,6 +1792,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } finally {
       connection.removeEventListener("track", onTrack);
     }
+  }
+  // A receiver this client closed and the SFU's offer turned on again (see #reviveInactiveTransceivers) holds the track of the reused mid.
+  #revivedReceiverTrack(connection: RTCPeerConnection, mid: string): MediaStreamTrack | undefined {
+    const transceiver = connection.getTransceivers().find((item) => item.mid === mid);
+    const track = transceiver?.receiver.track;
+    return transceiver?.direction === "recvonly" && track !== undefined && this.#closedReceiverTracks.has(track) ? track : undefined;
   }
   #recordRemotePullErrors(publications: readonly CloudflareSFUPublication[], failures: NonNullable<CloudflareSFUTracksResponse["trackErrors"]>): void {
     const requested = new Map(
@@ -1941,24 +1947,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#reportPendingLocalOffer(connection, "remote_offer");
     await this.#rollbackLocalOffer(connection);
     await connection.setRemoteDescription(description);
-    this.#reviveParkedReceivers(description.sdp);
+    this.#reviveInactiveTransceivers(connection, description.sdp);
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
     await this.#signal(() => this.#requireTransport().renegotiate({ connectionId: owner.connectionId, sessionDescription: requireDescription(answer) }), owner);
     this.#requireGeneration(owner.generation);
   }
-  // An answer cannot enable a section that this side set inactive, so a parked receiver whose mid the offer turns on again
+  // An answer cannot enable a section that this side set inactive. The SFU reuses a closed mid for its next pull: the mid of a
+  // parked receiver, or of our own muted microphone or camera. So a transceiver that is inactive and that the offer turns on
   // must receive again before the answer is made. An offer that keeps the mid inactive still gets an inactive answer.
-  #reviveParkedReceivers(offerSDP: string): void {
+  #reviveInactiveTransceivers(connection: RTCPeerConnection, offerSDP: string): void {
     const active = new Set<string>();
     for (const section of offerSDP.split(/\r?\n(?=m=)/)) {
       const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
       if (mid !== undefined && !/\r?\na=(?:recvonly|inactive)\b/.test(section)) active.add(mid);
     }
-    for (const transceiver of this.#parkedReceivers) {
-      if (transceiver.mid === null || !active.has(transceiver.mid)) continue;
-      transceiver.direction = "recvonly";
-      this.#parkedReceivers.delete(transceiver);
+    for (const transceiver of connection.getTransceivers()) {
+      if (transceiver.direction === "inactive" && transceiver.mid !== null && active.has(transceiver.mid)) transceiver.direction = "recvonly";
     }
   }
   async #applyProviderDescriptionIfOpen(response: CloudflareSFUTracksResponse, connection: RTCPeerConnection, owner: { readonly generation: number; readonly connectionId: string }): Promise<void> {
@@ -2298,8 +2303,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   #disposeConnection(stopSenders: boolean): void {
-    // Parked receivers belong to the connection being closed; a later offer must never touch them.
-    this.#parkedReceivers.clear();
     this.#receiveHealth.replaced();
     this.#receiveProgress.replaced();
     this.#disposeConnectionObservation?.();
@@ -2538,7 +2541,9 @@ function* chunks<T>(items: readonly T[], size: number): Generator<readonly T[]> 
 }
 // A remote track is never stopped: a stopped track stays ended for good, and the SFU reuses the mid of a closed one.
 function droppedRemoteTracks(current: ReadonlyMap<string, CloudflareSFURemoteTrack>, next: ReadonlyMap<string, CloudflareSFURemoteTrack>): readonly CloudflareSFURemoteTrack[] {
-  return [...current].filter(([key, previous]) => next.get(key) !== previous).map(([, previous]) => previous);
+  // The SFU can put a re-pull on the receiver it just closed, so the new publication keeps the old track. That receiver is live again.
+  const kept = new Set([...next.values()].map((publication) => publication.track));
+  return [...current].filter(([key, previous]) => next.get(key) !== previous && !kept.has(previous.track)).map(([, previous]) => previous);
 }
 function observeConnectionState(
   peerState: RTCPeerConnectionState,

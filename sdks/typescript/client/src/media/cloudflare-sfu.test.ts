@@ -256,6 +256,40 @@ it("re-pulls only a stalled publication and retires its previous receiver", asyn
   );
 });
 
+it("keeps a stalled receiver's reused mid subscribed: retirement skips a track the roster still holds", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
+      h.transport.uniqueRemoteMids = true;
+      remoteMedia(h);
+      await h.client.refreshRemotePublications();
+      const original = h.client.getSnapshot().remoteTracks.find((track) => track.source === "microphone")!.track;
+      const originalMid = h.peers[0]!.getTransceivers().find((transceiver) => transceiver.receiver?.track === original)!.mid!;
+      h.peers[0]!.reusesMids = true;
+      h.transport.reuseRemoteMids.push(originalMid);
+      h.transport.immediateRenegotiation = true;
+      h.transport.remoteOfferSDP = `v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:${originalMid}\r\na=sendonly\r\n`;
+      const microphonePulls = () => h.transport.addInputs.flatMap((input) => input.tracks).filter((track) => track.location === "remote" && track.trackName === "microphone").length;
+      let packets = 10;
+      vi.mocked(h.peers[0]!.getStats).mockRestore();
+      vi.spyOn(FakePeerConnection.prototype, "getStats").mockImplementation(async () => {
+        packets++;
+        const rows = h.client.getSnapshot().remoteTracks.map((p) => ({ id: p.track.id, type: "inbound-rtp", timestamp: performance.now(), trackIdentifier: p.track.id, packetsReceived: p.track === original && microphonePulls() < 2 ? 10 : packets, codecId: "codec" }));
+        const codec = { id: "codec", type: "codec", timestamp: performance.now(), mimeType: "audio/opus", sdpFmtpLine: "useinbandfec=1" };
+        return new Map([...rows.map((r) => [r.id, r] as const), ["codec", codec]]);
+      });
+      await vi.advanceTimersByTimeAsync(110_000);
+      expect(microphonePulls()).toBe(2);
+      // The SFU put the re-pull on the closed receiver, so the roster holds the same track and its receiver is the live one.
+      expect(h.client.getSnapshot().remoteTracks.find((track) => track.source === "microphone")!.track).toBe(original);
+      expect(h.peers[0]!.getTransceivers().find((transceiver) => transceiver.mid === originalMid)?.direction).toBe("recvonly");
+      // Only the stall closed the receiver; retiring the replaced publication must not close the mid again.
+      expect(h.transport.closeInputs).toEqual([expect.objectContaining({ receiveOnly: true, tracks: [expect.objectContaining({ source: "microphone" })] })]);
+    },
+    { replaceMediaConnection: async () => bootstrap("replacement") },
+  );
+});
+
 it("falls back to one connection rebuild when targeted receive retirement fails", async () => {
   let replacements = 0;
   let receiver: ReturnType<typeof createHarness>;
@@ -2438,6 +2472,55 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
       expect(old.direction).toBe("stopped");
     } finally {
       call.harness.client.stop();
+    }
+  });
+
+  it("resolves a reused mid from its existing receiver when the browser fires no track event", async () => {
+    const call = await joinSecond([remote("silent-reuse-0", "participant-2", "microphone")]);
+    try {
+      call.peer.reusesMids = true;
+      call.peer.firesTrackOnReuse = false;
+      const track = call.section("remote-0").receiver.track as unknown as FakeTrack;
+      await call.withdraw([]);
+      const next = remote("silent-reuse-1", "participant-2", "microphone");
+      call.harness.transport.reuseRemoteMids.push("remote-0");
+      call.harness.transport.immediateRenegotiation = true;
+      call.harness.transport.remoteOfferSDP = `v=0\r\n${offerSection("remote-0", "sendonly")}`;
+      call.harness.transport.snapshot = { incarnation: 1, sequence: call.nextSequence(), publications: [next] };
+      call.harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+      await call.harness.client.refreshRemotePublications();
+      expect(call.section("remote-0").direction).toBe("recvonly");
+      expect(call.harness.client.getSnapshot().remoteTracks.map((entry) => entry.track as unknown)).toEqual([track]);
+      expect(call.replaceMediaConnection).not.toHaveBeenCalled();
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
+  it("revives the mid of the guest's own muted microphone when the SFU reuses it for a pull", async () => {
+    // The first guest in a call owns the BUNDLE tag with its own microphone; a mute keeps that section, inactive.
+    const harness = createHarness();
+    harness.transport.uniqueRemoteMids = true;
+    await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+    const peer = harness.peers[0]!;
+    peer.reusesMids = true;
+    try {
+      const own = peer.getTransceivers().find((transceiver) => transceiver.sender.track?.kind === "audio")!;
+      const ownMid = own.mid!;
+      await harness.client.setLocalSourceIntent("microphone", false, "user_pause");
+      expect(own.direction).toBe("inactive");
+      const next = remote("own-mid-0", "participant-2", "microphone");
+      harness.transport.reuseRemoteMids.push(ownMid);
+      harness.transport.immediateRenegotiation = true;
+      harness.transport.remoteOfferSDP = `v=0\r\n${offerSection(ownMid, "sendonly")}`;
+      harness.transport.snapshot = { incarnation: 1, sequence: 2, publications: [next] };
+      harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+      await harness.client.refreshRemotePublications();
+      expect(peer.answerDirections[ownMid]).toBe("recvonly");
+      expect(own.direction).toBe("recvonly");
+      expect(harness.client.getSnapshot().remoteTracks).toHaveLength(1);
+    } finally {
+      harness.client.stop();
     }
   });
 
@@ -5107,6 +5190,8 @@ class FakePeerConnection extends EventTarget {
   #lastOffer = "";
   /** A pull on a mid that already has a transceiver lands on that transceiver and its track, as in a browser. */
   reusesMids = false;
+  // A browser fires no track event when a reused mid still receives the same stream.
+  firesTrackOnReuse = true;
   /** Every m-section in the order the browser added it, local and remote, so the BUNDLE group has a real tag. */
   readonly #sectionMids: string[] = [];
   #bundleTag: string | undefined;
@@ -5168,11 +5253,12 @@ class FakePeerConnection extends EventTarget {
   async createAnswer(): Promise<RTCSessionDescriptionInit> {
     for (const section of this.#lastOffer.split(/\r?\n(?=m=)/)) {
       const mid = /\r?\na=mid:(\S+)/.exec(section)?.[1];
-      const transceiver = this.#remoteTransceivers.find((item) => item.mid === mid);
+      const transceiver = this.getTransceivers().find((item) => item.mid === mid);
       if (!mid || !transceiver) continue;
       const offeredOn = !/\r?\na=(?:recvonly|inactive)\b/.test(section);
       this.answerDirections[mid] = offeredOn && transceiver.direction === "recvonly" ? "recvonly" : "inactive";
-      (transceiver.receiver.track as unknown as FakeTrack).muted = this.answerDirections[mid] === "inactive";
+      const received = transceiver.receiver?.track as unknown as FakeTrack | undefined;
+      if (received) received.muted = this.answerDirections[mid] === "inactive";
     }
     return { type: "answer", sdp: `v=0\r\na=group:BUNDLE ${this.#sectionMids.join(" ")}\r\n` };
   }
@@ -5244,8 +5330,17 @@ class FakePeerConnection extends EventTarget {
   }
   emitTrack(mid: string, track: FakeTrack): void {
     const reused = this.reusesMids ? this.#remoteTransceivers.find((transceiver) => transceiver.mid === mid) : undefined;
+    const ownInactive = this.reusesMids && !reused ? this.#transceivers.find((transceiver) => transceiver.mid === mid && transceiver.direction === "inactive") : undefined;
+    if (ownInactive) {
+      // The SFU reused the mid of this guest's own closed sender for a pull: the browser fires a track event on that transceiver.
+      const event = new Event("track");
+      Object.defineProperties(event, { track: { value: track as unknown as MediaStreamTrack }, transceiver: { value: ownInactive } });
+      this.dispatchEvent(event);
+      return;
+    }
     if (reused) {
       // The SFU reused this mid: the browser fires the track event on the existing transceiver with its existing track.
+      if (!this.firesTrackOnReuse) return;
       const event = new Event("track");
       Object.defineProperties(event, { track: { value: reused.receiver.track }, transceiver: { value: reused } });
       this.dispatchEvent(event);
