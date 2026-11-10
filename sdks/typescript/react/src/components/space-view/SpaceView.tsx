@@ -97,7 +97,8 @@ export interface SpaceViewProps {
 }
 
 function toggleCallFullscreen() {
-  const request = document.fullscreenElement ? document.exitFullscreen() : document.querySelector<HTMLElement>("[data-part=call-frame]")?.requestFullscreen();
+  const frame = document.activeElement?.closest<HTMLElement>("[data-part=call-frame]") ?? document.querySelector<HTMLElement>("[data-part=call-frame]");
+  const request = document.fullscreenElement ? document.exitFullscreen() : frame?.requestFullscreen();
   // The browser can refuse (an embedding frame without the fullscreen permission); the call stays as it is.
   request?.catch(() => undefined);
 }
