@@ -466,52 +466,95 @@ func fileCertificateNotAfter(path string) (time.Time, bool) {
 	}
 }
 
+// serverCertificate says what one verified TLS handshake showed about a server.
+type serverCertificate struct {
+	// reached is false when no handshake completed and verification never failed
+	// (refused, timed out, reset): the caller decides what that means.
+	reached   bool
+	untrusted bool
+	// notAfter is the effective expiry: the earliest NotAfter along the verified
+	// chain, or the NotAfter of the certificate verification found expired.
+	notAfter time.Time
+}
+
 // sfuServerCertificate reads one node's server certificate. A node that cannot be
-// reached gives no reading: the readiness row owns that. A certificate that does
-// not chain to the configured CA for the configured name is a finding of its own,
+// reached gives no reading: the readiness row owns that. A certificate that does not
+// chain to the configured CA for the configured name is a finding of its own,
 // because an impostor must not be able to hide an expiring or expired certificate.
 func sfuServerCertificate(ctx context.Context, probe sfuProbe) certReading {
 	client, err := sfuClient(probe)
 	if err != nil {
 		return certReading{}
 	}
-	config := client.Transport.(*http.Transport).TLSClientConfig
-	chain, ok := serverChain(ctx, probe.URL, config)
-	if !ok {
+	// The configured CA is the pinned root, so its own expiry counts too.
+	seen := verifiedServerCertificate(ctx, probe.URL, client.Transport.(*http.Transport).TLSClientConfig, true)
+	if !seen.reached {
 		return certReading{}
 	}
-	reading := certReading{label: "an own SFU server certificate", notAfter: chain[0].NotAfter}
-	// The configured CA is the pinned root, so its own expiry counts too.
-	if notAfter, ok := trustedWhenIssued(chain, config.RootCAs, config.ServerName, true); ok {
-		reading.notAfter = notAfter
-	} else {
+	reading := certReading{label: "an own SFU server certificate", notAfter: seen.notAfter}
+	if seen.untrusted {
 		reading.failure = "an own SFU server certificate is untrusted"
 	}
 	return reading
 }
 
-// trustedWhenIssued checks the chain and the name at a moment inside the leaf's
-// validity, so only expiry is ignored, and returns the chain's effective expiry: the
-// earliest NotAfter along the best verified path, because a handshake fails once any
-// certificate on it has expired. The root counts only when it is the configured CA
-// (includeRoot); a system root's own expiry is not this certificate's to renew.
-func trustedWhenIssued(chain []*x509.Certificate, roots *x509.CertPool, dnsName string, includeRoot bool) (time.Time, bool) {
-	intermediates := x509.NewCertPool()
-	for _, certificate := range chain[1:] {
-		intermediates.AddCert(certificate)
+// doorRoots is the door's trust store; nil means the system roots. Tests set it.
+var doorRoots *x509.CertPool
+
+// doorCertificate reads the door's expiry over a verified handshake, so an expired
+// certificate reads as expired and an untrusted or unreachable door as a failure. A
+// system root's own expiry is not the door's to renew, so it does not count.
+func doorCertificate(ctx context.Context, doorURL string) certReading {
+	reading := certReading{label: "the direct door certificate", failure: "the direct door could not be verified over TLS"}
+	seen := verifiedServerCertificate(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: doorRoots}, false)
+	if seen.reached && !seen.untrusted {
+		reading.notAfter, reading.failure = seen.notAfter, ""
 	}
-	verified, err := chain[0].Verify(x509.VerifyOptions{
-		Roots:         roots,
-		Intermediates: intermediates,
-		DNSName:       dnsName,
-		CurrentTime:   chain[0].NotBefore.Add(time.Second),
-		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	})
+	return reading
+}
+
+// verifiedServerCertificate completes a TLS handshake with the URL's host using
+// normal verification. A chain that verifies gives its effective expiry. A chain
+// that fails only because a certificate has expired gives that certificate's
+// NotAfter, because an expired certificate is the very thing this check reports.
+// Any other verification failure (unknown authority, wrong name) is untrusted.
+// An untrusted failure may carry no certificates to read, and then nothing is
+// known about its expiry.
+func verifiedServerCertificate(ctx context.Context, rawURL string, config *tls.Config, includeRoot bool) serverCertificate {
+	target, err := url.Parse(rawURL)
+	if err != nil || target.Scheme != "https" || target.Hostname() == "" {
+		return serverCertificate{}
+	}
+	port := target.Port()
+	if port == "" {
+		port = "443"
+	}
+	ctx, cancel := context.WithTimeout(ctx, certNodeTimeout)
+	defer cancel()
+	dialer := tls.Dialer{Config: config}
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(target.Hostname(), port))
 	if err != nil {
-		return time.Time{}, false
+		var verification *tls.CertificateVerificationError
+		if !errors.As(err, &verification) {
+			return serverCertificate{}
+		}
+		var invalid x509.CertificateInvalidError
+		if errors.As(verification.Err, &invalid) && invalid.Reason == x509.Expired && invalid.Cert != nil {
+			return serverCertificate{reached: true, notAfter: invalid.Cert.NotAfter}
+		}
+		return serverCertificate{reached: true, untrusted: true}
 	}
+	defer conn.Close()
+	return serverCertificate{reached: true, notAfter: effectiveExpiry(conn.(*tls.Conn).ConnectionState().VerifiedChains, includeRoot)}
+}
+
+// effectiveExpiry is the earliest NotAfter along the best verified path, because a
+// handshake fails once any certificate on it has expired. The root counts only when
+// it is the configured CA (includeRoot); a system root's own expiry is not this
+// certificate's to renew.
+func effectiveExpiry(chains [][]*x509.Certificate, includeRoot bool) time.Time {
 	var best time.Time
-	for _, path := range verified {
+	for _, path := range chains {
 		if !includeRoot && len(path) > 1 {
 			path = path[:len(path)-1]
 		}
@@ -525,53 +568,7 @@ func trustedWhenIssued(chain []*x509.Certificate, roots *x509.CertPool, dnsName 
 			best = earliest
 		}
 	}
-	return best, true
-}
-
-// doorRoots is the door's trust store; nil means the system roots. Tests set it.
-var doorRoots *x509.CertPool
-
-// doorCertificate reads the door's expiry, then checks its chain against the system
-// roots, so an expired certificate reads as expired and an untrusted one as a failure.
-func doorCertificate(ctx context.Context, doorURL string) certReading {
-	reading := certReading{label: "the direct door certificate", failure: "the direct door could not be verified over TLS"}
-	chain, ok := serverChain(ctx, doorURL, &tls.Config{MinVersion: tls.VersionTLS12})
-	if !ok {
-		return reading
-	}
-	reading.notAfter = chain[0].NotAfter
-	target, _ := url.Parse(doorURL)
-	if notAfter, ok := trustedWhenIssued(chain, doorRoots, target.Hostname(), false); ok {
-		reading.notAfter, reading.failure = notAfter, ""
-	}
-	return reading
-}
-
-// serverChain completes a TLS handshake with the URL's host without verifying the
-// server's chain and returns the certificates it presented. Callers verify with
-// trustedWhenIssued, because a plain verification fails on an expired certificate
-// and the expiry check must still see that.
-func serverChain(ctx context.Context, rawURL string, config *tls.Config) ([]*x509.Certificate, bool) {
-	target, err := url.Parse(rawURL)
-	if err != nil || target.Scheme != "https" || target.Hostname() == "" {
-		return nil, false
-	}
-	port := target.Port()
-	if port == "" {
-		port = "443"
-	}
-	ctx, cancel := context.WithTimeout(ctx, certNodeTimeout)
-	defer cancel()
-	config = config.Clone()
-	config.InsecureSkipVerify = true
-	dialer := tls.Dialer{Config: config}
-	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(target.Hostname(), port))
-	if err != nil {
-		return nil, false
-	}
-	defer conn.Close()
-	chain := conn.(*tls.Conn).ConnectionState().PeerCertificates
-	return chain, len(chain) > 0
+	return best
 }
 
 func sfuClient(probe sfuProbe) (*http.Client, error) {
