@@ -182,6 +182,32 @@ The drill spent about 3.6 minutes from nothing to a node that carried a test cal
 
 Recommendation: do not turn on weekly backups. The node holds no state of its own (certificates are in 1Password and the private directory, the image and config come from the deploy), so the rebuild above takes under 4 minutes and a backup would only save part of the 163 seconds of cloud-init while restoring a stale image. DigitalOcean weekly backups cost 20% of the Droplet price: 3.60 USD a month for the 18 USD node, 43.20 USD a year. A manual snapshot costs 0.06 USD per GB-month of used disk; confirm the exact price in the DigitalOcean billing page before enabling either.
 
+## What guests see when the media node restarts or reboots
+
+Measured once on the staging node (1 vCPU, 1 GB Droplet) with two live guests on `chalk_sfu`, sampled every 250 ms. The guests stayed on the same page for both faults. Neither guest reloaded or rejoined by hand, the roster stayed at 2 and no error code appeared. Both are single runs, so read the times as an order of magnitude, not a promise.
+
+| Fault                                                       | Guest-visible state                                                                                                                                                                     | Media frozen | Back to flowing                           |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------- |
+| Media node process restart (`systemctl --user ... restart`) | Video and audio freeze at once. About 6 s later each guest shows `reconnecting` for about 5 s, its camera and microphone show `requesting` while they publish again, then `live`.       | about 14 s   | about 13 s after the restart command ends |
+| Node host reboot                                            | Video and audio freeze at once. Each guest shows `reconnecting` for about 24 s, with camera and microphone `requesting`, until the host is back and the service is active, then `live`. | about 34 s   | about 37 s after the reboot command       |
+
+Expected behaviour per case:
+
+1. **Process restart.** Tell the class to wait about 15 seconds. The SDK recovers on its own: do not ask guests to reload, since a reload only adds its own join time.
+2. **Host reboot.** The Droplet and service were back about 29 s after the reboot command and guests were flowing about 8 s after that. Tell the class to wait under a minute. The test did not cover an outage longer than this, so if the node is still down after 2 minutes, treat it as the Node down case above. How long the SDK keeps trying before it gives up was not measured, so ask guests who are still frozen to reload.
+
+The guests' `reconnecting` state started about 6 s after media stopped in both runs.
+
+## After a host resize or deploy
+
+After a host resize or deploy, run one throwaway two-guest proof before trusting the host. It creates one random-named Episode directly on the node, sends audio and video between two test participants, ends the Episode and checks the node returns to its earlier load. It prints `<env>-live-smoke: PASS` or `FAIL: <reason>`.
+
+```sh
+features/media/sfu/scripts/live-smoke production --confirm production
+```
+
+On staging, hold the staging lease: `scripts/staging-sfu/staging-lock --holder <you> --purpose live-smoke --run-id <label> -- features/media/sfu/scripts/live-smoke staging --confirm staging`.
+
 ## Kill-switch steps (timed)
 
 <!-- Owned by the kill-switch drill lane. Add the timed steps here; do not copy them elsewhere. -->
