@@ -79,6 +79,7 @@ export default function ReactionSheet({ open, isHandRaised, onToggleHandRaise, r
   }, [open, sheet]);
   const closing = useRef<number | undefined>(undefined);
   // A tray reopened inside the delay must not be closed by the previous send's timer.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [timer] Cancel the pending close timer when the sheet opens or closes again, and on unmount.
   useEffect(() => () => window.clearTimeout(closing.current), [open]);
   const send = (emoji: string) => {
     void trigger("success");
