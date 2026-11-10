@@ -220,7 +220,7 @@ Every API request span (`journey.phase.http`) carries `ingress=direct` or
 `ingress=tunnel`, as Sync's `sync.websocket.handshake` does. `direct` means the
 host's TLS proxy marked the request with `X-Chalk-Ingress: direct`, and only a
 trusted proxy peer (`CHALK_API_TRUSTED_PROXY_CIDRS`) can set the mark; everything
-else is `tunnel`. Split signalling latency and errors by it. A direct request
+else is `tunnel`. A client can also send the mark through the Tunnel, because the Tunnel peer is trusted: that request is classified `direct` and only subjects itself to the direct bound, so treat the attribute as client-influenceable and read it with the proxy's own request counts. Split signalling latency and errors by it. A direct request
 over the per-IP bound (300 in 10 seconds, before any credential check) answers
 429 with `Retry-After` and counts as the `direct.ingress.ip` policy. The change
 adds no journey-ledger event: no lifecycle transition changes, and a join under

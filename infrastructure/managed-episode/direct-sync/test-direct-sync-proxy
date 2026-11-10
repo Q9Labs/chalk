@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# The sourced proxy script owns unit, install_dir, config_dir, unit_path and calls the fetch_caddy defined below.
+# shellcheck disable=SC1091,SC2016,SC2030,SC2031,SC2034,SC2154,SC2329
+# Checks that `direct-sync-proxy install` validates every input before it replaces anything installed,
+# and puts the previous install back when switching over fails. Stubs stand in for nft, systemctl and Caddy.
+set -uo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+stubs="${work}/stubs"
+mkdir "$stubs"
+
+# nft --check fails when NFT_CHECK_FAILS=1. systemctl records its calls; its first restart fails when RESTART_FAILS=1.
+cat >"${stubs}/nft" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == --check && "${NFT_CHECK_FAILS:-0}" == 1 ]] && { echo 'nft: syntax error' >&2; exit 1; }
+exit 0
+EOF
+cat >"${stubs}/systemctl" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"${SYSTEMCTL_LOG}"
+if [[ "$1" == restart && "${RESTART_FAILS:-0}" == 1 && ! -e "${SYSTEMCTL_LOG}.failed" ]]; then
+  touch "${SYSTEMCTL_LOG}.failed"
+  exit 1
+fi
+exit 0
+EOF
+cat >"${stubs}/id" <<'EOF'
+#!/usr/bin/env bash
+echo 0
+EOF
+# install fails on the file named by INSTALL_FAILS_ON after writing part of it, like a full disk.
+real_install="$(command -v install)"
+cat >"${stubs}/install" <<EOF
+#!/usr/bin/env bash
+if [[ -n "\${INSTALL_FAILS_ON:-}" && "\${*: -1}" == *"/\${INSTALL_FAILS_ON}.new" ]]; then
+  printf partial >"\${*: -1}"
+  exit 1
+fi
+exec ${real_install} "\$@"
+EOF
+# curl fails when CURL_FAILS=1, otherwise saves junk that fails the checksum.
+cat >"${stubs}/curl" <<'EOF'
+#!/usr/bin/env bash
+[[ "${CURL_FAILS:-0}" == 1 ]] && exit 22
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == --output ]]; then printf junk >"$2"; fi
+  shift
+done
+exit 0
+EOF
+cat >"${stubs}/uname" <<'EOF'
+#!/usr/bin/env bash
+echo x86_64
+EOF
+chmod +x "${stubs}"/*
+
+failures=0
+check() { # name, exit status of the condition just run
+  if [[ "$2" == 0 ]]; then printf 'PASS %s\n' "$1"; else printf 'FAIL %s\n' "$1"; failures=1; fi
+}
+
+# run_install <name> <previous|none> [VAR=value ...]: one install in a fresh root. Sets $root and $status.
+run_install() {
+  local name="$1" previous="$2"
+  shift 2
+  root="${work}/root-${name}"
+  mkdir -p "${root}/opt/proxy" "${root}/etc/proxy" "${root}/etc/units"
+  : >"${root}/systemctl.log"
+  if [[ "$previous" == previous ]]; then
+    printf 'old caddy\n' >"${root}/opt/proxy/caddy"
+    printf 'old caddyfile\n' >"${root}/etc/proxy/Caddyfile"
+    printf 'old nft\n' >"${root}/etc/proxy/chalk-direct-sync-proxy.nft"
+    printf 'old unit\n' >"${root}/etc/units/chalk-direct-sync-proxy.service"
+  fi
+  status=0
+  # Run in the background and wait: `( ... ) || status=$?` would switch errexit off inside the subshell and mask failures.
+  (
+    export PATH="${stubs}:${PATH}" SYSTEMCTL_LOG="${root}/systemctl.log" CHALK_DIRECT_SYNC_HOST=direct.example.test
+    for assignment in "$@"; do export "${assignment?}"; done
+    source "${here}/direct-sync-proxy"
+    install_dir="${root}/opt/proxy"
+    config_dir="${root}/etc/proxy"
+    unit_path="${root}/etc/units/${unit}"
+    fetch_caddy() {
+      printf '#!/usr/bin/env bash\n[[ "$1" == validate && "${CADDY_VALIDATE_FAILS:-0}" == 1 ]] && exit 1\nexit 0\n' >"$1"
+      chmod 0755 "$1"
+    }
+    install_proxy
+  ) >"${root}/out.log" 2>&1 &
+  wait "$!" || status=$?
+}
+
+previous_install_is_intact() {
+  [[ "$(cat "${root}/opt/proxy/caddy")" == 'old caddy' &&
+    "$(cat "${root}/etc/proxy/Caddyfile")" == 'old caddyfile' &&
+    "$(cat "${root}/etc/proxy/chalk-direct-sync-proxy.nft")" == 'old nft' &&
+    "$(cat "${root}/etc/units/chalk-direct-sync-proxy.service")" == 'old unit' ]]
+}
+
+restarts() { grep -c '^restart ' "${root}/systemctl.log" || true; }
+
+run_install fresh none
+[[ "$status" == 0 && -f "${root}/etc/proxy/chalk-direct-sync-proxy.nft" && -f "${root}/opt/proxy/caddy" && "$(restarts)" == 1 ]] \
+  && grep -q 'direct.example.test' "${root}/etc/units/chalk-direct-sync-proxy.service"
+check 'a fresh install installs every file for the host and restarts the unit once' $?
+
+run_install bad-nft previous NFT_CHECK_FAILS=1
+[[ "$status" != 0 && "$(restarts)" == 0 ]] && previous_install_is_intact && grep -q 'nothing was installed' "${root}/out.log"
+check 'nftables caps that do not validate leave the previous install untouched' $?
+
+run_install bad-caddyfile previous CADDY_VALIDATE_FAILS=1
+[[ "$status" != 0 && "$(restarts)" == 0 ]] && previous_install_is_intact && grep -q 'nothing was installed' "${root}/out.log"
+check 'a Caddyfile that does not validate leaves the previous install untouched' $?
+
+run_install bad-nft-fresh none NFT_CHECK_FAILS=1
+[[ "$status" != 0 && ! -e "${root}/etc/proxy/Caddyfile" && ! -e "${root}/etc/units/chalk-direct-sync-proxy.service" ]]
+check 'invalid caps on a fresh host install nothing, not even the Caddyfile' $?
+
+run_install restart-fails previous RESTART_FAILS=1
+[[ "$status" != 0 && "$(restarts)" == 2 ]] && previous_install_is_intact
+check 'a failed restart puts the previous install back and restarts it' $?
+
+run_install restart-fails-fresh none RESTART_FAILS=1
+[[ "$status" != 0 && ! -e "${root}/etc/units/chalk-direct-sync-proxy.service" && ! -e "${root}/etc/proxy/Caddyfile" && ! -e "${root}/opt/proxy/caddy" ]]
+check 'a failed first install removes what it added' $?
+
+run_install partial-copy previous INSTALL_FAILS_ON=Caddyfile
+[[ "$status" != 0 && "$(restarts)" == 1 ]] && previous_install_is_intact && ! compgen -G "${root}/*/*/*.new" >/dev/null
+check 'a copy that fails part way never replaces an installed file and leaves no partial file' $?
+
+# macOS mktemp ignores TMPDIR, so run_fetch puts this one first on PATH to keep the work folder where the test can see it.
+fetch_stubs="${work}/fetch-stubs"
+mkdir "$fetch_stubs"
+cat >"${fetch_stubs}/mktemp" <<'EOF'
+#!/usr/bin/env bash
+dir="${TMPDIR}/work.$$.${RANDOM}"
+mkdir "$dir"
+echo "$dir"
+EOF
+chmod +x "${fetch_stubs}/mktemp"
+
+# run_fetch <name> [VAR=value ...]: the real fetch_caddy with a private TMPDIR. Sets $fetch_tmp and $status.
+run_fetch() {
+  local name="$1"
+  shift
+  fetch_tmp="${work}/tmp-${name}"
+  mkdir "$fetch_tmp"
+  status=0
+  (
+    export PATH="${fetch_stubs}:${stubs}:${PATH}" TMPDIR="$fetch_tmp"
+    for assignment in "$@"; do export "${assignment?}"; done
+    source "${here}/direct-sync-proxy"
+    fetch_caddy "${work}/caddy-${name}"
+  ) >"${fetch_tmp}.log" 2>&1 &
+  wait "$!" || status=$?
+}
+
+run_fetch download-fails CURL_FAILS=1
+[[ "$status" != 0 && -z "$(ls -A "$fetch_tmp")" ]]
+check 'a failed download leaves no temporary folder' $?
+
+run_fetch bad-checksum
+[[ "$status" != 0 && -z "$(ls -A "$fetch_tmp")" ]] && grep -q 'checksum mismatch' "${fetch_tmp}.log"
+check 'a checksum mismatch leaves no temporary folder' $?
+
+exit "$failures"

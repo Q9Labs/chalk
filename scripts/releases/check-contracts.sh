@@ -28,6 +28,7 @@ if [[ "${MANAGED_ENVIRONMENT:-nightly}" == nightly ]]; then
   check dispatcher-configuration python3 scripts/releases/media.py check_configuration --environment nightly
 fi
 check controller infrastructure/managed-episode/scripts/test-deployment-controller
+check direct-sync-proxy infrastructure/managed-episode/direct-sync/test-direct-sync-proxy
 if [[ "$mode" == --plan ]]; then exit "$failed"; fi
 check workspace-dependencies env CI=true pnpm install --frozen-lockfile
 check dispatcher-tests pnpm --dir apps/transcription-dispatcher test
