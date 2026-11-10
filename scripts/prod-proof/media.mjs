@@ -240,7 +240,7 @@ function sdpOf(request) {
   }
 }
 
-function signalingOperation(url) {
+export function signalingOperation(url) {
   const path = new URL(url).pathname;
   const operation = /\/media\/sfu\/(signal|tracks\/close|tracks|renegotiate|publications)$/.exec(path)?.[1];
   return operation ?? (path.endsWith("/access-grant") ? "access-grant" : null);
