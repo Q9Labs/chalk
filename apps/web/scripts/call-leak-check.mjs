@@ -282,7 +282,10 @@ async function runPool(jobs, concurrency) {
       results[index] = await jobs[index]();
     }
   };
-  await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
+  // Let started journeys finish so one setup failure does not close the browser under the others.
+  const settled = await Promise.allSettled(Array.from({ length: Math.min(concurrency, jobs.length) }, worker));
+  const rejected = settled.find((outcome) => outcome.status === "rejected");
+  if (rejected) throw rejected.reason;
   return results;
 }
 
