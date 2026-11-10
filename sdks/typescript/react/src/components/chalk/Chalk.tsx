@@ -52,10 +52,7 @@ type SpaceEventCallbacks = {
 };
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
-    readonly defaults?: {
-      readonly microphone?: boolean;
-      readonly camera?: boolean;
-    };
+    readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
@@ -369,7 +366,15 @@ function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((pr
 }
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();
-  return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
+  const { microphoneDeviceId, cameraDeviceId, speakerDeviceId } = props.defaults ?? {};
+  return {
+    ...(displayName ? { displayName } : {}),
+    microphone: props.defaults?.microphone ?? true,
+    camera: props.defaults?.camera ?? true,
+    ...(microphoneDeviceId ? { microphoneDeviceId } : {}),
+    ...(cameraDeviceId ? { cameraDeviceId } : {}),
+    ...(speakerDeviceId ? { speakerDeviceId } : {}),
+  };
 }
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward participantJoined events to the current host callback; unsubscribe on replacement.

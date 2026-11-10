@@ -123,11 +123,21 @@ export class SpaceClientCore {
     return Effect.sync(() => this.#requireActive()).pipe(
       Effect.andThen(this.#connection.configureJoin(options)),
       Effect.tap(() => Effect.sync(() => this.controllers.media.configure(options))),
+      Effect.andThen(this.#selectDevices(options)),
       Effect.andThen(this.#connection.join()),
       Effect.andThen(options.displayName === undefined ? Effect.void : this.controllers.participants.renameSelf(options.displayName)),
       Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),
       Effect.mapError(normalizeClientError),
     );
+  }
+  #selectDevices({ microphoneDeviceId, cameraDeviceId, speakerDeviceId }: JoinOptions): ClientEffect<void> {
+    const { media } = this.controllers;
+    return Effect.all([
+      microphoneDeviceId ? media.selectMicrophone(microphoneDeviceId) : Effect.void,
+      cameraDeviceId ? media.selectCamera(cameraDeviceId) : Effect.void,
+      // A runtime without output selection keeps the system speaker; that never blocks joining.
+      speakerDeviceId ? media.selectSpeaker(speakerDeviceId).pipe(Effect.ignore) : Effect.void,
+    ]).pipe(Effect.asVoid);
   }
   leave(): ClientEffect<void> {
     return this.#connection.leave().pipe(Effect.mapError(normalizeClientError));

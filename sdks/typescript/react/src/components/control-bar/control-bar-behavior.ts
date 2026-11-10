@@ -6,6 +6,8 @@ import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
 import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
+import { NO_DETECTED_DEVICES, watchMediaDevices } from "../../internal/media-devices";
+import { playSpeakerTestTone } from "../../internal/speaker-test";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 
 export interface MediaDevice {
@@ -117,18 +119,6 @@ export interface ControlBarProps {
 
 export const DEFAULT_CONTROL_BAR_BUTTONS: ControlBarButtonName[] = ["mic", "video", "screenshare", "record", "whiteboard", "handraise", "leave", "participants", "chat", "reactions"];
 
-interface DeviceGroups {
-  readonly audioinput: MediaDevice[];
-  readonly audiooutput: MediaDevice[];
-  readonly videoinput: MediaDevice[];
-}
-
-const EMPTY_DETECTED_DEVICES: DeviceGroups = {
-  audioinput: [],
-  audiooutput: [],
-  videoinput: [],
-};
-
 function mergeDevices(...deviceGroups: ReadonlyArray<readonly MediaDevice[] | undefined>): MediaDevice[] {
   const devicesById = new Map<string, MediaDevice>();
   for (const deviceGroup of deviceGroups) {
@@ -184,33 +174,13 @@ export function useControlBarSurfaceBehavior({
   detectDevices = true,
 }: ControlBarSurfaceBehaviorOptions): ControlBarSurfaceBehavior {
   const themeVariables = useMemo(() => getParticipantThemeVariables(participantColorSeed, participantGradientPreference), [participantColorSeed, participantGradientPreference]);
-  const [detectedDevices, setDetectedDevices] = useState(EMPTY_DETECTED_DEVICES);
+  const [detectedDevices, setDetectedDevices] = useState(NO_DETECTED_DEVICES);
   const buttonsToRender = buttons ?? DEFAULT_CONTROL_BAR_BUTTONS;
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Enumerate media devices and observe devicechange; remove the listener and ignore late enumeration on cleanup.
   useEffect(() => {
-    if (!detectDevices || density !== "comfortable" || !navigator.mediaDevices?.enumerateDevices) return;
-    let cancelled = false;
-    const syncDevices = async () => {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        if (!cancelled) {
-          setDetectedDevices({
-            audioinput: devices.filter((device) => device.kind === "audioinput"),
-            audiooutput: devices.filter((device) => device.kind === "audiooutput"),
-            videoinput: devices.filter((device) => device.kind === "videoinput"),
-          });
-        }
-      } catch {
-        if (!cancelled) setDetectedDevices(EMPTY_DETECTED_DEVICES);
-      }
-    };
-    void syncDevices();
-    navigator.mediaDevices.addEventListener?.("devicechange", syncDevices);
-    return () => {
-      cancelled = true;
-      navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
-    };
+    if (!detectDevices || density !== "comfortable") return;
+    return watchMediaDevices(setDetectedDevices).stop;
   }, [density, detectDevices]);
 
   const effectiveAudioInputDevices = withSelectedDeviceFallback(mergeDevices(audioInputDevices, detectedDevices.audioinput), selectedAudioInput, "Current microphone", "audioinput");
@@ -358,38 +328,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     selectedAudioInput: media.selection.microphone ?? undefined,
     selectedAudioOutput: media.selection.speaker ?? undefined,
     selectedVideoInput: media.selection.camera ?? undefined,
-    onTestSpeaker: () =>
-      void run(
-        async () => {
-          const context = new AudioContext();
-          const oscillator = context.createOscillator();
-          const gain = context.createGain();
-          const output = context.createMediaStreamDestination();
-          const audio = new Audio();
-          try {
-            if (media.selection.speaker && audio.setSinkId) await audio.setSinkId(media.selection.speaker);
-            audio.srcObject = output.stream;
-            oscillator.connect(gain).connect(output);
-            gain.gain.value = 0.15;
-            oscillator.frequency.value = 440;
-            oscillator.start();
-            await audio.play();
-            await new Promise<void>((resolve) => {
-              oscillator.onended = () => resolve();
-              oscillator.stop(context.currentTime + 0.4);
-            });
-          } finally {
-            audio.pause();
-            audio.srcObject = null;
-            oscillator.disconnect();
-            gain.disconnect();
-            output.stream.getTracks().forEach((track) => track.stop());
-            await context.close();
-          }
-        },
-        "speaker",
-        "test",
-      ),
+    onTestSpeaker: () => void run(() => playSpeakerTestTone(media.selection.speaker ?? undefined), "speaker", "test"),
     onToggleMute: toggleMicrophone,
     onToggleVideo: toggleCamera,
     onAudioInputChange: (deviceId) => void run(() => client.media.selectMicrophone(deviceId), "microphone", "select"),
