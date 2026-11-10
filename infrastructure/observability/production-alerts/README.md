@@ -70,6 +70,26 @@ proof of continued unreadiness; the freshness monitor now requires six rules.
 Install the updated collector and monitor definitions together. The independent
 uptime Worker remains separate and may report individual failed checks.
 
+### Certificate expiry
+
+The collector also emits one global `certificate-expiry` row per run when it has a
+certificate to read: the API's SFU client certificate (`CHALK_ALERT_SFU_CLIENT_CERT`, a
+file), each node's server certificate (read from a TLS handshake with the same probe as
+`sfu-readiness`), and the direct door's certificate when `CHALK_ALERT_DIRECT_DOOR_URL`
+(`https://<door host>`, private configuration) is set. With none of these set it emits
+no row. The row is 1 when the soonest certificate has 21 days or fewer left, has
+expired, or the door cannot finish a TLS handshake; otherwise 0. The 21-day and the
+7-day text differ, so the grouped monitor notifies twice, once at each stage. An SFU
+node that cannot be reached is the `sfu-readiness` row's concern, so an unreachable
+node adds nothing here.
+
+The row needs no monitor change: the grouped monitor already matches every rule that is
+not excluded by name. The own SFU server and client certificates last 180 and 365
+days, issued by `features/media/sfu/deploy/certs`; renew them with `certs <env> server`
+and `deploy`. The direct door's certificate is issued and renewed by its Caddy proxy
+over TLS-ALPN-01 on port 443; a warning there means renewal is failing, so check the
+proxy journal.
+
 ### Own SFU readiness
 
 When `CHALK_ALERT_SFU_READY_URL` (one node) or `CHALK_ALERT_SFU_READY_URLS` (a

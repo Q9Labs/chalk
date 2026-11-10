@@ -219,3 +219,46 @@ func TestRetirementDebtSQLAgesTheOldestDebt(t *testing.T) {
 		t.Fatalf("the oldest debt is 20 minutes old: %d", got)
 	}
 }
+
+func TestCertificateExpiryWarnsAtTwentyOneAndSevenDaysAndWhenTheDoorFails(t *testing.T) {
+	probes, servers := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	// The test certificates live one hour, so "now" moves instead of the certificates.
+	expiry := servers[0].Certificate().NotAfter
+	cases := []struct {
+		name  string
+		now   time.Time
+		value int64
+		want  string
+	}{
+		{"far from expiry", expiry.Add(-30 * 24 * time.Hour), 0, "all_valid"},
+		{"21 days left", expiry.Add(-20 * 24 * time.Hour), 1, "expires within 21 days"},
+		{"7 days left", expiry.Add(-6 * 24 * time.Hour), 1, "expires within 7 days"},
+		{"expired", expiry.Add(time.Minute), 1, "has expired"},
+	}
+	for _, c := range cases {
+		items := collectCertificateExpiry(context.Background(), probes, "", c.now)
+		if len(items) != 1 || items[0].Rule != "certificate-expiry" || items[0].Value != c.value || !strings.Contains(items[0].Reason, c.want) {
+			t.Errorf("%s: %+v", c.name, items)
+		}
+	}
+	// The soonest certificate decides: the API client certificate and the server certificate both live one hour here.
+	items := collectCertificateExpiry(context.Background(), probes, "", expiry.Add(-6*24*time.Hour))
+	formatMessage(&items[0])
+	if !strings.Contains(items[0].Summary, "7 days") || strings.Contains(items[0].Summary+items[0].Next, "chalk-sfu") {
+		t.Errorf("the message must name the window and no certificate name: %+v", items[0])
+	}
+	dead := httptest.NewUnstartedServer(http.NotFoundHandler())
+	dead.StartTLS()
+	deadURL := dead.URL
+	dead.Close()
+	items = collectCertificateExpiry(context.Background(), nil, deadURL, time.Now())
+	if len(items) != 1 || items[0].Value != 1 || strings.Contains(items[0].Reason, "127.0.0.1") {
+		t.Errorf("a door that cannot handshake must alert without an address: %+v", items)
+	}
+}
+
+func TestCertificateExpiryRowOnlyWhenConfigured(t *testing.T) {
+	if items := collectCertificateExpiry(context.Background(), nil, "", time.Now()); items != nil {
+		t.Fatalf("nothing configured must emit no row: %+v", items)
+	}
+}
