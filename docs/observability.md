@@ -870,6 +870,20 @@ acquisition result, not a new permission query. Unclassified failures stay
 Deploy the API allowlist before shipping an SDK that emits these fields; older
 APIs reject unknown report fields.
 
+Two more events ride in the same buffer, so they appear only inside a failure
+report and never trigger one. `receivers_closed` records each time the client
+closes receive-only tracks: `receivers_stopped` (0 to 10000) counts the receivers
+closed, and `bundle_tag_held` is true when one of them owned the BUNDLE transport,
+which the client parks inactive instead of stopping. `access_retry` records that
+the client asked for fresh access after a rejection, during a join or while
+connected; its `state` field tells which. Neither event carries a Space,
+participant or media identifier. The report is tenant-scoped, and the API log
+line already adds `space_id` and the `provider` of the verified media credential
+(`cloudflare_sfu` or `chalk_sfu`), so the events add no plane field. The API
+rejects the count and the flag on any other event. The replacement cause stays
+on `media.connection_replacement`. Deploy the API allowlist to production before
+the SDK release that emits these events.
+
 Listener audio receive health uses the same report endpoint, not a second
 diagnostic channel. It tracks desired remote `microphone` and `screen_audio`
 publications, never camera or local capture. Two event names also serve as report

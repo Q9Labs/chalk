@@ -96,6 +96,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #localListeners = new Set<(publications: readonly MediaPublication[]) => void>();
   readonly #onError: CloudflareSFUClientOptions["onError"];
   readonly #onDiagnostic: CloudflareSFUClientOptions["onDiagnostic"];
+  readonly #onReceiveHealth: CloudflareSFUClientOptions["onReceiveHealth"];
   readonly #onRemoteTrack: ((publication: CloudflareSFURemoteTrack) => void) | undefined;
   readonly #onScreenEnded: (() => void) | undefined;
   readonly #participantId: string;
@@ -181,6 +182,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replaceMediaConnection = options.replaceMediaConnection;
     this.#onError = options.onError;
     this.#onDiagnostic = options.onDiagnostic;
+    this.#onReceiveHealth = options.onReceiveHealth;
     this.#onRemoteTrack = options.onRemoteTrack;
     this.#onScreenEnded = options.onScreenEnded;
     this.#peerConnectionFactory = options.peerConnectionFactory;
@@ -191,7 +193,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       clearInterval: (timer) => globalThis.clearInterval(timer),
       connection: () => this.#connection,
       tracks: () => this.#remoteTracks.values(),
-      onEvent: (event) => this.#invokeListener(() => options.onReceiveHealth?.(event)),
+      onEvent: (event) => this.#invokeListener(() => this.#onReceiveHealth?.(event)),
     });
     this.#snapshot = freezeSnapshot({
       connection: { phase: "idle", peerConnectionState: this.#connection.connectionState, iceConnectionState: this.#connection.iceConnectionState },
@@ -1597,6 +1599,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   async #closeReceivers(receivers: readonly { readonly publication: Pick<CloudflareSFUPublication, "publicationId" | "source">; readonly transceiver: RTCRtpTransceiver; readonly mid: string }[], generation: number): Promise<void> {
     const connectionId = this.#bootstrap.connectionId;
     // The SFU rejects a request of more than 16 tracks. A forced close of a closed track answers alreadyClosed, so a retry after a partial failure is safe.
+    let bundleTagHeld = false;
     for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
       await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
       this.#requireGeneration(generation);
@@ -1605,11 +1608,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         // Stopping moves no SDP, so the next offer of any kind would reject this m-section. Rejecting the BUNDLE tag makes
         // Chrome drop the transport and the SFU session with it, so that one receiver is parked inactive instead.
         if (mid === bundleTagOf(this.#connection)) {
+          bundleTagHeld = true;
           transceiver.direction = "inactive";
           transceiver.receiver.track.stop();
         } else transceiver.stop();
       }
     }
+    if (receivers.length > 0) this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: receivers.length, bundle_tag_held: bundleTagHeld }));
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
