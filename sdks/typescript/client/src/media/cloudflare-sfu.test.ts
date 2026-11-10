@@ -2449,6 +2449,31 @@ describe("a withdrawn receiver that owns the BUNDLE transport", () => {
     }
   });
 
+  it("revives the first closed mid that does not own the transport after 23 other receivers closed and parked", async () => {
+    const speakers = Array.from({ length: 25 }, (_, index) => remote(`reuse-after-many-${index}`, `participant-${index + 2}`, "microphone"));
+    const call = await joinSecond(speakers);
+    try {
+      call.peer.reusesMids = true;
+      const track = call.section("remote-1").receiver.track as unknown as FakeTrack;
+      await call.withdraw([]);
+      expect(call.section("remote-1").direction).toBe("inactive");
+      const next = remote("reuse-after-many-again", "participant-3", "microphone");
+      call.harness.transport.reuseRemoteMids.push("remote-1");
+      call.harness.transport.immediateRenegotiation = true;
+      call.harness.transport.remoteOfferSDP = `v=0\r\n${offerSection("remote-1", "sendonly")}`;
+      call.harness.transport.snapshot = { incarnation: 1, sequence: call.nextSequence(), publications: [next] };
+      call.harness.client.remotePublicationsChanged([{ ...next, enabled: true }]);
+      await call.harness.client.refreshRemotePublications();
+      expect(call.peer.answerDirections["remote-1"]).toBe("recvonly");
+      expect(call.section("remote-1").direction).toBe("recvonly");
+      expect(track.muted).toBe(false);
+      expect(track.readyState).toBe("live");
+      expect(call.harness.client.getSnapshot().remoteTracks.map((entry) => entry.track as unknown)).toEqual([track]);
+    } finally {
+      call.harness.client.stop();
+    }
+  });
+
   it("forgets parked receivers of a replaced connection: a later offer reusing their mid never touches them", async () => {
     const speaker = remote("replaced-audio-0", "participant-2", "microphone");
     const call = await joinSecond([speaker]);

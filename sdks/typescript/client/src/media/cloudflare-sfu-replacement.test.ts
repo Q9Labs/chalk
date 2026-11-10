@@ -85,28 +85,6 @@ it("closes the receiver of a remote publication that is withdrawn or replaced, s
   });
 });
 
-it("bounds the sections it keeps for closed receivers when the SFU hands out a fresh MID for every pull", async () => {
-  await withTimedHarness(async (h) => {
-    h.transport.uniqueRemoteMids = true;
-    await h.client.start(fakeStream());
-    const peer = h.peers[0]!;
-    let sequence = 0;
-    const refresh = async (trackName?: string) => {
-      h.transport.snapshot = remoteMicrophoneRoster(++sequence, trackName);
-      await h.client.refreshRemotePublications();
-    };
-
-    for (let cycle = 0; cycle < 150; cycle++) {
-      await refresh(`microphone-${cycle}`);
-      expect(peer.liveRemoteTransceiverCount()).toBe(1);
-      await refresh();
-      expect(peer.liveRemoteTransceiverCount()).toBe(0);
-      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16);
-    }
-    expect(peer.retainedRemoteSectionCount()).toBe(16);
-  });
-});
-
 it("retires the receivers of pulls that failed after their tracks arrived, so none stays live without a roster entry", async () => {
   await withTimedHarness(async (h) => {
     h.transport.uniqueRemoteMids = true;
@@ -585,7 +563,6 @@ it("retires the receiver a newer Sync-advertised publication of the same source 
         await vi.advanceTimersByTimeAsync(0);
         await vi.advanceTimersByTimeAsync(0);
         expect(peer.liveRemoteTransceiverCount()).toBe(1);
-        expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16 + 1);
       }
       expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
       expect(h.transport.closeInputs.filter((input) => input.force).flatMap((input) => input.tracks)).toHaveLength(149);
@@ -1046,10 +1023,6 @@ class FakePeerConnection extends EventTarget {
   /** The receive m-lines still receiving in the session: a closed receiver is parked inactive and never stopped. */
   liveRemoteTransceiverCount(): number {
     return this.#remoteTransceivers.filter((transceiver) => transceiver.direction !== "inactive" && !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
-  }
-  /** The receive transceivers the client still holds, parked or receiving. A stopped one is released, though its rejected m-line stays in the SDP. */
-  retainedRemoteSectionCount(): number {
-    return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
   }
   getReceivers(): RTCRtpReceiver[] {
     return [...this.#receivers.values()];

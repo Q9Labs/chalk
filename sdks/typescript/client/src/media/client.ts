@@ -79,10 +79,6 @@ const RECEIVER_RETIREMENT_ATTEMPTS = 3;
 const RECEIVER_RETIREMENT_LIMIT = 64;
 // The SFU rejects a close that names more tracks than this.
 const TRACKS_PER_REQUEST = 16;
-// Closed receivers stay in the session as inactive sections (see #closeReceivers) and in every later offer, and the Chalk SFU rejects an offer
-// over 64 KiB. A parked audio section is about 1.1 KB in a Chromium offer, so 16 cost about 17 KB. The Chalk SFU never reuses a MID: its pion
-// peer numbers each pull after the highest MID, so a stopped section is never needed again. Past the limit the oldest are stopped.
-const PARKED_RECEIVER_LIMIT = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.
@@ -1619,20 +1615,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       this.#invokeListener(() => this.#onReceiveHealth?.({ event: "receivers_closed", receivers_stopped: batch.length, bundle_tag_held: batch.some(({ mid }) => mid === bundleTagOf(this.#connection)) }));
     }
-    this.#stopOldestParkedReceivers(this.#connection);
   }
   #heldRemoteTracks(): ReadonlySet<MediaStreamTrack> {
     return new Set([...this.#remoteTracks.values()].map((publication) => publication.track));
-  }
-  // Fresh MIDs would otherwise grow the offer and the answer for the whole call. The oldest parked sections go first; the BUNDLE tag's
-  // section stays because rejecting it drops the transport, and a section the roster holds is still in use.
-  #stopOldestParkedReceivers(connection: RTCPeerConnection): void {
-    if (connectionIsClosed(connection)) return;
-    const parked = connection.getTransceivers().filter((transceiver) => transceiver.direction === "inactive" && this.#closedReceiverTracks.has(transceiver.receiver.track));
-    const held = this.#heldRemoteTracks();
-    const tag = bundleTagOf(connection);
-    const stoppable = parked.filter((transceiver) => transceiver.mid !== tag && !held.has(transceiver.receiver.track));
-    for (const transceiver of stoppable.slice(0, Math.max(0, parked.length - PARKED_RECEIVER_LIMIT))) transceiver.stop();
   }
   #canReplaceConnectionAfterRemotePull(error: unknown, generation: number): boolean {
     const gone = error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410);
