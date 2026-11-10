@@ -220,6 +220,32 @@ Missing, skipped, cancelled or failed recovery evidence keeps the run red with
 `RECOVERY NOT RUN — manual recovery required` and exact manual Release inputs in
 the summary. A verified recovery also leaves the promotion red. No nightly rollback exists.
 
+## Iterate on the deployed staging build
+
+A Cut nightly only confirms. To find and fix a failure, deploy master to staging alone and run single proofs against it.
+
+Deploy without proofs (about 22 minutes: builds 7, SSM deploy 11, web 2). The Gate of `target_sha` on master must have passed, and the run queues behind a running cut in the `nightly` environment lock:
+
+```sh
+gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -f release_managed=true -f deploy_managed=true -f deploy_web=true -f managed_environment=nightly -f enable_recorder_control=true
+```
+
+Without `stable_manifest_run_id` the run rebuilds every enabled component, which costs no extra wall time.
+
+Run one proof against that build. `.github/workflows/real-call-proof.yml` refuses a ref other than master and runs only proof code that master already contains, so a fix to proof or harness code merges first. Until then, run the proof from the branch with `pnpm prod:proof <name>`. All runs use `-f environment=nightly -f media_plane=chalk_sfu` and share the staging-SFU lease, so they queue one at a time:
+
+| Check                       | `-f` flags                                                    | Run time     |
+| --------------------------- | ------------------------------------------------------------- | ------------ |
+| camera-share                | `proofs=camera-share`                                         | about 10 min |
+| call-artifacts              | `proofs=call-artifacts`                                       | about 11 min |
+| long-call                   | `proofs=long-call`                                            | about 14 min |
+| leave-own-sfu               | `proofs=leave-own-sfu`                                        | about 6 min  |
+| own-sfu-spaces              | `proofs=own-sfu-spaces`                                       | about 5 min  |
+| latency rows, short         | `proofs=own-sfu-spaces -f latency=true -f latency_samples=10` | about 12 min |
+| latency rows, full gate run | `proofs=own-sfu-spaces -f latency=true`                       | about 40 min |
+
+Each run adds about 4 minutes of job setup to the proof itself. The latency run measures every action row; `latency_samples` (1 to 60) only shortens it, so a p95 over 10 cycles is a quick check and not the gate value.
+
 ## Manual Release and setup
 
 Run the [manual hosted integrator proof](../scripts/prod-proof/README.md#manual-hosted-integrator-proof)

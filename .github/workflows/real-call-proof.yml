@@ -25,6 +25,10 @@ on:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
         default: false
+      latency_samples:
+        description: Latency cycles per run, 1 to 60; empty measures the full 60. A short run is for checking one fix, not for the gate
+        type: string
+        default: ""
       release_sha:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
@@ -55,6 +59,10 @@ on:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
         default: false
+      latency_samples:
+        description: Latency cycles per run, 1 to 60; empty measures the full 60. A short run is for checking one fix, not for the gate
+        type: string
+        default: ""
       latency_only:
         description: Skip real-call proofs and run only the nightly latency scorecard of one plane (chalk_sfu or cf_sfu)
         type: boolean
@@ -298,6 +306,7 @@ jobs:
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
           CF_LATENCY_ONLY: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}
+          CHALK_LATENCY_SAMPLES: ${{ inputs.latency_samples }}
           # The Cloudflare latency-only run never queries the staging API logs, so it does not receive their token.
           CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && inputs.media_plane == 'cf_sfu') && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
