@@ -108,6 +108,21 @@ describe("automatic connection reports", () => {
     expect(test.sent.filter((r) => r.trigger === "join_failed")).toHaveLength(1);
     reporter.dispose();
   });
+  it("reports bounded receiver-close and access-retry facts in a failure report, never alone", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "receivers_closed", receivers_stopped: 20000, bundle_tag_held: true, ...{ mid: "private-mid" } });
+    reporter.recordDiagnostic({ event: "access_retry", state: "reconnecting", epoch: 1 });
+    await settled();
+    expect(test.sent).toHaveLength(0);
+    fail(reporter);
+    await settled();
+    expect(test.sent[0]?.events.slice(0, 2)).toEqual([
+      { event: "receivers_closed", elapsed_ms: 0, receivers_stopped: 10000, bundle_tag_held: true },
+      { event: "access_retry", elapsed_ms: 0, state: "reconnecting" },
+    ]);
+    expect(JSON.stringify(test.sent)).not.toContain("private");
+  });
   it("replaces an unsent offline summary with the latest counts", async () => {
     const test = fixture(false);
     const reporter = test.create();
