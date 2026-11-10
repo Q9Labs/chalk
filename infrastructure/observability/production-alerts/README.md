@@ -302,7 +302,8 @@ the SDK/API emit accepted reports with that trigger and diagnostic event.
 
 Load these values privately: `AXIOM_TOKEN` (monitor/notifier management),
 `AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, and `DISCORD_WEBHOOK_URL`, plus
-`ONCALL_WEBHOOK_URL` to attach the Oncall notifier (leave it unset to reconcile Discord only).
+`ONCALL_WEBHOOK_URL` to create or update the Oncall notifier. With the URL unset, an Oncall notifier that
+already exists stays attached to every monitor; only `--detach-oncall` removes it (see the delivery test below).
 The Discord URL lives in 1Password vault `dev`, item
 **Chalk production alerts Discord webhook**; the Oncall URL is the item **Oncall webhook URL**.
 
