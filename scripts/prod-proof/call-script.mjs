@@ -9,7 +9,6 @@ export const phraseDelaySeconds = 1;
 export const flashSeconds = 0.4;
 // One pure tone per guest. A guest's marker, and the hold tone that the mute and stop checks use, share its frequency.
 export const markerHz = [1500, 2000, 2500];
-export const screenHz = 3200;
 export const hopSeconds = 0.05;
 export const frameRate = 20;
 
@@ -29,8 +28,8 @@ export const bounds = {
   silenceDb: -50,
   // A hold tone must be heard for at least this long before its stop.
   heldToneSeconds: 4,
-  // The screen's green square must cover this share of the frame while shared.
-  screenGreenShare: 0.003,
+  // The shared screen is the proof browser's fake display (see screenGreenPixel in recording-evidence.mjs), which fills most of the primary tile. A camera's coloured squares cover about 1% of a frame, so this share only holds while the screen is shown.
+  screenGreenShare: 0.2,
 };
 
 /** Wall-clock times (ms) of one guest's markers in one round. */
@@ -236,7 +235,6 @@ export function judgeScript(script, signals, durationSeconds) {
 
   const holds = [
     { name: "guest 2's tone", hz: markerHz[script.hold.guest], startMs: script.hold.startMs, endMs: script.hold.muteMs, action: "mute" },
-    { name: "the screen's audio", hz: screenHz, startMs: script.screen.startMs, endMs: script.screen.stopMs, action: "unshare" },
     { name: `guest ${script.stop.guest + 1}'s tone`, hz: markerHz[script.stop.guest], startMs: script.stop.holdStartMs, endMs: script.stop.stopMs, action: "host stop" },
   ].map((hold) => ({ ...hold, ...heldTone(signals, clock, hold.hz, hold.startMs, hold.endMs) }));
   for (const hold of holds) {

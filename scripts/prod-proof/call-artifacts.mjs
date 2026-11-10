@@ -60,7 +60,7 @@ export async function captureCall(run, receiver) {
     signal: run.signal,
   });
   console.log("All guests connected and Capture ready; playing the scripted call");
-  const script = await playCall(run, guests, receiver.origin, phraseSeconds, process.env.CHALK_PROOF_CAPTURE_RESTART_COMMAND);
+  const script = await playCall(run, guests, phraseSeconds, process.env.CHALK_PROOF_CAPTURE_RESTART_COMMAND);
   await save(`${run.directory}/call-script.json`, script);
   console.log("Ending own Episode");
   await end();
