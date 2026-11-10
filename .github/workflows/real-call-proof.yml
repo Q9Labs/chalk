@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly gates on chalk_sfu, which runs only camera-share, call-artifacts and long-call. cf_sfu is for manual dispatch and Promote's production proof; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote's own-SFU proof run on chalk_sfu, which runs only camera-share, call-artifacts and long-call. cf_sfu is for manual dispatch and Promote's Leave proof; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -48,7 +48,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly gates on chalk_sfu, which runs only camera-share, call-artifacts and long-call. cf_sfu is for manual dispatch and Promote's production proof; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote's own-SFU proof run on chalk_sfu, which runs only camera-share, call-artifacts and long-call. cf_sfu is for manual dispatch and Promote's Leave proof; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
       latency:

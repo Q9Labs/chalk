@@ -129,7 +129,16 @@ own-SFU proof for that exact SHA, both at selection and in the approval recheck.
 Missing results (including older cuts), skipped proofs and failed proofs block
 promotion with an error naming the SHA and nightly run unless the existing
 `scorecard_override` input supplies a written reason. Promote's own production
-proof (`leave smoke transcript`) still runs on the production Space's plane.
+proof runs in two jobs. `leave` runs first on the default plane, because it compares the
+candidate with the published 5.2.6 client, which only runs on Cloudflare. Then
+`camera-share call-artifacts` runs on `chalk_sfu`: the call, the Recording and the
+Transcript. The old `smoke` and `transcript` proofs need Cloudflare and no longer run in
+Promote. Both jobs must pass, or Promote rolls back. The own-SFU job reuses two proof Spaces that
+an operator moved with `media-settings` (the public API cannot create one): the
+`CHALK_PROOF_SPACE_ID_CHALK_SFU` and `CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC` variables of the
+`production` environment. Promote refuses before it deploys when either is unset. The Spaces must
+also be inside `CHALK_SFU_ALLOWED_SPACES`, with new own-SFU Episodes not paused. Nothing else moves:
+live Spaces keep their plane. The undo is to revert the change that added the `proof-chalk-sfu` job.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
 It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
 newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
