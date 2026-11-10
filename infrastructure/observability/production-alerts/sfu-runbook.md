@@ -36,14 +36,20 @@ This is a change to the production API host, so it needs approval. It turns on t
    api=/run/chalk/env/api.env
    val() { sed -n "s/^$1=//p" "$api" | head -1; }
    node="$(val CHALK_SFU_NODES | cut -d, -f1 | cut -d= -f2-)"
-   for v in node "$(val CHALK_SFU_SERVER_NAME)" "$(val CHALK_SFU_CA_FILE)" "$(val CHALK_SFU_CLIENT_CERT_FILE)" "$(val CHALK_SFU_CLIENT_KEY_FILE)"; do [ -n "${!v:-$v}" ] || { echo "missing SFU setting in api.env" >&2; exit 1; }; done
+   server_name="$(val CHALK_SFU_SERVER_NAME)"
+   ca_file="$(val CHALK_SFU_CA_FILE)"
+   cert_file="$(val CHALK_SFU_CLIENT_CERT_FILE)"
+   key_file="$(val CHALK_SFU_CLIENT_KEY_FILE)"
+   for setting in "$node" "$server_name" "$ca_file" "$cert_file" "$key_file"; do
+     [ -n "$setting" ] || { echo "missing SFU setting in api.env" >&2; exit 1; }
+   done
    cp -p /etc/chalk-alerts/collector.env /etc/chalk-alerts/collector.env.before-sfu-probe 2>/dev/null || install -m 0640 -o root -g chalk /dev/null /etc/chalk-alerts/collector.env
    {
      echo "CHALK_ALERT_SFU_READY_URL=${node}/readyz"
-     echo "CHALK_ALERT_SFU_SERVER_NAME=$(val CHALK_SFU_SERVER_NAME)"
-     echo "CHALK_ALERT_SFU_CA=$(val CHALK_SFU_CA_FILE)"
-     echo "CHALK_ALERT_SFU_CLIENT_CERT=$(val CHALK_SFU_CLIENT_CERT_FILE)"
-     echo "CHALK_ALERT_SFU_CLIENT_KEY=$(val CHALK_SFU_CLIENT_KEY_FILE)"
+     echo "CHALK_ALERT_SFU_SERVER_NAME=${server_name}"
+     echo "CHALK_ALERT_SFU_CA=${ca_file}"
+     echo "CHALK_ALERT_SFU_CLIENT_CERT=${cert_file}"
+     echo "CHALK_ALERT_SFU_CLIENT_KEY=${key_file}"
    } >>/etc/chalk-alerts/collector.env
    ```
 

@@ -345,8 +345,9 @@ A direct webhook POST proves the endpoint only, not this route.
 1. With production monitors enabled, run `collector --test`. This emits a dedicated
    `delivery-test` group, with no database write or induced user failure. The test
    reaches every notifier on the monitor, so it would also start an Oncall run. To keep
-   Oncall out, first run `provision.py --apply` without `ONCALL_WEBHOOK_URL` (that
-   detaches the Oncall notifier), and run it again with the URL after step 3.
+   Oncall out, first run `provision.py --apply --detach-oncall` (an apply without the
+   Oncall URL leaves the notifier attached), and run `provision.py --apply` with
+   `ONCALL_WEBHOOK_URL` again after step 3, so production paging comes back.
 2. Wait for the native monitor evaluation using its history/completion evidence.
    Confirm the **TEST: Chalk alert delivery** message in the actual
    Discord channel. Record the monitor history and channel/message evidence privately.

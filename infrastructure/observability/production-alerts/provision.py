@@ -26,6 +26,16 @@ THRESHOLDS = {
 }
 
 
+ONCALL_NOTIFIER = "Chalk production Oncall"
+
+
+def kept_oncall_ids(notifiers, detach):
+    """An apply without the Oncall URL leaves an existing Oncall notifier attached; only --detach-oncall removes it."""
+    if detach:
+        return []
+    return [item["id"] for item in notifiers if item["name"] == ONCALL_NOTIFIER]
+
+
 def reconcile_notifier(name, properties):
     notifiers = api("GET", "/v2/notifiers")
     existing = next((item for item in notifiers if item["name"] == name), None)
@@ -82,7 +92,10 @@ def main():
     parser.add_argument("--apply", action="store_true", help="Create/update production configuration")
     parser.add_argument("--disabled", action="store_true", help="Stage monitors without evaluating or notifying")
     parser.add_argument("--without-connection-reports", action="store_true", help="Undo the connection-report rules without disabling existing alerts")
+    parser.add_argument("--detach-oncall", action="store_true", help="Detach the Oncall notifier from every monitor, for a delivery test; apply again with ONCALL_WEBHOOK_URL to attach it")
     args = parser.parse_args()
+    if args.detach_oncall and os.environ.get("ONCALL_WEBHOOK_URL"):
+        raise RuntimeError("--detach-oncall conflicts with ONCALL_WEBHOOK_URL")
     variables = {}
     for name in ("LOG_DATASET", "TRACE_DATASET"):
         value = os.environ.get(name, "")
@@ -110,7 +123,9 @@ def main():
         if not re.fullmatch(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9/_.~%-]+", oncall):
             raise RuntimeError("ONCALL_WEBHOOK_URL must be an https URL")
         # The plan has no custom-webhook feature to create a notifier with; the Slack notifier is free.
-        notifier_ids.append(reconcile_notifier("Chalk production Oncall", {"slack": {"slackUrl": oncall}}))
+        notifier_ids.append(reconcile_notifier(ONCALL_NOTIFIER, {"slack": {"slackUrl": oncall}}))
+    else:
+        notifier_ids.extend(kept_oncall_ids(api("GET", "/v2/notifiers"), args.detach_oncall))
     existing_monitors = {item["name"]: item for item in api("GET", "/v2/monitors")}
     for monitor in monitors:
         existing = existing_monitors.get(monitor["name"])
