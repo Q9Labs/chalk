@@ -706,6 +706,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false # staging-lock sends GH_TOKEN itself; a persisted header makes two and GitHub rejects the request
 
       - name: Setup Node
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
