@@ -246,10 +246,12 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 	expectCounts(t, "tenants by configuration source", delta(after.Tenants.ByConfigurationSource, before.Tenants.ByConfigurationSource),
 		counts{"deployment_default": 4, "tenant_chalk_managed": 1, "tenant_managed": 1, "disabled": 1, "invalid": 3})
 	expectCounts(t, "tenants by space selection", delta(after.Tenants.BySpaceSelection, before.Tenants.BySpaceSelection), counts{"has_cloudflare_space": 6, "no_cloudflare_space": 4})
+	// A Space stored as cf_sfu with no setting inherits: the stored value is the platform default,
+	// so the Tenant default (here chalk_sfu, off the allowlist) now decides.
 	expectCounts(t, "spaces by selection", delta(after.Spaces.BySelection, before.Spaces.BySelection),
-		counts{"space_chalk_sfu": 7, "space_cf_sfu": 4, "tenant_default_cf_sfu": 1, "space_unknown": 1})
+		counts{"space_chalk_sfu": 7, "space_cf_sfu": 3, "tenant_default_cf_sfu": 1, "tenant_default_chalk_sfu": 1, "space_unknown": 1})
 	expectCounts(t, "spaces by new Episode provider", delta(after.Spaces.ByNewEpisodeProvider, before.Spaces.ByNewEpisodeProvider),
-		counts{"chalk_sfu": 1, "cf_sfu": 3, "cf_sfu_by_allowlist": 2, "none": 2, "unresolvable": 5})
+		counts{"chalk_sfu": 1, "cf_sfu": 2, "cf_sfu_by_allowlist": 3, "none": 2, "unresolvable": 5})
 	expectCounts(t, "spaces by configuration source", delta(after.Spaces.ByConfigurationSource, before.Spaces.ByConfigurationSource),
 		counts{"deployment_default": 4, "tenant_chalk_managed": 2, "tenant_managed": 2, "disabled": 2, "invalid": 3})
 	expectCounts(t, "Cloudflare Spaces (selected or pinned) by configuration source", delta(after.Spaces.CloudflareByConfigSource, before.Spaces.CloudflareByConfigSource),
