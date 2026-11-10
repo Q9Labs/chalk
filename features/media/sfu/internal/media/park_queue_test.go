@@ -111,7 +111,7 @@ func parkWithQueuedPacket(t *testing.T, repair, resume bool) {
 		t.Fatal("peer did not connect")
 	}
 	owner := &Session{subscribed: map[string]*subscription{}}
-	sub := newSubscription(owner, pub, tx, track, layerRequest{}, nil)
+	sub := newSubscription(owner, pub, newSection(tx), track, layerRequest{}, nil)
 	sub.mid = tx.Mid()
 	owner.subscribed[sub.mid] = sub
 	pub.addSubscriber(sub)

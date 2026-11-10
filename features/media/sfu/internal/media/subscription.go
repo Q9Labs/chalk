@@ -2,8 +2,6 @@ package media
 
 import (
 	"encoding/binary"
-	"errors"
-	"io"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -34,8 +32,8 @@ type subscription struct {
 	pub         *publication
 	transport   *transport // the subscriber session's
 	pauseLogged bool       // the control loop has logged this subscription's congestion pause
+	section     *section
 	transceiver *webrtc.RTPTransceiver
-	sender      *webrtc.RTPSender
 	track       *egressTrack
 	mid         string
 	closed      atomic.Bool
@@ -99,16 +97,22 @@ type resentPacket struct {
 	at  int64 // monotonic; 0 marks a free slot
 }
 
-func newSubscription(owner *Session, pub *publication, transceiver *webrtc.RTPTransceiver, track *egressTrack, request layerRequest, lease *captureLease) *subscription {
+// newSubscription sends a pull on sec. A parked section's stream goes on from where its last
+// subscription left it.
+func newSubscription(owner *Session, pub *publication, sec *section, track *egressTrack, request layerRequest, lease *captureLease) *subscription {
 	clockRate := uint32(90000)
 	if !pub.video() {
 		clockRate = 48000
 	}
-	return &subscription{
-		owner: owner, capture: owner.kind == kindCapture, lease: lease, pub: pub, transport: track.transport, transceiver: transceiver, sender: transceiver.Sender(), track: track,
-		request: request, target: -1, revision: 1, translator: translator{clockRate: clockRate},
+	stream := sec.stream.continued()
+	stream.clockRate = clockRate
+	s := &subscription{
+		owner: owner, capture: owner.kind == kindCapture, lease: lease, pub: pub, transport: track.transport, section: sec, transceiver: sec.transceiver, track: track,
+		request: request, target: -1, revision: 1, translator: stream,
 		order: serials.Add(1),
 	}
+	sec.current.Store(s)
+	return s
 }
 
 // start joins the publication's forwarding and chooses the first layer. A
@@ -355,24 +359,6 @@ func (s *subscription) send(p *rtpPacket, out outgoing, class packetClass, repai
 	return s.transport.send(&packet, w)
 }
 
-// readFeedback serves the subscriber's RTCP until its sender stops: keyframe
-// requests go to the publisher's forwarded layer, and lost packets are resent
-// from the layer's shared history. Pion also needs this read to run its RTCP
-// interceptors. Transport-wide feedback reaches the transport from the
-// session's RTCP buffers instead, whichever SSRC it names.
-func (s *subscription) readFeedback() {
-	writer := &packetWriter{}
-	for {
-		packets, _, err := s.sender.ReadRTCP()
-		if err != nil {
-			return
-		}
-		if !s.closed.Load() {
-			s.handleFeedback(packets, writer)
-		}
-	}
-}
-
 // handleFeedback acts on one RTCP read. Pion hands a compound packet to every
 // sender it names, so feedback about another sender's stream is ignored.
 func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWriter) {
@@ -524,7 +510,7 @@ func (s *subscription) detach() bool {
 
 // release ends the subscription and forgets it in its owner's session, as the owner's close
 // of its MID does, so the owner can pull the same publication again. The owner's next offer
-// carries the stopped transceiver.
+// carries the section inactive.
 func (s *subscription) release() {
 	s.owner.mu.Lock()
 	if s.owner.subscribed[s.mid] == s {
@@ -534,18 +520,10 @@ func (s *subscription) release() {
 	s.close()
 }
 
-// close detaches the subscription and stops its transceiver and sender. That ends the RTCP
-// reader, unbinds the egress track from the sender and frees the sender's SRTP stream. The
-// stopped section goes back to the owner for its next pull. It is idempotent.
+// close detaches the subscription and parks its section for the owner's next pull. It is idempotent.
 func (s *subscription) close() {
 	if !s.detach() {
 		return
 	}
-	err := s.transceiver.Stop()
-	switch {
-	case err == nil:
-		s.owner.recycle(s.transceiver)
-	case !errors.Is(err, io.ErrClosedPipe):
-		s.pub.session.node.log.Warn("stop subscription", "connectionId", s.pub.session.id, "error", err)
-	}
+	s.owner.park(s)
 }

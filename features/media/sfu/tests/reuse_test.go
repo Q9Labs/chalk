@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -20,6 +21,7 @@ type stream struct {
 	payloadType uint8
 	tags        map[byte]int
 	count       int
+	reports     int // RTCP sender reports received on the stream
 }
 
 // viewer is one subscriber peer that stays connected while it pulls and closes tracks.
@@ -42,10 +44,29 @@ func newViewer(t *testing.T, svc *service, conn string, scope protocol.Scope) *v
 				mid = transceiver.Mid()
 			}
 		}
-		s := &stream{mid: mid, kind: remote.Kind(), mime: remote.Codec().MimeType, payloadType: uint8(remote.PayloadType()), tags: map[byte]int{}}
+		// A reused section keeps its SSRC and may fire the track event again: one stream per SSRC.
 		v.mu.Lock()
-		v.streams[remote.SSRC()] = s
+		s := v.streams[remote.SSRC()]
+		if s == nil {
+			s = &stream{mid: mid, kind: remote.Kind(), mime: remote.Codec().MimeType, payloadType: uint8(remote.PayloadType()), tags: map[byte]int{}}
+			v.streams[remote.SSRC()] = s
+		}
 		v.mu.Unlock()
+		go func() {
+			for {
+				packets, _, err := receiver.ReadRTCP()
+				if err != nil {
+					return
+				}
+				for _, packet := range packets {
+					if _, report := packet.(*rtcp.SenderReport); report {
+						v.mu.Lock()
+						s.reports++
+						v.mu.Unlock()
+					}
+				}
+			}
+		}()
 		for {
 			packet, _, err := remote.ReadRTP()
 			if err != nil {
@@ -111,9 +132,10 @@ func (v *viewer) seen() map[webrtc.SSRC]stream {
 }
 
 // TestClosedSectionsCarryTheNextTrackWithoutStaleMedia pulls and closes tracks of two publishers 100 times,
-// audio and video, on one subscriber connection. The node reuses the closed track's mid, so the
-// client holds one audio and one video section, and every stream on a reused section carries only
-// the packets of the track pulled, in the codec of its kind. A closed stream stays silent.
+// audio and video, on one subscriber connection. The node reuses the closed track's section, mid and
+// SSRC, so the client holds one audio and one video section and the transport one stream per section.
+// Every pull delivers only the packets of the track pulled, in the codec of its kind, and a closed
+// stream stays silent.
 func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 	ca := newAuthority(t, "chalk test CA")
 	svc := startService(t, ca)
@@ -141,30 +163,35 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 
 	const cycles = 100
 	mids := map[string]bool{}
-	frozen := map[webrtc.SSRC]int{}
-	var lastSSRC webrtc.SSRC
 	for cycle := range cycles {
 		kindIndex, publisher := cycle%2, publishers[(cycle/2)%2]
 		want := kinds[kindIndex]
+		before := bob.seen()
 		mid := bob.pull(publisher.conn, want.track)
 		mids[mid] = true
 
-		var fresh webrtc.SSRC
-		eventually(t, "five packets on a new stream of the pulled mid", 10*time.Second, func() bool {
+		wantTag := publisher.tags[kindIndex]
+		var got stream
+		eventually(t, "five packets of the pulled track on its mid", 10*time.Second, func() bool {
 			for ssrc, s := range bob.seen() {
-				if _, old := frozen[ssrc]; !old && ssrc != lastSSRC && s.mid == mid && s.count >= 5 {
-					fresh = ssrc
+				if s.mid == mid && s.count-before[ssrc].count >= 5 {
+					got = s
+					for tag, n := range before[ssrc].tags {
+						got.tags[tag] -= n
+						if got.tags[tag] == 0 {
+							delete(got.tags, tag)
+						}
+					}
 					return true
 				}
 			}
 			return false
 		})
-		got := bob.seen()[fresh]
 		if got.kind != want.kind || got.mime != want.mime {
 			t.Fatalf("cycle %d: mid %s carries %v %s, want %v %s", cycle, mid, got.kind, got.mime, want.kind, want.mime)
 		}
-		if len(got.tags) != 1 || got.tags[publisher.tags[kindIndex]] == 0 {
-			t.Fatalf("cycle %d: mid %s received payload tags %v, want only %q", cycle, mid, got.tags, publisher.tags[kindIndex])
+		if len(got.tags) != 1 || got.tags[wantTag] == 0 {
+			t.Fatalf("cycle %d: mid %s received payload tags %v since the pull, want only %q", cycle, mid, got.tags, wantTag)
 		}
 		if len(bob.peer.pc.GetTransceivers()) > 2 {
 			t.Fatalf("cycle %d: the client holds %d sections, want 2", cycle, len(bob.peer.pc.GetTransceivers()))
@@ -172,8 +199,15 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 
 		bob.closeTrack(mid)
 		time.Sleep(60 * time.Millisecond) // packets already on the wire land
-		lastSSRC = fresh
-		frozen[fresh] = bob.seen()[fresh].count
+		for ssrc, s := range bob.seen() {
+			if s.mid == mid {
+				// A closed stream stays silent until the next pull of its mid.
+				time.Sleep(100 * time.Millisecond)
+				if after := bob.seen()[ssrc].count; after != s.count {
+					t.Fatalf("cycle %d: stream %d on mid %s received %d packets after its track closed", cycle, ssrc, mid, after-s.count)
+				}
+			}
+		}
 	}
 	if len(mids) != 2 {
 		var used []string
@@ -183,10 +217,42 @@ func TestClosedSectionsCarryTheNextTrackWithoutStaleMedia(t *testing.T) {
 		sort.Strings(used)
 		t.Fatalf("%d pulls used mids %v, want 2", cycles, used)
 	}
-	time.Sleep(300 * time.Millisecond)
-	for ssrc, s := range bob.seen() {
-		if s.count != frozen[ssrc] {
-			t.Fatalf("stream %d on mid %s received %d packets after its track closed", ssrc, s.mid, s.count-frozen[ssrc])
+	// One SSRC per section for the life of the connection: the transport keeps replay state for
+	// each SSRC it has seen, so a new SSRC per pull would grow it with the pulls.
+	if streams := bob.seen(); len(streams) != 2 {
+		t.Fatalf("%d pulls produced %d distinct streams, want 2 (one per section)", cycles, len(streams))
+	}
+}
+
+// TestAReusedSectionKeepsSendingSenderReports checks that RTCP sender reports reach the client on a
+// section's first use and on its reuse; the client needs them to map RTP time to wall-clock time.
+func TestAReusedSectionKeepsSendingSenderReports(t *testing.T) {
+	ca := newAuthority(t, "chalk test CA")
+	svc := startService(t, ca)
+	svc.grantSources(t, scopeA, scopeB)
+	connA := svc.createSession(t, "create-sr-alice", scopeA)
+	connB := svc.createSession(t, "create-sr-bob", scopeB)
+	alice := publishTaggedMedia(t, svc, connA, scopeA, 'x', 'p')
+	defer alice.stop()
+	bob := newViewer(t, svc, connB, scopeB)
+
+	for _, track := range []string{audioName, videoName} {
+		for use := range 2 {
+			before := map[webrtc.SSRC]int{}
+			for ssrc, s := range bob.seen() {
+				before[ssrc] = s.reports
+			}
+			mid := bob.pull(connA, track)
+			eventually(t, "a sender report on the pulled mid", 8*time.Second, func() bool {
+				for ssrc, s := range bob.seen() {
+					if s.mid == mid && s.reports > before[ssrc] {
+						return true
+					}
+				}
+				return false
+			})
+			t.Logf("%s use %d on mid %s received a sender report", track, use, mid)
+			bob.closeTrack(mid)
 		}
 	}
 }

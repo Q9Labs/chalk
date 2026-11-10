@@ -22,6 +22,9 @@ type egressTrack struct {
 	kind      webrtc.RTPCodecType
 	transport *transport
 	binding   atomic.Pointer[egressBinding]
+	// rtxSeqFrom is where the RTX sequence of the section's earlier track ended; this track's
+	// RTX stream goes on from it, on the same SSRC.
+	rtxSeqFrom uint32
 }
 
 // egressBinding is what the subscriber negotiated for one outgoing track.
@@ -58,6 +61,7 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 		binding := &egressBinding{writer: ctx.WriteStream(), ssrc: uint32(ctx.SSRC()), payloadType: uint8(codec.PayloadType)}
 		if rtx, ok := rtxFor(codecs, codec.PayloadType); ok && ctx.SSRCRetransmission() != 0 {
 			binding.rtxSSRC, binding.rtxPayloadType = uint32(ctx.SSRCRetransmission()), uint8(rtx)
+			binding.rtxSeq.Store(e.rtxSeqFrom)
 		}
 		for _, extension := range ctx.HeaderExtensions() {
 			switch extension.URI {

@@ -38,7 +38,6 @@ type Session struct {
 	captureLeases   []*captureLease
 	node            *Node
 	pc              *webrtc.PeerConnection
-	api             *webrtc.API // builds the senders of reused sections
 
 	// opMu serializes AddTracks, Renegotiate, UpdateTracks and CloseTracks. It also guards ops.
 	opMu sync.Mutex
@@ -49,9 +48,9 @@ type Session struct {
 	published  map[string]*publication  // by MID
 	subscribed map[string]*subscription // by MID
 	retired    map[string]bool          // MIDs of closed publications, never published again
-	// free holds the sections of closed subscriptions, in the order they closed. The next pull of
-	// the same kind takes one back (see takeFreeSection) instead of adding a section.
-	free         []*webrtc.RTPTransceiver
+	// free holds the parked sections of closed subscriptions, in the order they closed. The next
+	// pull of the same kind takes one back instead of adding a section.
+	free         []*section
 	pending      *pendingOffer
 	connectTimer *time.Timer
 
@@ -71,13 +70,13 @@ type pendingOffer struct {
 // newSession builds a session and starts its pacer. The caller holds n.mu.
 func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind sessionKind) (*Session, error) {
 	transport := newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done)
-	pc, api, err := n.peers.newPeer(transport)
+	pc, err := n.peers.newPeer(transport)
 	if err != nil {
 		transport.close()
 		return nil, fmt.Errorf("create peer connection: %w", err)
 	}
 	s := &Session{
-		id: id, createOperation: operationID, scope: scope, kind: kind, node: n, pc: pc, api: api,
+		id: id, createOperation: operationID, scope: scope, kind: kind, node: n, pc: pc,
 		published:  map[string]*publication{},
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
@@ -178,8 +177,13 @@ func (s *Session) Close() {
 		s.pending = nil
 	}
 	s.connectTimer.Stop()
+	parked := slices.Clone(s.free)
+	s.free = nil
 	s.mu.Unlock()
 
+	for _, sec := range parked {
+		_ = sec.sender.Stop() // The peer connection stops the senders that still have a transceiver.
+	}
 	for _, pub := range published {
 		pub.close()
 	}
@@ -512,14 +516,14 @@ func (s *Session) pull(ctx context.Context, request protocol.TracksRequest) (pro
 		})
 	}
 	timeout := s.node.cfg.NegotiationTimeout
-	var pending *pendingOffer
-	pending = &pendingOffer{timer: time.AfterFunc(timeout, func() { s.offerExpired(pending) })}
+	pending := &pendingOffer{}
+	pending.timer = time.AfterFunc(timeout, func() { s.offerExpired(pending) })
 	s.pending = pending
 	s.mu.Unlock()
 
 	for _, subscription := range added {
 		subscription.start()
-		if !s.node.track(func() { subscription.readFeedback() }) {
+		if sec := subscription.section; sec.reading.CompareAndSwap(false, true) && !s.node.track(sec.readFeedback) {
 			return protocol.TracksResponse{}, ErrDraining
 		}
 	}
@@ -574,7 +578,7 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 		}
 	}
 	egress := newEgressTrack(pub, s.transport)
-	transceiver, err := s.attach(egress, reusable)
+	sec, err := s.attach(egress, reusable)
 	if err != nil {
 		if lease != nil {
 			s.node.releaseCapture(s, lease)
@@ -582,39 +586,40 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 		s.node.log.Warn("add subscription section", "connectionId", s.id, "error", err)
 		return nil, protocol.TrackCodeSubscriptionFailure, "cannot add the track"
 	}
-	return newSubscription(s, pub, transceiver, egress, layerRequestFor(track), lease), "", ""
+	return newSubscription(s, pub, sec, egress, layerRequestFor(track), lease), "", ""
 }
 
-// attach sends egress on a section. With a free section it gives that section a new sender and
-// the section turns from inactive back to sendonly; the mid is the same and the SSRCs are new.
-// Otherwise it adds a section. The sender is new because Pion ends a stopped sender for good,
-// and a stopped transceiver is the only way Pion offers a section as inactive.
-func (s *Session) attach(egress *egressTrack, free *webrtc.RTPTransceiver) (*webrtc.RTPTransceiver, error) {
-	if free == nil {
-		return s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
-	}
-	sender, err := s.api.NewRTPSender(egress, free.Sender().Transport())
-	if err != nil {
-		return nil, fmt.Errorf("new sender for mid %q: %w", free.Mid(), err)
+// attach sends egress on a section. With a parked section the section's own sender takes the
+// track and the section turns from inactive back to sendonly: the mid and the SSRCs stay, and the
+// stream goes on from where it stopped. Otherwise it adds a section.
+func (s *Session) attach(egress *egressTrack, parked *section) (*section, error) {
+	if parked == nil {
+		transceiver, err := s.pc.AddTransceiverFromTrack(egress, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
+		if err != nil {
+			return nil, err
+		}
+		return newSection(transceiver), nil
 	}
 	s.mu.Lock()
-	s.free = slices.DeleteFunc(s.free, func(section *webrtc.RTPTransceiver) bool { return section == free })
+	s.free = slices.DeleteFunc(s.free, func(sec *section) bool { return sec == parked })
 	s.mu.Unlock()
-	if err := free.SetSender(sender, egress); err != nil {
-		return nil, fmt.Errorf("send on mid %q: %w", free.Mid(), err)
+	egress.rtxSeqFrom = parked.rtxSeq
+	if err := parked.transceiver.SetSender(parked.sender, egress); err != nil {
+		_ = parked.transceiver.Stop()
+		return nil, fmt.Errorf("send on mid %q: %w", parked.transceiver.Mid(), err)
 	}
-	return free, nil
+	return parked, nil
 }
 
-// freeSection returns the section a pull of kind reuses, or nil: the oldest closed
+// freeSection returns the parked section a pull of kind takes, or nil: the oldest closed
 // subscription's section of that kind, which is the lowest mid. A section the client rejected
 // (port 0 in its latest description) is stopped there for good, and a browser
 // that stopped a transceiver gives a new one for a section that comes back, so it is not reused.
-func (s *Session) freeSection(kind webrtc.RTPCodecType) *webrtc.RTPTransceiver {
+func (s *Session) freeSection(kind webrtc.RTPCodecType) *section {
 	s.mu.Lock()
 	free := slices.Clone(s.free)
 	s.mu.Unlock()
-	if !slices.ContainsFunc(free, func(section *webrtc.RTPTransceiver) bool { return section.Kind() == kind }) {
+	if !slices.ContainsFunc(free, func(sec *section) bool { return sec.transceiver.Kind() == kind }) {
 		return nil
 	}
 	remote := s.pc.CurrentRemoteDescription()
@@ -625,22 +630,52 @@ func (s *Session) freeSection(kind webrtc.RTPCodecType) *webrtc.RTPTransceiver {
 	if err != nil {
 		return nil
 	}
-	for _, section := range s.pc.GetTransceivers() {
-		if known, negotiated := sections[section.Mid()]; negotiated && !known.rejected && section.Kind() == kind && slices.Contains(free, section) {
-			return section
+	for _, sec := range free {
+		if known, negotiated := sections[sec.transceiver.Mid()]; negotiated && !known.rejected && sec.transceiver.Kind() == kind {
+			return sec
 		}
 	}
 	return nil
 }
 
-// recycle makes the section of a closed subscription available to the next pull of its kind.
-func (s *Session) recycle(section *webrtc.RTPTransceiver) {
+// park ends a subscription's use of its section and keeps the section for the owner's next pull.
+// Taking the track off the sender unbinds it, so the subscription sends nothing more, and turns the
+// section inactive. The sender stays: it holds the section's SSRCs and RTCP reports. A section
+// whose track was never bound has not been answered, so its sender has not started and is not kept.
+func (s *Session) park(sub *subscription) {
+	sec := sub.section
+	sec.current.CompareAndSwap(sub, nil)
+	binding := sub.track.binding.Load()
+	if binding == nil {
+		_ = sec.transceiver.Stop()
+		return
+	}
+	if err := sec.transceiver.SetSender(sec.sender, nil); err != nil {
+		if !s.isClosed() {
+			s.node.log.Warn("park subscription section", "connectionId", s.id, "mid", sec.transceiver.Mid(), "error", err)
+			_ = sec.transceiver.Stop()
+		}
+		return
+	}
+	sub.mu.Lock()
+	sec.stream = sub.translator
+	sub.mu.Unlock()
+	// In-flight repairs may still count on the old binding, so the next stream starts past them.
+	sec.rtxSeq = binding.rtxSeq.Load() + rtxSeqMargin
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.closed {
-		s.free = append(s.free, section)
+	closed := s.closed
+	if !closed {
+		s.free = append(s.free, sec)
+	}
+	s.mu.Unlock()
+	if closed {
+		_ = sec.sender.Stop()
 	}
 }
+
+// rtxSeqMargin is how far a parked section's RTX sequence skips ahead for repairs that were
+// being written when its subscription closed.
+const rtxSeqMargin = 64
 
 // layerRequestFor reads the layer policy of a pull or update. Without one the
 // subscriber gets the best active layer.
@@ -721,9 +756,11 @@ func (s *Session) closeForced(request protocol.CloseTracksRequest) protocol.Clos
 	return response
 }
 
-// closeNegotiated applies the client's offer first. The offer already carries the stopped
-// sections, and Pion releases the matching senders and receivers while it applies it. Tracks the
-// registry still holds are then released, and a section the offer did not stop stays open.
+// closeNegotiated parks the named subscriptions, then applies the client's offer. The offer marks
+// the closed sections inactive, and Pion stops the transceiver of an inactive section along with
+// its sender, so a section parked after the offer could never carry another track. Publications
+// are released after the offer, which already carries their stopped sections, and a section the
+// offer did not stop stays open.
 func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTracksRequest) (protocol.CloseTracksResponse, error) {
 	if err := s.readyForNegotiation(); err != nil {
 		return protocol.CloseTracksResponse{}, err
@@ -741,12 +778,19 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 			return protocol.CloseTracksResponse{}, fmt.Errorf("%w: a close offer cannot add a section", ErrInvalidRequest)
 		}
 	}
+	closed := make([]bool, len(request.Tracks))
+	for index, track := range request.Tracks {
+		closed[index] = s.closeMid(track.Mid, true)
+	}
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
 		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
 	}
 	var response protocol.CloseTracksResponse
-	for _, track := range request.Tracks {
-		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !s.closeMid(track.Mid, request.ReceiveOnly)})
+	for index, track := range request.Tracks {
+		if !closed[index] && !request.ReceiveOnly {
+			closed[index] = s.closeMid(track.Mid, false)
+		}
+		response.Tracks = append(response.Tracks, protocol.ClosedTrack{Mid: track.Mid, AlreadyClosed: !closed[index]})
 	}
 	answer, err := s.pc.CreateAnswer(nil)
 	if err == nil {

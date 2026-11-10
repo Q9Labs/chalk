@@ -79,6 +79,15 @@ type translator struct {
 	lastKeyIdx    uint8
 }
 
+// continued is the translator of a stream that goes on after this one ends: it has sent what this
+// one has and forwards nothing until its first switch point, which continues the outgoing sequence
+// number, timestamp and VP8 identifiers.
+func (t translator) continued() translator {
+	t.forwarding, t.live, t.liveFrom = false, segment{}, 0
+	t.segments, t.count, t.next = [recentSegments]segment{}, 0, 0
+	return t
+}
+
 // layer is the forwarded layer, or -1.
 func (t *translator) layer() int {
 	if !t.forwarding {

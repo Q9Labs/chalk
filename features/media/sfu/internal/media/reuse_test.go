@@ -2,12 +2,15 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 
+	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
@@ -185,8 +188,8 @@ func TestReusedMidIsAnnouncedAsTheSDKRevives(t *testing.T) {
 	if got := sections[mic]; got.direction != "sendonly" || got.port == 0 {
 		t.Fatalf("reused section %s is %+v, want sendonly and not rejected", mic, got)
 	}
-	if got, old := sections[mic].ssrcs, firstSources[mic]; len(got) == 0 || len(old) == 0 || got[0] == old[0] {
-		t.Fatalf("reused section has sources %v after %v: the new track must not reuse the old SSRC", got, old)
+	if got, old := sections[mic].ssrcs, firstSources[mic]; len(got) == 0 || len(old) == 0 || got[0] != old[0] {
+		t.Fatalf("reused section has sources %v after %v: the section keeps its SSRC, so the transport holds no new crypto state", got, old)
 	}
 	if got := sections[cam]; got.direction != "sendonly" || len(got.ssrcs) == 0 || got.ssrcs[0] != firstSources[cam][0] {
 		t.Fatalf("the live camera section changed with the mic pull: %+v, was %v", got, firstSources[cam])
@@ -321,4 +324,25 @@ func rejectSection(t *testing.T, raw, mid string) string {
 		t.Fatal(err)
 	}
 	return string(out)
+}
+
+// An unanswered server offer closes the session even when the timer fires as the pull returns.
+// Run with -race: the timer's closure must see the pending offer fully built.
+func TestAnUnansweredOfferClosesTheSessionWhenItsTimerFiresAtOnce(t *testing.T) {
+	node := newTestNode(t, func(cfg *config.Config) { cfg.NegotiationTimeout = time.Millisecond })
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	publishMedia(t, publisher)
+	for index := range 20 {
+		subscriber := node.newTestSession(t, testScope(fmt.Sprintf("bob-%d", index), 1))
+		if _, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic")); err != nil && !errors.Is(err, ErrSessionGone) {
+			t.Fatalf("pull %d: %v", index, err)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for !subscriber.isClosed() {
+			if time.Now().After(deadline) {
+				t.Fatalf("session %d stayed open after its server offer went unanswered", index)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
 }

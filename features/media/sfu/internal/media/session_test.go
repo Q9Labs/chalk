@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -268,13 +269,17 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 	})
 }
 
-func TestForcedSubscriptionCloseReleasesTheSender(t *testing.T) {
+// A forced close parks the section and its sender, which holds the section's SSRCs. Every pull
+// takes the same section back, so the SRTP state of a session follows its sections, and the
+// sender's RTCP reader, which serves the section for its life, ends with the session.
+func TestForcedSubscriptionCloseParksTheSection(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publish(t, publisher, "mic", 1)
 	viewer := newTestPeer(t)
 
+	var first *section
 	for cycle := range 6 {
 		pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic-0"))
 		if err != nil || len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 0 {
@@ -290,31 +295,46 @@ func TestForcedSubscriptionCloseReleasesTheSender(t *testing.T) {
 		if closing == nil {
 			t.Fatalf("cycle %d: no subscription for mid %q", cycle, mid)
 		}
+		if first == nil {
+			first = closing.section
+		} else if closing.section != first {
+			t.Fatalf("cycle %d: the pull got a new section, want the parked one", cycle)
+		}
 
 		if _, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
 			t.Fatalf("cycle %d close: %v", cycle, err)
 		}
-
-		// The RTCP reader must end, or every cycle leaks a goroutine.
-		ended := make(chan error, 1)
-		go func() {
-			_, _, err := closing.sender.ReadRTCP()
-			ended <- err
-		}()
-		select {
-		case err := <-ended:
-			if err == nil {
-				t.Fatalf("cycle %d: the sender still delivers RTCP after the close", cycle)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("cycle %d: the RTCP reader of a closed subscription is still blocked", cycle)
-		}
 		if direction := closing.transceiver.Direction(); direction != webrtc.RTPTransceiverDirectionInactive {
 			t.Fatalf("cycle %d: closed subscription's transceiver is %s, want inactive", cycle, direction)
+		}
+		subscriber.mu.Lock()
+		parked := slices.Clone(subscriber.free)
+		subscriber.mu.Unlock()
+		if len(parked) != 1 || parked[0] != first {
+			t.Fatalf("cycle %d: %d parked sections, want the one", cycle, len(parked))
+		}
+		if first.current.Load() != nil {
+			t.Fatalf("cycle %d: the parked section still has a subscription", cycle)
 		}
 		if tracks, _ := subscriber.Inspect(); len(tracks.Tracks) != 0 {
 			t.Fatalf("cycle %d: inspect still lists %+v", cycle, tracks.Tracks)
 		}
+	}
+
+	// The reader must end with the session, or every session leaks a goroutine.
+	subscriber.Close()
+	ended := make(chan error, 1)
+	go func() {
+		_, _, err := first.sender.ReadRTCP()
+		ended <- err
+	}()
+	select {
+	case err := <-ended:
+		if err == nil {
+			t.Fatal("the parked sender still delivers RTCP after the session closed")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the RTCP reader of a parked section is still blocked after the session closed")
 	}
 }
 

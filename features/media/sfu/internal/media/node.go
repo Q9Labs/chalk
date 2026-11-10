@@ -188,6 +188,8 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 // peerFactory builds each session's peer connection from settings every
 // session shares.
 type peerFactory struct {
+	engine   *webrtc.MediaEngine
+	registry *interceptor.Registry
 	settings webrtc.SettingEngine
 }
 
@@ -195,7 +197,7 @@ type peerFactory struct {
 // transport-wide feedback report to feedback. Each peer connection gets its own
 // API because the buffer factory is the only place Pion passes every stream's
 // RTCP through, and it has no other way to tell peer connections apart.
-func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, *webrtc.API, error) {
+func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, error) {
 	settings := f.settings
 	settings.BufferFactory = func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser {
 		buffer := boundedBuffer(packetType, ssrc)
@@ -204,32 +206,21 @@ func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, *web
 		}
 		return feedbackBuffer{packetBuffer: buffer, transport: feedback}
 	}
-	// The media engine is the peer's own and Pion does not copy it, so the codecs, payload types and
-	// header extensions the peer negotiates are the ones a sender made from this API reads. That is
-	// how a reused section sends what its session negotiated. Pion builds the interceptors again for
-	// the peer connection, so a reused section sends no RTCP sender reports.
-	engine, registry, err := newMediaEngine()
-	if err != nil {
-		return nil, nil, err
-	}
-	settings.DisableMediaEngineCopy(true)
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(engine), webrtc.WithInterceptorRegistry(registry), webrtc.WithSettingEngine(settings))
-	pc, err := api.NewPeerConnection(webrtc.Configuration{})
-	return pc, api, err
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(f.engine), webrtc.WithInterceptorRegistry(f.registry), webrtc.WithSettingEngine(settings))
+	return api.NewPeerConnection(webrtc.Configuration{})
 }
 
-// newMediaEngine negotiates only the codecs the node forwards: Opus and VP8.
+// newPeerFactory negotiates only the codecs the node forwards: Opus and VP8.
 // Feedback is limited to the keyframe requests the node relays to the publisher.
-// Every peer connection gets a new engine, because negotiation writes into it.
-func newMediaEngine() (*webrtc.MediaEngine, *interceptor.Registry, error) {
+func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
 	engine := &webrtc.MediaEngine{}
 	opus := webrtc.RTPCodecParameters{RTPCodecCapability: opusCapability, PayloadType: opusPayloadType}
 	vp8 := webrtc.RTPCodecParameters{RTPCodecCapability: vp8Capability, PayloadType: vp8PayloadType}
 	if err := engine.RegisterCodec(opus, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, nil, fmt.Errorf("register Opus: %w", err)
+		return nil, fmt.Errorf("register Opus: %w", err)
 	}
 	if err := engine.RegisterCodec(vp8, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, nil, fmt.Errorf("register VP8: %w", err)
+		return nil, fmt.Errorf("register VP8: %w", err)
 	}
 	// Repairs travel over RTX in both directions, so a resend never looks like
 	// fresh media to loss accounting and bandwidth probes can reuse it.
@@ -238,47 +229,40 @@ func newMediaEngine() (*webrtc.MediaEngine, *interceptor.Registry, error) {
 		PayloadType:        rtxPayloadType,
 	}
 	if err := engine.RegisterCodec(rtx, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, nil, fmt.Errorf("register RTX: %w", err)
+		return nil, fmt.Errorf("register RTX: %w", err)
 	}
 	// The node reads a microphone's audio level to keep a speaker's camera
 	// longest under congestion, and forwards it so subscribers see who speaks.
 	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.AudioLevelURI}, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, nil, fmt.Errorf("register audio level header extension: %w", err)
+		return nil, fmt.Errorf("register audio level header extension: %w", err)
 	}
 	for _, kind := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeAudio, webrtc.RTPCodecTypeVideo} {
 		if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESMidURI}, kind); err != nil {
-			return nil, nil, fmt.Errorf("register MID header extension: %w", err)
+			return nil, fmt.Errorf("register MID header extension: %w", err)
 		}
 	}
 	// A browser offers camera simulcast by RID. Negotiating the RID extension lets it
 	// send; the node forwards only the first RID whose packets arrive until layer routing lands.
 	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, nil, fmt.Errorf("register RID header extension: %w", err)
+		return nil, fmt.Errorf("register RID header extension: %w", err)
 	}
 	// A simulcast publisher signals no SSRCs, so its RTX streams name their layer
 	// with the repaired RID. Without it the node drops every uplink repair.
 	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRepairRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, nil, fmt.Errorf("register repaired RID header extension: %w", err)
+		return nil, fmt.Errorf("register repaired RID header extension: %w", err)
 	}
 
 	registry := &interceptor.Registry{}
 	if err := webrtc.ConfigureRTCPReports(registry); err != nil {
-		return nil, nil, fmt.Errorf("configure RTCP reports: %w", err)
+		return nil, fmt.Errorf("configure RTCP reports: %w", err)
 	}
 	// Publishers estimate their uplink from the node's transport-wide feedback.
 	// This also negotiates the transport sequence extension the node writes on
 	// egress for its own estimate of each subscriber.
 	if err := webrtc.ConfigureTWCCSender(engine, registry); err != nil {
-		return nil, nil, fmt.Errorf("configure transport-wide feedback: %w", err)
+		return nil, fmt.Errorf("configure transport-wide feedback: %w", err)
 	}
-	return engine, registry, nil
-}
 
-// newPeerFactory holds the settings every peer connection shares.
-func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
-	if _, _, err := newMediaEngine(); err != nil { // Fail at the start, not at the first session.
-		return nil, err
-	}
 	settings := webrtc.SettingEngine{}
 	settings.SetICEUDPMux(mux)
 	settings.SetLite(true)
@@ -291,7 +275,7 @@ func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
 	if err := settings.SetAnsweringDTLSRole(webrtc.DTLSRoleServer); err != nil {
 		return nil, fmt.Errorf("set DTLS answering role: %w", err)
 	}
-	return &peerFactory{settings: settings}, nil
+	return &peerFactory{engine: engine, registry: registry, settings: settings}, nil
 }
 
 // boundedBuffer replaces Pion's per-stream buffer, which allows 1 MB of RTP, with a smaller limit.
