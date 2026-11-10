@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,8 +127,8 @@ func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
 			t.Fatalf("pull %d: the section %s of the response is %+v, want an active sendonly section with a source", pull, mid, section)
 		}
 		for other, section := range sections {
-			if other != mid && section.direction != "inactive" {
-				t.Fatalf("pull %d: section %s is %s while its track is closed, want inactive", pull, other, section.direction)
+			if other != mid && len(section.ssrcs) != 0 {
+				t.Fatalf("pull %d: section %s still announces a source %v while its track is closed", pull, other, section.ssrcs)
 			}
 		}
 		clientOffer, err := viewer.pc.CreateOffer(nil)
@@ -205,8 +207,8 @@ func TestReusedMidIsAnnouncedAsTheSDKRevives(t *testing.T) {
 	if got := sections[cam]; got.direction != "sendonly" {
 		t.Fatalf("reused camera section is %s, want sendonly", got.direction)
 	}
-	if got := sections[mic]; got.direction != "inactive" || len(got.ssrcs) != 0 {
-		t.Fatalf("the unnamed free mic section is %+v, want inactive with no source", got)
+	if got := sections[mic]; got.port == 0 || len(got.ssrcs) != 0 {
+		t.Fatalf("the unnamed free mic section is %+v, want it kept and without a source", got)
 	}
 }
 
@@ -304,6 +306,108 @@ func TestReusedSectionSendsTheNegotiatedPayloadType(t *testing.T) {
 	}
 	if got := boundPayloadType(t, subscriber, reused); got != clientPayloadType {
 		t.Fatalf("the reused section sends on payload type %d, want the negotiated %d", got, clientPayloadType)
+	}
+}
+
+// setDirection gives one section of an SDP the direction a browser's offer has for a parked receiver.
+func setDirection(t *testing.T, raw, mid, direction string) string {
+	t.Helper()
+	var description sdp.SessionDescription
+	if err := description.Unmarshal([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	for _, media := range description.MediaDescriptions {
+		if got, _ := media.Attribute(sdp.AttrKeyMID); got != mid {
+			continue
+		}
+		for index, attribute := range media.Attributes {
+			if isDirection(attribute.Key) {
+				media.Attributes[index] = sdp.Attribute{Key: direction}
+			}
+		}
+	}
+	out, err := description.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}
+
+// extensionsOf lists the header extension URIs of one section.
+func extensionsOf(t *testing.T, raw, mid string) []string {
+	t.Helper()
+	var description sdp.SessionDescription
+	if err := description.Unmarshal([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	var uris []string
+	for _, media := range description.MediaDescriptions {
+		if got, _ := media.Attribute(sdp.AttrKeyMID); got != mid {
+			continue
+		}
+		for _, attribute := range media.Attributes {
+			if attribute.Key == sdp.AttrKeyExtMap {
+				fields := strings.Fields(attribute.Value)
+				uris = append(uris, fields[len(fields)-1])
+			}
+		}
+	}
+	slices.Sort(uris)
+	return uris
+}
+
+// The SDK parks a closed receiver as inactive and repeats that in every offer it makes. Pion stops a
+// transceiver whose mid an offer marks inactive, which would end the reuse of a parked section at
+// the guest's next publish or close. The answer must also keep the header extensions the client
+// offered on that section, or a browser drops the RID extension from its bundle and refuses its next
+// simulcast offer.
+func TestAClientOfferThatLeavesAParkedSectionInactiveDoesNotEndItsReuse(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+	mic, cam := pullBoth(t, subscriber, publisher, viewer)
+
+	forceClose(t, subscriber, cam)
+	offer := viewer.offer(t)
+	offer.SDP = setDirection(t, offer.SDP, cam, "inactive")
+	offer.SDP = setDirection(t, offer.SDP, mic, "inactive")
+	closed, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: offer, Tracks: []protocol.CloseTrack{{Mid: mic}}})
+	if err != nil || closed.SessionDescription == nil {
+		t.Fatalf("negotiated close of the mic with the camera parked: %+v, %v", closed, err)
+	}
+	answered := readSections(t, closed.SessionDescription.SDP)
+	if got := answered[cam]; got.direction != "inactive" {
+		t.Fatalf("the answer to the client's inactive camera section is %s, want inactive", got.direction)
+	}
+	if want, got := extensionsOf(t, offer.SDP, cam), extensionsOf(t, closed.SessionDescription.SDP, cam); !slices.Equal(want, got) {
+		t.Fatalf("the answer keeps the extensions %v on the parked camera section, the client offered %v", got, want)
+	}
+	if err := viewer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: closed.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The node's own offers keep the RID extension on the parked camera section for the same reason.
+	pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic"))
+	if err != nil || pulled.SessionDescription == nil {
+		t.Fatalf("pull mic: %+v, %v", pulled, err)
+	}
+	if !slices.Contains(extensionsOf(t, pulled.SessionDescription.SDP, cam), "urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id") {
+		t.Fatalf("the node's offer drops the RID extension from the parked camera section: %v", extensionsOf(t, pulled.SessionDescription.SDP, cam))
+	}
+	answer := viewer.answer(t, pulled.SessionDescription)
+	if err := subscriber.Renegotiate(context.Background(), protocol.RenegotiateRequest{OperationID: op(), Scope: subscriber.scope, SessionDescription: answer}); err != nil {
+		t.Fatal(err)
+	}
+	forceClose(t, subscriber, pulled.Tracks[0].Mid)
+
+	mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if mid != cam {
+		t.Fatalf("the camera pull got mid %s after the client's offer, want the parked %s", mid, cam)
+	}
+	if got := sections[cam]; got.port == 0 || got.direction != "sendonly" || len(got.ssrcs) == 0 {
+		t.Fatalf("the reused camera section is %+v, want an active sendonly section with a source", got)
 	}
 }
 

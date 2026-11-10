@@ -289,7 +289,11 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 		}
 		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
 	}
-	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
+	offer, held, err := s.holdParked(request.SessionDescription.SDP)
+	if err != nil {
+		return protocol.TracksResponse{}, s.failNegotiation("read the offer", err)
+	}
+	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offer}); err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
 	}
 	var response protocol.TracksResponse
@@ -339,6 +343,9 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+	}
+	if description.SDP, err = releaseParked(description.SDP, offer, held); err != nil {
+		return protocol.TracksResponse{}, s.failNegotiation("answer the offer", err)
 	}
 	response.SessionDescription = description
 	return response, nil
@@ -621,7 +628,7 @@ func (s *Session) attach(egress *egressTrack, parked *section) (*section, error)
 		return nil, ErrSessionGone
 	}
 	egress.rtx = parked.rtx
-	if err := parked.transceiver.SetSender(parked.sender, egress); err != nil {
+	if err := parked.sender.ReplaceTrack(egress); err != nil {
 		_ = parked.transceiver.Stop()
 		return nil, fmt.Errorf("send on mid %q: %w", parked.transceiver.Mid(), err)
 	}
@@ -661,9 +668,12 @@ func (s *Session) freeSection(kind webrtc.RTPCodecType) *section {
 }
 
 // park ends a subscription's use of its section and keeps the section for the owner's next pull.
-// Taking the track off the sender unbinds it, so the subscription sends nothing more, and turns the
-// section inactive. The sender stays: it holds the section's SSRCs and RTCP reports. A section
-// whose track was never bound has not been answered, so its sender has not started and is not kept.
+// Taking the track off the sender unbinds it, so the subscription sends nothing more. The sender
+// stays on the transceiver: it holds the section's SSRCs and RTCP reports, and Pion offers and
+// answers a section's header extensions only while it has a sender. A browser negotiates a bundle's
+// extensions from its sections, so a parked video section without them would cost the next
+// simulcast offer its RID extension. A section whose track was never bound has not been answered, so
+// its sender has not started and is not kept.
 func (s *Session) park(sub *subscription) {
 	sec := sub.section
 	sec.current.CompareAndSwap(sub, nil)
@@ -675,7 +685,7 @@ func (s *Session) park(sub *subscription) {
 		_ = sec.transceiver.Stop()
 		return
 	}
-	if err := sec.transceiver.SetSender(sec.sender, nil); err != nil {
+	if err := sec.sender.ReplaceTrack(nil); err != nil {
 		if !s.isClosed() {
 			s.node.log.Warn("park subscription section", "connectionId", s.id, "mid", sec.transceiver.Mid(), "error", err)
 			_ = sec.transceiver.Stop()
@@ -801,7 +811,11 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 	for index, track := range request.Tracks {
 		closed[index] = s.closeMid(track.Mid, true)
 	}
-	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
+	offer, held, err := s.holdParked(request.SessionDescription.SDP)
+	if err != nil {
+		return protocol.CloseTracksResponse{}, s.failNegotiation("read the close offer", err)
+	}
+	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offer}); err != nil {
 		return protocol.CloseTracksResponse{}, s.failNegotiation("apply the close offer", err)
 	}
 	var response protocol.CloseTracksResponse
@@ -821,6 +835,9 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 	description, err := s.completeLocalDescription(ctx)
 	if err != nil {
 		return protocol.CloseTracksResponse{}, s.failNegotiation("gather ICE candidates", err)
+	}
+	if description.SDP, err = releaseParked(description.SDP, offer, held); err != nil {
+		return protocol.CloseTracksResponse{}, s.failNegotiation("answer the close offer", err)
 	}
 	response.SessionDescription = description
 	return response, nil

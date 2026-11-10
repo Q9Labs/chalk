@@ -304,8 +304,8 @@ func TestForcedSubscriptionCloseParksTheSection(t *testing.T) {
 		if _, err := subscriber.CloseTracks(context.Background(), protocol.CloseTracksRequest{OperationID: op(), Scope: subscriber.scope, Force: true, Tracks: []protocol.CloseTrack{{Mid: mid}}}); err != nil {
 			t.Fatalf("cycle %d close: %v", cycle, err)
 		}
-		if direction := closing.transceiver.Direction(); direction != webrtc.RTPTransceiverDirectionInactive {
-			t.Fatalf("cycle %d: closed subscription's transceiver is %s, want inactive", cycle, direction)
+		if closing.transceiver.Sender() == nil || closing.transceiver.Sender().Track() != nil {
+			t.Fatalf("cycle %d: closed subscription's transceiver must keep its sender and send no track", cycle)
 		}
 		subscriber.mu.Lock()
 		parked := slices.Clone(subscriber.free)
