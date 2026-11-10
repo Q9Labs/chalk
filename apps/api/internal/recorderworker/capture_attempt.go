@@ -580,7 +580,19 @@ func (a *PionCaptureAttempt) Run(ctx context.Context) error {
 	}
 
 	events := make(chan captureRuntimeEvent, 256)
-	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events)
+	// While a planned track is still silent, the bind waited before any reader
+	// started. Every reader then stamps its first packet with the time the peer
+	// bound its track, so initial and late tracks share one clock basis.
+	var firstPacketAt map[string]time.Time
+	if len(late.watching) > 0 {
+		firstPacketAt = make(map[string]time.Time, len(readers))
+		for mid, track := range readers {
+			if bound, ok := track.(interface{ BoundAt() time.Time }); ok {
+				firstPacketAt[mid] = bound.BoundAt()
+			}
+		}
+	}
+	readerCancels, readerCancel, startErr := startCaptureReaders(runCtx, a.peer, readers, a.config.RTPReadDeadline, a.config.KeyFrameInterval, events, firstPacketAt)
 	if startErr != nil {
 		return finish(startErr, writer)
 	}
@@ -1394,14 +1406,14 @@ type captureRuntimeEvent struct {
 	err    error
 }
 
-func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent) (map[string]func(), func(), error) {
+func startCaptureReaders(ctx context.Context, peer CapturePeer, tracks map[string]CaptureMediaTrack, deadline, keyFrameInterval time.Duration, events chan<- captureRuntimeEvent, firstPacketAt map[string]time.Time) (map[string]func(), func(), error) {
 	if len(tracks) == 0 {
 		return make(map[string]func()), func() {}, nil
 	}
 	readerCtx, cancel := context.WithCancel(ctx)
 	cancels := make(map[string]func(), len(tracks))
 	for mid, track := range tracks {
-		readerCancel, err := startCaptureReader(readerCtx, peer, mid, track, deadline, keyFrameInterval, events)
+		readerCancel, err := startCaptureReaderAt(readerCtx, peer, mid, track, deadline, keyFrameInterval, events, firstPacketAt[mid])
 		if err != nil {
 			cancel()
 			for _, stop := range cancels {
