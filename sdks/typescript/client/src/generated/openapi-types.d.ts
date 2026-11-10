@@ -1577,7 +1577,8 @@ export interface components {
         | "remote_signaling_failure"
         | "dormant_connection"
         | "access_refresh"
-        | "receive_stalled";
+        | "receive_stalled"
+        | "section_budget";
       session_description?: {
         sdp: string;
         type: string;
@@ -8726,7 +8727,8 @@ export interface operations {
           | "remote_signaling_failure"
           | "dormant_connection"
           | "access_refresh"
-          | "receive_stalled";
+          | "receive_stalled"
+          | "section_budget";
       };
       header?: never;
       path: {

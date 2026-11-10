@@ -362,6 +362,7 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
         "dormant_connection",
         "access_refresh",
         "receive_stalled",
+        "section_budget",
       ]),
     ),
     session_description: Schema.optional(
@@ -2386,6 +2387,7 @@ export const AddCloudflareSFUTracksQueryParamsSchema = /* @__PURE__ */ (() =>
         "dormant_connection",
         "access_refresh",
         "receive_stalled",
+        "section_budget",
       ]),
     ),
   }))();

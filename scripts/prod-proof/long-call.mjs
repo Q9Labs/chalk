@@ -98,7 +98,7 @@ export async function longCallProof(run, receiver) {
   await Promise.all([sampling, toggling]);
   const heard = await Promise.all(hearings);
 
-  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs });
+  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs, signalBytes: guests.signalBytes, budgetReplacements: guests.budgetReplacements });
   failures.push(...judged.failures);
   const evidence = { ...judged.evidence, failureCount: failures.length };
   console.log(evidenceLine(evidence));

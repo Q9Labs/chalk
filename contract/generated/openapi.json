@@ -8618,7 +8618,8 @@
                 "remote_signaling_failure",
                 "dormant_connection",
                 "access_refresh",
-                "receive_stalled"
+                "receive_stalled",
+                "section_budget"
               ],
               "type": "string"
             }
@@ -14760,7 +14761,8 @@
               "remote_signaling_failure",
               "dormant_connection",
               "access_refresh",
-              "receive_stalled"
+              "receive_stalled",
+              "section_budget"
             ],
             "type": "string"
           },
