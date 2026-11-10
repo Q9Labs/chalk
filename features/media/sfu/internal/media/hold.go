@@ -91,7 +91,9 @@ func releaseParked(answer, offer string, held []string) (string, error) {
 	return string(out), nil
 }
 
-// answerable returns the offered extmap lines for extensions the node negotiates.
+// answerable returns the offered extmap lines for extensions the node negotiates. An extmap value is
+// "<id>[/<direction>] <uri> [<attributes>]". The answer keeps the id and what follows the URI but no
+// direction: the offerer's direction is not the answerer's.
 func answerable(attributes []sdp.Attribute) []sdp.Attribute {
 	var found []sdp.Attribute
 	for _, attribute := range attributes {
@@ -99,9 +101,11 @@ func answerable(attributes []sdp.Attribute) []sdp.Attribute {
 			continue
 		}
 		fields := strings.Fields(attribute.Value)
-		if len(fields) > 0 && answerableExtensions[fields[len(fields)-1]] {
-			found = append(found, attribute)
+		if len(fields) < 2 || !answerableExtensions[fields[1]] {
+			continue
 		}
+		id, _, _ := strings.Cut(fields[0], "/")
+		found = append(found, sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: strings.Join(append([]string{id}, fields[1:]...), " ")})
 	}
 	return found
 }

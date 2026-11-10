@@ -347,8 +347,7 @@ func extensionsOf(t *testing.T, raw, mid string) []string {
 		}
 		for _, attribute := range media.Attributes {
 			if attribute.Key == sdp.AttrKeyExtMap {
-				fields := strings.Fields(attribute.Value)
-				uris = append(uris, fields[len(fields)-1])
+				uris = append(uris, strings.Fields(attribute.Value)[1])
 			}
 		}
 	}
@@ -586,8 +585,8 @@ func TestHeldSectionsAnswerOnlyWithExtensionsTheNodeNegotiates(t *testing.T) {
 		}
 		for _, media := range description.MediaDescriptions {
 			for _, attribute := range media.Attributes {
-				if fields := strings.Fields(attribute.Value); attribute.Key == sdp.AttrKeyExtMap {
-					live[fields[len(fields)-1]] = true
+				if attribute.Key == sdp.AttrKeyExtMap {
+					live[strings.Fields(attribute.Value)[1]] = true
 				}
 			}
 		}
@@ -638,4 +637,28 @@ func withExtension(t *testing.T, raw, mid, value string) string {
 		t.Fatal(err)
 	}
 	return string(out)
+}
+
+// An extmap value is "<id>[/<direction>] <uri> [<attributes>]". The URI is the second token, so a
+// direction on the id or an attribute after the URI neither hides a negotiated extension nor lets
+// an unknown one in, and the answer carries no direction of the offerer's.
+func TestAnswerableReadsTheURIAfterTheIDWhateverElseTheLineCarries(t *testing.T) {
+	line := func(value string) sdp.Attribute { return sdp.Attribute{Key: sdp.AttrKeyExtMap, Value: value} }
+	got := answerable([]sdp.Attribute{
+		line("3/sendonly " + sdp.SDESMidURI),
+		line("10 " + sdp.SDESRTPStreamIDURI + " urn:example:attribute"),
+		line("11/recvonly " + sdp.SDESRepairRTPStreamIDURI + " mode=a"),
+		line("13 " + sdp.ABSSendTimeURI),
+		line("14/sendonly " + sdp.ABSSendTimeURI + " " + sdp.SDESMidURI),
+		{Key: sdp.AttrKeyRecvOnly},
+	})
+	want := []string{"3 " + sdp.SDESMidURI, "10 " + sdp.SDESRTPStreamIDURI + " urn:example:attribute", "11 " + sdp.SDESRepairRTPStreamIDURI + " mode=a"}
+	if len(got) != len(want) {
+		t.Fatalf("answerable kept %+v, want %v", got, want)
+	}
+	for index, attribute := range got {
+		if attribute.Key != sdp.AttrKeyExtMap || attribute.Value != want[index] {
+			t.Fatalf("answerable kept %+v at %d, want %q", attribute, index, want[index])
+		}
+	}
 }
