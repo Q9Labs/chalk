@@ -96,14 +96,14 @@ it("bounds the sections it keeps for closed receivers when the SFU hands out a f
       await h.client.refreshRemotePublications();
     };
 
-    for (let cycle = 0; cycle < 40; cycle++) {
+    for (let cycle = 0; cycle < 150; cycle++) {
       await refresh(`microphone-${cycle}`);
       expect(peer.liveRemoteTransceiverCount()).toBe(1);
       await refresh();
       expect(peer.liveRemoteTransceiverCount()).toBe(0);
-      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(16);
+      expect(peer.retainedRemoteSectionCount()).toBeLessThanOrEqual(128);
     }
-    expect(peer.retainedRemoteSectionCount()).toBe(16);
+    expect(peer.retainedRemoteSectionCount()).toBe(128);
   });
 });
 
@@ -1009,7 +1009,7 @@ class FakePeerConnection extends EventTarget {
   liveRemoteTransceiverCount(): number {
     return this.#remoteTransceivers.filter((transceiver) => transceiver.direction !== "inactive" && !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
   }
-  /** Every receive m-line the session still carries, parked or receiving; a stopped one is gone from the offer. */
+  /** The receive transceivers the client still holds, parked or receiving. A stopped one is released, though its rejected m-line stays in the SDP. */
   retainedRemoteSectionCount(): number {
     return this.#remoteTransceivers.filter((transceiver) => !this.#stoppedRemoteMids.has(transceiver.mid ?? "")).length;
   }
