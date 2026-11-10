@@ -1261,11 +1261,20 @@ it("does not stop a transceiver that is already stopped when the call ends", asy
   const harness = createHarness();
   await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("cam", "video")));
   const [stopped, live] = harness.peers[0]!.getTransceivers() as [RTCRtpTransceiver, RTCRtpTransceiver];
-  const stopStopped = vi.spyOn(stopped, "stop");
+  const firstStop = stopped.stop.bind(stopped);
+  // React Native rejects asynchronously, with nothing to catch it, when a stopped transceiver is stopped again. An unhandled rejection fails the test.
+  const stopStopped = vi.spyOn(stopped, "stop").mockImplementation(() => {
+    if (stopped.direction === "stopped") {
+      void Promise.reject(new Error("Could not get transceiver"));
+      return;
+    }
+    firstStop();
+  });
   const stopLive = vi.spyOn(live, "stop");
-  // React Native reports a natively stopped transceiver this way, and a second stop() rejects there.
-  stopped.direction = "stopped" as RTCRtpTransceiverDirection;
+  stopped.stop();
+  stopStopped.mockClear();
   harness.client.stop();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   expect(stopStopped).not.toHaveBeenCalled();
   expect(stopLive).toHaveBeenCalledTimes(1);
 });
