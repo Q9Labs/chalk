@@ -12,20 +12,21 @@ import (
 )
 
 const lockTenantMediaPolicyForEpisode = `-- name: LockTenantMediaPolicyForEpisode :one
-select default_media_plane, media_plane_provider_config
+select default_media_plane, default_media_plane_approved, media_plane_provider_config
 from tenants
 where id = $1
 for share
 `
 
 type LockTenantMediaPolicyForEpisodeRow struct {
-	DefaultMediaPlane        pgtype.Text `json:"default_media_plane"`
-	MediaPlaneProviderConfig []byte      `json:"media_plane_provider_config"`
+	DefaultMediaPlane         pgtype.Text `json:"default_media_plane"`
+	DefaultMediaPlaneApproved bool        `json:"default_media_plane_approved"`
+	MediaPlaneProviderConfig  []byte      `json:"media_plane_provider_config"`
 }
 
 func (q *Queries) LockTenantMediaPolicyForEpisode(ctx context.Context, id pgtype.UUID) (LockTenantMediaPolicyForEpisodeRow, error) {
 	row := q.db.QueryRow(ctx, lockTenantMediaPolicyForEpisode, id)
 	var i LockTenantMediaPolicyForEpisodeRow
-	err := row.Scan(&i.DefaultMediaPlane, &i.MediaPlaneProviderConfig)
+	err := row.Scan(&i.DefaultMediaPlane, &i.DefaultMediaPlaneApproved, &i.MediaPlaneProviderConfig)
 	return i, err
 }

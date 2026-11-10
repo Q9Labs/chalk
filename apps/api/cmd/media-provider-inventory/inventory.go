@@ -77,14 +77,15 @@ type rawReport struct {
 // A malformed document, unknown provider string or unknown mode is invalid.
 //
 // space_class.selected is the Space's own media_plane_setting (or a stored chalk_sfu that
-// has no setting yet), else the Tenant default, else the stored media_plane, which holds
+// has no setting yet), else the Tenant default (an unknown value, or a chalk_sfu no operator
+// approved, names no plane), else the stored media_plane, which holds
 // the platform default for a Space that inherits.
 // A chalk_sfu selection outside the allowlist is pinned to Cloudflare.
 // outcome is the provider a new Episode would bind, or none (no provider or
 // media disabled), or unresolvable (the API refuses to create the binding).
 const classificationSQL = `
 with tenant_doc as (
-    select t.id, t.default_media_plane, t.media_plane_provider_config as c from tenants t
+    select t.id, t.default_media_plane, t.default_media_plane_approved, t.media_plane_provider_config as c from tenants t
 ),
 tenant_class as (
     select d.id,
@@ -92,6 +93,11 @@ tenant_class as (
             when d.default_media_plane is null then 'none'
             else case btrim(d.default_media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
         end as default_provider,
+        case
+            when btrim(coalesce(d.default_media_plane, '')) = 'cf_sfu' then 'cf_sfu'
+            when btrim(coalesce(d.default_media_plane, '')) = 'chalk_sfu' and d.default_media_plane_approved then 'chalk_sfu'
+            else 'none'
+        end as resolver_default,
         case
             when d.c is null or jsonb_typeof(d.c) = 'null' then 'deployment_default'
             when jsonb_typeof(d.c) <> 'object'
@@ -117,12 +123,12 @@ space_class as (
     select s.id, s.tenant_id, tc.config_source,
         case
             when own.plane is not null then 'space'
-            when tc.default_provider <> 'none' then 'tenant_default'
+            when tc.resolver_default <> 'none' then 'tenant_default'
             else 'space'
         end as selection_source,
         case
             when own.plane is not null then case own.plane when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
-            when tc.default_provider <> 'none' then tc.default_provider
+            when tc.resolver_default <> 'none' then tc.resolver_default
             when btrim(s.media_plane) = '' then 'none'
             else case btrim(s.media_plane) when 'cf_sfu' then 'cf_sfu' when 'chalk_sfu' then 'chalk_sfu' else 'unknown' end
         end as selected,

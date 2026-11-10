@@ -156,7 +156,7 @@ func newSettings(pool *pgxpool.Pool, policy spaces.PlanePolicy, out io.Writer) s
 	spaceRepository := postgres.NewSpaceRepository(queries, pool)
 	return settings{
 		pool: pool, policy: policy, tenants: tenantService, spaces: spaceRepository,
-		operator: spaces.NewPlaneOperator(spaceRepository, tenantService, policy),
+		operator: spaces.NewPlaneOperator(spaceRepository, tenantService, policy).WithAdopter(spaceRepository),
 		log:      slog.New(slog.NewJSONHandler(out, nil)),
 	}
 }
@@ -172,11 +172,12 @@ func (s settings) execute(ctx context.Context, r request) error {
 	}
 }
 
-func name(plane *spaces.MediaPlaneProvider) string {
+func planeText(plane *spaces.MediaPlaneProvider) *string {
 	if plane == nil {
-		return "inherit"
+		return nil
 	}
-	return string(*plane)
+	text := string(*plane)
+	return &text
 }
 
 func valueOrInherit(value *string) string {
@@ -203,7 +204,7 @@ func (s settings) get(ctx context.Context, r request) error {
 			return fmt.Errorf("resolve the effective plane: %w", err)
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
-			"space_setting", name(space.MediaPlaneSetting), "space_stored_media_plane", space.MediaPlane,
+			"space_setting", valueOrInherit(planeText(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
 			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", string(s.policy.Platform),
 			"kill_switch_on", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", string(effective)}
 	}
@@ -217,14 +218,14 @@ func (s settings) set(ctx context.Context, r request) error {
 		if err != nil {
 			return err
 		}
-		s.log.Info("media plane setting changed", "scope", "tenant", "tenant_id", r.tenant.String(), "before", name(change.Before), "after", name(change.After))
+		s.log.Info("media plane setting changed", "scope", "tenant", "tenant_id", r.tenant.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After))
 		return nil
 	}
 	change, err := s.operator.SetSpace(ctx, r.tenant, r.space, r.plane)
 	if err != nil {
 		return err
 	}
-	s.log.Info("media plane setting changed", "scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(), "before", name(change.Before), "after", name(change.After))
+	s.log.Info("media plane setting changed", "scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(), "before", valueOrInherit(change.Before), "after", valueOrInherit(change.After))
 	return nil
 }
 
@@ -249,19 +250,13 @@ func (s settings) backfill(ctx context.Context, dryRun bool) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list Spaces: %w", err)
 	}
-	own := spaces.MediaPlaneProviderChalkSFU
-	var changed, offAllowlist, refused int
+	var changed, offAllowlist, refused, moved int
 	for _, c := range candidates {
 		if !s.policy.Allowed.Allows(c.space) {
 			offAllowlist++
 			continue
 		}
-		if dryRun {
-			changed++
-			s.log.Info("media plane setting would change", "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "before", "inherit", "after", string(own))
-			continue
-		}
-		change, err := s.operator.SetSpace(ctx, c.tenant, c.space, &own)
+		wrote, err := s.operator.AdoptStoredChalkSFU(ctx, c.tenant, c.space, dryRun)
 		if errors.Is(err, spaces.ErrTenantCannotServePlane) {
 			refused++
 			s.log.Warn("media plane setting skipped", "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "reason", err.Error())
@@ -270,14 +265,27 @@ func (s settings) backfill(ctx context.Context, dryRun bool) error {
 		if err != nil {
 			return fmt.Errorf("set Space %s: %w", c.space, err)
 		}
+		if !wrote {
+			moved++
+			s.log.Warn("media plane setting skipped", "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "reason", "the Space changed after it was listed")
+			continue
+		}
 		changed++
-		s.log.Info("media plane setting changed", "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "before", name(change.Before), "after", name(change.After))
+		message := "media plane setting changed"
+		if dryRun {
+			message = "media plane setting would change"
+		}
+		s.log.Info(message, "scope", "space", "tenant_id", c.tenant.String(), "space_id", c.space.String(), "before", "inherit", "after", string(spaces.MediaPlaneProviderChalkSFU))
 	}
-	var unknownTenantDefaults int
+	var unknownTenantDefaults, unapprovedOwnDefaults int
 	if err := s.pool.QueryRow(ctx, `select count(*) from tenants where default_media_plane is not null and default_media_plane not in ('cf_sfu', 'chalk_sfu')`).Scan(&unknownTenantDefaults); err != nil {
 		return fmt.Errorf("audit Tenant defaults: %w", err)
 	}
+	if err := s.pool.QueryRow(ctx, `select count(*) from tenants where default_media_plane = 'chalk_sfu' and not default_media_plane_approved`).Scan(&unapprovedOwnDefaults); err != nil {
+		return fmt.Errorf("audit Tenant defaults: %w", err)
+	}
 	s.log.Info("media plane backfill finished", "dry_run", dryRun, "stored_as_chalk_sfu", len(candidates), "changed", changed,
-		"off_allowlist", offAllowlist, "refused_tenant", refused, "tenants_with_unknown_default", unknownTenantDefaults)
+		"off_allowlist", offAllowlist, "refused_tenant", refused, "changed_since_listed", moved,
+		"tenants_with_unknown_default", unknownTenantDefaults, "tenants_with_unapproved_chalk_sfu_default", unapprovedOwnDefaults)
 	return nil
 }

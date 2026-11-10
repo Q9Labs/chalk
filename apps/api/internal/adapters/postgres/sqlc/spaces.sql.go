@@ -11,6 +11,45 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptSpaceMediaPlaneSetting = `-- name: AdoptSpaceMediaPlaneSetting :execrows
+update spaces
+set media_plane_setting = $1::text
+where spaces.tenant_id = $2
+  and spaces.id = $3
+  and spaces.media_plane_setting is null
+  and btrim(spaces.media_plane) = $1::text
+  and exists (
+    select 1 from tenants
+    where tenants.id = spaces.tenant_id
+      and (
+        tenants.media_plane_provider_config is null
+        or tenants.media_plane_provider_config = 'null'::jsonb
+        or (
+          (tenants.media_plane_provider_config->'enabled' is null
+            or tenants.media_plane_provider_config->'enabled' in ('true'::jsonb, 'null'::jsonb))
+          and btrim(coalesce(tenants.media_plane_provider_config->>'mode', '')) = 'chalk_managed'
+        )
+      )
+  )
+`
+
+type AdoptSpaceMediaPlaneSettingParams struct {
+	Plane    string      `json:"plane"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Moves a Space stored on a plane onto the setting without changing where it runs. It writes only
+// while the Space still has no setting and still stores that plane, and the Tenant can still serve
+// the own SFU, so a choice made after the caller looked is never overwritten.
+func (q *Queries) AdoptSpaceMediaPlaneSetting(ctx context.Context, arg AdoptSpaceMediaPlaneSettingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adoptSpaceMediaPlaneSetting, arg.Plane, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const archiveTenantSpace = `-- name: ArchiveTenantSpace :one
 update spaces
 set

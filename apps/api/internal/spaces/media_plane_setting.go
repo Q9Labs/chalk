@@ -19,6 +19,21 @@ var (
 	ErrTenantCannotServePlane = errors.New("tenant cannot serve this media plane")
 )
 
+// tenantDefault is the plane the Tenant's default_media_plane names for the resolver,
+// or nil when it names none. The column was writable by anyone before operators owned
+// it, so a value counts only when it parses, and chalk_sfu counts only when an operator
+// wrote it. Anything else is ignored and the platform default decides.
+func tenantDefault(tenant tenants.Tenant) *MediaPlaneProvider {
+	if tenant.DefaultMediaPlane == nil {
+		return nil
+	}
+	plane, err := ParseMediaPlaneProvider(*tenant.DefaultMediaPlane)
+	if err != nil || (plane == MediaPlaneProviderChalkSFU && !tenant.DefaultMediaPlaneApproved) {
+		return nil
+	}
+	return &plane
+}
+
 // SelectPlane is the plane a new Episode starts on before the deployment's guards
 // (kill switch, allowlist, client capability, node room) apply. The Space's own
 // setting wins, then the Tenant default, then the platform default.
@@ -35,8 +50,8 @@ func SelectPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space
 	if strings.TrimSpace(space.MediaPlane) == string(MediaPlaneProviderChalkSFU) {
 		return MediaPlaneProviderChalkSFU, nil
 	}
-	if tenant.DefaultMediaPlane != nil {
-		return ParseMediaPlaneProvider(*tenant.DefaultMediaPlane)
+	if plane := tenantDefault(tenant); plane != nil {
+		return *plane, nil
 	}
 	if platform != "" {
 		return platform, nil
@@ -60,8 +75,12 @@ type PlanePolicy struct {
 }
 
 // Effective is the plane a new Episode in the Space would start on, ignoring the
-// client's capability and node room.
+// client's capability and node room. It is empty when the Tenant has media disabled,
+// because such an Episode gets no media binding.
 func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
+	if tenantMediaDisabled(tenant) {
+		return "", nil
+	}
 	selected, err := SelectPlane(p.Platform, tenant, space)
 	if err != nil {
 		return "", err
@@ -81,10 +100,11 @@ func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
 	return p.Platform
 }
 
-// publicWriteAllowed gates a Space write. A deployment that hands its new-Space plane to
-// every Space that names none gives a caller no power by letting it name that plane.
+// publicWriteAllowed gates a Space write that a caller's request names. The new-Space
+// plane is no exception: the deployment fills it in for a Space that names none, after
+// it checked that the Tenant can serve it, but a caller may not name it.
 func (p PlanePolicy) publicWriteAllowed(provider MediaPlaneProvider) error {
-	if provider != p.PublicWritePlane() && (p.NewSpace == "" || provider != p.NewSpace) {
+	if provider != p.PublicWritePlane() {
 		return ErrMediaPlaneNotPermitted
 	}
 	return nil
@@ -97,6 +117,18 @@ func (p PlanePolicy) legacyPlane(setting *MediaPlaneProvider) string {
 		return string(*setting)
 	}
 	return string(p.Platform)
+}
+
+// tenantMediaDisabled is true when the Tenant's provider configuration turns media off.
+func tenantMediaDisabled(tenant tenants.Tenant) bool {
+	raw := bytes.TrimSpace(tenant.MediaPlaneProviderConfig)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return false
+	}
+	var config struct {
+		Enabled *bool `json:"enabled"`
+	}
+	return json.Unmarshal(raw, &config) == nil && config.Enabled != nil && !*config.Enabled
 }
 
 // tenantRunsEveryProvider is true when Chalk runs every provider for the Tenant.
@@ -123,6 +155,12 @@ type TenantPlaneStore interface {
 	SetDefaultMediaPlane(ctx context.Context, id utilities.ID, plane *string) (tenants.Tenant, error)
 }
 
+// PlaneAdopter moves a Space stored on a plane onto the setting in one conditional
+// write that re-checks the Space and its Tenant, and reports whether it wrote.
+type PlaneAdopter interface {
+	AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane MediaPlaneProvider) (bool, error)
+}
+
 // PlaneOperator changes Tenant and Space plane settings with operator authority.
 // No public route reaches it: it exists for the operator command, because the
 // public API has no operator principal.
@@ -130,16 +168,32 @@ type PlaneOperator struct {
 	spaces  Repository
 	tenants TenantPlaneStore
 	policy  PlanePolicy
+	adopter PlaneAdopter
+}
+
+// WithAdopter lets the operator run AdoptStoredChalkSFU.
+func (o PlaneOperator) WithAdopter(adopter PlaneAdopter) PlaneOperator {
+	o.adopter = adopter
+	return o
 }
 
 func NewPlaneOperator(spaces Repository, tenants TenantPlaneStore, policy PlanePolicy) PlaneOperator {
 	return PlaneOperator{spaces: spaces, tenants: tenants, policy: policy}
 }
 
-// PlaneChange records one setting before and after. A nil plane is "inherit".
+// PlaneChange records one setting before and after, as stored: a nil value is
+// "inherit". Before keeps a legacy value that is no known plane, for the audit line.
 type PlaneChange struct {
-	Before *MediaPlaneProvider
-	After  *MediaPlaneProvider
+	Before *string
+	After  *string
+}
+
+func planeText(plane *MediaPlaneProvider) *string {
+	if plane == nil {
+		return nil
+	}
+	text := string(*plane)
+	return &text
 }
 
 // SetTenant sets the Tenant default plane, or clears it with nil.
@@ -151,20 +205,8 @@ func (o PlaneOperator) SetTenant(ctx context.Context, tenantID utilities.ID, pla
 	if err := o.checkServes(tenant, plane); err != nil {
 		return PlaneChange{}, err
 	}
-	change := PlaneChange{After: plane}
-	if tenant.DefaultMediaPlane != nil {
-		before, err := ParseMediaPlaneProvider(*tenant.DefaultMediaPlane)
-		if err != nil {
-			return PlaneChange{}, fmt.Errorf("stored Tenant plane: %w", err)
-		}
-		change.Before = &before
-	}
-	var value *string
-	if plane != nil {
-		text := string(*plane)
-		value = &text
-	}
-	if _, err := o.tenants.SetDefaultMediaPlane(ctx, tenantID, value); err != nil {
+	change := PlaneChange{Before: tenant.DefaultMediaPlane, After: planeText(plane)}
+	if _, err := o.tenants.SetDefaultMediaPlane(ctx, tenantID, change.After); err != nil {
 		return PlaneChange{}, fmt.Errorf("write Tenant plane: %w", err)
 	}
 	return change, nil
@@ -194,7 +236,30 @@ func (o PlaneOperator) SetSpace(ctx context.Context, tenantID, spaceID utilities
 	if err != nil {
 		return PlaneChange{}, fmt.Errorf("write Space plane: %w", err)
 	}
-	return PlaneChange{Before: space.MediaPlaneSetting, After: plane}, nil
+	return PlaneChange{Before: planeText(space.MediaPlaneSetting), After: planeText(plane)}, nil
+}
+
+// AdoptStoredChalkSFU gives a Space that stores chalk_sfu and has no setting that setting,
+// so the choice no longer lives only in the legacy column. It changes where the choice
+// is kept and not what the Space gets. With dryRun it only checks the Tenant. The write
+// is conditional, so a Space that gained a setting or moved plane since the caller listed
+// it is left alone and the result is false.
+func (o PlaneOperator) AdoptStoredChalkSFU(ctx context.Context, tenantID, spaceID utilities.ID, dryRun bool) (bool, error) {
+	tenant, err := o.tenants.GetTenant(ctx, tenantID)
+	if err != nil {
+		return false, fmt.Errorf("read Tenant: %w", err)
+	}
+	own := MediaPlaneProviderChalkSFU
+	if err := o.checkServes(tenant, &own); err != nil {
+		return false, err
+	}
+	if dryRun {
+		return true, nil
+	}
+	if o.adopter == nil {
+		return false, errors.New("plane operator has no adopter")
+	}
+	return o.adopter.AdoptStoredPlaneSetting(ctx, tenantID, spaceID, own)
 }
 
 func (o PlaneOperator) checkServes(tenant tenants.Tenant, plane *MediaPlaneProvider) error {

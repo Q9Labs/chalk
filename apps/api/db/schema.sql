@@ -6,6 +6,7 @@ create table tenants (
     default_region text,
     -- cf_sfu
     default_media_plane text,
+    default_media_plane_approved boolean not null default false,
     -- {
     --   "enabled": true,
     --   "provider": "cf_sfu",

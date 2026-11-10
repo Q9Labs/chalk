@@ -42,16 +42,20 @@ type Tenant struct {
 	CreatedByServiceID *string
 	ExternalID         *string
 
-	DefaultMediaPlane        *string
-	MediaPlaneProviderConfig json.RawMessage
-	StorageProviderConfig    json.RawMessage
-	CORSAllowedOrigins       []string
-	LogoKey                  *string
-	Website                  *string
-	RecordingRenderMode      RecordingRenderMode
-	ArtifactPolicy           artifactpolicy.TenantPolicy
-	UpdatedAt                time.Time
-	CreatedAt                time.Time
+	DefaultMediaPlane *string
+	// DefaultMediaPlaneApproved is true when an operator wrote DefaultMediaPlane. Any other
+	// writer, including the previous release, leaves it false, and an unapproved value
+	// never selects the own SFU.
+	DefaultMediaPlaneApproved bool
+	MediaPlaneProviderConfig  json.RawMessage
+	StorageProviderConfig     json.RawMessage
+	CORSAllowedOrigins        []string
+	LogoKey                   *string
+	Website                   *string
+	RecordingRenderMode       RecordingRenderMode
+	ArtifactPolicy            artifactpolicy.TenantPolicy
+	UpdatedAt                 time.Time
+	CreatedAt                 time.Time
 }
 
 type TenantRepository interface {
@@ -89,14 +93,17 @@ type CreateTenantInput struct {
 type UpdateTenantInput struct {
 	Name utilities.OptionalString
 
-	DefaultMediaPlane        utilities.OptionalString
-	MediaPlaneProviderConfig utilities.OptionalJSON
-	StorageProviderConfig    utilities.OptionalJSON
-	CORSAllowedOrigins       OptionalCORSOrigins
-	LogoKey                  utilities.OptionalString
-	Website                  utilities.OptionalString
-	RecordingRenderMode      utilities.OptionalString
-	ArtifactPolicy           ArtifactPolicyUpdate
+	DefaultMediaPlane utilities.OptionalString
+	// DefaultMediaPlaneApproved is stored with DefaultMediaPlane whenever that is set. Only
+	// SetDefaultMediaPlane sets it, so every public write clears the approval.
+	DefaultMediaPlaneApproved bool
+	MediaPlaneProviderConfig  utilities.OptionalJSON
+	StorageProviderConfig     utilities.OptionalJSON
+	CORSAllowedOrigins        OptionalCORSOrigins
+	LogoKey                   utilities.OptionalString
+	Website                   utilities.OptionalString
+	RecordingRenderMode       utilities.OptionalString
+	ArtifactPolicy            ArtifactPolicyUpdate
 }
 
 type ArtifactPolicyUpdate struct {
@@ -153,7 +160,7 @@ func (s Service) SetDefaultMediaPlane(ctx context.Context, id utilities.ID, plan
 	if id.IsZero() {
 		return Tenant{}, ErrInvalidTenantID
 	}
-	return s.repository.UpdateTenant(ctx, id, UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: plane}})
+	return s.repository.UpdateTenant(ctx, id, UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: plane}, DefaultMediaPlaneApproved: plane != nil})
 }
 
 func (s Service) CreateTenant(ctx context.Context, input CreateTenantInput) (Tenant, error) {

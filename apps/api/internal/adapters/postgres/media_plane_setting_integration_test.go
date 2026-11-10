@@ -39,7 +39,7 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 	if space, err = utilities.NewID(); err != nil {
 		t.Fatal(err)
 	}
-	mustExec(t, pool, `insert into tenants (id,name,default_media_plane) values ($1,'Plane setting proof',$2)`, tenant.Bytes(), tenantDefault)
+	mustExec(t, pool, `insert into tenants (id,name,default_media_plane,default_media_plane_approved) values ($1,'Plane setting proof',$2,$2::text is not null)`, tenant.Bytes(), tenantDefault)
 	t.Cleanup(func() {
 		for _, statement := range []string{`delete from episodes where tenant_id=$1`, `delete from spaces where tenant_id=$1`, `delete from tenants where id=$1`} {
 			mustExec(t, pool, statement, tenant.Bytes())
@@ -205,5 +205,94 @@ func TestSpaceSettingRoundTripAndDualWrite(t *testing.T) {
 	// The database refuses a value that is not a plane.
 	if _, err := pool.Exec(t.Context(), `update spaces set media_plane_setting='bogus' where id=$1`, space.Bytes()); err == nil {
 		t.Fatal("the check constraint accepted an unknown plane")
+	}
+}
+
+func TestTenantDefaultApprovalFollowsTheWriter(t *testing.T) {
+	pool := settingsPool(t)
+	tenant, _ := seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	mustExec(t, pool, `insert into tenant_artifact_policies(tenant_id) values ($1)`, tenant.Bytes())
+	repository := NewTenantRepository(sqlc.New(pool))
+	approved := func() (*string, bool) {
+		t.Helper()
+		got, err := repository.GetTenant(t.Context(), tenant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.DefaultMediaPlane, got.DefaultMediaPlaneApproved
+	}
+	set := func(value string, byOperator bool) {
+		t.Helper()
+		if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{DefaultMediaPlane: utilities.OptionalString{Set: true, Value: &value}, DefaultMediaPlaneApproved: byOperator}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A value written before approvals existed, or by the previous release, is unapproved.
+	mustExec(t, pool, `update tenants set default_media_plane='chalk_sfu' where id=$1`, tenant.Bytes())
+	if value, ok := approved(); value == nil || *value != "chalk_sfu" || ok {
+		t.Fatalf("legacy write = %v approved=%v", value, ok)
+	}
+	set("chalk_sfu", true)
+	if _, ok := approved(); !ok {
+		t.Fatal("an operator write was not approved")
+	}
+	name := "Renamed"
+	if _, err := repository.UpdateTenant(t.Context(), tenant, tenants.UpdateTenantInput{Name: utilities.OptionalString{Set: true, Value: &name}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := approved(); !ok {
+		t.Fatal("an unrelated update dropped the approval")
+	}
+	set("cf_sfu", false)
+	if _, ok := approved(); ok {
+		t.Fatal("a public write kept the approval")
+	}
+}
+
+func TestAdoptingAStoredPlaneRechecksEverythingInTheWrite(t *testing.T) {
+	pool := settingsPool(t)
+	repository := NewSpaceRepository(sqlc.New(pool), pool)
+	own := spaces.MediaPlaneProviderChalkSFU
+	cf := "cf_sfu"
+	setting := func(space utilities.ID) *string {
+		t.Helper()
+		var got *string
+		if err := pool.QueryRow(t.Context(), `select media_plane_setting from spaces where id=$1`, space.Bytes()).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	tenant, space := seedSettingsSpace(t, pool, nil, nil, "chalk_sfu")
+	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || !wrote || setting(space) == nil || *setting(space) != "chalk_sfu" {
+		t.Fatalf("eligible Space: wrote=%v err=%v setting=%v", wrote, err, setting(space))
+	}
+	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || wrote {
+		t.Fatalf("a Space that already has the setting: wrote=%v err=%v", wrote, err)
+	}
+
+	// The Space owner pinned Cloudflare after the caller listed the Space.
+	tenant, space = seedSettingsSpace(t, pool, nil, &cf, "cf_sfu")
+	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || wrote || *setting(space) != "cf_sfu" {
+		t.Fatalf("pinned Space: wrote=%v err=%v setting=%v", wrote, err, setting(space))
+	}
+	// The Space moved off the stored plane without gaining a setting.
+	tenant, space = seedSettingsSpace(t, pool, nil, nil, "cf_sfu")
+	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || wrote || setting(space) != nil {
+		t.Fatalf("Space stored on Cloudflare: wrote=%v err=%v setting=%v", wrote, err, setting(space))
+	}
+	// The Tenant switched to its own credentials, or turned media off.
+	for _, config := range []string{`{"provider":"cf_sfu","mode":"tenant_managed"}`, `{"enabled":false,"mode":"chalk_managed"}`} {
+		tenant, space = seedSettingsSpace(t, pool, nil, nil, "chalk_sfu")
+		mustExec(t, pool, `update tenants set media_plane_provider_config=$2::jsonb where id=$1`, tenant.Bytes(), config)
+		if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || wrote || setting(space) != nil {
+			t.Fatalf("Tenant %s: wrote=%v err=%v setting=%v", config, wrote, err, setting(space))
+		}
+	}
+	tenant, space = seedSettingsSpace(t, pool, nil, nil, "chalk_sfu")
+	mustExec(t, pool, `update tenants set media_plane_provider_config='{"mode":"chalk_managed"}'::jsonb where id=$1`, tenant.Bytes())
+	if wrote, err := repository.AdoptStoredPlaneSetting(t.Context(), tenant, space, own); err != nil || !wrote {
+		t.Fatalf("Chalk-managed Tenant: wrote=%v err=%v", wrote, err)
 	}
 }

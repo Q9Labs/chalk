@@ -102,9 +102,11 @@ these that names a plane: `CHALK_SFU_NEW_EPISODES=off` (the kill switch, default
 `on`, which sends every new Episode to `cf_sfu` and leaves live Episodes alone),
 the Space's `media_plane_setting`, the Tenant's `default_media_plane`, and
 `CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` still applies as well.
-The public API accepts `chalk_sfu` only where the deployment already hands it to
-new Spaces; elsewhere only an operator sets it, with `cmd/media-settings`
-(see `infrastructure/sfu/README.md`). Responses carry `media_plane_setting` (null
+The public API never accepts `chalk_sfu` in a request; only an operator sets it,
+with `cmd/media-settings` (see `infrastructure/sfu/README.md`). A Space whose
+request names no plane gets `CHALK_NEW_SPACE_MEDIA_PLANE` when its Tenant can
+serve it. A Tenant's `default_media_plane` counts only when it names a known
+plane, and `chalk_sfu` counts only when an operator wrote it. Responses carry `media_plane_setting` (null
 means inherit) and the read-only `effective_media_plane`. Spaces that
 public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
 instead, so that setting moves them separately.

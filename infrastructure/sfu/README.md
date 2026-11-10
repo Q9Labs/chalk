@@ -120,7 +120,13 @@ names one wins:
 1. `CHALK_SFU_NEW_EPISODES=off` sends every new Episode to Cloudflare. It is the
    kill switch and defaults to `on`. Live Episodes keep their node.
 2. The Space's own setting (`media_plane_setting`), if it has one.
-3. The Tenant's `default_media_plane`.
+3. The Tenant's `default_media_plane`, when it names a known plane. Before operators
+   owned it, any caller could write it with no check, so a value counts only if it
+   parses, and `chalk_sfu` counts only if an operator wrote it
+   (`tenants.default_media_plane_approved`). The migration leaves every existing row
+   unapproved; run `backfill --dry-run` to see how many Tenants hold an unapproved
+   `chalk_sfu` or an unknown value (`tenants_with_unapproved_chalk_sfu_default`,
+   `tenants_with_unknown_default`), then clear or re-set them with `set --tenant`.
 4. `CHALK_DEFAULT_MEDIA_PLANE`.
 
 The guards below the order still apply: a Space outside the allowlist, an SDK that
@@ -140,9 +146,17 @@ CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings 
 ```
 
 Leave out `--space` to act on the Tenant's default. Each change prints one JSON
-line with the before and after values. `backfill` moves Spaces that stored
-`chalk_sfu` before the setting existed, and are on the allowlist, onto the
-setting; a Tenant with its own credentials or with media disabled is skipped.
+line with the before and after values, as stored, so an unknown legacy Tenant value
+appears as it was. `set --tenant ... --plane inherit` clears such a value.
+`backfill` moves Spaces that stored `chalk_sfu` before the setting existed, and are on
+the allowlist, onto the setting; a Tenant with its own credentials or with media
+disabled is skipped, and the write is conditional, so a Space whose owner pinned
+Cloudflare after the listing is left alone. The public API refuses `chalk_sfu` even
+where `CHALK_NEW_SPACE_MEDIA_PLANE` hands it to new Spaces.
+
+A setting-only change, such as the backfill, sends no `space.updated` webhook: the
+Space's `media_plane` and so its payload do not change. Setting a Space to another
+plane changes `media_plane` and does send it.
 
 ## Client sunset
 

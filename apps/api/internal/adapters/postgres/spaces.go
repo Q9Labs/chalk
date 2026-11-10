@@ -28,6 +28,7 @@ type spaceQuerier interface {
 	UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error)
 	ArchiveTenantSpace(ctx context.Context, arg sqlc.ArchiveTenantSpaceParams) (sqlc.Space, error)
 	RestoreTenantSpace(ctx context.Context, arg sqlc.RestoreTenantSpaceParams) (sqlc.Space, error)
+	AdoptSpaceMediaPlaneSetting(ctx context.Context, arg sqlc.AdoptSpaceMediaPlaneSettingParams) (int64, error)
 }
 
 func NewSpaceRepository(queries spaceQuerier, pools ...*pgxpool.Pool) SpaceRepository {
@@ -346,4 +347,18 @@ func optionalPlaneSetting(input spaces.OptionalMediaPlaneSetting) pgtype.Text {
 		return pgtype.Text{}
 	}
 	return pgtype.Text{String: string(*input.Value), Valid: true}
+}
+
+// AdoptStoredPlaneSetting moves a Space stored on the plane onto the setting. It reports
+// false when the Space no longer qualifies: it gained a setting, stores another plane, or
+// its Tenant can no longer serve the own SFU. No Space reads differently afterwards, so it
+// sends no space.updated event.
+func (r SpaceRepository) AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane spaces.MediaPlaneProvider) (bool, error) {
+	rows, err := r.queries.AdoptSpaceMediaPlaneSetting(ctx, sqlc.AdoptSpaceMediaPlaneSettingParams{
+		Plane: string(plane), TenantID: uuid(tenantID), ID: uuid(spaceID),
+	})
+	if err != nil {
+		return false, err
+	}
+	return rows == 1, nil
 }

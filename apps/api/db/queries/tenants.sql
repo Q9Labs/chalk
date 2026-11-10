@@ -5,6 +5,7 @@ select
     tenants.created_by_service_id,
     tenants.external_id,
     tenants.default_media_plane,
+    tenants.default_media_plane_approved,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
@@ -31,6 +32,7 @@ select
     tenants.created_by_service_id,
     tenants.external_id,
     tenants.default_media_plane,
+    tenants.default_media_plane_approved,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
@@ -87,7 +89,7 @@ insert into tenants (
 )
 ON CONFLICT (created_by_service_id, external_id) DO UPDATE
     SET external_id = tenants.external_id
-returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
+returning id, name, created_by_service_id, external_id, default_media_plane, default_media_plane_approved, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
@@ -110,6 +112,7 @@ select
     inserted.created_by_service_id,
     inserted.external_id,
     inserted.default_media_plane,
+    inserted.default_media_plane_approved,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
     inserted.cors_allowed_origins,
@@ -144,6 +147,10 @@ set
         when sqlc.arg(default_media_plane_set)::boolean then sqlc.narg(default_media_plane)::text
         else default_media_plane
     end,
+    default_media_plane_approved = case
+        when sqlc.arg(default_media_plane_set)::boolean then sqlc.arg(default_media_plane_approved)::boolean
+        else default_media_plane_approved
+    end,
     media_plane_provider_config = case
         when sqlc.arg(media_plane_provider_config_set)::boolean then sqlc.narg(media_plane_provider_config)::jsonb
         else media_plane_provider_config
@@ -166,7 +173,7 @@ set
     end,
     updated_at = now()
 where id = sqlc.arg(id)
-returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
+returning id, name, created_by_service_id, external_id, default_media_plane, default_media_plane_approved, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
@@ -206,6 +213,7 @@ select
     updated_tenant.created_by_service_id,
     updated_tenant.external_id,
     updated_tenant.default_media_plane,
+    updated_tenant.default_media_plane_approved,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,
     updated_tenant.cors_allowed_origins,

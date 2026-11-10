@@ -320,7 +320,7 @@ const tenantModeChalkManaged = "chalk_managed"
 // tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
 // and the Tenant names no plane of its own. A Tenant default plane is its own choice.
 func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
-	return tenant.DefaultMediaPlane == nil && tenantRunsEveryProvider(tenant)
+	return tenantDefault(tenant) == nil && tenantRunsEveryProvider(tenant)
 }
 
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {

@@ -131,6 +131,7 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 
 		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
 		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
+		DefaultMediaPlaneApproved:     input.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
 		MediaPlaneProviderConfig:      jsonBytes(input.MediaPlaneProviderConfig.Value),
 		StorageProviderConfigSet:      input.StorageProviderConfig.Set,
@@ -192,16 +193,17 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 		CreatedByServiceID: nullableText(tenant.CreatedByServiceID),
 		ExternalID:         nullableText(tenant.ExternalID),
 
-		DefaultMediaPlane:        nullableText(tenant.DefaultMediaPlane),
-		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
-		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
-		CORSAllowedOrigins:       append([]string(nil), tenant.CorsAllowedOrigins...),
-		LogoKey:                  nullableText(tenant.LogoKey),
-		Website:                  nullableText(tenant.Website),
-		RecordingRenderMode:      tenants.RecordingRenderMode(tenant.RecordingRenderMode),
-		ArtifactPolicy:           policy,
-		UpdatedAt:                timestamp(tenant.UpdatedAt),
-		CreatedAt:                timestamp(tenant.CreatedAt),
+		DefaultMediaPlane:         nullableText(tenant.DefaultMediaPlane),
+		DefaultMediaPlaneApproved: tenant.DefaultMediaPlaneApproved,
+		MediaPlaneProviderConfig:  jsonRaw(tenant.MediaPlaneProviderConfig),
+		StorageProviderConfig:     jsonRaw(tenant.StorageProviderConfig),
+		CORSAllowedOrigins:        append([]string(nil), tenant.CorsAllowedOrigins...),
+		LogoKey:                   nullableText(tenant.LogoKey),
+		Website:                   nullableText(tenant.Website),
+		RecordingRenderMode:       tenants.RecordingRenderMode(tenant.RecordingRenderMode),
+		ArtifactPolicy:            policy,
+		UpdatedAt:                 timestamp(tenant.UpdatedAt),
+		CreatedAt:                 timestamp(tenant.CreatedAt),
 	}
 }
 
@@ -212,6 +214,7 @@ type tenantRecord struct {
 	ExternalID         pgtype.Text
 
 	DefaultMediaPlane          pgtype.Text
+	DefaultMediaPlaneApproved  bool
 	MediaPlaneProviderConfig   []byte
 	StorageProviderConfig      []byte
 	CorsAllowedOrigins         []string
@@ -257,6 +260,7 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -283,6 +287,7 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -309,6 +314,7 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -335,6 +341,7 @@ func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,

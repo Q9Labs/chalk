@@ -627,3 +627,27 @@ returning
     deadline_generation,
     updated_at,
     created_at;
+
+-- name: AdoptSpaceMediaPlaneSetting :execrows
+-- Moves a Space stored on a plane onto the setting without changing where it runs. It writes only
+-- while the Space still has no setting and still stores that plane, and the Tenant can still serve
+-- the own SFU, so a choice made after the caller looked is never overwritten.
+update spaces
+set media_plane_setting = sqlc.arg(plane)::text
+where spaces.tenant_id = sqlc.arg(tenant_id)
+  and spaces.id = sqlc.arg(id)
+  and spaces.media_plane_setting is null
+  and btrim(spaces.media_plane) = sqlc.arg(plane)::text
+  and exists (
+    select 1 from tenants
+    where tenants.id = spaces.tenant_id
+      and (
+        tenants.media_plane_provider_config is null
+        or tenants.media_plane_provider_config = 'null'::jsonb
+        or (
+          (tenants.media_plane_provider_config->'enabled' is null
+            or tenants.media_plane_provider_config->'enabled' in ('true'::jsonb, 'null'::jsonb))
+          and btrim(coalesce(tenants.media_plane_provider_config->>'mode', '')) = 'chalk_managed'
+        )
+      )
+  );

@@ -158,7 +158,7 @@ func TestCollectCountsEveryResolutionCase(t *testing.T) {
 		if config != "" {
 			document = config
 		}
-		exec(`insert into tenants(id, name, default_media_plane, media_plane_provider_config) values($1, 'inventory', $2, $3::jsonb)`, id.Bytes(), defaultPlane, document)
+		exec(`insert into tenants(id, name, default_media_plane, default_media_plane_approved, media_plane_provider_config) values($1, 'inventory', $2, coalesce($2::text = 'chalk_sfu', false), $3::jsonb)`, id.Bytes(), defaultPlane, document)
 		return id
 	}
 	space := func(tenantID utilities.ID, mediaPlane string, archived bool, preset ...utilities.ID) utilities.ID {

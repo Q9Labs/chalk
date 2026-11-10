@@ -153,7 +153,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	// A dry run lists and writes nothing.
 	dry := invoke("backfill", "--dry-run")
 	summary := dry[len(dry)-1]
-	if summary["dry_run"] != true || summary["off_allowlist"].(float64) < 1 {
+	if summary["dry_run"] != true || summary["off_allowlist"].(float64) < 1 || summary["refused_tenant"].(float64) < 1 || summary["changed"].(float64) != 1 {
 		t.Fatalf("dry-run summary = %v", summary)
 	}
 	if setting, _ := settingOf(listed); setting != nil {
@@ -194,6 +194,31 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	invoke("set", "--tenant", tenantID.String(), "--plane", "inherit")
 	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
 		t.Fatalf("get after undo = %v", got)
+	}
+
+	// A value no operator approved never selects the own SFU, and an operator can repair one
+	// that names no plane at all, with the raw value in the audit line.
+	exec(`update tenants set default_media_plane='chalk_sfu', default_media_plane_approved=false where id=$1`, tenantID.Bytes())
+	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
+		t.Fatalf("an unapproved legacy chalk_sfu default selected %v", got[0]["effective_plane"])
+	}
+	exec(`update tenants set default_media_plane='bogus' where id=$1`, tenantID.Bytes())
+	if got = invoke("get", "--tenant", tenantID.String(), "--space", listed.String()); got[0]["effective_plane"] != "cf_sfu" {
+		t.Fatalf("an unknown legacy default broke the resolution: %v", got)
+	}
+	if got = invoke("set", "--tenant", tenantID.String(), "--plane", "inherit"); got[0]["before"] != "bogus" || got[0]["after"] != "inherit" {
+		t.Fatalf("clearing an unknown legacy default = %v", got)
+	}
+
+	// The backfill writes only a Space that still qualifies when the write runs.
+	exec(`update spaces set media_plane_setting=null, media_plane='chalk_sfu' where id=$1`, listed.Bytes())
+	settings := newSettings(pool, spaces.PlanePolicy{Platform: spaces.MediaPlaneProviderCloudflareSFU}, &bytes.Buffer{})
+	exec(`update spaces set media_plane_setting='cf_sfu', media_plane='cf_sfu' where id=$1`, listed.Bytes())
+	if wrote, err := settings.operator.AdoptStoredChalkSFU(t.Context(), tenantID, listed, false); err != nil || wrote {
+		t.Fatalf("a Space that pinned Cloudflare after it was listed: wrote=%v err=%v", wrote, err)
+	}
+	if setting, _ := settingOf(listed); setting == nil || *setting != "cf_sfu" {
+		t.Fatalf("the backfill overwrote the Space owner's choice: %v", setting)
 	}
 
 	// The own SFU is refused for a Tenant that runs its own credentials.

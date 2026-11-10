@@ -118,7 +118,7 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 		space  spaces.Space
 	}{
 		{"Space setting", tenants.Tenant{}, spaces.Space{MediaPlane: ownText, MediaPlaneSetting: &own}},
-		{"Tenant default", tenants.Tenant{DefaultMediaPlane: &ownText}, spaces.Space{MediaPlane: "cf_sfu"}},
+		{"Tenant default", tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{MediaPlane: "cf_sfu"}},
 		{"Space setting over a Tenant on Cloudflare", tenants.Tenant{DefaultMediaPlane: strPtr("cf_sfu")}, spaces.Space{MediaPlane: ownText, MediaPlaneSetting: &own}},
 	}
 	for _, c := range tried {
@@ -131,8 +131,22 @@ func TestSettingsPickTheProviderAndTheKillSwitchOverridesThem(t *testing.T) {
 		}
 	}
 
+	// A Tenant default no operator approved never reaches the own SFU, and one that names
+	// no plane does not break new Episodes, even with the kill switch on.
+	for name, tenant := range map[string]tenants.Tenant{
+		"unapproved legacy chalk_sfu": {DefaultMediaPlane: &ownText},
+		"unknown legacy value":        {DefaultMediaPlane: strPtr("bogus")},
+	} {
+		for _, paused := range []bool{false, true} {
+			binding, err := registry(paused).ResolveBinding(context.Background(), tenant, spaces.Space{MediaPlane: "cf_sfu"}, runsOwnSFU)
+			if err != nil || binding == nil || binding.Provider != string(cloudflare) {
+				t.Errorf("%s (kill switch %v): %#v %v, want Cloudflare", name, paused, binding, err)
+			}
+		}
+	}
+
 	// A Space that sets Cloudflare beats a Tenant default of the own SFU.
-	binding, err := registry(false).ResolveBinding(context.Background(), tenants.Tenant{DefaultMediaPlane: &ownText}, spaces.Space{MediaPlane: "cf_sfu", MediaPlaneSetting: &cloudflare}, runsOwnSFU)
+	binding, err := registry(false).ResolveBinding(context.Background(), tenants.Tenant{DefaultMediaPlane: &ownText, DefaultMediaPlaneApproved: true}, spaces.Space{MediaPlane: "cf_sfu", MediaPlaneSetting: &cloudflare}, runsOwnSFU)
 	if err != nil || binding == nil || binding.Provider != string(cloudflare) {
 		t.Fatalf("Space on Cloudflare under a Tenant on the own SFU: %#v %v", binding, err)
 	}
