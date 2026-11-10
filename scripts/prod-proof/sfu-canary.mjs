@@ -32,6 +32,7 @@ import { launchGuests, stats } from "./media.mjs";
 import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
 import { grew, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
+import { installRenderProbe, renderEventMs } from "./render-probe.mjs";
 
 const options = parseArgs({
   options: {
@@ -82,7 +83,7 @@ async function openCall(run, receiver, owned) {
   let startedAt = performance.now();
   // Guests launch one after the other, and the first cannot receive media before the second joins. A join is timed
   // from the second guest's SDK join call, so browser startup and admission of either guest are outside it.
-  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 1 && (startedAt = at) });
+  const guests = await launchGuests(run, space, episode, null, receiver.origin, true, 2, { onJoinStart: (guest, at) => guest === 1 && (startedAt = at), pageProbe: installRenderProbe });
   owned.ending.useSDK(guests.pages[0]);
   return { guests, startedAt };
 }
@@ -142,9 +143,11 @@ async function trial(run, receiver, fault) {
     const call = await openCall(run, receiver, owned);
     const { pages } = call.guests;
     const joinMs = await rendersWithin(pages, call.startedAt, joinLimitMs, "join");
+    // joinMs ends on a 500 ms stats poll; joinEventMs ends on the first frame and first audio packet, and is recorded beside it.
+    const joinEventMs = renderEventMs(await Promise.all(pages.map((page) => page.evaluate(() => window.proofRenderTimes))), performance.timeOrigin + call.startedAt);
     // The timings above are settled; now the audio must also decode (a tone at the other client), not only advance in bytes.
     await proveAudioDecoded(call.guests);
-    if (!fault) result = { ms: joinMs };
+    if (!fault) result = { ms: joinMs, eventMs: joinEventMs };
     else {
       const open = await faultRound(pages, false);
       await proveAudioDecoded(call.guests);
@@ -153,7 +156,7 @@ async function trial(run, receiver, fault) {
       await proveSilenceFrom(call.guests, 0);
       await proveAudioDecoded(call.guests, { pairs: [{ listener: 0, speaker: 1 }] });
       const recoveries = [open, muted];
-      result = { ms: Math.max(...recoveries), joinMs, recoveries };
+      result = { ms: Math.max(...recoveries), joinMs, joinEventMs, recoveries };
     }
   } catch (error) {
     result = { error: error instanceof Error ? error.message : String(error) };
@@ -186,7 +189,8 @@ function checkConfiguration() {
 // A fault trial also joins, so its join counts against the join limit.
 function conclude(report) {
   const faultJoins = report.faults.map((trial) => (trial.joinMs === undefined ? trial : { ms: trial.joinMs }));
-  report.summary = { join: summarize([...report.joins, ...faultJoins], joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs) };
+  const eventJoins = [...report.joins, ...report.faults].map((trial) => ({ ms: trial.eventMs ?? trial.joinEventMs ?? undefined, error: trial.error }));
+  report.summary = { join: summarize([...report.joins, ...faultJoins], joinLimitMs), recovery: summarize(report.faults, recoveryLimitMs), joinEvent: summarize(eventJoins, joinLimitMs) };
   report.meetsM7Minimum = joins >= 20 && faults >= 10;
   const { join, recovery } = report.summary;
   report.result = !report.error && !report.cleanupError && join.withinLimit === join.trials && recovery.withinLimit === recovery.trials ? "passed" : "failed";
