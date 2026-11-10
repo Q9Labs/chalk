@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
@@ -85,6 +86,16 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 	t.Cleanup(pool.Close)
 	if err := pool.Ping(t.Context()); err != nil {
 		t.Skipf("postgres unavailable: %v", err)
+	}
+	// This test commits Tenants and Spaces that the inventory command's tests count, so the
+	// two take the same lock. Closing the connection releases it.
+	lock, err := pgx.Connect(t.Context(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { lock.Close(context.Background()) })
+	if _, err := lock.Exec(t.Context(), `select pg_advisory_lock(7710001)`); err != nil {
+		t.Fatal(err)
 	}
 	newID := func() utilities.ID {
 		id, err := utilities.NewID()

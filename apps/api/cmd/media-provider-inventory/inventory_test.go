@@ -85,6 +85,11 @@ func connect(t *testing.T) (context.Context, *pgx.Conn) {
 		t.Skipf("postgres unavailable: %v", err)
 	}
 	t.Cleanup(func() { connection.Close(context.Background()) })
+	// The counts here break when another package commits Tenants or Spaces meanwhile
+	// (media-settings does). Closing the connection releases the lock.
+	if _, err := connection.Exec(ctx, `select pg_advisory_lock(7710001)`); err != nil {
+		t.Fatal(err)
+	}
 	return ctx, connection
 }
 
