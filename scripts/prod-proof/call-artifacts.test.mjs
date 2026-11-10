@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { bundleFailures, captureReady, checkTranscript, transcriptEvidence } from "./call-artifacts.mjs";
+import { bounds } from "./call-script.mjs";
 import { parseVolume, recordingEvidence, recordingFailures, screenGreenPixel } from "./recording-evidence.mjs";
 import { decodeFrames, tileEvidence } from "./tile-frames.mjs";
 
@@ -178,22 +179,25 @@ test("a failed Capture names its failure code, and only a recording Capture is r
   assert.equal(captureReady({ recordingId: "r1", status: "recording", failureCode: null }), true);
 });
 
-// Pixels counted in one frame of the 10 Nov 2026 staging export during the screen share (96x54 thumbnail): Chromium's fake display.
-test("the screen detector counts the colours of the fake display and nothing a camera or page shows", () => {
-  const fakeDisplay = [
-    [0, 136, 0],
-    [0, 134, 0],
-    [0, 124, 0],
-    [73, 255, 19],
-    [0, 255, 0],
-  ];
-  const elsewhere = [
-    [245, 244, 240],
-    [247, 246, 243],
-    [0, 0, 0],
-  ];
-  assert.ok(fakeDisplay.every((pixel) => screenGreenPixel(...pixel)));
-  assert.ok(elsewhere.every((pixel) => !screenGreenPixel(...pixel)));
-  // The matcher before the fix looked for a bright green square (34, 197, 94) within a distance of 90; the fake display's main colour is far from it.
-  assert.ok(Math.abs(0 - 34) + Math.abs(136 - 197) + Math.abs(0 - 94) >= 90);
+// Pixel counts of one 96x54 thumbnail from the 10 Nov 2026 staging export while guest 1 shared its screen: Chromium's fake display.
+const observedShare = [
+  [[0, 136, 0], 2654],
+  [[73, 255, 19], 141],
+  [[0, 134, 0], 92],
+  [[0, 124, 0], 87],
+  [[0, 255, 0], 39],
+  [[245, 244, 240], 152],
+  [[247, 246, 243], 93],
+  [[0, 0, 0], 78],
+];
+const shareOf = (pixels) => pixels.filter(([colour, count]) => screenGreenPixel(...colour)).reduce((sum, [, count]) => sum + count, 0) / pixels.reduce((sum, [, count]) => sum + count, 0);
+
+test("an observed fake-display frame reaches the share threshold and an ordinary page does not", () => {
+  assert.ok(shareOf(observedShare) >= bounds.screenGreenShare);
+  assert.ok(
+    shareOf([
+      [[245, 244, 240], 4000],
+      [[0, 0, 0], 1184],
+    ]) < bounds.screenGreenShare,
+  );
 });
