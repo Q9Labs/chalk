@@ -276,6 +276,7 @@ export function SessionRow({ row, one }: { readonly row: RowModel; readonly one?
 
 export function ListMore({
   scope,
+  stale,
   shown,
   total,
   noun,
@@ -284,6 +285,8 @@ export function ListMore({
   onLoaded,
 }: {
   readonly scope: string;
+  /** The rows on screen belong to the previous filters, so their cursor must not page the new query. */
+  readonly stale: boolean;
   readonly shown: number;
   readonly total: number;
   readonly noun: string;
@@ -304,7 +307,7 @@ export function ListMore({
         <button
           type="button"
           className="btn out"
-          disabled={busy}
+          disabled={busy || stale}
           onClick={() => {
             setBusy(true);
             const asked = scope;

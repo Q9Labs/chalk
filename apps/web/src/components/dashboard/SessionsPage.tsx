@@ -134,6 +134,7 @@ export function SessionsPage({ search }: { readonly search: SessionsSearch }) {
             <Cutoff truncated={shown.truncated} />
             <ListMore
               scope={JSON.stringify(query)}
+              stale={stale}
               shown={rows.length}
               total={totals.sessions}
               noun="sessions"

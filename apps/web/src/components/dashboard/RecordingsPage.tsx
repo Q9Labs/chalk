@@ -33,7 +33,7 @@ export function RecordingsPage({ search }: { readonly search: RecordingsSearch }
   const query = recordingsQueryOf(search, now);
   const { state, reload, update } = useLoad(() => readPage("recordings", query), JSON.stringify(query), {
     visibility: "status",
-    interval: (data) => (data.totals.video.processing || data.rows.some((row) => row.recording && videoGroup(row.recording.video) === "processing") ? POLL_MS : undefined),
+    interval: (data) => (data.totals.video.processing || data.rows.some((row) => row.transcript === "processing" || (row.recording && videoGroup(row.recording.video) === "processing")) ? POLL_MS : undefined),
     read: async () => refreshed(await readPage("recordings", query)),
   });
   const [deleting, setDeleting] = useState<SessionRowDTO | null>(null);
@@ -172,6 +172,7 @@ export function RecordingsPage({ search }: { readonly search: RecordingsSearch }
             <Cutoff truncated={shown.truncated} />
             <ListMore
               scope={JSON.stringify(query)}
+              stale={stale}
               shown={rows.length}
               total={totals.sessions}
               noun="recordings"

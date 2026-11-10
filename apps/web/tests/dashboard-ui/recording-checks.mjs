@@ -148,7 +148,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
         const request = tab.waitForResponse((response) => response.url().includes("/dashboard-api/call-metadata"));
         await tab.clock.runFor(5000);
         await request;
-        await tab.getByRole("region", { name: "Recording", exact: true }).waitFor();
+        await tab.locator(".player").waitFor();
         await tab.clock.resume();
         await tab.locator("video[src]").waitFor({ state: "attached" });
         await tab.waitForFunction(() => {

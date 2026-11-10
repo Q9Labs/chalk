@@ -117,10 +117,10 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
       </div>
       {recording ? (
         <div className="dsplit">
-          <section className="card rc">
+          <section className="card rc" aria-labelledby="recording-title">
             <div className="ph">
               <Icon name="film" size={18} />
-              <h2>Recording</h2>
+              <h2 id="recording-title">Recording</h2>
               {video ? <BadgeView badge={VIDEO_BADGE[videoGroup(video)]} /> : null}
               <span className="end">
                 <CopyAction pill small text={sessionLink(ids)} toastMessage="Link copied. It opens for people signed in to this account." />
@@ -128,10 +128,10 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
             </div>
             <div className="body">{media}</div>
           </section>
-          <section className="card trcard">
+          <section className="card trcard" aria-labelledby="transcript-title">
             <div className="ph">
               <Icon name="file" size={18} />
-              <h2>Transcript</h2>
+              <h2 id="transcript-title">Transcript</h2>
             </div>
             <div className="fill">{panel}</div>
           </section>

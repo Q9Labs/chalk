@@ -72,6 +72,7 @@ export async function listChecks({ open, check, origin }) {
     await tab.waitForURL(`**/dashboard/call/${CALL}/session/**`);
     await tab.getByRole("heading", { name: "Who joined" }).waitFor();
     check("a session row opens its session", (await tab.getByRole("link", { name: "Sessions", exact: true }).count()) >= 1 && (await tab.getByRole("heading", { name: "Recording", exact: true }).count()) === 1);
+    check("the recording and transcript cards are named landmarks", (await tab.locator("section[aria-labelledby=recording-title]").count()) === 1 && (await tab.locator("section[aria-labelledby=transcript-title]").count()) === 1);
     check("the session shows who joined, one bar for each person", (await tab.locator(".wjr:not(.head)").count()) === 5);
     await tab.locator(".crumb a").click();
     await tab.waitForURL("**/dashboard/sessions");
