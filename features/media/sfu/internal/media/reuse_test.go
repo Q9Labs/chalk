@@ -688,3 +688,23 @@ func TestAnswerableAnswersEachIDAndURIOnce(t *testing.T) {
 		t.Fatalf("answerable kept %+v, want 3 sdes:mid and 5 audio-level", got)
 	}
 }
+
+// RFC 8285 section 5 lets an offer declare an extension once at session level for every media
+// section. A held section answers it on its own section, because the answer's session level is Pion's.
+func TestAHeldSectionAnswersAnExtensionTheOfferDeclaresAtSessionLevel(t *testing.T) {
+	const offer = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n" +
+		"a=extmap:4 " + sdp.SDESRTPStreamIDURI + "\r\n" +
+		"m=video 9 UDP/TLS/RTP/SAVPF 96\r\nc=IN IP4 0.0.0.0\r\na=mid:1\r\na=inactive\r\na=rtpmap:96 VP8/90000\r\n" +
+		"a=extmap:5 " + sdp.SDESMidURI + "\r\n"
+	const answer = "v=0\r\no=- 1 1 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n" +
+		"m=video 9 UDP/TLS/RTP/SAVPF 96\r\nc=IN IP4 0.0.0.0\r\na=mid:1\r\na=recvonly\r\na=rtpmap:96 VP8/90000\r\n"
+	released, err := releaseParked(answer, offer, []string{"1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := extensionsOf(t, released, "1")
+	slices.Sort(got)
+	if want := []string{sdp.SDESMidURI, sdp.SDESRTPStreamIDURI}; !slices.Equal(got, want) {
+		t.Fatalf("the held section answers with %v, want %v", got, want)
+	}
+}
