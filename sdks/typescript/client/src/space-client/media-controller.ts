@@ -5,7 +5,8 @@ import type { LocalPublicationRetirementCause } from "../media/plane";
 import { cameraEffectFailure } from "../media/camera-effects";
 import { describeMediaCaptureError } from "../media/capture-error";
 import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connection";
-import { displayMediaConstraints, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
+import type { ConnectionMediaDevices } from "../connection/dependencies";
+import { displayMediaConstraints, releaseTracks, screenShareCapture, requireDisplayVideoTrack, stopStream, streamFromTracks } from "../connection/media-devices";
 import { ConnectionError } from "../connection/types";
 import type { V1DirectedRequest } from "../sync";
 import type { LinkReading } from "../sync/link-watch";
@@ -311,7 +312,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
     return this.#captureStream(
       (captureSignal) => this.#selection.getUserMedia({ audio: intent.microphone, video: intent.camera }, captureSignal),
       (stream) =>
-        Effect.try({ try: () => selectInitialTracks(stream, intent, (track) => this.#selection.releaseTrack(track)), catch: (cause) => cause }).pipe(
+        Effect.try({ try: () => selectInitialTracks(stream, intent, this.#selection), catch: (cause) => cause }).pipe(
           Effect.tap((tracks) =>
             Effect.sync(() => {
               for (const [source, track] of tracks) this.#setTrack(source, track);
@@ -460,9 +461,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (camera.status === "live") this.#transitionCamera({ status: "ended" });
   }
   #releasePublished(source: "microphone" | "camera", skip: MediaStreamTrack | undefined): void {
-    for (const publication of this.#ports?.media.getSnapshot().localTracks ?? []) {
-      if (publication.source === source && publication.track !== skip) this.#selection.releaseTrack(publication.track);
-    }
+    const tracks = (this.#ports?.media.getSnapshot().localTracks ?? []).filter((publication) => publication.source === source && publication.track !== skip).map((publication) => publication.track);
+    releaseTracks(this.#selection, tracks);
   }
   #pauseTracks(source: MediaSource): void {
     const track = this.#track(source);
@@ -1305,10 +1305,18 @@ class MediaControllerRuntime implements MediaControllerEffects {
     this.#pendingCaptures.clear();
     this.#screenAudioTrack?.stop();
     this.#screenAudioTrack = null;
-    for (const track of this.#tracks.values()) this.#selection.releaseTrack(track);
+    // Dispose must finish its teardown, so a failing native release is reported instead of thrown.
+    try {
+      releaseTracks(this.#selection, this.#tracks.values());
+    } catch (cause) {
+      Effect.runSync(Effect.logWarning("Releasing local tracks failed", cause));
+    }
   }
   #releaseStream(stream: MediaStream | null): void {
-    for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") this.#selection.releaseTrack(track);
+    releaseTracks(
+      this.#selection,
+      (stream?.getTracks() ?? []).filter((track) => track.readyState !== "ended"),
+    );
   }
   #captureSource(source: "microphone" | "camera", signal?: AbortSignal): Effect.Effect<MediaStreamTrack, unknown> {
     return this.#captureStream(
@@ -1321,7 +1329,10 @@ class MediaControllerRuntime implements MediaControllerEffects {
               try: () => {
                 const track = stream.getTracks().find((candidate) => candidate.kind === (source === "microphone" ? "audio" : "video"));
                 if (!track) throw new TypeError(`Media capture did not return a ${source} track`);
-                for (const candidate of stream.getTracks()) if (candidate !== track) this.#selection.releaseTrack(candidate);
+                releaseTracks(
+                  this.#selection,
+                  stream.getTracks().filter((candidate) => candidate !== track),
+                );
                 return track;
               },
               catch: (cause) => cause,
@@ -1691,7 +1702,7 @@ function refusedBySync(cause: unknown): boolean {
 function foreign<A>(operation: () => Promise<A>): Effect.Effect<A, unknown> {
   return Effect.tryPromise({ try: operation, catch: (cause) => cause });
 }
-function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>, release: (track: MediaStreamTrack) => void): Map<"microphone" | "camera", MediaStreamTrack> {
+function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"microphone" | "camera", boolean>>, devices: Pick<ConnectionMediaDevices, "releaseTrack">): Map<"microphone" | "camera", MediaStreamTrack> {
   const tracks = stream.getTracks();
   const selected = new Map<"microphone" | "camera", MediaStreamTrack>();
   for (const [source, kind] of [
@@ -1703,11 +1714,10 @@ function selectInitialTracks(stream: MediaStream, intent: Readonly<Record<"micro
     if (track) selected.set(source, track);
   }
   const retained = new Set(selected.values());
-  for (const track of tracks) if (!retained.has(track)) release(track);
-  if (selected.size !== Number(intent.microphone) + Number(intent.camera)) {
-    for (const track of retained) release(track);
-    throw new TypeError("Media capture did not return every requested track");
-  }
+  const unused = tracks.filter((track) => !retained.has(track));
+  const complete = selected.size === Number(intent.microphone) + Number(intent.camera);
+  releaseTracks(devices, complete ? unused : [...unused, ...retained]);
+  if (!complete) throw new TypeError("Media capture did not return every requested track");
   return selected;
 }
 function screenLocalMedia(track: MediaStreamTrack | null, snapshot: ConnectionMediaSnapshot | undefined, connectionState: ReturnType<ConnectionLifecycleCapability["getSnapshot"]>["state"], pending: boolean): MediaSlice["local"]["screen"] {

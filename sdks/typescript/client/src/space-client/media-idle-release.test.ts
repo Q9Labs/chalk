@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ManualClock } from "../../tests/helpers/manual-clock";
 import { mediaStream, mediaTrack } from "../../tests/helpers/media-convergence";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
+import type { ConnectionDependencies, ConnectionMediaDevices } from "../connection/dependencies";
 import { createSpaceClientForPlatform } from "./space-client";
 
 const IDLE_MS = 30_000;
@@ -264,5 +265,92 @@ describe("a join that fails after the devices opened", () => {
     camera.resolve(mediaStream(captureTrack("video")));
     await joining;
     expect(releaseTrack).toHaveBeenCalledWith(microphone);
+  });
+});
+
+function streamOf(...tracks: MediaStreamTrack[]): MediaStream {
+  const [first] = tracks;
+  if (!first) return mediaStream(captureTrack("audio"));
+  return Object.assign(mediaStream(first), {
+    getTracks: () => tracks,
+    getAudioTracks: () => tracks.filter((track) => track.kind === "audio"),
+    getVideoTracks: () => tracks.filter((track) => track.kind === "video"),
+  });
+}
+
+/** An adapter that keeps its state on `this`, as a native module wrapper does. Calling `releaseTrack` detached from it throws. */
+class StatefulDevices implements ConnectionMediaDevices {
+  readonly released: MediaStreamTrack[] = [];
+  readonly failing = new Set<MediaStreamTrack>();
+  constructor(readonly streams: () => MediaStream) {}
+  getUserMedia = async () => this.streams();
+  getDisplayMedia = async () => this.streams();
+  enumerateDevices = async () => [];
+  releaseTrack(track: MediaStreamTrack): void {
+    if (this.failing.has(track)) throw new Error("native release failed");
+    this.released.push(track);
+    track.stop();
+  }
+}
+
+describe("an adapter whose releaseTrack uses this", () => {
+  function clientWith(devices: StatefulDevices, overrides: Partial<ConnectionDependencies> = {}) {
+    const base = createCoreTestPlatform();
+    return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...base, apiBaseUrl: "http://localhost:8080", dependencies: { ...base.dependencies, mediaDevices: devices, ...overrides } });
+  }
+  const syncDown = (): Partial<ConnectionDependencies> => {
+    const base = createCoreTestPlatform();
+    return { createSyncClient: () => ({ ...base.sync, start: async () => Promise.reject(new Error("Sync is down")) }) };
+  };
+
+  it("releases the captured tracks when the join fails", async () => {
+    const microphone = captureTrack("audio");
+    const devices = new StatefulDevices(() => mediaStream(microphone));
+    const client = clientWith(devices, syncDown());
+
+    await client.join({ microphone: true, camera: false }).catch(() => undefined);
+
+    expect(new Set(devices.released)).toEqual(new Set([microphone]));
+    client.dispose();
+  });
+
+  it("releases every captured track when one release throws, and the join still reports its own failure", async () => {
+    const microphone = captureTrack("audio");
+    const camera = captureTrack("video");
+    const devices = new StatefulDevices(() => streamOf(microphone, camera));
+    devices.failing.add(microphone);
+    const client = clientWith(devices, syncDown());
+
+    const failure = await client.join({ microphone: true, camera: true }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(new Set(devices.released)).toEqual(new Set([camera]));
+    expect(String(failure)).not.toContain("native release failed");
+    client.dispose();
+  });
+
+  it("releases the local tracks on Leave even when the first release throws", async () => {
+    const microphone = captureTrack("audio");
+    const camera = captureTrack("video");
+    const devices = new StatefulDevices(() => streamOf());
+    const base = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...base, apiBaseUrl: "http://localhost:8080", dependencies: { ...base.dependencies, mediaDevices: devices } });
+    await client.join({ microphone: false, camera: false });
+    const publication = { participantId: "participant-1", enabled: true };
+    base.media.emit({
+      ...base.media.getSnapshot(),
+      localTracks: [
+        { ...publication, source: "microphone", publicationId: "publication-1", track: microphone },
+        { ...publication, source: "camera", publicationId: "publication-2", track: camera },
+      ],
+    });
+    devices.failing.add(microphone);
+
+    await client.leave();
+
+    expect(new Set(devices.released)).toEqual(new Set([camera]));
+    client.dispose();
   });
 });

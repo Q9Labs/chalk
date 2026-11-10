@@ -27,6 +27,19 @@ export function createBrowserMediaDevices(mediaDevices: MediaDevices | undefined
   };
 }
 
+/** Releases every track through the adapter object, so an adapter that keeps state in `this` works. One failing release cannot keep the others open; the first error is thrown after all were tried. */
+export function releaseTracks(devices: Pick<ConnectionMediaDevices, "releaseTrack">, tracks: Iterable<MediaStreamTrack>): void {
+  const failures: unknown[] = [];
+  for (const track of tracks) {
+    try {
+      devices.releaseTrack(track);
+    } catch (cause) {
+      failures.push(cause);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
+}
+
 export function stopStream(stream: MediaStream | null | undefined): void {
   for (const track of stream?.getTracks() ?? []) {
     if (track.readyState !== "ended") track.stop();

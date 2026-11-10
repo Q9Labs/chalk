@@ -9,7 +9,7 @@ import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
 import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionMediaDevices, type ConnectionSyncClient } from "./dependencies";
-import { streamFromTracks } from "./media-devices";
+import { releaseTracks, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
@@ -490,7 +490,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices.releaseTrack));
+            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices));
             stream = captured.stream;
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
@@ -563,7 +563,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             Effect.matchEffect({
               onFailure: (cause) =>
                 Effect.gen(function* () {
-                  releaseLiveTracks(stream, platform.mediaDevices.releaseTrack);
+                  yield* releaseLocalTracks(platform.mediaDevices, liveTracks(stream));
                   const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   const failure = yield* resolveMediaRejection(originalFailure);
                   if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
@@ -605,12 +605,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
             return;
           }
-          yield* Effect.sync(() => {
-            for (const { track } of model.media?.getSnapshot().localTracks ?? []) {
-              track.enabled = false;
-              platform.mediaDevices.releaseTrack(track);
-            }
-          });
+          yield* releaseLocalTracks(platform.mediaDevices, localTracksOf(model));
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
@@ -1308,8 +1303,21 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       } satisfies ConnectionLifecycleCapability;
     }),
   );
-function releaseLiveTracks(stream: MediaStream | null | undefined, releaseTrack: ConnectionMediaDevices["releaseTrack"]): void {
-  for (const track of stream?.getTracks() ?? []) if (track.readyState !== "ended") releaseTrack(track);
+function localTracksOf(model: Model): MediaStreamTrack[] {
+  return (model.media?.getSnapshot().localTracks ?? []).map(({ track }) => track);
+}
+function liveTracks(stream: MediaStream | null | undefined): MediaStreamTrack[] {
+  return (stream?.getTracks() ?? []).filter((track) => track.readyState !== "ended");
+}
+/** A failing release is reported but does not replace the Leave or join failure that is already being handled. */
+function releaseLocalTracks(devices: ConnectionMediaDevices, tracks: readonly MediaStreamTrack[]): Effect.Effect<void> {
+  return Effect.try({
+    try: () => {
+      for (const track of tracks) track.enabled = false;
+      releaseTracks(devices, tracks);
+    },
+    catch: (cause) => cause,
+  }).pipe(Effect.catch((cause) => Effect.logWarning("Releasing local tracks failed", cause)));
 }
 function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
@@ -1372,7 +1380,7 @@ function acquireInitialMedia(
     microphone: boolean;
     camera: boolean;
   }>,
-  releaseTrack: ConnectionMediaDevices["releaseTrack"],
+  mediaDevices: ConnectionMediaDevices,
 ): Effect.Effect<
   {
     stream: MediaStream;
@@ -1412,13 +1420,7 @@ function acquireInitialMedia(
         }
         if (tracks.size === 0) yield* provider({ microphone: false, camera: false }).pipe(Effect.mapError(captureFailure));
         return { stream: streamFromTracks([...tracks]), failure: initialCaptureWarning(failures) };
-      }).pipe(
-        Effect.onInterrupt(() =>
-          Effect.sync(() => {
-            for (const track of tracks) releaseTrack(track);
-          }),
-        ),
-      );
+      }).pipe(Effect.onInterrupt(() => releaseLocalTracks(mediaDevices, [...tracks])));
     }),
   );
 }
