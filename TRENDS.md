@@ -4,11 +4,11 @@ The last 14 nightly values of every metric, oldest first. A metric with a p95 bu
 
 ## cf_sfu
 
-12 runs, 2026-11-08 to 2026-11-10.
+13 runs, 2026-11-08 to 2026-11-10.
 
 | Metric | Unit | Values |
 |---|---|---|
-| `proof.leave_median_ms` | ms | 431 351 531 481 476 474 320 410 437 430 493 379 |
+| `proof.leave_median_ms` | ms | 431 351 531 481 476 474 320 410 437 430 493 379 494 |
 
 ## chalk_sfu
 
