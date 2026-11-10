@@ -7,11 +7,20 @@ on:
         type: environment
         default: production
         required: true
+      media_plane:
+        description: Media provider of the proof Space; the nightly cut runs chalk_sfu, and cf_sfu stays for manual dispatch
+        type: choice
+        options: [cf_sfu, chalk_sfu]
+        default: cf_sfu
   workflow_call:
     inputs:
       environment:
         type: string
         required: true
+      media_plane:
+        description: Media provider of the proof Space; the nightly cut runs chalk_sfu
+        type: string
+        default: cf_sfu
     secrets:
       CHALK_PROOF_API_KEY:
         required: true
@@ -19,6 +28,9 @@ on:
       result:
         description: passed only when the web call and cleanup pass
         value: ${{ jobs.web.outputs.result }}
+      failure:
+        description: Named reason when the staging SFU lease stopped the proof; empty otherwise
+        value: ${{ jobs.web.outputs.failure }}
 permissions:
   contents: read
 concurrency:
@@ -29,10 +41,18 @@ jobs:
   web:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.environment }}
-    timeout-minutes: 15
+    # A nightly chalk_sfu run may wait up to 30 minutes for the staging SFU lease.
+    timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 50 || 15 }}
+    # The staging SFU lease is a Git ref, so a nightly chalk_sfu run needs contents:write. Other runs never push.
+    permissions:
+      contents: write
     outputs:
       result: ${{ steps.result.outputs.result }}
+      failure: ${{ steps.prove.outputs.failure }}
     env:
+      CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+      # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one.
+      CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
       CHALK_PROOF_CONFIG_SOURCE: env
       CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
       CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
@@ -99,10 +119,19 @@ jobs:
           sudo mount --bind /dev/shm/chalk-web-private .private
           echo "TMPDIR=/dev/shm/chalk-web-tmp" >> "$GITHUB_ENV"
       - name: Prove the deployed web app
-        timeout-minutes: 7
+        id: prove
+        timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 38 || 7 }}
         env:
+          GH_TOKEN: ${{ github.token }}
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
-        run: pnpm web:proof
+          STAGING_SFU_PROOF: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
+        run: |
+          if [[ "$STAGING_SFU_PROOF" == true ]]; then
+            # A lease that stays busy for the whole wait fails the gate as staging-sfu-lease-timeout.
+            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-web web-call "$GITHUB_RUN_ID" -- pnpm web:proof
+          else
+            pnpm web:proof
+          fi
       - name: Clean proof resources even after cancellation
         if: always()
         env:

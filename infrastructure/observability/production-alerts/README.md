@@ -70,6 +70,33 @@ proof of continued unreadiness; the freshness monitor now requires six rules.
 Install the updated collector and monitor definitions together. The independent
 uptime Worker remains separate and may report individual failed checks.
 
+### Certificate expiry
+
+The collector also emits one global `certificate-expiry` row per run when it has a
+certificate to read: the API's SFU client certificate (`CHALK_ALERT_SFU_CLIENT_CERT`, a
+file), each node's server certificate (read from a TLS handshake with the same probe as
+`sfu-readiness`), and the direct door's certificate when `CHALK_ALERT_DIRECT_DOOR_URL`
+(`https://<door host>`, private configuration) is set. With none of these set it emits
+no row. The row is 1 when the soonest certificate has 21 days or fewer left, has
+expired, or the door cannot finish a TLS handshake; otherwise 0. The 21-day and the
+7-day text differ, so the grouped monitor notifies twice, once at each stage. An SFU
+node that cannot be reached is the `sfu-readiness` row's concern, so an unreachable
+node adds nothing here.
+
+The row needs no monitor change: the grouped monitor already matches every rule that is
+not excluded by name. The own SFU certificates are issued by `features/media/sfu/deploy/certs`. The server
+certificate lasts 180 days: renew it with `certs <env> server`, then `deploy`. The API's
+SFU client certificate lasts 365 days and is a separate target: renew it with
+`certs <env> api <key file> <current certificate>`, then install it where the API and
+the collector read it. Each handshake verifies normally against the configured CA (the system roots for the door) and the name. A chain that fails only
+because a certificate has expired reads as expired, using that certificate's NotAfter; a chain
+that fails for any other reason (unknown authority, wrong name) raises an
+`untrusted` finding instead of hiding an expiry. A certificate's expiry is the earliest NotAfter along its verified chain: the pinned CA counts for the SFU, a system root does not for the door, so a CA that ends before its leaf sets the date and the finding names the CA, not the server certificate. Renewing the server certificate does not help then. Rotate the service CA instead: move the old `ca.crt` aside and run `certs <env> ca` (the script refuses while one exists, because a new CA orphans every certificate it issued), then reissue the server, API and operator certificates from it and give every node and the API the new client CA and CA file. An intermediate named for the direct door is Let's Encrypt's to rotate; check that Caddy still renews. The checks run in parallel on their
+own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
+The direct door's certificate is issued and renewed by its Caddy proxy
+over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the
+proxy journal.
+
 ### Own SFU readiness
 
 When `CHALK_ALERT_SFU_READY_URL` (one node) or `CHALK_ALERT_SFU_READY_URLS` (a

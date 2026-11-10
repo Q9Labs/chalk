@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createRun, loadConfig, save, maskCredentials, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
-import { prepareIntegration } from "../prod-proof/proofs.mjs";
+import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
+import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
+import { closeReusedInvite } from "./invite.mjs";
 
 const runId = process.env.CHALK_PROOF_RUN_ID ?? `web-${randomUUID()}`;
 runLabel(runId);
@@ -28,6 +29,7 @@ const stop = () => {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 const report = { result: "failed", cleanup: "not-started" };
+let reusedInviteSpace;
 try {
   check(process.env.CHALK_PROOF_CONFIG_SOURCE === "env", "Web proof requires environment configuration", "configuration");
   const config = await loadConfig({ readiness: false });
@@ -36,21 +38,29 @@ try {
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
   await prepareIntegration(run, false);
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `web-proof-${randomUUID()}`,
-    metadata: { proof_run_id: runId },
-    media_plane: "cf_sfu",
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  // The public API refuses to create an own-SFU Space, so chalk_sfu reuses the Space an operator moved (CHALK_PROOF_SPACE_ID_CHALK_SFU).
+  const space =
+    mediaPlane === "chalk_sfu"
+      ? await createSpace(run, mediaPlane)
+      : await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
+          name: run.label,
+          slug: `web-proof-${randomUUID()}`,
+          metadata: { proof_run_id: runId },
+          media_plane: "cf_sfu",
+          recording_policy: "manual",
+          transcription_policy: "on_demand",
+          default_episode_duration_seconds: 1800,
+          maximum_episode_duration_seconds: 1800,
+          linger_window_seconds: 60,
+          admission_policy: { mode: "open" },
+        });
   await save(`${directory}/space.json`, space);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });
+  // A reused Space is not the run's own, so cleanup learns of this Episode from the ownership file.
+  if (mediaPlane === "chalk_sfu") await trackEpisode(run, space, episode);
   await save(`${directory}/episode.json`, episode);
+  // Only a reused Space outlives the run, so only its invite must be closed again (also when the proof fails).
+  if (mediaPlane === "chalk_sfu") reusedInviteSpace = space;
   const invite = await run.ownerRequest("PATCH", `${run.tenantPath}/spaces/${space.id}/public-invite`, { enabled: true });
   const url = new URL(invite.canonical_url);
   const web = new URL(run.config.web_url);
@@ -62,7 +72,7 @@ try {
     child = spawn("pnpm", ["exec", "e2e", "run"], {
       detached: true,
       stdio: "inherit",
-      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin }),
+      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin, mediaPlane }),
     });
     const timer = setTimeout(stop, 300_000);
     child.once("error", (error) => {
@@ -85,7 +95,11 @@ try {
 } finally {
   if (run) {
     try {
-      await cleanupRun(run);
+      // A failed invite close fails the cleanup, but never skips the rest of it.
+      const inviteClosing = reusedInviteSpace ? closeReusedInvite(run, reusedInviteSpace) : Promise.resolve();
+      const outcomes = await Promise.allSettled([inviteClosing, cleanupRun(run)]);
+      const failed = outcomes.find((outcome) => outcome.status === "rejected");
+      if (failed) throw failed.reason;
       report.cleanup = "passed";
     } catch (error) {
       report.cleanup = "failed";
