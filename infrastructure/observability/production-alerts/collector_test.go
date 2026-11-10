@@ -320,6 +320,47 @@ func TestAnExpiredButTrustedServerCertificateReadsAsExpired(t *testing.T) {
 	}
 }
 
+func TestACAThatExpiresBeforeItsLeafSetsTheEffectiveExpiry(t *testing.T) {
+	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The CA ends in two days; the leaf it signed ends in a year.
+	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(11), Subject: pkix.Name{CommonName: "short ca"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(48 * time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leafTemplate := &x509.Certificate{SerialNumber: big.NewInt(12), Subject: pkix.Name{CommonName: "long leaf"}, NotBefore: time.Now().Add(-30 * time.Minute), NotAfter: time.Now().Add(365 * 24 * time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature, DNSNames: []string{"chalk-sfu"}}
+	der, err := x509.CreateCertificate(rand.Reader, leafTemplate, caCert, &key.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.NotFoundHandler())
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}, MinVersion: tls.VersionTLS13}
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	caFile := filepath.Join(t.TempDir(), "short-ca.pem")
+	if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	probes[0].URL, probes[0].CAFile = server.URL+"/readyz", caFile
+	// Handshakes start failing when the CA ends, so the leaf's year-long NotAfter must not read as healthy.
+	items := collectCertificateExpiry(context.Background(), probes[:1], "", time.Now())
+	if len(items) != 1 || items[0].Value != 1 || !strings.Contains(items[0].Reason, "an own SFU server certificate expires within 7 days") {
+		t.Fatalf("the CA's earlier expiry must decide: %+v", items)
+	}
+}
+
 func TestAnImpostorCertificateRaisesAnUntrustedFindingInsteadOfHidingExpiry(t *testing.T) {
 	// The fleet's CA is not the impostor's, so the impostor's far-future expiry must not read as healthy.
 	probes, _ := newSFUFleet(t, ready(200, sfuBody(0, "")))

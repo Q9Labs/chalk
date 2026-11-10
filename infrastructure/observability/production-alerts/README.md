@@ -91,7 +91,7 @@ SFU client certificate lasts 365 days and is a separate target: renew it with
 the collector read it. Each chain is verified against the configured CA and name as of the moment the
 certificate was issued, so only expiry is ignored: an expired certificate from the right
 CA reads as expired, and a certificate that does not chain or match raises an
-`untrusted` finding instead of hiding an expiry. The checks run in parallel on their
+`untrusted` finding instead of hiding an expiry. A certificate's expiry is the earliest NotAfter along its verified chain: the pinned CA counts for the SFU, a system root does not for the door, so a CA that ends before its leaf sets the date. The checks run in parallel on their
 own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
 The direct door's certificate is issued and renewed by its Caddy proxy
 over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the

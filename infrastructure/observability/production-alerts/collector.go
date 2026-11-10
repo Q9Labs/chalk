@@ -481,28 +481,51 @@ func sfuServerCertificate(ctx context.Context, probe sfuProbe) certReading {
 		return certReading{}
 	}
 	reading := certReading{label: "an own SFU server certificate", notAfter: chain[0].NotAfter}
-	if !trustedWhenIssued(chain, config.RootCAs, config.ServerName) {
+	// The configured CA is the pinned root, so its own expiry counts too.
+	if notAfter, ok := trustedWhenIssued(chain, config.RootCAs, config.ServerName, true); ok {
+		reading.notAfter = notAfter
+	} else {
 		reading.failure = "an own SFU server certificate is untrusted"
 	}
 	return reading
 }
 
 // trustedWhenIssued checks the chain and the name at a moment inside the leaf's
-// validity, so only expiry is ignored: the expiry check reads NotAfter itself, and
-// an expired certificate from the right CA must still read as expired.
-func trustedWhenIssued(chain []*x509.Certificate, roots *x509.CertPool, dnsName string) bool {
+// validity, so only expiry is ignored, and returns the chain's effective expiry: the
+// earliest NotAfter along the best verified path, because a handshake fails once any
+// certificate on it has expired. The root counts only when it is the configured CA
+// (includeRoot); a system root's own expiry is not this certificate's to renew.
+func trustedWhenIssued(chain []*x509.Certificate, roots *x509.CertPool, dnsName string, includeRoot bool) (time.Time, bool) {
 	intermediates := x509.NewCertPool()
 	for _, certificate := range chain[1:] {
 		intermediates.AddCert(certificate)
 	}
-	_, err := chain[0].Verify(x509.VerifyOptions{
+	verified, err := chain[0].Verify(x509.VerifyOptions{
 		Roots:         roots,
 		Intermediates: intermediates,
 		DNSName:       dnsName,
 		CurrentTime:   chain[0].NotBefore.Add(time.Second),
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	})
-	return err == nil
+	if err != nil {
+		return time.Time{}, false
+	}
+	var best time.Time
+	for _, path := range verified {
+		if !includeRoot && len(path) > 1 {
+			path = path[:len(path)-1]
+		}
+		earliest := path[0].NotAfter
+		for _, certificate := range path[1:] {
+			if certificate.NotAfter.Before(earliest) {
+				earliest = certificate.NotAfter
+			}
+		}
+		if earliest.After(best) {
+			best = earliest
+		}
+	}
+	return best, true
 }
 
 // doorRoots is the door's trust store; nil means the system roots. Tests set it.
@@ -518,8 +541,8 @@ func doorCertificate(ctx context.Context, doorURL string) certReading {
 	}
 	reading.notAfter = chain[0].NotAfter
 	target, _ := url.Parse(doorURL)
-	if trustedWhenIssued(chain, doorRoots, target.Hostname()) {
-		reading.failure = ""
+	if notAfter, ok := trustedWhenIssued(chain, doorRoots, target.Hostname(), false); ok {
+		reading.notAfter, reading.failure = notAfter, ""
 	}
 	return reading
 }
