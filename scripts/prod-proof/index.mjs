@@ -4,6 +4,7 @@ import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
 import { offReasonProof } from "./off-reason.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
+import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -65,8 +66,16 @@ const plans = {
     webhooks: false,
     proofs: ["long-call"],
   },
+  // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.
+  "toggle-offers": {
+    media: false,
+    longCall: true,
+    webhooks: false,
+    proofs: ["toggle-offers"],
+  },
 };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|offreason] [--force-layer-switch|--no-layer-switch] [long-call --dry-run]
+const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -76,9 +85,9 @@ Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is l
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
 const known = new Set([...Object.keys(plans), "--force-layer-switch", "--no-layer-switch", "--dry-run"]);
-const invalid = [!plans[mode], args.some((arg) => !known.has(arg)), args.filter((arg) => Object.hasOwn(plans, arg)).length > 1, args.includes("--force-layer-switch") && args.includes("--no-layer-switch"), args.includes("--dry-run") && mode !== "long-call"].some(Boolean);
+const invalid = [!plans[mode], args.some((arg) => !known.has(arg)), args.filter((arg) => Object.hasOwn(plans, arg)).length > 1, args.includes("--force-layer-switch") && args.includes("--no-layer-switch"), args.includes("--dry-run") && !dryRuns[mode]].some(Boolean);
 if (args.includes("--help")) console.log(usage);
-else if (!invalid && args.includes("--dry-run")) console.log(longCallPlan());
+else if (!invalid && args.includes("--dry-run")) console.log(dryRuns[mode]());
 else if (mode === "cleanup") {
   try {
     check(args.length === 2, "cleanup requires one run ID");
@@ -112,6 +121,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   if (plan.longCall) receiver = await prepareIntegration(run, false);
   const actions = {
     "long-call": () => longCallProof(run, receiver),
+    "toggle-offers": () => toggleOffersProof(run, receiver),
     leave: () => leaveProof(run),
     offreason: () => offReasonProof(run),
     "camera-share": async () => {
