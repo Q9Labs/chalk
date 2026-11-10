@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AssignmentError, ControlApiError, ProviderError, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
+import { isReasonWord } from "./provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { validateSpeakerTurnManifest } from "./urls.js";
@@ -216,7 +217,7 @@ export async function reportAssignmentFailure(error: unknown, assignment: Transc
     terminal,
     attempt: assignment.attempt,
     ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}),
-    ...(error instanceof ProviderError && error.providerCode !== undefined ? { providerReason: error.providerCode } : {}),
+    ...(error instanceof ProviderError && error.providerCode !== undefined && isReasonWord(error.providerCode) ? { providerReason: error.providerCode } : {}),
     reason: failureReason(error),
   });
   await safeRetry(control, assignment, journey, errorCode, terminal, logger, creditRetryAt(error, assignment));
