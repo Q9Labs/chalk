@@ -6,7 +6,6 @@ import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
-import { callNetwork } from "../space-header/call-network";
 import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
@@ -317,7 +316,7 @@ export function SpaceView({
             onOpenReportProblem,
             reportUnavailableReason,
             diagnostics: callDiagnostics(connection, media),
-            network: callNetwork(connection.status === "live", media.callStats),
+            network: { live: connection.status === "live", samples: media.callStats },
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
               onToggleMute: microphoneTarget === undefined ? undefined : () => void runCommand(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop"),

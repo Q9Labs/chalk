@@ -1,5 +1,18 @@
-import { CALL_STATS_HISTORY } from "@q9labsai/chalk-client";
-import type { CallCharts as Charts, NetworkSeries } from "./call-network";
+import { CALL_STATS_HISTORY, type CallStatsSample } from "@q9labsai/chalk-client";
+import { lossOf, rounded } from "./call-network";
+
+/** One value per call-stats window, oldest first; `null` where a window measured nothing. */
+export type NetworkSeries = readonly (number | null)[];
+
+export type Charts = {
+  readonly latency: { readonly points: NetworkSeries; readonly headline: string };
+  readonly loss: { readonly points: NetworkSeries; readonly headline: string };
+  readonly bandwidth: { readonly upload: NetworkSeries; readonly download: NetworkSeries; readonly headline: string };
+};
+
+/** Charts need a line, so they wait for a second window. */
+const MIN_CHART_SAMPLES = 2;
+const megabits = (kbps: number | null | undefined): number | null => (typeof kbps === "number" ? kbps / 1000 : null);
 
 const WIDTH = 328;
 const HEIGHT = 36;
@@ -30,6 +43,19 @@ function line(points: NetworkSeries, min: number, max: number): string {
   return path;
 }
 
+export function callCharts(samples: readonly CallStatsSample[]): Charts | null {
+  if (samples.length < MIN_CHART_SAMPLES) return null;
+  const latest = samples.at(-1);
+  if (!latest) return null;
+  const upload = samples.map((sample) => megabits(sample.send_bitrate_kbps));
+  const download = samples.map((sample) => megabits(sample.recv_bitrate_kbps));
+  return {
+    latency: { points: samples.map((sample) => sample.rtt_ms ?? null), headline: rounded(latest.rtt_ms ?? null, 0) },
+    loss: { points: samples.map(lossOf), headline: rounded(lossOf(latest), 1) },
+    bandwidth: { upload, download, headline: `${rounded(upload.at(-1) ?? null, 1)} / ${rounded(download.at(-1) ?? null, 1)}` },
+  };
+}
+
 function Row({ label, headline, unit, children }: { readonly label: React.ReactNode; readonly headline: string; readonly unit: string; readonly children: React.ReactNode }) {
   return (
     <div className="chalk-shell-chart">
@@ -55,7 +81,9 @@ function Stroke({ d, color, opacity }: { readonly d: string; readonly color: str
   return <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeOpacity={opacity} vectorEffect="non-scaling-stroke" />;
 }
 
-export function CallChartsView({ charts }: { readonly charts: Charts }) {
+export function CallChartsView({ samples }: { readonly samples: readonly CallStatsSample[] }) {
+  const charts = callCharts(samples);
+  if (!charts) return null;
   const { latency, loss, bandwidth } = charts;
   const latencyMin = Math.min(LATENCY_FLOOR_MS, ...latency.points.filter((value): value is number => value !== null));
   const latencyMax = Math.max(LATENCY_CEILING_MS, peak(latency.points));

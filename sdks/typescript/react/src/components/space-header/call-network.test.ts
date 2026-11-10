@@ -1,6 +1,7 @@
 import type { CallStatsSample } from "@q9labsai/chalk-client";
 import { expect, it } from "vitest";
-import { callCharts, callNetwork, connectionQuality } from "./call-network";
+import { callCharts } from "./CallCharts";
+import { connectionQuality as rate } from "./call-network";
 
 const sample = (fields: Partial<CallStatsSample> = {}): CallStatsSample => ({ elapsed_ms: 10_000, window_ms: 10_000, connection_type: "udp", ...fields });
 
@@ -24,14 +25,14 @@ it("waits for a second window before offering charts", () => {
 });
 
 it("rates the connection from the newest window and says why when it is weak", () => {
-  expect(connectionQuality(true, [])).toMatchObject({ level: 4, tone: "good", word: "Connected" });
-  expect(connectionQuality(true, [sample({ rtt_ms: 60, recv_loss_pct: 0.2 })])).toMatchObject({ level: 4, word: "Excellent" });
-  expect(connectionQuality(true, [sample({ rtt_ms: 250 })])).toMatchObject({ level: 3, tone: "warn", word: "Fair" });
-  expect(connectionQuality(true, [sample({ rtt_ms: 40, recv_loss_pct: 8 })])).toMatchObject({ level: 2, word: "Unstable", helper: "8% of packets are getting lost. Audio may break up." });
-  expect(connectionQuality(true, [sample({ rtt_ms: 900 })])).toMatchObject({ level: 2, word: "Unstable" });
-  expect(connectionQuality(true, [sample({ rtt_ms: 900 }), sample({ rtt_ms: 40 })]).word).toBe("Excellent");
+  expect(rate({ live: true, samples: [] })).toMatchObject({ level: 4, tone: "good", word: "Connected" });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 60, recv_loss_pct: 0.2 })] })).toMatchObject({ level: 4, word: "Excellent" });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 250 })] })).toMatchObject({ level: 3, tone: "warn", word: "Fair" });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 40, recv_loss_pct: 8 })] })).toMatchObject({ level: 2, word: "Unstable", helper: "8% of packets are getting lost. Audio may break up." });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 900 })] })).toMatchObject({ level: 2, word: "Unstable" });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 900 }), sample({ rtt_ms: 40 })] }).word).toBe("Excellent");
 });
 
 it("reports reconnecting regardless of old stats", () => {
-  expect(callNetwork(false, [sample({ rtt_ms: 40 }), sample({ rtt_ms: 41 })]).quality).toMatchObject({ level: 1, tone: "bad", word: "Reconnecting…" });
+  expect(rate({ live: false, samples: [sample({ rtt_ms: 40 }), sample({ rtt_ms: 41 })] })).toMatchObject({ level: 1, tone: "bad", word: "Reconnecting…" });
 });

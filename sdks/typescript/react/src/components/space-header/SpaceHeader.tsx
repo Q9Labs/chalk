@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useRef, useState } from "react";
 import { cn } from "../../utils/cn";
 import { useMediaQuery } from "../../internal/useMediaQuery";
 import { useNarrowCall } from "../../internal/call-width";
@@ -6,12 +6,15 @@ import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { ChalkPopover, ChalkSheet } from "../chalk-ui";
 import { Avatar } from "../atomic/Avatar";
 import { LayoutMenu } from "./LayoutMenu";
-import { CallDetails, CallDialog } from "./CallDetails";
+import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+
+// The menu body loads when the menu first opens, so a call that never opens it never downloads it.
+const CallDetails = lazy(() => import("./CallDetails").then((module) => ({ default: module.CallDetails })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
@@ -42,17 +45,19 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </button>
   );
   const content = (
-    <CallDetails
-      {...props}
-      onClose={() => setOpen(false)}
-      sounds={sounds}
-      onSoundsChange={setSounds}
-      onDialog={(kind) => {
-        setOpen(false);
-        if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
-        else setDialog({ kind, open: true });
-      }}
-    />
+    <Suspense fallback={null}>
+      <CallDetails
+        {...props}
+        onClose={() => setOpen(false)}
+        sounds={sounds}
+        onSoundsChange={setSounds}
+        onDialog={(kind) => {
+          setOpen(false);
+          if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
+          else setDialog({ kind, open: true });
+        }}
+      />
+    </Suspense>
   );
   return (
     <header ref={focusScope} data-part="header-region" className={cn("chalk-header", className)} role="banner">
