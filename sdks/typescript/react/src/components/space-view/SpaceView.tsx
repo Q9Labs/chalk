@@ -96,6 +96,12 @@ export interface SpaceViewProps {
   readonly className?: string;
 }
 
+function toggleCallFullscreen() {
+  const request = document.fullscreenElement ? document.exitFullscreen() : document.querySelector<HTMLElement>("[data-part=call-frame]")?.requestFullscreen();
+  // The browser can refuse (an embedding frame without the fullscreen permission); the call stays as it is.
+  request?.catch(() => undefined);
+}
+
 export function SpaceView({
   timeLimit,
   colorScheme = "dark",
@@ -179,6 +185,8 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
+  if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -324,6 +332,7 @@ export function SpaceView({
               onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
               onToggleLayout: () => updateLayout(headerLayout === "grid" ? "focus" : "grid"),
+              onToggleFullscreen: toggleCallFullscreen,
               onClosePanel: () => setActivePanel(null),
               onPushToTalk: (enabled) => {
                 if (enabled && connection.status !== "live") return;
@@ -377,6 +386,7 @@ export function SpaceView({
               onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
               onToggleWhiteboard={onToggleWhiteboard}
               onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+              reactionsOpen={isReactionPickerOpen}
               onCommandError={onCommandError}
               onLeaveRequest={leaveCall}
               onEndForEveryone={endCallForEveryone}
@@ -385,8 +395,9 @@ export function SpaceView({
           stageOverlay={
             <>
               {feature("reactions") ? <ReactionsOverlay /> : null}
+              {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. */}
               {feature("reactions") && canSendReaction && connection.status === "live" ? (
-                <div className="absolute bottom-24 left-1/2 z-50 -translate-x-1/2">
+                <div className="absolute bottom-24 left-1/2 z-50">
                   <ReactionPicker
                     isHandRaised={self.handRaised}
                     onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
