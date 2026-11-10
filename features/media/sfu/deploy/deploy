@@ -44,9 +44,9 @@ for file in ca.crt server.crt server.key; do
   [[ -f "${dir}/${file}" ]] || { echo "missing ${dir}/${file}; see certs" >&2; exit 1; }
 done
 
-# Without a readable key, BatchMode ssh fails quietly and the bootstrap wait below would retry for ten minutes.
+# An unusable key makes BatchMode ssh fail quietly, and the bootstrap wait below would retry for ten minutes.
 ssh_key="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
-[[ -f "$ssh_key" ]] || { echo "no SSH key at ${ssh_key}; set SFU_SSH_KEY to the operator key" >&2; exit 1; }
+[[ -f "$ssh_key" && -r "$ssh_key" ]] || { echo "no readable SSH key at ${ssh_key}; set SFU_SSH_KEY to the operator key" >&2; exit 1; }
 ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts" -i "$ssh_key")
 remote() { ssh "${ssh_options[@]}" "root@${host}" "$@"; }
 # as_sfu runs a command as the chalk-sfu user, inside its user session.
@@ -57,7 +57,14 @@ as_sfu() {
 
 echo "==> waiting for the node's bootstrap"
 for _ in $(seq 60); do
-  remote test -f /var/lib/chalk-sfu-bootstrapped 2>/dev/null && break
+  status=0
+  probe="$(remote test -f /var/lib/chalk-sfu-bootstrapped 2>&1)" || status=$?
+  [[ $status -eq 0 ]] && break
+  # A node that is not up yet refuses or times out and is worth waiting for; a key the node rejects is not.
+  if grep -q -E 'Permission denied|Load key|no such identity|Too many authentication failures' <<<"$probe"; then
+    echo "ssh cannot authenticate to the node with ${ssh_key}: ${probe}" >&2
+    exit 1
+  fi
   sleep 10
 done
 remote test -f /var/lib/chalk-sfu-bootstrapped

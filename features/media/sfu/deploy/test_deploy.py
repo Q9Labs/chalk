@@ -32,8 +32,27 @@ class DeployStartTest(unittest.TestCase):
     def test_missing_key_fails_at_the_start_without_ssh(self):
         result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env=self.env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 1)
-        self.assertIn('no SSH key at', result.stderr)
+        self.assertIn('no readable SSH key at', result.stderr)
         self.assertFalse((self.root / 'ssh-calls').exists())
+
+    @unittest.skipIf(os.geteuid() == 0, 'root reads any file')
+    def test_unreadable_key_fails_at_the_start_without_ssh(self):
+        key = self.root / 'operator_key'
+        key.write_text('x')
+        key.chmod(0)
+        result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key)}, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no readable SSH key at', result.stderr)
+        self.assertFalse((self.root / 'ssh-calls').exists())
+
+    def test_key_the_node_rejects_fails_without_waiting(self):
+        key = self.root / 'operator_key'
+        key.write_text('x')
+        (self.root / 'bin' / 'ssh').write_text('#!/bin/sh\necho "root@host: Permission denied (publickey)." >&2\nexit 255\n')
+        result = subprocess.run([str(DEPLOY), 'staging', '192.0.2.1'], env={**self.env, 'SFU_SSH_KEY': str(key)}, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('ssh cannot authenticate', result.stderr)
+        self.assertIn('Permission denied', result.stderr)
 
     def test_key_from_environment_is_passed_to_ssh(self):
         key = self.root / 'operator_key'
