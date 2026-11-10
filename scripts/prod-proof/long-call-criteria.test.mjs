@@ -336,3 +336,12 @@ test("every microphone turn-on must be checked at every other guest, by every gu
   assert.deepEqual(judged({ ...call, hearings: partial }), ["Guest 1's microphone turned back on at +26s was checked at 1 of 2 other guests"]);
   assert.deepEqual(judged({ ...call, hearings: all }), []);
 });
+
+test("a listener page that closed during the hearing check fails the call naming the listener", () => {
+  const call = healthyCall();
+  const toggle = call.toggles.find((entry) => entry.guest === 0 && entry.kind === "microphone" && entry.enabled);
+  const hearings = heardEveryUnmute(call).map((hearing) =>
+    hearing.speaker === 0 && hearing.atMs === toggle.atMs ? { ...hearing, verdicts: hearing.verdicts.map((verdict) => (verdict.listener === 2 ? { listener: 2, speaker: 1, pass: false, why: "the listener's page failed: Target page, context or browser has been closed" } : verdict)) } : hearing,
+  );
+  assert.deepEqual(judged({ ...call, hearings }), ["Guest 2 did not decode guest 1 within 5 s of its microphone turning back on (the listener's page failed: Target page, context or browser has been closed); turned back on at +26s"]);
+});

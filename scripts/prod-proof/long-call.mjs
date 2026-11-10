@@ -82,11 +82,12 @@ export async function longCallProof(run, receiver) {
       pending.sort((a, b) => a.atMs - b.atMs);
       while (pending.length && pending[0].atMs <= now) {
         const entry = pending.shift();
+        const turnedOnAt = Date.now();
         try {
           await toggle(guests.pages[entry.guest], entry);
           const turned = { ...entry, atMs: Date.now() - startedAtMs };
           ran.push(turned);
-          if (entry.kind === "microphone" && entry.enabled) hearings.push(hearAfterUnmute(guests, entry.guest).then((verdicts) => ({ speaker: entry.guest, atMs: turned.atMs, verdicts })));
+          if (entry.kind === "microphone" && entry.enabled) hearings.push(hearAfterUnmute(guests, entry.guest, { turnedOnAt }).then((verdicts) => ({ speaker: entry.guest, atMs: turned.atMs, verdicts })));
         } catch (error) {
           failures.push(`Guest ${entry.guest + 1} could not turn its ${entry.kind} ${entry.enabled ? "on" : "off"} at +${Math.round(now / 1000)}s: ${String(error.message).split("\n")[0]}`);
         }

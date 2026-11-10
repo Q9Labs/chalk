@@ -134,8 +134,9 @@ const scenarios = {
     for (const speaker of everyone(3)) {
       await pages[speaker].evaluate(() => window.proofClient.media.setMicrophoneEnabled(false));
       const silenced = await proveSilenceFrom(guests, speaker);
+      const turnedOnAt = Date.now();
       await pages[speaker].evaluate(() => window.proofClient.media.setMicrophoneEnabled(true));
-      const back = await hearAfterUnmute(guests, speaker);
+      const back = await hearAfterUnmute(guests, speaker, { turnedOnAt });
       const unheard = unheardAfterUnmute(speaker, back);
       check(unheard.length === 0, unheard.join("; "), "audio-not-decoded");
       rounds.push({ mutedGuest: speaker + 1, silence: silenced.map(pick), unmuted: back.map(pick) });
