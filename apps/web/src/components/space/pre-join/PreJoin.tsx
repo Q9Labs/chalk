@@ -136,7 +136,7 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
           {title}
           {preview}
           {rows}
-          <div className="mt-auto">{form}</div>
+          <div className="flex flex-1 flex-col justify-end">{form}</div>
         </div>
         {sheet}
       </div>
