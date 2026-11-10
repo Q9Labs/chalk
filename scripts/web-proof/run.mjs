@@ -72,7 +72,7 @@ try {
     child = spawn("pnpm", ["exec", "e2e", "run"], {
       detached: true,
       stdio: "inherit",
-      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin }),
+      env: childEnvironment(process.env, { config: run.config, apiKey: run.apiKey, invite: entry, directory, runId, webUrl: web.origin, mediaPlane }),
     });
     const timer = setTimeout(stop, 300_000);
     child.once("error", (error) => {

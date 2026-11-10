@@ -1,10 +1,12 @@
 import { check } from "../prod-proof/runtime.mjs";
 
-export function childEnvironment(environment, { config, apiKey, invite, directory, runId, webUrl }) {
+export function childEnvironment(environment, { config, apiKey, invite, directory, runId, webUrl, mediaPlane }) {
   return {
     ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
     E2E_TELEMETRY_DISABLED: "1",
     CHALK_PROOF_WEBKIT: environment.CHALK_PROOF_WEBKIT === "1" ? "1" : "0",
+    // The SDK guest fails when its admission grant is on another provider (an own SFU that overflows to Cloudflare).
+    CHALK_PROOF_MEDIA_PLANE: mediaPlane,
     CHALK_PROOF_WEB_URL: webUrl,
     CHALK_E2E_API_URL: config.api_url,
     CHALK_E2E_TENANT_ID: config.tenant_id,
