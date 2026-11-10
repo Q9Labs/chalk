@@ -258,6 +258,30 @@ await writeFile("result.json", JSON.stringify({ own, foreign, episode, foreignEp
         self.assertEqual(self.store.read()[0], held)
 
 
+class DeployLeaseTests(unittest.TestCase):
+    """The nightly managed deploy restarts API, Sync and the SFU node, so it takes the staging lease like the proofs."""
+
+    workflows = Path(__file__).parents[2] / ".github/workflows"
+
+    def test_nightly_deploy_waits_for_the_lease_and_production_does_not(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        wrapped = re.search(r'if \[\[ "\$MANAGED_ENVIRONMENT" == nightly \]\]; then\n\s+#[^\n]*\n\s+(STAGING_LEASE_WAIT=\d+ scripts/staging-sfu/gate-lease [^\n]+)\n\s+else\n\s+(node scripts/deploy/deploy-managed-release.mjs "\$\{args\[@\]\}")\n', ci)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(wrapped[1], 'STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-deploy managed-deploy "$GITHUB_RUN_ID" -- node scripts/deploy/deploy-managed-release.mjs "${args[@]}"')
+        self.assertEqual(ci.count("deploy-managed-release.mjs"), ci.count("deploy-managed-release.mjs \"${args[@]}\" --dry-run") + 2)
+
+    def test_the_deploy_job_and_every_caller_may_write_the_lease_ref(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        self.assertRegex(job[: job.index("steps:")], r"permissions:\n\s+contents: write")
+        # A caller cannot grant less than a called job asks for, or the whole run fails at startup.
+        for name, jobs in (("nightly.yml", ["release"]), ("promote.yml", ["release", "rollback"])):
+            text = (self.workflows / name).read_text()
+            for job_name in jobs:
+                block = text[text.index(f"\n  {job_name}:") :]
+                self.assertRegex(block[: block.index("uses: ./.github/workflows/ci.yml")], r"permissions:\n\s+contents: write", f"{name} {job_name}")
+
+
 class GateLeaseTests(unittest.TestCase):
     """gate-lease names why the lease stopped a gating job; staging-lock keeps the lease rules."""
 
