@@ -689,14 +689,14 @@ jobs:
       release_id: ${{ steps.result.outputs.release_id }}
       restored_source_release_id: ${{ steps.result.outputs.restored_source_release_id }}
     runs-on: ubuntu-24.04
-    # The nightly deploy first waits up to 30 minutes for the staging-SFU lease; host polling is bounded to 30 minutes, with time for guarded dispatcher plans.
-    timeout-minutes: 90
+    # Host polling is bounded to 30 minutes; leave time for guarded dispatcher plans.
+    timeout-minutes: 60
     environment: ${{ inputs.managed_environment }}
     concurrency:
       group: deploy-managed-${{ inputs.managed_environment }}
       cancel-in-progress: false
     permissions:
-      contents: write # The staging-SFU lease is a Git ref; only the nightly deploy writes it.
+      contents: read
       actions: read
       deployments: write
       id-token: write
@@ -867,12 +867,7 @@ jobs:
           if [[ -f "$media" ]]; then
             python3 scripts/releases/media.py pin_archives --manifest "$manifest" --output "$media"
           fi
-          if [[ "$MANAGED_ENVIRONMENT" == nightly ]]; then
-            # The deploy restarts API, Sync and the SFU node, so it must not overlap a proof or latency run on the shared staging SFU.
-            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-deploy managed-deploy "$GITHUB_RUN_ID" -- node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
-          else
-            node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
-          fi
+          node scripts/deploy/deploy-managed-release.mjs "${args[@]}"
           if [[ "$MANAGED_ENVIRONMENT" == nightly && -f "$media" ]]; then
             python3 scripts/releases/media.py qualify --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
             python3 scripts/releases/media.py record_current --manifest "$manifest" --output "$media" --directory "$RUNNER_TEMP/media-qualification"
