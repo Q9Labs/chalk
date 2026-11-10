@@ -103,7 +103,23 @@ func forceClose(t *testing.T, s *Session, mid string) {
 	}
 }
 
-func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
+// Reusing an audio receiver can leave Chromium's MediaStreamTrack silent even while
+// its RTP and sample counters advance. Keep a fresh receiver until audio reuse is proved.
+func TestAudioRepullGetsAFreshReceiverIdentity(t *testing.T) {
+	node := newTestNode(t, nil)
+	publisher := node.newTestSession(t, testScope("alice", 1))
+	subscriber := node.newTestSession(t, testScope("bob", 1))
+	publishMedia(t, publisher)
+	viewer := newTestPeer(t)
+	first, original := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
+	forceClose(t, subscriber, first)
+	next, sections := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
+	if next == first || len(sections[next].ssrcs) == 0 || slices.Equal(sections[next].ssrcs, original[first].ssrcs) {
+		t.Fatalf("audio repull reused receiver identity: mid %s -> %s, SSRCs %v -> %v", first, next, original[first].ssrcs, sections[next].ssrcs)
+	}
+}
+
+func TestVideoSectionsFollowLiveTracksNotPulls(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
@@ -114,14 +130,14 @@ func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
 	firstSize := 0
 	seen := map[string]bool{}
 	for pull := range pulls {
-		name := []string{"mic", "cam", "mic", "mic", "cam", "cam"}[pull%6]
+		name := "cam"
 		mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, name)
 		seen[mid] = true
-		if got := len(subscriber.pc.GetTransceivers()); got > 2 {
-			t.Fatalf("pull %d: the node holds %d sections for at most one live track of each kind, want at most 2", pull, got)
+		if got := len(subscriber.pc.GetTransceivers()); got > 1 {
+			t.Fatalf("pull %d: the node holds %d sections for one live video track, want at most 1", pull, got)
 		}
-		if got := len(viewer.pc.GetTransceivers()); got > 2 {
-			t.Fatalf("pull %d: the client holds %d sections, want at most 2", pull, got)
+		if got := len(viewer.pc.GetTransceivers()); got > 1 {
+			t.Fatalf("pull %d: the client holds %d sections, want at most 1", pull, got)
 		}
 		if section := sections[mid]; section.direction != "sendonly" || section.port == 0 || len(section.ssrcs) == 0 {
 			t.Fatalf("pull %d: the section %s of the response is %+v, want an active sendonly section with a source", pull, mid, section)
@@ -142,10 +158,10 @@ func TestSectionsFollowLiveTracksNotPulls(t *testing.T) {
 		}
 		forceClose(t, subscriber, mid)
 	}
-	if len(seen) > 2 {
-		t.Fatalf("%d pulls used %d mids, want 2 (one audio, one video)", pulls, len(seen))
+	if len(seen) > 1 {
+		t.Fatalf("%d pulls used %d mids, want 1 (video)", pulls, len(seen))
 	}
-	t.Logf("%d pulls of two kinds used mids %v; the client offer stayed near %d bytes", pulls, fmt.Sprint(seen), firstSize)
+	t.Logf("%d video pulls used mids %v; the client offer stayed near %d bytes", pulls, fmt.Sprint(seen), firstSize)
 }
 
 // pullBoth has the viewer pull the mic and then the camera, so mids 0 and 1 are live.
@@ -167,48 +183,31 @@ func TestReusedMidIsAnnouncedAsTheSDKRevives(t *testing.T) {
 	viewer := newTestPeer(t)
 
 	mic, cam := pullBoth(t, subscriber, publisher, viewer)
-	if mic == cam {
-		t.Fatalf("mic and camera share mid %s", mic)
+	offer, err := subscriber.pc.CreateOffer(nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	firstSources := map[string][]string{}
-	{
-		// The sources of the live sections, from an offer the node makes for a third pull of nothing new.
-		offer, err := subscriber.pc.CreateOffer(nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for mid, section := range readSections(t, offer.SDP) {
-			firstSources[mid] = section.ssrcs
-		}
+	first := readSections(t, offer.SDP)
+	forceClose(t, subscriber, cam)
+	mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if mid != cam {
+		t.Fatalf("camera pull got mid %s, want the parked %s", mid, cam)
 	}
-
-	forceClose(t, subscriber, mic)
-	mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
-	if mid != mic {
-		t.Fatalf("the pull after the close got mid %s, want the closed mic mid %s", mid, mic)
+	if got := sections[cam]; got.direction != "sendonly" || got.port == 0 || len(got.ssrcs) == 0 || !slices.Equal(got.ssrcs, first[cam].ssrcs) {
+		t.Fatalf("reused camera section is %+v, want sendonly with the original SSRCs %v", got, first[cam].ssrcs)
 	}
-	if got := sections[mic]; got.direction != "sendonly" || got.port == 0 {
-		t.Fatalf("reused section %s is %+v, want sendonly and not rejected", mic, got)
-	}
-	if got, old := sections[mic].ssrcs, firstSources[mic]; len(got) == 0 || len(old) == 0 || got[0] != old[0] {
-		t.Fatalf("reused section has sources %v after %v: the section keeps its SSRC, so the transport holds no new crypto state", got, old)
-	}
-	if got := sections[cam]; got.direction != "sendonly" || len(got.ssrcs) == 0 || got.ssrcs[0] != firstSources[cam][0] {
-		t.Fatalf("the live camera section changed with the mic pull: %+v, was %v", got, firstSources[cam])
+	if got := sections[mic]; got.direction != "sendonly" || !slices.Equal(got.ssrcs, first[mic].ssrcs) {
+		t.Fatalf("the live microphone section changed with the camera pull: %+v", got)
 	}
 
-	// Both tracks closed: the camera pull reuses the camera mid, and the mic mid stays inactive and unnamed.
 	forceClose(t, subscriber, mic)
 	forceClose(t, subscriber, cam)
 	mid, sections = pullAndAnswer(t, subscriber, publisher, viewer, "cam")
-	if mid != cam {
-		t.Fatalf("camera pull got mid %s, want %s", mid, cam)
+	if mid != cam || sections[cam].direction != "sendonly" {
+		t.Fatalf("camera pull got mid %s with section %+v, want %s sendonly", mid, sections[mid], cam)
 	}
-	if got := sections[cam]; got.direction != "sendonly" {
-		t.Fatalf("reused camera section is %s, want sendonly", got.direction)
-	}
-	if got := sections[mic]; got.port == 0 || len(got.ssrcs) != 0 {
-		t.Fatalf("the unnamed free mic section is %+v, want it kept and without a source", got)
+	if got := sections[mic]; len(got.ssrcs) != 0 {
+		t.Fatalf("closed audio section still announces a source: %+v", got)
 	}
 }
 
@@ -218,7 +217,7 @@ func TestANegotiatedCloseFreesTheMidAndARejectedSectionIsNeverReused(t *testing.
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
-	mic, _ := pullBoth(t, subscriber, publisher, viewer)
+	_, cam := pullBoth(t, subscriber, publisher, viewer)
 
 	closeNegotiated := func(mid string, reject bool) {
 		t.Helper()
@@ -242,19 +241,19 @@ func TestANegotiatedCloseFreesTheMidAndARejectedSectionIsNeverReused(t *testing.
 		}
 	}
 
-	closeNegotiated(mic, false)
-	if mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "mic"); mid != mic {
-		t.Fatalf("after a negotiated close that parked the section the pull got mid %s, want %s", mid, mic)
+	closeNegotiated(cam, false)
+	if mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam"); mid != cam {
+		t.Fatalf("after a negotiated close that parked the section the pull got mid %s, want %s", mid, cam)
 	}
 
 	// An older client stops the transceiver, so its offer rejects the section (port 0). A browser
 	// treats that section as gone for good, so the node must add a new one.
-	closeNegotiated(mic, true)
-	mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
-	if mid == mic {
-		t.Fatalf("the pull reused mid %s, which the client rejected", mic)
+	closeNegotiated(cam, true)
+	mid, sections := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
+	if mid == cam {
+		t.Fatalf("the pull reused mid %s, which the client rejected", cam)
 	}
-	if got := sections[mic]; got.port != 0 && got.direction != "inactive" {
+	if got := sections[cam]; got.port != 0 && got.direction != "inactive" {
 		t.Fatalf("rejected section is %+v in the next offer, want it left inactive or rejected", got)
 	}
 }
@@ -547,15 +546,15 @@ func TestAttachingAParkedSectionToAClosedSessionFails(t *testing.T) {
 	subscriber := node.newTestSession(t, testScope("bob", 1))
 	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
-	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "mic")
+	mid, _ := pullAndAnswer(t, subscriber, publisher, viewer, "cam")
 	forceClose(t, subscriber, mid)
-	parked := subscriber.freeSection(webrtc.RTPCodecTypeAudio)
+	parked := subscriber.freeSection(webrtc.RTPCodecTypeVideo)
 	if parked == nil {
-		t.Fatal("the closed microphone section is not parked")
+		t.Fatal("the closed camera section is not parked")
 	}
 
 	subscriber.Close()
-	pub := publisher.publication("mic")
+	pub := publisher.publication("cam")
 	if _, err := subscriber.attach(newEgressTrack(pub, subscriber.transport), parked); !errors.Is(err, ErrSessionGone) {
 		t.Fatalf("attach on a closed session returned %v, want ErrSessionGone", err)
 	}

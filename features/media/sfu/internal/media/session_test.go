@@ -269,19 +269,19 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 	})
 }
 
-// A forced close parks the section and its sender, which holds the section's SSRCs. Every pull
+// A forced video close parks the section and its sender, which holds the section's SSRCs. Every pull
 // takes the same section back, so the SRTP state of a session follows its sections, and the
 // sender's RTCP reader, which serves the section for its life, ends with the session.
 func TestForcedSubscriptionCloseParksTheSection(t *testing.T) {
 	node := newTestNode(t, nil)
 	publisher := node.newTestSession(t, testScope("alice", 1))
 	subscriber := node.newTestSession(t, testScope("bob", 1))
-	publish(t, publisher, "mic", 1)
+	publishMedia(t, publisher)
 	viewer := newTestPeer(t)
 
 	var first *section
 	for cycle := range 6 {
-		pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "mic-0"))
+		pulled, err := subscriber.AddTracks(context.Background(), pullRequest(subscriber, publisher, "cam"))
 		if err != nil || len(pulled.Tracks) != 1 || len(pulled.TrackErrors) != 0 {
 			t.Fatalf("cycle %d pull: %+v, %v", cycle, pulled, err)
 		}
