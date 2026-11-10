@@ -65,13 +65,12 @@ try {
               for (let i = 0; i < pixels.length; i += 4) if ((i / 4) % 128 < 24) sum += Math.abs(pixels[i] - previous[i]) + Math.abs(pixels[i + 1] - previous[i + 1]) + Math.abs(pixels[i + 2] - previous[i + 2]);
               return sum / (24 * 72 * 3);
             });
-            window.__lastDiff = differences;
             return differences.every((difference) => difference > 12) ? { pixels, differences } : false;
           },
           { background, references, localOnly },
         )
         .catch(async (error) => {
-          console.log("Processed background failure", background, await page.evaluate(() => ({ lastDiff: window.__lastDiff, background: window.cameraBackgroundProof.backgroundState(), frames: window.cameraBackgroundProof.frames(), publication: window.cameraBackgroundProof.publication() })));
+          console.log("Processed background failure", background, await page.evaluate(() => ({ background: window.cameraBackgroundProof.backgroundState(), frames: window.cameraBackgroundProof.frames(), publication: window.cameraBackgroundProof.publication() })));
           throw error;
         });
       const decoded = await frame.jsonValue();
@@ -116,7 +115,6 @@ try {
     // Stop measuring the previous effect while the image preset loads on software WebGL.
     await choose("None");
     await closePicker();
-    for (let i = 0; i < 5; i++) { console.log("DEBUGF", phone, JSON.stringify(await page.evaluate(() => ({ f: window.cameraBackgroundProof.frames(), vis: document.visibilityState, bg: window.cameraBackgroundProof.backgroundState(), v: [...document.querySelectorAll("video")].map((v) => [v.getAttribute("aria-label"), v.readyState, v.paused, v.getBoundingClientRect().width, v.getBoundingClientRect().top|0, v.srcObject?.getVideoTracks()[0]?.readyState])})))); await page.waitForTimeout(1500); }
     await waitForProcessedPixels("none", [blurred]);
     await choose("Office");
     await closePicker();
