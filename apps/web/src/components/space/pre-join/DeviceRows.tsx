@@ -36,32 +36,34 @@ function rowViews(devices: PreJoinDevices, compact = false): readonly RowView[] 
   return [input("microphone"), input("camera"), ...(devices.canChooseSpeaker ? [speaker] : [])];
 }
 
+function DeviceOption({ devices, kind, device, role, onPick }: { readonly devices: PreJoinDevices; readonly kind: Kind; readonly device: MediaDeviceInfo; readonly role: "option" | "radio"; readonly onPick: () => void }) {
+  const { selected, select } = listFor(devices, kind);
+  const chosen = selected === device.deviceId;
+  return (
+    <button
+      type="button"
+      role={role}
+      aria-selected={role === "option" ? chosen : undefined}
+      aria-checked={role === "radio" ? chosen : undefined}
+      onClick={() => {
+        select(device.deviceId);
+        onPick();
+      }}
+      className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
+    >
+      <span className="grid w-[18px] flex-none place-items-center">{chosen ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
+      <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
+      {kind === "microphone" && chosen && devices.microphoneOn ? <LevelMeter level={devices.microphoneLevel} small /> : null}
+    </button>
+  );
+}
+
 function DeviceList({ devices, kind, onPick }: { readonly devices: PreJoinDevices; readonly kind: Kind; readonly onPick: () => void }) {
-  const { list, selected, select } = listFor(devices, kind);
+  const { list } = listFor(devices, kind);
   return (
     <div role="listbox" aria-label={CAPTION[kind]} className="absolute inset-x-0 bottom-full z-20 mb-2 grid rounded-2xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2">
       <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
-      {list.length ? (
-        list.map((device) => (
-          <button
-            key={device.deviceId}
-            type="button"
-            role="option"
-            aria-selected={selected === device.deviceId}
-            onClick={() => {
-              select(device.deviceId);
-              onPick();
-            }}
-            className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) outline-none hover:bg-[var(--chalk-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
-          >
-            <span className="grid w-[18px] flex-none place-items-center">{selected === device.deviceId ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
-            <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
-            {kind === "microphone" && selected === device.deviceId && devices.microphoneOn ? <LevelMeter level={devices.microphoneLevel} small /> : null}
-          </button>
-        ))
-      ) : (
-        <p className="px-3 py-3 text-(length:--type-body) text-[var(--chalk-muted-text)]">No devices found</p>
-      )}
+      {list.length ? list.map((device) => <DeviceOption key={device.deviceId} devices={devices} kind={kind} device={device} role="option" onPick={onPick} />) : <p className="px-3 py-3 text-(length:--type-body) text-[var(--chalk-muted-text)]">No devices found</p>}
     </div>
   );
 }
@@ -138,16 +140,12 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
         <BottomSheet label="Devices" onClose={() => setOpen(false)}>
           <div className="grid gap-3 px-3">
             {(["microphone", "camera", ...(devices.canChooseSpeaker ? (["speaker"] as const) : [])] as const).map((kind) => {
-              const { list, selected, select } = listFor(devices, kind);
+              const { list } = listFor(devices, kind);
               return (
                 <div key={kind} role="radiogroup" aria-label={CAPTION[kind]} className="grid">
                   <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
                   {list.map((device) => (
-                    <button key={device.deviceId} type="button" role="radio" aria-checked={selected === device.deviceId} onClick={() => select(device.deviceId)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-left text-(length:--type-body) hover:bg-[var(--chalk-hover)]">
-                      <span className="grid w-[18px] flex-none place-items-center">{selected === device.deviceId ? <Tick01Icon size={18} aria-hidden="true" /> : null}</span>
-                      <span className="min-w-0 flex-1 truncate">{device.label || FALLBACK[kind]}</span>
-                      {kind === "microphone" && selected === device.deviceId && devices.microphoneOn ? <LevelMeter level={devices.microphoneLevel} small /> : null}
-                    </button>
+                    <DeviceOption key={device.deviceId} devices={devices} kind={kind} device={device} role="radio" onPick={() => undefined} />
                   ))}
                 </div>
               );
