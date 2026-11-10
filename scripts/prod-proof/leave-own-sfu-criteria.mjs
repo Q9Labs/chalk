@@ -9,7 +9,8 @@ export function evaluateOwnSfuLeave(sample) {
   if (!(leave.ms <= leaveCeilingMs)) failures.push(`The Leave took ${Math.round(leave.ms)} ms, over ${leaveCeilingMs} ms`);
   if (leave.peerClosedBeforeAck) failures.push("The media connection closed before the Leave was acknowledged");
   if (!(capture.audio >= 1 && capture.video >= 1)) failures.push("The leaving guest held no live microphone and camera before the Leave, so the release proves nothing");
-  if (release.live !== 0) failures.push(`${release.live} capture track(s) of the leaving guest were still live ${releaseCeilingMs} ms after the Leave`);
+  if (release.live !== 0) failures.push(`${release.live} capture track(s) of the leaving guest were still live ${releaseCeilingMs} ms after the Leave began`);
+  else if (!(release.ms <= releaseCeilingMs)) failures.push(`The capture was released ${Math.round(release.ms)} ms after the Leave began, over ${releaseCeilingMs} ms`);
   if (!survivor.rosterWithoutLeaver) failures.push("The remaining guest still lists the leaver as a participant");
   if (!survivor.remoteWithoutLeaver) failures.push("The remaining guest still receives media from the leaver");
   if (!survivor.ownTracksLive) failures.push("The remaining guest stopped its own capture when the other guest left");

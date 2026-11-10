@@ -23,6 +23,7 @@ for (const [name, change, message] of [
   ["a media close before the acknowledgement", (s) => (s.leave.peerClosedBeforeAck = true), /closed before/],
   ["no capture to release", (s) => (s.capture = { live: 0, audio: 0, video: 0 }), /proves nothing/],
   ["a live camera after Leave", (s) => (s.release.live = 1), /still live/],
+  ["a release that finished after the deadline counted from the start of the Leave", (s) => (s.release.ms = 10_001), /released 10001 ms after the Leave began/],
   ["the leaver in the roster", (s) => (s.survivor.rosterWithoutLeaver = false), /lists the leaver/],
   ["media still arriving from the leaver", (s) => (s.survivor.remoteWithoutLeaver = false), /still receives media/],
   ["the survivor losing its capture", (s) => (s.survivor.ownTracksLive = false), /stopped its own capture/],

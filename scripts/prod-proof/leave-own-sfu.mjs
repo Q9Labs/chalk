@@ -49,13 +49,15 @@ export async function leaveOwnSfuProof(run) {
   await save(`${run.directory}/initial-media-progress.json`, await waitForMediaProgress(guests.pages));
   const leaverId = guests.participants[0];
   const before = await captured(leaver);
+  const leaveBegan = performance.now();
   const leave = await measureLeave(leaver, "ordinary");
   await save(`${run.directory}/leave.json`, leave);
-  // A wait that times out is not an error here: the criteria below name what stayed behind.
-  const releasedAt = performance.now();
+  // The release deadline runs from the start of the Leave, not from its acknowledgement. A wait that times out is not an error
+  // here: the criteria below name what stayed behind.
   let after = await captured(leaver);
-  await waitFor("the leaving guest's capture tracks end", async () => (after = await captured(leaver)).live === 0, releaseCeilingMs, 250).catch(() => {});
-  const releaseMs = Math.round(performance.now() - releasedAt);
+  const window = Math.max(0, releaseCeilingMs - (performance.now() - leaveBegan));
+  if (after.live !== 0 && window > 0) await waitFor("the leaving guest's capture tracks end", async () => (after = await captured(leaver)).live === 0, window, 250).catch(() => {});
+  const releaseMs = Math.round(performance.now() - leaveBegan);
   let view = await survivorView(survivor, leaverId);
   await waitFor("the other guest drops the guest who left", async () => (view = await survivorView(survivor, leaverId)).rosterWithoutLeaver && view.remoteWithoutLeaver, 30_000, 500).catch(() => {});
   const survivorTracks = await captured(survivor);
