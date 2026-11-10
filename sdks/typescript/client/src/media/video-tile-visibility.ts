@@ -2,6 +2,8 @@ import type { VideoRenderSize } from "./video-render-size";
 
 /** How long the UI gets to report a new video publication before it is pulled as if nobody reported. */
 export const UNREPORTED_TILE_WAIT_MS = 250;
+/** On the join's first pull, this many unreported videos skip the report wait: one screen of tiles, so a big room still waits. */
+export const JOIN_UNREPORTED_VIDEO_LIMIT = 4;
 /** A tile that leaves the screen keeps its video this long, so scrolling straight back costs no re-pull. */
 export const HIDDEN_TILE_CLOSE_MS = 5000;
 /** A hidden tab keeps its video this long, so a quick look at another tab costs no re-pull. */
@@ -58,14 +60,18 @@ export class VideoTileSubscriptions {
 
   /**
    * An unreported publication waits briefly for its report and is then pulled, so a UI that never reports keeps every
-   * video. A hidden one is not pulled, and a pulled one that goes off screen is closed after a debounce.
+   * video. A hidden one is not pulled, and a pulled one that goes off screen is closed after a debounce. On the join's
+   * first pull the UI has not mounted its tiles yet, so the first few unreported videos go out with the audio at once.
    */
-  select(now: number, publicationIds: readonly string[], pulled: ReadonlySet<string>): VideoTileSelection {
+  select(now: number, publicationIds: readonly string[], pulled: ReadonlySet<string>, joining = false): VideoTileSelection {
     this.#list(now, publicationIds);
     const wanted = new Set<string>();
     let wakeAt: number | undefined;
+    let immediate = joining ? JOIN_UNREPORTED_VIDEO_LIMIT : 0;
     for (const id of publicationIds) {
-      const choice = this.#choose(id, now, pulled.has(id));
+      const skipsWait = !reports.has(id) && immediate > 0;
+      if (skipsWait) immediate--;
+      const choice = skipsWait ? { wanted: true } : this.#choose(id, now, pulled.has(id));
       if (choice.wanted) wanted.add(id);
       if (choice.until !== undefined) wakeAt = Math.min(wakeAt ?? choice.until, choice.until);
     }
@@ -82,6 +88,7 @@ export class VideoTileSubscriptions {
   #choose(id: string, now: number, pulled: boolean): { readonly wanted: boolean; readonly until?: number } {
     const report = reports.get(id);
     if (!report) {
+      if (pulled) return { wanted: true };
       const due = this.#firstListed.get(id)! + this.#unreportedWaitMs;
       return now >= due ? { wanted: true } : { wanted: false, until: due };
     }

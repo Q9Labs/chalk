@@ -1549,7 +1549,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #visibleRemotePublications(advertised: ReadonlyMap<string, CloudflareSFUPublication>): Map<string, CloudflareSFUPublication> {
     const video = [...advertised.values()].filter(isVideoPublication).map((publication) => publication.publicationId);
     const pulled = new Set([...this.#remoteTracks.values()].filter(isVideoPublication).map((publication) => publication.publicationId));
-    const { wanted, wakeAt } = this.#videoTiles.select(Date.now(), video, pulled);
+    // Nothing is reconciled yet: this is the join's first pull, which must not hold the video back behind the report wait.
+    const { wanted, wakeAt } = this.#videoTiles.select(Date.now(), video, pulled, this.#cursor === null);
     this.#wakeForVideoTiles(wakeAt);
     // A video in picture-in-picture is on screen even while its tab is hidden or its tile is off screen.
     const floating = new Set(pictureInPictureTracks());
