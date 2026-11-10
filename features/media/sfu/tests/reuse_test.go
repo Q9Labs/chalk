@@ -297,16 +297,15 @@ func TestAReusedSectionContinuesItsStream(t *testing.T) {
 	}{{audioName, 48000}, {videoName, 90000}} {
 		var mid string
 		for use := range 4 {
-			mid = bob.pull(publishers[use%2], track.name)
-			want := 0
-			for _, s := range bob.seen() {
-				if s.mid == mid {
-					want = s.count + 10
-				}
+			before := map[webrtc.SSRC]int{}
+			for ssrc, s := range bob.seen() {
+				before[ssrc] = s.count
 			}
-			eventually(t, "ten more packets on the pulled mid", 10*time.Second, func() bool {
-				for _, s := range bob.seen() {
-					if s.mid == mid && s.count >= want {
+			mid = bob.pull(publishers[use%2], track.name)
+			// A first use has no stream yet, so it waits for ten packets from zero, as a reuse waits for ten more.
+			eventually(t, "ten packets of the pulled track on its mid", 10*time.Second, func() bool {
+				for ssrc, s := range bob.seen() {
+					if s.mid == mid && s.count-before[ssrc] >= 10 {
 						return true
 					}
 				}
