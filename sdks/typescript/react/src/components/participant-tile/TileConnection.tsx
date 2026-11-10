@@ -48,7 +48,7 @@ const TILE_CSS = `.chalk-tile-signal {position:absolute;top:var(--space-2);left:
 .chalk-tile-reconnecting-ring {width:40px;height:40px;display:grid;place-items:center;border-radius:50%;background:color-mix(in srgb, var(--chalk-canvas) 78%, transparent);}
 .chalk-tile-reconnecting-ring .chalk-connection-ring {width:24px;height:24px;}
 .chalk-tile-reconnecting-label {padding:var(--space-1) var(--space-2-5);border-radius:var(--corner-pill);background:color-mix(in srgb, var(--chalk-canvas) 78%, transparent);}
-@container (max-width: 199.98px) {
+@container (max-width: 199.98px) or (max-height: 119.98px) {
   .chalk-tile-reconnecting-label {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;padding:0;}
 }
 `;
