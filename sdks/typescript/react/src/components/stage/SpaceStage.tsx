@@ -1,13 +1,23 @@
 import type { ScreenShareCapture, ScreenShareOptions } from "@q9labsai/chalk-client";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../utils/cn";
 import type { Participant } from "../participant-grid/ParticipantGrid";
 import { QuietSpace } from "../participant-grid/ParticipantGrid";
 import { Stage, type StageLayout, type StageTileRenderContext } from "./Stage";
 import { buildStageItems, type StageItem } from "./stage-items";
 import { StageContentTile, StageContentTileSurface } from "./StageContentTile";
-import { Board } from "../board/Board";
 import type { SpaceViewWhiteboard } from "../space-view/SpaceView";
+
+/** Holds the board's place while its chunk loads, so the stage does not jump when the board arrives. */
+function BoardOpening() {
+  return (
+    <div role="status" className="grid h-full place-content-center rounded-[inherit] bg-[var(--chalk-surface)] text-sm text-[var(--chalk-muted-text)]">
+      Opening board
+    </div>
+  );
+}
+
+const Board = lazy(() => import("../board/Board").then((module) => ({ default: module.Board })));
 
 export interface SpaceStageProps {
   readonly pinnedId?: string | null;
@@ -107,7 +117,9 @@ export function SpaceStage({ pinnedId, onPinnedChange, tiles, layout, onLayoutCh
           media={
             boardProps ? (
               <div className={cn("h-full", !context.primary && "pointer-events-none")} inert={!context.primary || undefined}>
-                <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={follow} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
+                <Suspense fallback={<BoardOpening />}>
+                  <Board board={boardProps} primary={context.primary} visible={context.active} colorScheme={colorScheme} people={tiles} following={followed} onFollow={follow} sendView={canFollow ? whiteboard?.sendView : undefined} onClose={onCloseBoard} />
+                </Suspense>
               </div>
             ) : null
           }
