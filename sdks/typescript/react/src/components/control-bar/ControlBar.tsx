@@ -1,4 +1,4 @@
-import { commandFailureMessage } from "./command-failure";
+import { commandFailurePresentation } from "./command-failure";
 import React, { useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
@@ -13,6 +13,7 @@ import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type Cont
 import { ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
+import { DeviceAccessWaiting } from "../device-access/DeviceAccessWaiting";
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
@@ -77,6 +78,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           noiseSuppression={props.noiseSuppression}
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
+          access={props.deviceAccess?.microphone}
         />
       ) : null}
       {has("video") ? (
@@ -95,9 +97,12 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           warning={props.cameraWarning}
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}
+          access={props.deviceAccess?.camera}
         />
       ) : null}
-      {has("screenshare") ? <ShareControl disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
+      {has("screenshare") && canCaptureDisplay ? (
+        <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
+      ) : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -182,11 +187,13 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, waitingForBrowser } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError ? commandFailurePresentation(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? (!props.onCommandError && commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined)} />
+      <CommandErrorAlert message={mediaNotice ?? (failure?.card ? undefined : failure?.message)} />
+      {waitingForBrowser ? <DeviceAccessWaiting /> : null}
     </>
   );
 }

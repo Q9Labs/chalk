@@ -86,6 +86,8 @@ export type ClientFailure = {
   readonly code: ErrorCode;
   readonly recoverable: boolean;
   readonly message: string;
+  /** Set on `media.permission_denied` when the browser says the operating system refused capture. */
+  readonly permissionBlock?: "system";
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 export type EpisodeSummary = {

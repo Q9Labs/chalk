@@ -1,4 +1,5 @@
 import { SpaceClientError, type ClientFailure, type ErrorCode, type MediaSource } from "@q9labsai/chalk-client";
+import { isDeviceAccessFailure } from "../device-access/model";
 
 export type MediaCommandSource = MediaSource | "speaker";
 export type MediaCommandAction = "start" | "stop" | "select" | "test" | "request";
@@ -109,13 +110,14 @@ export const MEDIA_FAILURE_POLICY = {
   "whiteboard.unavailable": unavailable,
 } satisfies Record<ErrorCode, Rule>;
 
-export function commandFailurePresentation(failure: ClientFailure, source?: MediaCommandSource, operation: Operation = "change", hasExactRetry = false): { readonly message: string; readonly retry: boolean } {
-  if (!Object.hasOwn(MEDIA_FAILURE_POLICY, failure.code)) return { message: "This media action couldn’t be completed.", retry: false };
-  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: failure.message, retry: false };
+/** `card` is true when DeviceAccessCard presents the failure on its dock button; the message is then only the fallback for callers that cannot show the card. */
+export function commandFailurePresentation(failure: ClientFailure, source?: MediaCommandSource, operation: Operation = "change", hasExactRetry = false): { readonly message: string; readonly retry: boolean; readonly card: boolean } {
+  if (!Object.hasOwn(MEDIA_FAILURE_POLICY, failure.code)) return { message: "This media action couldn’t be completed.", retry: false, card: false };
+  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: failure.message, retry: false, card: false };
   const rule: Rule = MEDIA_FAILURE_POLICY[failure.code];
   const context = { source, recoverable: failure.recoverable };
   const message = rule.copy[operation](context);
-  return { message, retry: failure.recoverable && rule.retry && hasExactRetry && source !== undefined && source !== "speaker" && (operation === "start" || operation === "stop") };
+  return { message, card: isDeviceAccessFailure(failure, source), retry: failure.recoverable && rule.retry && hasExactRetry && source !== undefined && source !== "speaker" && (operation === "start" || operation === "stop") };
 }
 
 export function commandFailureMessage(failure: ClientFailure, source?: MediaCommandSource, operation?: MediaCommandAction): string {

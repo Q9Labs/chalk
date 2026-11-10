@@ -9,6 +9,9 @@ import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+import { DeviceAccessCard, type DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { DeviceAccessStyles } from "../device-access/DeviceAccessStyles";
+import { accessTooltip } from "../device-access/model";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
@@ -41,6 +44,14 @@ export interface DevicePopoverProps {
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
+  /** Set while the browser or the system refuses this device. Pressing the button opens the card instead of toggling. */
+  access?: DeviceAccessControl;
+}
+
+/** "Choose another" closes the card and opens the device menu beside the button. */
+function chooseAnother(split: HTMLElement | null, access: DeviceAccessControl) {
+  access.onOpenChange(false);
+  split?.querySelector<HTMLButtonElement>(".chalk-shell-caret")?.click();
 }
 
 function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
@@ -173,8 +184,10 @@ export function DevicePopover({
   toggleDisabled,
   busy,
   onCancelPending,
+  access,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  const [split, setSplit] = useState<HTMLDivElement | null>(null);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
@@ -184,25 +197,29 @@ export function DevicePopover({
   );
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
+  const accessLabel = access ? accessTooltip(mic ? "microphone" : "camera", access.reason) : undefined;
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-menu={!mic ? true : undefined}>
+    <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={access ? true : undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
+      <DeviceAccessStyles />
       <ChalkTooltip
         trigger={
           <button
             type="button"
             className="chalk-shell-main"
-            aria-label={busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label}
+            aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label)}
             aria-pressed={isActive}
             aria-busy={busy}
+            aria-haspopup={access ? "dialog" : undefined}
+            aria-expanded={access ? access.open : undefined}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
-            onClick={busy && onCancelPending ? onCancelPending : onToggle}
+            onClick={access ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
           >
             {busy ? <span aria-hidden="true">…</span> : <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />}
           </button>
         }
       >
-        {warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
+        {accessLabel ?? (warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label)}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
@@ -255,7 +272,15 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
-      {warning ? (
+      {access ? (
+        <>
+          <span className="chalk-access-badge" aria-hidden="true">
+            !
+          </span>
+          <DeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} onChooseAnother={() => chooseAnother(split, access)} />
+        </>
+      ) : null}
+      {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
           <span className="sr-only">{mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.</span>
