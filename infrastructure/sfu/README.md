@@ -183,10 +183,13 @@ The Space setting is the kill switch for one Space. It moves the Space's next
 Episodes to Cloudflare (`cf_sfu`), and it moves them back, with no deploy and no API
 reload.
 
-**Who runs it.** A Chalk operator: someone who holds the API's database settings in
-the private API environment (`CHALK_DATABASE_URL`, `CHALK_SFU_ALLOWED_SPACES`),
+**Who runs it.** A Chalk operator: someone who holds the API's database and plane
+settings in the private API environment (`CHALK_DATABASE_URL`,
+`CHALK_DEFAULT_MEDIA_PLANE`, `CHALK_SFU_ALLOWED_SPACES`, `CHALK_SFU_NEW_EPISODES`),
 because `media-settings` is the only way to set `chalk_sfu` and there is no operator
-principal in the API. A Tenant owner with the Tenant API key can do the one-way half
+principal in the API. Run it with the API's own values: without
+`CHALK_DEFAULT_MEDIA_PLANE` the command refuses `--plane inherit` with "invalid
+media plane". A Tenant owner with the Tenant API key can do the one-way half
 with the public API: `PATCH /v1/tenants/{tenant_id}/spaces/{space_id}` with
 `{"media_plane":"cf_sfu"}` sends the Space to Cloudflare (it answers 200 and the
 Space reports `effective_media_plane: cf_sfu`), but the API refuses `chalk_sfu` with
@@ -200,7 +203,7 @@ starting a new one.
 1. Read the Space and confirm the ids are the ones you mean:
 
    ```sh
-   CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
+   CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings get --tenant <id> --space <id>
    ```
 
    `effective_plane` is what the next Episode gets; `kill_switch_on` and
@@ -209,7 +212,7 @@ starting a new one.
 2. Flip the Space:
 
    ```sh
-   CHALK_DATABASE_URL=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane cf_sfu
+   CHALK_DATABASE_URL=… CHALK_DEFAULT_MEDIA_PLANE=… CHALK_SFU_ALLOWED_SPACES=… go run ./cmd/media-settings set --tenant <id> --space <id> --plane cf_sfu
    ```
 
    The command prints one JSON line with `before` and `after`. Keep that line in the
