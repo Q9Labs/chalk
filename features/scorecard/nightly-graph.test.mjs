@@ -179,6 +179,83 @@ test("a failed Cloudflare measurement under the lease still fails its step", () 
   assert.equal(run.status, 3);
 });
 
+// Runs the real "Prove a real call" script in a scratch tree: the lease wrapper stub runs the workload, and the proof command exits with the code given for each failing proof.
+function runProofStep({ nightly: isNightly, plane, proofs, failing = {} }) {
+  const dir = mkdtempSync(join(tmpdir(), "proof-step-"));
+  try {
+    mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "bin"));
+    const lease = join(dir, "scripts/staging-sfu/gate-lease");
+    const pnpm = join(dir, "bin/pnpm");
+    writeFileSync(lease, `#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n`);
+    const cases = Object.entries(failing)
+      .map(([name, code]) => `${name}) exit ${code} ;;`)
+      .join(" ");
+    writeFileSync(pnpm, `#!/usr/bin/env bash\necho "$2" >> ran\ncase "$2" in ${cases} esac\n`);
+    for (const file of [lease, pnpm]) chmodSync(file, 0o755);
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", proofStep.run], {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"], // bash reads ~/.bashrc when its stdin is a socket, which spawnSync's default is
+      env: {
+        PATH: `${join(dir, "bin")}:${process.env.PATH}`,
+        PROOFS: proofs,
+        CHALK_PROOF_MEDIA_PLANE: plane,
+        STAGING_SFU_PROOF: String(isNightly),
+        RUN_PREFIX: "abc",
+        GITHUB_OUTPUT: join(dir, "output"),
+        GITHUB_STEP_SUMMARY: join(dir, "summary"),
+      },
+    });
+    const output = existsSync(join(dir, "output")) ? readFileSync(join(dir, "output"), "utf8") : "";
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      ran: existsSync(join(dir, "ran")) ? readFileSync(join(dir, "ran"), "utf8").trim().split("\n") : [],
+      results: /^results=(.*)$/m.exec(output)?.[1],
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const nightlyProofs = "camera-share call-artifacts long-call";
+
+test("the nightly proofs all run when one fails, and the step lists every result", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, failing: { "call-artifacts": 1 } });
+  assert.equal(run.status, 1);
+  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
+  assert.equal(run.results, "camera-share=passed call-artifacts=failed long-call=passed");
+  assert.match(run.stdout, /::error title=Proofs failed::call-artifacts/);
+});
+
+test("the nightly step passes only when every proof passes", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
+});
+
+test("a lease failure (exit 75) stops the nightly proofs and marks the rest not-run", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, failing: { "camera-share": 75 } });
+  assert.equal(run.status, 1);
+  assert.deepEqual(run.ran, ["camera-share"]);
+  assert.equal(run.results, "camera-share=failed call-artifacts=not-run long-call=not-run");
+});
+
+test("a run that is not the nightly gate stops at the first failed proof", () => {
+  const run = runProofStep({ nightly: false, plane: "cf_sfu", proofs: "smoke transcript", failing: { smoke: 1 } });
+  assert.equal(run.status, 1);
+  assert.deepEqual(run.ran, ["smoke"]);
+  assert.equal(run.results, "smoke=failed transcript=not-run");
+});
+
+test("Cut nightly prints every proof's result when it holds the cut", () => {
+  const recordStep = nightly.jobs.record.steps.find((item) => item.name === "Record held or failed cut without rolling nightly back");
+  assert.equal(recordStep.env.PROOF_RESULTS, "${{ needs.proof.outputs.results }}");
+  assert.match(recordStep.run, /Results: \$\{PROOF_RESULTS:-none recorded\}/);
+  assert.equal(proof.on.workflow_call.outputs.results.value, "${{ jobs.smoke.outputs.results }}");
+});
+
 // A cut must outwait the warn-only Cloudflare run: that run cannot yield the lease, so the cut's wait has to cover all of it.
 // A step's cap is "<nightly chalk_sfu cap> || <any other cap>" in its expression.
 const capMinutes = (step) => {
