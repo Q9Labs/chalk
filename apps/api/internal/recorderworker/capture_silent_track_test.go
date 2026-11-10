@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +20,8 @@ type silentTrackRun struct {
 	deadTrack        *capturePlanWatchTrack
 	deadSendsRTP     atomic.Bool
 	deadWaitCalls    atomic.Int32
+	deadWaitEnded    chan struct{}
+	replan           chan struct{}
 	attempt          *PionCaptureAttempt
 	clock            *capturePlanWatchClock
 	stop             chan struct{}
@@ -30,12 +33,13 @@ type silentTrackRun struct {
 }
 
 // startSilentTrackRun runs an attempt whose plan holds one live audio MID and one audio MID that sends no RTP until the test says so.
-func startSilentTrackRun(t *testing.T, deadOnly bool) *silentTrackRun {
+func startSilentTrackRun(t *testing.T, deadOnly bool, lateWait time.Duration) *silentTrackRun {
 	t.Helper()
 	origin := time.Now().UTC().Add(-time.Second)
 	start := origin.Add(time.Second)
 	stopAt := origin.Add(5 * time.Second)
-	r := &silentTrackRun{clock: &capturePlanWatchClock{now: start}, stop: make(chan struct{}), runDone: make(chan error, 1)}
+	r := &silentTrackRun{clock: &capturePlanWatchClock{now: start}, stop: make(chan struct{}), runDone: make(chan error, 1), deadWaitEnded: make(chan struct{}), replan: make(chan struct{})}
+	var endedOnce sync.Once
 	r.live = capturePlanWatchPulledTrack(t, "0", "live")
 	r.dead = capturePlanWatchPulledTrack(t, "1", "dead")
 	r.dead.ParticipantID = captureTestID(t, "99999999-9999-4999-8999-999999999999")
@@ -47,29 +51,41 @@ func startSilentTrackRun(t *testing.T, deadOnly bool) *silentTrackRun {
 	}
 	authority := captureTestPlanAtEpoch(t, 2, 1, start).Authority()
 	running := capturePlanWatchPlan(t, authority, 1, start, captureplan.StopStateRunning, tracks...)
-	stopped := capturePlanWatchPlan(t, authority, 2, stopAt, captureplan.StopStateRequested)
+	replanned := capturePlanWatchPlan(t, authority, 2, start.Add(time.Second), captureplan.StopStateRunning, tracks...)
+	stopped := capturePlanWatchPlan(t, authority, 3, stopAt, captureplan.StopStateRequested)
 	peer := &capturePlanWatchPeer{tracks: []*capturePlanWatchTrack{r.liveTrack, r.deadTrack}, wait: func(ctx context.Context, mid captureplane.ProviderReference) (CaptureMediaTrack, error) {
 		switch mid {
 		case r.live.MID:
 			return r.liveTrack, nil
 		case r.dead.MID:
-			r.deadWaitCalls.Add(1)
-			if r.deadSendsRTP.Load() {
-				return r.deadTrack, nil
+			// The first wait is the initial bind; the second is the late-track watch.
+			calls := r.deadWaitCalls.Add(1)
+			for !r.deadSendsRTP.Load() {
+				select {
+				case <-ctx.Done():
+					if calls == 2 {
+						endedOnce.Do(func() { close(r.deadWaitEnded) })
+					}
+					return nil, ctx.Err()
+				case <-time.After(2 * time.Millisecond):
+				}
 			}
-			<-ctx.Done()
-			return nil, ctx.Err()
+			return r.deadTrack, nil
 		default:
 			return nil, fmt.Errorf("unexpected MID %s", mid)
 		}
 	}}
 	r.coordinator = newCapturePlanWatchCoordinator(map[captureplane.PlanRevision]recordercapture.Snapshot{
 		1: {PlanRevision: 1, Tracks: tracks},
-		2: {PlanRevision: 2},
+		2: {PlanRevision: 2, Tracks: tracks},
+		3: {PlanRevision: 3},
 	})
 	// Like the real source, every poll ends with ErrWaitTimeout after PlanWait until the test asks for the stop.
 	poll := func(ctx context.Context) (captureplan.Plan, error) {
 		select {
+		case <-r.replan:
+			r.replan = nil
+			return replanned, nil
 		case <-r.stop:
 			r.clock.Set(stopAt)
 			return stopped, nil
@@ -88,6 +104,7 @@ func startSilentTrackRun(t *testing.T, deadOnly bool) *silentTrackRun {
 	lifecycle := &captureTestLifecycle{}
 	r.attempt = capturePlanWatchAttempt(t, authority, &origin, peer, r.coordinator, plans, storage, lifecycle, r.clock.Now, 100*time.Millisecond, 200*time.Millisecond)
 	r.attempt.config.PlanWait = 10 * time.Millisecond
+	r.attempt.config.LateTrackWait = lateWait
 	r.lifecycleStopped = func() int { return len(lifecycle.stopped) }
 	r.runCtx, r.cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(r.cancel)
@@ -117,7 +134,7 @@ func waitClosed(t *testing.T, ctx context.Context, ch <-chan struct{}, what stri
 }
 
 func TestCaptureRecordsLiveTracksWhenOneMidSendsNoRTP(t *testing.T) {
-	r := startSilentTrackRun(t, false)
+	r := startSilentTrackRun(t, false, time.Minute)
 	waitClosed(t, r.runCtx, r.liveTrack.readStarted, "live track read")
 	if err := r.finish(t); err != nil {
 		t.Fatalf("attempt with one silent MID among live MIDs failed: %v", err)
@@ -133,7 +150,7 @@ func TestCaptureRecordsLiveTracksWhenOneMidSendsNoRTP(t *testing.T) {
 }
 
 func TestCaptureAttachesMidWhoseRTPArrivesAfterTheInitialWait(t *testing.T) {
-	r := startSilentTrackRun(t, false)
+	r := startSilentTrackRun(t, false, time.Minute)
 	waitClosed(t, r.runCtx, r.liveTrack.readStarted, "live track read")
 	r.deadSendsRTP.Store(true)
 	waitClosed(t, r.runCtx, r.deadTrack.readStarted, "late track read")
@@ -143,17 +160,21 @@ func TestCaptureAttachesMidWhoseRTPArrivesAfterTheInitialWait(t *testing.T) {
 }
 
 func TestCaptureStopsWaitingForLateMidAfterLateTrackWait(t *testing.T) {
-	r := startSilentTrackRun(t, false)
+	r := startSilentTrackRun(t, false, 50*time.Millisecond)
 	waitClosed(t, r.runCtx, r.liveTrack.readStarted, "live track read")
-	r.clock.Set(r.clock.Now().Add(defaultCaptureLateTrackWait + time.Second))
-	time.Sleep(100 * time.Millisecond)
-	before := r.deadWaitCalls.Load()
-	time.Sleep(100 * time.Millisecond)
-	if after := r.deadWaitCalls.Load(); after != before {
-		t.Fatalf("expired MID is still polled: wait calls %d -> %d", before, after)
+	waitClosed(t, r.runCtx, r.deadWaitEnded, "late track wait end")
+	time.Sleep(50 * time.Millisecond)
+	// A plan change that keeps the expired binding must neither wait for it nor attach it.
+	close(r.replan)
+	deadline := time.Now().Add(2 * time.Second)
+	for len(r.coordinator.Reconciled()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
 	}
 	r.deadSendsRTP.Store(true)
 	time.Sleep(100 * time.Millisecond)
+	if calls := r.deadWaitCalls.Load(); calls != 2 {
+		t.Fatalf("expired MID was waited for %d times, want 2 (initial bind and one late watch)", calls)
+	}
 	select {
 	case <-r.deadTrack.readStarted:
 		t.Fatal("expired MID attached after its wait ended")
@@ -165,7 +186,7 @@ func TestCaptureStopsWaitingForLateMidAfterLateTrackWait(t *testing.T) {
 }
 
 func TestCaptureFailsWhenEveryMidSendsNoRTP(t *testing.T) {
-	r := startSilentTrackRun(t, true)
+	r := startSilentTrackRun(t, true, time.Minute)
 	select {
 	case err := <-r.runDone:
 		if !errors.Is(err, errCaptureTrackSilent) && !errors.Is(err, context.DeadlineExceeded) {
