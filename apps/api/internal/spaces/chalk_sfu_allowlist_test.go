@@ -34,24 +34,3 @@ func TestChalkSFUAllowlistNamesSpacesOnly(t *testing.T) {
 		t.Fatal("a malformed entry must fail the parse, not silently shrink the list")
 	}
 }
-
-func TestOnlyAllowlistedSpacesSelectTheOwnSFU(t *testing.T) {
-	listed, _ := utilities.ParseID("11111111-1111-4111-8111-111111111111")
-	other, _ := utilities.ParseID("22222222-2222-4222-8222-222222222222")
-	list, err := ParseChalkSFUAllowlist([]string{listed.String()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := Service{}.WithChalkSFUAllowlist(list)
-	chalk := string(MediaPlaneProviderChalkSFU)
-	cloudflare := string(MediaPlaneProviderCloudflareSFU)
-	if !service.selectable(chalk, listed) || service.selectable(chalk, other) {
-		t.Fatal("only the listed Space may select chalk_sfu")
-	}
-	if !service.selectable(cloudflare, other) || !(Service{}).selectable(cloudflare, other) {
-		t.Fatal("Cloudflare stays selectable for every Space")
-	}
-	if (Service{}).selectable(chalk, listed) {
-		t.Fatal("a service with no allowlist refuses chalk_sfu")
-	}
-}

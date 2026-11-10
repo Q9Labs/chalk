@@ -40,12 +40,25 @@ export async function prepareIntegration(run, webhooks) {
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
 const manualPolicy = { recording: "manual", transcription: "on_demand" };
+// A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
+// proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
+// reuses a Space an operator moved with media-settings, and otherwise the deployment or the
+// Tenant default an operator set decides. Either way the Space must land on `plane`, and a
+// run that cannot get one stops at once with reason media-plane-config.
 export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
+  const pinName = pinnedSpaceVariable(plane, policy);
+  const pinned = pinName && process.env[pinName];
+  if (pinned) {
+    const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+    checkSpacePlane(existing, plane, pinName);
+    checkSpacePolicy(existing, policy);
+    await save(`${run.directory}/space.json`, existing);
+    return existing;
+  }
   const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
     name: run.label,
     slug: `prod-proof-${randomUUID()}`,
     metadata: { proof_run_id: run.runId },
-    media_plane: plane,
     recording_policy: policy.recording,
     transcription_policy: policy.transcription,
     default_episode_duration_seconds: 1800,
@@ -53,10 +66,27 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     linger_window_seconds: 60,
     admission_policy: { mode: "open" },
   });
-  check(space.recording_policy === policy.recording, "Space Recording policy was not applied");
-  check(space.transcription_policy === policy.transcription, "Space Transcription policy was not applied");
+  checkSpacePlane(space, plane, pinName);
+  checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);
   return space;
+}
+function checkSpacePolicy(space, policy) {
+  check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");
+  check(space.transcription_policy === policy.transcription, `A proof Space has Transcription policy ${space.transcription_policy}, not ${policy.transcription}`, "media-plane-config");
+}
+// The policies of a reused Space are fixed, so each policy set has its own variable: the manual one
+// takes CHALK_PROOF_SPACE_ID_<PLANE> and automatic Recording with automatic Transcription (call-artifacts)
+// takes CHALK_PROOF_SPACE_ID_<PLANE>_AUTOMATIC. Any other policy set is never reused.
+function pinnedSpaceVariable(plane, policy) {
+  const base = `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`;
+  if (policy.recording === manualPolicy.recording && policy.transcription === manualPolicy.transcription) return base;
+  if (policy.recording === "automatic" && policy.transcription === "automatic") return `${base}_AUTOMATIC`;
+  return undefined;
+}
+function checkSpacePlane(space, plane, pinName) {
+  const got = space.effective_media_plane ?? space.media_plane;
+  check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or ${pinName ?? `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`} for a Space moved with media-settings)`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
   let ended = false;
@@ -76,8 +106,15 @@ export function episodeEnd(run, path) {
     },
   };
 }
+// A reused Space is not the run's own, so cleanup learns of an Episode created in it from the
+// ownership file, which this writes before the Episode is used.
+export async function trackEpisode(run, space, episode) {
+  run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
+  await saveOwnership(run);
+}
 export async function createEpisode(run, space, policy = manualPolicy) {
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  await trackEpisode(run, space, episode);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
   const effective = episode.config_snapshot.artifact_policy;

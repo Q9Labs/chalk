@@ -27,6 +27,7 @@ test("the latency entry point runs a cycle and writes both the card and the diag
     const out = join(directory, ".private", "prod-proof", "entry-test");
     for (const name of ["latency.json", "scorecard-chalk_sfu.json", "latency-diagnostics-chalk_sfu.json"]) assert.equal(existsSync(join(out, name)), true, `${name} was written`);
 
+    assert.equal(readFileSync(join(out, "tracked.jsonl"), "utf8").trim().split("\n").length >= 1, true, "the cycle's Episode was recorded for cleanup");
     const card = readFileSync(join(out, "scorecard-chalk_sfu.json"), "utf8");
     const sidecar = JSON.parse(readFileSync(join(out, "latency-diagnostics-chalk_sfu.json"), "utf8"));
     assert.equal(card.includes("media."), false, "the card holds no media.* metric");

@@ -99,6 +99,7 @@ const (
 	ChalkSFUAllowedSpaces       = "CHALK_SFU_ALLOWED_SPACES"
 	ChalkSFUClientSunset        = "CHALK_SFU_CLIENT_SUNSET"
 	ChalkSFUUnifiedSignaling    = "CHALK_SFU_UNIFIED_SIGNALING"
+	ChalkSFUNewEpisodes         = "CHALK_SFU_NEW_EPISODES"
 	DefaultMediaPlane           = "CHALK_DEFAULT_MEDIA_PLANE"
 	NewSpaceMediaPlane          = "CHALK_NEW_SPACE_MEDIA_PLANE"
 	NewSpaceRecordingPolicy     = "CHALK_NEW_SPACE_RECORDING_POLICY"
@@ -275,6 +276,11 @@ type ChalkSFUConfig struct {
 	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
 	// joins without a web deploy. CHALK_API_DIRECT_URL.
 	DirectSignalingURL string
+
+	// NewEpisodesPaused is the kill switch, CHALK_SFU_NEW_EPISODES=off. Every new Episode
+	// then starts on Cloudflare, and Episodes already on the own SFU keep running there.
+	// Turning the own SFU off instead would also strand those live Episodes.
+	NewEpisodesPaused bool
 
 	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
 	// room. It is on by default. When it is off, creating that Episode fails with
@@ -690,6 +696,37 @@ func Load() (Config, error) {
 	}, nil
 }
 
+// loadNewEpisodesPaused reads the kill switch. It is on unless set to off.
+func loadNewEpisodesPaused() (bool, error) {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(ChalkSFUNewEpisodes)))
+	switch value {
+	case "", "on", "true":
+		return false, nil
+	case "off", "false":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%s must be on or off", ChalkSFUNewEpisodes)
+	}
+}
+
+// LoadPlanePolicy reads the plane policy from the environment the API runs with,
+// for the operator command, which does not load the whole configuration.
+func LoadPlanePolicy() (spaces.PlanePolicy, error) {
+	platform, err := loadDefaultMediaPlane()
+	if err != nil {
+		return spaces.PlanePolicy{}, err
+	}
+	allowed, err := spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces))
+	if err != nil {
+		return spaces.PlanePolicy{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
+	}
+	paused, err := loadNewEpisodesPaused()
+	if err != nil {
+		return spaces.PlanePolicy{}, err
+	}
+	return spaces.PlanePolicy{Platform: platform, Allowed: allowed, NewEpisodesPaused: paused}, nil
+}
+
 func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	value, ok := os.LookupEnv(DefaultMediaPlane)
 	if !ok || strings.TrimSpace(value) == "" {
@@ -777,8 +814,13 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}
+	newEpisodesPaused, err := loadNewEpisodesPaused()
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
 		Enabled:            true,
+		NewEpisodesPaused:  newEpisodesPaused,
 		UnifiedSignaling:   unifiedSignaling,
 		DirectSignalingURL: directURL,
 		CaptureEnabled:     envBool(ChalkSFUCaptureEnabled),

@@ -28,6 +28,7 @@ type spaceQuerier interface {
 	UpdateTenantSpace(ctx context.Context, arg sqlc.UpdateTenantSpaceParams) (sqlc.Space, error)
 	ArchiveTenantSpace(ctx context.Context, arg sqlc.ArchiveTenantSpaceParams) (sqlc.Space, error)
 	RestoreTenantSpace(ctx context.Context, arg sqlc.RestoreTenantSpaceParams) (sqlc.Space, error)
+	AdoptSpaceMediaPlaneSetting(ctx context.Context, arg sqlc.AdoptSpaceMediaPlaneSettingParams) (int64, error)
 }
 
 func NewSpaceRepository(queries spaceQuerier, pools ...*pgxpool.Pool) SpaceRepository {
@@ -129,6 +130,8 @@ func (r SpaceRepository) UpdateSpace(ctx context.Context, tenantID utilities.ID,
 		Slug:                             requiredText(input.Slug),
 		MediaPlaneSet:                    input.MediaPlane.Set,
 		MediaPlane:                       requiredText(input.MediaPlane),
+		MediaPlaneSettingSet:             input.MediaPlaneSetting.Set,
+		MediaPlaneSetting:                optionalPlaneSetting(input.MediaPlaneSetting),
 		MetadataSet:                      input.Metadata.Set,
 		Metadata:                         jsonBytes(input.Metadata.Value),
 		RecurringPolicySet:               input.RecurringPolicy.Set,
@@ -209,6 +212,7 @@ func createSpaceParams(input spaces.CreateSpaceInput) sqlc.CreateSpaceParams {
 		TenantID:                      uuid(input.TenantID),
 		Slug:                          input.Slug,
 		MediaPlane:                    input.MediaPlane,
+		MediaPlaneSetting:             optionalPlaneSetting(spaces.OptionalMediaPlaneSetting{Set: true, Value: input.MediaPlaneSetting}),
 		Metadata:                      jsonBytes(input.Metadata),
 		RecurringPolicy:               jsonBytes(input.RecurringPolicy),
 		AdmissionPolicy:               jsonBytes(input.AdmissionPolicy),
@@ -277,6 +281,7 @@ func mapSpace(space sqlc.Space) spaces.Space {
 		TenantID:                      utilities.IDFromBytes(space.TenantID.Bytes),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		MediaPlaneSetting:             mediaPlaneSetting(space.MediaPlaneSetting),
 		RecordingPolicy:               artifactpolicy.RecordingMode(space.RecordingPolicy),
 		TranscriptionPolicy:           artifactpolicy.TranscriptionMode(space.TranscriptionPolicy),
 		TranscriptLanguage:            nullableTranscriptLanguage(space.TranscriptLanguage),
@@ -300,6 +305,7 @@ func mapCreatedSpace(space sqlc.CreateSpaceRow) spaces.Space {
 		TenantID:                      utilities.IDFromBytes(space.TenantID.Bytes),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		MediaPlaneSetting:             mediaPlaneSetting(space.MediaPlaneSetting),
 		RecordingPolicy:               artifactpolicy.RecordingMode(space.RecordingPolicy),
 		TranscriptionPolicy:           artifactpolicy.TranscriptionMode(space.TranscriptionPolicy),
 		TranscriptLanguage:            nullableTranscriptLanguage(space.TranscriptLanguage),
@@ -327,3 +333,32 @@ func mapSpaceRole(role sqlc.SpaceRole) spaces.Role {
 }
 
 var _ spaces.Repository = SpaceRepository{}
+
+func mediaPlaneSetting(value pgtype.Text) *spaces.MediaPlaneProvider {
+	if !value.Valid {
+		return nil
+	}
+	provider := spaces.MediaPlaneProvider(value.String)
+	return &provider
+}
+
+func optionalPlaneSetting(input spaces.OptionalMediaPlaneSetting) pgtype.Text {
+	if !input.Set || input.Value == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: string(*input.Value), Valid: true}
+}
+
+// AdoptStoredPlaneSetting moves a Space stored on the plane onto the setting. It reports
+// false when the Space no longer qualifies: it gained a setting, stores another plane, or
+// its Tenant can no longer serve the own SFU. No Space reads differently afterwards, so it
+// sends no space.updated event.
+func (r SpaceRepository) AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane spaces.MediaPlaneProvider) (bool, error) {
+	rows, err := r.queries.AdoptSpaceMediaPlaneSetting(ctx, sqlc.AdoptSpaceMediaPlaneSettingParams{
+		Plane: string(plane), TenantID: uuid(tenantID), ID: uuid(spaceID),
+	})
+	if err != nil {
+		return false, err
+	}
+	return rows == 1, nil
+}
