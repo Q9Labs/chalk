@@ -360,6 +360,13 @@ func (p *publication) stop() { p.stopSending(); p.senders.Wait() }
 // sending known RTP on both, as the SDK does.
 func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope) *publication {
 	t.Helper()
+	return publishTaggedMedia(t, svc, conn, scope, 'a', 'v')
+}
+
+// publishTaggedMedia is publishKnownMedia with the tag byte each kind's payload carries, so a test
+// can tell which publisher a packet came from.
+func publishTaggedMedia(t *testing.T, svc *service, conn string, scope protocol.Scope, audioTag, videoTag byte) *publication {
+	t.Helper()
 	alice := newPeer(t)
 	audio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "mic", scope.ParticipantID)
 	if err != nil {
@@ -399,8 +406,8 @@ func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.S
 
 	sendCtx, stopSending := context.WithCancel(context.Background())
 	pub := &publication{peer: alice, audio: audio, video: video, audioMid: audioMid, videoMid: videoMid, stopSending: stopSending}
-	sendLoop(sendCtx, audio, 'a', 111, &pub.audioSent, &pub.senders)
-	sendLoop(sendCtx, video, 'v', 96, &pub.videoSent, &pub.senders)
+	sendLoop(sendCtx, audio, audioTag, 111, &pub.audioSent, &pub.senders)
+	sendLoop(sendCtx, video, videoTag, 96, &pub.videoSent, &pub.senders)
 	return pub
 }
 

@@ -197,7 +197,7 @@ type peerFactory struct {
 // transport-wide feedback report to feedback. Each peer connection gets its own
 // API because the buffer factory is the only place Pion passes every stream's
 // RTCP through, and it has no other way to tell peer connections apart.
-func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, error) {
+func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, *webrtc.API, error) {
 	settings := f.settings
 	settings.BufferFactory = func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser {
 		buffer := boundedBuffer(packetType, ssrc)
@@ -207,7 +207,8 @@ func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, erro
 		return feedbackBuffer{packetBuffer: buffer, transport: feedback}
 	}
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(f.engine), webrtc.WithInterceptorRegistry(f.registry), webrtc.WithSettingEngine(settings))
-	return api.NewPeerConnection(webrtc.Configuration{})
+	pc, err := api.NewPeerConnection(webrtc.Configuration{})
+	return pc, api, err
 }
 
 // newPeerFactory negotiates only the codecs the node forwards: Opus and VP8.

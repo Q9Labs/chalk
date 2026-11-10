@@ -12,17 +12,18 @@ import (
 // handful of sections is a few kilobytes.
 const maxSDPBytes = 64 << 10
 
-// sectionHeadroom lets a session outlive closed tracks: Pion keeps a stopped
-// transceiver for the life of the peer connection, so the total is bounded
-// instead of recycled. A session at the limit refuses new tracks and the
+// sectionHeadroom lets a session outlive closed publications, and subscriptions the client
+// rejected: Pion keeps a stopped transceiver for the life of the peer connection, and only a
+// closed subscription's section is reused. A session at the limit refuses new tracks and the
 // client replaces the connection.
 const sectionHeadroom = 4
 
 // offerSection is what the node needs to know about one media section of a client offer.
 type offerSection struct {
-	media   string          // "audio" or "video"
-	sending bool            // the client sends in this section
-	codecs  map[string]bool // lower-case encoding names from a=rtpmap
+	media    string          // "audio" or "video"
+	sending  bool            // the client sends in this section
+	rejected bool            // port 0: the section is stopped
+	codecs   map[string]bool // lower-case encoding names from a=rtpmap
 }
 
 // supports reports whether the section offers the codec the node forwards for its media.
@@ -60,7 +61,7 @@ func parseOffer(raw string) (map[string]offerSection, error) {
 		if _, repeated := sections[mid]; repeated {
 			return nil, fmt.Errorf("%w: the offer repeats mid %q", ErrInvalidRequest, mid)
 		}
-		sections[mid] = offerSection{media: kind, sending: sendsMedia(media), codecs: encodingNames(media)}
+		sections[mid] = offerSection{media: kind, sending: sendsMedia(media), rejected: media.MediaName.Port.Value == 0, codecs: encodingNames(media)}
 	}
 	return sections, nil
 }

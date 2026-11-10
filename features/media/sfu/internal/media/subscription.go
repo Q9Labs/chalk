@@ -535,12 +535,17 @@ func (s *subscription) release() {
 }
 
 // close detaches the subscription and stops its transceiver and sender. That ends the RTCP
-// reader, unbinds the egress track from the sender and frees the sender's SRTP stream. It is idempotent.
+// reader, unbinds the egress track from the sender and frees the sender's SRTP stream. The
+// stopped section goes back to the owner for its next pull. It is idempotent.
 func (s *subscription) close() {
 	if !s.detach() {
 		return
 	}
-	if err := s.transceiver.Stop(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+	err := s.transceiver.Stop()
+	switch {
+	case err == nil:
+		s.owner.recycle(s.transceiver)
+	case !errors.Is(err, io.ErrClosedPipe):
 		s.pub.session.node.log.Warn("stop subscription", "connectionId", s.pub.session.id, "error", err)
 	}
 }
