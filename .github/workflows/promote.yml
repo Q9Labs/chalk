@@ -6,14 +6,10 @@ on:
         description: Exact held release revision approved for promotion
         type: string
         required: true
-      leave_baseline_median_ms:
-        description: Same-session 5.2.6 production Leave median in milliseconds
-        type: string
-        required: true
-      leave_baseline_evidence_sha256:
-        description: SHA-256 of the encrypted baseline comparison evidence
-        type: string
-        required: true
+      capture_proofs:
+        description: Run call-artifacts, the Recording and Transcript proof. Set false only when this deploy does not turn the capture flags on
+        type: boolean
+        default: true
       scorecard_override:
         description: Written reason to accept failed nightly own-SFU proof or gated scorecard results; leave blank to apply the gates
         type: string
@@ -45,8 +41,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_RELEASE_SHA: ${{ inputs.expected_sha }}
           SCORECARD_OVERRIDE: ${{ inputs.scorecard_override }}
-          LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
-          LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
         run: python3 scripts/releases/release.py select
   approve:
     needs: select
@@ -118,8 +112,24 @@ jobs:
             previous-media.json
             previous-npm.json
           retention-days: 90
-  release:
+  own-sfu-spaces:
+    # Runs before the deploy, on the release still in production. That release lets the public API move an allowlisted Space to chalk_sfu, and a plane stored that way survives the upgrade; the release that adds the per-Space setting refuses it. It runs the proof code of this master revision. A failure stops Promote before anything deploys.
+    permissions:
+      contents: read
     needs: [select, approve]
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: production
+      proofs: own-sfu-spaces
+      media_plane: chalk_sfu
+    secrets: inherit
+  release:
+    permissions:
+      contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
+      actions: read
+      deployments: write
+      id-token: write
+    needs: [select, approve, own-sfu-spaces]
     uses: ./.github/workflows/ci.yml
     with:
       target_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
@@ -143,10 +153,9 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave smoke transcript
+      proofs: ${{ inputs.capture_proofs && 'leave-own-sfu camera-share call-artifacts' || 'leave-own-sfu camera-share' }}
+      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
     secrets: inherit
   scorecard:
     # The scorecard jobs only fail this run. No other job needs them and none reads their result, so they cannot start rollback.
@@ -195,10 +204,9 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: leave
+      proofs: leave-own-sfu
+      media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
-      leave_baseline_median_ms: ${{ inputs.leave_baseline_median_ms }}
-      leave_baseline_evidence_sha256: ${{ inputs.leave_baseline_evidence_sha256 }}
       scorecard_label: rerun
     secrets: inherit
   scorecard-final:
@@ -227,6 +235,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: features/scorecard/promote-gate.sh final artifacts/scorecard-proof.json
   rollback:
+    permissions:
+      contents: write # Release's deploy job asks for it to hold the staging-SFU lease on nightly; the production path does not use it.
+      actions: read
+      deployments: write
+      id-token: write
     needs: [select, approve, release, proof]
     if: >-
       always() && needs.approve.result == 'success' && needs.release.result != 'skipped' &&

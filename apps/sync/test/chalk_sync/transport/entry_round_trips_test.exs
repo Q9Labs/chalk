@@ -7,6 +7,8 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
   use ChalkSync.ServerCase, async: false
 
   alias ChalkSync.Auth.DevTokenVerifier
+  alias ChalkSync.Operations.Probe
+  alias ChalkSync.Operations.Readiness
   alias ChalkSync.Stateholder.Postgres
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
@@ -73,9 +75,11 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
 
   defp traced_entry(port, path, identity) do
     {:ok, client} = Client.connect(port, path)
+    wait_for_idle_probe()
     tracer = spawn_link(fn -> collect_loop([]) end)
     :erlang.trace(:all, true, [:call, :timestamp, {:tracer, tracer}])
     trace_pattern = [{:_, [], [{:return_trace}]}]
+    :erlang.trace_pattern({Probe, :run, :_}, true, [:local])
     :erlang.trace_pattern({Postgrex, :query, 4}, trace_pattern, [:local])
     :erlang.trace_pattern({DBConnection, :transaction, 3}, trace_pattern, [:global])
 
@@ -92,9 +96,22 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
     :erlang.trace(:all, false, [:call])
     :erlang.trace_pattern({Postgrex, :query, 4}, false, [:local])
     :erlang.trace_pattern({DBConnection, :transaction, 3}, false, [:global])
+    :erlang.trace_pattern({Probe, :run, :_}, false, [:local])
     send(tracer, {:done, self()})
     assert_receive {:statements, statements}, 2_000
     statements
+  end
+
+  # A probe already running when tracing starts would be counted, so let it finish first.
+  defp wait_for_idle_probe do
+    case :sys.get_state(Readiness) do
+      %{probe_pid: nil} ->
+        :ok
+
+      _running ->
+        Process.sleep(10)
+        wait_for_idle_probe()
+    end
   end
 
   defp collect_loop(acc) do
@@ -106,6 +123,11 @@ defmodule ChalkSync.Transport.EntryRoundTripsTest do
 
   # Pairs each call with its return so every statement carries its duration.
   defp summarize(events) do
+    # The readiness probe polls Postgres from its own process on a timer; its statements
+    # are not part of the entry, so drop every process that ran the probe in the window.
+    probe_pids = for {:trace_ts, pid, :call, {Probe, :run, _args}, _ts} <- events, do: pid
+    events = Enum.reject(events, &(elem(&1, 1) in probe_pids))
+
     events
     |> Enum.reduce({[], %{}}, fn
       {:trace_ts, pid, :call, {Postgrex, :query, [_conn, sql | _]}, ts}, {done, open} ->

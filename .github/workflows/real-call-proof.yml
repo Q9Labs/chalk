@@ -17,14 +17,22 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share, call-artifacts and long-call
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
+      transcribe:
+        description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
+        type: boolean
+        default: true
       latency:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
         default: false
+      latency_samples:
+        description: Latency cycles per run, 1 to 60; empty measures the full 60. A short run is for checking one fix, not for the gate
+        type: string
+        default: ""
       release_sha:
         description: Exact deployed revision to prove; defaults to the workflow revision
         type: string
@@ -48,13 +56,21 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space; chalk_sfu runs only camera-share, call-artifacts and long-call
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
+      transcribe:
+        description: Wait for and check the call-artifacts Transcript (false records the call but turns the proof Space's Transcript off for the run)
+        type: boolean
+        default: true
       latency:
         description: After the proofs, measure action latency on the proof Space's media plane and publish its scorecard (nightly, chalk_sfu)
         type: boolean
         default: false
+      latency_samples:
+        description: Latency cycles per run, 1 to 60; empty measures the full 60. A short run is for checking one fix, not for the gate
+        type: string
+        default: ""
       latency_only:
         description: Skip real-call proofs and run only the nightly latency scorecard of one plane (chalk_sfu or cf_sfu)
         type: boolean
@@ -90,9 +106,15 @@ on:
       result:
         description: passed or failed; may be absent on cancellation or runner loss
         value: ${{ jobs.smoke.outputs.result }}
+      failure:
+        description: Named reason when the staging SFU lease stopped the proof (staging-sfu-lease-timeout or staging-sfu-lease-lost); empty otherwise
+        value: ${{ jobs.smoke.outputs.failure }}
+      results:
+        description: Each proof's result in order, as name=passed, name=failed or name=not-run, separated by spaces; empty when the proof step did not finish
+        value: ${{ jobs.smoke.outputs.results }}
 
-# Inherit the caller's permissions. Only nightly's own-sfu caller grants contents:write
-# for the staging lease; Promote and Cloudflare proof callers retain contents:read.
+# Inherit the caller's permissions. Only nightly's proof and latency callers grant contents:write
+# for the staging lease; Promote and the Cloudflare latency caller retain contents:read.
 
 concurrency:
   # All workflows driving the shared staging SFU use this group and the Git-ref lease.
@@ -110,6 +132,8 @@ jobs:
     environment: ${{ inputs.environment || 'production' }}
     outputs:
       result: ${{ steps.result.outputs.result }}
+      failure: ${{ steps.prove.outputs.failure }}
+      results: ${{ steps.prove.outputs.results }}
     timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 165 || inputs.latency_only && inputs.media_plane == 'cf_sfu' && 35 || 50 }}
     steps:
       - name: Refuse non-master invocation before checkout
@@ -183,6 +207,7 @@ jobs:
           sudo mount --bind /dev/shm/chalk-proof-private .private
           echo "TMPDIR=/dev/shm/chalk-proof-tmp" >> "$GITHUB_ENV"
       - name: Prove a real call
+        id: prove
         if: ${{ success() && !inputs.latency_only }}
         timeout-minutes: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' && 65 || 40 }}
         env:
@@ -193,6 +218,14 @@ jobs:
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           PROOFS: ${{ inputs.proofs || 'smoke transcript' }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
+          # Promote's own-SFU proof reuses the two Spaces that own-sfu-spaces moved, found by slug.
+          CHALK_PROOF_SPACE_BY_SLUG: ${{ inputs.environment == 'production' && inputs.media_plane == 'chalk_sfu' }}
+          # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
+          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
           CHALK_PROOF_LEAVE_BASELINE_MEDIAN_MS: ${{ inputs.leave_baseline_median_ms }}
           CHALK_PROOF_LEAVE_BASELINE_EVIDENCE_SHA256: ${{ inputs.leave_baseline_evidence_sha256 }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
@@ -213,27 +246,51 @@ jobs:
           esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
             # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ]; then
-              echo "chalk_sfu supports only camera-share, call-artifacts and long-call" >&2
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ]; then
+              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces" >&2
               exit 1
             fi
           done
           mkdir -p .private
+          results=()
+          failed=()
+          stop=false
           for proof in "${proofs[@]}"; do
+            if [ "$stop" = true ]; then
+              results+=("$proof=not-run")
+              continue
+            fi
             start=$(date +%s)
             run_id="${RUN_PREFIX}-${proof}"
             echo "$run_id" >> .private/proof-run-ids
+            status=0
             if [[ "$STAGING_SFU_PROOF" == true ]]; then
-              scripts/staging-sfu/staging-lock --holder nightly-proof --purpose "$proof" --run-id "$RUN_PREFIX" --wait 1800 -- env CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+              # A lease that stays busy for the whole wait fails the gate as staging-sfu-lease-timeout (exit 75, step output `failure`).
+              STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof "$proof" "$RUN_PREFIX" -- env CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof" || status=$?
             else
-              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof"
+              CHALK_PROOF_RUN_ID="$run_id" pnpm prod:proof "$proof" || status=$?
             fi
             echo "$proof wall seconds: $(( $(date +%s) - start ))" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$status" -eq 0 ]; then
+              results+=("$proof=passed")
+              continue
+            fi
+            results+=("$proof=failed")
+            failed+=("$proof")
+            # The nightly proofs are independent, so one failure must not hide the others' results. Any other run (Promote) stops at the first
+            # failure, because its proofs build on each other. A lease problem (exit 75) stops both, since the next proof would wait for the lease again.
+            if [[ "$STAGING_SFU_PROOF" != true || "$status" -eq 75 ]]; then stop=true; fi
           done
+          echo "results=${results[*]}" >> "$GITHUB_OUTPUT"
+          echo "Proof results: ${results[*]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error title=Proofs failed::${failed[*]}"
+            exit 1
+          fi
       - name: Measure action latency
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         # Runs after a failed proof too, so one run shows both results. A failed proof or latency run still fails the job; the caller reads that as the revision's result.
@@ -243,6 +300,12 @@ jobs:
           CHALK_PROOF_API_KEY: ${{ secrets.CHALK_PROOF_API_KEY }}
           RUN_PREFIX: ${{ steps.invocation.outputs.suffix }}
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
+          # A Space an operator moved to the own SFU (media-settings), since the public API refuses to create one. Leave the Cloudflare variable unset.
+          CHALK_PROOF_SPACE_ID_CF_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CF_SFU }}
+          CHALK_PROOF_SPACE_ID_CHALK_SFU: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU }}
+          # The call-artifacts proof needs automatic Recording and Transcription, so it reuses its own Space.
+          CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC: ${{ vars.CHALK_PROOF_SPACE_ID_CHALK_SFU_AUTOMATIC }}
           CHALK_PROOF_TENANT_ID: ${{ vars.CHALK_PROOF_TENANT_ID }}
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
@@ -253,6 +316,7 @@ jobs:
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || inputs.environment == 'production' && 'production' || 'ci' }}
           GH_TOKEN: ${{ github.token }}
           CF_LATENCY_ONLY: ${{ inputs.latency_only && inputs.media_plane == 'cf_sfu' }}
+          CHALK_LATENCY_SAMPLES: ${{ inputs.latency_samples }}
           # The Cloudflare latency-only run never queries the staging API logs, so it does not receive their token.
           CHALK_AXIOM_QUERY_TOKEN: ${{ !(inputs.latency_only && inputs.media_plane == 'cf_sfu') && secrets.CHALK_AXIOM_QUERY_TOKEN || '' }}
           CHALK_AXIOM_STAGING_LOG_DATASET: ${{ vars.CHALK_AXIOM_STAGING_LOG_DATASET }}
@@ -293,6 +357,7 @@ jobs:
         if: ${{ !cancelled() && inputs.latency && (!inputs.latency_only || inputs.environment == 'nightly') }}
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           STAGING_LATENCY: ${{ inputs.environment == 'nightly' && inputs.media_plane == 'chalk_sfu' }}
         run: |
           if [ ! -f features/scorecard/own-sfu.mjs ] || [ -f .private/cf-latency-skipped ]; then
@@ -327,7 +392,7 @@ jobs:
         continue-on-error: true
         run: |
           # The scorecard holds timings only, so unlike the evidence it is not encrypted. The nightly run appends it to the history.
-          leave=$(find .private/prod-proof -path "*-leave/leave-comparison.json" -print -quit 2> /dev/null || true)
+          leave=$(find .private/prod-proof \( -path "*-leave/leave-comparison.json" -o -path "*-leave-own-sfu/leave-comparison.json" \) -print -quit 2> /dev/null || true)
           if [ -z "$leave" ]; then
             echo "No Leave proof result in this run; no scorecard."
             exit 0
@@ -338,6 +403,7 @@ jobs:
             --out artifacts/scorecard-proof.json
         env:
           CHALK_PROOF_MEDIA_PLANE: ${{ inputs.media_plane || 'cf_sfu' }}
+          CHALK_PROOF_TRANSCRIBE: ${{ inputs.transcribe }}
           SCORECARD_TIER: ${{ inputs.environment == 'nightly' && 'nightly' || 'promote' }}
           SCORECARD_ENVIRONMENT: ${{ inputs.environment == 'nightly' && 'staging' || 'production' }}
       - name: Upload the scorecard

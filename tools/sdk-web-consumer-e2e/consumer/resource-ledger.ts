@@ -7,6 +7,7 @@ type FixtureClock = {
 type FixtureMediaDevices = {
   readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
+  readonly releaseTrack: (track: MediaStreamTrack) => void;
 };
 
 const tracks = new Set<MediaStreamTrack>();
@@ -55,6 +56,7 @@ export const fixtureMediaDevices: FixtureMediaDevices = {
     return new MediaStream(mediaTracks);
   },
   getDisplayMedia: async () => new MediaStream([createVideoTrack("screen")]),
+  releaseTrack: (track) => track.stop(),
 };
 
 export function registerSocket(socket: WebSocket): WebSocket {

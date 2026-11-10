@@ -109,6 +109,13 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
       const bytes = Uint8Array.from(atob(speech), (character) => character.charCodeAt(0));
       const phrase = await context.decodeAudioData(bytes.buffer);
       const destination = context.createMediaStreamDestination();
+      // A destination with no input sends no RTP at all, so the Capture would wait for the microphone's first packet and the call would never start.
+      const idle = context.createOscillator();
+      const idleGain = context.createGain();
+      idleGain.gain.value = 0;
+      idle.connect(idleGain);
+      idleGain.connect(destination);
+      idle.start();
       window.proofAudio = { context, phrase, destination };
       const tone = (hz, level) => {
         const oscillator = context.createOscillator();
@@ -184,11 +191,3 @@ export function installFixture({ speech, guest, tones = false, voiceGain, turns 
     return stream;
   };
 }
-
-// With ?audio=HZ the page also plays that tone, so a shared tab carries screen audio.
-export const shareHTML = `<!doctype html><title>Chalk proof screen share</title><canvas width="1920" height="1080"></canvas><script>
-const hz=Number(new URLSearchParams(location.search).get('audio'));
-if(hz){const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.frequency.value=hz;g.gain.value=0.2;o.connect(g);g.connect(a.destination);o.start();a.resume()}
-const c=document.querySelector('canvas').getContext('2d');let n=0;
-setInterval(()=>{c.fillStyle='#102a43';c.fillRect(0,0,1920,1080);c.fillStyle='#ffffff';c.font='80px sans-serif';c.fillText('Synthetic screen share',80,160);c.fillText('Frame '+n++,80,320);c.fillStyle='#22c55e';c.fillRect((n*20)%1600,500,200,200)},1000/15);
-</script>`;

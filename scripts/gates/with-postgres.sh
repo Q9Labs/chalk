@@ -32,16 +32,30 @@ if [[ "$1" == "--" ]]; then
   fi
 fi
 
-# Service suites can leave fixtures behind; each gate needs its own database.
+# Service suites can leave fixtures behind; each gate needs its own database. Each gate waits on timers and
+# sockets more than on CPU, so they run side by side. One owned child holds every gate in a single process
+# group, so a stop reaches all of them and the usual grace and KILL escalation apply.
 if ((command_mode == 0 && $# > 1)); then
   # shellcheck source=scripts/gates/owned-command.sh
   source "$(dirname "$0")/owned-command.sh"
   # Each gate's own wrapper bounds its stop and cleanup, so this one waits longer before it uses KILL.
   owned_grace=$((owned_grace + 5))
   trap stop_owned EXIT
-  for gate in "$@"; do
-    run_owned bash "${BASH_SOURCE[0]}" "${gate}"
-  done
+  # Background jobs of a non-interactive shell ignore INT, so the launcher forwards either signal as TERM.
+  launcher=$(cat <<'LAUNCHER'
+pids=()
+trap 'kill -TERM "${pids[@]}" 2>/dev/null; wait; exit 143' INT TERM
+for gate in "${@:2}"; do
+  label="${gate#apps/}"
+  bash "$1" "$gate" </dev/null > >(sed -u "s|^|[${label%%/*}] |") 2>&1 &
+  pids+=("$!")
+done
+status=0
+for pid in "${pids[@]}"; do wait "$pid" || status=$?; done
+exit "$status"
+LAUNCHER
+  )
+  run_owned bash -c "${launcher}" _ "${BASH_SOURCE[0]}" "$@"
   exit 0
 fi
 

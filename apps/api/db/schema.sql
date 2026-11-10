@@ -6,6 +6,8 @@ create table tenants (
     default_region text,
     -- cf_sfu
     default_media_plane text,
+    -- Set only by the operator command; a trigger clears it whenever the default changes otherwise.
+    default_media_plane_approved boolean not null default false,
     -- {
     --   "enabled": true,
     --   "provider": "cf_sfu",
@@ -283,6 +285,19 @@ create table spaces (
     slug text not null,
     -- cf_sfu
     media_plane text not null,
+    -- The Space's own plane choice, with the media_plane value it was written against; null inherits the Tenant, then the platform default.
+    media_plane_setting_written text check (media_plane_setting_written in ('cf_sfu', 'chalk_sfu')),
+    media_plane_setting_against text,
+    constraint spaces_media_plane_setting_witness check ((media_plane_setting_written is null) = (media_plane_setting_against is null)),
+    -- What readers use: the choice while media_plane still equals what it was written against, else the older release's media_plane.
+    media_plane_setting text generated always as (
+        case
+            when media_plane_setting_written is null then null
+            when media_plane_setting_against = btrim(media_plane) then media_plane_setting_written
+            when btrim(media_plane) in ('cf_sfu', 'chalk_sfu') then btrim(media_plane)
+            else null
+        end
+    ) stored,
     metadata jsonb,
     -- recurring_policy is null for non-recurring spaces.
     -- Example:

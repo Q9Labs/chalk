@@ -116,7 +116,8 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 	}
 	before := mapSpace(beforeRow)
 	changed := spaceChangedFields(before, input)
-	if len(changed) == 0 {
+	settingChanged := input.MediaPlaneSetting.Set && !samePlaneSetting(before.MediaPlaneSetting, input.MediaPlaneSetting.Value)
+	if len(changed) == 0 && !settingChanged {
 		if err := tx.Commit(ctx); err != nil {
 			return spaces.Space{}, err
 		}
@@ -131,6 +132,8 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 		Slug:                             requiredText(input.Slug),
 		MediaPlaneSet:                    input.MediaPlane.Set,
 		MediaPlane:                       requiredText(input.MediaPlane),
+		MediaPlaneSettingSet:             input.MediaPlaneSetting.Set,
+		MediaPlaneSetting:                optionalPlaneSetting(input.MediaPlaneSetting),
 		MetadataSet:                      input.Metadata.Set,
 		Metadata:                         jsonBytes(input.Metadata.Value),
 		RecurringPolicySet:               input.RecurringPolicy.Set,
@@ -154,6 +157,14 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 		return spaces.Space{}, err
 	}
 	after := mapSpace(row)
+	if len(changed) == 0 {
+		// Only the media plane setting changed. The webhook contract does not carry it,
+		// and the media_plane it reports did not change.
+		if err := tx.Commit(ctx); err != nil {
+			return spaces.Space{}, err
+		}
+		return r.withSpaceRoles(ctx, after)
+	}
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
 		TenantID:     tenantID,
 		EventName:    "space.updated",
@@ -271,6 +282,13 @@ func (r SpaceRepository) restoreSpaceWithWebhook(ctx context.Context, tenantID, 
 	}
 	metric.Record(ctx)
 	return r.withSpaceRoles(ctx, after)
+}
+
+func samePlaneSetting(a, b *spaces.MediaPlaneProvider) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 func spaceChangedFields(before spaces.Space, input spaces.UpdateSpaceInput) []string {

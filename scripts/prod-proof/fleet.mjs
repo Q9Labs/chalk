@@ -172,7 +172,7 @@ function spacePool(run, ids, createSpace) {
       const id = free.shift();
       if (!spaces.has(id)) spaces.set(id, run.apiRequest("GET", `${run.tenantPath}/spaces/${id}`));
       const space = await spaces.get(id);
-      check(space.media_plane === mediaPlane, `Space uses ${space.media_plane}, not ${mediaPlane}`);
+      check((space.effective_media_plane ?? space.media_plane) === mediaPlane, `Space uses ${space.effective_media_plane ?? space.media_plane}, not ${mediaPlane}`);
       return { space, release: async () => void free.push(id) };
     },
   };

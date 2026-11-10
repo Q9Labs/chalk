@@ -43,7 +43,7 @@ function browser() {
   vi.stubGlobal("RTCPeerConnection", PeerConnection);
   vi.stubGlobal("WebSocket", SilentSocket);
   vi.stubGlobal("fetch", async () => Response.json({ incarnation: 1, sequence: 0, publications: [] }));
-  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
+  vi.stubGlobal("navigator", { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => ({ getTracks: () => [] }), enumerateDevices: async () => [] } });
 }
 function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeoutMs: number | null = 25, logger?: SpaceClientOptions["logger"], onConnectionDiagnostic?: (event: ConnectionDiagnostic) => void) {
   return createSpaceClientForPlatform(

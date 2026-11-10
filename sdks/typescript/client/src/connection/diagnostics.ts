@@ -1,6 +1,6 @@
 import type { ConnectionErrorCode, ConnectionState } from "./types";
 
-export type ConnectionDiagnosticEventName =
+type ReportedDiagnosticEventName =
   | "sync_dial_timeout"
   | "sync_connect_failed"
   | "connection_failed"
@@ -14,6 +14,8 @@ export type ConnectionDiagnosticEventName =
   | "cleanup_completed"
   | "cleanup_unconfirmed"
   | "space_join_span";
+
+export type ConnectionDiagnosticEventName = ReportedDiagnosticEventName | "transport_path";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
 
@@ -54,6 +56,8 @@ export type ConnectionDiagnostic = {
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  /** Which network path carried a plane, so a trial can compare the direct door with the Tunnel. */
+  readonly transport?: import("../direct-path").TransportPath;
   readonly recovery?: {
     readonly reference: "connection.sync_recovery_exhausted" | "connection.media_recovery_exhausted";
     readonly attempts: number;
@@ -156,4 +160,11 @@ export class ConnectionDiagnostics {
   joinTrace(): readonly ConnectionJoinTraceEvent[] {
     return Object.freeze(this.#events.filter((event): event is ConnectionJoinTraceEvent => event.event === "space_join_span"));
   }
+}
+
+/** A diagnostic the server problem report can carry. The report has a fixed schema, so a `transport_path` record stays with the client for a trial harness. */
+export type ReportedConnectionDiagnostic = ConnectionDiagnostic & { readonly event: ReportedDiagnosticEventName };
+
+export function isReportedDiagnostic(diagnostic: ConnectionDiagnostic): diagnostic is ReportedConnectionDiagnostic {
+  return diagnostic.event !== "transport_path";
 }

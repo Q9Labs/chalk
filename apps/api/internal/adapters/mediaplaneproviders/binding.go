@@ -14,12 +14,12 @@ import (
 // ResolveBinding uses the same authority and application selection as live
 // media, without constructing a client or exposing its credentials.
 // A Space outside the own-SFU allowlist gets Cloudflare, so only allowlisted
-// Spaces move. An SDK that cannot run the own SFU gets Cloudflare in an
+// Spaces move, and while the kill switch is on every new Episode gets Cloudflare. An SDK that cannot run the own SFU gets Cloudflare in an
 // allowlisted Space too, until the client sunset passes. After it the request
 // fails with mediaplane.ErrClientUnsupported, so no client cohort stays on
 // Cloudflare for good.
 func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	selected, err := selectedProvider(tenant, space)
+	selected, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +28,7 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
 			return nil, err
 		}
-		if !r.chalkSpaces.Allows(space.ID) || !clients.Runs(mediaplane.ProviderChalkSFU) {
+		if !r.admitsNewChalkSFUEpisode(space) || !clients.Runs(mediaplane.ProviderChalkSFU) {
 			pin = spaces.MediaPlaneProviderCloudflareSFU
 		}
 	}
@@ -113,7 +113,7 @@ func (r Registry) resolveApplication(tenant tenants.Tenant, space spaces.Space, 
 // that must refuse before it writes anything. A Space that does not exist yet
 // has the zero ID, so only the allowlist entry * covers it.
 func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space spaces.Space, clients mediaplane.ClientProviders) error {
-	selected, err := selectedProvider(tenant, space)
+	selected, err := r.selectedProvider(tenant, space)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space
 // sunset has passed, in a Space that is on the allowlist. Disabled media is left
 // alone: that Episode has no binding, so no client has to run the own SFU.
 func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected spaces.MediaPlaneProvider, clients mediaplane.ClientProviders) error {
-	if selected != spaces.MediaPlaneProviderChalkSFU || !r.chalkSpaces.Allows(space.ID) || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+	if selected != spaces.MediaPlaneProviderChalkSFU || !r.admitsNewChalkSFUEpisode(space) || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
 		return nil
 	}
 	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: providercontracts.ModeUnknown}

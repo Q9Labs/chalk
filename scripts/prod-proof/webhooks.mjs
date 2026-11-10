@@ -3,7 +3,6 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { shareHTML } from "./fixture.mjs";
 import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
 import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
@@ -12,7 +11,7 @@ const { build } = createRequire(new URL("../../sdks/typescript/client/package.js
 export async function proofServer(run) {
   const origin = new URL(run.config.proof_origin);
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
-  const pages = { "/": "<!doctype html><title>Chalk production proof</title>", "/share": shareHTML };
+  const pages = { "/": "<!doctype html><title>Chalk production proof</title>" };
   const server = createServer((request, response) => {
     const path = request.url?.split("?")[0] ?? "";
     if (request.method !== "GET" || !Object.hasOwn(pages, path)) {

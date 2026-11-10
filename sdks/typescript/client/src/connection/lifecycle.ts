@@ -7,9 +7,9 @@ import type { V1EpisodeSnapshot } from "../sync";
 import { ConnectionAccessFailure, ConnectionAccessService, makeConnectionAccessLayer } from "../access/manager";
 import { AccessGrantError, type ParsedAccessGrant } from "../access/grant";
 import type { ConnectionLifecycleSnapshot, ConnectionOptions, ConnectionPorts } from "./index";
-import { ConnectionDiagnostics, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
-import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionSyncClient } from "./dependencies";
-import { stopStream, streamFromTracks } from "./media-devices";
+import { ConnectionDiagnostics, isReportedDiagnostic, type ConnectionDiagnostic, type ConnectionJoinTraceEvent, type ConnectionJoinTraceStep } from "./diagnostics";
+import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionDependencies, type ConnectionMediaClient, type ConnectionMediaDevices, type ConnectionSyncClient } from "./dependencies";
+import { releaseTracks, streamFromTracks } from "./media-devices";
 import { describeMediaCaptureError } from "../media/capture-error";
 import { classifyMediaFailure, grantedMediaFromStream, type GrantedMedia } from "../media/failure-diagnostics";
 import { createDefaultConnectionDependencies } from "./production";
@@ -182,11 +182,12 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
         now: () => clock.currentTimeMillisUnsafe(),
         ...options.diagnostics,
         onEvent: (event) => {
-          reporter?.recordDiagnostic(event);
+          if (isReportedDiagnostic(event)) reporter?.recordDiagnostic(event);
           options.diagnostics?.onEvent?.(event);
         },
       });
       const onTransportDiagnostic = (event: import("./report").ConnectionReportTransportEvent) => reporter?.recordTransport(event);
+      const onTransportPath = (transport: import("../direct-path").TransportPath) => diagnostics.record({ event: "transport_path", state: model.state, epoch: model.epoch, transport });
       const snapshotRef = yield* SubscriptionRef.make<ConnectionLifecycleSnapshot>(idleSnapshot());
       const queue = yield* Queue.unbounded<Work>();
       const listeners = new Set<() => void>();
@@ -490,7 +491,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
           let captureWarning: ConnectionLifecycleFailure | null = null;
           yield* Effect.gen(function* () {
             if (model.joinCancelled) return yield* Effect.fail(lifecycleFailure("invalid_state", false, "Join was cancelled by Leave"));
-            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent));
+            const captured = yield* trace("acquire_initial_media", acquireInitialMedia(model.initialMedia, model.initialMediaIntent?.() ?? model.intent, platform.mediaDevices));
             stream = captured.stream;
             grantedMedia = grantedMediaFromStream(stream);
             captureWarning = captured.failure;
@@ -505,6 +506,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    refreshCredential: () => toPromise(access.refresh("access_retry", false).pipe(Effect.map((fresh) => fresh.media.token))),
                     // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
                     // as a lost connection. A refresh then would race the server's own Leave and replace a connection
                     // that is about to go.
@@ -516,6 +518,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                             return replacement.media;
                           }),
                     onTransportDiagnostic,
+                    onTransportPath,
                     traceparent: reporter?.traceparent,
                     onFailure: (cause, binding = grant.media.clientPayload.connectionId) => enqueueBackground(handleMediaFailure(media, cause, binding)),
                     onScreenEnded: () => enqueueBackground(notifyScreenEnded()),
@@ -527,7 +530,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             const sync = yield* trace(
               "create_sync_client",
               Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
                 catch: (cause) => (accessRejected(cause) ? lifecycleFailure("invalid_access", false, "Access was rejected", cause) : lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause)),
               }),
             );
@@ -563,7 +566,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             Effect.matchEffect({
               onFailure: (cause) =>
                 Effect.gen(function* () {
-                  stopStream(stream);
+                  yield* releaseLocalTracks(platform.mediaDevices, liveTracks(stream));
                   const originalFailure = failureFromCause(cause, "internal_error", "The Connection could not start");
                   const failure = yield* resolveMediaRejection(originalFailure);
                   if (failure.code === "episode_ended" && needsEpisodeCheck(originalFailure)) {
@@ -605,12 +608,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (model.failure) return yield* Effect.fail(lifecycleFailure("leave_unconfirmed", false, model.failure.message));
             return;
           }
-          yield* Effect.sync(() => {
-            for (const { track } of model.media?.getSnapshot().localTracks ?? []) {
-              track.enabled = false;
-              track.stop();
-            }
-          });
+          yield* releaseLocalTracks(platform.mediaDevices, localTracksOf(model));
           yield* transition("leaving");
           const confirmed = yield* leaveIsConfirmed();
           yield* stopPorts();
@@ -924,7 +922,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
               model.syncBindingCleanup?.();
               model.sync = null;
               const sync = yield* Effect.try({
-                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, traceparent: reporter?.traceparent }),
+                try: () => platform.createSyncClient({ access: grant, token: () => toPromise(access.getSyncToken()), media, onTransportDiagnostic, onTransportPath, traceparent: reporter?.traceparent }),
                 catch: (cause) => lifecycleFailure("sync_start_failed", true, "The sync layer could not start", cause),
               });
               model.sync = sync;
@@ -1308,6 +1306,22 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
       } satisfies ConnectionLifecycleCapability;
     }),
   );
+function localTracksOf(model: Model): MediaStreamTrack[] {
+  return (model.media?.getSnapshot().localTracks ?? []).map(({ track }) => track);
+}
+function liveTracks(stream: MediaStream | null | undefined): MediaStreamTrack[] {
+  return (stream?.getTracks() ?? []).filter((track) => track.readyState !== "ended");
+}
+/** A failing release is reported but does not replace the Leave or join failure that is already being handled. */
+function releaseLocalTracks(devices: ConnectionMediaDevices, tracks: readonly MediaStreamTrack[]): Effect.Effect<void> {
+  return Effect.try({
+    try: () => {
+      for (const track of tracks) track.enabled = false;
+      releaseTracks(devices, tracks);
+    },
+    catch: (cause) => cause,
+  }).pipe(Effect.catch((cause) => Effect.logWarning("Releasing local tracks failed", cause)));
+}
 function idleSnapshot(): ConnectionLifecycleSnapshot {
   return Object.freeze({ state: "idle", subject: null, episode: null, connection: Object.freeze({ sync: "idle", media: "idle" }), failure: null });
 }
@@ -1369,6 +1383,7 @@ function acquireInitialMedia(
     microphone: boolean;
     camera: boolean;
   }>,
+  mediaDevices: ConnectionMediaDevices,
 ): Effect.Effect<
   {
     stream: MediaStream;
@@ -1408,13 +1423,7 @@ function acquireInitialMedia(
         }
         if (tracks.size === 0) yield* provider({ microphone: false, camera: false }).pipe(Effect.mapError(captureFailure));
         return { stream: streamFromTracks([...tracks]), failure: initialCaptureWarning(failures) };
-      }).pipe(
-        Effect.onInterrupt(() =>
-          Effect.sync(() => {
-            for (const track of tracks) track.stop();
-          }),
-        ),
-      );
+      }).pipe(Effect.onInterrupt(() => releaseLocalTracks(mediaDevices, [...tracks])));
     }),
   );
 }

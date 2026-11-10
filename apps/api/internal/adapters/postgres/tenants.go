@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -131,6 +132,7 @@ func (s TenantRepository) UpdateTenant(ctx context.Context, id utilities.ID, inp
 
 		DefaultMediaPlaneSet:          input.DefaultMediaPlane.Set,
 		DefaultMediaPlane:             text(input.DefaultMediaPlane.Value),
+		DefaultMediaPlaneApproved:     input.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfigSet:   input.MediaPlaneProviderConfig.Set,
 		MediaPlaneProviderConfig:      jsonBytes(input.MediaPlaneProviderConfig.Value),
 		StorageProviderConfigSet:      input.StorageProviderConfig.Set,
@@ -192,16 +194,17 @@ func mapTenant(tenant tenantRecord) tenants.Tenant {
 		CreatedByServiceID: nullableText(tenant.CreatedByServiceID),
 		ExternalID:         nullableText(tenant.ExternalID),
 
-		DefaultMediaPlane:        nullableText(tenant.DefaultMediaPlane),
-		MediaPlaneProviderConfig: jsonRaw(tenant.MediaPlaneProviderConfig),
-		StorageProviderConfig:    jsonRaw(tenant.StorageProviderConfig),
-		CORSAllowedOrigins:       append([]string(nil), tenant.CorsAllowedOrigins...),
-		LogoKey:                  nullableText(tenant.LogoKey),
-		Website:                  nullableText(tenant.Website),
-		RecordingRenderMode:      tenants.RecordingRenderMode(tenant.RecordingRenderMode),
-		ArtifactPolicy:           policy,
-		UpdatedAt:                timestamp(tenant.UpdatedAt),
-		CreatedAt:                timestamp(tenant.CreatedAt),
+		DefaultMediaPlane:         nullableText(tenant.DefaultMediaPlane),
+		DefaultMediaPlaneApproved: tenant.DefaultMediaPlaneApproved,
+		MediaPlaneProviderConfig:  jsonRaw(tenant.MediaPlaneProviderConfig),
+		StorageProviderConfig:     jsonRaw(tenant.StorageProviderConfig),
+		CORSAllowedOrigins:        append([]string(nil), tenant.CorsAllowedOrigins...),
+		LogoKey:                   nullableText(tenant.LogoKey),
+		Website:                   nullableText(tenant.Website),
+		RecordingRenderMode:       tenants.RecordingRenderMode(tenant.RecordingRenderMode),
+		ArtifactPolicy:            policy,
+		UpdatedAt:                 timestamp(tenant.UpdatedAt),
+		CreatedAt:                 timestamp(tenant.CreatedAt),
 	}
 }
 
@@ -212,6 +215,7 @@ type tenantRecord struct {
 	ExternalID         pgtype.Text
 
 	DefaultMediaPlane          pgtype.Text
+	DefaultMediaPlaneApproved  bool
 	MediaPlaneProviderConfig   []byte
 	StorageProviderConfig      []byte
 	CorsAllowedOrigins         []string
@@ -257,6 +261,7 @@ func createTenantRecord(row sqlc.CreateTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -283,6 +288,7 @@ func getTenantRecord(row sqlc.GetTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -309,6 +315,7 @@ func listTenantRecord(row sqlc.ListTenantsRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -335,6 +342,7 @@ func updateTenantRecord(row sqlc.UpdateTenantRow) tenantRecord {
 		ExternalID:         row.ExternalID,
 
 		DefaultMediaPlane:          row.DefaultMediaPlane,
+		DefaultMediaPlaneApproved:  row.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:   row.MediaPlaneProviderConfig,
 		StorageProviderConfig:      row.StorageProviderConfig,
 		CorsAllowedOrigins:         row.CorsAllowedOrigins,
@@ -392,4 +400,38 @@ func (s TenantRepository) FindServiceTenant(ctx context.Context, serviceID, exte
 		return tenants.Tenant{}, fmt.Errorf("find service Tenant: %w", err)
 	}
 	return s.GetTenant(ctx, utilities.IDFromBytes(id.Bytes))
+}
+
+// TenantOperator writes a Tenant's default media plane with operator authority. The trigger on
+// tenants clears the approval of any default that changes outside a transaction that says it is
+// the operator's, so this is the only way to write one that counts.
+type TenantOperator struct {
+	pool *pgxpool.Pool
+}
+
+func NewTenantOperator(pool *pgxpool.Pool) TenantOperator {
+	return TenantOperator{pool: pool}
+}
+
+func (o TenantOperator) GetTenant(ctx context.Context, id utilities.ID) (tenants.Tenant, error) {
+	return NewTenantRepository(sqlc.New(o.pool)).GetTenant(ctx, id)
+}
+
+func (o TenantOperator) SetDefaultMediaPlane(ctx context.Context, id utilities.ID, plane *string) (tenants.Tenant, error) {
+	tx, err := o.pool.Begin(ctx)
+	if err != nil {
+		return tenants.Tenant{}, fmt.Errorf("set default media plane: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `select set_config('chalk.operator_write', 'on', true)`); err != nil {
+		return tenants.Tenant{}, fmt.Errorf("set default media plane: %w", err)
+	}
+	tenant, err := tenants.NewService(NewTenantRepository(sqlc.New(tx))).SetDefaultMediaPlane(ctx, id, plane)
+	if err != nil {
+		return tenants.Tenant{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return tenants.Tenant{}, fmt.Errorf("set default media plane: %w", err)
+	}
+	return tenant, nil
 }

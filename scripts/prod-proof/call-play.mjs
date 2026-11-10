@@ -1,4 +1,4 @@
-import { bounds, cycleSeconds, flashSeconds, markerHz, markerSeconds, phraseDelaySeconds, screenHz, slotSeconds } from "./call-script.mjs";
+import { bounds, cycleSeconds, flashSeconds, markerHz, markerSeconds, phraseDelaySeconds, slotSeconds } from "./call-script.mjs";
 import { check, command, waitFor } from "./runtime.mjs";
 
 const startLeadMs = 3000;
@@ -26,29 +26,26 @@ async function startRound(run, pages, guestList, cycles) {
   return { guests, cycles };
 }
 
-async function shareScreen(run, pages, origin) {
-  const share = await pages[0].context().newPage();
-  await share.goto(`${origin}/share?audio=${screenHz}`);
-  await pages[0].bringToFront();
-  await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(true, { audio: true }));
+async function shareScreen(pages) {
+  await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(true));
   await waitFor("screen share enabled", () => pages[0].evaluate(() => window.proofClient.getSnapshot().media.screenShare.state === "enabled"));
-  return share;
 }
 
 /**
  * Plays the scripted call on guests that are already live and recorded, and returns the script that call-script.mjs judges.
  * 1. Two cycles of turns (marker beep + camera flash, then a phrase) from one shared start.
- * 2. Guest 2 holds a tone and mutes, while guest 1 shares a tab that plays a tone.
+ * 2. Guest 2 holds a tone and mutes, while guest 1 shares its screen (the browser's fake display) while holding its own tone, because the Recording has no shared-screen audio.
  * 3. Optionally one capture-node restart (CHALK_PROOF_CAPTURE_RESTART_COMMAND), then one more round without the muted guest.
  * 4. Guest 3 holds a tone while the host stops the Recording.
  */
-export async function playCall(run, guests, origin, phraseSeconds, restartCommand) {
+export async function playCall(run, guests, phraseSeconds, restartCommand) {
   const pages = guests.pages;
   const script = { anchorGuest: 0, phraseSeconds, rounds: [await startRound(run, pages, [0, 1, 2], 2)] };
 
-  console.log("Guest 2 holds a tone and guest 1 shares a tab with sound");
+  console.log("Guest 2 holds a tone and guest 1 holds a tone and shares its screen");
   const holdStartMs = await pages[mutedGuest].evaluate((hz) => window.proofHoldTone(hz), markerHz[mutedGuest]);
-  const share = await shareScreen(run, pages, origin);
+  await pages[0].evaluate((hz) => window.proofHoldTone(hz), markerHz[0]);
+  await shareScreen(pages);
   const screenStartMs = Date.now();
   await run.wait(holdSeconds * 1000);
   const muteMs = Date.now();
@@ -56,8 +53,7 @@ export async function playCall(run, guests, origin, phraseSeconds, restartComman
   await run.wait(holdSeconds * 1000);
   const screenStopMs = Date.now();
   await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(false));
-  await share.close();
-  await pages[mutedGuest].evaluate(() => window.proofHoldStop());
+  await Promise.all([pages[0], pages[mutedGuest]].map((page) => page.evaluate(() => window.proofHoldStop())));
   Object.assign(script, { hold: { guest: mutedGuest, startMs: holdStartMs, muteMs }, screen: { startMs: screenStartMs, stopMs: screenStopMs } });
 
   if (restartCommand) {

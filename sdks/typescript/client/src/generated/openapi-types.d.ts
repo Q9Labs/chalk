@@ -2410,10 +2410,12 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
       default_episode_duration_seconds: number;
+      effective_media_plane: string | null;
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
       media_plane: string;
+      media_plane_setting: string | null;
       metadata:
         | {
             [key: string]: unknown;

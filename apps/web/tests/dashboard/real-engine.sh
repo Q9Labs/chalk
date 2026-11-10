@@ -10,6 +10,8 @@ if [[ ! "$deadline_seconds" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 mkdir -p artifacts
+# A parallel run sets a suffix so its binary and logs do not collide with the default run.
+artifact_suffix="${DASHBOARD_ENGINE_ARTIFACT_SUFFIX:-}"
 # This wrapper owns the isolated gate database. Exercise the enforced release.
 psql "$CHALK_DATABASE_URL" -v ON_ERROR_STOP=1 -qAtc "select enforce_sync_entry_ownership('dashboard-proof')" >/dev/null
 export CHALK_API_ENV=local
@@ -66,7 +68,7 @@ export GOFLAGS=-buildvcs=false
 if [[ "${DASHBOARD_REFRESH_COST:-0}" == 1 ]]; then
   pnpm exec turbo run build --filter=web...
 fi
-(cd apps/api && go build -o ../../artifacts/dashboard-api ./cmd)
+(cd apps/api && go build -o ../../artifacts/dashboard-api${artifact_suffix} ./cmd)
 final_pid=""
 api_pid=""
 vendor_pid=""
@@ -93,25 +95,25 @@ trap 'exit 143' TERM
 certificate_dir="$(mktemp -d /tmp/dashboard-capability-identity.XXXXXX)"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=dashboard-proof-ca \
   -addext basicConstraints=critical,CA:TRUE \
-  -keyout "$certificate_dir/ca.key" -out "$certificate_dir/ca.pem" > artifacts/dashboard-certificates.log 2>&1
+  -keyout "$certificate_dir/ca.key" -out "$certificate_dir/ca.pem" > artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 openssl req -newkey rsa:2048 -nodes -subj /CN=localhost \
-  -keyout "$certificate_dir/server.key" -out "$certificate_dir/server.csr" >> artifacts/dashboard-certificates.log 2>&1
+  -keyout "$certificate_dir/server.key" -out "$certificate_dir/server.csr" >> artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 cat > "$certificate_dir/server.ext" <<'CERT'
 subjectAltName=DNS:localhost,IP:127.0.0.1,URI:spiffe://chalk.local/api
 extendedKeyUsage=serverAuth
 CERT
 openssl x509 -req -in "$certificate_dir/server.csr" -CA "$certificate_dir/ca.pem" \
   -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
-  -extfile "$certificate_dir/server.ext" -out "$certificate_dir/server.pem" >> artifacts/dashboard-certificates.log 2>&1
+  -extfile "$certificate_dir/server.ext" -out "$certificate_dir/server.pem" >> artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 openssl req -newkey rsa:2048 -nodes -subj /CN=dashboard-proof-sync \
-  -keyout "$certificate_dir/sync.key" -out "$certificate_dir/sync.csr" >> artifacts/dashboard-certificates.log 2>&1
+  -keyout "$certificate_dir/sync.key" -out "$certificate_dir/sync.csr" >> artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 cat > "$certificate_dir/sync.ext" <<'CERT'
 subjectAltName=URI:spiffe://chalk.local/environment/local/sync/00000000-0000-4000-8000-000000000002
 extendedKeyUsage=clientAuth
 CERT
 openssl x509 -req -in "$certificate_dir/sync.csr" -CA "$certificate_dir/ca.pem" \
   -CAkey "$certificate_dir/ca.key" -CAcreateserial -days 1 \
-  -extfile "$certificate_dir/sync.ext" -out "$certificate_dir/sync.pem" >> artifacts/dashboard-certificates.log 2>&1
+  -extfile "$certificate_dir/sync.ext" -out "$certificate_dir/sync.pem" >> artifacts/dashboard-certificates${artifact_suffix}.log 2>&1
 export CHALK_PROVIDER_BRIDGE_ADDRESS=127.0.0.1:${dashboard_bridge_port}
 export CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE="$certificate_dir/server.pem"
 export CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE="$certificate_dir/server.key"
@@ -128,15 +130,15 @@ for attempt in {1..50}; do
   sleep 0.1
 done
 docker exec "$redis_container" redis-cli ping >/dev/null
-node apps/web/tests/dashboard/vendor-fixture.mjs "$BASHPID" > artifacts/dashboard-vendor.log 2>&1 &
+node apps/web/tests/dashboard/vendor-fixture.mjs "$BASHPID" > artifacts/dashboard-vendor${artifact_suffix}.log 2>&1 &
 vendor_pid=$!
 for attempt in {1..50}; do
   if curl --fail --silent "$CHALK_CLOUDFLARE_REALTIME_BASE_URL/healthz" >/dev/null; then break; fi
-  if ! kill -0 "$vendor_pid" 2>/dev/null; then cat artifacts/dashboard-vendor.log; exit 1; fi
+  if ! kill -0 "$vendor_pid" 2>/dev/null; then cat artifacts/dashboard-vendor${artifact_suffix}.log; exit 1; fi
   sleep 0.1
 done
 kill -0 "$vendor_pid"
-artifacts/dashboard-api > artifacts/dashboard-api.log 2>&1 &
+artifacts/dashboard-api${artifact_suffix} > artifacts/dashboard-api${artifact_suffix}.log 2>&1 &
 api_pid=$!
 # Owner loss and a hard deadline also reap the server if the driver is killed.
 python3 - "$BASHPID" "$api_pid" "$redis_container" "$deadline_seconds" <<'PY' &
@@ -155,7 +157,7 @@ PY
 watchdog_pid=$!
 for attempt in {1..100}; do
   if curl --fail --silent "$DASHBOARD_TEST_API_ORIGIN/healthz" >/dev/null; then break; fi
-  if ! kill -0 "$api_pid" 2>/dev/null; then cat artifacts/dashboard-api.log; exit 1; fi
+  if ! kill -0 "$api_pid" 2>/dev/null; then cat artifacts/dashboard-api${artifact_suffix}.log; exit 1; fi
   sleep 0.1
 done
 if (($# == 0)); then

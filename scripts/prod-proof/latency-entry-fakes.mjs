@@ -1,5 +1,6 @@
 // Stands in for the browser, API and cloud modules that latency.mjs imports, so the test can run the real entry point through a
 // whole cycle and let it write its files. The fake page runs each evaluate callback in this process against a fake `window`.
+import { appendFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import timers from "node:timers/promises";
 
@@ -53,6 +54,9 @@ export const disposeResource = async () => [];
 export const runLabel = () => undefined;
 export const prepareIntegration = async () => ({ origin: "https://app.invalid" });
 export const createSpace = async () => ({ id: "space", slug: "space" });
+export const trackEpisode = async (run, space, episode) => {
+  await appendFile(`${run.directory}/tracked.jsonl`, `${JSON.stringify({ space_id: space.id, id: episode.id })}\n`);
+};
 export const episodeEnd = () => ({ useSDK: () => undefined, end: async () => undefined });
 export const launchGuests = async () => ({
   pages: [page, page],

@@ -19,7 +19,7 @@ import { parseArgs } from "node:util";
 import { ProofError, check, command, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, disposeResource, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
@@ -97,37 +97,30 @@ function toggles(participantId) {
   ];
 }
 
-async function shareSteps(origin, pages, participantId, sample, stages) {
-  const share = await pages[0].context().newPage();
-  try {
-    await share.goto(`${origin}/share`);
-    await pages[0].bringToFront();
-    const start = {
-      group: "screen_start",
-      command: "live_target:set_screen_share_enabled:true",
-      specs: [
-        { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
-        { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
-      ],
-    };
-    const started = await measure(pages[0], pages[1], "screen", true, start.specs);
-    Object.assign(sample, started.delays);
-    Object.assign(stages, await toggleTrace(pages, start, started));
-    await sleep(settleMs);
-    const stop = {
-      group: "screen_stop",
-      command: "live_target:set_screen_share_enabled:false",
-      specs: [
-        { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
-        { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
-      ],
-    };
-    const stopped = await measure(pages[0], pages[1], "screen", false, stop.specs);
-    Object.assign(sample, stopped.delays);
-    Object.assign(stages, await toggleTrace(pages, stop, stopped));
-  } finally {
-    await share.close();
-  }
+async function shareSteps(pages, participantId, sample, stages) {
+  const start = {
+    group: "screen_start",
+    command: "live_target:set_screen_share_enabled:true",
+    specs: [
+      { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
+      { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
+    ],
+  };
+  const started = await measure(pages[0], pages[1], "screen", true, start.specs);
+  Object.assign(sample, started.delays);
+  Object.assign(stages, await toggleTrace(pages, start, started));
+  await sleep(settleMs);
+  const stop = {
+    group: "screen_stop",
+    command: "live_target:set_screen_share_enabled:false",
+    specs: [
+      { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
+      { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
+    ],
+  };
+  const stopped = await measure(pages[0], pages[1], "screen", false, stop.specs);
+  Object.assign(sample, stopped.delays);
+  Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
 async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
@@ -136,6 +129,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   const createdAt = clock();
   const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
   const createMs = clock() - createdAt;
+  await trackEpisode(run, space, episode);
   ending.path = `${path}/${episode.id}`;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
@@ -180,7 +174,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
     Object.assign(stages, await toggleTrace(pages, step, result));
   }
   await sleep(settleMs);
-  await shareSteps(origin, pages, sender, sample, stages);
+  await shareSteps(pages, sender, sample, stages);
   // The call is steady for the settle pause after the actions: the listener's audio counters are read on both sides of it.
   const audioBefore = await observe("audio counters", () => pages[1].evaluate(() => window.proofTrace.audioStats()), null);
   await sleep(settleMs);
@@ -225,6 +219,8 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs) {
   try {
     outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, ending)) };
   } catch (error) {
+    // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
+    if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
     outcome = { plane, timestamp, dropped: error instanceof ProofError && error.reason === "media-plane" ? "wrong_media_plane" : "cycle_failed", error: reason(error) };
   }
   if (ending.current) await endEpisode(run, ending).catch((error) => (outcome = { plane, timestamp, dropped: "teardown_failed", error: `end Episode: ${reason(error)}` }));

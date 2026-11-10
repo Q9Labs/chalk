@@ -147,6 +147,29 @@ it("retains receive health after automatic pull recovery with an unchanged curso
   }
 });
 
+it("removes a remote track soon after Sync shows its source off while the listing still names it", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: "remote-connection|microphone" };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    // The sender's Sync off reaches this client before the sender's SFU close does, so the first listing still names the source.
+    h.client.remotePublicationsChanged([{ ...publication, publicationId: null, enabled: false }]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.client.getSnapshot().remoteTracks).toEqual([]);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
   harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
@@ -1255,6 +1278,28 @@ it("retires through a peer that closes while sender detachment is pending", asyn
     gate.resolve();
     harness.client.stop();
   }
+});
+
+it("does not stop a transceiver that is already stopped when the call ends", async () => {
+  const harness = createHarness();
+  await harness.client.start(fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("cam", "video")));
+  const [stopped, live] = harness.peers[0]!.getTransceivers() as [RTCRtpTransceiver, RTCRtpTransceiver];
+  const firstStop = stopped.stop.bind(stopped);
+  // React Native rejects asynchronously, with nothing to catch it, when a stopped transceiver is stopped again. An unhandled rejection fails the test.
+  const stopStopped = vi.spyOn(stopped, "stop").mockImplementation(() => {
+    if (stopped.direction === "stopped") {
+      void Promise.reject(new Error("Could not get transceiver"));
+      return;
+    }
+    firstStop();
+  });
+  const stopLive = vi.spyOn(live, "stop");
+  stopped.stop();
+  stopStopped.mockClear();
+  harness.client.stop();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(stopStopped).not.toHaveBeenCalled();
+  expect(stopLive).toHaveBeenCalledTimes(1);
 });
 
 it.each(["signaling_failed", "invalid_publication"] as const)("attempts screen audio even when an owned video close returns %s", async (code) => {
@@ -5888,7 +5933,7 @@ function reviewFixture(statusCode = 403, forbidden = false, lifetime = 300000) {
           foreground = listener;
           return () => {};
         },
-        mediaDevices: { getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: enumerate },
+        mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture, getDisplayMedia: screenCapture, enumerateDevices: enumerate },
         getEpisodeStatus: status,
         createMediaClient: (input) => {
           failure = input.onFailure;
@@ -6739,8 +6784,8 @@ describe("own-SFU subscription state", () => {
     );
   });
 
-  function tileCall(tag: string, bootstrapOverride?: CloudflareSFUBootstrap) {
-    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...(bootstrapOverride ? { bootstrap: bootstrapOverride } : {}) });
+  function tileCall(tag: string, bootstrapOverride?: CloudflareSFUBootstrap, options: Parameters<typeof createHarness>[0] = {}) {
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, ...(bootstrapOverride ? { bootstrap: bootstrapOverride } : {}), ...options });
     harness.transport.uniqueRemoteMids = true;
     const cameraId = versionedPublicationID(`${tag}-0`, "1", "camera");
     const publications = [
@@ -6755,6 +6800,41 @@ describe("own-SFU subscription state", () => {
     const cameraPulls = () => harness.transport.addInputs.flatMap((input) => input.tracks.filter((track) => track.location === "remote" && track.trackName === "camera"));
     return { harness, cameraId, join, cameraPulls };
   }
+
+  it("does not fail the call when a pause update for the old connection is refused after the media connection was replaced", async () => {
+    vi.useFakeTimers();
+    const errors: unknown[] = [];
+    const replacement = Promise.withResolvers<CloudflareSFUBootstrap>();
+    const replaceCalls = vi.fn(() => replacement.promise);
+    const { harness: h, cameraId, join } = tileCall("race-pause", own, { onError: (error) => errors.push(error), replaceMediaConnection: replaceCalls });
+    try {
+      setVideoTileVisibility(cameraId, onScreen);
+      await join();
+      // The pause is addressed to the old connection, but its token is fetched after the replacement issued the new one, so the API refuses the pair.
+      const refused = Promise.withResolvers<CloudflareSFUTracksResponse>();
+      vi.spyOn(h.transport, "updateTracks").mockImplementation(() => refused.promise);
+      setVideoTileVisibility(cameraId, null);
+      await vi.advanceTimersByTimeAsync(HIDDEN_TILE_CLOSE_MS + 1);
+      expect(h.transport.updateInputs).toHaveLength(0);
+      const addTracks = h.transport.addTracks.bind(h.transport);
+      vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+        if (input.connectionId === own.connectionId) throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+        return addTracks(input);
+      });
+      h.client.prepareLocalTrack("screen", new FakeTrack("local-screen", "video") as unknown as MediaStreamTrack);
+      const publishing = h.client.setLocalPublicationTarget({ operationId: "race-on", participantId: "participant-1", source: "screen", enabled: true });
+      await vi.advanceTimersByTimeAsync(0);
+      replacement.resolve(bootstrap("replacement"));
+      await publishing;
+      expect(replaceCalls).toHaveBeenCalledTimes(1);
+      refused.reject(new CloudflareSFUError("Chalk SFU signaling failed with HTTP 403", "signaling_failed", { status: 403 }));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(errors.filter((error) => error instanceof CloudflareSFUError && error.options.status === 403)).toEqual([]);
+    } finally {
+      h.client.stop();
+      vi.useRealTimers();
+    }
+  });
 
   it("pauses an off-screen camera in place and resumes it with no pull, close or renegotiation", async () => {
     vi.useFakeTimers();

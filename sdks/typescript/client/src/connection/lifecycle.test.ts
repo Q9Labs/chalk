@@ -81,6 +81,17 @@ it.each([
 });
 
 describe("ConnectionLifecycle Episode snapshot", () => {
+  it("records the path a transport factory reports, for a trial to read", async () => {
+    const fixture = recoveryFixture();
+    const create = fixture.dependencies.createSyncClient;
+    vi.spyOn(fixture.dependencies, "createSyncClient").mockImplementation((input) => {
+      input.onTransportPath?.({ plane: "sync", path: "direct", fellBack: false });
+      return create(input);
+    });
+    await fixture.run(async (lifecycle) => {
+      expect(lifecycle.getDiagnostics()).toContainEqual(expect.objectContaining({ event: "transport_path", transport: { plane: "sync", path: "direct", fellBack: false } }));
+    });
+  });
   it.each(["startup", "live"] as const)("surfaces a failed digest recovery during %s without replacing the Sync client", async (phase) => {
     const fixture = recoveryFixture();
     const createSync = vi.spyOn(fixture.dependencies, "createSyncClient");
