@@ -143,13 +143,13 @@ try {
     const { tab, context } = await open("/dashboard");
     const order = [];
     await tab.locator("body").focus();
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 11; i++) {
       await tab.keyboard.press("Tab");
       order.push(await focused(tab));
     }
     // The privacy notice adds its link and dismiss button until the policy update takes effect.
     const notice = (await tab.locator(".privacy-notice").count()) === 1 ? ["See what's changing.", "Dismiss Privacy Policy notice"] : [];
-    const expected = ["Chalk, Home", "Home", "AI apps", "Developer", "Docs", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
+    const expected = ["Chalk, Home", "Home", "Sessions", "Recordings", "AI apps", "Developer", "Docs", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
     check("keyboard order on Home", order.slice(0, expected.length).join(" | ") === expected.join(" | "), order.join(" | "));
     await tab.getByRole("link", { name: /^Q9 team/ }).click();
     await tab.waitForURL(`**${CALL}`);
@@ -157,14 +157,14 @@ try {
     await tab.waitForTimeout(600);
     check("Home row opens the call", (await tab.getByRole("heading", { name: /^Q9 team/, level: 1 }).count()) === 1);
     await tab
-      .getByRole("link", { name: /^Session/ })
+      .getByRole("link", { name: /^Session / })
       .first()
       .click();
     await tab.waitForURL(`**${CALL}/session/**`);
     await tab.waitForLoadState("networkidle");
     await tab.waitForTimeout(600);
-    check("Session row opens the past session", (await tab.getByRole("heading", { name: /^Session on/ }).count()) === 1);
-    await tab.getByRole("link", { name: "Q9 team" }).click();
+    check("Session row opens the past session", (await tab.getByRole("heading", { name: "Q9 team", level: 1 }).count()) === 1 && (await tab.getByRole("link", { name: "Sessions", exact: true }).count()) >= 1);
+    await tab.getByRole("link", { name: /^Open call/ }).click();
     await tab.waitForURL(`**${CALL}`);
     await tab.getByRole("link", { name: "Developer" }).click();
     await tab.waitForURL("**/dashboard/developer");
@@ -334,11 +334,11 @@ try {
   }
   {
     const { tab, context } = await open(`${CALL}/session/${uuid(0x200)}`);
-    const you = await tab.locator(".who").getByText("(you)").count();
+    const you = await tab.locator(".wjp").getByText("You", { exact: true }).count();
     const speakers = await tab.locator(".tline b").count();
     await context.close();
     const other = await open(`${CALL}/session/${uuid(0x203)}`);
-    const youElsewhere = await other.tab.locator(".who").getByText("(you)").count();
+    const youElsewhere = await other.tab.locator(".wjp").getByText("You", { exact: true }).count();
     await other.context.close();
     check("(you) only on the owner's current seat, speakers on every line", you === 1 && youElsewhere === 0 && speakers === 16, `you=${you}, elsewhere=${youElsewhere}, speakers=${speakers}`);
   }

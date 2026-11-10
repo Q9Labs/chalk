@@ -8,13 +8,13 @@ const now = new Date(2026, 10, 10, 15, 30);
 describe("list ranges", () => {
   it("covers whole days in the viewer's time zone, ending at the end of today", () => {
     expect(dayValue(bounds({ range: "today" }, now).from)).toBe("2026-11-10");
-    expect(dayValue(bounds({ range: "7d" }, now).from)).toBe("2026-11-03");
-    expect(dayValue(bounds({ range: "30d" }, now).from)).toBe("2026-10-11");
+    expect(dayValue(bounds({ range: "7d" }, now).from)).toBe("2026-11-04");
+    expect(dayValue(bounds({ range: "30d" }, now).from)).toBe("2026-10-12");
     expect(dayValue(bounds({ range: "month" }, now).from)).toBe("2026-11-01");
     const week = bounds({ range: "7d" }, now);
     expect(dayValue(week.to)).toBe("2026-11-10");
     expect(week.to.getHours()).toBe(23);
-    expect(week.span).toBe("3 Nov – 10 Nov");
+    expect(week.span).toBe("4 Nov – 10 Nov");
   });
 
   it("is the last 30 days with no range, and for a custom range that is missing or backwards", () => {

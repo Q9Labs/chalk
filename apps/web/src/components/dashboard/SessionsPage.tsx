@@ -119,12 +119,10 @@ export function SessionsPage({ search }: { readonly search: SessionsSearch }) {
           <h2 id="sessions-title">Past sessions</h2>
           {totals.sessions ? <span className="pill">{totals.sessions}</span> : null}
         </div>
-        {totals.sessions || filtered || range.kind !== "30d" ? (
-          <>
-            <ListTools q={search.q} placeholder="Search by call name" range={range} now={now} onSearch={setSearch} onRange={setRange} />
-            <Chips chips={chips} onClearAll={() => void navigate({ to, search: keep.range ? { range: keep.range, from: keep.from, to: keep.to } : {} })} />
-          </>
-        ) : null}
+        <>
+          <ListTools q={search.q} placeholder="Search by call name" range={range} now={now} onSearch={setSearch} onRange={setRange} />
+          <Chips chips={chips} onClearAll={() => void navigate({ to, search: keep.range ? { range: keep.range, from: keep.from, to: keep.to } : {} })} />
+        </>
         {rows.length ? (
           <>
             <div className="slist ses">
@@ -134,7 +132,15 @@ export function SessionsPage({ search }: { readonly search: SessionsSearch }) {
               ))}
             </div>
             <Cutoff truncated={shown.truncated} />
-            <ListMore shown={rows.length} total={totals.sessions} noun="sessions" cursor={shown.nextCursor} load={(cursor) => readPage("sessions", { ...query, cursor })} onLoaded={(page: SessionListDTO) => update((current) => appendPage(current, page), { refresh: false })} />
+            <ListMore
+              scope={JSON.stringify(query)}
+              shown={rows.length}
+              total={totals.sessions}
+              noun="sessions"
+              cursor={shown.nextCursor}
+              load={(cursor) => readPage("sessions", { ...query, cursor })}
+              onLoaded={(page: SessionListDTO) => update((current) => appendPage(current, page), { refresh: false })}
+            />
           </>
         ) : filtered || range.kind !== "30d" ? (
           <div className="blank tall">

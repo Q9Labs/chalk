@@ -24,7 +24,7 @@ const STATUS: readonly { readonly status: VideoGroup | undefined; readonly label
 ];
 
 /** A page polls this often while a recording on it is still being made; each read scans the calls again, so it stays slow. */
-const POLL_MS = 10_000;
+const POLL_MS = 30_000;
 
 export function RecordingsPage({ search }: { readonly search: RecordingsSearch }) {
   const navigate = useNavigate();
@@ -142,20 +142,18 @@ export function RecordingsPage({ search }: { readonly search: RecordingsSearch }
           <h2 id="recordings-title">All recordings</h2>
           {totals.sessions ? <span className="pill">{totals.sessions}</span> : null}
         </div>
-        {totals.sessions || filtered || range.kind !== "30d" ? (
-          <>
-            <ListTools q={search.q} placeholder="Search by call name" range={range} now={now} onSearch={setSearch} onRange={setRange} />
-            {processing ? (
-              <div className="lnote" role="status">
-                <span className="spin" aria-hidden="true" />
-                <span>
-                  <b>{processing === 1 ? "1 recording is processing." : `${processing} recordings are processing.`}</b> This page updates by itself, so you can leave it. Most are ready within a few minutes.
-                </span>
-              </div>
-            ) : null}
-            <Chips chips={chips} onClearAll={() => void navigate({ to, search: search.range ? { range: search.range, from: search.from, to: search.to } : {} })} />
-          </>
-        ) : null}
+        <>
+          <ListTools q={search.q} placeholder="Search by call name" range={range} now={now} onSearch={setSearch} onRange={setRange} />
+          {processing ? (
+            <div className="lnote" role="status">
+              <span className="spin" aria-hidden="true" />
+              <span>
+                <b>{processing === 1 ? "1 recording is processing." : `${processing} recordings are processing.`}</b> This page updates by itself, so you can leave it. Most are ready within a few minutes.
+              </span>
+            </div>
+          ) : null}
+          <Chips chips={chips} onClearAll={() => void navigate({ to, search: search.range ? { range: search.range, from: search.from, to: search.to } : {} })} />
+        </>
         {rows.length ? (
           <>
             <div className="slist rec">
@@ -172,7 +170,15 @@ export function RecordingsPage({ search }: { readonly search: RecordingsSearch }
               ))}
             </div>
             <Cutoff truncated={shown.truncated} />
-            <ListMore shown={rows.length} total={totals.sessions} noun="recordings" cursor={shown.nextCursor} load={(cursor) => readPage("recordings", { ...query, cursor })} onLoaded={(page: SessionListDTO) => update((current) => appendPage(current, page), { refresh: false })} />
+            <ListMore
+              scope={JSON.stringify(query)}
+              shown={rows.length}
+              total={totals.sessions}
+              noun="recordings"
+              cursor={shown.nextCursor}
+              load={(cursor) => readPage("recordings", { ...query, cursor })}
+              onLoaded={(page: SessionListDTO) => update((current) => appendPage(current, page), { refresh: false })}
+            />
           </>
         ) : filtered || range.kind !== "30d" ? (
           <div className="blank tall">

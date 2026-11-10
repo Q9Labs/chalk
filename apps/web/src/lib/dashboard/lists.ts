@@ -25,14 +25,14 @@ export function bounds(search: Pick<SessionsSearch, "range" | "from" | "to">, no
   const back = (days: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate() - days);
   const made = (kind: RangeKind, from: Date, to: Date, label: string): Bounds => ({ kind, from, to, label, span: from.getTime() === startOfDay(to).getTime() ? rangeDay(from) : `${rangeDay(from)} – ${rangeDay(to)}` });
   if (search.range === "today") return made("today", today, endOfDay(now), RANGE_LABEL.today);
-  if (search.range === "7d") return made("7d", back(7), endOfDay(now), RANGE_LABEL["7d"]);
+  if (search.range === "7d") return made("7d", back(6), endOfDay(now), RANGE_LABEL["7d"]);
   if (search.range === "month") return made("month", new Date(today.getFullYear(), today.getMonth(), 1), endOfDay(now), RANGE_LABEL.month);
   if (search.range === "custom" && search.from && search.to) {
     const from = startOfDay(localDay(search.from));
     const to = endOfDay(localDay(search.to));
     if (from.getTime() <= to.getTime()) return made("custom", from, to, `${rangeDay(from)} – ${rangeDay(startOfDay(to))}`);
   }
-  return made("30d", back(30), endOfDay(now), RANGE_LABEL["30d"]);
+  return made("30d", back(29), endOfDay(now), RANGE_LABEL["30d"]);
 }
 
 function filters(search: Pick<SessionsSearch, "q" | "range" | "from" | "to" | "spaceId">, now: Date) {

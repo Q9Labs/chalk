@@ -104,7 +104,7 @@ export async function recordingChecks({ open, fixture, check, CALL }) {
       await request;
       // A refused read is final for that recording, which shows the server's error; the rest of the session stays.
       await tab.getByText("Couldn’t load this recording", { exact: true }).waitFor();
-      check("a deleted recording leaves session attendance visible", (await tab.getByText("Who came", { exact: true }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
+      check("a deleted recording leaves session attendance visible", (await tab.getByText("Who joined", { exact: true }).count()) === 1 && (await tab.getByText("Couldn’t load this session", { exact: true }).count()) === 0);
       await tab.getByText("Couldn’t load the transcript", { exact: true }).waitFor();
       check("a deleted recording keeps its transcript unavailable", (await tab.getByText("The transcript couldn’t be made", { exact: true }).count()) === 0);
       await tab.clock.runFor(30000);

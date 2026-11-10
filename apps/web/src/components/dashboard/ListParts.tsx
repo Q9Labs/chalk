@@ -232,7 +232,7 @@ export function SessionRow({ row, one }: { readonly row: RowModel; readonly one?
   const mobileTranscript = row.video !== null && ["ready", "processing", "none"].includes(row.transcript) && recording.tone !== "bad" && recording.tone !== "mu";
   return (
     <div className="lr">
-      <Link className="go" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId: row.spaceId, episodeId: row.episodeId }} aria-label={`${one ? "" : `${row.callName}, `}${day}, ${range}${length ? `, ${length}` : ""}, ${people(row.people)}, ${recording.label.toLowerCase()}`} />
+      <Link className="go" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId: row.spaceId, episodeId: row.episodeId }} aria-label={`${one ? "Session " : `${row.callName}, `}${day}, ${range}${length ? `, ${length}` : ""}, ${people(row.people)}, ${recording.label.toLowerCase()}`} />
       {one ? null : (
         <>
           <span className="cini" aria-hidden="true">
@@ -255,7 +255,7 @@ export function SessionRow({ row, one }: { readonly row: RowModel; readonly one?
       <div className="dsk">
         <BadgeView badge={recording} />
       </div>
-      <div className="dsk">
+      <div className="dsk tc">
         <BadgeView badge={transcript} />
       </div>
       <div className="mob mt num">
@@ -274,8 +274,26 @@ export function SessionRow({ row, one }: { readonly row: RowModel; readonly one?
 
 /* ---------- the next page, and what a list leaves out ---------- */
 
-export function ListMore({ shown, total, noun, cursor, load, onLoaded }: { readonly shown: number; readonly total: number; readonly noun: string; readonly cursor: string | null; readonly load: (cursor: string) => Promise<SessionListDTO>; readonly onLoaded: (page: SessionListDTO) => void }) {
+export function ListMore({
+  scope,
+  shown,
+  total,
+  noun,
+  cursor,
+  load,
+  onLoaded,
+}: {
+  readonly scope: string;
+  readonly shown: number;
+  readonly total: number;
+  readonly noun: string;
+  readonly cursor: string | null;
+  readonly load: (cursor: string) => Promise<SessionListDTO>;
+  readonly onLoaded: (page: SessionListDTO) => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const live = useRef(scope);
+  live.current = scope;
   const toast = useToast();
   return (
     <div className="lmore">
@@ -289,8 +307,12 @@ export function ListMore({ shown, total, noun, cursor, load, onLoaded }: { reado
           disabled={busy}
           onClick={() => {
             setBusy(true);
+            const asked = scope;
             load(cursor)
-              .then(onLoaded, (error: unknown) => toast(errorMessage(error), { icon: "alert" }))
+              .then(
+                (page) => (live.current === asked ? onLoaded(page) : undefined),
+                (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+              )
               .finally(() => setBusy(false));
           }}
         >
