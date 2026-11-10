@@ -165,6 +165,26 @@ describe("independent r7 ordering", () => {
     }
   });
 
+  // Receivers learn of a screen stop from Sync, so Sync's Off must not wait for the SFU close that retires the local capture.
+  it("sends the screen Off to Sync while the local capture is still closing at the SFU", async () => {
+    const platform = createCoreTestPlatform();
+    const close = barrier();
+    const clear = vi.fn(async () => close.promise);
+    const command = vi.fn<ConnectionSyncClient["setScreenShareEnabled"]>(async () => receipt);
+    const client = capturedClient(platform, mediaTrack(), { media: { clearPreparedLocalTrack: clear }, sync: { setScreenShareEnabled: command } });
+    try {
+      await client.join({ microphone: false, camera: false });
+      const stop = client.media.setScreenShareEnabled(false);
+      await vi.waitFor(() => expect(clear).toHaveBeenCalled());
+      await vi.waitFor(() => expect(command).toHaveBeenCalledWith(false));
+      close.release();
+      await stop;
+    } finally {
+      close.release();
+      client.dispose();
+    }
+  });
+
   it.each(["microphone", "camera"] as const)("preserves a newer %s Off while join capture is pending", async (source) => {
     const platform = createCoreTestPlatform();
     const captureGate = barrier();
