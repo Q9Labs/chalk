@@ -29,7 +29,11 @@ export function rememberDevices(devices: RememberedDevices): void {
 /** Drops the remembered device ids the browser no longer lists, so an unplugged headset does not pin the next join to a device that is gone. */
 export async function listedRememberedDevices(devices: RememberedDevices): Promise<RememberedDevices> {
   const listed = (await globalThis.navigator?.mediaDevices?.enumerateDevices().catch(() => [])) ?? [];
-  const present = (id: string | undefined, kind: MediaDeviceKind) => id !== undefined && listed.some((device) => device.kind === kind && device.deviceId === id);
+  // Until the browser grants access it may list devices without ids; then nothing can be checked, so the saved id stays.
+  const present = (id: string | undefined, kind: MediaDeviceKind) => {
+    const ofKind = listed.filter((device) => device.kind === kind && device.deviceId !== "");
+    return id !== undefined && (ofKind.length === 0 || ofKind.some((device) => device.deviceId === id));
+  };
   const { microphoneDeviceId, cameraDeviceId, speakerDeviceId, ...toggles } = devices;
   return {
     ...toggles,

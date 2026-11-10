@@ -61,7 +61,8 @@ export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, 
   const { access } = devices;
   const reason: AccessReason | null = dismissed || joining ? null : access === "blocked" ? "blocked" : access === "ask" || access === "requesting" ? "ask" : null;
   const named = displayName.trim() !== "";
-  const ready = named && !joining && access !== "checking" && access !== "requesting";
+  // A visitor who dismissed the card while the browser prompt is still open can join with devices off.
+  const ready = named && !joining && access !== "checking" && (access !== "requesting" || dismissed);
   // Join is disabled while the browser's permission is read, so it takes focus the first time it can: Enter then joins.
   const joinButton = useRef<HTMLButtonElement>(null);
   const focusedJoin = useRef(false);

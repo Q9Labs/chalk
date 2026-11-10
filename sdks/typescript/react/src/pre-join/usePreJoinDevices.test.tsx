@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readRememberedDevices } from "./remembered-devices";
+import { listedRememberedDevices, readRememberedDevices } from "./remembered-devices";
 import { usePreJoinDevices, type PreJoinDevices, type PreJoinJoinOptions } from "./usePreJoinDevices";
 
 type FakeTrack = MediaStreamTrack & { readonly stopped: () => boolean };
@@ -352,5 +352,17 @@ describe("usePreJoinDevices", () => {
     Object.defineProperty(navigator, "permissions", { configurable: true, value: { query: async () => Promise.reject(new TypeError("unsupported")) } });
     await mount();
     expect(current.access).toBe("granted");
+  });
+
+  it("keeps remembered device ids while the browser lists devices without ids", async () => {
+    installBrowser({ permission: "ask", devices: [device("audioinput", "", ""), device("videoinput", "", "")] });
+    const remembered = { microphone: true, camera: true, microphoneDeviceId: "mic-2", cameraDeviceId: "cam-2" };
+    expect(await listedRememberedDevices(remembered)).toEqual(remembered);
+  });
+
+  it("drops remembered device ids the browser lists no more", async () => {
+    installBrowser({ permission: "granted" });
+    const remembered = { microphone: true, camera: true, microphoneDeviceId: "mic-9", cameraDeviceId: "cam-2" };
+    expect(await listedRememberedDevices(remembered)).toEqual({ microphone: true, camera: true, cameraDeviceId: "cam-2" });
   });
 });

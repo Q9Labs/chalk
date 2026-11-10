@@ -62,6 +62,7 @@ async function shoot() {
       if (!listed) {
         await probe.close();
         if (page === "call-states.html") throw new Error(`${states}/${page} has no call states`);
+        console.warn(`${states}/${page} has no call states; skipping that page.`);
         continue;
       }
       const stateList = await probe.evaluate(() => window.__CALL_STATES__.map((state) => ({ id: state.id, actions: state.actions ?? [], stallBoard: Boolean(state.stallBoard) })));
