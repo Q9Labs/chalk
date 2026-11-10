@@ -130,7 +130,7 @@ function grouped<T>(items: readonly T[], key: (item: T) => string): Map<string, 
 const PENDING = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
 
 /** One row for each ended Episode inside the range, newest first. `participantCount` is filled in for a page later. */
-export function sessionRows(input: Scan & { readonly names: ReadonlyMap<string, string> }, range: Range): SessionRowDTO[] {
+function sessionRows(input: Scan & { readonly names: ReadonlyMap<string, string> }, range: Range): SessionRowDTO[] {
   const recordingsOf = grouped(input.recordings, (recording) => recording.episode_id);
   const transcriptsOf = grouped(input.transcripts, (transcript) => transcript.recording_id);
   const rows: SessionRowDTO[] = [];
@@ -161,7 +161,7 @@ function follows(row: SessionRowDTO, at: { readonly t: number; readonly id: stri
   return started < at.t || (started === at.t && row.episode.id < at.id);
 }
 
-export function totals(rows: readonly SessionRowDTO[]): SessionTotalsDTO {
+function totals(rows: readonly SessionRowDTO[]): SessionTotalsDTO {
   const video: Record<VideoGroup, number> = { ready: 0, processing: 0, prepare: 0, failed: 0, expired: 0 };
   let seconds = 0;
   let recorded = 0;

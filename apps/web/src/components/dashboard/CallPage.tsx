@@ -4,19 +4,20 @@ import { useRef, useState, type ReactNode } from "react";
 
 import type { CallPageDTO, RecordingDTO, CallMetadataQuery, CallMetadataDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
 import { act, DashboardRequestError, errorMessage, readPage } from "../../lib/dashboard/client";
-import { workingRecording } from "../../lib/dashboard/recording";
-import { clock, displayLink, duration, sessionDay } from "../../lib/dashboard/format";
+import type { RowModel } from "../../lib/dashboard/lists";
+import { keptRecording, videoState, workingRecording } from "../../lib/dashboard/recording";
+import { clock, displayLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { AdmissionKnocks } from "./AdmissionKnocks";
-import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
+import { SessionRow, SessionsHead } from "./ListParts";
+import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
 
 type Admission = CallPageDTO["call"]["admission"];
-type Session = CallPageDTO["episodes"][number];
 const ADMISSION: readonly (readonly [Admission, string])[] = [
   ["anyone", "Anyone with the link"],
   ["knock", "Ask to join"],
@@ -307,9 +308,12 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
       ) : (
         <>
           <div className="list">
-            {past.map((episode) => (
-              <SessionRow key={episode.id} spaceId={spaceId} episode={episode} unavailableTranscripts={metadata.current.unavailable} />
-            ))}
+            <div className="slist ses one">
+              <SessionsHead one />
+              {past.map((episode) => (
+                <SessionRow key={episode.id} one row={{ spaceId, callName: call.name, episodeId: episode.id, startedAt: episode.startedAt, endedAt: episode.endedAt, people: episode.participantCount, ...kept(episode.recordings, metadata.current.unavailable) }} />
+              ))}
+            </div>
           </div>
           {nextCursor ? (
             <MoreButton
@@ -338,86 +342,16 @@ function inCall(names: readonly string[]): string {
   return `${shown.slice(0, -1).join(", ")} and ${shown.at(-1)} are in the call.`;
 }
 
-type Kept = { readonly recording: boolean; readonly transcript: "none" | "ready" | "processing" | "unavailable" };
-
-/** What a session kept: its newest recording, and that recording's best transcript. */
-function kept(recordings: readonly RecordingDTO[], unavailable: ReadonlySet<string>): Kept {
-  const recording = recordings.find((item) => item.status === "completed") ?? recordings[0];
-  if (!recording) return { recording: false, transcript: "none" };
-  if (unavailable.has(recording.id)) return { recording: true, transcript: "unavailable" };
+/** What a session kept: its newest recording's video, and that recording's best transcript. */
+function kept(recordings: readonly RecordingDTO[], unavailable: ReadonlySet<string>): Pick<RowModel, "video" | "transcript"> {
+  const recording = keptRecording(recordings);
+  if (!recording) return { video: null, transcript: "none" };
+  const video = videoState(recording);
+  if (unavailable.has(recording.id)) return { video, transcript: "unavailable" };
   const transcripts = recording.transcripts ?? [];
-  if (transcripts.some((item) => item.status === "completed" || item.status === "complete")) return { recording: true, transcript: "ready" };
-  if (transcripts.some((item) => PENDING_TRANSCRIPTS.has(item.status))) return { recording: true, transcript: "processing" };
-  return { recording: true, transcript: "none" };
-}
-
-function keptSummary({ recording, transcript }: Kept): string {
-  if (!recording) return "No recording";
-  if (transcript === "ready") return "Recording and transcript";
-  if (transcript === "unavailable") return "Recording · transcript unavailable";
-  if (transcript === "processing") return "Recording · transcript soon";
-  return "Recording";
-}
-
-function SessionRow({ spaceId, episode, unavailableTranscripts }: { readonly spaceId: string; readonly episode: Session; readonly unavailableTranscripts: ReadonlySet<string> }) {
-  const phone = usePhone();
-  const day = sessionDay(episode.startedAt);
-  const range = episode.endedAt ? `${clock(episode.startedAt)} to ${clock(episode.endedAt)}` : `${clock(episode.startedAt)}, ending`;
-  const length = episode.endedAt ? duration(episode.startedAt, episode.endedAt) : "";
-  const what = kept(episode.recordings, unavailableTranscripts);
-  const people = `${episode.participantCount} ${episode.participantCount === 1 ? "person" : "people"}`;
-  const link = <Link className="ra" to="/dashboard/call/$spaceId/session/$episodeId" params={{ spaceId, episodeId: episode.id }} aria-label={`Session ${day}, ${range}${length ? `, ${length}` : ""}, ${people}, ${what.recording ? "recorded" : "not recorded"}`} />;
-  if (phone)
-    return (
-      <div className="row">
-        {link}
-        <span className="rt np">
-          <b>
-            {day}, {clock(episode.startedAt)}
-          </b>
-          <span>
-            {length || "Ending"} · {keptSummary(what)}
-          </span>
-        </span>
-        <span className="np num mu">{people}</span>
-        <Icon name="right" />
-      </div>
-    );
-  return (
-    <div className="row srow">
-      {link}
-      <span className="np">{day}</span>
-      <span className="np num mu">{range}</span>
-      <span className="np num mu">{length}</span>
-      <span className="np num mu">{people}</span>
-      <span className="kept np">
-        {what.recording ? (
-          <>
-            <span>
-              <Icon name="film" />
-              Recording
-            </span>
-            {what.transcript === "ready" ? (
-              <span>
-                <Icon name="file" />
-                Transcript
-              </span>
-            ) : what.transcript === "processing" ? (
-              <span>
-                <Icon name="clock" />
-                Transcript processing
-              </span>
-            ) : what.transcript === "unavailable" ? (
-              <span>Transcript unavailable</span>
-            ) : null}
-          </>
-        ) : (
-          <span>No recording</span>
-        )}
-      </span>
-      <Icon name="right" />
-    </div>
-  );
+  if (transcripts.some((item) => item.status === "completed" || item.status === "complete")) return { video, transcript: "ready" };
+  if (transcripts.some((item) => PENDING_TRANSCRIPTS.has(item.status))) return { video, transcript: "processing" };
+  return { video, transcript: "none" };
 }
 
 function CallSkeleton({ back }: { readonly back: ReactNode }) {

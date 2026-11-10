@@ -69,6 +69,12 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 - `GET /dashboard-api/past-session?spaceId=...&episodeId=...&cursor=...`: Episode,
   recordings and attendance. `POST`: `PastSessionAction` (artifact URLs,
   transcripts, export, deletion). Artifact URLs expire; request again on expiry.
+- `GET /dashboard-api/sessions?range=...&show=...&q=...&spaceId=...&cursor=...` and
+  `GET /dashboard-api/recordings?...`: the tenant-wide lists. There is no tenant-wide
+  Episode read, so each request fans out over the newest Spaces (3 pages of 100), reads
+  each matching Space's Episodes and returns 10 rows. The cursor is a stateless
+  `{time, id}` position, a request reads at most 40 calls, and `truncated` says a bound
+  cut the scan. `totals` cover the whole filtered set. Search matches the call name.
 - `GET /dashboard-api/developer?keyCursor=...&webhookCursor=...`: keys and webhooks.
   `POST`: `DeveloperAction`. Secret mutations return only the newly minted,
   user-requested secret. Updates require revision and stable idempotency keys.
