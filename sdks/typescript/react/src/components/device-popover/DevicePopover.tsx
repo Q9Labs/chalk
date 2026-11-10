@@ -88,14 +88,18 @@ export function DevicePopover({
   toggleDisabled,
   busy,
   onCancelPending,
-  sheetOpen = false,
-  onSheetOpenChange,
+  sheetOpen: controlledSheetOpen,
+  onSheetOpenChange: controlledSheetChange,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  // The dock owns the sheet so its More rows can open it; a popover used on its own keeps the state itself.
+  const [ownSheetOpen, setOwnSheetOpen] = useState(false);
+  const sheetOpen = controlledSheetChange ? Boolean(controlledSheetOpen) : ownSheetOpen;
+  const onSheetOpenChange = controlledSheetChange ?? setOwnSheetOpen;
   const [sheetLoaded, setSheetLoaded] = useState(false);
   if (sheetOpen && !sheetLoaded) setSheetLoaded(true);
   const phone = usePhoneCall();
-  const hold = useLongPress(phone && onSheetOpenChange ? () => onSheetOpenChange(true) : undefined);
+  const hold = useLongPress(phone ? () => onSheetOpenChange(true) : undefined);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
@@ -177,7 +181,7 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
-      {sheetLoaded && onSheetOpenChange ? (
+      {sheetLoaded ? (
         <Suspense fallback={null}>
           <DeviceSheet
             type={type}

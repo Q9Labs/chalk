@@ -91,7 +91,6 @@ try {
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
     await openPicker();
-    if (phone) console.log("DEBUG", await page.getByRole("dialog").count(), JSON.stringify(await page.locator("body").innerText({ timeout: 2000 })).slice(0, 700));
     await pickerRow("Blur").click();
     const blurred = await waitForProcessedPixels("blur", [original]);
     await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
