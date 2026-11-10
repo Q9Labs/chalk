@@ -1,4 +1,5 @@
 import type { ParticipantEpisodeStatus } from "../generated/schemas";
+import type { TransportPath } from "../direct-path";
 import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
@@ -94,6 +95,7 @@ export type ConnectionMediaFactoryInput = {
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
   readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
 };
@@ -103,6 +105,7 @@ export type ConnectionSyncFactoryInput = {
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];

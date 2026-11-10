@@ -13,7 +13,8 @@ export type ConnectionDiagnosticEventName =
   | "recovery_exhausted"
   | "cleanup_completed"
   | "cleanup_unconfirmed"
-  | "space_join_span";
+  | "space_join_span"
+  | "transport_path";
 
 export type ConnectionJoinTraceStep = "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
 
@@ -54,6 +55,8 @@ export type ConnectionDiagnostic = {
   readonly outcome?: ConnectionJoinTraceOutcome;
   readonly durationMs?: number;
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  /** Which network path carried a plane, so a trial can compare the direct door with the Tunnel. */
+  readonly transport?: import("../direct-path").TransportPath;
   readonly recovery?: {
     readonly reference: "connection.sync_recovery_exhausted" | "connection.media_recovery_exhausted";
     readonly attempts: number;

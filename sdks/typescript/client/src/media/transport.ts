@@ -3,6 +3,7 @@ import { markMediaFailure, markMediaFetchFailure } from "./failure-diagnostics";
 import type { MediaFailureStep } from "./failure-diagnostics";
 import { CloudflareSFUError } from "./types";
 import type { CloudflareSFUCredentialProvider, CloudflareSFUHTTPTransportOptions, CloudflareSFUPublicationSnapshot, CloudflareSFUSignalingTransport, CloudflareSFUTracksResponse, SFUSubscriptionState } from "./types";
+import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, directOrigin, directPathBlocked, markDirectPathFailed, sharedDirectPathMemory } from "../direct-path";
 import { withRequestContext } from "../session";
 import type { CallStatsRequest } from "./call-stats";
 const SIGNALING_TIMEOUT_MS = 8000;
@@ -23,7 +24,31 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
   const credential = requireCredential(options);
   let lastToken = "";
   const base = options.apiBaseURL.replace(/\/$/, "");
-  const mediaPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
+  const mediaPathAt = (origin: string) => `${origin}/v1/tenants/${encodeURIComponent(options.tenantId)}/spaces/${encodeURIComponent(options.spaceId)}/episodes/${encodeURIComponent(options.episodeId)}/participants/${encodeURIComponent(options.participantId)}/media/sfu`;
+  const direct = directOrigin(options.directBaseURL);
+  const directMemory = options.directMemory ?? sharedDirectPathMemory;
+  let probe: Promise<boolean> | undefined;
+  /** Whether the direct door answers: one cheap request that starts with the transport and overlaps the work before the first call. */
+  const directAnswers = async (): Promise<boolean> => {
+    if (!direct || directPathBlocked(directMemory, direct.host, Date.now())) return false;
+    probe ??= probeDirectPath(direct, options.fetch ?? globalThis.fetch.bind(globalThis)).then((answered) => {
+      if (!answered) markDirectPathFailed(directMemory, direct.host, Date.now());
+      return answered;
+    });
+    return probe;
+  };
+  if (direct) void directAnswers();
+  let announced: string | undefined;
+  const announce = (path: "direct" | "tunnel", fellBack: boolean) => {
+    const key = `${path}:${fellBack}`;
+    if (key === announced) return;
+    announced = key;
+    try {
+      options.onPath?.({ plane: "signalling", path, fellBack });
+    } catch {
+      /* Observers cannot interrupt signaling. */
+    }
+  };
   const statsPath = `${base}/v1/tenants/${encodeURIComponent(options.tenantId)}/call-stats`;
   const timeoutMs = options.requestTimeoutMs ?? SIGNALING_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new CloudflareSFUError("The signaling deadline is invalid", "signaling_failed");
@@ -53,33 +78,50 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
     try {
       const token = await freshToken(op);
       const [method, path] = ROUTES[op];
-      const target = options.unifiedSignaling
-        ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
-        : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };
-      return await withDeadline(timeoutMs, async (signal) => {
-        const startedAt = performance.now();
-        const response = await fetch(target.url, {
-          method: target.method,
-          ...(target.body === undefined ? {} : { body: target.body }),
-          signal,
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}) },
-        }).catch((error: unknown) => {
-          markMediaFetchFailure(error);
-          throw error;
-        });
-        if (!response.ok) {
-          try {
-            options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
-          } catch {
-            /* Observers cannot interrupt signaling. */
-          }
-          throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
-            status: response.status,
-            retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
+      const targetAt = (origin: string) => {
+        const mediaPath = mediaPathAt(origin);
+        return options.unifiedSignaling
+          ? { url: `${mediaPath}/signal`, method: "POST", body: JSON.stringify({ op, ...unifiedBody(op, body), ...query }) }
+          : { url: `${mediaPath}/${path}${Object.keys(query).length ? `?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}` : ""}`, method, body: body && JSON.stringify(body) };
+      };
+      const send = (origin: string): Promise<T> =>
+        withDeadline(timeoutMs, async (signal) => {
+          const target = targetAt(origin);
+          const startedAt = performance.now();
+          const response = await fetch(target.url, {
+            method: target.method,
+            ...(target.body === undefined ? {} : { body: target.body }),
+            signal,
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(options.traceparent ? { traceparent: options.traceparent } : {}) },
+          }).catch((error: unknown) => {
+            markMediaFetchFailure(error);
+            throw error;
           });
+          if (!response.ok) {
+            try {
+              options.onDiagnostic?.({ event: "media_http_error", http_status: response.status, duration_ms: performance.now() - startedAt });
+            } catch {
+              /* Observers cannot interrupt signaling. */
+            }
+            throw new CloudflareSFUError(`Chalk SFU signaling failed with HTTP ${response.status}`, "signaling_failed", {
+              status: response.status,
+              retryableConnection: response.status === 404 || response.status === 410 || (response.status >= 500 && response.status < 600),
+            });
+          }
+          return (await response.json()) as T;
+        });
+      if (direct && (await directAnswers())) {
+        try {
+          const result = await send(direct.origin);
+          announce("direct", false);
+          return result;
+        } catch (error) {
+          if (!neverReachedApi(error)) throw error;
+          markDirectPathFailed(directMemory, direct.host, Date.now());
         }
-        return (await response.json()) as T;
-      });
+      }
+      announce("tunnel", direct !== null);
+      return await send(base);
     } catch (error) {
       markMediaFailure(error, ROUTES[op][2]);
       throw error;
@@ -217,4 +259,22 @@ function requireCredential(options: CloudflareSFUHTTPTransportOptions): Cloudfla
   if (options.credential) return options.credential;
   if (options.bearerToken !== undefined) return () => options.bearerToken ?? "";
   throw new CloudflareSFUError("A media credential provider is required", "signaling_failed");
+}
+/** One request to the direct host's catch-all route: any HTTP answer, even a 404, proves TCP and TLS work. Resolves false on a network failure or after the attempt budget. */
+async function probeDirectPath(direct: URL, fetch: typeof globalThis.fetch): Promise<boolean> {
+  try {
+    await withDeadline(DIRECT_PATH_ATTEMPT_TIMEOUT_MS, (signal) => fetch(`${direct.origin}/`, { mode: "no-cors", cache: "no-store", credentials: "omit", signal }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+/**
+ * A failure that proves the API never handled the call, so replaying it on the Tunnel cannot apply it twice:
+ * the connection failed (a rejected fetch), the proxy could not reach the API (502, 503) or its per-client bound refused it (429).
+ * A timeout or a 504 may follow a call the API already handled, so those surface as they do on the Tunnel.
+ */
+function neverReachedApi(error: unknown): boolean {
+  if (error instanceof CloudflareSFUError) return error.options.status === 429 || error.options.status === 502 || error.options.status === 503;
+  return error instanceof TypeError;
 }

@@ -1,16 +1,13 @@
+import { DIRECT_PATH_ATTEMPT_TIMEOUT_MS, DIRECT_PATH_FAILURE_MEMORY_MS, directPathBlocked, markDirectPathFailed, sharedDirectPathMemory, type DirectPathMemory, type TransportPath } from "../direct-path";
 import type { SyncClock, SyncSocket, SyncWebSocketFactory } from "./types";
 
+export type { DirectPathMemory };
 /** A blocked direct path costs at most this much before the Tunnel socket opens. */
-export const DIRECT_SYNC_ATTEMPT_TIMEOUT_MS = 2_500;
+export const DIRECT_SYNC_ATTEMPT_TIMEOUT_MS = DIRECT_PATH_ATTEMPT_TIMEOUT_MS;
 /** After a failed direct attempt, later connections skip the direct path for this long. */
-export const DIRECT_SYNC_FAILURE_MEMORY_MS = 10 * 60_000;
+export const DIRECT_SYNC_FAILURE_MEMORY_MS = DIRECT_PATH_FAILURE_MEMORY_MS;
 
 type Clock = Pick<SyncClock, "now" | "setTimeout" | "clearTimeout">;
-
-/** Host to the time until which its direct path is skipped, shared by every client in the page. Expired entries are dropped on the next failure. */
-export type DirectPathMemory = Map<string, number>;
-
-const sharedMemory: DirectPathMemory = new Map();
 
 const defaultClock: Clock = {
   now: () => Date.now(),
@@ -26,6 +23,8 @@ export type DirectFirstOptions = {
   readonly attemptTimeoutMs?: number;
   readonly failureMemoryMs?: number;
   readonly memory?: DirectPathMemory;
+  /** Told which path each connection used: `direct` once the direct socket opens, `tunnel` when the Tunnel carries it. */
+  readonly onPath?: (path: TransportPath) => void;
 };
 
 /**
@@ -36,17 +35,16 @@ export type DirectFirstOptions = {
 export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): SyncWebSocketFactory {
   const direct = new URL(options.directUrl);
   const clock = options.clock ?? defaultClock;
-  const memory = options.memory ?? sharedMemory;
+  const memory = options.memory ?? sharedDirectPathMemory;
   return {
     connect(tunnelUrl) {
       const attempt = directAttemptUrl(direct, tunnelUrl, memory, clock.now());
-      if (!attempt) return options.inner.connect(tunnelUrl);
-      const markFailed = () => {
-        const now = clock.now();
-        for (const [host, until] of memory) if (until <= now) memory.delete(host);
-        memory.set(direct.host, now + (options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS));
-      };
-      return new DirectFirstSocket(options.inner, attempt, tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed);
+      if (!attempt) {
+        options.onPath?.({ plane: "sync", path: "tunnel", fellBack: true });
+        return options.inner.connect(tunnelUrl);
+      }
+      const markFailed = () => markDirectPathFailed(memory, direct.host, clock.now(), options.failureMemoryMs ?? DIRECT_SYNC_FAILURE_MEMORY_MS);
+      return new DirectFirstSocket(options.inner, attempt, tunnelUrl, clock, options.attemptTimeoutMs ?? DIRECT_SYNC_ATTEMPT_TIMEOUT_MS, markFailed, options.onPath);
     },
   };
 }
@@ -55,7 +53,7 @@ export function createDirectFirstWebSocketFactory(options: DirectFirstOptions): 
 function directAttemptUrl(direct: URL, tunnelUrl: string, memory: DirectPathMemory, now: number): string | null {
   const url = new URL(tunnelUrl);
   // The hello frame carries the token, so a secure Tunnel URL never falls to a plain direct one.
-  if ((url.protocol === "wss:" && direct.protocol !== "wss:") || (memory.get(direct.host) ?? 0) > now) return null;
+  if ((url.protocol === "wss:" && direct.protocol !== "wss:") || directPathBlocked(memory, direct.host, now)) return null;
   url.protocol = direct.protocol;
   // The direct host is its own origin: assigning `host` alone would keep the Tunnel URL's port.
   url.hostname = direct.hostname;
@@ -65,12 +63,12 @@ function directAttemptUrl(direct: URL, tunnelUrl: string, memory: DirectPathMemo
 
 /** The URL a socket opened ahead of `connect` must have to be adopted: what `connect` dials first for this direct URL. */
 export function directFirstWarmUrl(directUrl: string | null | undefined, tunnelUrl: string): string {
-  return (directUrl ? directAttemptUrl(new URL(directUrl), tunnelUrl, sharedMemory, Date.now()) : null) ?? tunnelUrl;
+  return (directUrl ? directAttemptUrl(new URL(directUrl), tunnelUrl, sharedDirectPathMemory, Date.now()) : null) ?? tunnelUrl;
 }
 
 /** Spread into the sync client options: empty (today's behaviour) unless a direct URL is configured. */
-export function directFirstSyncOptions(directUrl: string | null | undefined, inner: SyncWebSocketFactory): { readonly webSocket?: SyncWebSocketFactory } {
-  return directUrl ? { webSocket: createDirectFirstWebSocketFactory({ directUrl, inner }) } : {};
+export function directFirstSyncOptions(directUrl: string | null | undefined, inner: SyncWebSocketFactory, onPath?: (path: TransportPath) => void): { readonly webSocket?: SyncWebSocketFactory } {
+  return directUrl ? { webSocket: createDirectFirstWebSocketFactory({ directUrl, inner, ...(onPath ? { onPath } : {}) }) } : {};
 }
 
 class DirectFirstSocket implements SyncSocket {
@@ -90,6 +88,7 @@ class DirectFirstSocket implements SyncSocket {
     private readonly clock: Clock,
     attemptTimeoutMs: number,
     private readonly markFailed: () => void,
+    private readonly onPath?: (path: TransportPath) => void,
   ) {
     try {
       this.#active = inner.connect(directUrl);
@@ -121,7 +120,10 @@ class DirectFirstSocket implements SyncSocket {
     socket.onopen = () => {
       if (!live()) return;
       this.clock.clearTimeout(this.#timer);
-      if (path === "direct") this.#state = "direct";
+      if (path === "direct") {
+        this.#state = "direct";
+        this.onPath?.({ plane: "sync", path: "direct", fellBack: false });
+      }
       this.onopen?.();
     };
     socket.onmessage = (event) => {
@@ -162,6 +164,7 @@ class DirectFirstSocket implements SyncSocket {
   }
 
   #openTunnel(): void {
+    this.onPath?.({ plane: "sync", path: "tunnel", fellBack: true });
     this.#state = "tunnel";
     this.#active = undefined;
     this.#active = this.inner.connect(this.tunnelUrl);

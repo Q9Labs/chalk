@@ -34,6 +34,21 @@ After a failed attempt the client skips the direct URL for 10 minutes, shared by
 
 The whiteboard socket does not use the direct path. Only `/v1/sync` is proxied.
 
+### The door a grant advertises
+
+A grant for an own-SFU Space carries `directSignalingUrl` (the API's `CHALK_API_DIRECT_URL`). With `directPath: "auto"`, the SDK default, the client uses it in two places without any build value:
+
+- **SFU signalling.** The media HTTP transport starts one `no-cors` probe of the door when it is created, with the same 2.5 second limit. A call waits for the probe, then goes to the door. A call that never reaches the API through the door (a network error, 429, 502 or 503) is replayed once on the Tunnel and marks the door failed for 10 minutes, on the same page-wide memory Sync uses. Any other answer, such as 401 or 409, is the API's answer and is not replayed. Stats uploads stay on the Tunnel.
+- **Sync.** When the build sets no `syncDirectUrl`, the client uses `wss://<door host>/v1/sync` from the grant. A static `syncDirectUrl` wins when both exist.
+
+`directPath: "off"` keeps both on the Tunnel and ignores the advertised door. The web app sets it from `?direct=off`, which is the control arm of the trial. Login, admin, OAuth and MCP never use the door.
+
+The warm lobby socket opens before a grant exists, so it can only use the static `syncDirectUrl`. A Sync socket opened from the grant alone is a fresh one. Set both the static value and the grant value on the trial arm, or the direct arm pays a socket open the control arm's warm Tunnel socket does not.
+
+### Which path a join used
+
+The SDK records one `transport_path` diagnostic per use of each plane: `{ plane: "sync" | "signalling", path: "direct" | "tunnel", fellBack }`. `fellBack` is true when a door was available and the Tunnel carried the use anyway (a failed attempt, or the 10 minute memory skipping the door). A Tunnel use with no door advertised has `fellBack: false`. The records stay in the client's diagnostics (`getDiagnostics()`) and are not part of the problem report schema. The trial harness reads them to split joins into arms and to count the fallback rate.
+
 ## Turn it on for one environment
 
 Start with nightly. The OpenTofu root accepts only `environment = "nightly"` and fails validation for anything else, and `build-web` passes the direct URL to the nightly build only. Staging and production each need a reviewed change to both before they can use the path. Every step is reversible; see the next section.
@@ -88,3 +103,4 @@ Ship the A record alone. Add an AAAA record only after the whole chain works, an
 - A live nightly cut with real Karachi clients: the table above comes from one trial from one network.
 - That the proxy unit and Caddy configuration run on the managed host's operating system. The configuration validates and the header handling was checked against a local Caddy, but the unit, `DynamicUser` state directory and TLS-ALPN-01 issuance have not run on the host.
 - Behaviour under a connection flood on a small host.
+- Blocked-door behaviour on real Pakistani ISPs (the probe limit, TLS interception, a middlebox that drops port 443 to an unknown host), the real latency gain, the fallback rate and mobile carrier NAT. Only a real network can show these; a datacentre run proves the Tunnel fallback and the records, not the gain.

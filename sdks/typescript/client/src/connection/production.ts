@@ -8,8 +8,9 @@ import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type 
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 import { mediaBootstrap } from "../access/media-bootstrap";
+import { directOrigin, directSyncUrl, type DirectPathMode } from "../direct-path";
 const apiFetch = withRequestContext();
-export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly whiteboardURL?: string | null }): ConnectionDependencies {
+export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
     clock: {
       now: () => Date.now(),
@@ -72,8 +73,8 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       const body: unknown = await response.json();
       return typeof body === "object" && body !== null && "cancelled" in body && body.cancelled === true;
     },
-    createMediaClient: (input) => createMediaClient(options.apiBaseURL, input),
-    createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, input),
+    createMediaClient: (input) => createMediaClient(options.apiBaseURL, options.directPath ?? "auto", input),
+    createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, options.directPath ?? "auto", input),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
     createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input),
     subscribeForeground: subscribeBrowserForeground,
@@ -107,7 +108,7 @@ function createChatFileTransport(apiBaseURL: string, input: ConnectionChatFileFa
     token: input.token,
   });
 }
-function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
+function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input: ConnectionMediaFactoryInput): ConnectionMediaClient {
   const { subject } = input.access;
   const replaceMediaConnection = input.replaceMediaConnection;
   const bootstrap = mediaBootstrap(input.access.media);
@@ -126,6 +127,9 @@ function createMediaClient(apiBaseURL: string, input: ConnectionMediaFactoryInpu
       participantId: subject.participantId,
       // The grant decides, so an older API without the capability keeps the per-operation routes.
       unifiedSignaling: bootstrap.capabilities?.unifiedSignaling === true,
+      // The grant advertises the direct door; the Tunnel (apiBaseURL) stays the fallback, and `off` keeps every call on it.
+      ...(directPath === "auto" && bootstrap.capabilities?.directSignalingUrl ? { directBaseURL: bootstrap.capabilities.directSignalingUrl } : {}),
+      ...(input.onTransportPath ? { onPath: input.onTransportPath } : {}),
     }),
     onError: input.onFailure,
     // A pending local offer is a bug signal, not a failure. Log it so the next rig run names the call that started it.
@@ -181,7 +185,11 @@ export function bindConnectionMediaClient(client: BoundMediaClient, restart: Con
     subscribe: client.subscribe.bind(client),
   };
 }
-function createSyncClient(syncURL: string, syncDirectURL: string | null | undefined, input: ConnectionSyncFactoryInput) {
+function createSyncClient(syncURL: string, syncDirectURL: string | null | undefined, directPath: DirectPathMode, input: ConnectionSyncFactoryInput) {
+  // A configured direct Sync URL wins, because the lobby warm socket was opened for it; otherwise the grant's door serves Sync too.
+  const advertised = directOrigin(mediaBootstrap(input.access.media).capabilities?.directSignalingUrl);
+  const directURL = directPath === "off" ? null : syncDirectURL || (advertised ? directSyncUrl(advertised) : null);
+  if (!directURL) input.onTransportPath?.({ plane: "sync", path: "tunnel", fellBack: false });
   return createV1SyncClient({
     url: syncURL,
     onDiagnostic: input.onTransportDiagnostic,
@@ -191,7 +199,7 @@ function createSyncClient(syncURL: string, syncDirectURL: string | null | undefi
     collaboration: { name: "collaboration_v2", chatCursor: { afterSequence: null, retainedFloorSequence: null } },
     persistenceScope: `${input.access.subject.tenantId}:${input.access.subject.episodeId}:${input.access.subject.participantId}`,
     entryConfirmation: true,
-    ...directFirstSyncOptions(syncDirectURL, createBrowserWebSocketFactory()),
+    ...directFirstSyncOptions(directURL, createBrowserWebSocketFactory(), input.onTransportPath),
   });
 }
 function createWhiteboardClient(apiBaseURL: string, url: string, input: ConnectionWhiteboardFactoryInput) {

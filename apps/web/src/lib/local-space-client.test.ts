@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createLocalSpaceClient } from "./local-space-client";
 
 // The factory throws once it has seen the platform, so the test needs no client double.
-function platformFor(credential: { readonly syncURL: string; readonly syncDirectURL?: string }): SpaceClientPlatform {
+function platformFor(credential: { readonly syncURL: string; readonly syncDirectURL?: string; readonly directPath?: "off" }): SpaceClientPlatform {
   let seen: SpaceClientPlatform | undefined;
   expect(() =>
     createLocalSpaceClient(
@@ -30,5 +30,9 @@ describe("local Space client direct Sync path", () => {
       syncUrl: "wss://sync.example.test/v1/sync",
       syncDirectUrl: "wss://direct.example.test/v1/sync",
     });
+  });
+
+  it("passes the control-arm switch so the SDK keeps every call on the Tunnel", () => {
+    expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync", directPath: "off" })).toEqual({ syncUrl: "wss://sync.example.test/v1/sync", directPath: "off" });
   });
 });

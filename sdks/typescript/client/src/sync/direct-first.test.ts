@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDirectFirstWebSocketFactory, directFirstSyncOptions } from "./direct-first";
+import type { TransportPath } from "../direct-path";
 import type { SyncSocket, SyncWebSocketFactory } from "./types";
 
 const TUNNEL = "wss://tunnel.example.test/v1/sync?entry_generation=new&entry_confirmation=1";
@@ -54,12 +55,38 @@ function harness(options: { readonly innerThrowsFor?: (url: string) => boolean }
       }
     }
   };
-  const factory = () => createDirectFirstWebSocketFactory({ directUrl: DIRECT, inner, clock, memory });
+  const factory = (onPath?: (path: TransportPath) => void) => createDirectFirstWebSocketFactory({ directUrl: DIRECT, inner, clock, memory, ...(onPath ? { onPath } : {}) });
   const memory = new Map<string, number>();
   return { sockets, advance, factory, memory, urls: () => sockets.map((socket) => socket.url) };
 }
 
 describe("direct-first Sync socket", () => {
+  it("reports the direct path when the direct socket opens", () => {
+    const { sockets, factory } = harness();
+    const paths: TransportPath[] = [];
+    factory((path) => paths.push(path)).connect(TUNNEL);
+    expect(paths).toEqual([]);
+
+    sockets[0]!.onopen?.();
+
+    expect(paths).toEqual([{ plane: "sync", path: "direct", fellBack: false }]);
+  });
+
+  it("reports a fall back when the Tunnel opens after a failed direct attempt, and again when memory skips the door", () => {
+    const { sockets, factory } = harness();
+    const paths: TransportPath[] = [];
+    factory((path) => paths.push(path)).connect(TUNNEL);
+    sockets[0]!.onclose?.({ code: 1006, wasClean: false });
+    expect(paths).toEqual([{ plane: "sync", path: "tunnel", fellBack: true }]);
+
+    factory((path) => paths.push(path)).connect(TUNNEL);
+
+    expect(paths).toEqual([
+      { plane: "sync", path: "tunnel", fellBack: true },
+      { plane: "sync", path: "tunnel", fellBack: true },
+    ]);
+  });
+
   it("leaves the client options untouched while no direct URL is configured", () => {
     const inner = harness().factory();
     expect(directFirstSyncOptions(undefined, inner)).toEqual({});

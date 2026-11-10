@@ -100,6 +100,8 @@ export class ConnectionReporter {
   }
 
   recordDiagnostic(diagnostic: ConnectionDiagnostic): void {
+    // The report has a fixed server schema; the path record stays with the client, for a trial harness.
+    if (diagnostic.event === "transport_path") return;
     this.#record({
       event: diagnostic.event,
       elapsed_ms: this.#elapsed(),
