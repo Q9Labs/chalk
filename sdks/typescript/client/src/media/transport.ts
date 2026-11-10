@@ -19,6 +19,9 @@ const ROUTES: Readonly<Record<SignalOp, readonly ["GET" | "POST" | "PUT", string
   tracks_update: ["PUT", "tracks/update", "sfu_tracks"],
   renegotiate: ["POST", "renegotiate", "sfu_renegotiate"],
 };
+/** The calls that change nothing, so a second send cannot do harm. The unified route carries them as POST, so the operation decides, not the method. */
+const READS: ReadonlySet<SignalOp> = new Set(["publications", "subscriptions"]);
+
 export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTransportOptions): CloudflareSFUSignalingTransport {
   const fetch = withRequestContext(options.fetch);
   const credential = requireCredential(options);
@@ -123,8 +126,8 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         } catch (error) {
           // A write that left the browser may have been applied; the protocol has no idempotency key, so only a read is sent twice.
           const unreachable = neverReachedApi(error);
-          if (unreachable) forgetDirectProbe();
-          if (!(unreachable && method === "GET")) {
+          if (unreachable || isSignalingTimeout(error)) forgetDirectProbe();
+          if (!(unreachable && READS.has(op))) {
             announce("direct", false);
             throw error;
           }
@@ -284,6 +287,10 @@ async function probeDirectPath(direct: URL, fetch: typeof globalThis.fetch): Pro
  * the connection failed (a rejected fetch), the proxy could not reach the API (502, 503) or its per-client bound refused it (429).
  * A timeout or a 504 may follow a call the API already handled, so those surface as they do on the Tunnel.
  */
+function isSignalingTimeout(error: unknown): boolean {
+  return error instanceof CloudflareSFUError && error.code === "signaling_timeout";
+}
+
 function neverReachedApi(error: unknown): boolean {
   if (error instanceof CloudflareSFUError) return error.options.status === 429 || error.options.status === 502 || error.options.status === 503;
   return error instanceof TypeError;

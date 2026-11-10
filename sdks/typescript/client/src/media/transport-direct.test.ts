@@ -5,12 +5,12 @@ import { createCloudflareSFUHTTPTransport } from "./transport";
 const DIRECT = "https://direct.example.test";
 const TUNNEL = "https://api.test";
 const ROUTE = "/v1/tenants/t1/spaces/s1/episodes/e1/participants/p1/media/sfu/publications";
-const LIST = { incarnation: 1, sequence: 1, publications: [] };
+const LIST = { incarnation: 1, sequence: 1, publications: [], subscriptions: [] };
 
 type Handler = (url: URL, init: RequestInit | undefined) => Response | Promise<Response>;
 
 /** A transport whose fetch records every URL and answers through `handler`; the probe is the request with mode no-cors. */
-function setup(handler: Handler, directBaseURL: string | null = DIRECT, memory: DirectPathMemory = new Map()) {
+function setup(handler: Handler, directBaseURL: string | null = DIRECT, memory: DirectPathMemory = new Map(), unifiedSignaling = false) {
   const urls: string[] = [];
   const paths: TransportPath[] = [];
   const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -27,6 +27,7 @@ function setup(handler: Handler, directBaseURL: string | null = DIRECT, memory: 
     fetch: fetch as unknown as typeof globalThis.fetch,
     directMemory: memory,
     onPath: (path) => paths.push(path),
+    ...(unifiedSignaling ? { unifiedSignaling: true } : {}),
     ...(directBaseURL ? { directBaseURL } : {}),
   });
   return { transport, urls, paths, memory };
@@ -109,6 +110,36 @@ describe("direct signalling door", () => {
     expect(applied).toEqual(["direct.example.testPUT"]);
     expect(urls.filter(onTunnel)).toEqual([]);
     expect(memory.has("direct.example.test")).toBe(true);
+  });
+
+  it.each([502, 503])("replays both list reads on the Tunnel with unified signalling when the door answers %i", async (status) => {
+    const { transport, urls } = setup((url) => (url.origin === DIRECT && url.pathname !== "/" ? new Response("refused", { status }) : answer(url, undefined)), DIRECT, new Map(), true);
+
+    await transport.listPublications();
+    await transport.listSubscriptions();
+
+    expect(urls.filter(onTunnel)).toEqual([`${TUNNEL}${ROUTE.replace("/publications", "/signal")}`, `${TUNNEL}${ROUTE.replace("/publications", "/signal")}`]);
+  });
+
+  it("does not replay a unified write the door answered 503", async () => {
+    const { transport, urls } = setup((url) => (url.origin === DIRECT && url.pathname !== "/" ? new Response("refused", { status: 503 }) : answer(url, undefined)), DIRECT, new Map(), true);
+
+    await expect(transport.closeTracks(CLOSE)).rejects.toMatchObject({ options: { status: 503 } });
+
+    expect(urls.filter(onTunnel)).toEqual([]);
+  });
+
+  it("stops using the door for later calls once a call on it times out after a good probe", async () => {
+    vi.useFakeTimers();
+    const { transport, urls, memory } = setup((url) => (url.pathname === "/" ? new Response("not found", { status: 404 }) : url.origin === DIRECT ? new Promise<Response>(() => undefined) : Response.json(LIST)));
+
+    const first = expect(transport.listPublications()).rejects.toMatchObject({ code: "signaling_timeout" });
+    await vi.advanceTimersByTimeAsync(9_000);
+    await first;
+    await transport.listPublications();
+
+    expect(memory.has("direct.example.test")).toBe(true);
+    expect(urls.filter(onTunnel)).toEqual([`${TUNNEL}${ROUTE}`]);
   });
 
   it("sends the next call on the Tunnel after a write failed on the door", async () => {
