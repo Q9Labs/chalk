@@ -63,8 +63,8 @@ func TestPublicLeaveLockTimeoutCanRetryTheSameRequest(t *testing.T) {
 	}
 	defer blocker.Rollback(context.Background())
 	request := episodes.Request{Key: "public-leave-" + participantID.String()}
-	// An uncommitted insert owns the same request key. Only this request is
-	// blocked, at the INSERT that timed out in the nightly trace.
+	// An uncommitted insert owns the same request key and holds a key-share lock on the control row.
+	// Only this request is blocked, where it asks for the control row before the Episode.
 	if _, err := blocker.Exec(ctx, `insert into sync_external_operations(tenant_id,space_id,episode_id,external_operation_id,request_key,request_fingerprint,operation_name,payload) values($1,$2,$3,$4,$5,$6,'remove_participant','{}'::jsonb)`, uuid(tenantID), uuid(spaceID), uuid(episodeID), uuid(accountTenantIntegrationID(t)), request.Key, request.Fingerprint[:]); err != nil {
 		t.Fatal(err)
 	}
@@ -72,8 +72,8 @@ func TestPublicLeaveLockTimeoutCanRetryTheSameRequest(t *testing.T) {
 	input := episodes.PublicLeaveInput{TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, Request: request}
 	_, err = service.LeavePublic(ctx, input)
 	var postgresError *pgconn.PgError
-	if !errors.Is(err, publicinvites.ErrAccessUnavailable) || !errors.As(err, &postgresError) || postgresError.Code != "55P03" || !strings.Contains(err.Error(), "create remove_participant external operation") {
-		t.Fatalf("blocked leave = %v; want retryable access unavailable wrapping INSERT lock timeout", err)
+	if !errors.Is(err, publicinvites.ErrAccessUnavailable) || !errors.As(err, &postgresError) || postgresError.Code != "55P03" || !strings.Contains(err.Error(), "lock lifecycle control") {
+		t.Fatalf("blocked leave = %v; want retryable access unavailable wrapping the control row lock timeout", err)
 	}
 	if err := blocker.Rollback(ctx); err != nil {
 		t.Fatal(err)
