@@ -2,7 +2,10 @@ import { installFixture } from "../prod-proof/fixture.mjs";
 import { installAgreementProbe } from "./agreement.mjs";
 
 // Keep fake capture in the browser, while the real app owns joining and playback.
-export function webMediaFixture(guest) {
+// The camera and microphone permission behaves like a browser's: it starts as "prompt" and becomes "granted" once capture succeeds,
+// so the pre-join access sheet appears on a tablet or phone. A proof that is not about that step starts with permission: "granted"
+// and joins with mic and camera off.
+export function webMediaFixture(guest, { permission = "prompt" } = {}) {
   return `(() => {
     (${installAgreementProbe.toString()})();
     if (!navigator.mediaDevices) return;
@@ -21,6 +24,30 @@ export function webMediaFixture(guest) {
       { deviceId: "proof-microphone", groupId: "proof", kind: "audioinput", label: "Proof microphone", toJSON() { return {}; } }
     ];
     (${installFixture.toString()})({ speech: "", guest: ${guest}, tones: true });
+    let permission = ${JSON.stringify(permission)};
+    const watchers = [];
+    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      const stream = await capture(constraints);
+      if (permission !== "granted") {
+        permission = "granted";
+        for (const watcher of watchers) watcher.dispatchEvent(new Event("change"));
+      }
+      return stream;
+    };
+    const queryPermission = navigator.permissions?.query.bind(navigator.permissions);
+    if (queryPermission) {
+      navigator.permissions.query = async (descriptor) => {
+        if (descriptor.name !== "camera" && descriptor.name !== "microphone") return queryPermission(descriptor);
+        const status = new EventTarget();
+        Object.defineProperty(status, "state", { get: () => permission });
+        watchers.push(status);
+        return status;
+      };
+    }
+    try {
+      if (permission === "granted" && localStorage.getItem("chalk.prejoin-devices") === null) localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
+    } catch {}
   })();`;
 }
 
