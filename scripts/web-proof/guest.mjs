@@ -23,10 +23,8 @@ export async function withProofCall({ app, screen }, run) {
     await screen.getByLabel("Your name").fill("Web proof A");
     await screen.getByRole("button", "Join call", { exact: true }).click();
     joined = true;
-    if (order === "web-first") {
-      await screen.getByRole("region", "Space stage", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
-      guest = await prepareGuest(directory);
-    }
+    await screen.getByRole("region", "Space stage", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+    if (order === "web-first") guest = await prepareGuest(directory);
     await run(guest);
   };
   for (const step of [call, () => leaveWebCall(screen, joined), () => guest?.dispose()]) {

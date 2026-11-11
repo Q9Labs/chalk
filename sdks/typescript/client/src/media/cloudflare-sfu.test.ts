@@ -147,6 +147,29 @@ it("retains receive health after automatic pull recovery with an unchanged curso
   }
 });
 
+it("removes a remote track soon after Sync shows its source off while the listing still names it", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: "remote-connection|microphone" };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    h.client.remotePublicationsChanged([{ ...publication, enabled: true }]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    // The sender's Sync off reaches this client before the sender's SFU close does, so the first listing still names the source.
+    h.client.remotePublicationsChanged([{ ...publication, publicationId: null, enabled: false }]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [] };
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(h.client.getSnapshot().remoteTracks).toEqual([]);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 function remoteMedia(harness: ReturnType<typeof createHarness>, progress: () => boolean = () => false) {
   const publications = (["microphone", "camera"] as const).map((source, i) => ({ participantId: "participant-2", source, publicationId: versionedPublicationID("remote", String(i), source) }));
   harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };

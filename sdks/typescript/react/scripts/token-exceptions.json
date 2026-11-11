@@ -3,5 +3,15 @@
     "file": "atomic/ReactionBubble.tsx",
     "snippet": "const BASE_PARTICLE_COLORS = [\"#14b8a6\", \"#f59e0b\", \"#ec4899\", \"#8b5cf6\", \"#06b6d4\", \"#22c55e\"];",
     "reason": "Decorative confetti palette, not a UI role; carries no information and is disabled with reduced motion."
+  },
+  {
+    "file": "control-bar/ShellIcon.tsx",
+    "snippet": "fill=\"white\" stroke=\"none\"",
+    "reason": "SVG mask luminance: white keeps the glyph, black cuts the slash gap. It is a mask value, not a theme colour."
+  },
+  {
+    "file": "control-bar/ShellIcon.tsx",
+    "snippet": "stroke=\"black\" strokeWidth=\"5\"",
+    "reason": "SVG mask luminance: white keeps the glyph, black cuts the slash gap. It is a mask value, not a theme colour."
   }
 ]

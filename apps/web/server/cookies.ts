@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import { DashboardError } from "./http";
+import { SIGNED_IN_COOKIE } from "../src/lib/signed-in-hint";
 
 type CookiePurpose = "session" | "tenant" | "login_google" | "login_apple" | "binding" | "seats" | `seat_${string}`;
 const encoder = new TextEncoder();
@@ -47,6 +48,11 @@ export function writeCookie(response: Response, env: DashboardEnvironment, purpo
   const secure = new URL(env.DASHBOARD_ORIGIN).protocol === "https:" ? "; Secure" : "";
   response.headers.append("Set-Cookie", `${cookieName(env, purpose)}=${value}; Path=/; HttpOnly; SameSite=${purpose === "login_apple" && secure ? "None" : "Lax"}${secure}; Max-Age=${maxAge}`);
 }
+/** The readable twin of the session cookie: same lifetime, no value worth stealing. */
+function writeSignedInHint(response: Response, env: DashboardEnvironment, maxAge = 2592000): void {
+  const secure = new URL(env.DASHBOARD_ORIGIN).protocol === "https:" ? "; Secure" : "";
+  response.headers.append("Set-Cookie", `${SIGNED_IN_COOKIE}=${maxAge > 0 ? "1" : ""}; Path=/; SameSite=Lax${secure}; Max-Age=${maxAge}`);
+}
 const bindingSchema = z.object({ userId: z.string(), sessionId: z.string(), expiresAt: z.number() });
 export type SessionBinding = z.infer<typeof bindingSchema>;
 export async function binding(request: Request, env: DashboardEnvironment): Promise<SessionBinding> {
@@ -68,7 +74,9 @@ export async function checkCsrf(request: Request, identity: Pick<Identity, "user
   if (difference !== 0) throw new DashboardError(403, "csrf_rejected");
 }
 export async function setSession(response: Response, env: DashboardEnvironment, sealedSession: string, identity: Identity): Promise<void> {
-  writeCookie(response, env, "session", sealedSession, Math.max(0, Math.floor((identity.expiresAt - Date.now()) / 1000)));
+  const maxAge = Math.max(0, Math.floor((identity.expiresAt - Date.now()) / 1000));
+  writeCookie(response, env, "session", sealedSession, maxAge);
+  writeSignedInHint(response, env, maxAge);
   writeCookie(response, env, "binding", await seal({ userId: identity.userId, sessionId: identity.sessionId, expiresAt: identity.expiresAt }, env.SESSION_SECRET, "binding"));
 }
 export function clearSeatCookies(response: Response, request: Request, env: DashboardEnvironment): void {
@@ -85,6 +93,7 @@ export function clearLegacySeatCookies(response: Response, request: Request, env
 }
 export function clearSession(response: Response, env: DashboardEnvironment, request: Request): void {
   writeCookie(response, env, "session", "", 0);
+  writeSignedInHint(response, env, 0);
   writeCookie(response, env, "tenant", "", 0);
   writeCookie(response, env, "binding", "", 0);
   clearSeatCookies(response, request, env);

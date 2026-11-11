@@ -131,7 +131,7 @@ const closedAudioSection = readFileSync(new URL("./fixtures/chromium-offer-with-
   .split(/(?=^m=)/m)
   .find((section) => /^m=audio 0 /.test(section))!;
 
-it("replaces the media connection before parked receivers push the offer past the node's 64 KiB cap", async () => {
+it("replaces the media connection before parked receivers push the offer past the node's 256 KiB cap", async () => {
   const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
   await withTimedHarness(
     async (h) => {
@@ -144,7 +144,7 @@ it("replaces the media connection before parked receivers push the offer past th
       };
       let largestOffer = 0;
       // Each remote mic off/on parks one receiver inactive, and the node gives the next pull a new mid, so the offer grows by one section a toggle.
-      for (let toggle = 0; toggle < 70; toggle++) {
+      for (let toggle = 0; toggle < 280; toggle++) {
         await refresh(`microphone-${toggle}`);
         await refresh();
         // The valve spaces its replacements a minute apart.
@@ -153,7 +153,7 @@ it("replaces the media connection before parked receivers push the offer past th
       }
       expect(replaceMediaConnection).toHaveBeenCalled();
       expect(h.transport.addInputs.some((input) => input.replacementCause === "section_budget")).toBe(true);
-      expect(largestOffer).toBeLessThanOrEqual(48 * 1024);
+      expect(largestOffer).toBeLessThanOrEqual(176 * 1024);
     },
     { replaceMediaConnection },
   );
@@ -166,18 +166,35 @@ function closeRemoteSections(peer: FakePeerConnection, count: number): void {
   for (const transceiver of peer.getTransceivers()) if (transceiver.mid?.startsWith("closed-")) transceiver.stop();
 }
 
+it("replaces before a remote pull would overshoot the request budget from below the soft trigger", async () => {
+  const replaceMediaConnection = vi.fn(async () => bootstrap("replacement"));
+  await withTimedHarness(
+    async (h) => {
+      await h.client.start(fakeStream());
+      closeRemoteSections(h.peers.at(-1)!, 175);
+      expect((await h.peers.at(-1)!.createOffer()).sdp!.length).toBeLessThan(160 * 1024);
+      h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [2, 3, 4, 5].map((guest) => ({ participantId: `participant-${guest}`, source: "camera", publicationId: `remote-${guest}|camera` })) };
+      await h.client.refreshRemotePublications();
+      expect(replaceMediaConnection).toHaveBeenCalledOnce();
+      expect(h.client.getSnapshot().remoteTracks).toHaveLength(4);
+      expect(h.transport.addInputs.filter((input) => input.replacementCause === "section_budget")).toHaveLength(1);
+    },
+    { replaceMediaConnection },
+  );
+});
+
 it("does not replace for the offer size again within a minute of the last replacement", async () => {
   const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
   await withTimedHarness(
     async (h) => {
       await publishMicrophone(h);
-      closeRemoteSections(h.peers.at(-1)!, 50);
+      closeRemoteSections(h.peers.at(-1)!, 200);
       h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
       await h.client.setLocalPublicationTarget({ ...micOn, operationId: "cam-on", source: "camera" });
       expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
 
-      // The new connection closes enough sections to pass the trigger but not the ceiling: the cooldown holds the next replacement back.
-      closeRemoteSections(h.peers.at(-1)!, 36);
+      // The soft trigger is passed, but the next publish is below the request budget: the cooldown holds the replacement back.
+      closeRemoteSections(h.peers.at(-1)!, 180);
       h.client.prepareLocalTrack("screen", new FakeTrack("local-screen", "video") as unknown as MediaStreamTrack);
       await h.client.setLocalPublicationTarget({ ...micOn, operationId: "screen-on", source: "screen" });
       expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
@@ -187,18 +204,18 @@ it("does not replace for the offer size again within a minute of the last replac
   );
 });
 
-it("replaces again within the cooldown when the renewed connection's offer has reached the ceiling", async () => {
+it("replaces again within the cooldown when the next publish would pass the request budget", async () => {
   const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
   await withTimedHarness(
     async (h) => {
       await publishMicrophone(h);
-      closeRemoteSections(h.peers.at(-1)!, 50);
+      closeRemoteSections(h.peers.at(-1)!, 200);
       h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
       await h.client.setLocalPublicationTarget({ ...micOn, operationId: "cam-on", source: "camera" });
       expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
 
-      // Remote churn fills the new connection up to the cap again at once: the offer would be refused, so the cooldown does not apply.
-      closeRemoteSections(h.peers.at(-1)!, 68);
+      // Below the request budget, but the screen section would push the projected offer past 176 KiB.
+      closeRemoteSections(h.peers.at(-1)!, 195);
       h.client.prepareLocalTrack("screen", new FakeTrack("local-screen", "video") as unknown as MediaStreamTrack);
       await h.client.setLocalPublicationTarget({ ...micOn, operationId: "screen-on", source: "screen" });
       expect(replaceMediaConnection).toHaveBeenCalledTimes(3);
@@ -222,18 +239,18 @@ describe("a failed size replacement", () => {
     return h.client.setLocalPublicationTarget({ ...micOn, operationId: `${source}-on`, source });
   };
 
-  it("keeps the cooldown below the hard limit", async () => {
+  it("does not let a failed replacement's cooldown allow a request-budget overshoot", async () => {
     const replaceMediaConnection = failingReplacement();
     await withTimedHarness(
       async (h) => {
         await publishMicrophone(h);
-        closeRemoteSections(h.peers.at(-1)!, 50);
+        closeRemoteSections(h.peers.at(-1)!, 200);
         await publish(h, "camera");
         expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
-        // About 45 KiB: the offer is small enough to send, so the next publish goes ahead without another attempt.
+        // About 179 KiB plus the next video section: the caller's next enable must try the replacement again.
         await vi.advanceTimersByTimeAsync(10_000);
         await publish(h, "screen");
-        expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(3);
       },
       { replaceMediaConnection },
     );
@@ -248,8 +265,8 @@ describe("a failed size replacement", () => {
     await withTimedHarness(
       async (h) => {
         await publishMicrophone(h);
-        closeRemoteSections(h.peers.at(-1)!, 68);
-        // About 62 KiB. The first enable tries a replacement, which fails, so that enable fails once.
+        closeRemoteSections(h.peers.at(-1)!, 272);
+        // About 243 KiB. The first enable tries a replacement, which fails, so that enable fails once.
         expect(await publish(h, "camera")).toMatchObject({ outcome: "retryable_failure" });
         expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
 
@@ -266,19 +283,19 @@ describe("a failed size replacement", () => {
   });
 });
 
-it("replaces the media connection before a publish whose offer would pass the node's cap", async () => {
+it("replaces the media connection before a publish whose projected offer would pass the request budget", async () => {
   // The first call replaces the connection before it negotiates; the second is the size budget.
   const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
   await withTimedHarness(
     async (h) => {
       await publishMicrophone(h);
-      closeRemoteSections(h.peers.at(-1)!, 50);
+      closeRemoteSections(h.peers.at(-1)!, 200);
       h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
       await expect(h.client.setLocalPublicationTarget({ ...micOn, operationId: "cam-on", source: "camera" })).resolves.toEqual({ outcome: "confirmed", errorCode: null });
       expect(replaceMediaConnection).toHaveBeenCalledTimes(2);
       expect(h.peers).toHaveLength(3);
       expect(h.transport.addInputs.filter((input) => input.replacementCause === "section_budget")).toEqual([expect.objectContaining({ connectionId: "replacement-2" })]);
-      expect((await h.peers[2]!.createOffer()).sdp!.length).toBeLessThan(40 * 1024);
+      expect((await h.peers[2]!.createOffer()).sdp!.length).toBeLessThan(160 * 1024);
     },
     { replaceMediaConnection },
   );
@@ -290,7 +307,7 @@ it("closes a track without SDP when its close offer would pass the trigger, so t
   await withTimedHarness(
     async (h) => {
       await publishMicrophone(h);
-      closeRemoteSections(h.peers.at(-1)!, 50);
+      closeRemoteSections(h.peers.at(-1)!, 200);
       await mute(h);
       expect(h.transport.closeInputs).toHaveLength(1);
       expect(h.transport.closeInputs[0]).toMatchObject({ force: true, sessionDescription: undefined });
@@ -668,7 +685,7 @@ it("leaves a Sync-advertised pull to the listing when the offer is over the size
   await withTimedHarness(
     async (h) => {
       const calls = await startReceiver(h);
-      closeRemoteSections(h.peers.at(-1)!, 50);
+      closeRemoteSections(h.peers.at(-1)!, 200);
       const publication = remoteMicrophone("remote-connection", "microphone-1");
       h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
 

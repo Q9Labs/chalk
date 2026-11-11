@@ -13,7 +13,7 @@ import { reportCredentialExpiredReason, useProblemReports, useReportCredentialEx
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
+type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string; readonly reason?: "declined" | "expired" };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 // A visitor on the lobby or the leave screen usually presses Join within seconds. Sync closes an idle socket after 5 s, so the
 // SDK replaces it for this long after the last action: about four short-lived sockets at most, then none.
@@ -447,10 +447,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               spaceName={pending.spaceName}
               message={error?.message ?? `Asking to join ${pending.spaceName ?? "the call"}`}
               detail={error ? undefined : "The host will let you in."}
+              joiningAs={error ? undefined : displayName.trim()}
               action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }}
             />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} glyph={error.reason} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
           ) : stepOpen ? (
             <PreJoin
               spaceName={callName}
@@ -563,8 +564,8 @@ function neutralMessage(cause: unknown): EntryFailure {
   if (cause instanceof ArrivalUnavailableError) return { message: "Your request to join is no longer available. Open the invite link and join again.", retryable: false };
   if (cause instanceof MediaUnavailableError) return { message: "Calls are unavailable right now. Try again in a few minutes.", retryable: true };
   if (cause instanceof AdmissionError) {
-    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true };
-    if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true };
+    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true, reason: "declined" };
+    if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true, reason: "expired" };
     return { message: "Your request to join is no longer active.", retryable: true };
   }
   if (cause && typeof cause === "object" && "status" in cause) {

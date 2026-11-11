@@ -21,6 +21,7 @@ export interface SpaceHeaderProps {
     readonly onToggleChat?: () => void;
     readonly onTogglePeople?: () => void;
     readonly onToggleLayout?: () => void;
+    readonly onToggleFullscreen?: () => void;
     readonly onClosePanel?: () => void;
     readonly onPushToTalk?: (enabled: boolean) => void;
   };

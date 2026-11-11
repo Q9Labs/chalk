@@ -41,7 +41,6 @@ export interface ControlBarSurfaceProps {
   onTestSpeaker?: () => void;
   onStartScreenShare?: (options: ScreenShareOptions) => void;
   onCopyError?: () => void;
-  onFullscreenError?: () => void;
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
@@ -78,6 +77,8 @@ export interface ControlBarSurfaceProps {
   onToggleHandRaise?: () => void;
   onToggleWhiteboard?: () => void;
   onOpenReactions?: () => void;
+  /** The reactions tray is open; the button reports it with aria-expanded. */
+  reactionsOpen?: boolean;
   onLeft?: () => void;
   onEndForEveryone?: () => void;
 
@@ -106,6 +107,7 @@ export interface ControlBarProps {
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly onOpenReactions?: () => void;
+  readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;
   /** Set for hosts: the leave button opens a menu with Leave call and End call for everyone. */
   readonly onEndForEveryone?: () => void;

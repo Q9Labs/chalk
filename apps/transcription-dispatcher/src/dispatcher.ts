@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AssignmentError, ControlApiError, ProviderError, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
+import { isReasonWord } from "./provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { validateSpeakerTurnManifest } from "./urls.js";
@@ -102,7 +103,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
   try {
     await dependencies.control.heartbeat({ assignment, context: journey });
     const chunkDurationSeconds = (assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs) / 1_000;
-    if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new Error("audio duration bound exceeded");
+    if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new AssignmentError("audio duration bound exceeded");
     const audio = await fetchAudioChunk({
       fetch: dependencies.fetch,
       url: assignment.chunk.inputUrl,
@@ -197,15 +198,44 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       logger.warn("dispatcher_late_or_duplicate_completion_rejected");
       return "failed";
     }
-    const kind = providerFailureKind(error);
-    const terminal = kind === "nonretryable" || kind === "schema";
-    if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
-    await safeRetry(dependencies.control, assignment, journey, safeErrorCode(error), terminal, logger);
+    await reportAssignmentFailure(error, assignment, journey, dependencies.control, logger);
     return "failed";
   }
 }
 
-async function safeRetry(control: ControlApi, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
+// The error code is stored only by the control plane, so a terminal failure needs this line to have a reason anywhere else.
+export async function reportAssignmentFailure(error: unknown, assignment: TranscriptionAssignment, journey: JourneyContext, control: Pick<ControlApi, "retry">, logger: DispatcherLogger): Promise<void> {
+  const kind = providerFailureKind(error);
+  const terminal = kind === "nonretryable" || kind === "schema";
+  if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
+  const errorCode = safeErrorCode(error);
+  logger.warn("dispatcher_assignment_failed", {
+    jobId: assignment.jobId,
+    journeyId: journey.journeyId,
+    errorCode,
+    kind,
+    terminal,
+    attempt: assignment.attempt,
+    ...(error instanceof ProviderError && error.status !== undefined ? { providerStatus: error.status } : {}),
+    ...(error instanceof ProviderError && error.providerCode !== undefined && isReasonWord(error.providerCode) ? { providerReason: error.providerCode } : {}),
+    reason: failureReason(error),
+  });
+  await safeRetry(control, assignment, journey, errorCode, terminal, logger, creditRetryAt(error, assignment));
+}
+
+// OpenRouter answers 402 when the credit is short or the chunks of one recording together exceed its in-flight budget; both pass within minutes, so the attempts wait 20, 40 and 60 seconds instead of burning the control plane's four attempts at once.
+function creditRetryAt(error: unknown, assignment: Pick<TranscriptionAssignment, "attempt">): string | undefined {
+  if (!(error instanceof ProviderError) || error.status !== 402 || error.kind !== "retryable") return undefined;
+  return new Date(Date.now() + 20_000 * assignment.attempt).toISOString();
+}
+
+// Only our own errors have fixed messages; anything else can carry a signed URL or provider data, so it logs only its class.
+function failureReason(error: unknown): string {
+  if (error instanceof AssignmentError || error instanceof ProviderError) return error.message;
+  return error instanceof Error ? error.name : typeof error;
+}
+
+async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger, retryAt?: string): Promise<void> {
   try {
     await control.retry({
       jobId: assignment.jobId,
@@ -213,6 +243,7 @@ async function safeRetry(control: ControlApi, assignment: TranscriptionAssignmen
       leaseToken: assignment.leaseToken,
       errorCode,
       terminal,
+      ...(retryAt === undefined ? {} : { retryAt }),
       context,
     });
   } catch (retryError) {

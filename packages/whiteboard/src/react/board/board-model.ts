@@ -116,6 +116,36 @@ export function widthUnits(width: PenWidth): number {
   return PEN_WIDTHS.find((entry) => entry.id === width)!.units;
 }
 
+/** The stroke chip: the colour disc and a bar at the real width, so colour and width read together. */
+export function strokeChip(color: PenColor, width: PenWidth, surface: BoardSurface, theme: CallTheme): { readonly disc: string; readonly bar: number; readonly label: string } {
+  const colorLabel = PEN_COLORS.find((entry) => entry.id === color)!.label;
+  const widthLabel = PEN_WIDTHS.find((entry) => entry.id === width)!.label.toLowerCase();
+  return { disc: penHex(color, surface, theme), bar: widthUnits(width), label: `Colour and width: ${colorLabel}, ${widthLabel}` };
+}
+
+/** The mark inside a chosen colour: white, or near-black on a light colour such as Ink on the chalkboard. */
+export function checkInk(hex: string): "#ffffff" | "#111111" {
+  const [red = 0, green = 0, blue = 0] = [1, 3, 5].map((start) => Number.parseInt(hex.slice(start, start + 2), 16));
+  return 0.299 * red + 0.587 * green + 0.114 * blue > 150 ? "#111111" : "#ffffff";
+}
+
+/** Which tool the colour and width style: the pen's own for tools that draw nothing, or the selection when nothing else is chosen. */
+export function strokeTarget(tool: BoardTool): string {
+  if (tool === "selection") return "Selection";
+  if (tool === "hand" || tool === "eraser" || tool === "laser") return "Pen";
+  if (tool === "pen" || tool === "highlighter" || tool === "text" || tool === "note") return { pen: "Pen", highlighter: "Highlighter", text: "Text", note: "Sticky note" }[tool];
+  return SHAPES.find((entry) => entry.id === tool)!.label;
+}
+
+/** A stroke as the board draws it with this tool: the highlighter is wide and see-through, everything else uses the pen's own colour and width. */
+export function strokePreview(tool: BoardTool, color: PenColor, width: PenWidth, surface: BoardSurface, theme: CallTheme): { readonly stroke: string; readonly width: number; readonly opacity: number } {
+  if (tool === "highlighter") {
+    const style = highlighterStyle(color, width);
+    return { stroke: style.strokeColor, width: style.strokeWidth, opacity: style.opacity / 100 };
+  }
+  return { stroke: penHex(color, surface, theme), width: widthUnits(width), opacity: 1 };
+}
+
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 4;
 
