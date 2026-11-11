@@ -337,6 +337,24 @@ describe("AudioReceiveHealth", () => {
     expect(h.events).toHaveLength(1);
   });
 
+  it("treats a playing element with growing bytes as playing when the pull stage was never recorded", async () => {
+    const h = harness();
+    const p = remote();
+    const audio = element(p.track, false);
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.observeAudioElement(p.track, audio);
+    h.tracker.start();
+    for (let i = 1; i <= 4; i++) {
+      h.bytes(p.track, i);
+      audio.currentTime = i;
+      audio.dispatchEvent(new Event("playing"));
+      await vi.advanceTimersByTimeAsync(5000);
+    }
+    expect(h.events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
+    h.tracker.dispose();
+  });
+
   it("requires matching inbound audio stats and a bound stream, and resets bytes for new track ids", async () => {
     const h = harness();
     const p = remote();

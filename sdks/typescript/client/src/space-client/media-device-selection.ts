@@ -20,6 +20,10 @@ export class MediaDeviceSelection implements ConnectionMediaDevices {
     return this.#devices.getDisplayMedia(constraints);
   }
 
+  releaseTrack(track: MediaStreamTrack): void {
+    this.#devices.releaseTrack(track);
+  }
+
   enumerateDevices(): Promise<readonly MediaDeviceInfo[]> {
     return this.#devices.enumerateDevices?.() ?? Promise.resolve([]);
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CALL_STATS_CALL_CAP, CALL_STATS_MAX_WINDOW_MS, CALL_STATS_WINDOW_MS, createCallStatsCollector, type CallStatsRequest } from "./call-stats";
+import { CALL_STATS_CALL_CAP, CALL_STATS_HISTORY, CALL_STATS_MAX_WINDOW_MS, CALL_STATS_WINDOW_MS, createCallStatsCollector, type CallStatsRequest } from "./call-stats";
 
 type Stat = Record<string, unknown>;
 const report = (stats: readonly Stat[]): RTCStatsReport => new Map(stats.map((stat) => [String(stat.id), stat])) as unknown as RTCStatsReport;
@@ -184,5 +184,22 @@ describe("call stats collector", () => {
     const samples = uploads.flatMap((request) => request.samples);
     expect(samples).toHaveLength(1);
     expect(samples[0]).toMatchObject({ window_ms: 10_000, send_bitrate_kbps: 1000 });
+  });
+
+  it("keeps only the latest windows for display, replaced after each window and unaffected by uploads", async () => {
+    const { collector, flush } = run(CALL_STATS_WINDOW_MS / 1000);
+    const first = collector.recent();
+    expect(first).toHaveLength(1);
+    await flush();
+    expect(collector.recent()).toBe(first);
+
+    let clock = 0;
+    const long = createCallStatsCollector({ now: () => clock, upload: async () => undefined });
+    for (let second = 0; second <= (CALL_STATS_HISTORY + 3) * (CALL_STATS_WINDOW_MS / 1000); second++) {
+      clock = second * 1000;
+      long.observe(frame(second));
+    }
+    expect(long.recent()).toHaveLength(CALL_STATS_HISTORY);
+    expect(long.recent().at(-1)?.elapsed_ms).toBe((CALL_STATS_HISTORY + 3) * CALL_STATS_WINDOW_MS);
   });
 });

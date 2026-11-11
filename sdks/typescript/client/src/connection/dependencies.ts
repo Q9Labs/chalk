@@ -1,4 +1,5 @@
 import type { ParticipantEpisodeStatus } from "../generated/schemas";
+import type { TransportPath } from "../direct-path";
 import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
@@ -28,6 +29,11 @@ export type ConnectionMediaDevices = {
   readonly getUserMedia: (constraints: MediaStreamConstraints, signal?: AbortSignal) => Promise<MediaStream>;
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
+  /**
+   * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls
+   * `release()`, because `stop()` there only marks the track ended and the native capture stays open.
+   */
+  readonly releaseTrack: (track: MediaStreamTrack) => void;
   /**
    * An application-provided output sink selector. Browser capture APIs have no
    * global speaker switch, so an application that renders remote audio supplies the
@@ -86,9 +92,12 @@ export type ConnectionMediaClient = ClientMediaPlane & {
 export type ConnectionMediaFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
+  /** A fresh grant for the current media connection (no replacement); resolves to its media token. */
+  readonly refreshCredential?: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
   readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
 };
@@ -98,6 +107,7 @@ export type ConnectionSyncFactoryInput = {
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];

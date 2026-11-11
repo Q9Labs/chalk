@@ -1,5 +1,7 @@
 import { commandFailureMessage } from "./command-failure";
-import React, { useEffect, useRef, useState } from "react";
+import { LazyDeviceAccessWaiting } from "../device-access/LazyDeviceAccessCard";
+import { isDeviceAccessFailure } from "../device-access/model";
+import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon } from "../../utils/icons";
@@ -20,42 +22,49 @@ export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX
 
 export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const { buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({ ...props, density: props.density ?? "comfortable", detectDevices: props.detectDevices ?? true });
-  const dock = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
   const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect display-capture support after hydration so server and first client markup agree.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Mirror browser fullscreen changes; remove the document listener on unmount.
-  useEffect(() => {
-    const changed = () => setFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", changed);
-    return () => document.removeEventListener("fullscreenchange", changed);
-  }, []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
-  const iconButton = (label: string, icon: React.ReactNode, onClick?: () => void, active?: boolean, badge = 0, hand = false, disabled = false) => (
+  const iconButton = (label: string, icon: React.ReactNode, onClick?: () => void, active?: boolean, badge = 0) => (
     <ChalkTooltip
       trigger={
-        <ChalkIconButton size="lg" aria-label={label} aria-pressed={active} onClick={onClick} disabled={disabled}>
+        <ChalkIconButton size="lg" aria-label={label} aria-pressed={active} onClick={onClick}>
           {icon}
           {badge > 0 ? <span className="chalk-shell-dot" aria-label={`${badge} unread`} /> : null}
-          {hand ? <span className="chalk-shell-dot" aria-label="Hand raised" /> : null}
         </ChalkIconButton>
       }
     >
       {label}
     </ChalkTooltip>
   );
-  const toggleFullscreen = () => {
-    const frame = dock.current?.closest<HTMLElement>("[data-part=call-frame]") ?? dock.current?.closest<HTMLElement>("[data-chalk]");
-    const request = document.fullscreenElement ? document.exitFullscreen() : frame?.requestFullscreen();
-    void request?.then(() => setFullscreen(Boolean(document.fullscreenElement))).catch(() => props.onFullscreenError?.());
-  };
   const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <ShellIcon name="chat" />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
   const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
   const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
-  const reactions = has("reactions") && (props.onOpenReactions || props.displayOnly) ? iconButton("Reactions", <ShellIcon name="smile" />, props.onOpenReactions, undefined, 0, props.isHandRaised, props.reactionsDisabled) : null;
+  const reactions =
+    has("reactions") && (props.onOpenReactions || props.displayOnly) ? (
+      <ChalkTooltip
+        trigger={
+          <ChalkIconButton
+            size="lg"
+            className="chalk-shell-reactions-button"
+            data-reactions-trigger
+            data-hand-raised={props.isHandRaised || undefined}
+            aria-label={props.isHandRaised ? "Reactions, hand raised" : "Reactions"}
+            aria-expanded={props.reactionsOpen}
+            onClick={props.onOpenReactions}
+            disabled={props.reactionsDisabled}
+          >
+            <ShellIcon name="smile" className="chalk-shell-reactions-smile" />
+            <ShellIcon name="hand" className="chalk-shell-reactions-hand" />
+          </ChalkIconButton>
+        }
+      >
+        Reactions
+      </ChalkTooltip>
+    ) : null;
   return (
-    <div ref={dock} data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
+    <div data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
       <ShellStyles />
       {has("mic") ? (
         <DevicePopover
@@ -77,6 +86,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           noiseSuppression={props.noiseSuppression}
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
+          access={props.deviceAccess?.microphone}
         />
       ) : null}
       {has("video") ? (
@@ -95,13 +105,15 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           warning={props.cameraWarning}
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}
+          access={props.deviceAccess?.camera}
         />
       ) : null}
-      {has("screenshare") ? <ShareControl disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
+      {has("screenshare") && canCaptureDisplay ? (
+        <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
+      ) : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
-      <span className="chalk-shell-desktop">{iconButton(fullscreen ? "Exit fullscreen" : "Fullscreen", <ShellIcon name={fullscreen ? "min" : "max"} />, toggleFullscreen, fullscreen)}</span>
 
       <span className="chalk-shell-phone">
         <DockLayout layout={props.layout ?? "focus"} onLayoutChange={props.onLayoutChange ?? (() => {})}>
@@ -124,7 +136,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             </button>
           ) : null}
           {has("screenshare") && canCaptureDisplay ? (
-            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.onToggleScreenShare}>
+            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
             </button>
@@ -182,11 +194,17 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice, cardUnavailable } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError && (cardUnavailable || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? (!props.onCommandError && commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined)} />
+      <CommandErrorAlert message={mediaNotice ?? failure} />
+      {requestingDevice ? (
+        <Suspense fallback={null}>
+          <LazyDeviceAccessWaiting device={requestingDevice} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

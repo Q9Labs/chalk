@@ -1395,11 +1395,12 @@ func (s *capturePlanWatchSource) WaitForPlan(ctx context.Context, input capturep
 }
 
 type capturePlanWatchCoordinator struct {
-	mu         sync.Mutex
-	snapshots  map[captureplane.PlanRevision]recordercapture.Snapshot
-	current    recordercapture.Snapshot
-	reconciled []captureplane.PlanRevision
-	closeCalls int
+	mu          sync.Mutex
+	snapshots   map[captureplane.PlanRevision]recordercapture.Snapshot
+	current     recordercapture.Snapshot
+	reconciled  []captureplane.PlanRevision
+	closeCalls  int
+	checkpoints int
 }
 
 func newCapturePlanWatchCoordinator(snapshots map[captureplane.PlanRevision]recordercapture.Snapshot) *capturePlanWatchCoordinator {
@@ -1432,6 +1433,7 @@ func (c *capturePlanWatchCoordinator) accept(plan captureplan.Plan, reconcile bo
 func (c *capturePlanWatchCoordinator) Snapshot() (recordercapture.Snapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.checkpoints++
 	snapshot := c.current
 	snapshot.Tracks = append([]captureplane.PulledCaptureTrack(nil), snapshot.Tracks...)
 	return snapshot, nil
@@ -1445,6 +1447,13 @@ func (c *capturePlanWatchCoordinator) Close(context.Context, bool) error {
 }
 
 func (*capturePlanWatchCoordinator) RenewLease(capturesignaling.WorkerLease) error { return nil }
+
+// Checkpoints counts the plan checkpoints the capture loop has processed.
+func (c *capturePlanWatchCoordinator) Checkpoints() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.checkpoints
+}
 
 func (c *capturePlanWatchCoordinator) Reconciled() []captureplane.PlanRevision {
 	c.mu.Lock()

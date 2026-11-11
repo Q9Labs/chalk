@@ -2,17 +2,18 @@ import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
+import { DEVICE_ACCESS_STATES } from "./device-access";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
 import { STATES_LANE } from "./states-lane";
+import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
 import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { NameNeeded } from "../components/space/SpacePage";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -52,8 +53,11 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,
   ...SHELL_STATES,
+  ...DEVICE_ACCESS_STATES,
   ...STAGE_STATES,
   ...CARD_STATES,
+  ...PEOPLE_STATES,
+  ...PEOPLE_GUEST_STATES,
   ...STATES_LANE,
   ...INTEGRATION_STATES,
   { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
@@ -72,8 +76,6 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
-  { id: "name-needed", title: "Name needed", render: () => <JoinName theme="dark" /> },
-  { id: "name-needed-light", title: "Name needed, light", render: () => <JoinName theme="light" /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -169,6 +171,12 @@ export const CALL_STATES: readonly CallState[] = [
       actions: [{ click: `More options for ${nora.name}` }, { click: "Follow", role: "menuitem" }] satisfies readonly Action[],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
+    {
+      id: `board-edges-${scheme}`,
+      title: `Board with a name tag at the edge and a pointer off screen, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik], pointers: "edges" }} />,
+    },
+    { id: `board-viewonly-${scheme}`, title: `Board, view only, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true })} board={{ scene: true, people: [nora, malik] }} /> },
     { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },
     { id: `board-relay-${scheme}`, title: `Board shared with other tabs, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ relay: `board-relay-${scheme}` }} /> },
     { id: `board-notes-${scheme}`, title: `Board sticky notes, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
@@ -307,15 +315,6 @@ function WaitingForHost() {
   return (
     <main className="h-dvh">
       <CallLimbo spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." action={{ label: "Cancel", onClick: () => undefined }} />
-    </main>
-  );
-}
-
-function JoinName({ theme }: { readonly theme: "light" | "dark" }) {
-  const [name, setName] = useState("");
-  return (
-    <main data-chalk data-chalk-theme={theme} className="h-dvh">
-      <NameNeeded spaceName={SPACE_NAME} theme={theme} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
     </main>
   );
 }

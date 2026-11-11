@@ -152,3 +152,55 @@ it("sends the combined pull to the one signal route when the API advertised it",
   expect(JSON.parse(String(init.body))).toEqual({ op: "tracks", connection_id: "connection", tracks: [], pull_published_audio: true, allow_partial_remote_tracks: true });
   expect(pulled?.snapshot).toEqual({ incarnation: 2, sequence: 5, publications: [] });
 });
+
+describe("one re-grant after a refused media request", () => {
+  function refusing(statuses: readonly number[], refreshCredential: () => Promise<string>) {
+    const tokens: string[] = [];
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      tokens.push(String((init?.headers as Record<string, string>).Authorization));
+      const status = statuses[tokens.length - 1] ?? 200;
+      return status === 200 ? Response.json({ subscriptions: [], publications: [], incarnation: 1, sequence: 1, tracks: [] }) : new Response("{}", { status });
+    });
+    const transport = createCloudflareSFUHTTPTransport({
+      apiBaseURL: "https://api.test",
+      tenantId: "t1",
+      spaceId: "s1",
+      episodeId: "e1",
+      participantId: "p1",
+      credential: async () => "old",
+      refreshCredential,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    return { transport, tokens };
+  }
+
+  it("fetches a fresh grant after HTTP 403 and sends the request once more with it", async () => {
+    const refreshCredential = vi.fn(async () => "fresh");
+    const { transport, tokens } = refusing([403], refreshCredential);
+
+    await expect(transport.updateTracks!({ connectionId: "c1", tracks: [] })).resolves.toBeDefined();
+
+    expect(refreshCredential).toHaveBeenCalledTimes(1);
+    expect(tokens).toEqual(["Bearer old", "Bearer fresh"]);
+  });
+
+  it("fails with the second HTTP 403 and asks for a grant only once", async () => {
+    const refreshCredential = vi.fn(async () => "fresh");
+    const { transport, tokens } = refusing([403, 403], refreshCredential);
+
+    await expect(transport.updateTracks!({ connectionId: "c1", tracks: [] })).rejects.toMatchObject({ code: "signaling_failed", options: { status: 403 } });
+
+    expect(refreshCredential).toHaveBeenCalledTimes(1);
+    expect(tokens).toEqual(["Bearer old", "Bearer fresh"]);
+  });
+
+  it("does not re-grant for other statuses", async () => {
+    const refreshCredential = vi.fn(async () => "fresh");
+    const { transport, tokens } = refusing([401], refreshCredential);
+
+    await expect(transport.updateTracks!({ connectionId: "c1", tracks: [] })).rejects.toMatchObject({ options: { status: 401 } });
+
+    expect(refreshCredential).not.toHaveBeenCalled();
+    expect(tokens).toEqual(["Bearer old"]);
+  });
+});

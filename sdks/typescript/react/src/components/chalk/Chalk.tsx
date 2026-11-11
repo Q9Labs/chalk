@@ -13,7 +13,7 @@ import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../..
 import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
-import { CallDialog } from "../space-header/CallDetails";
+import { CallDialog } from "../space-header/CallDialog";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
@@ -52,10 +52,7 @@ type SpaceEventCallbacks = {
 };
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
-    readonly defaults?: {
-      readonly microphone?: boolean;
-      readonly camera?: boolean;
-    };
+    readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
@@ -369,7 +366,7 @@ function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((pr
 }
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();
-  return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
+  return { ...(displayName ? { displayName } : {}), ...props.defaults, microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
 }
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward participantJoined events to the current host callback; unsubscribe on replacement.

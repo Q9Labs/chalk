@@ -21,3 +21,11 @@ export function describeMediaCaptureError(cause: unknown) {
       return { code: "media_capture_failed", recoverable: true, message: "Media capture failed. Try again or enter with devices off." } as const;
   }
 }
+
+/** Chrome reports an operating-system refusal as a NotAllowedError whose message ends "by system". Other browsers give no such signal, so absence means unknown, not browser. */
+export function permissionBlockOf(cause: unknown): "system" | undefined {
+  for (let depth = 0, current = cause; depth < 4 && current instanceof Error; depth++, current = current.cause) {
+    if (current.name === "NotAllowedError" && /by system/i.test(current.message)) return "system";
+  }
+  return undefined;
+}

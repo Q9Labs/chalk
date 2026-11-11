@@ -1,14 +1,6 @@
 import { expect, it } from "vitest";
-import { opaqueAccessGrant } from "../space-client/core.test.helpers";
-import { parseParsedAccessGrant } from "./grant";
+import { ownSFUGrant } from "../space-client/core.test.helpers";
 import { mediaBootstrap } from "./media-bootstrap";
-
-function ownSFUGrant(capabilities: Record<string, boolean>) {
-  const grant: unknown = opaqueAccessGrant("own-sfu");
-  if (typeof grant !== "object" || grant === null || !("media" in grant) || typeof grant.media !== "object" || grant.media === null) throw new Error("Unexpected grant fixture");
-  const media = { ...grant.media, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref", iceServers: [], capabilities } };
-  return parseParsedAccessGrant({ ...grant, media });
-}
 
 it("carries the unified signaling capability from the grant into the media bootstrap", () => {
   const bootstrap = mediaBootstrap(ownSFUGrant({ serverLayerAdaptation: true, subscriptionState: true, iceRestart: true, unifiedSignaling: true }).media);
@@ -20,4 +12,20 @@ it("treats a grant from an API that predates unified signaling as not supporting
   const bootstrap = mediaBootstrap(ownSFUGrant({ serverLayerAdaptation: true, subscriptionState: true, iceRestart: true }).media);
 
   expect(bootstrap.capabilities).toMatchObject({ iceRestart: true, unifiedSignaling: false });
+});
+
+it.each(["https://direct.example.test", "https://direct.example.test/"])("carries the direct door %s from the grant into the media bootstrap as a bare origin", (advertised) => {
+  const bootstrap = mediaBootstrap(ownSFUGrant({ unifiedSignaling: true, directSignalingUrl: advertised }).media);
+
+  expect(bootstrap.capabilities?.directSignalingUrl).toBe("https://direct.example.test");
+});
+
+it.each(["http://direct.example.test", "https://direct.example.test/v1/sync", "https://user@direct.example.test", "direct.example.test", 7, null])("drops an advertised direct door that is not a bare https origin: %j", (advertised) => {
+  const bootstrap = mediaBootstrap(ownSFUGrant({ unifiedSignaling: true, directSignalingUrl: advertised }).media);
+
+  expect(bootstrap.capabilities).not.toHaveProperty("directSignalingUrl");
+});
+
+it("advertises no direct door when the grant has none", () => {
+  expect(mediaBootstrap(ownSFUGrant({ unifiedSignaling: true }).media).capabilities).not.toHaveProperty("directSignalingUrl");
 });

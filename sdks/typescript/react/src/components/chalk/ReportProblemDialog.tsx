@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import { chalkThemeStyle } from "../../theme";
-import { CallDialog } from "../space-header/CallDetails";
+import { CallDialog } from "../space-header/CallDialog";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import type { ChalkProps } from "./Chalk";
 

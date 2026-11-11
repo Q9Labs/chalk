@@ -8,8 +8,10 @@ import { generateVoice } from "./fixture.mjs";
 import { launchGuests, stats, limitCamera, restoreCamera, proveLayers, checkMediaProgress } from "./media.mjs";
 import { assertAgreement, playProofMedia } from "../web-proof/agreement.mjs";
 import { proveAudioDecoded } from "./audio-decode.mjs";
-import { check, command, mediaPlane, mediaProviders, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
+import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
+import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -39,7 +41,6 @@ export async function prepareIntegration(run, webhooks) {
 }
 // Recording runs only on Cloudflare, so the own SFU proves the call without a Capture.
 const recordable = mediaPlane === "cf_sfu";
-const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // A proof Space on `plane`. The public API refuses a request that names the own SFU, so the
 // proof names no plane: CHALK_PROOF_SPACE_ID_<PLANE> (for example CHALK_PROOF_SPACE_ID_CHALK_SFU)
 // reuses a Space an operator moved with media-settings, and otherwise the deployment or the
@@ -47,9 +48,8 @@ const manualPolicy = { recording: "manual", transcription: "on_demand" };
 // run that cannot get one stops at once with reason media-plane-config.
 export async function createSpace(run, plane = mediaPlane, policy = manualPolicy) {
   const pinName = pinnedSpaceVariable(plane, policy);
-  const pinned = pinName && process.env[pinName];
-  if (pinned) {
-    const existing = await run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`);
+  const existing = await pinnedSpace(run, plane, policy, pinName);
+  if (existing) {
     checkSpacePlane(existing, plane, pinName);
     checkSpacePolicy(existing, policy);
     await save(`${run.directory}/space.json`, existing);
@@ -71,6 +71,19 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
   await save(`${run.directory}/space.json`, space);
   return space;
 }
+// CHALK_PROOF_SPACE_BY_SLUG=true (Promote's own-SFU proof) uses the Space the own-sfu-spaces step checked and moved:
+// the pinned Space ID when an operator pinned one, otherwise the Space with the fixed slug (same resolver as the step).
+// Otherwise a Space ID variable reuses the Space an operator moved.
+async function pinnedSpace(run, plane, policy, pinName) {
+  const kind = ownSfuSpaceKind(policy);
+  if (plane === "chalk_sfu" && kind && process.env.CHALK_PROOF_SPACE_BY_SLUG === "true") {
+    const found = await findOwnSfuSpace(run.apiRequest, run.tenantPath, kind);
+    check(found, `The proof Space for ${pinName} or ${ownSfuSpaces[kind].slug} does not exist: run the own-sfu-spaces proof first`, "media-plane-config");
+    return found;
+  }
+  const pinned = pinName && process.env[pinName];
+  return pinned ? run.apiRequest("GET", `${run.tenantPath}/spaces/${pinned}`) : undefined;
+}
 function checkSpacePolicy(space, policy) {
   check(space.recording_policy === policy.recording, `A proof Space has Recording policy ${space.recording_policy}, not ${policy.recording}`, "media-plane-config");
   check(space.transcription_policy === policy.transcription, `A proof Space has Transcription policy ${space.transcription_policy}, not ${policy.transcription}`, "media-plane-config");
@@ -85,7 +98,7 @@ function pinnedSpaceVariable(plane, policy) {
   return undefined;
 }
 function checkSpacePlane(space, plane, pinName) {
-  const got = space.effective_media_plane ?? space.media_plane;
+  const got = spacePlane(space);
   check(got === plane, `A proof Space is on ${got}, not ${plane}: an operator sets the plane (CHALK_NEW_SPACE_MEDIA_PLANE, the Tenant default, or ${pinName ?? `CHALK_PROOF_SPACE_ID_${plane.toUpperCase()}`} for a Space moved with media-settings)`, "media-plane-config");
 }
 export function episodeEnd(run, path) {
@@ -112,8 +125,35 @@ export async function trackEpisode(run, space, episode) {
   run.ownership.episodes = [...(run.ownership.episodes ?? []), { space_id: space.id, id: episode.id }];
   await saveOwnership(run);
 }
+// A Space holds one live Episode, and a proof Space is shared with the run before it. The run holds the staging lease, so a live
+// Episode that carries another run's proof_run_id was left by a proof whose cleanup did not finish: end it. An Episode with no
+// proof_run_id belongs to someone else and is never ended; it only gets the wait below.
+async function endLeftoverEpisodes(run, space) {
+  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
+  for (const episode of await list(run.apiRequest, path, "episodes")) {
+    const owner = episode.metadata?.proof_run_id;
+    if (episode.status !== "active" || typeof owner !== "string" || owner === run.runId) continue;
+    console.log("Ending an Episode a finished proof run left live in the proof Space");
+    await requestEpisodeEnd(run.apiRequest, `${path}/${episode.id}`);
+  }
+}
+// An Episode still ending, or someone else's, makes Create Episode answer 409 episode.capacity_exceeded; wait up to 30 x 3 s for it.
+const spaceBusyPolls = 30;
+const spaceBusyPollMs = 3_000;
+async function createEpisodeWhenSpaceClears(run, space) {
+  for (let poll = 0; ; poll++) {
+    try {
+      return await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+    } catch (error) {
+      if (error.status !== 409 || error.apiCode !== "episode.capacity_exceeded") throw error;
+      if (poll === spaceBusyPolls) throw new ProofError("proof-space-busy", `The proof Space still has a live Episode after ${(spaceBusyPolls * spaceBusyPollMs) / 1000} seconds`);
+      await run.wait(spaceBusyPollMs);
+    }
+  }
+}
 export async function createEpisode(run, space, policy = manualPolicy) {
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  if (space.metadata?.proof_run_id !== run.runId) await endLeftoverEpisodes(run, space);
+  const episode = await createEpisodeWhenSpaceClears(run, space);
   await trackEpisode(run, space, episode);
   const ending = episodeEnd(run, `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`);
   await save(`${run.directory}/episode.json`, episode);
@@ -183,7 +223,7 @@ async function forceSwitch(run, pages, sample, receiveBefore) {
   console.log("Sender bandwidth restored; layer-switch evidence collected");
   return failure;
 }
-export function checkShareProgress(before, after) {
+function checkShareProgress(before, after) {
   const screens = after.filter((row) => row.source === "screen");
   const advancing = screens.some((row) => before.some((previous) => previous.id === row.id && previous.connection === row.connection && row.framesDecoded - previous.framesDecoded >= 2));
   check(advancing, "Screen-share decoding stalled during a ten-second observation window");
@@ -208,10 +248,7 @@ async function monitorShare(run, sample) {
   }
   return (Date.now() - started) / 1000;
 }
-async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
-  const share = await pages[0].context().newPage();
-  await share.goto(`${origin}/share`);
-  await pages[0].bringToFront();
+async function cameraShareWindow(run, pages, sample, forceLayerSwitch) {
   await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(true));
   await waitFor("screen share enabled", () => pages[0].evaluate(() => window.proofClient.getSnapshot().media.screenShare.state === "enabled"));
   console.log("Screen share enabled; holding for two minutes");
@@ -227,7 +264,6 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   const observed = await monitor;
   if (observed.error) throw observed.error;
   await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(false));
-  await share.close();
   return { seconds: observed.seconds, failure };
 }
 export function availableSource(run) {
@@ -278,7 +314,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
-  if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
+  if (cameraShare) share = await cameraShareWindow(run, pages, sample, forceLayerSwitch);
   else await shortRecordingWindow(run, guests, rejoin);
   console.log("Holding the real call through scheduled credential refresh and original expiry");
   await guests.waitForRefresh();

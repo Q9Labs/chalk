@@ -41,6 +41,7 @@ export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: (
         if (key === "c") action = latest.current?.onToggleChat;
         if (key === "p") action = latest.current?.onTogglePeople;
         if (key === "l") action = latest.current?.onToggleLayout;
+        if (key === "f") action = latest.current?.onToggleFullscreen;
       } else {
         if (key === "d") action = latest.current?.onToggleMute;
         if (key === "e") action = latest.current?.onToggleVideo;

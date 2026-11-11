@@ -23,7 +23,7 @@ describe("join with unavailable capture devices", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia, enumerateDevices: async () => (permitted ? [camera("one", "Front camera"), camera("two", "Back camera")] : [camera("", "")]) },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => (permitted ? [camera("one", "Front camera"), camera("two", "Back camera")] : [camera("", "")]) },
           createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }),
         },
       },
@@ -44,13 +44,40 @@ describe("join with unavailable capture devices", () => {
     }
   });
 
+  it("captures from the devices picked before joining and records them as the selection", async () => {
+    const platform = createCoreTestPlatform();
+    const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));
+    const selectSpeaker = vi.fn(async () => undefined);
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, selectSpeaker } } });
+    try {
+      await client.join({ microphone: true, camera: true, microphoneDeviceId: "mic-2", cameraDeviceId: "cam-2", speakerDeviceId: "speaker-2" });
+      expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: "mic-2" } }, video: { deviceId: { exact: "cam-2" } } }, expect.anything());
+      expect(selectSpeaker).toHaveBeenCalledWith("speaker-2");
+      expect(client.getSnapshot().media.selection).toMatchObject({ microphone: "mic-2", camera: "cam-2", speaker: "speaker-2" });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("joins with the system speaker when the runtime cannot select an output", async () => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([]) } } });
+    try {
+      await client.join({ microphone: false, camera: false, speakerDeviceId: "speaker-2" });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().media.selection.speaker).toBeNull();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("preserves devices switched off before leaving when rejoining with defaults", async () => {
     const platform = createCoreTestPlatform();
     const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));
     const target = async () => ({ operationId: "toggle", name: "set_microphone_enabled" as const, serverOutcome: "satisfied" as const, mediaPlaneOutcome: "satisfied" as const });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: target, setCameraEnabled: target }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: target, setCameraEnabled: target }) } },
     );
     try {
       await client.join();
@@ -93,7 +120,7 @@ describe("join with unavailable capture devices", () => {
     });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia }, createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), start }) } },
     );
     const errors: ClientFailure[] = [];
     client.on("error", ({ error }) => errors.push(error));
@@ -121,7 +148,7 @@ describe("join with unavailable capture devices", () => {
   it("keeps a single capture request when both devices work", async () => {
     const platform = createCoreTestPlatform();
     const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));
-    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia } } });
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia } } });
     const error = vi.fn();
     client.on("error", error);
     try {
@@ -143,7 +170,7 @@ describe("join with unavailable capture devices", () => {
     const previewStream = await getUserMedia({ audio: true, video: true });
     previewStream.getTracks().forEach((input) => input.stop());
     preview = false;
-    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia } } });
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia } } });
     try {
       await client.join();
       expect(client.getSnapshot().connection).toMatchObject({ status: "live", lastError: { code: "media.device_busy", recoverable: true } });
@@ -177,7 +204,7 @@ describe("join with media on", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => stream(tracks), enumerateDevices: async () => [] },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream(tracks), enumerateDevices: async () => [] },
           createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }),
         },
       },
@@ -225,7 +252,7 @@ describe("join with media on", () => {
     });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
     );
     try {
       await client.join({ microphone: true, camera: false });
@@ -252,7 +279,7 @@ describe("join with media on", () => {
     });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
     );
     try {
       await client.join({ microphone: true, camera: false });
@@ -277,7 +304,7 @@ describe("join with media on", () => {
     });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([microphone]), enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
     );
     try {
       await client.join({ microphone: true, camera: false });
@@ -308,7 +335,7 @@ describe("join with media on", () => {
     );
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled }) } },
     );
     try {
       await client.join({ microphone: true, camera: false });
@@ -335,7 +362,7 @@ describe("join with media on", () => {
     });
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess: async () => opaqueAccessGrant("test") },
-      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }) } },
+      { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, enumerateDevices: async () => [] }, createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled, setCameraEnabled }) } },
     );
     try {
       await client.join({ microphone: true, camera: true });

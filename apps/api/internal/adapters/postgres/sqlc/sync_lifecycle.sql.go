@@ -38,7 +38,7 @@ where
     )
     and episodes.id <> all($1::uuid[])
 order by episodes.deadline_at, episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit $2
 `
 
@@ -125,7 +125,7 @@ where episodes.status='active' and empty_window.empty_since is not null
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
     and episodes.id <> all($2::uuid[])
 order by episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit $3
 `
 
