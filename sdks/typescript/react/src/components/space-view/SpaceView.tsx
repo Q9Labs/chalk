@@ -1,5 +1,7 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { isDeviceAccessFailure } from "../device-access/model";
+import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
@@ -238,20 +240,27 @@ export function SpaceView({
   const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
-  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
-    try {
-      await command();
-      setCommandError(null);
-      setCommandSource(undefined);
-      setCommandAction(undefined);
-      setRetryCommand(undefined);
-    } catch (cause) {
-      setCommandError(commandFailure(cause));
-      setCommandSource(source);
-      setCommandAction(action);
-      setRetryCommand(() => command);
-    }
-  }, []);
+  const { store: deviceAccess, snapshot: deviceAccessSnapshot } = useDeviceAccess();
+  const runCommand = useCallback(
+    async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
+      try {
+        await command();
+        if (source && source !== "speaker") deviceAccess.clear(source);
+        setCommandError(null);
+        setCommandSource(undefined);
+        setCommandAction(undefined);
+        setRetryCommand(undefined);
+      } catch (cause) {
+        const failure = commandFailure(cause);
+        if (source && source !== "speaker") void deviceAccess.report(source, failure, () => runCommand(command, source, action));
+        setCommandError(failure);
+        setCommandSource(source);
+        setCommandAction(action);
+        setRetryCommand(() => command);
+      }
+    },
+    [deviceAccess],
+  );
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
@@ -265,7 +274,13 @@ export function SpaceView({
       onCommandError(commandFailure(cause), commandSource, commandSource, commandAction, retryCommand);
     }
   };
-  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource, externalCommandError != null ? externalCommandAction : commandAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  const shownFailure = typeof displayedCommandError === "object" ? displayedCommandError : null;
+  const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
+  // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
+  const mappedFailure =
+    externalCommandError == null && !deviceAccessSnapshot.unavailable && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource)
+      ? null
+      : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);
@@ -377,24 +392,26 @@ export function SpaceView({
             />
           }
           controls={
-            <ControlBar
-              density="comfortable"
-              layout={layout}
-              onLayoutChange={updateLayout}
-              shareUrl={effectiveShareUrl}
-              callLinkOpen={callLinkOpen ?? callLink.open}
-              onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
-              buttons={buttons}
-              activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-              onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-              onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-              onToggleWhiteboard={onToggleWhiteboard}
-              onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-              reactionsOpen={isReactionPickerOpen}
-              onCommandError={onCommandError}
-              onLeaveRequest={leaveCall}
-              onEndForEveryone={endCallForEveryone}
-            />
+            <DeviceAccessProvider value={deviceAccess}>
+              <ControlBar
+                density="comfortable"
+                layout={layout}
+                onLayoutChange={updateLayout}
+                shareUrl={effectiveShareUrl}
+                callLinkOpen={callLinkOpen ?? callLink.open}
+                onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
+                buttons={buttons}
+                activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+                onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+                onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+                onToggleWhiteboard={onToggleWhiteboard}
+                onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+                reactionsOpen={isReactionPickerOpen}
+                onCommandError={onCommandError}
+                onLeaveRequest={leaveCall}
+                onEndForEveryone={endCallForEveryone}
+              />
+            </DeviceAccessProvider>
           }
           stageOverlay={
             <>

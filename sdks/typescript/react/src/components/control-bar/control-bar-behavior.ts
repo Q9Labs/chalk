@@ -9,6 +9,9 @@ import { useCan, useCanDrawWhiteboard, useConnection, useChat, useMedia, usePart
 import { NO_DETECTED_DEVICES, watchMediaDevices } from "../../internal/media-devices";
 import { playSpeakerTestTone } from "../../internal/speaker-test";
 import { getParticipantThemeVariables, type ParticipantGradientPreference } from "../../utils/colorGenerator";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { useDeviceAccess } from "../device-access/useDeviceAccess";
+import type { DeviceKind } from "../device-access/model";
 
 export interface MediaDevice {
   deviceId: string;
@@ -33,6 +36,8 @@ export interface ControlBarSurfaceProps {
   captureCameraPreview?: () => Promise<CameraPreview>;
   microphoneWarning?: boolean;
   cameraWarning?: boolean;
+  /** A device the browser or the system refuses. Its dock button shows a ring and a badge and opens the access card. */
+  deviceAccess?: Partial<Record<DeviceKind, DeviceAccessControl>>;
   speakingWhileMuted?: boolean;
   noiseSuppression?: boolean;
   onNoiseSuppressionChange?: (enabled: boolean) => void;
@@ -204,6 +209,10 @@ interface ConnectedControlBarBehavior {
   readonly surfaceProps: ControlBarSurfaceProps;
   readonly commandError: ClientFailure | null;
   readonly mediaNotice?: string;
+  /** The device being requested right now. The browser may be showing its own permission prompt for it. */
+  readonly requestingDevice: "microphone" | "camera" | undefined;
+  /** The access card could not load, so a refused device shows its failure the old way. */
+  readonly cardUnavailable: boolean;
   readonly commandSource?: MediaCommandSource;
   readonly commandAction?: MediaCommandAction;
 }
@@ -234,6 +243,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const [commandError, setCommandError] = useState<ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
+  const access = useDeviceAccess();
 
   const run = useCallback(
     async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
@@ -243,8 +253,10 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
       props.onCommandError?.(null, source === "speaker" ? undefined : source, source, action);
       try {
         await command();
+        if (source && source !== "speaker") access.store.clear(source);
       } catch (cause) {
         const failure = commandFailure(cause);
+        if (source && source !== "speaker") void access.store.report(source, failure, () => run(command, source, action));
         if (!props.onCommandError) {
           setCommandError(failure);
           setCommandSource(source);
@@ -253,7 +265,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         props.onCommandError?.(failure, source === "speaker" ? undefined : source, source, action, command);
       }
     },
-    [props.onCommandError],
+    [props.onCommandError, access.store],
   );
 
   const leave = useCallback(() => {
@@ -280,10 +292,17 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const videoInputDevices: MediaDevice[] = media.devices.cameras.map((device) => ({ ...device, kind: "videoinput" }));
   const toggleMicrophone = microphoneTarget === undefined ? undefined : () => void run(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop");
   const toggleCamera = cameraTarget === undefined ? undefined : () => void run(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop");
+  const deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>> = {};
+  for (const device of ["microphone", "camera", "screen"] as const) {
+    const issue = access.snapshot.issues[device];
+    if (!issue || media.local[device].state === "enabled") continue;
+    deviceAccess[device] = { ...issue, onOpenChange: (open) => access.store.setOpen(device, open), onRetry: () => void access.store.retry(device) };
+  }
   const surfaceProps: ControlBarSurfaceProps = {
     ...props,
     detectDevices: false,
     buttons,
+    deviceAccess,
     microphoneTrack: media.local.microphone.track,
     cameraTrack: media.local.camera.track,
     captureCameraPreview: client.media.captureCameraPreview,
@@ -347,11 +366,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onEndForEveryone: props.onEndForEveryone,
   };
 
-  return { surfaceProps, commandError, commandSource, commandAction, mediaNotice: failedMediaNotice(media.local) };
+  const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
 }
 
-function failedMediaNotice(media: ReturnType<typeof useMedia>["local"]): string | undefined {
-  if (media.microphone.state === "failed") return "Microphone didn’t reach the call. Turn it on to try again.";
-  if (media.camera.state === "failed") return "Camera didn’t reach the call. Turn it on to try again.";
+/** A device with an access card already says what is wrong, so it gets no second notice. */
+function failedMediaNotice(media: ReturnType<typeof useMedia>["local"], deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>>): string | undefined {
+  if (media.microphone.state === "failed" && !deviceAccess.microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
+  if (media.camera.state === "failed" && !deviceAccess.camera) return "Camera didn’t reach the call. Turn it on to try again.";
   return undefined;
 }

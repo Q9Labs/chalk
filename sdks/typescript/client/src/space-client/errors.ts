@@ -2,6 +2,7 @@ import { Data } from "effect";
 import { ChalkChatFileError } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
+import { permissionBlockOf } from "../media/capture-error";
 import { V1SyncError } from "../sync/v1-error";
 import type { ClientFailure, ErrorCode } from "./types";
 
@@ -64,14 +65,7 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
   if (cause instanceof SpaceClientError) return cause;
   const chatFileError = normalizeChatFileError(cause);
   if (chatFileError) return chatFileError;
-  if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) {
-    return new SpaceClientError({
-      code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
-      recoverable: cause.recoverable,
-      message: cause.message,
-      ...(cause.sync ? { sync: cause.sync } : {}),
-    });
-  }
+  if (cause instanceof ConnectionLifecycleFailure || isConnectionError(cause)) return connectionFailure(cause);
   if (cause instanceof V1SyncError) {
     const policy = SYNC_FAILURES.get(cause.code);
     if (policy && (!policy.scope || policy.scope === scope)) return new SpaceClientError(policy.failure);
@@ -83,6 +77,17 @@ export function normalizeClientError(cause: unknown, fallback: ErrorCode = "clie
   return new SpaceClientError({ code: fallback, recoverable: false, message });
 }
 
+function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError): SpaceClientError {
+  const permissionBlock = permissionBlockOf(cause);
+  return new SpaceClientError({
+    code: connectionErrorCode(cause.code, cause instanceof ConnectionLifecycleFailure ? null : cause.action),
+    recoverable: cause.recoverable,
+    message: cause.message,
+    ...(permissionBlock ? { permissionBlock } : {}),
+    ...(cause.sync ? { sync: cause.sync } : {}),
+  });
+}
+
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {
   if (!(cause instanceof ChalkChatFileError) || cause.code !== "unavailable") return null;
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
@@ -92,7 +97,7 @@ function normalizeChatFileError(cause: unknown): SpaceClientError | null {
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.sync ? { sync: error.sync } : {}) });
+  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}), ...(error.sync ? { sync: error.sync } : {}) });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

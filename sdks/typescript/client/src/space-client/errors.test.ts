@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ConnectionError } from "../connection/types";
 import { V1SyncError } from "../sync/v1-error";
 import { normalizeClientError } from "./errors";
 import { createV1SyncClient, InMemoryV1PendingTargetStore } from "../sync";
@@ -28,5 +29,13 @@ describe("Sync reaction confirmation", () => {
   });
   it("does not classify unrelated exhausted retries as media failures", () => {
     expect(normalizeClientError(new V1SyncError("command retries exhausted", "retry_exhausted"))).toMatchObject({ code: "client.internal_error", recoverable: false });
+  });
+});
+
+describe("capture permission denial", () => {
+  const denied = (message: string) => new ConnectionError({ code: "permission_denied", action: "setMicrophoneEnabled", recoverable: true, message: "Denied" }, { cause: new DOMException(message, "NotAllowedError") });
+  it("tells a refusal by the operating system from one by the browser", () => {
+    expect(normalizeClientError(denied("Permission denied by system"))).toMatchObject({ code: "media.permission_denied", permissionBlock: "system" });
+    expect(normalizeClientError(denied("Permission denied")).permissionBlock).toBeUndefined();
   });
 });
