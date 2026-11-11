@@ -87,6 +87,13 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("set transaction bounds", err)
 	}
 	queries := sqlc.New(transaction)
+	// Sync locks the control row before anything of the Episode's; the operation insert below needs it again
+	// through its foreign key, so take it first rather than after the recording rows.
+	if _, err := queries.LockSyncEpisodeControlForUpdate(ctx, sqlc.LockSyncEpisodeControlForUpdateParams{TenantID: ids.tenantID, SpaceID: ids.spaceID, EpisodeID: ids.episodeID}); errors.Is(err, pgx.ErrNoRows) {
+		return recordinglifecycle.Publication{}, fmt.Errorf("lock live capture authority: %w", recordinglifecycle.ErrAuthorityMismatch)
+	} else if err != nil {
+		return recordinglifecycle.Publication{}, recordingLifecycleRepositoryError("lock episode control", err)
+	}
 	authorityRow, err := queries.LockRecordingCaptureLifecycleAuthority(ctx, sqlc.LockRecordingCaptureLifecycleAuthorityParams{
 		JobID: ids.jobID, AttemptCount: int32(authority.AttemptCount), FencingGeneration: authority.FencingGeneration,
 		CaptureEpoch: authority.CaptureEpoch, EnvelopeDigest: authority.EnvelopeDigest, LeaseToken: authority.LeaseToken,

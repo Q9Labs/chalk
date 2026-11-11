@@ -24,7 +24,7 @@ export const bounds = {
   /** A grant's successor must be requested within this long after the grant's refresh point (its expiry less the refresh window). */
   refreshLateMs: 30_000,
   sampleIntervalMs: 2000,
-  /** The Chalk SFU node refuses an SDP offer over 64 KiB (HTTP 400). A signaling request this large means the offer is about to hit that cliff, so fail while the call still works. */
+  /** The default three-guest proof bar; larger calls use the SDK's 176 KiB signaling budget below the node's 256 KiB offer cap. */
   signalBytes: 48 * 1024,
 };
 
@@ -49,11 +49,11 @@ function offOn(atMs, guest, kind) {
 }
 
 /**
- * The toggles around one access refresh due at `dueMs`: guests 1 and 2 (indexes 0 and 1) toggle 8 s before and 2 to 6 s after it,
+ * The guest toggles its microphone before and camera after one access refresh due at `dueMs`,
  * so a refresh within 2 s of `dueMs` has a toggle on either side within the bound.
  */
-export function refreshToggles(dueMs) {
-  return [...offOn(dueMs - 8000, 0, "microphone"), ...offOn(dueMs - 4000, 1, "camera"), ...offOn(dueMs + 2000, 1, "microphone"), ...offOn(dueMs - 2000, 0, "camera")];
+export function refreshToggles(dueMs, guest = 0) {
+  return [...offOn(dueMs - 8000, guest, "microphone"), ...offOn(dueMs + 2000, guest, "camera")];
 }
 
 /**
@@ -63,22 +63,24 @@ export function refreshToggles(dueMs) {
  */
 export function planRefreshToggles({ dues, nowMs, planned, durationMs = callDurationMs }) {
   const toggles = [];
-  for (const { key, dueMs } of dues) {
+  for (const { key, guest = 0, dueMs } of dues) {
     if (planned.has(key) || dueMs <= nowMs + 9000 || dueMs + 10_000 >= durationMs) continue;
     planned.add(key);
-    toggles.push(...refreshToggles(dueMs));
+    toggles.push(...refreshToggles(dueMs, guest));
   }
   return toggles;
 }
 
 /**
  * The toggles of one call if every guest renews its grant at the predicted time, as `{ atMs, guest, kind, enabled }` sorted by time from the
- * start of the call. Guest 3 only listens and speaks. A real call plans the refresh toggles from each guest's current grant instead
- * (long-call.mjs), because a media-connection replacement issues a new grant and moves the next refresh.
+ * start of the call. Every guest toggles around each scheduled refresh. A real call plans the refresh toggles from each guest's current grant instead
+ * (long-call.mjs), because a media-connection replacement issues a new grant and moves that guest's next refresh.
  */
-export function toggleSchedule({ durationMs = callDurationMs, firstRefreshMs = refreshIntervalMs } = {}) {
+export function toggleSchedule({ durationMs = callDurationMs, firstRefreshMs = refreshIntervalMs, guestCount = 3 } = {}) {
   const toggles = baselineToggles();
-  for (let boundary = firstRefreshMs; boundary + 10_000 < durationMs; boundary += refreshIntervalMs) toggles.push(...refreshToggles(boundary));
+  for (let boundary = firstRefreshMs; boundary + 10_000 < durationMs; boundary += refreshIntervalMs) {
+    for (let guest = 0; guest < guestCount; guest++) toggles.push(...refreshToggles(boundary, guest));
+  }
   return toggles.filter((toggle) => toggle.atMs + 1000 < durationMs).sort((a, b) => a.atMs - b.atMs);
 }
 
@@ -229,6 +231,8 @@ function hearingFailures({ toggles, hearings, guests }) {
 export function judgeLongCall({ ticks, participants, refreshes, toggles, hearings, startedAtMs, signalBytes = [], budgetReplacements = [] }) {
   const failures = [];
   const guests = participants.length;
+  const signalLimitBytes = guests > 3 ? 176 * 1024 : bounds.signalBytes;
+  const signalBytesByGuest = Array.from({ length: guests }, (_, guest) => signalBytes[guest] ?? 0);
   const label = (guest) => `Guest ${guest + 1}`;
   for (let guest = 0; guest < guests; guest++) {
     const own = ticks.map((tick) => ({ ...tick.guests[guest], t: tick.t }));
@@ -241,8 +245,8 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
       failures.push(`${label(guest)} had no connected peer connection for more than ${seconds(bounds.disconnectedMs)} s (${span(stretch)}); a closed one was not replaced`);
     }
     failures.push(...leftConnectedFailures(own, label(guest), ticks[0].t, budgetReplacements[guest] ?? []));
-    if ((signalBytes[guest] ?? 0) > bounds.signalBytes)
-      failures.push(`${label(guest)} sent a signaling request of ${signalBytes[guest]} bytes, over the ${bounds.signalBytes} byte limit that keeps its offer clear of the node's 64 KiB cap; the offer grows with every media section the connection has closed`);
+    if (signalBytesByGuest[guest] > signalLimitBytes)
+      failures.push(`${label(guest)} sent a signaling request of ${signalBytesByGuest[guest]} bytes, over the ${signalLimitBytes} byte limit that keeps its offer clear of the node's 256 KiB cap; the offer grows with every media section the connection has closed`);
     for (const stretch of stalls(own, (sample) => ({ on: sample.mic, bytes: sample.outAudio }), bounds.outboundStallMs)) {
       failures.push(`${label(guest)} sent no audio for ${seconds(stretch.toMs - stretch.fromMs)} s (${span(stretch)}) while its microphone showed on`);
     }
@@ -293,12 +297,15 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
       durationSeconds: seconds((ticks.at(-1)?.t ?? 0) - (ticks[0]?.t ?? 0)),
       refreshesSeen: fewest,
       toggles: toggles.length,
-      maxSignalBytes: Math.max(0, ...signalBytes),
+      maxSignalBytes: Math.max(0, ...signalBytesByGuest),
+      signalBytesByGuest,
+      signalLimitBytes,
       failureCount: failures.length,
     },
   };
 }
 
-export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, maxSignalBytes, failureCount }) {
-  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, largest signaling request ${maxSignalBytes} bytes, ${failureCount} failures`;
+export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, maxSignalBytes, signalBytesByGuest, signalLimitBytes, failureCount }) {
+  const perGuest = signalBytesByGuest.map((bytes, guest) => `G${guest + 1} ${bytes}/${signalLimitBytes}`).join(", ");
+  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, signaling requests (bytes/bar) ${perGuest} (max ${maxSignalBytes}), ${failureCount} failures`;
 }
