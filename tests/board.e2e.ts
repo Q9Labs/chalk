@@ -337,11 +337,18 @@ async function resizeAndReconnect(a: Page, b: Page, follower: BrowserContext) {
   expect(await b.locator(".chalk-board").getAttribute("data-proof-zooms")).toBe("100%");
 }
 
+// A phone has no Zoom in button because it pinches; the board also zooms on the plus key from any control inside it.
+async function zoomIn(page: Page) {
+  const button = page.getByRole("button", { name: "Zoom in", exact: true });
+  if (await button.count()) await button.click();
+  else await page.getByRole("button", { name: /^Zoom \d+%/ }).press("+");
+}
+
 async function checkManualZoom(a: Page, b: Page) {
   await a.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect.poll(() => a.evaluate(zoomLabel)).toBe("125%");
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("100%");
-  await b.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await zoomIn(b);
   await expect.poll(() => b.evaluate(zoomLabel)).toBe("125%");
   await b.getByLabel("More options for BoardA", { exact: true }).click();
   await b.getByRole("menuitem", { name: "Follow", exact: true }).click();
