@@ -29,6 +29,7 @@ const { values } = parseArgs({
     shard: { type: "string" },
     "leak-journey": { type: "string" },
     "leak-repeats": { type: "string", default: "1" },
+    "journey-concurrency": { type: "string", default: "3" },
     diagnostics: { type: "boolean" },
     shots: { type: "string", default: process.env.CALL_PERFORMANCE_SHOTS },
     "record-baseline": { type: "boolean" },
@@ -134,6 +135,7 @@ try {
   if (!values["bundle-only"] && !values["timing-only"]) {
     const repeats = Number(values["leak-repeats"]);
     if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Invalid leak repeats");
+    if (!Number.isInteger(Number(values["journey-concurrency"])) || Number(values["journey-concurrency"]) < 1) throw new Error("Invalid journey concurrency");
     report.leaks = await checkLeaks({
       browser,
       origin,
@@ -141,6 +143,7 @@ try {
       directory: resolve(root, "artifacts/call-leaks"),
       boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
       selfTest: values["self-test"] && (!shard || shard.selfTest),
+      journeyConcurrency: Number(values["journey-concurrency"]),
       repeats,
       journeys: shard?.journeys ?? (values["leak-journey"] ? [values["leak-journey"]] : undefined),
     });

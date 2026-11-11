@@ -1,3 +1,4 @@
+import { parseParsedAccessGrant } from "../access/grant";
 import type { V1MediaPause } from "../sync/v1-types";
 import type { AccessGrant } from "./index";
 import type { ConnectionDependencies, ConnectionMediaClient, ConnectionSyncClient } from "../connection/dependencies";
@@ -85,7 +86,7 @@ export function createCoreTestPlatform(): CoreTestPlatform {
       getEpisodeStatus: async () => "active",
       cancelPendingAdmission: async () => true,
       clock: { now: () => Date.now(), setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>) },
-      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [] },
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, getDisplayMedia: async () => ({ getTracks: () => [] }) as unknown as MediaStream, enumerateDevices: async () => [], releaseTrack: (track) => track.stop() },
       createMediaClient: () => media,
       createSyncClient: () => sync,
     },
@@ -113,6 +114,13 @@ export function opaqueAccessGrant(value: string | number, suffix = String(value)
     sync: { token: credential("chalk-sync", suffix), expires_at: expiresAt },
     media: { token: credential("chalk-media", suffix), expires_at: expiresAt, provider: "cloudflare_sfu", client_payload: { connectionId, stunServer: "stun:stun.cloudflare.com:3478" } },
   } as unknown as AccessGrant;
+}
+/** A parsed grant for the own SFU, with the capabilities object exactly as the API would send it. */
+export function ownSFUGrant(capabilities: Record<string, unknown>) {
+  const grant: unknown = opaqueAccessGrant("own-sfu");
+  if (typeof grant !== "object" || grant === null || !("media" in grant) || typeof grant.media !== "object" || grant.media === null) throw new Error("Unexpected grant fixture");
+  const media = { ...grant.media, provider: "chalk_sfu", client_payload: { connectionId: "connection-1", episodeRef: "episode-ref", iceServers: [], capabilities } };
+  return parseParsedAccessGrant({ ...grant, media });
 }
 function credential(audience: "chalk-sync" | "chalk-media", suffix: string): string {
   const encode = (value: unknown) => btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");

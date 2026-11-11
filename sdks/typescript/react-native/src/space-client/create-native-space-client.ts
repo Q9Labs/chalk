@@ -20,6 +20,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { releaseNativeTrack } from "../media/native-release-track";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
@@ -75,6 +76,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
         }
       },
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
+      releaseTrack: releaseNativeTrack,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
     createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),
@@ -140,10 +142,14 @@ function createMediaClient(apiBaseURL: string, input: MediaFactoryInput, fetch: 
   });
   return createSFUConnectionMediaClient(client);
 }
-function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
+/** The mute path needs `setLocalSourceIntent` and `closeForcedLocalPublication`: without them every mute takes the forced-close path and fails on the bundled transport. */
+export function createSFUConnectionMediaClient(client: CloudflareSFUClient): NativeMediaClient {
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
+    pauseLocalCapture: client.pauseLocalCapture.bind(client),
+    setLocalSourceIntent: client.setLocalSourceIntent.bind(client),
+    closeForcedLocalPublication: client.closeForcedLocalPublication.bind(client),
     observeLocalPublications: client.observeLocalPublications.bind(client),
     observeRemotePublications: client.observeRemotePublications.bind(client),
     start: client.start.bind(client),

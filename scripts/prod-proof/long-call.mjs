@@ -4,7 +4,10 @@ import { createEpisode, createSpace } from "./proofs.mjs";
 import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
-const guestCount = 3;
+const guestCount = Number(process.env.LONG_CALL_GUESTS ?? 3);
+if (!Number.isInteger(guestCount) || guestCount < 3 || guestCount > 12) {
+  throw new Error("LONG_CALL_GUESTS must be an integer from 3 to 12");
+}
 const sampleTimeoutMs = 5000;
 
 /** Runs in the page: what one guest reports about its call. Self-contained, because Playwright serializes it. */
@@ -37,7 +40,7 @@ const sampleGuest = (page) => Promise.race([page.evaluate(browserSample), new Pr
 
 /** The plan `pnpm prod:proof long-call --dry-run` prints; it needs no configuration and opens no connection. */
 export function longCallPlan() {
-  const schedule = toggleSchedule();
+  const schedule = toggleSchedule({ guestCount });
   return [
     `Long call: ${guestCount} guests on ${mediaPlane}, ${callDurationMs / 1000}s (the longer of 10 minutes and two ${refreshIntervalMs / 1000 + refreshWindowMs / 1000}s access lifetimes)`,
     `Access refresh every ${refreshIntervalMs / 1000}s after a grant; the schedule below assumes the first refresh at +${refreshIntervalMs / 1000}s of the call`,
@@ -78,7 +81,7 @@ export async function longCallProof(run, receiver) {
     const planned = new Set();
     while (Date.now() - startedAtMs < callDurationMs) {
       const now = Date.now() - startedAtMs;
-      pending.push(...planRefreshToggles({ dues: guests.refreshes.map((refresh) => ({ key: `${refresh.guest}:${refresh.currentExpiry}`, dueMs: dueMs(refresh) })), nowMs: now, planned }));
+      pending.push(...planRefreshToggles({ dues: guests.refreshes.map((refresh) => ({ key: `${refresh.guest}:${refresh.currentExpiry}`, guest: refresh.guest - 1, dueMs: dueMs(refresh) })), nowMs: now, planned }));
       pending.sort((a, b) => a.atMs - b.atMs);
       while (pending.length && pending[0].atMs <= now) {
         const entry = pending.shift();
@@ -97,11 +100,23 @@ export async function longCallProof(run, receiver) {
   })();
   await Promise.all([sampling, toggling]);
   const heard = await Promise.all(hearings);
+  const networkEvents = guests.networks.flat();
+  const signalingRequestFailures = networkEvents.filter((event) => event.type === "request-failed").length;
+  const signaling400Responses = networkEvents.filter((event) => event.type === "signaling-response" && event.status === 400).length;
+  const budgetReplacementEvidence = guests.budgetReplacements.map((atMs, guest) => ({ guest: guest + 1, count: atMs.length, causes: atMs.map(() => "section_budget"), atMs }));
+  const hearingVerdicts = heard.flatMap((hearing) => hearing.verdicts);
+  const hearingPasses = hearingVerdicts.filter((verdict) => verdict.pass).length;
+  if (signalingRequestFailures) failures.push(`${signalingRequestFailures} signaling request(s) failed`);
+  if (signaling400Responses) failures.push(`${signaling400Responses} signaling request(s) returned HTTP 400`);
 
-  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs });
+  const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs, signalBytes: guests.signalBytes, budgetReplacements: guests.budgetReplacements });
   failures.push(...judged.failures);
-  const evidence = { ...judged.evidence, failureCount: failures.length };
+  const evidence = { ...judged.evidence, signalRequestFailures, signaling400Responses, budgetReplacements: budgetReplacementEvidence, hearingPasses, hearingFailures: hearingVerdicts.length - hearingPasses, failureCount: failures.length };
   console.log(evidenceLine(evidence));
+  console.log(`Signaling requests: ${signalingRequestFailures} failed, ${signaling400Responses} HTTP 400 responses`);
+  const replacements = budgetReplacementEvidence.filter((entry) => entry.count).map((entry) => `G${entry.guest} ${entry.count} (${[...new Set(entry.causes)].join(", ")})`);
+  console.log(`Budget replacements: ${replacements.length ? replacements.join("; ") : "none"}`);
+  console.log(`hearAfterUnmute: ${hearingPasses}/${hearingVerdicts.length} listener-speaker decodes passed`);
   for (const note of judged.notes) console.log(`Long call note: ${note}`);
   for (const failure of failures) console.log(`Long call failure: ${failure}`);
   await save(`${run.directory}/long-call.json`, { evidence, failures, toggles: ran, hearings: heard, ticks });

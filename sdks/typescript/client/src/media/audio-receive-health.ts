@@ -231,12 +231,10 @@ export class AudioReceiveHealth {
       snapshot.element_state = observation.element.paused ? "paused" : "playing";
       snapshot.play_result = observation.result;
     }
-    if (entry.pull !== "pull_succeeded" || track.readyState !== "live") return snapshot;
-    snapshot.receive_state = "track_received";
-    if (!flowing) return snapshot;
-    snapshot.receive_state = "bytes_flowing";
-    if (!observation) return snapshot;
-    snapshot.receive_state = observation.playing ? "playing" : "element_bound";
+    if (track.readyState !== "live") return snapshot;
+    // Playback of a live track with growing bytes outranks the pull record: a pull stage that was never recorded must not hide audio the element is playing.
+    if (entry.pull !== "pull_succeeded" && !(flowing && observation?.playing === true)) return snapshot;
+    snapshot.receive_state = receivedStage(flowing, observation);
     return snapshot;
   }
 
@@ -331,4 +329,10 @@ function playResult(result: unknown): PlayResult {
 
 function increment(counts: Counts, state: ReceiveState | "projection_off"): void {
   counts[state] = Math.min(10000, (counts[state] ?? 0) + 1);
+}
+
+function receivedStage(flowing: boolean, observation: ReturnType<typeof boundElement>): Snapshot["receive_state"] {
+  if (!flowing) return "track_received";
+  if (!observation) return "bytes_flowing";
+  return observation.playing ? "playing" : "element_bound";
 }

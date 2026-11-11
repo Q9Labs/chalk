@@ -126,9 +126,6 @@ async function toggle(call, guest, source) {
 }
 
 async function screenShare(call, guest) {
-  const share = await call.pages[guest].context().newPage();
-  await share.goto(`${call.origin}/share`);
-  await call.pages[guest].bringToFront();
   await call.pages[guest].evaluate(() => window.proofClient.media.setScreenShareEnabled(true));
   await waitFor("screen share enabled", () => call.pages[guest].evaluate(() => window.proofClient.getSnapshot().media.screenShare.state === "enabled"), 30_000, 500);
   call.state[call.participants[guest]].screen = true;
@@ -137,7 +134,6 @@ async function screenShare(call, guest) {
   await sleep(3000);
   await call.pages[guest].evaluate(() => window.proofClient.media.setScreenShareEnabled(false));
   call.state[call.participants[guest]].screen = false;
-  await share.close();
   call.record.actions.push({ kind: "screen-share", ms });
 }
 
@@ -284,7 +280,6 @@ async function muteForGood(call, guest) {
 
 export async function runCall(ctx, spec) {
   const call = new Call(spec);
-  call.origin = ctx.origin;
   call.pulse = ctx.pulse;
   call.run = { ...ctx.run, directory: join(ctx.run.directory, "calls", spec.id), resources: [] };
   await mkdir(call.run.directory, { recursive: true, mode: 0o700 });

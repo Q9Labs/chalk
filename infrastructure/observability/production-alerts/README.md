@@ -6,7 +6,11 @@ holds transcription Lambda and deployment logs; it does not cover all these
 failures. No hosted Grafana was found on the managed runtime host.
 
 Use Axiom's custom webhook notifier with `discord-body.tmpl` aimed directly at the Discord webhook. Three grouped monitors fit the
-current monitor allowance. Keep the live organization, dataset names, monitor
+current monitor allowance. When `ONCALL_WEBHOOK_URL` is set, `provision.py` also reconciles a second
+notifier, a free Slack-type one aimed at the Q9 Oncall webhook, and attaches both notifiers to every monitor
+(the plan has no custom-webhook feature for a new notifier). The on-call guide for the Chalk SFU alerts,
+including the DigitalOcean node-down, CPU, memory and disk alerts that `do-monitoring.sh` sets, is
+[sfu-runbook.md](sfu-runbook.md). Keep the live organization, dataset names, monitor
 IDs and Discord webhook in private configuration, never in this public repo.
 
 | Rule                          | Production source                        | Evaluation                                                                                                                                                       |
@@ -23,6 +27,7 @@ IDs and Discord webhook in private configuration, never in this public repo.
 | Own SFU retirement debt stuck | Collector read of `sfu_retirement_debts` | Oldest unpaid debt above 15 minutes in at least 4 distinct minute samples in 5 minutes; latest sample still above and newer than 90 seconds                      |
 | TURN credentials fail         | Axiom API logs                           | At least 3 `cloudflare_turn.credentials_failed` or `chalk_sfu.turn_credentials_failed` events in 5 minutes                                                       |
 | Own SFU recovery refused      | Axiom API logs                           | `chalk_sfu.recovery_refused` logged in at least 3 distinct minutes of the last 5                                                                                 |
+| New class left the Chalk SFU  | Axiom API logs                           | At least one `chalk_sfu.overflow` event in the last 2 minutes; the alert names the provider (`cf_sfu` moved, `chalk_sfu` refused) and the placement reason       |
 
 The Capture and Export rules are disjoint: a Render failure only counts as Export. API errors are unsampled in the
 production `errors` request-log mode. Sync exports the same named events as spans;
@@ -69,6 +74,33 @@ next evaluation, regardless of earlier failed samples. Missing evidence is not
 proof of continued unreadiness; the freshness monitor now requires six rules.
 Install the updated collector and monitor definitions together. The independent
 uptime Worker remains separate and may report individual failed checks.
+
+### Certificate expiry
+
+The collector also emits one global `certificate-expiry` row per run when it has a
+certificate to read: the API's SFU client certificate (`CHALK_ALERT_SFU_CLIENT_CERT`, a
+file), each node's server certificate (read from a TLS handshake with the same probe as
+`sfu-readiness`), and the direct door's certificate when `CHALK_ALERT_DIRECT_DOOR_URL`
+(`https://<door host>`, private configuration) is set. With none of these set it emits
+no row. The row is 1 when the soonest certificate has 21 days or fewer left, has
+expired, or the door cannot finish a TLS handshake; otherwise 0. The 21-day and the
+7-day text differ, so the grouped monitor notifies twice, once at each stage. An SFU
+node that cannot be reached is the `sfu-readiness` row's concern, so an unreachable
+node adds nothing here.
+
+The row needs no monitor change: the grouped monitor already matches every rule that is
+not excluded by name. The own SFU certificates are issued by `features/media/sfu/deploy/certs`. The server
+certificate lasts 180 days: renew it with `certs <env> server`, then `deploy`. The API's
+SFU client certificate lasts 365 days and is a separate target: renew it with
+`certs <env> api <key file> <current certificate>`, then install it where the API and
+the collector read it. Each handshake verifies normally against the configured CA (the system roots for the door) and the name. A chain that fails only
+because a certificate has expired reads as expired, using that certificate's NotAfter; a chain
+that fails for any other reason (unknown authority, wrong name) raises an
+`untrusted` finding instead of hiding an expiry. A certificate's expiry is the earliest NotAfter along its verified chain: the pinned CA counts for the SFU, a system root does not for the door, so a CA that ends before its leaf sets the date and the finding names the CA, not the server certificate. Renewing the server certificate does not help then. Rotate the service CA instead: move the old `ca.crt` aside and run `certs <env> ca` (the script refuses while one exists, because a new CA orphans every certificate it issued), then reissue the server, API and operator certificates from it and give every node and the API the new client CA and CA file. An intermediate named for the direct door is Let's Encrypt's to rotate; check that Caddy still renews. The checks run in parallel on their
+own clock (3 s per node, 8 s in all), so a slow node never delays another alert row.
+The direct door's certificate is issued and renewed by its Caddy proxy
+over TLS-ALPN-01 on port 443; a warning there means renewal is failing or the chain does not verify, so check the
+proxy journal.
 
 ### Own SFU readiness
 
@@ -269,9 +301,11 @@ the SDK/API emit accepted reports with that trigger and diagnostic event.
 ## Reconcile the native monitors
 
 Load these values privately: `AXIOM_TOKEN` (monitor/notifier management),
-`AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, and `DISCORD_WEBHOOK_URL`.
+`AXIOM_ORG_ID`, `LOG_DATASET`, `TRACE_DATASET`, and `DISCORD_WEBHOOK_URL`, plus
+`ONCALL_WEBHOOK_URL` to create or update the Oncall notifier. With the URL unset, an Oncall notifier that
+already exists stays attached to every monitor; only `--detach-oncall` removes it (see the delivery test below).
 The Discord URL lives in 1Password vault `dev`, item
-**Chalk production alerts Discord webhook**.
+**Chalk production alerts Discord webhook**; the Oncall URL is the item **Oncall webhook URL**.
 
 ```sh
 python3 infrastructure/observability/production-alerts/provision.py
@@ -306,11 +340,15 @@ and existing telemetry health checks, not by a new claim of complete telemetry.
 
 ## Prove delivery and reset
 
-All rules share one route: Axiom monitor → custom webhook notifier → Discord.
+All Axiom rules share one route: Axiom monitor → custom webhook notifier → Discord, and, when attached, Axiom monitor → Slack-type notifier → Oncall.
 A direct webhook POST proves the endpoint only, not this route.
 
 1. With production monitors enabled, run `collector --test`. This emits a dedicated
-   `delivery-test` group, with no database write or induced user failure.
+   `delivery-test` group, with no database write or induced user failure. The test
+   reaches every notifier on the monitor, so it would also start an Oncall run. To keep
+   Oncall out, first run `provision.py --apply --detach-oncall` (an apply without the
+   Oncall URL leaves the notifier attached), and run `provision.py --apply` with
+   `ONCALL_WEBHOOK_URL` again after step 3, so production paging comes back.
 2. Wait for the native monitor evaluation using its history/completion evidence.
    Confirm the **TEST: Chalk alert delivery** message in the actual
    Discord channel. Record the monitor history and channel/message evidence privately.

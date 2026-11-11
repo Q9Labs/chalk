@@ -228,7 +228,7 @@ describe("camera effects ownership", () => {
           complete = resolve;
         }),
     );
-    const client = captureClient(createCoreTestPlatform(), { mediaDevices: { getUserMedia: (_constraints, signal) => processCameraStream(stream([source]), signal) } });
+    const client = captureClient(createCoreTestPlatform(), { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: (_constraints, signal) => processCameraStream(stream([source]), signal) } });
     try {
       await client.join({ microphone: false, camera: false });
       const preview = client.media.captureCameraPreview().then(

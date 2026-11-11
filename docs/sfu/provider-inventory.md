@@ -59,13 +59,16 @@ removal still touches.
 
 **Spaces** exclude archived ones, counted separately in `archived`:
 
-- `by_selection` is what the Space selects: its own `media_plane`
-  (`space_*`), or the Tenant default when its value is blank
-  (`tenant_default_*`), or `none`. A `space_cf_sfu` cell is an explicit
-  Space-level override.
+- `by_selection` is what the Space selects: its own plane (`space_*`: its
+  `media_plane_setting`, else a stored `chalk_sfu`, which the API still honors for
+  Spaces stored before the setting existed), or the Tenant default when it has
+  none (`tenant_default_*`), or `none`. A `space_cf_sfu` cell is an explicit
+  Space-level override. The inventory does not read `CHALK_SFU_NEW_EPISODES`: with
+  the kill switch off every new Episode binds to Cloudflare whatever these cells say.
 - `by_new_episode_provider` is what the API would bind a new Episode to.
   `cf_sfu_by_allowlist` is a Space that selects `chalk_sfu` but is outside the
-  allowlist. `none` is no provider selected or media disabled.
+  allowlist. A `chalk_sfu` Space inside the allowlist under a tenant-managed
+  Tenant counts as `cf_sfu`, as live resolution does. `none` is no provider selected or media disabled.
   `unresolvable` is a Space the API refuses to bind: unknown provider, invalid
   Tenant settings, a tenant-managed Tenant selecting `chalk_sfu` (it has no
   tenant-managed mode), or tenant-managed settings with no Cloudflare SFU

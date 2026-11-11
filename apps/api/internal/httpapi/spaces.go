@@ -58,6 +58,8 @@ type spaceResponse struct {
 	TenantID                      string                           `json:"tenant_id"`
 	Slug                          string                           `json:"slug"`
 	MediaPlane                    string                           `json:"media_plane"`
+	MediaPlaneSetting             *string                          `json:"media_plane_setting"`
+	EffectiveMediaPlane           *string                          `json:"effective_media_plane"`
 	RecordingPolicy               artifactpolicy.RecordingMode     `json:"recording_policy"`
 	TranscriptionPolicy           artifactpolicy.TranscriptionMode `json:"transcription_policy"`
 	Metadata                      any                              `json:"metadata"`
@@ -166,14 +168,14 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		if err != nil {
 			return spaceResponse{}, err
 		}
-		return newSpaceResponse(space), nil
+		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -200,7 +202,7 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 		if err != nil {
 			return spaceListResponse{}, err
 		}
-		return newSpaceListResponse(list)
+		return newSpaceListResponse(ctx, service, request.TenantID, list)
 	}).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
@@ -222,7 +224,7 @@ func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoin
 		if err != nil {
 			return spaceResponse{}, err
 		}
-		return newSpaceResponse(space), nil
+		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
@@ -248,14 +250,14 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		if err != nil {
 			return spaceResponse{}, err
 		}
-		return newSpaceResponse(space), nil
+		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
+		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
 		MapErrors(spaceEndpointAPIError)
 }
 
@@ -272,7 +274,7 @@ func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		if err != nil {
 			return spaceResponse{}, err
 		}
-		return newSpaceResponse(space), nil
+		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
@@ -291,7 +293,7 @@ func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		if err != nil {
 			return spaceResponse{}, err
 		}
-		return newSpaceResponse(space), nil
+		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
@@ -414,6 +416,8 @@ func spaceServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidSpaceSlug, true
 	case errors.Is(err, spaces.ErrInvalidMediaPlane):
 		return apiErrorInvalidMediaPlane, true
+	case errors.Is(err, spaces.ErrMediaPlaneNotPermitted):
+		return apiErrorSpaceMediaPlaneNotPermitted, true
 	case errors.Is(err, spaces.ErrInvalidAdmissionPolicy),
 		errors.Is(err, spaces.ErrInvalidEpisodeDuration),
 		errors.Is(err, spaces.ErrInvalidEpisodeCeiling),
@@ -436,17 +440,54 @@ func spaceServiceAPIError(err error) (APIError, bool) {
 	}
 }
 
-func newSpaceListResponse(list spaces.SpaceList) (spaceListResponse, error) {
+// SpacePlaneService reports the plane a new Episode would start on in each Space.
+type SpacePlaneService interface {
+	EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID, list []spaces.Space) ([]*spaces.MediaPlaneProvider, error)
+}
+
+func newSpaceListResponse(ctx context.Context, service SpaceService, tenantID utilities.ID, list spaces.SpaceList) (spaceListResponse, error) {
 	page, err := newPaginationResponse(list.Page)
 	if err != nil {
 		return spaceListResponse{}, err
 	}
-
-	response := spaceListResponse{Spaces: make([]spaceResponse, 0, len(list.Spaces)), Pagination: page}
-	for _, space := range list.Spaces {
-		response.Spaces = append(response.Spaces, newSpaceResponse(space))
+	responses, err := newSpaceResponses(ctx, service, tenantID, list.Spaces)
+	if err != nil {
+		return spaceListResponse{}, err
 	}
-	return response, nil
+	return spaceListResponse{Spaces: responses, Pagination: page}, nil
+}
+
+func singleSpaceResponse(ctx context.Context, service SpaceService, tenantID utilities.ID, space spaces.Space) (spaceResponse, error) {
+	responses, err := newSpaceResponses(ctx, service, tenantID, []spaces.Space{space})
+	if err != nil {
+		return spaceResponse{}, err
+	}
+	return responses[0], nil
+}
+
+func newSpaceResponses(ctx context.Context, service SpaceService, tenantID utilities.ID, list []spaces.Space) ([]spaceResponse, error) {
+	effective := make([]*spaces.MediaPlaneProvider, len(list))
+	if planes, ok := service.(SpacePlaneService); ok {
+		var err error
+		if effective, err = planes.EffectiveMediaPlanes(ctx, tenantID, list); err != nil {
+			return nil, err
+		}
+	}
+	responses := make([]spaceResponse, 0, len(list))
+	for i, space := range list {
+		response := newSpaceResponse(space)
+		response.EffectiveMediaPlane = planeString(effective[i])
+		responses = append(responses, response)
+	}
+	return responses, nil
+}
+
+func planeString(plane *spaces.MediaPlaneProvider) *string {
+	if plane == nil {
+		return nil
+	}
+	value := string(*plane)
+	return &value
 }
 
 func newSpaceResponse(space spaces.Space) spaceResponse {
@@ -460,6 +501,7 @@ func newSpaceResponse(space spaces.Space) spaceResponse {
 		TenantID:                      space.TenantID.String(),
 		Slug:                          space.Slug,
 		MediaPlane:                    space.MediaPlane,
+		MediaPlaneSetting:             planeString(space.MediaPlaneSetting),
 		RecordingPolicy:               space.RecordingPolicy,
 		TranscriptionPolicy:           space.TranscriptionPolicy,
 		TranscriptLanguage:            transcriptLanguageString(space.TranscriptLanguage),

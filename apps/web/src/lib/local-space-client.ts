@@ -18,6 +18,7 @@ export function createLocalSpaceClient({ credential, getAccess, connectionAccess
     {
       ...(syncURL ? { syncUrl: syncURL } : {}),
       ...(credential.syncDirectURL ? { syncDirectUrl: credential.syncDirectURL } : {}),
+      ...(credential.directPath ? { directPath: credential.directPath } : {}),
       ...(connectionAccess ? { connectionAccess } : {}),
     },
   );

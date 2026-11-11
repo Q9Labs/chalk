@@ -46,6 +46,23 @@ H264 with more than 512 variable frame intervals keeps every decoded frame's
 timestamp in both copy and re-encode paths. Worker and API tests check accepted-failure evidence, trace correlation,
 and redaction; rejected failure reports do not emit accepted-failure evidence.
 
+### Recording stopped callbacks
+
+The API emits `recording.capture_stopped_callback` with `outcome=accepted` only
+when the stopped callback service succeeds, even when successful HTTP request
+logs are disabled. It includes the operational `job_id`, `attempt_count`,
+`capture_epoch`, and `duration_ms` for the API service call. Acceptance does not
+prove the worker received the response or the recording finished processing.
+
+If the worker gives up, its existing `recording.capture_attempt_failed` report
+preserves `stage=capture_stopped`, `outcome=returned` or `outcome=timed_out`, the
+safe error class, HTTP status, API error code, `callback_attempts`, and
+`callback_elapsed_ms`. The elapsed time includes callback calls and retry waits,
+not local media shutdown. These fields survive the failure-detail sanitizer;
+unknown text still does not. Join the two event types by operational job and
+worker attempt, not by a Tenant or Episode identifier. A missing failure report
+is not proof of success: the worker may have lost its lease or its API connection.
+
 ### Follow a user's session
 
 A session is one run of a Chalk app on one device: a browser tab, or an app launch
@@ -220,7 +237,7 @@ Every API request span (`journey.phase.http`) carries `ingress=direct` or
 `ingress=tunnel`, as Sync's `sync.websocket.handshake` does. `direct` means the
 host's TLS proxy marked the request with `X-Chalk-Ingress: direct`, and only a
 trusted proxy peer (`CHALK_API_TRUSTED_PROXY_CIDRS`) can set the mark; everything
-else is `tunnel`. Split signalling latency and errors by it. A direct request
+else is `tunnel`. A client can also send the mark through the Tunnel, because the Tunnel peer is trusted: that request is classified `direct` and only subjects itself to the direct bound, so treat the attribute as client-influenceable and read it with the proxy's own request counts. Split signalling latency and errors by it. A direct request
 over the per-IP bound (300 in 10 seconds, before any credential check) answers
 429 with `Retry-After` and counts as the `direct.ingress.ip` policy. The change
 adds no journey-ledger event: no lifecycle transition changes, and a join under
@@ -573,7 +590,9 @@ at warn level with `event` `chalk_sfu.overflow`, the `provider` the Episode went
 when it moved to Cloudflare, `chalk_sfu` when overflow is off and it was refused) and the
 bounded `placement_reason`. The line carries no Tenant, Space, Episode or node identity, adds
 no journey-ledger event, and like the counter it counts decisions, so a request whose creation
-rolls back still logs once. Axiom monitors read this line, not the counter. A refusal with
+rolls back still logs once. Axiom monitors read this line, not the counter: the `sfu-overflow` branch of the first production
+monitor alerts on any `chalk_sfu.overflow` line in the last two minutes (see the
+[SFU runbook](../infrastructure/observability/production-alerts/sfu-runbook.md)). A refusal with
 overflow off also counts toward the API 5xx alert.
 
 `CHALK_SFU_CLOUDFLARE_OVERFLOW=false` turns Cloudflare overflow off: a new Episode that
@@ -781,7 +800,8 @@ Retirement causes distinguish `user_pause`, `moderation_pause`,
 `publish_failure`, `enable_failure`, `projection_mismatch` and the legacy
 `forced_pause` fallback.
 Other replacement causes are `local_signaling_failure`,
-`remote_signaling_failure`, `dormant_connection`, `receive_stalled` and `access_refresh` for an
+`remote_signaling_failure`, `dormant_connection`, `receive_stalled`, `section_budget` (the connection
+held too many closed media sections for the node's offer size limit) and `access_refresh` for an
 externally refreshed binding. Capture interruptions detach microphone/camera
 senders and retain their publication for short interruptions. Fresh user consent
 within 20 seconds reattaches capture without replacing a healthy session. Longer

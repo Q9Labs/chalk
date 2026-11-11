@@ -4,6 +4,7 @@
 //   CHALK_PROOF_MEDIA_PLANE=chalk_sfu \
 //   CHALK_CANARY_FAULT_DOWN='sudo iptables -I OUTPUT -p udp -d <media address> -j DROP' \
 //   CHALK_CANARY_FAULT_UP='sudo iptables -D OUTPUT -p udp -d <media address> -j DROP' \
+//   CHALK_CANARY_FAULT_STATUS (optional) prints what the block dropped, for a failed stall check
 //   node scripts/prod-proof/sfu-canary.mjs [--joins 20] [--faults 10] [--fault-seconds 5]
 //
 // Run it once per provider with the same flags and the same machine, so the two
@@ -31,7 +32,7 @@ import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests, stats } from "./media.mjs";
 import { proveAudioDecoded, proveSilenceFrom } from "./audio-decode.mjs";
 import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
-import { grew, rendering, stalled, summarize } from "./sfu-canary-criteria.mjs";
+import { grew, rendering, stalled, stallEvidence, summarize } from "./sfu-canary-criteria.mjs";
 import { installRenderProbe, renderEventMs } from "./render-probe.mjs";
 
 const options = parseArgs({
@@ -52,6 +53,7 @@ const pollMs = 500;
 const stallProbeMs = 1500;
 const faultDown = process.env.CHALK_CANARY_FAULT_DOWN;
 const faultUp = process.env.CHALK_CANARY_FAULT_UP;
+const faultStatus = process.env.CHALK_CANARY_FAULT_STATUS;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const shell = (script) => command("sh", ["-c", script]);
 
@@ -73,7 +75,7 @@ async function microphoneState(page) {
 // openCall records the Episode's owner in `owned` before any guest launches, so a failed setup can still end it.
 async function openCall(run, receiver, owned) {
   const space = process.env.CHALK_CANARY_SPACE_ID ? await run.apiRequest("GET", `${run.tenantPath}/spaces/${process.env.CHALK_CANARY_SPACE_ID}`) : await createSpace(run);
-  check(space.media_plane === mediaPlane, `Space uses ${space.media_plane}, not ${mediaPlane}`);
+  check((space.effective_media_plane ?? space.media_plane) === mediaPlane, `Space uses ${space.effective_media_plane ?? space.media_plane}, not ${mediaPlane}`);
   await save(`${run.directory}/space.json`, space);
   const episodePath = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const episode = await run.apiRequest("POST", episodePath, { metadata: { proof_run_id: run.runId } });
@@ -105,7 +107,10 @@ async function faultRound(pages, muted) {
     await sleep(faultMs - stallProbeMs);
     const before = await stats(pages);
     await sleep(stallProbeMs);
-    check(stalled(await stats(pages), before), "The fault did not interrupt rendered media");
+    const after = await stats(pages);
+    // The optional status command reports what the block dropped, so a stall that never happened shows whether the rule matched the media path.
+    const dropped = faultStatus ? (await shell(faultStatus)).trim() : "";
+    check(stalled(after, before), `The fault did not interrupt rendered media (${muted ? "muted" : "open"} round; block rule: ${dropped || "none"}; ${JSON.stringify(stallEvidence(after, before))})`);
   } finally {
     // Recovery counts from the start of the restore command, which may keep running after the path is back.
     restoredAt = performance.now();

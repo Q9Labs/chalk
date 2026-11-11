@@ -96,6 +96,17 @@ type MediaTrack struct {
 	rid      string
 	remote   *webrtc.TrackRemote
 	receiver *webrtc.RTPReceiver
+	boundAt  time.Time
+}
+
+// BoundAt is when OnTrack bound this track, which Pion does as the first RTP
+// packet arrives. A reader that starts later can anchor the track's clock here
+// instead of at its own first read.
+func (t *MediaTrack) BoundAt() time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.boundAt
 }
 
 // CaptureTrack returns the identity registered before SDP was applied.
@@ -710,7 +721,7 @@ func (p *Peer) bindTrack(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceive
 		p.signalLocked()
 		return
 	}
-	p.tracks[mid] = &MediaTrack{identity: identity, mid: captureplane.ProviderReference(mid), rid: remote.RID(), remote: remote, receiver: receiver}
+	p.tracks[mid] = &MediaTrack{identity: identity, mid: captureplane.ProviderReference(mid), rid: remote.RID(), remote: remote, receiver: receiver, boundAt: time.Now()}
 	p.signalLocked()
 }
 

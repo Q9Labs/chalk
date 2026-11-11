@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -48,4 +48,34 @@ test("a connection that keeps resetting still fails cleanup after three tries", 
     /Remote cleanup failed/,
   );
   assert.equal(calls, 3);
+});
+
+test("cleanup ends an Episode the run created, and deletes its Transcripts, in a Space it does not own", async () => {
+  const directory = await scratch();
+  await writeFile(join(directory, "ownership.json"), JSON.stringify({ episodes: [{ space_id: "pinned", id: "e1" }] }));
+  const calls = [];
+  let ended = false;
+  const fake = async (url, init = {}) => {
+    const { pathname } = new URL(url);
+    calls.push(`${init.method ?? "GET"} ${pathname}`);
+    if (pathname.endsWith("/episodes/e1/end")) {
+      ended = true;
+      return Response.json({});
+    }
+    if (pathname.endsWith("/episodes/e1")) return Response.json({ id: "e1", status: ended ? "ended" : "active" });
+    if (pathname.endsWith("/transcripts")) {
+      return Response.json({
+        transcripts: [
+          { id: "t-own", episode_id: "e1", status: "completed" },
+          { id: "t-other", episode_id: "e9", status: "completed" },
+        ],
+        pagination: { next_cursor: "" },
+      });
+    }
+    return emptyListing();
+  };
+  await withFetch(fake, () => cleanupByRunId(config, "run-pinned", directory));
+  assert.ok(calls.includes("POST /v1/tenants/tenant-1/spaces/pinned/episodes/e1/end"));
+  assert.ok(calls.includes("DELETE /v1/tenants/tenant-1/transcripts/t-own"));
+  assert.ok(!calls.includes("DELETE /v1/tenants/tenant-1/transcripts/t-other"));
 });

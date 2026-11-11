@@ -16,7 +16,7 @@ The module is `github.com/q9labs/chalk/features/media/sfu`. It never imports `ap
   - `POST /v1/sessions/{id}/tracks/close` force-closes tracks by MID. Closing an absent MID succeeds.
   - `POST /v1/sessions/{id}/inspect` lists the session's tracks.
     A session or publisher outside the caller's Tenant and Episode reads as gone.
-  - An offer is checked before Pion sees it: at most 64 KiB, audio and video sections only, and every section it adds must belong to a track of the request. Tracks that would exceed the publication limit fail the whole request with 429. A section without Opus (audio) or VP8 (video) gets a per-track `invalid_track` error. A session holds at most four times its publication plus subscription limit in media sections over its life, because Pion keeps stopped sections.
+  - An offer is checked before Pion sees it: at most 256 KiB, audio and video sections only, and every section it adds must belong to a track of the request. Tracks that would exceed the publication limit fail the whole request with 429. A section without Opus (audio) or VP8 (video) gets a per-track `invalid_track` error. A session holds at most four times its publication plus subscription limit in media sections over its life, because Pion keeps stopped sections.
   - A delayed create from an older generation stays refused after the newer session closes. The node remembers the highest generation per Participant, for up to 16384 Participants. When the table is full it drops the oldest fence of a Participant with no live session, and it never drops a live session's fence; if every fence is live, a create for a new Participant gets 429. A refused create never drops a fence.
 - **M2 additions**:
   - Every mutation takes an `operationId`. The session remembers the digest and the stored response of its last 256 operations, so a retry returns the first result and the same ID with another body fails with 409. The API adapter generates one ID per logical call and reuses it on its HTTP retries.
@@ -107,7 +107,7 @@ go run ./cmd/sfu
 | `SFU_MAX_SUBSCRIPTIONS_PER_SESSION`     | `32`            | 1 to 128.                                                             |
 | `SFU_MAX_CAPTURES_PER_EPISODE`          | `2`             | 0 to 8. 0 turns capture sessions off.                                 |
 | `SFU_MAX_CAPTURE_SUBSCRIPTIONS`         | `64`            | 1 to 128. Tracks one capture session pulls.                           |
-| `SFU_MAX_REQUEST_BYTES`                 | `262144`        | 4096 to 1048576.                                                      |
+| `SFU_MAX_REQUEST_BYTES`                 | `393216`        | 4096 to 1048576. Keep above 1.5 times the offer cap.                  |
 | `SFU_PACKET_BUDGET`                     | `16000`         | Packets/s budget; `deploy` sets `22000` on 1 vCPU and `36000` on 2.   |
 | `SFU_AUDIO_STREAM_COST`                 | `50`            | Reserved packets/s of one audio stream.                               |
 | `SFU_SCREEN_STREAM_COST`                | `210`           | Reserved packets/s of one screen share.                               |

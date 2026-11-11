@@ -38,7 +38,7 @@ insert into tenants (
 )
 ON CONFLICT (created_by_service_id, external_id) DO UPDATE
     SET external_id = tenants.external_id
-returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
+returning id, name, created_by_service_id, external_id, default_media_plane, default_media_plane_approved, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), seeded as (
     insert into tenant_artifact_policies (tenant_id)
@@ -61,6 +61,7 @@ select
     inserted.created_by_service_id,
     inserted.external_id,
     inserted.default_media_plane,
+    inserted.default_media_plane_approved,
     inserted.media_plane_provider_config,
     inserted.storage_provider_config,
     inserted.cors_allowed_origins,
@@ -99,6 +100,7 @@ type CreateTenantRow struct {
 	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
 	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
+	DefaultMediaPlaneApproved  bool               `json:"default_media_plane_approved"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
@@ -136,6 +138,7 @@ func (q *Queries) CreateTenant(ctx context.Context, arg CreateTenantParams) (Cre
 		&i.CreatedByServiceID,
 		&i.ExternalID,
 		&i.DefaultMediaPlane,
+		&i.DefaultMediaPlaneApproved,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
 		&i.CorsAllowedOrigins,
@@ -179,6 +182,7 @@ select
     tenants.created_by_service_id,
     tenants.external_id,
     tenants.default_media_plane,
+    tenants.default_media_plane_approved,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
@@ -205,6 +209,7 @@ type GetTenantRow struct {
 	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
 	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
+	DefaultMediaPlaneApproved  bool               `json:"default_media_plane_approved"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
@@ -231,6 +236,7 @@ func (q *Queries) GetTenant(ctx context.Context, id pgtype.UUID) (GetTenantRow, 
 		&i.CreatedByServiceID,
 		&i.ExternalID,
 		&i.DefaultMediaPlane,
+		&i.DefaultMediaPlaneApproved,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
 		&i.CorsAllowedOrigins,
@@ -270,6 +276,7 @@ select
     tenants.created_by_service_id,
     tenants.external_id,
     tenants.default_media_plane,
+    tenants.default_media_plane_approved,
     tenants.media_plane_provider_config,
     tenants.storage_provider_config,
     tenants.cors_allowed_origins,
@@ -314,6 +321,7 @@ type ListTenantsRow struct {
 	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
 	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
+	DefaultMediaPlaneApproved  bool               `json:"default_media_plane_approved"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
@@ -352,6 +360,7 @@ func (q *Queries) ListTenants(ctx context.Context, arg ListTenantsParams) ([]Lis
 			&i.CreatedByServiceID,
 			&i.ExternalID,
 			&i.DefaultMediaPlane,
+			&i.DefaultMediaPlaneApproved,
 			&i.MediaPlaneProviderConfig,
 			&i.StorageProviderConfig,
 			&i.CorsAllowedOrigins,
@@ -394,56 +403,60 @@ set
         when $5::boolean then $6::text
         else default_media_plane
     end,
+    default_media_plane_approved = case
+        when $5::boolean then $7::boolean
+        else default_media_plane_approved
+    end,
     media_plane_provider_config = case
-        when $7::boolean then $8::jsonb
+        when $8::boolean then $9::jsonb
         else media_plane_provider_config
     end,
     storage_provider_config = case
-        when $9::boolean then $10::jsonb
+        when $10::boolean then $11::jsonb
         else storage_provider_config
     end,
     cors_allowed_origins = case
-        when $11::boolean then $12::text[]
+        when $12::boolean then $13::text[]
         else cors_allowed_origins
     end,
     logo_key = case
-        when $13::boolean then $14::text
+        when $14::boolean then $15::text
         else logo_key
     end,
     website = case
-        when $15::boolean then $16::text
+        when $16::boolean then $17::text
         else website
     end,
     updated_at = now()
-where id = $17
-returning id, name, created_by_service_id, external_id, default_media_plane, media_plane_provider_config, storage_provider_config,
+where id = $18
+returning id, name, created_by_service_id, external_id, default_media_plane, default_media_plane_approved, media_plane_provider_config, storage_provider_config,
     cors_allowed_origins, logo_key, website, recording_render_mode, updated_at, created_at
 ), updated_policy as (
 update tenant_artifact_policies
 set
-    transcript_language = case when $18::boolean then $19::text else transcript_language end,
+    transcript_language = case when $19::boolean then $20::text else transcript_language end,
     transcription_ceiling = case
-        when $20::boolean then $21::text
+        when $21::boolean then $22::text
         else transcription_ceiling
     end,
     transcription_default_mode = case
-        when $22::boolean then $23::text
+        when $23::boolean then $24::text
         else transcription_default_mode
     end,
     provider_policy_version = case
-        when $24::boolean then $25::text
+        when $25::boolean then $26::text
         else provider_policy_version
     end,
     recording_retention_seconds = case
-        when $26::boolean then $27::bigint
+        when $27::boolean then $28::bigint
         else recording_retention_seconds
     end,
     transcript_retention_seconds = case
-        when $28::boolean then $29::bigint
+        when $29::boolean then $30::bigint
         else transcript_retention_seconds
     end,
     source_window_seconds = case
-        when $30::boolean then $31::bigint
+        when $31::boolean then $32::bigint
         else source_window_seconds
     end,
     updated_at = now()
@@ -456,6 +469,7 @@ select
     updated_tenant.created_by_service_id,
     updated_tenant.external_id,
     updated_tenant.default_media_plane,
+    updated_tenant.default_media_plane_approved,
     updated_tenant.media_plane_provider_config,
     updated_tenant.storage_provider_config,
     updated_tenant.cors_allowed_origins,
@@ -482,6 +496,7 @@ type UpdateTenantParams struct {
 	Name                          string      `json:"name"`
 	DefaultMediaPlaneSet          bool        `json:"default_media_plane_set"`
 	DefaultMediaPlane             pgtype.Text `json:"default_media_plane"`
+	DefaultMediaPlaneApproved     bool        `json:"default_media_plane_approved"`
 	MediaPlaneProviderConfigSet   bool        `json:"media_plane_provider_config_set"`
 	MediaPlaneProviderConfig      []byte      `json:"media_plane_provider_config"`
 	StorageProviderConfigSet      bool        `json:"storage_provider_config_set"`
@@ -515,6 +530,7 @@ type UpdateTenantRow struct {
 	CreatedByServiceID         pgtype.Text        `json:"created_by_service_id"`
 	ExternalID                 pgtype.Text        `json:"external_id"`
 	DefaultMediaPlane          pgtype.Text        `json:"default_media_plane"`
+	DefaultMediaPlaneApproved  bool               `json:"default_media_plane_approved"`
 	MediaPlaneProviderConfig   []byte             `json:"media_plane_provider_config"`
 	StorageProviderConfig      []byte             `json:"storage_provider_config"`
 	CorsAllowedOrigins         []string           `json:"cors_allowed_origins"`
@@ -540,6 +556,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		arg.Name,
 		arg.DefaultMediaPlaneSet,
 		arg.DefaultMediaPlane,
+		arg.DefaultMediaPlaneApproved,
 		arg.MediaPlaneProviderConfigSet,
 		arg.MediaPlaneProviderConfig,
 		arg.StorageProviderConfigSet,
@@ -573,6 +590,7 @@ func (q *Queries) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (Upd
 		&i.CreatedByServiceID,
 		&i.ExternalID,
 		&i.DefaultMediaPlane,
+		&i.DefaultMediaPlaneApproved,
 		&i.MediaPlaneProviderConfig,
 		&i.StorageProviderConfig,
 		&i.CorsAllowedOrigins,

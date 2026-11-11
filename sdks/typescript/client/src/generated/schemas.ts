@@ -362,6 +362,7 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
         "dormant_connection",
         "access_refresh",
         "receive_stalled",
+        "section_budget",
       ]),
     ),
     session_description: Schema.optional(
@@ -1367,10 +1368,12 @@ export const SpaceSchema = /* @__PURE__ */ (() =>
     created_at: DateTimeStringSchema,
     created_by_user_id: Schema.NullOr(UserIdSchema),
     default_episode_duration_seconds: Schema.Number,
+    effective_media_plane: Schema.NullOr(Schema.String),
     id: SpaceIdSchema,
     linger_window_seconds: Schema.Number,
     maximum_episode_duration_seconds: Schema.Number,
     media_plane: Schema.String,
+    media_plane_setting: Schema.NullOr(Schema.String),
     metadata: Schema.Unknown,
     name: Schema.String,
     recording_policy: Schema.String,
@@ -2386,6 +2389,7 @@ export const AddCloudflareSFUTracksQueryParamsSchema = /* @__PURE__ */ (() =>
         "dormant_connection",
         "access_refresh",
         "receive_stalled",
+        "section_budget",
       ]),
     ),
   }))();
@@ -5663,6 +5667,25 @@ export const SpaceInvalidMediaPlaneErrorSchema = SpaceInvalidMediaPlaneErrorWire
   }),
 );
 
+export class SpaceMediaPlaneNotPermittedError extends Schema.TaggedErrorClass<SpaceMediaPlaneNotPermittedError>()("SpaceMediaPlaneNotPermittedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("space.media_plane_not_permitted"),
+    message: Schema.String,
+  }),
+}) {}
+export const SpaceMediaPlaneNotPermittedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("space.media_plane_not_permitted"),
+    message: Schema.String,
+  }),
+});
+export const SpaceMediaPlaneNotPermittedErrorSchema = SpaceMediaPlaneNotPermittedErrorWireSchema.pipe(
+  Schema.decodeTo(SpaceMediaPlaneNotPermittedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "SpaceMediaPlaneNotPermittedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
 export class SpaceNotFoundError extends Schema.TaggedErrorClass<SpaceNotFoundError>()("SpaceNotFoundError", {
   error: Schema.Struct({
     code: Schema.Literal("space.not_found"),
@@ -5887,6 +5910,25 @@ export const TenantLiveEpisodeLimitReachedErrorWireSchema = Schema.Struct({
 export const TenantLiveEpisodeLimitReachedErrorSchema = TenantLiveEpisodeLimitReachedErrorWireSchema.pipe(
   Schema.decodeTo(TenantLiveEpisodeLimitReachedError, {
     decode: SchemaGetter.transform((wire) => ({ _tag: "TenantLiveEpisodeLimitReachedError", ...wire })),
+    encode: SchemaGetter.transform((error) => ({ error: error.error })),
+  }),
+);
+
+export class TenantMediaPlaneNotPermittedError extends Schema.TaggedErrorClass<TenantMediaPlaneNotPermittedError>()("TenantMediaPlaneNotPermittedError", {
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.media_plane_not_permitted"),
+    message: Schema.String,
+  }),
+}) {}
+export const TenantMediaPlaneNotPermittedErrorWireSchema = Schema.Struct({
+  error: Schema.Struct({
+    code: Schema.Literal("tenant.media_plane_not_permitted"),
+    message: Schema.String,
+  }),
+});
+export const TenantMediaPlaneNotPermittedErrorSchema = TenantMediaPlaneNotPermittedErrorWireSchema.pipe(
+  Schema.decodeTo(TenantMediaPlaneNotPermittedError, {
+    decode: SchemaGetter.transform((wire) => ({ _tag: "TenantMediaPlaneNotPermittedError", ...wire })),
     encode: SchemaGetter.transform((error) => ({ error: error.error })),
   }),
 );
@@ -6682,6 +6724,7 @@ export const CreateSpaceErrorSchema = Schema.Union([
   ServiceUnavailableErrorSchema,
   SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
+  SpaceMediaPlaneNotPermittedErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
 ]);
@@ -6698,6 +6741,7 @@ export const CreateTenantErrorSchema = Schema.Union([
   TenantInvalidCorsOriginErrorSchema,
   TenantInvalidFieldErrorSchema,
   TenantInvalidNameErrorSchema,
+  TenantMediaPlaneNotPermittedErrorSchema,
 ]);
 export type CreateTenantError = typeof CreateTenantErrorSchema.Type;
 
@@ -7662,6 +7706,7 @@ export const UpdateSpaceErrorSchema = Schema.Union([
   SpaceInvalidArtifactPolicyErrorSchema,
   SpaceInvalidIdErrorSchema,
   SpaceInvalidMediaPlaneErrorSchema,
+  SpaceMediaPlaneNotPermittedErrorSchema,
   SpaceNotFoundErrorSchema,
   SpaceSlugConflictErrorSchema,
   TenantInvalidIdErrorSchema,
@@ -7699,6 +7744,7 @@ export const UpdateTenantErrorSchema = Schema.Union([
   TenantInvalidFieldErrorSchema,
   TenantInvalidIdErrorSchema,
   TenantInvalidNameErrorSchema,
+  TenantMediaPlaneNotPermittedErrorSchema,
   TenantNotFoundErrorSchema,
 ]);
 export type UpdateTenantError = typeof UpdateTenantErrorSchema.Type;

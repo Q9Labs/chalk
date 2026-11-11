@@ -39,7 +39,10 @@ function endingTrack(source: "microphone" | "camera", id: string) {
 describe("media capture ownership", () => {
   it("stops microphone capture superseded by Off, before disposal", async () => {
     const { platform, track, capture, release } = heldCapture();
-    const client = capturedClient(platform, track, { mediaDevices: { getUserMedia: capture }, sync: { setMicrophoneEnabled: async () => ({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) } });
+    const client = capturedClient(platform, track, {
+      mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture },
+      sync: { setMicrophoneEnabled: async () => ({ operationId: "off", name: "set_microphone_enabled", serverOutcome: "satisfied", mediaPlaneOutcome: "satisfied" }) },
+    });
     try {
       await client.join({ microphone: false, camera: false });
       const on = client.media.setMicrophoneEnabled(true).catch((error: unknown) => error);
@@ -61,7 +64,7 @@ describe("media capture ownership", () => {
       prepared.add(source);
     });
     const client = capturedClient(platform, track, {
-      mediaDevices: { getUserMedia: capture },
+      mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture },
       media: {
         prepareLocalTrack,
         start: async (stream) => {
@@ -111,7 +114,7 @@ describe("media capture ownership", () => {
     const clearPreparedLocalTrack = vi.fn(async (preparedSource: string) => {
       prepared.delete(preparedSource);
     });
-    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { prepareLocalTrack, clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send, setCameraEnabled: send } });
+    const client = capturedClient(platform, original.track, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture }, media: { prepareLocalTrack, clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send, setCameraEnabled: send } });
     const setEnabled = source === "microphone" ? client.media.setMicrophoneEnabled : client.media.setCameraEnabled;
     try {
       await client.join({ microphone: false, camera: false });
@@ -148,7 +151,7 @@ describe("media capture ownership", () => {
     const clearPreparedLocalTrack = vi.fn(async () => {
       await clearHeld;
     });
-    const client = capturedClient(platform, original.track, { mediaDevices: { getUserMedia: capture }, media: { clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send } });
+    const client = capturedClient(platform, original.track, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: capture }, media: { clearPreparedLocalTrack }, sync: { setMicrophoneEnabled: send } });
     try {
       await client.join({ microphone: false, camera: false });
       await client.media.setMicrophoneEnabled(true);

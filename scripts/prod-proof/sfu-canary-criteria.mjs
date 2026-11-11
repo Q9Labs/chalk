@@ -49,3 +49,16 @@ const measuredCamera = (rows, before) => rows.filter((row) => isStream(row, "vid
 export function stalled(after, before) {
   return after.length === 2 && after.every((rows, guest) => measuredCamera(rows, before[guest]).length > 0 && !grew(rows, before[guest], "video", "camera"));
 }
+
+// What each client's camera and connections did across a stall check, so a failed check names the cause.
+export function stallEvidence(after, before) {
+  return after.map((rows, guest) => ({
+    connections: rows.filter((row) => row.type === "peer-state").map((row) => `${row.connection}:${row.connectionState}/${row.iceConnectionState}`),
+    camera: rows
+      .filter((row) => isStream(row, "video", "camera"))
+      .map((row) => {
+        const previous = before[guest].find(sameStream(row));
+        return { connection: row.connection, id: row.id, bytes: previous ? row.bytesReceived - previous.bytesReceived : "new", frames: previous ? row.framesDecoded - previous.framesDecoded : "new" };
+      }),
+  }));
+}

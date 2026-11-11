@@ -1,17 +1,20 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { Fragment, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ReactNode } from "react";
-import { CursorArrow } from "./BoardIcon";
-import { springStep, type Camera } from "./board-model";
+import { BoardIcon, CursorArrow } from "./BoardIcon";
+import { springStep, type Camera, type Viewport } from "./board-model";
+import { edgePointer, tagFlip, tagVisible, toScreen } from "./board-pointers";
 
 export type RemoteCursor = { readonly participantId: string; readonly displayName: string; readonly x: number; readonly y: number; readonly occurredAt: string };
 
-type Tracked = { name: string; x: number; y: number; vx: number; vy: number; tx: number; ty: number; movingUntil: number; lastX: number; lastY: number };
+type Tracked = { name: string; x: number; y: number; vx: number; vy: number; tx: number; ty: number; tag: { width: number; height: number } | null };
 
 const REST_RATE = 16;
 const STALE_MS = 10_000;
-const NAME_HOLD_MS = 700;
-const MOVING_PX_PER_SECOND = 25;
+/** Slide limits for the off-screen chips: clear of the board menu, the zoom and the island, and of the chips at the top. */
+const EDGE_INSETS = { top: 56, right: 64, bottom: 80, left: 64 } as const;
 const HOVER_PX = 26;
+/** The name starts this far into the tag, behind the avatar, as the stylesheet has it. */
+const NAME_INDENT_PX = 14;
 
 /** Pruning belongs to receipt too: grid boards do not mount the cursor layer. */
 export function rememberCursor(cursors: Map<string, RemoteCursor>, cursor: RemoteCursor): void {
@@ -63,12 +66,13 @@ export function BoardCursors({
         }
         let state = tracked.current.get(id);
         if (!state) {
-          state = { name: cursor.displayName, x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, movingUntil: 0, lastX: cursor.x, lastY: cursor.y };
+          state = { name: cursor.displayName, x: cursor.x, y: cursor.y, vx: 0, vy: 0, tx: cursor.x, ty: cursor.y, tag: null };
           tracked.current.set(id, state);
           rosterChanged = true;
         }
         if (state.name !== cursor.displayName) {
           state.name = cursor.displayName;
+          state.tag = null;
           rosterChanged = true;
         }
         if (cursor.x !== state.tx || cursor.y !== state.ty) {
@@ -89,17 +93,29 @@ export function BoardCursors({
         state.y = state.ty + dy;
         state.vx = vx;
         state.vy = vy;
-        const screenX = (state.x + camera.scrollX) * camera.zoom;
-        const screenY = (state.y + camera.scrollY) * camera.zoom;
-        const speed = Math.hypot(screenX - state.lastX, screenY - state.lastY) / Math.max(seconds, 1e-3);
-        state.lastX = screenX;
-        state.lastY = screenY;
-        if (speed > MOVING_PX_PER_SECOND) state.movingUntil = now + NAME_HOLD_MS;
         const element = layer.current?.querySelector<HTMLElement>(`[data-cursor="${CSS.escape(id)}"]`);
         if (!element) continue;
-        element.style.transform = `translate3d(${screenX}px, ${screenY}px, 0)`;
-        const near = pointer.current !== null && Math.hypot(pointer.current.x - screenX, pointer.current.y - screenY) < HOVER_PX;
-        element.dataset.named = String(near || now < state.movingUntil);
+        const viewport: Viewport = { width: layer.current?.clientWidth ?? 0, height: layer.current?.clientHeight ?? 0 };
+        const screen = toScreen(camera, state);
+        element.style.transform = `translate3d(${screen.x}px, ${screen.y}px, 0)`;
+        if (!state.tag) {
+          const name = element.querySelector<HTMLElement>(".chalk-board-cursor-name");
+          const avatar = element.querySelector<HTMLElement>(".chalk-board-cursor-avatar");
+          if (name && name.textContent === state.name.split(" ")[0]) state.tag = { width: Math.max(NAME_INDENT_PX + name.offsetWidth, avatar?.offsetWidth ?? 0), height: Math.max(name.offsetHeight, avatar?.offsetHeight ?? 0) };
+        }
+        const flip = state.tag ? tagFlip(screen, state.tag, viewport) : { x: false, y: false };
+        element.dataset.flipX = String(flip.x);
+        element.dataset.flipY = String(flip.y);
+        const near = pointer.current !== null && Math.hypot(pointer.current.x - screen.x, pointer.current.y - screen.y) < HOVER_PX;
+        element.dataset.named = String(tagVisible(Date.now() - Date.parse(roster.get(id)!.occurredAt), near));
+        const chip = layer.current?.querySelector<HTMLElement>(`[data-edge-for="${CSS.escape(id)}"]`);
+        if (!chip) continue;
+        const edge = edgePointer(screen, viewport, EDGE_INSETS);
+        chip.hidden = edge === null;
+        if (!edge) continue;
+        chip.dataset.edge = edge.edge;
+        chip.style.transform = `translate3d(${edge.x}px, ${edge.y}px, 0)`;
+        chip.style.setProperty("--chalk-board-edge-angle", `${edge.angle - 90}deg`);
       }
       if (rosterChanged) setPeople([...roster.values()].filter((cursor) => tracked.current.has(cursor.participantId)).map((cursor) => ({ id: cursor.participantId, name: cursor.displayName })));
       frame = requestAnimationFrame(step);
@@ -127,15 +143,21 @@ export function BoardCursors({
   return (
     <div ref={layer} className="chalk-board-cursors" aria-hidden="true" data-hidden={hidden || undefined}>
       {people.map((person) => (
-        <div key={person.id} className="chalk-board-cursor" data-cursor={person.id}>
-          <CursorArrow color={colorFor(person.id)} />
-          <span className="chalk-board-cursor-tag">
-            <span className="chalk-board-cursor-name" style={{ background: colorFor(person.id) }}>
-              {person.name.split(" ")[0]}
+        <Fragment key={person.id}>
+          <div className="chalk-board-cursor" data-cursor={person.id}>
+            <CursorArrow color={colorFor(person.id)} />
+            <span className="chalk-board-cursor-tag">
+              <span className="chalk-board-cursor-name" style={{ background: colorFor(person.id) }}>
+                {person.name.split(" ")[0]}
+              </span>
+              {renderAvatar?.(person.name)}
             </span>
-            {renderAvatar?.(person.name)}
-          </span>
-        </div>
+          </div>
+          <div className="chalk-board-edge" data-edge-for={person.id} hidden style={{ background: colorFor(person.id) }}>
+            {person.name.split(" ")[0]}
+            <BoardIcon name="chevron" size={16} className="chalk-board-edge-arrow" />
+          </div>
+        </Fragment>
       ))}
     </div>
   );
