@@ -167,6 +167,15 @@ gh workflow run ci.yml --ref master -f target_sha=<target_sha> -f release_manage
 
 The dispatch needs the production concurrency group (`chalk-environment-production`) free. I read these commands against the workflow inputs and the deployment payload keys; the dispatch itself has not been run, so treat it as the second choice after the primary undo. npm `latest` may need restoring from `npm_latest` in the saved rollback record.
 
+### The node ships before any SDK that lets an offer pass 64 KiB
+
+The node accepts an offer of up to 256 KiB (`maxSDPBytes`), and its request body limit default is 384 KiB (`SFU_MAX_REQUEST_BYTES`). Every SDK released before this change keeps its offers under the old 64 KiB cap (it replaces the connection from 40 KiB), so it works against either node. An SDK that raises those thresholds lets an offer grow past 64 KiB, and a node that still has the old cap answers its next offer with a 400. So the node goes first:
+
+1. Promote deploys the node (its media pins) and the API in `deploy-managed`. The web bundle builds the SDK from the same commit (`workspace:^`) and ships in `deploy-web`, which `needs: deploy-managed` in `.github/workflows/ci.yml`, so a web cut cannot go out before the node. Do not publish a web-only cut by another path.
+2. Publish such an SDK to npm (`.github/workflows/npm-publish.yml`) and cut mobile builds only after Promote's proof is green.
+3. A node must not roll back to a build with the 64 KiB cap while a web or SDK release that raises the thresholds is live. The Promote rollback restores the web and the node together; a node-only rollback needs the web rollback too.
+4. A node that sets `SFU_MAX_REQUEST_BYTES` itself must be at least 393216 (384 KiB), or a 256 KiB offer does not fit its request limit.
+
 ## 2. The 60-minute window
 
 ### Conditions before it starts
