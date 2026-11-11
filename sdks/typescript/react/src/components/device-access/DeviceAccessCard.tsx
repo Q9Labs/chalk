@@ -2,7 +2,7 @@ import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { useRef } from "react";
 import { useNarrowCall } from "../../internal/call-width";
 import { useMediaQuery } from "../../internal/useMediaQuery";
-import { ShellIcon } from "../control-bar/ShellIcon";
+import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { BROWSER_MARKS } from "./browser-marks";
 import { DeviceAccessStyles } from "./DeviceAccessStyles";
 import { cardCopy, DEVICE_NAMES, systemSettingsLink } from "./card-copy";
@@ -47,7 +47,8 @@ function Glyph({ name }: { readonly name: keyof typeof GLYPHS }) {
 }
 
 function DeviceGlyph({ device, off = false }: { readonly device: DeviceKind; readonly off?: boolean }) {
-  return <ShellIcon name={device === "microphone" ? (off ? "micOff" : "mic") : device === "camera" ? (off ? "camOff" : "cam") : off ? "shareOff" : "share"} />;
+  if (device === "screen") return <ShellIcon name={off ? "shareOff" : "share"} />;
+  return <MediaGlyph kind={device === "microphone" ? "mic" : "cam"} slashed={off} busy={false} />;
 }
 
 const Step = ({ n }: { readonly n: number }) => (
