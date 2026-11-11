@@ -1,5 +1,4 @@
 import { createContext, useContext, useLayoutEffect, useState, type RefObject } from "react";
-import { useMediaQuery } from "./useMediaQuery";
 
 export const PHONE_CALL_WIDTH = 640;
 const NarrowCallContext = createContext<boolean | null>(null);
@@ -24,10 +23,4 @@ export function useNarrowCallFrame(frame: RefObject<HTMLElement | null>): boolea
 /** Inside a call, whether the call is phone width; null outside a call. */
 export function useNarrowCall(): boolean | null {
   return useContext(NarrowCallContext);
-}
-
-/** Whether the call is phone width, by its own frame or by the window; the phone rules in ShellStyles follow the same two. */
-export function usePhoneCall(): boolean {
-  const narrowWindow = useMediaQuery(`(max-width: ${PHONE_CALL_WIDTH}px)`);
-  return useNarrowCall() === true || narrowWindow;
 }

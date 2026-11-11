@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChalkIconButton, ChalkSegmentedControl, ChalkSheet } from "../chalk-ui";
 
-export function DockLayout({ layout, onLayoutChange, devices, children }: { readonly children?: ReactNode; readonly devices?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
+export function DockLayout({ layout, onLayoutChange, children }: { readonly children?: ReactNode; readonly layout: "focus" | "grid"; readonly onLayoutChange: (layout: "focus" | "grid") => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -37,7 +37,6 @@ export function DockLayout({ layout, onLayoutChange, devices, children }: { read
               onValueChange={onLayoutChange}
             />
           </div>
-          {devices}
         </div>
       </ChalkSheet>
     </>

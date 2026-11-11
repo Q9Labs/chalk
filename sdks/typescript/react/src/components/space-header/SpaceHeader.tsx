@@ -57,11 +57,10 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       {chevron}
     </button>
   );
-  const content = (hideShortcuts: boolean) => (
+  const content = (
     <Suspense fallback={null}>
       <CallDetails
         {...props}
-        hideShortcuts={hideShortcuts}
         onClose={() => changeOpen(false)}
         revealConnection={revealConnection}
         sounds={sounds}
@@ -119,12 +118,12 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
                   <span>{props.callLinkOpen ? "Hide call link" : "Show call link"}</span>
                 </button>
               ) : null}
-              {content(true)}
+              {content}
             </ChalkSheet>
           </>
         ) : (
           <ChalkPopover open={open} onOpenChange={changeOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
-            {content(false)}
+            {content}
           </ChalkPopover>
         )}
         {phone ? null : noticeSlot}

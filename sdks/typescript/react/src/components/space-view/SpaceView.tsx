@@ -436,7 +436,7 @@ export function SpaceView({
                       isOpen={isReactionPickerOpen}
                       onClose={() => setReactionPickerOpen(false)}
                       allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
-                      onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
+                      onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction)).finally(() => setReactionPickerOpen(false))}
                       size="compact"
                     />
                   </div>

@@ -6,11 +6,7 @@ import { SITE_ORIGIN } from "../lib/site-head";
 
 export const Route = createFileRoute("/_space")({
   head: ({ match }) => ({
-    // viewport-fit=cover lets the phone sheets read the home indicator inset; the later route's tag replaces the root one.
-    meta: [
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "apple-itunes-app", content: `app-id=6760978704, app-argument=${new URL(match.pathname, SITE_ORIGIN).href}` },
-    ],
+    meta: [{ name: "apple-itunes-app", content: `app-id=6760978704, app-argument=${new URL(match.pathname, SITE_ORIGIN).href}` }],
   }),
   component: SpaceRoute,
 });

@@ -77,50 +77,22 @@ try {
       console.log("Decoded processed background", background, decoded.differences);
       return decoded.pixels;
     };
-    // The phone dock has no caret: holding the camera button opens the picker as a sheet.
-    const phone = viewport.width < 600;
-    const pickerRow = (name) => page.getByRole(phone ? "radio" : "menuitemradio", { name, exact: true });
-    const openPicker = async () => {
-      if (!phone) return page.getByRole("button", { name: "Select camera", exact: true }).click();
-      const box = await page.locator('[data-part="video-split"] .chalk-shell-main').boundingBox();
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.waitForTimeout(600);
-      await page.mouse.up();
-    };
     const original = await page.evaluate((localOnly) => window.cameraBackgroundProof.pixels(localOnly), localOnly);
     await page.screenshot({ path: resolve(artifacts, `none-${viewport.width}.png`) });
-    const choose = async (name, id) => {
-      if (!phone) return pickerRow(name).click();
-      // The phone sheet covers the call and slows software WebGL, so only the first choice goes through it.
-      await page.evaluate((id) => window.cameraBackgroundProof.background(id), id);
-    };
-    if (phone) {
-      await openPicker();
-      await pickerRow("Blur").click();
-      await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
-      await page.locator("[data-part=sheet-scrim]").click({ position: { x: 20, y: 20 } });
-      await page.getByRole("dialog").waitFor({ state: "hidden" });
-    } else {
-      await openPicker();
-      await choose("Blur");
-    }
+    await page.getByRole("button", { name: "Select camera", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "Blur", exact: true }).click();
     const blurred = await waitForProcessedPixels("blur", [original]);
-    if (!phone) {
-      await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
-      await page.keyboard.press("Escape");
-    }
+    await page.screenshot({ path: resolve(artifacts, `picker-${viewport.width}.png`) });
+    await page.keyboard.press("Escape");
     await page.screenshot({ path: resolve(artifacts, `blur-${viewport.width}.png`) });
-    if (!phone) await openPicker();
+    await page.getByRole("button", { name: "Select camera", exact: true }).click();
     // Stop measuring the previous effect while the image preset loads on software WebGL.
-    await choose("None", "none");
+    await page.getByRole("menuitemradio", { name: "None", exact: true }).click();
     await waitForProcessedPixels("none", [blurred]);
-    await choose("Office", "modern-acoustic-office");
+    await page.getByRole("menuitemradio", { name: "Office", exact: true }).click();
     await waitForProcessedPixels("modern-acoustic-office", [original, blurred]);
-    if (!phone) {
-      await page.getByRole("button", { name: "Select camera", exact: true }).click();
-      await page.getByRole("menu").waitFor({ state: "hidden" });
-    }
+    await page.getByRole("button", { name: "Select camera", exact: true }).click();
+    await page.getByRole("menu").waitFor({ state: "hidden" });
     const cameraGroup = await page.locator(".chalk-shell-split").evaluate((group) => ({
       width: group.getBoundingClientRect().width,
       buttonsWidth: [...group.querySelectorAll("button")].reduce((width, button) => width + button.getBoundingClientRect().width, 0),
