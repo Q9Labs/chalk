@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show guests when someone else's connection is weak or very poor. Sync negotiates a new `connection_quality=1` query: the SDK sends its own rating (`connection_quality_set`) and Sync adds an optional `connection_quality` to that participant's presence item. Older SDKs and older Sync ignore it. Deploy Sync before releasing the SDK.
 - Add `CHALK_SFU_CLIENT_SUNSET`. After that instant a client that does not declare the own SFU can no longer start an Episode in a Space that uses it: the request fails with `409 media.client_unsupported`, whose message now tells the user to update the app. Before the instant, and while the variable is empty, such a client still gets Cloudflare. `createEpisode` now lists `media.client_unsupported` among its errors.
 
 ## 5.5.0

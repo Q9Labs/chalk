@@ -6,6 +6,8 @@ export type PublicSpaceCredential = {
   readonly syncURL: string;
   /** Direct Sync URL tried before `syncURL`; absent unless the build sets VITE_CHALK_SYNC_DIRECT_URL. */
   readonly syncDirectURL?: string;
+  /** `off` keeps Sync and SFU signalling on the Tunnel; set by `?direct=off` for the trial's control arm. */
+  readonly directPath?: "off";
   readonly space: string;
 };
 export type SpaceAccessCleanupOptions = {
@@ -91,7 +93,7 @@ export function createPreparedPublicSpace(client: PublicInviteClient, arrival: P
     },
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle: arrival.arrival_handle ?? undefined }),
     arrival,
-    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), ...publicSyncDirectURL(), space: publicSpaceSlug(arrival) },
+    credential: { apiBaseURL: publicAPIBaseURL(), syncURL: publicSyncURL(publicAPIBaseURL()), ...publicSyncDirectURL(), ...publicDirectPathControl(), space: publicSpaceSlug(arrival) },
     getAccess,
     connectionAccess,
     finish,
@@ -103,7 +105,11 @@ export function publicAPIBaseURL(): string {
   if (globalThis.location?.origin) return globalThis.location.origin;
   return defaultAPIOrigin;
 }
+export function publicDirectPathControl(): { readonly directPath?: "off" } {
+  return new URLSearchParams(globalThis.location?.search).get("direct") === "off" ? { directPath: "off" } : {};
+}
 export function publicSyncDirectURL(): { readonly syncDirectURL?: string } {
+  if (publicDirectPathControl().directPath) return {};
   const configured = import.meta.env.VITE_CHALK_SYNC_DIRECT_URL?.trim();
   return configured ? { syncDirectURL: configured } : {};
 }

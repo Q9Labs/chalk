@@ -42,6 +42,7 @@ for (const path of [
   "/dashboard-api/past-session",
   "/dashboard-api/transcript-text",
   "/dashboard-api/developer",
+  "/dashboard-api/favicon",
 ]) {
   assert(
     routes.include.some((pattern) => (pattern.endsWith("*") ? path.startsWith(pattern.slice(0, -1)) : path === pattern)),

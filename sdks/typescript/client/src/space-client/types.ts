@@ -48,6 +48,10 @@ export type JoinOptions = {
   readonly displayName?: string;
   readonly microphone?: boolean;
   readonly camera?: boolean;
+  /** Devices picked before joining. The call captures from these instead of the browser defaults. */
+  readonly microphoneDeviceId?: string;
+  readonly cameraDeviceId?: string;
+  readonly speakerDeviceId?: string;
 };
 export type ConnectionStatus = "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
 export type Capability = V1Capability;
@@ -86,6 +90,8 @@ export type ClientFailure = {
   readonly code: ErrorCode;
   readonly recoverable: boolean;
   readonly message: string;
+  /** Set on `media.permission_denied` when the browser says the operating system refused capture. */
+  readonly permissionBlock?: "system";
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
 };
 export type EpisodeSummary = {
@@ -119,6 +125,8 @@ export type ParticipantPresence = {
   readonly state: "connected" | "disconnected" | "unknown";
   readonly speaking: boolean;
   readonly activeSpeaker: boolean;
+  /** How well this person's own link carries the call, as they rate it. Absent when unknown. */
+  readonly connectionQuality?: import("../media/link-quality").LinkTier;
 };
 export type Participant = {
   /** Stable person identity, independent of the per-device participant ID. */
@@ -180,6 +188,10 @@ export type MediaSlice = {
   readonly remote: readonly RemoteMedia[];
   readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
   readonly incomingRequests: readonly IncomingMediaRequest[];
+  /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
+  readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];
+  /** How well this person's own link carries the call, steadied over several windows. Omitted before the first window closes. */
+  readonly link?: import("../media/link-quality").LinkQuality;
 };
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;

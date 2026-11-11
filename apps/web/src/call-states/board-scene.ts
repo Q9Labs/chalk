@@ -128,7 +128,7 @@ export function smallScene(): ChalkWhiteboardV1Element[] {
 }
 
 /** Nora and Malik move their pointers around the plan, as cursor updates about 15 times a second. */
-export function boardActivity(people: readonly { readonly id: string; readonly name: string }[], emit: (event: ChalkWhiteboardV1Event) => void): () => void {
+export function boardActivity(people: readonly { readonly id: string; readonly name: string }[], emit: (event: ChalkWhiteboardV1Event) => void, pointers: "roaming" | "edges" = "roaming"): () => void {
   const started = performance.now();
   const anchors = [
     { x: 330, y: 250, rx: 140, ry: 60 },
@@ -137,6 +137,12 @@ export function boardActivity(people: readonly { readonly id: string; readonly n
   const tick = () => {
     const seconds = (performance.now() - started) / 1000;
     const occurredAt = new Date().toISOString();
+    if (pointers === "edges") {
+      // The first person rests 70px inside the board's right edge, so the name tag flips; the second is past that edge, so a chip shows.
+      const width = document.querySelector(".chalk-board[data-primary]")?.clientWidth ?? 800;
+      people.forEach((person, index) => emit({ type: "cursor", participantId: person.id, displayName: person.name, x: index === 0 ? width - 70 : width + 240, y: index === 0 ? 150 : 330, occurredAt }));
+      return;
+    }
     people.forEach((person, index) => {
       const anchor = anchors[index % anchors.length]!;
       const phase = seconds * (0.6 + index * 0.25) + index;

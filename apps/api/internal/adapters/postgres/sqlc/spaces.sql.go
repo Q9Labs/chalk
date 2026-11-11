@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adoptSpaceMediaPlaneSetting = `-- name: AdoptSpaceMediaPlaneSetting :execrows
+update spaces
+set media_plane_setting_written = $1::text,
+    media_plane_setting_against = $1::text
+where spaces.tenant_id = $2
+  and spaces.id = $3
+  and spaces.media_plane_setting is null
+  and btrim(spaces.media_plane) = $1::text
+  and exists (
+    select 1 from tenants
+    where tenants.id = spaces.tenant_id
+      and (
+        tenants.media_plane_provider_config is null
+        or tenants.media_plane_provider_config = 'null'::jsonb
+        or (
+          (tenants.media_plane_provider_config->'enabled' is null
+            or tenants.media_plane_provider_config->'enabled' in ('true'::jsonb, 'null'::jsonb))
+          and btrim(coalesce(tenants.media_plane_provider_config->>'mode', '')) = 'chalk_managed'
+        )
+      )
+  )
+`
+
+type AdoptSpaceMediaPlaneSettingParams struct {
+	Plane    string      `json:"plane"`
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+// Moves a Space stored on a plane onto the setting without changing where it runs. It writes only
+// while the Space still has no setting and still stores that plane, and the Tenant can still serve
+// the own SFU, so a choice made after the caller looked is never overwritten.
+func (q *Queries) AdoptSpaceMediaPlaneSetting(ctx context.Context, arg AdoptSpaceMediaPlaneSettingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adoptSpaceMediaPlaneSetting, arg.Plane, arg.TenantID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const archiveTenantSpace = `-- name: ArchiveTenantSpace :one
 update spaces
 set
@@ -24,6 +64,9 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -53,6 +96,9 @@ func (q *Queries) ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpace
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
@@ -233,6 +279,8 @@ insert into spaces (
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
     metadata,
     recurring_policy,
     admission_policy,
@@ -250,18 +298,20 @@ select
     tenant_facts.id,
     $4,
     $5,
-    $6,
+    $6::text,
+    case when $6::text is null then null else btrim($5) end,
     $7,
     $8,
-    coalesce($9::text, 'automatic'),
-    coalesce($10::text, tenant_facts.transcription_default_mode),
-    $11::text,
-    $12,
+    $9,
+    coalesce($10::text, 'automatic'),
+    coalesce($11::text, tenant_facts.transcription_default_mode),
+    $12::text,
     $13,
     $14,
-    $15
+    $15,
+    $16
 from tenant_facts
-returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+returning id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 ), seeded as (
     insert into space_roles (id, tenant_id, space_id, name, capabilities)
     select
@@ -305,7 +355,7 @@ returning id, name, tenant_id, slug, media_plane, metadata, recurring_policy, ad
     select
         inserted.tenant_id,
         inserted.id,
-        $16,
+        $17,
         1,
         1,
         true,
@@ -322,6 +372,9 @@ select
     inserted.tenant_id,
     inserted.slug,
     inserted.media_plane,
+    inserted.media_plane_setting_written,
+    inserted.media_plane_setting_against,
+    inserted.media_plane_setting,
     inserted.metadata,
     inserted.recurring_policy,
     inserted.admission_policy,
@@ -344,6 +397,7 @@ type CreateSpaceParams struct {
 	Name                          string      `json:"name"`
 	Slug                          string      `json:"slug"`
 	MediaPlane                    string      `json:"media_plane"`
+	MediaPlaneSetting             pgtype.Text `json:"media_plane_setting"`
 	Metadata                      []byte      `json:"metadata"`
 	RecurringPolicy               []byte      `json:"recurring_policy"`
 	AdmissionPolicy               []byte      `json:"admission_policy"`
@@ -363,6 +417,9 @@ type CreateSpaceRow struct {
 	TenantID                      pgtype.UUID        `json:"tenant_id"`
 	Slug                          string             `json:"slug"`
 	MediaPlane                    string             `json:"media_plane"`
+	MediaPlaneSettingWritten      pgtype.Text        `json:"media_plane_setting_written"`
+	MediaPlaneSettingAgainst      pgtype.Text        `json:"media_plane_setting_against"`
+	MediaPlaneSetting             pgtype.Text        `json:"media_plane_setting"`
 	Metadata                      []byte             `json:"metadata"`
 	RecurringPolicy               []byte             `json:"recurring_policy"`
 	AdmissionPolicy               []byte             `json:"admission_policy"`
@@ -385,6 +442,7 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		arg.Name,
 		arg.Slug,
 		arg.MediaPlane,
+		arg.MediaPlaneSetting,
 		arg.Metadata,
 		arg.RecurringPolicy,
 		arg.AdmissionPolicy,
@@ -404,6 +462,9 @@ func (q *Queries) CreateSpace(ctx context.Context, arg CreateSpaceParams) (Creat
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
@@ -671,6 +732,9 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -704,6 +768,9 @@ func (q *Queries) GetTenantSpace(ctx context.Context, arg GetTenantSpaceParams) 
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
@@ -899,6 +966,9 @@ select
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -964,6 +1034,9 @@ func (q *Queries) ListTenantSpaces(ctx context.Context, arg ListTenantSpacesPara
 			&i.TenantID,
 			&i.Slug,
 			&i.MediaPlane,
+			&i.MediaPlaneSettingWritten,
+			&i.MediaPlaneSettingAgainst,
+			&i.MediaPlaneSetting,
 			&i.Metadata,
 			&i.RecurringPolicy,
 			&i.AdmissionPolicy,
@@ -1042,6 +1115,9 @@ returning
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -1071,6 +1147,9 @@ func (q *Queries) RestoreTenantSpace(ctx context.Context, arg RestoreTenantSpace
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,
@@ -1303,49 +1382,62 @@ set
         when $5::boolean then $6::text
         else media_plane
     end,
+    media_plane_setting_written = case
+        when $7::boolean then $8::text
+        else media_plane_setting_written
+    end,
+    media_plane_setting_against = case
+        when $7::boolean then
+            case when $8::text is null then null
+            else btrim(case when $5::boolean then $6::text else media_plane end) end
+        else media_plane_setting_against
+    end,
     metadata = case
-        when $7::boolean then $8::jsonb
+        when $9::boolean then $10::jsonb
         else metadata
     end,
     recurring_policy = case
-        when $9::boolean then $10::jsonb
+        when $11::boolean then $12::jsonb
         else recurring_policy
     end,
     admission_policy = case
-        when $11::boolean then $12::jsonb
+        when $13::boolean then $14::jsonb
         else admission_policy
     end,
     recording_policy = case
-        when $13::boolean then $14::text
+        when $15::boolean then $16::text
         else recording_policy
     end,
-    transcript_language = case when $15::boolean then $16::text else transcript_language end,
+    transcript_language = case when $17::boolean then $18::text else transcript_language end,
     transcription_policy = case
-        when $17::boolean then $18::text
+        when $19::boolean then $20::text
         else transcription_policy
     end,
     default_episode_duration_seconds = case
-        when $19::boolean then $20::integer
+        when $21::boolean then $22::integer
         else default_episode_duration_seconds
     end,
     maximum_episode_duration_seconds = case
-        when $21::boolean then $22::integer
+        when $23::boolean then $24::integer
         else maximum_episode_duration_seconds
     end,
     linger_window_seconds = case
-        when $23::boolean then $24::integer
+        when $25::boolean then $26::integer
         else linger_window_seconds
     end,
     updated_at = now()
 where
-    tenant_id = $25
-    and id = $26
+    tenant_id = $27
+    and id = $28
 returning
     id,
     name,
     tenant_id,
     slug,
     media_plane,
+    media_plane_setting_written,
+    media_plane_setting_against,
+    media_plane_setting,
     metadata,
     recurring_policy,
     admission_policy,
@@ -1368,6 +1460,8 @@ type UpdateTenantSpaceParams struct {
 	Slug                             string      `json:"slug"`
 	MediaPlaneSet                    bool        `json:"media_plane_set"`
 	MediaPlane                       string      `json:"media_plane"`
+	MediaPlaneSettingSet             bool        `json:"media_plane_setting_set"`
+	MediaPlaneSetting                pgtype.Text `json:"media_plane_setting"`
 	MetadataSet                      bool        `json:"metadata_set"`
 	Metadata                         []byte      `json:"metadata"`
 	RecurringPolicySet               bool        `json:"recurring_policy_set"`
@@ -1398,6 +1492,8 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		arg.Slug,
 		arg.MediaPlaneSet,
 		arg.MediaPlane,
+		arg.MediaPlaneSettingSet,
+		arg.MediaPlaneSetting,
 		arg.MetadataSet,
 		arg.Metadata,
 		arg.RecurringPolicySet,
@@ -1426,6 +1522,9 @@ func (q *Queries) UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpacePa
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,

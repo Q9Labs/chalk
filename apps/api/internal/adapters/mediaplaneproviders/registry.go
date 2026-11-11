@@ -35,6 +35,9 @@ type Config struct {
 	// ChalkSFUSpaces are the Spaces whose new Episodes may start on the own SFU.
 	// Every other Space selecting it starts on Cloudflare.
 	ChalkSFUSpaces spaces.ChalkSFUAllowlist
+	// ChalkSFUNewEpisodesPaused sends every new Episode to Cloudflare. Live Episodes
+	// keep resolving to their own SFU binding.
+	ChalkSFUNewEpisodesPaused bool
 	// ChalkSFUClientSunset is the instant after which a client that cannot run the
 	// own SFU is refused a new Episode in an allowlisted Space, instead of getting
 	// Cloudflare. The zero value means never.
@@ -76,6 +79,7 @@ type Registry struct {
 	telemetry       providercontracts.Telemetry
 	chalk           *chalksfu.Fleet
 	chalkSpaces     spaces.ChalkSFUAllowlist
+	chalkPaused     bool
 	clientSunset    time.Time
 	now             func() time.Time
 	episodes        EpisodeReader
@@ -118,6 +122,7 @@ func NewRegistry(config Config) Registry {
 		telemetry:       config.Telemetry,
 		chalk:           config.ChalkSFU,
 		chalkSpaces:     config.ChalkSFUSpaces,
+		chalkPaused:     config.ChalkSFUNewEpisodesPaused,
 		episodes:        config.Episodes,
 		recovery:        config.Recovery,
 		backlog:         &backlogCell{},
@@ -210,7 +215,7 @@ type resolvedProviderConfig struct {
 func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *providercontracts.Resolution, pin spaces.MediaPlaneProvider) (*resolvedProviderConfig, error) {
 	providerName := pin
 	if pin == "" {
-		selected, err := selectedProvider(tenant, space)
+		selected, err := r.selectedProvider(tenant, space)
 		if err != nil {
 			return nil, err
 		}
@@ -267,6 +272,14 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantChalkManaged
 		return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
 	case providercontracts.ModeTenantManaged:
+		if pin == spaces.MediaPlaneProviderChalkSFU {
+			// The Tenant switched to its own Cloudflare credentials after this Episode
+			// started on the own SFU. The binding decides where the Episode runs; the
+			// document only describes the next one.
+			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
+			resolution.Mode = providercontracts.ModeChalkManaged
+			return &resolvedProviderConfig{provider: provider, config: r.processConfig}, nil
+		}
 		resolution.ConfigurationSource = providercontracts.ConfigurationSourceTenantManaged
 		providerConfig, err := r.tenantManagedConfig(providerName, providerConfig)
 		if err != nil {
@@ -308,14 +321,21 @@ func failureClass(err error) string {
 	}
 }
 
-func selectedProvider(tenant tenants.Tenant, space spaces.Space) (spaces.MediaPlaneProvider, error) {
-	if provider := strings.TrimSpace(space.MediaPlane); provider != "" {
-		return parseSelectedProvider(provider)
+// selectedProvider is the plane the settings choose for a new Episode: the Space,
+// then the Tenant, then the platform default. The guards (kill switch, allowlist,
+// client capability, node room) apply after it.
+func (r Registry) selectedProvider(tenant tenants.Tenant, space spaces.Space) (spaces.MediaPlaneProvider, error) {
+	selected, err := spaces.SelectPlane(r.defaultProvider, tenant, space)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", providercontracts.ErrUnknownProvider, err)
 	}
-	if tenant.DefaultMediaPlane == nil {
-		return "", nil
-	}
-	return parseSelectedProvider(*tenant.DefaultMediaPlane)
+	return selected, nil
+}
+
+// admitsNewChalkSFUEpisode is false while the kill switch is on or the Space is off
+// the allowlist: its new Episodes start on Cloudflare.
+func (r Registry) admitsNewChalkSFUEpisode(space spaces.Space) bool {
+	return !r.chalkPaused && r.chalkSpaces.Allows(space.ID)
 }
 
 func parseSelectedProvider(value string) (spaces.MediaPlaneProvider, error) {

@@ -6,7 +6,7 @@ import { useSoundCues } from "../../../../sdks/typescript/react/src/internal/use
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
-import { ReconnectingOverlay } from "../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
+import { ConnectionStatus } from "../../../../sdks/typescript/react/src/components/connection-status/ConnectionStatus";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
@@ -188,7 +188,7 @@ function ReconnectingInputFixture() {
         Message
         <textarea aria-label="Message" />
       </label>
-      <ReconnectingOverlay isVisible status="reconnecting" />
+      <ConnectionStatus phase="reconnecting" since={Date.now()} />
     </main>
   );
 }
@@ -260,6 +260,7 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-qr", title: "Ready card QR regression", render: () => <StatesCall ready shareUrl="https://chalk.example/join/example" /> },
+  { id: "states-ready-qr-light", title: "Ready card QR, Light", render: () => <StatesCall ready light shareUrl="https://chalk.example/join/example" /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
   {
     id: "states-joining",

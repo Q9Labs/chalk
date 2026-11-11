@@ -1,28 +1,9 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { useEffect, useRef, useState } from "react";
+import { useInputLevel } from "../../internal/useInputLevel";
 
 export function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
-  const [level, setLevel] = useState(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the microphone meter AudioContext and sampling interval; disconnect, close and clear them on track replacement.
-  useEffect(() => {
-    if (!track || track.readyState !== "live") return;
-    const context = new AudioContext();
-    const source = context.createMediaStreamSource(new MediaStream([track]));
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    const samples = new Uint8Array(analyser.fftSize);
-    const timer = window.setInterval(() => {
-      analyser.getByteTimeDomainData(samples);
-      const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length);
-      setLevel(Math.min(100, Math.round(rms * 400)));
-    }, 100);
-    return () => {
-      clearInterval(timer);
-      source.disconnect();
-      void context.close();
-    };
-  }, [track]);
+  const level = useInputLevel(track);
   return (
     <span className="chalk-shell-level" role="meter" aria-label="Input level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}>
       <i style={{ transform: `scaleX(${level / 100})` }} />

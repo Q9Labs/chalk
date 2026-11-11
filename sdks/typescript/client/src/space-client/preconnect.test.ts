@@ -32,7 +32,7 @@ class FakeWebSocket extends EventTarget {
 }
 
 const syncUrl = "wss://sync.example.test/v1/sync";
-const dialed = "wss://sync.example.test/v1/sync?participant_devices=1&participant_device_admissions=2&media_off_reason=1&entry_generation=new&entry_confirmation=1";
+const dialed = "wss://sync.example.test/v1/sync?participant_devices=1&participant_device_admissions=2&media_off_reason=1&connection_quality=1&entry_generation=new&entry_confirmation=1";
 let links: FakeLink[];
 
 beforeEach(() => {

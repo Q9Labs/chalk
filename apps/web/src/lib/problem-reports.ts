@@ -19,10 +19,14 @@ export function useReportCredentialExpired(expiresAt: number | undefined) {
   return expiresAt !== undefined && (expiredAt === expiresAt || expiresAt <= Date.now());
 }
 
+/**
+ * Whether the call should offer "Report a problem". It stays true until the server answers that reports are
+ * off, so a slow or failed probe never hides the item. A failed probe retries, and a send that fails shows its own error.
+ */
 export function useProblemReports(baseURL: string, tenantId: string | undefined) {
-  const [available, setAvailable] = useState(false);
+  const [refused, setRefused] = useState(false);
   useEffect(() => {
-    setAvailable(false);
+    setRefused(false);
     if (!tenantId) return;
     const controller = new AbortController();
     let retryDelay = 1000;
@@ -43,15 +47,9 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
         const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports/availability`, { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
         if (!response.ok) throw new Error("Availability probe failed");
         const enabled = parseAvailability(await response.json()).available;
-        if (!controller.signal.aborted && !attempt.signal.aborted) {
-          setAvailable(enabled);
-          if (enabled) retryDelay = 1000;
-          else retry();
-        }
+        if (!controller.signal.aborted && !attempt.signal.aborted) setRefused(!enabled);
       } catch {
-        if (!controller.signal.aborted && !attempt.signal.aborted) {
-          retry();
-        }
+        if (!controller.signal.aborted && !attempt.signal.aborted) retry();
       }
     };
     const online = () => {
@@ -67,7 +65,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       window.removeEventListener("online", online);
     };
   }, [baseURL, tenantId]);
-  return available;
+  return !refused;
 }
 
 export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReportConnection }): ReportProblem {

@@ -19,19 +19,31 @@ export interface SpacePresentationProps {
   readonly dialogs?: ReactNode;
   readonly renderToken?: string;
   readonly interactive?: boolean;
+  /** While the call reconnects the header and dock stay on screen; once it is lost the dock dims except Leave. */
+  readonly connectionTrouble?: "reconnecting" | "lost";
   readonly className?: string;
 }
 /**
  * Presentation-only Space chrome shared by the live controller and deterministic
  * Recording projection. Networking, device effects and commands stay in callers.
  */
-export function SpacePresentation({ colorScheme = "dark", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, toasts, overlays, dialogs, renderToken, interactive = true, className }: SpacePresentationProps): React.JSX.Element {
+export function SpacePresentation({ colorScheme = "dark", stageBackground, header, stage, controls, compactControls, stageOverlay, sidebar, mediaOutput, toasts, overlays, dialogs, renderToken, interactive = true, connectionTrouble, className }: SpacePresentationProps): React.JSX.Element {
   const root = useRef<HTMLElement>(null);
-  const idle = useIdleChrome(root, interactive);
+  const idle = useIdleChrome(root, interactive && connectionTrouble === undefined);
   const narrow = useNarrowCallFrame(root);
   return (
     <NarrowCallProvider value={narrow}>
-      <main ref={root} data-chalk data-part="call-frame" data-idle={idle} data-chalk-theme={colorScheme} data-recording-space-render-token={renderToken} inert={interactive ? undefined : true} className={cn("chalk-root chalk-frame", className)}>
+      <main
+        ref={root}
+        data-chalk
+        data-part="call-frame"
+        data-idle={idle}
+        data-connection-lost={connectionTrouble === "lost" || undefined}
+        data-chalk-theme={colorScheme}
+        data-recording-space-render-token={renderToken}
+        inert={interactive ? undefined : true}
+        className={cn("chalk-root chalk-frame", className)}
+      >
         {mediaOutput}
         <SpaceHeader {...header} className={cn("chalk-frame-header", header.className)} />
         <section data-part="stage-region" data-stage-background={stageBackground} className="chalk-frame-stage" aria-label="Space stage">

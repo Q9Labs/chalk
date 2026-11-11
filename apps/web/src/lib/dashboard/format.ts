@@ -75,6 +75,11 @@ export function duration(fromISO: string, toISO: string): string {
   return rest ? `${Math.floor(minutes / 60)} h ${rest} min` : `${minutes / 60} h`;
 }
 
+/** True once a key's expiry has passed. */
+export function hasExpired(iso: string, now = Date.now()): boolean {
+  return Date.parse(iso) <= now;
+}
+
 /** "in 5 days" when an expiry is within a week, otherwise undefined. "today" and "tomorrow" read better than numbers. */
 export function expiresSoon(iso: string, now = Date.now()): string | undefined {
   const days = -daysBefore(iso, now);

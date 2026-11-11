@@ -311,8 +311,11 @@ automatic consequence of merging it. Keep both adapters installed.
 **Files:** provider selection/runtime configuration, proof scripts, observability
 queries and public rollout guide. Private allowlists live outside Git.
 
-**Check:** at least 20 scripted joins and 10 fault/recovery trials per provider
-under matched network/call shape; zero cross-Tenant or mute/consent failures,
+**Check:** all evidence runs on the `chalk_sfu` plane only; no Cloudflare run or
+comparison is part of this gate. At least 20 scripted joins and 10 fault/recovery
+trials under one fixed network and call shape, plus Chrome and Safari browser
+guests joining in both orders, a guest leaving, and one long call; zero
+cross-Tenant or mute/consent failures,
 all stable-network joins render audio/video within 10 seconds, and all short
 transport faults recover rendered media within 15 seconds after network restore
 without manual toggles. Long-drop cases intentionally remain off pending fresh

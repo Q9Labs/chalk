@@ -1,4 +1,5 @@
 import { Clock, Context, Duration, Effect, Layer } from "effect";
+import type { DirectPathMode } from "../direct-path";
 import { requireParsedAccessGrant, type AccessGrant } from "../access/grant";
 import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type ConnectionLifecycleCapability } from "../connection";
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
@@ -17,6 +18,8 @@ export type SpaceClientPlatform = {
   readonly syncUrl?: string;
   /** Direct Sync URL tried before `syncUrl`, with fallback. Unset (the default) keeps today's single path. */
   readonly syncDirectUrl?: string;
+  /** `off` keeps Sync and SFU signalling on the Tunnel even when the grant advertises a direct door; for a control run. Default `auto`. */
+  readonly directPath?: DirectPathMode;
   readonly whiteboardUrl?: string | null;
   readonly dependencies?: Partial<ConnectionDependencies>;
   /** Private adapter seam for runtimes that need the full refresh request. */
@@ -33,7 +36,7 @@ export class SpaceClientCoreService extends Context.Service<SpaceClientCoreServi
 export const makeSpaceClientCoreLayer = (options: SpaceClientOptions, platform: SpaceClientPlatform = {}) => {
   const apiBaseUrl = normalizedBaseUrl(platform.apiBaseUrl ?? options.baseUrl ?? DEFAULT_API_BASE_URL);
   const syncUrl = platform.syncUrl ?? defaultSyncUrl(apiBaseUrl);
-  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
+  const baseDependencies = { ...createDefaultConnectionDependencies({ apiBaseURL: apiBaseUrl, syncURL: syncUrl, syncDirectURL: platform.syncDirectUrl, directPath: platform.directPath, whiteboardURL: platform.whiteboardUrl }), ...platform.dependencies } satisfies ConnectionDependencies;
   const dependencies = baseDependencies;
   const lifecycle = makeConnectionLifecycleLayer({
     access: async (request) => requireParsedAccessGrant(await fetchAccessGrant({ request, options, platform })),
@@ -120,11 +123,21 @@ export class SpaceClientCore {
     return Effect.sync(() => this.#requireActive()).pipe(
       Effect.andThen(this.#connection.configureJoin(options)),
       Effect.tap(() => Effect.sync(() => this.controllers.media.configure(options))),
+      Effect.andThen(this.#selectDevices(options)),
       Effect.andThen(this.#connection.join()),
       Effect.andThen(options.displayName === undefined ? Effect.void : this.controllers.participants.renameSelf(options.displayName)),
       Effect.catchTag("ConnectionLifecycleFailure", (failure) => Effect.fail(failure.code === "episode_ended" ? new SpaceClientError({ code: "episode.ended", recoverable: failure.recoverable, message: failure.message }) : failure)),
       Effect.mapError(normalizeClientError),
     );
+  }
+  #selectDevices({ microphoneDeviceId, cameraDeviceId, speakerDeviceId }: JoinOptions): ClientEffect<void> {
+    const { media } = this.controllers;
+    return Effect.all([
+      microphoneDeviceId ? media.selectMicrophone(microphoneDeviceId) : Effect.void,
+      cameraDeviceId ? media.selectCamera(cameraDeviceId) : Effect.void,
+      // A runtime without output selection keeps the system speaker; that never blocks joining.
+      speakerDeviceId ? media.selectSpeaker(speakerDeviceId).pipe(Effect.ignore) : Effect.void,
+    ]).pipe(Effect.asVoid);
   }
   leave(): ClientEffect<void> {
     return this.#connection.leave().pipe(Effect.mapError(normalizeClientError));

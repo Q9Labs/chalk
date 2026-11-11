@@ -119,7 +119,7 @@ export function MediaGlyph({ kind, slashed, busy }: { readonly kind: keyof typeo
   const cut = useId();
   const body = MEDIA_BODY[kind];
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="chalk-shell-media" data-slashed={slashed} data-busy={busy} aria-hidden="true">
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="chalk-shell-media" data-slashed={slashed} data-busy={busy} aria-hidden="true">
       <mask id={cut} maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
         {/* token-ratchet-ignore: mask luminance (white keeps, black cuts), not a theme colour */}
         <rect width="24" height="24" fill="white" stroke="none" />

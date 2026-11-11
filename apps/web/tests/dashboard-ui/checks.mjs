@@ -73,6 +73,7 @@ try {
     await context.close();
   }
   await (await import("./developer-recording-checks.mjs")).developerRecordingChecks({ open, fixture, check });
+  await (await import("./developer-checks.mjs")).developerChecks({ open, check, origin });
   await (await import("./connect-checks.mjs")).connectChecks({ open, check });
   await (await import("./recording-checks.mjs")).recordingChecks({ open, fixture, check, CALL });
   await (await import("./refresh-checks.mjs")).refreshChecks({ open, fixture, check, CALL });
@@ -147,7 +148,7 @@ try {
     }
     // The privacy notice adds its link and dismiss button until the policy update takes effect.
     const notice = (await tab.locator(".privacy-notice").count()) === 1 ? ["See what's changing.", "Dismiss Privacy Policy notice"] : [];
-    const expected = ["Chalk, Home", "Home", "Developer", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
+    const expected = ["Chalk, Home", "Home", "AI apps", "Developer", "Docs", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
     check("keyboard order on Home", order.slice(0, expected.length).join(" | ") === expected.join(" | "), order.join(" | "));
     await tab.getByRole("link", { name: /^Q9 team/ }).click();
     await tab.waitForURL(`**${CALL}`);
@@ -228,9 +229,9 @@ try {
     await tab.getByLabel("Name", { exact: true }).fill("Production server");
     await tab.locator("[role=dialog] button[type=submit]").click();
     await tab.waitForTimeout(800);
-    const secret = await tab.locator(".secret .linkbox").textContent();
+    const secret = await tab.getByRole("dialog").getByTestId("secret-text").textContent();
     await dialogCheck(tab, "Secret", async () => {}, null);
-    check("create key shows the secret once and lists the key", secret?.startsWith("chalk_sk_") && (await tab.getByText("Production server").count()) === 1, secret ?? "");
+    check("create key shows the secret once and lists the key", secret?.startsWith("chalk_sk_") && (await tab.getByRole("table", { name: "API keys" }).getByText("Production server", { exact: true }).count()) === 1, secret ?? "");
     await context.close();
   }
   // The CSRF header on every POST, and the Origin.

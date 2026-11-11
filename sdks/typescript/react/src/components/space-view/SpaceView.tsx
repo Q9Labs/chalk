@@ -1,9 +1,11 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { isDeviceAccessFailure } from "../device-access/model";
+import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
@@ -14,14 +16,18 @@ import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
+import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
+import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
-import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
-import { OfflineActions } from "../offline-actions/OfflineActions";
-import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
+import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
+import { useConnectionPhase } from "../connection-status/use-connection-phase";
+import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
+import { useHeldWhile } from "../../internal/useHeldWhile";
+import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useCallToasts } from "../toast-stack/useCallToasts";
 import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
@@ -35,8 +41,10 @@ import { SpacePresentation } from "./SpacePresentation";
 import { SpaceStage } from "../stage/SpaceStage";
 import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
-import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+
+// The knock notice is not needed to start a call, so it loads when the first request arrives.
+const KnockNotice = lazy(() => import("../admission-panel/KnockNotice").then((module) => ({ default: module.KnockNotice })));
 
 export type SpacePanel = "chat" | "participants" | "admission";
 
@@ -87,9 +95,8 @@ export interface SpaceViewProps {
   readonly onDismissCommandError?: () => void;
   readonly onToggleWhiteboard?: () => void;
   readonly whiteboard?: SpaceViewWhiteboard;
-  readonly reconnecting?: Omit<ReconnectingOverlayProps, "isVisible"> & {
-    readonly isVisible: boolean;
-  };
+  /** Rejoin after the call could not be recovered; the failed card offers it. */
+  readonly onRejoin?: () => void;
   readonly overlay?: React.ReactNode;
   readonly onLeft?: () => void | Promise<void>;
   readonly onEndEpisode?: () => void | Promise<void>;
@@ -128,7 +135,7 @@ export function SpaceView({
   onDismissCommandError,
   onToggleWhiteboard,
   whiteboard,
-  reconnecting,
+  onRejoin,
   overlay,
   onLeft,
   onEndEpisode,
@@ -139,12 +146,15 @@ export function SpaceView({
   const callToasts = useCallToasts();
   const [soundsEnabled] = useSoundsSetting();
   const client = useSpaceClient();
-  const self = useSelf();
-  const participantsSlice = useParticipants();
-  const callLink = useCallLink(participantsSlice.roster.length <= 1);
-  const media = useMedia();
-  const mediaRequest = media.incomingRequests[0];
   const connection = useConnection();
+  const connectionPhase = useConnectionPhase(connection.status);
+  // A lost connection clears the roster and the tracks, so the call behind the failure card keeps what it last showed.
+  const connectionLost = connectionPhase.kind === "failed";
+  const self = useHeldWhile(useSelf(), connectionLost);
+  const participantsSlice = useHeldWhile(useParticipants(), connectionLost);
+  const callLink = useCallLink(participantsSlice.roster.length <= 1);
+  const media = useHeldWhile(useMedia(), connectionLost);
+  const mediaRequest = media.incomingRequests[0];
   const offline = useOffline();
   const [dismissedOfflineNotice, setDismissedOfflineNotice] = useState<string | null>(null);
   const offlineNotice = offline.notice && offline.notice !== dismissedOfflineNotice ? offline.notice : null;
@@ -180,6 +190,8 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
+  const [hiddenKnocks, setHiddenKnocks] = useState<ReadonlySet<string>>(new Set());
+  const handOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((person) => person.handRaised).map((person) => person.participantId), [participantsSlice.roster]));
   const [previousInitialPanel, setPreviousInitialPanel] = useState(initialPanel);
   if (previousInitialPanel !== initialPanel) {
     setPreviousInitialPanel(initialPanel);
@@ -203,18 +215,16 @@ export function SpaceView({
   const layout = onLayoutChange ? (controlledLayout ?? uncontrolledLayout) : uncontrolledLayout;
   const feature = (name: keyof SpaceViewFeatures) => features?.[name] !== false;
   const localId = self.participantId ?? "local";
+  const seenConnected = useSeenConnected(participantsSlice.roster);
   const tiles = useMemo(
     () =>
-      toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map((tile) => ({
+      toVideoParticipants(participantsSlice.roster, media.remote, localId, self.displayName ?? "You", media.local).map(({ isReconnecting, ...tile }) => ({
         ...tile,
+        ...(isReconnecting && seenConnected.has(tile.id) ? { isReconnecting } : {}),
         screenShareHasAudio: tile.isLocal ? media.screenShare.hasAudio : participantsSlice.roster.find((person) => person.participantId === tile.id)?.media.screenShareHasAudio,
       })),
-    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName],
+    [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, seenConnected, self.displayName],
   );
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Open the participants drawer when admission inputs change; do not force it open on every render after a user closes it.
-  useEffect(() => {
-    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
-  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -236,20 +246,27 @@ export function SpaceView({
   const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
-  const runCommand = useCallback(async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
-    try {
-      await command();
-      setCommandError(null);
-      setCommandSource(undefined);
-      setCommandAction(undefined);
-      setRetryCommand(undefined);
-    } catch (cause) {
-      setCommandError(commandFailure(cause));
-      setCommandSource(source);
-      setCommandAction(action);
-      setRetryCommand(() => command);
-    }
-  }, []);
+  const { store: deviceAccess, snapshot: deviceAccessSnapshot } = useDeviceAccess();
+  const runCommand = useCallback(
+    async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
+      try {
+        await command();
+        if (source && source !== "speaker") deviceAccess.clear(source);
+        setCommandError(null);
+        setCommandSource(undefined);
+        setCommandAction(undefined);
+        setRetryCommand(undefined);
+      } catch (cause) {
+        const failure = commandFailure(cause);
+        if (source && source !== "speaker") void deviceAccess.report(source, failure, () => runCommand(command, source, action));
+        setCommandError(failure);
+        setCommandSource(source);
+        setCommandAction(action);
+        setRetryCommand(() => command);
+      }
+    },
+    [deviceAccess],
+  );
   const leaveCall = onLeft ? () => void runCommand(async () => onLeft()) : undefined;
   const endCallForEveryone = onEndEpisode ? () => void runCommand(async () => onEndEpisode()) : undefined;
   const displayedCommandError = externalCommandError ?? commandError;
@@ -263,7 +280,13 @@ export function SpaceView({
       onCommandError(commandFailure(cause), commandSource, commandSource, commandAction, retryCommand);
     }
   };
-  const mappedFailure = mediaFailureToast(typeof displayedCommandError === "object" ? displayedCommandError : null, displayedCommandSource, externalCommandError != null ? externalCommandAction : commandAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+  const shownFailure = typeof displayedCommandError === "object" ? displayedCommandError : null;
+  const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
+  // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
+  const mappedFailure =
+    externalCommandError == null && !deviceAccessSnapshot.unavailable && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource)
+      ? null
+      : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);
@@ -308,155 +331,172 @@ export function SpaceView({
   return (
     <ParticipantVolumeProvider>
       <BoardToastContext.Provider value={showBoardToast}>
-        <SpacePresentation
-          colorScheme={colorScheme}
-          stageBackground={stageBackground}
-          header={{
-            colorScheme,
-            onColorSchemeChange,
-            spaceName,
-            people: participantsSlice.roster,
-            onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
-            knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
-            shareUrl: effectiveShareUrl,
-            callLinkOpen: callLinkOpen ?? callLink.open,
-            onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
-            onReportProblem,
-            onOpenReportProblem,
-            reportUnavailableReason,
-            diagnostics: callDiagnostics(connection, media),
-            shortcuts: {
-              isMuted: media.local.microphone.state !== "enabled",
-              onToggleMute: microphoneTarget === undefined ? undefined : () => void runCommand(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop"),
-              onToggleVideo: cameraTarget === undefined ? undefined : () => void runCommand(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop"),
-              onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
-              onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
+        <FrozenFramesContext.Provider value={connectionPhase.kind === "reconnecting" || connectionPhase.kind === "failed"}>
+          <SpacePresentation
+            connectionTrouble={connectionPhase.kind === "failed" ? "lost" : connectionPhase.kind === "reconnecting" ? "reconnecting" : undefined}
+            colorScheme={colorScheme}
+            stageBackground={stageBackground}
+            header={{
+              colorScheme,
+              onColorSchemeChange,
+              spaceName,
+              people: participantsSlice.roster,
               onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
-              onToggleLayout: () => updateLayout(headerLayout === "grid" ? "focus" : "grid"),
-              onToggleFullscreen: toggleCallFullscreen,
-              onClosePanel: () => setActivePanel(null),
-              onPushToTalk: (enabled) => {
-                if (enabled && connection.status !== "live") return;
-                void runCommand(() => client.media.setMicrophoneEnabled(enabled), "microphone", enabled ? "start" : "stop");
+              knockCount: canManageAdmission ? participantsSlice.admissionQueue.length : 0,
+              shareUrl: effectiveShareUrl,
+              callLinkOpen: callLinkOpen ?? callLink.open,
+              onCallLinkToggle: onCallLinkToggle ?? callLink.toggle,
+              onReportProblem,
+              onOpenReportProblem,
+              reportUnavailableReason,
+              diagnostics: callDiagnostics(connection, media),
+              network: { live: connection.status === "live", samples: media.callStats, link: media.link },
+              videoOn: media.local.camera.state === "enabled",
+              onTurnOffVideo: () => void runCommand(() => client.media.setCameraEnabled(false), "camera", "stop"),
+              shortcuts: {
+                isMuted: media.local.microphone.state !== "enabled",
+                onToggleMute: microphoneTarget === undefined ? undefined : () => void runCommand(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop"),
+                onToggleVideo: cameraTarget === undefined ? undefined : () => void runCommand(() => client.media.setCameraEnabled(cameraTarget), "camera", cameraTarget ? "start" : "stop"),
+                onToggleHand: feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined,
+                onToggleChat: feature("chat") ? () => setActivePanel((current) => (current === "chat" ? null : "chat")) : undefined,
+                onTogglePeople: feature("participants") ? () => setActivePanel((current) => (current === "participants" ? null : "participants")) : undefined,
+                onToggleLayout: () => updateLayout(headerLayout === "grid" ? "focus" : "grid"),
+                onToggleFullscreen: toggleCallFullscreen,
+                onClosePanel: () => setActivePanel(null),
+                onPushToTalk: (enabled) => {
+                  if (enabled && connection.status !== "live") return;
+                  void runCommand(() => client.media.setMicrophoneEnabled(enabled), "microphone", enabled ? "start" : "stop");
+                },
               },
-            },
-            duration: episodeDuration,
-            timeLeft: countdown.seconds,
-            isRecording: recording.current?.status === "recording",
-            layout: headerLayout,
-            onLayoutChange: updateLayout,
-            notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
-          }}
-          stage={
-            <SpaceStage
-              pinnedId={pinnedId}
-              onPinnedChange={setPinnedId}
-              tiles={tiles}
-              layout={layout}
-              onLayoutChange={updateLayout}
-              generatedAvatars={generatedAvatars}
-              whiteboard={whiteboard}
-              onCloseBoard={whiteboard?.isOpen ? onToggleWhiteboard : undefined}
-              colorScheme={colorScheme}
-              onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
-              shareCapture={media.screenShare.capture}
-              onStopSharing={async () => {
-                await client.media.setScreenShareEnabled(false);
-              }}
-              onChangeShare={
-                connection.status === "live"
-                  ? async (options) => {
-                      await client.media.setScreenShareEnabled(true, options);
-                    }
-                  : undefined
-              }
-              className="h-full"
-            />
-          }
-          controls={
-            <ControlBar
-              density="comfortable"
-              layout={layout}
-              onLayoutChange={updateLayout}
-              shareUrl={effectiveShareUrl}
-              callLinkOpen={callLinkOpen ?? callLink.open}
-              onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
-              buttons={buttons}
-              activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
-              onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
-              onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
-              onToggleWhiteboard={onToggleWhiteboard}
-              onOpenReactions={() => setReactionPickerOpen((current) => !current)}
-              reactionsOpen={isReactionPickerOpen}
-              onCommandError={onCommandError}
-              onLeaveRequest={leaveCall}
-              onEndForEveryone={endCallForEveryone}
-            />
-          }
-          stageOverlay={
-            <>
-              {feature("reactions") ? <ReactionsOverlay /> : null}
-              {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
-              {feature("reactions") && canSendReaction && connection.status === "live" ? (
-                <div className="absolute bottom-24 left-1/2 z-44">
-                  <ReactionPicker
-                    isHandRaised={self.handRaised}
-                    onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
-                    isOpen={isReactionPickerOpen}
-                    onClose={() => setReactionPickerOpen(false)}
-                    allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
-                    onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
-                    size="compact"
-                  />
-                </div>
-              ) : null}
-            </>
-          }
-          sidebar={
-            <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
-              {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
-              {drawer.panel === "participants" && feature("participants") ? (
-                <ParticipantsPanel
-                  onParticipantClick={(id) => {
-                    setPinnedId((current) => (current === id ? null : id));
-                    if (phone) setActivePanel(null);
-                  }}
-                  variant="mobile"
-                  admissionEnabled={feature("admission")}
-                  generatedAvatars={generatedAvatars}
+              duration: episodeDuration,
+              timeLeft: countdown.seconds,
+              isRecording: recording.current?.status === "recording",
+              layout: headerLayout,
+              onLayoutChange: updateLayout,
+              notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
+            }}
+            stage={
+              <SpaceStage
+                pinnedId={pinnedId}
+                onPinnedChange={setPinnedId}
+                tiles={tiles}
+                layout={layout}
+                onLayoutChange={updateLayout}
+                generatedAvatars={generatedAvatars}
+                whiteboard={whiteboard}
+                onCloseBoard={whiteboard?.isOpen ? onToggleWhiteboard : undefined}
+                colorScheme={colorScheme}
+                onOverflowClick={feature("participants") ? () => setActivePanel("participants") : undefined}
+                shareCapture={media.screenShare.capture}
+                onStopSharing={async () => {
+                  await client.media.setScreenShareEnabled(false);
+                }}
+                onChangeShare={
+                  connection.status === "live"
+                    ? async (options) => {
+                        await client.media.setScreenShareEnabled(true, options);
+                      }
+                    : undefined
+                }
+                className="h-full"
+              />
+            }
+            controls={
+              <DeviceAccessProvider value={deviceAccess}>
+                <ControlBar
+                  density="comfortable"
+                  layout={layout}
+                  onLayoutChange={updateLayout}
+                  shareUrl={effectiveShareUrl}
+                  callLinkOpen={callLinkOpen ?? callLink.open}
+                  onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
+                  buttons={buttons}
+                  activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
+                  onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
+                  onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
+                  onToggleWhiteboard={onToggleWhiteboard}
+                  onOpenReactions={() => setReactionPickerOpen((current) => !current)}
+                  reactionsOpen={isReactionPickerOpen}
                   onCommandError={onCommandError}
-                  onClose={() => setActivePanel(null)}
+                  onLeaveRequest={leaveCall}
+                  onEndForEveryone={endCallForEveryone}
                 />
-              ) : null}
-              {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
-            </CallCard>
-          }
-          toasts={
-            <ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices}>
-              {mediaRequest ? (
-                <MediaRequestDialog
-                  request={mediaRequest}
-                  onDecline={() => void runCommand(() => client.media.declineRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
-                  onAllow={() => void runCommand(() => client.media.acceptRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
-                />
-              ) : null}
-            </ToastStack>
-          }
-          mediaOutput={
-            <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-(--elevation-toast)">
-              <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
-            </div>
-          }
-          overlays={
-            <>
-              <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
-              {overlay}
-              {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}
-              <OfflineActions reconnecting={reconnecting?.status === "reconnecting" && reconnecting.isVisible} hasNotice={offlineNotice !== null} />
-            </>
-          }
-          className={className}
-        />
+              </DeviceAccessProvider>
+            }
+            stageOverlay={
+              <>
+                {feature("reactions") ? <ReactionsOverlay /> : null}
+                {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
+                <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onOpenReportProblem} />
+                {feature("reactions") && canSendReaction && connection.status === "live" ? (
+                  <div className="absolute bottom-24 left-1/2 z-44">
+                    <ReactionPicker
+                      isHandRaised={self.handRaised}
+                      onToggleHandRaise={feature("handRaise") && canRaiseHand ? () => void runCommand(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())) : undefined}
+                      isOpen={isReactionPickerOpen}
+                      onClose={() => setReactionPickerOpen(false)}
+                      allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
+                      onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
+                      size="compact"
+                    />
+                  </div>
+                ) : null}
+              </>
+            }
+            sidebar={
+              <CallCard state={drawer.state} panel={drawer.panel} onPanelChange={setActivePanel} peopleCount={participantsSlice.roster.length} participantsEnabled={feature("participants")} chatEnabled={feature("chat")} onClose={() => setActivePanel(null)}>
+                {drawer.panel === "chat" && feature("chat") ? <ChatPanel variant="mobile" generatedAvatars={generatedAvatars} onClose={() => setActivePanel(null)} pickChatFiles={pickChatFiles} /> : null}
+                {drawer.panel === "participants" && feature("participants") ? (
+                  <ParticipantsPanel
+                    onParticipantClick={(id) => {
+                      setPinnedId((current) => (current === id ? null : id));
+                      if (phone) setActivePanel(null);
+                    }}
+                    variant="mobile"
+                    handOrders={handOrders}
+                    admissionEnabled={feature("admission")}
+                    generatedAvatars={generatedAvatars}
+                    onCommandError={onCommandError}
+                    onClose={() => setActivePanel(null)}
+                  />
+                ) : null}
+                {drawer.panel === "admission" && feature("admission") ? (
+                  <Suspense fallback={null}>
+                    <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} />
+                  </Suspense>
+                ) : null}
+              </CallCard>
+            }
+            toasts={
+              <ToastStack toasts={toasts} onDismiss={dismissToast} onFold={setFoldedNotices}>
+                {mediaRequest ? (
+                  <MediaRequestDialog
+                    request={mediaRequest}
+                    onDecline={() => void runCommand(() => client.media.declineRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
+                    onAllow={() => void runCommand(() => client.media.acceptRequest(mediaRequest.requestId), mediaRequest.kind === "start_camera" ? "camera" : "microphone", "request")}
+                  />
+                ) : null}
+              </ToastStack>
+            }
+            mediaOutput={
+              <div className="[&>div]:top-[68px] [&>div>button]:h-11 [&>div>button]:shadow-(--elevation-toast)">
+                <AudioOutput resumeAudioLabel="Your browser paused the sound. Click to hear the call" />
+              </div>
+            }
+            overlays={
+              <>
+                {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
+                  <Suspense fallback={null}>
+                    <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />
+                  </Suspense>
+                ) : null}
+                <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
+                {overlay}
+              </>
+            }
+            className={className}
+          />
+        </FrozenFramesContext.Provider>
       </BoardToastContext.Provider>
     </ParticipantVolumeProvider>
   );

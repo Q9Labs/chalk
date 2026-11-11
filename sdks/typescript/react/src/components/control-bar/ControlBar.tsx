@@ -1,5 +1,7 @@
 import { commandFailureMessage } from "./command-failure";
-import React, { useEffect, useState } from "react";
+import { LazyDeviceAccessWaiting } from "../device-access/LazyDeviceAccessCard";
+import { isDeviceAccessFailure } from "../device-access/model";
+import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon, VolumeHighIcon } from "../../utils/icons";
@@ -91,6 +93,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           noiseSuppression={props.noiseSuppression}
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
+          access={props.deviceAccess?.microphone}
           sheetOpen={deviceSheet === "mic"}
           onSheetOpenChange={(open) => setDeviceSheet(open ? "mic" : null)}
         />
@@ -111,11 +114,14 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           warning={props.cameraWarning}
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}
+          access={props.deviceAccess?.camera}
           sheetOpen={deviceSheet === "video"}
           onSheetOpenChange={(open) => setDeviceSheet(open ? "video" : null)}
         />
       ) : null}
-      {has("screenshare") ? <ShareControl disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} /> : null}
+      {has("screenshare") && canCaptureDisplay ? (
+        <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
+      ) : null}
       {reactions}
       {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
@@ -158,7 +164,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             </button>
           ) : null}
           {has("screenshare") && canCaptureDisplay ? (
-            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.onToggleScreenShare}>
+            <button type="button" className="chalk-sheet-row" disabled={props.mediaEnableDisabled && !props.isScreenSharing} onClick={props.deviceAccess?.screen ? () => props.deviceAccess?.screen?.onOpenChange(true) : props.onToggleScreenShare}>
               <ShellIcon name="share" />
               <span>{props.isScreenSharing ? "Stop sharing" : "Share screen"}</span>
             </button>
@@ -221,11 +227,17 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice } = useConnectedControlBarBehavior(props);
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice, cardUnavailable } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError && (cardUnavailable || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? (!props.onCommandError && commandError ? commandFailureMessage(commandError, commandSource, commandAction) : undefined)} />
+      <CommandErrorAlert message={mediaNotice ?? failure} />
+      {requestingDevice ? (
+        <Suspense fallback={null}>
+          <LazyDeviceAccessWaiting device={requestingDevice} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

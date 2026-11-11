@@ -1,5 +1,8 @@
 export * from "./cloudflare-sfu";
 export type { ClientMediaPlane, ConnectionMediaLocalTrack, ConnectionMediaPhase, ConnectionMediaRemoteTrack, ConnectionMediaSnapshot, MediaPlaneOutcome, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource, MediaSource } from "./plane";
+export { CALL_STATS_HISTORY } from "./call-stats";
+export type { CallStatsSample } from "./call-stats";
+export type { LinkQuality, LinkReason, LinkTier } from "./link-quality";
 export { describeMediaCaptureError } from "./capture-error";
 export { configureCameraEffectProvider, getCameraBackgroundFallback, setCameraBackground, subscribeCameraBackground, processCameraStream, loadCameraBackgroundControls } from "./camera-effects";
 export type { CameraEffectsAssets, CameraEffectsTrack, CameraEffectsProvider, CameraSegmenter } from "./camera-effects";

@@ -13,7 +13,7 @@ import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../..
 import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
-import { CallDialog } from "../space-header/CallDetails";
+import { CallDialog } from "../space-header/CallDialog";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
@@ -52,10 +52,7 @@ type SpaceEventCallbacks = {
 };
 export type ChalkProps = SpaceIntegration &
   SpaceEventCallbacks & {
-    readonly defaults?: {
-      readonly microphone?: boolean;
-      readonly camera?: boolean;
-    };
+    readonly defaults?: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
     readonly displayName?: string;
     readonly features?: ChalkFeatures;
     readonly theme?: ChalkTheme;
@@ -83,6 +80,9 @@ export type ChalkProps = SpaceIntegration &
     /** Host-provided terminal reason when the transport cannot distinguish it. */
     readonly terminalState?: "removed" | "full" | "elsewhere";
   };
+/** A call that could not be recovered stays on screen, dimmed, with a card that offers a way back. */
+const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted";
+
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
   const colorScheme = props.theme?.colorScheme ?? localColorScheme;
@@ -228,7 +228,7 @@ function SpaceExperience(
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
   if (connection.status === "failed" && connection.lastError?.code === "episode.ended")
     return <StatusSurface phase="episode-ended" callName={callName} episodeEndReason={connection.episodeEndReason} endAction={props.timeLimit?.endAction} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
-  if (connection.status === "failed") {
+  if (connection.status === "failed" && !keepsCallOnFailure(connection.lastError?.code)) {
     return (
       <StatusSurface
         phase="failed"
@@ -260,7 +260,7 @@ function SpaceExperience(
     );
   return (
     <div className="relative h-full min-h-0">
-      <SpaceSurface {...props} spaceName={spaceName} />
+      <SpaceSurface {...props} spaceName={spaceName} onRetry={retryAutomaticJoin} />
       <CallLimbo overlay active={false} initiallyCovered message="" />
     </div>
   );
@@ -270,6 +270,7 @@ function SpaceSurface(
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly spaceName: string;
     readonly onOpenReport?: () => void;
+    readonly onRetry: () => void;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -351,7 +352,7 @@ function SpaceSurface(
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
-      reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
+      onRejoin={props.onRejoin ?? props.onRetry}
       overlay={
         media.microphoneMutedByOtherDevice ? (
           <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">
@@ -369,7 +370,7 @@ function bindWhiteboardPresentation(transport: ChalkWhiteboardV1Transport): ((pr
 }
 function defaultJoinOptions(props: ChalkProps): JoinOptions {
   const displayName = props.displayName?.trim();
-  return { ...(displayName ? { displayName } : {}), microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
+  return { ...(displayName ? { displayName } : {}), ...props.defaults, microphone: props.defaults?.microphone ?? true, camera: props.defaults?.camera ?? true };
 }
 function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): void {
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward participantJoined events to the current host callback; unsubscribe on replacement.

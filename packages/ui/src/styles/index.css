@@ -1276,6 +1276,18 @@
   opacity: 1;
   transform: none;
 }
+.chalk-invite-qr {
+  display: block;
+  flex: none;
+  width: 176px;
+  height: 176px;
+  border-radius: var(--corner-xl);
+  overflow: hidden;
+  font-size: 0;
+}
+[data-chalk-theme="light"] .chalk-invite-qr {
+  box-shadow: var(--elevation-hairline-strong);
+}
 .chalk-toasts {
   position: absolute;
   left: 0;

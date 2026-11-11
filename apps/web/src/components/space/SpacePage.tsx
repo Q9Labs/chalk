@@ -1,19 +1,19 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
-import type { ThemeMode } from "../../lib/theme";
 import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { CallLimbo, ChalkButton } from "@q9labsai/chalk-react";
+import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
 import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
-type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">>;
+import { PreJoin } from "./pre-join/PreJoin";
+type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
-type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string };
+type EntryFailure = { readonly message: string; readonly retryable: boolean; readonly retryLabel?: string; readonly reason?: "declined" | "expired" };
 export type ExitPhase = "left" | "episode-ended" | "removed" | "failed";
 // A visitor on the lobby or the leave screen usually presses Join within seconds. Sync closes an idle socket after 5 s, so the
 // SDK replaces it for this long after the last action: about four short-lived sockets at most, then none.
@@ -89,6 +89,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       return "";
     }
   });
+  // A visitor who already chose devices in this browser skips the device step and joins with that choice.
+  const [rememberedDevices] = useState(() => readRememberedDevices());
+  const [stepOpen, setStepOpen] = useState(!reloadMarker && !(automaticName && rememberedDevices));
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState<string>();
@@ -112,7 +115,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const retryAfterRelease = useRef(false);
   // The entrance releases an admitted arrival until LocalSpace mounts and takes over its release.
   const entranceAccess = useRef<SpaceEntryAccess | null>(null);
-  const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ displayName, ...devicesOff }), [displayName]);
+  const defaultJoinOptions = useMemo<WebJoinSettings>(() => ({ ...(entranceSettings ?? devicesOff), displayName }), [displayName, entranceSettings]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -168,12 +171,13 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       });
   }, [client, complete, reloadMarker, slug]);
   const start = useCallback(
-    (settings: WebJoinSettings = defaultJoinOptions) => {
+    (settings: WebJoinSettings = defaultJoinOptions, fromStep = false) => {
       const normalizedDisplayName = settings.displayName.trim();
       const inviteToken = inviteCode ?? spaceInviteToken();
       if (!normalizedDisplayName || (spaceAccess && !terminal) || pending || preparing) return;
       setDisplayName(normalizedDisplayName);
-      setEntranceSettings({ displayName: normalizedDisplayName, ...devicesOff });
+      setEntranceSettings({ ...settings, displayName: normalizedDisplayName });
+      setStepOpen(fromStep);
       try {
         globalThis.localStorage.setItem(displayNameStorageKey, normalizedDisplayName);
       } catch {
@@ -212,6 +216,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           if (arrival.state === "pending") {
             const nextPending = { arrival, inviteLink, spaceName } satisfies PendingArrival;
             pendingRef.current = nextPending;
+            setStepOpen(false);
             setPending(nextPending);
             return;
           }
@@ -244,10 +249,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     };
   }, [automaticName, reloadMarker]);
   useEffect(() => {
-    if (!automaticName || reloadMarker || autoArrivalAttempted.current) return;
+    if (!automaticName || !rememberedDevices || reloadMarker || autoArrivalAttempted.current) return;
     autoArrivalAttempted.current = true;
-    start({ displayName: automaticName, ...devicesOff });
-  }, [automaticName, reloadMarker, start]);
+    void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
+  }, [automaticName, reloadMarker, rememberedDevices, start]);
   useEffect(() => {
     if (preparing || cancelRequested.current) return;
     pendingRef.current = pending;
@@ -294,6 +299,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       await client.leaveSpacePublicInviteArrival(arrivalHandle);
       pendingRef.current = null;
       setPending(null);
+      setStepOpen(true);
     } catch (cause) {
       setError(neutralMessage(cause));
     } finally {
@@ -419,7 +425,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           credential={spaceAccess.prepared.credential}
           hostCanExtend={(spaceAccess.prepared.arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600}
           displayName={settings.displayName}
-          defaults={{ microphone: settings.microphone, camera: settings.camera }}
+          defaults={settings}
           getAccess={spaceAccess.prepared.getAccess}
           connectionAccess={spaceAccess.prepared.connectionAccess}
           onFinish={finish}
@@ -441,24 +447,25 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               spaceName={pending.spaceName}
               message={error?.message ?? `Asking to join ${pending.spaceName ?? "the call"}`}
               detail={error ? undefined : "The host will let you in."}
+              joiningAs={error ? undefined : displayName.trim()}
               action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }}
             />
-          ) : preparing || (spaceAccess && !error) || (!reloadMarker && automaticName && !autoArrivalAttempted.current) ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
-          ) : (
-            <NameNeeded
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} glyph={error.reason} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
+          ) : stepOpen ? (
+            <PreJoin
               spaceName={callName}
-              theme={mode}
               displayName={displayName}
               onDisplayNameChange={(name) => {
                 nameEdited.current = true;
                 setDisplayName(name);
                 warmCall();
               }}
-              onJoin={() => start()}
+              joining={preparing || Boolean(spaceAccess)}
+              onJoin={(devices: PreJoinJoinOptions) => start({ ...devices, displayName }, true)}
             />
+          ) : (
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={`Joining ${callName ?? "the call"}…`} />
           )}
         </div>
       </main>
@@ -557,8 +564,8 @@ function neutralMessage(cause: unknown): EntryFailure {
   if (cause instanceof ArrivalUnavailableError) return { message: "Your request to join is no longer available. Open the invite link and join again.", retryable: false };
   if (cause instanceof MediaUnavailableError) return { message: "Calls are unavailable right now. Try again in a few minutes.", retryable: true };
   if (cause instanceof AdmissionError) {
-    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true };
-    if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true };
+    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true, reason: "declined" };
+    if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true, reason: "expired" };
     return { message: "Your request to join is no longer active.", retryable: true };
   }
   if (cause && typeof cause === "object" && "status" in cause) {
@@ -569,34 +576,4 @@ function neutralMessage(cause: unknown): EntryFailure {
     if (cause.status === 409) return { message: "You could not enter this Space. Try entering again.", retryable: true };
   }
   return { message: "Chalk could not connect. Check your connection and try entering again.", retryable: true };
-}
-
-/** The web asks only for identity. Devices are requested inside the admitted call. */
-export function NameNeeded({ spaceName, theme, displayName, onDisplayNameChange, onJoin }: { readonly spaceName?: string; readonly theme: ThemeMode; readonly displayName: string; readonly onDisplayNameChange: (name: string) => void; readonly onJoin: () => void }) {
-  return (
-    <CallLimbo spaceName={spaceName} message={spaceName ? `Join ${spaceName}` : "Join the call"} theme={{ colorScheme: theme }} className="w-[320px] p-5 max-[640px]:w-[300px]">
-      <form
-        className="mt-4 flex w-full flex-col gap-2 text-left"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (displayName.trim()) onJoin();
-        }}
-      >
-        <label htmlFor="join-display-name" className="text-(length:--type-body-sm) font-semibold">
-          Your name
-        </label>
-        <input
-          id="join-display-name"
-          autoComplete="name"
-          autoFocus
-          value={displayName}
-          onChange={(event) => onDisplayNameChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] px-3.5 text-[var(--chalk-app-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--chalk-app-control-active-line)]"
-        />
-        <ChalkButton type="submit" variant="solid" className="mt-1.5 !h-11 w-full" disabled={!displayName.trim()}>
-          Join call
-        </ChalkButton>
-      </form>
-    </CallLimbo>
-  );
 }

@@ -1,4 +1,4 @@
-import type { Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, LinkQuality, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
 import { boardActivity, planScene, smallScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
@@ -11,6 +11,12 @@ export type Person = {
   readonly speaking?: boolean;
   readonly handRaised?: boolean;
   readonly sharing?: boolean;
+  /** Holds the host capabilities, so the roster marks the person as a host. */
+  readonly host?: boolean;
+  /** How this guest's own link reads to everyone else. */
+  readonly quality?: "good" | "weak" | "poor";
+  /** This guest dropped out of the call and is trying to come back. */
+  readonly reconnecting?: boolean;
 };
 
 const BACKGROUNDS = ["#4d5d73", "#5c6650", "#6b5b4f", "#64576b", "#49645d", "#665d42", "#315f72", "#6d5158"];
@@ -51,7 +57,32 @@ export type LiveOptions = {
   readonly offlinePending?: boolean;
   readonly mediaRequest?: boolean;
   readonly reactions?: boolean;
+  /** A minute of call-stats windows for the call menu charts. */
+  readonly network?: "steady" | "unstable";
+  /** The tier the call menu and the header chip show for your own link. */
+  readonly link?: LinkQuality;
 };
+
+const STEADY_RTT = [44, 43, 52, 47, 42, 41];
+const STEADY_LOSS = [0, 0.4, 1.2, 0.3, 0, 0.1];
+const UNSTABLE_RTT = [58, 120, 340, 410, 380, 350];
+const UNSTABLE_LOSS = [0.5, 2, 6, 9, 8, 8];
+
+/** Six 10-second windows, the history the call menu charts. */
+function networkSamples(kind: "steady" | "unstable"): readonly CallStatsSample[] {
+  const rtt = kind === "steady" ? STEADY_RTT : UNSTABLE_RTT;
+  const loss = kind === "steady" ? STEADY_LOSS : UNSTABLE_LOSS;
+  return rtt.map((rtt_ms, index) => ({
+    elapsed_ms: (index + 1) * 10_000,
+    window_ms: 10_000,
+    connection_type: "udp" as const,
+    rtt_ms,
+    recv_loss_pct: loss[index],
+    send_loss_pct: 0,
+    send_bitrate_kbps: 1200 + (index % 3) * 40,
+    recv_bitrate_kbps: 3400 - (index === 2 ? 700 : 0) + (index % 2) * 60,
+  }));
+}
 
 const startedAt = new Date(Date.now() - (25 * 60 + 9) * 1000).toISOString();
 
@@ -61,7 +92,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const self = { camera: true, microphone: true, ...options.self };
   const others = options.others ?? [];
   const now = Date.now();
-  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, GUEST))];
+  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, person.host ? HOST : GUEST))];
   const remote: RemoteMedia[] = others.flatMap((person, index) => [
     ...(person.camera === false ? [] : [{ participantId: person.id, source: "camera" as const, publicationId: `${person.id}-camera`, track: cameraTrack(person.name, BACKGROUNDS[index % BACKGROUNDS.length]!) }]),
     ...(person.sharing ? [{ participantId: person.id, source: "screen" as const, publicationId: `${person.id}-screen`, track: screenTrack() }] : []),
@@ -84,6 +115,8 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
         screen: { source: "screen", state: self.sharing ? "enabled" : "disabled", track: self.sharing ? screenTrack() : null },
       },
       remote,
+      ...(options.network ? { callStats: networkSamples(options.network) } : {}),
+      ...(options.link ? { link: options.link } : {}),
       incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
     },
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },
@@ -116,7 +149,7 @@ function participant(person: Person, capabilities: readonly Capability[]): Parti
     capabilities,
     handRaised: person.handRaised ?? false,
     media: { microphone: person.microphone === false ? "inactive" : "active", camera: person.camera === false ? "inactive" : "active", screenShare: person.sharing ? "active" : "inactive" },
-    presence: { state: "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false },
+    presence: { state: person.reconnecting ? "disconnected" : "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false, ...(person.quality ? { connectionQuality: person.quality } : {}) },
   };
 }
 
@@ -142,7 +175,7 @@ export type CallStateClient = ReturnType<typeof createCallStateClient>;
 
 /** The preview client plus the two seams Chalk needs from a live client: lifecycle events and a whiteboard transport. */
 /** What the fixture board holds: the plan scene or one small word, the people who move their pointers over it, and a relay channel to other tabs. */
-export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string };
+export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string; readonly pointers?: "roaming" | "edges" };
 
 export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixture = {}) {
   const client = createPreviewClient(snapshot);
@@ -191,7 +224,7 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
     subscribe: (listener) => {
       listeners.add(listener);
       queueMicrotask(() => listener(snapshot()));
-      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)));
+      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)), board.pointers);
       return () => {
         listeners.delete(listener);
         if (listeners.size > 0) return;

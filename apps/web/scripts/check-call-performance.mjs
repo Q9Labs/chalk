@@ -29,6 +29,7 @@ const { values } = parseArgs({
     shard: { type: "string" },
     "leak-journey": { type: "string" },
     "leak-repeats": { type: "string", default: "1" },
+    "journey-concurrency": { type: "string", default: "3" },
     diagnostics: { type: "boolean" },
     shots: { type: "string", default: process.env.CALL_PERFORMANCE_SHOTS },
     "record-baseline": { type: "boolean" },
@@ -134,6 +135,7 @@ try {
   if (!values["bundle-only"] && !values["timing-only"]) {
     const repeats = Number(values["leak-repeats"]);
     if (!Number.isInteger(repeats) || repeats < 1) throw new Error("Invalid leak repeats");
+    if (!Number.isInteger(Number(values["journey-concurrency"])) || Number(values["journey-concurrency"]) < 1) throw new Error("Invalid journey concurrency");
     report.leaks = await checkLeaks({
       browser,
       origin,
@@ -141,6 +143,7 @@ try {
       directory: resolve(root, "artifacts/call-leaks"),
       boardCss: resolve(root, "packages/whiteboard/node_modules/@excalidraw/excalidraw/dist/prod/index.css"),
       selfTest: values["self-test"] && (!shard || shard.selfTest),
+      journeyConcurrency: Number(values["journey-concurrency"]),
       repeats,
       journeys: shard?.journeys ?? (values["leak-journey"] ? [values["leak-journey"]] : undefined),
     });
@@ -330,7 +333,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     }
     if (scenario.id === "reconnect") {
       await page.locator("[data-perf-reconnect]").dispatchEvent("click");
-      const notice = page.locator('[data-part="connection-notice"]');
+      const notice = page.locator('[data-part="connection-status"]');
       await notice.filter({ hasText: "Reconnecting" }).waitFor({ timeout: 10_000 });
       if ((await notice.evaluate((element) => getComputedStyle(element).pointerEvents)) !== "none") throw new Error("Recovery notice intercepts call controls");
       if (await page.locator('[data-call-limbo][data-covered="true"][aria-hidden="false"]').count()) throw new Error("Recovery covers the call");
@@ -342,7 +345,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       });
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");
-      await notice.waitFor({ state: "hidden" });
+      await notice.waitFor({ state: "hidden", timeout: 10_000 });
       await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
       await page.getByRole("button", { name: "Leave call", exact: true }).click({ trial: true });
     }

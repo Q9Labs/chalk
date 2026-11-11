@@ -41,7 +41,8 @@ class Store:
     def git(self, *args, data=None, check=True):
         result = subprocess.run(["git", *args], input=data, text=True, capture_output=True, env=self.env, timeout=30)
         if check and result.returncode:
-            raise RuntimeError("staging lease Git operation failed")
+            lines = [line for line in result.stderr.splitlines() if line.strip()]
+            raise RuntimeError(f"git {args[0]} failed: {lines[-1][:200] if lines else 'no output'}")
         return result
 
     def read(self):
@@ -196,6 +197,6 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (RuntimeError, OSError, subprocess.SubprocessError):
-        print("Staging SFU lease operation failed; workload not authorized to continue.", file=sys.stderr)
+    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+        print(f"Staging SFU lease operation failed ({error}); workload not authorized to continue.", file=sys.stderr)
         sys.exit(75)

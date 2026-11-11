@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { CallNetwork } from "./call-network";
 
 export interface SpaceHeaderProps {
   spaceName: string;
@@ -9,7 +10,12 @@ export interface SpaceHeaderProps {
   callLinkOpen?: boolean;
   onCallLinkToggle?: () => void;
   diagnostics?: readonly { readonly label: string; readonly value: string }[];
-  weakConnection?: boolean;
+  /** Connection quality and its charts for the call menu. Without it the menu has no Connection row. */
+  network?: CallNetwork;
+  /** Whether the camera is on, so a very poor link can offer to turn it off. */
+  videoOn?: boolean;
+  /** The "Turn off video" action of the connection chip. The video stays off until the person turns it back on. */
+  onTurnOffVideo?: () => void;
   onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
   reportUnavailableReason?: string;
   onOpenReportProblem?: () => void;

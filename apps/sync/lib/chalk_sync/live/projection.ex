@@ -171,17 +171,30 @@ defmodule ChalkSync.Live.Projection do
     exact_keys?(
       item,
       ["participant_id", "state", "speaking", "active_speaker"] ++
-        Enum.filter(["identity_id", "device_type", "admission_revision"], &Map.has_key?(item, &1))
+        Enum.filter(
+          ["identity_id", "device_type", "admission_revision", "connection_quality"],
+          &Map.has_key?(item, &1)
+        )
     ) and
-      valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
+      valid_presence_hints?(item) and
       item["state"] in ["connected", "disconnected"] and
       canonical_uuid?(item["participant_id"]) and is_boolean(item["speaking"]) and
       is_boolean(item["active_speaker"]) and
       valid_presence_activity?(item)
   end
 
+  defp valid_presence_hints?(item) do
+    valid_identity_hint?(item) and valid_device_hint?(item) and valid_admission_hint?(item) and
+      valid_connection_quality?(item)
+  end
+
   defp valid_presence_activity?(%{"state" => "connected"}), do: true
   defp valid_presence_activity?(item), do: not item["speaking"] and not item["active_speaker"]
+
+  defp valid_connection_quality?(%{"connection_quality" => quality}),
+    do: quality in ["good", "weak", "poor"]
+
+  defp valid_connection_quality?(_item), do: true
 
   defp valid_identity_hint?(%{"identity_id" => id}), do: canonical_uuid?(id)
   defp valid_identity_hint?(_item), do: true
@@ -253,6 +266,7 @@ defmodule ChalkSync.Live.Projection do
 
   defp tombstone(:presence, item) do
     %{item | "state" => "disconnected", "speaking" => false, "active_speaker" => false}
+    |> Map.delete("connection_quality")
   end
 
   defp reconcile_changes(projection, _desired_items, [], _options, _now_ms),

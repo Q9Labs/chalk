@@ -25,11 +25,20 @@ The API must be ready, but recording and transcription can be disabled: this
 proof tests the live web call, not media processing. The separate recording and
 transcript proofs still require both media capabilities before a nightly can hold.
 
+The proof Space is on Cloudflare by default. `CHALK_PROOF_MEDIA_PLANE=chalk_sfu` runs the call on the own SFU
+instead: the public API cannot create such a Space, so set `CHALK_PROOF_SPACE_ID_CHALK_SFU` to a Space an operator moved with
+`media-settings` (manual Recording, on-demand Transcription, open admission). The run turns that Space's public invite on
+for the call and off again afterwards, and ends the Episode it made. `CHALK_PROOF_WEBKIT=1` adds Playwright WebKit (an
+iPad Safari profile) beside Chromium. `CHALK_PROOF_JOIN_ORDER=web-first` or `guest-first` fixes which side is in the
+Episode before the other joins; unset, the SDK guest starts while the web app opens.
+
 Run browser suites in a configured M4 checkout, not a developer laptop. Keep its
 proof configuration and evidence in that checkout. For hosted runs,
 `.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only
 when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
-deploy and after the recording/transcript proof. Both workflows share the same
+deploy and after the `chalk_sfu` real-call proof, on `chalk_sfu` (the Space an operator
+moved, `CHALK_PROOF_SPACE_ID_CHALK_SFU`, under the staging SFU lease). A manual dispatch
+takes `media_plane`, `cf_sfu` by default. Both workflows share the same
 environment lock because existing proof cleanup resets the webhook. Both must pass to hold a cut;
 the deployment record retains `real_call_proof_result` and `web_e2e_result`.
 

@@ -2,18 +2,20 @@ import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
+import { DEVICE_ACCESS_STATES } from "./device-access";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
+import { Live } from "./live";
 import { STATES_LANE } from "./states-lane";
+import { CONNECTION_STATES } from "./connection";
+import { PEOPLE_GUEST_STATES, PEOPLE_STATES } from "./people";
 import { FoundationKit } from "./foundation";
-import { readThemePreference, persistThemePreference } from "../lib/theme";
 import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
-import { CallLimbo, Chalk, ToastStack, type SpaceLayout } from "@q9labsai/chalk-react";
-import { useEffect, useState, type ReactNode } from "react";
-import { NameNeeded } from "../components/space/SpacePage";
-import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type BoardFixture, type CallStateClient, type Person } from "./fixtures";
+import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
+import { useState, type ReactNode } from "react";
+import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
 export type Action = { readonly click: string; readonly role?: "button" | "menuitem" | "menuitemradio" } | { readonly wait: number };
@@ -52,9 +54,13 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,
   ...SHELL_STATES,
+  ...DEVICE_ACCESS_STATES,
   ...STAGE_STATES,
   ...CARD_STATES,
+  ...PEOPLE_STATES,
+  ...PEOPLE_GUEST_STATES,
   ...STATES_LANE,
+  ...CONNECTION_STATES,
   ...INTEGRATION_STATES,
   { id: "foundation-motion-dark", title: "Foundation motion Dark", render: () => <FoundationKit scheme="dark" initialNotice={false} /> },
   { id: "foundation-motion-light", title: "Foundation motion Light", render: () => <FoundationKit scheme="light" initialNotice={false} /> },
@@ -72,8 +78,6 @@ export const CALL_STATES: readonly CallState[] = [
     ),
   },
   { id: "joining", title: "Joining with devices off", render: () => <Live snapshot={{ ...liveSnapshot(), connection: { status: "joining", episode: null, lastError: null, episodeEnded: false, removedByHost: false } }} /> },
-  { id: "name-needed", title: "Name needed", render: () => <JoinName theme="dark" /> },
-  { id: "name-needed-light", title: "Name needed, light", render: () => <JoinName theme="light" /> },
   { id: "knocking", title: "Asking the host to join", render: () => <WaitingForHost /> },
   {
     id: "knock-denied",
@@ -169,6 +173,12 @@ export const CALL_STATES: readonly CallState[] = [
       actions: [{ click: `More options for ${nora.name}` }, { click: "Follow", role: "menuitem" }] satisfies readonly Action[],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
+    {
+      id: `board-edges-${scheme}`,
+      title: `Board with a name tag at the edge and a pointer off screen, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik], pointers: "edges" }} />,
+    },
+    { id: `board-viewonly-${scheme}`, title: `Board, view only, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true })} board={{ scene: true, people: [nora, malik] }} /> },
     { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },
     { id: `board-relay-${scheme}`, title: `Board shared with other tabs, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ relay: `board-relay-${scheme}` }} /> },
     { id: `board-notes-${scheme}`, title: `Board sticky notes, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },
@@ -257,65 +267,10 @@ function raiseNotices(client: CallStateClient, kind: string, count: number) {
   for (let index = 0; index < count; index += 1) client.emit("error", { error: new SpaceClientError({ ...error, recoverable: true }) });
 }
 
-function Live({
-  snapshot,
-  layout,
-  then,
-  initialColorScheme,
-  board,
-  width,
-  height,
-  spaceName = SPACE_NAME,
-}: {
-  readonly initialColorScheme?: "light" | "dark";
-  readonly snapshot: SpaceSnapshot;
-  readonly layout?: SpaceLayout;
-  readonly then?: (client: CallStateClient) => void;
-  readonly board?: BoardFixture;
-  readonly width?: number;
-  readonly height?: number;
-  readonly spaceName?: string;
-}) {
-  const [client] = useState(() => createCallStateClient(snapshot, board));
-  const [colorScheme, setColorScheme] = useState(() => initialColorScheme ?? readThemePreference(document.cookie));
-  const [transition] = useState(() => then);
-  useEffect(() => {
-    if (!transition) return;
-    const timer = setTimeout(() => transition(client), 200);
-    return () => clearTimeout(timer);
-  }, [client, transition]);
-  return (
-    <main className="h-dvh min-h-0 w-full overflow-hidden" style={width || height ? { width, height } : undefined}>
-      <Chalk
-        theme={{ colorScheme }}
-        onColorSchemeChange={(next) => {
-          setColorScheme(next);
-          persistThemePreference(next);
-        }}
-        client={client}
-        displayName={SELF_NAME}
-        spaceName={spaceName}
-        layout={layout}
-        onLeft={() => undefined}
-        onHome={() => undefined}
-      />
-    </main>
-  );
-}
-
 function WaitingForHost() {
   return (
     <main className="h-dvh">
       <CallLimbo spaceName={SPACE_NAME} message={`Asking to join ${SPACE_NAME}`} detail="The host will let you in." action={{ label: "Cancel", onClick: () => undefined }} />
-    </main>
-  );
-}
-
-function JoinName({ theme }: { readonly theme: "light" | "dark" }) {
-  const [name, setName] = useState("");
-  return (
-    <main data-chalk data-chalk-theme={theme} className="h-dvh">
-      <NameNeeded spaceName={SPACE_NAME} theme={theme} displayName={name} onDisplayNameChange={setName} onJoin={() => undefined} />
     </main>
   );
 }

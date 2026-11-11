@@ -62,7 +62,7 @@ async function capture(state, viewportName, viewport) {
     });
     // The board waits for its stylesheet from the CDN; holding it back keeps the loading screen, as on a slow network.
     if (state.stallBoard) await page.route(/\/chalk-whiteboard\//, () => undefined);
-    await page.goto(`${ORIGIN}/call-states.html?state=${state.id}`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${ORIGIN}/${state.page}?state=${state.id}`, { waitUntil: "domcontentloaded" });
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(SETTLE_MS);
     for (const action of state.actions ?? []) {
@@ -93,10 +93,15 @@ function launchBrowser() {
 }
 
 async function readStates() {
-  const page = await browser.newPage();
-  await page.goto(`${ORIGIN}/call-states.html`);
-  const states = await page.waitForFunction(() => window.__CALL_STATES__).then((handle) => handle.jsonValue());
-  await page.close();
+  const states = [];
+  // The pre-join states have their own page, so the call budgets do not measure them.
+  for (const name of ["call-states.html", "pre-join-states.html"]) {
+    const page = await browser.newPage();
+    await page.goto(`${ORIGIN}/${name}`);
+    const listed = await page.waitForFunction(() => window.__CALL_STATES__).then((handle) => handle.jsonValue());
+    await page.close();
+    states.push(...listed.map((state) => ({ ...state, page: name })));
+  }
   return states;
 }
 

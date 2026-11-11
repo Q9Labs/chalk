@@ -25,6 +25,7 @@ var (
 		regexp.MustCompile(`^create capture peer for epoch [0-9]{1,10}$`),
 		regexp.MustCompile(`^recorder control-plane request failed with HTTP status [0-9]{3}(?: code [a-z]+(?:\.[a-z_]+)+)?$`),
 		regexp.MustCompile(`^stage=[a-z_]{1,32} outcome=[a-z_]{1,32} error_class=[a-z_]{1,32} http_status=[0-9]{1,3}(?: api_error_code=[a-z]+(?:\.[a-z_]+)+)?$`),
+		regexp.MustCompile(`^stage=capture_stopped outcome=(?:returned|timed_out) error_class=(?:http|deadline|transport|protocol|fenced|unknown) http_status=[0-9]{1,3}(?: api_error_code=[a-z]+(?:\.[a-z_]+)+)? callback_attempts=[0-9]{1,10} callback_elapsed_ms=[0-9]{1,13}$`),
 	}
 )
 

@@ -4,13 +4,16 @@
 existing checks declared as custom lanes in `gate.config.ts`. `pnpm gate:full`
 runs the same tracker checks followed by `q9gate run --full`. Each gate runs
 with `GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, and
-q9gate concurrency 1. “gate.report.json” records every selected/skipped lane.
+q9gate concurrency 1; each of those environment variables, when already set, replaces the default.
+`instabox-run.sh` sets `VITEST_MAX_WORKERS=4`, because most test files wait on timers.
+“gate.report.json” records every selected/skipped lane.
 
 Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
-`hygiene`, `secrets`, and `generated` lanes on staged files
-(about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
-`GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
+`hygiene`, and `secrets` lanes on staged files (about 4 seconds). The `secrets` lane scans the staged
+diff, so a secret is caught before it enters history. The `generated` lane takes about 7 seconds, so it
+runs in the Gate workflow and in `pnpm gate`; run `pnpm run check:generated` yourself after editing a generator input.
+A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
 the `services` lane, because CI runs the API and Sync gates as separate jobs.
 
 ## The Gate workflow
@@ -75,7 +78,7 @@ build caches, so pull requests and queue groups start from the latest master cac
 The Metro cache is no longer saved; the mobile export starts cold.
 The API job sets `-count=1` because a cached Go test result would not see a
 migration or database change. CI calls `scripts/gates/commit.sh` directly with
-`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=2` instead of the
+`GATE_WORKSPACE_CONCURRENCY=2` and `VITEST_MAX_WORKERS=4` instead of the
 one-CPU `pnpm gate` alias, and installs the pinned Gitleaks and OSV-Scanner
 releases through `.github/actions/setup-scanners` instead of compiling them with
 `go run`.
@@ -151,13 +154,14 @@ file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on 
 
 Commit and push first: `box run` fetches the pushed HEAD, not working-tree edits.
 Run Linux gates and browser suites on Instabox, never on the laptop or M4.
-The disposable machine is deleted when the command ends. Keep the single-worker
-settings above: the 4-vCPU / 8-GB machine has no room for extra workers.
+The disposable machine is deleted when the command ends. Use `--size 2x4` (2 vCPU / 4 GiB, half the price of the
+default 4x8): every lane of the full gate peaks at or below 2.5 GiB there, and the full gate takes about as long as on 4x8.
+Keep the single-worker settings above: there is no room for extra workers.
 
 ```sh
-box run -- 'bash scripts/gates/instabox-run.sh --browser'
-box run -- 'bash scripts/gates/instabox-run.sh apps/api/scripts/gate.sh'
-box run -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh --browser'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh apps/api/scripts/gate.sh'
+box run --size 2x4 -- 'bash scripts/gates/instabox-run.sh scripts/gates/with-postgres.sh -- apps/sync/scripts/gate.sh'
 ```
 
 `scripts/gates/instabox-run.sh` installs locked dependencies and the missing Ruby/lsof

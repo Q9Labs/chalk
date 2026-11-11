@@ -6,7 +6,6 @@ export { createPreviewClient, createSnapshot } from "./preview-client";
 export { PREVIEW_DEVICE_FIXTURES, createPreviewMediaDevices } from "./preview-devices";
 export { CommandErrorAlert, PreviewSpaceView } from "./preview-fixtures";
 export type { Participant } from "../components/participant-grid/ParticipantGrid";
-export type { ReconnectingOverlayProps } from "../components/reconnecting-overlay/ReconnectingOverlay";
 export type { SpaceViewFeatures, SpaceViewWhiteboard } from "../components/space-view/SpaceView";
 export type { Toast } from "../components/toast-stack/ToastStack";
 export type { WhiteboardViewProps } from "../components/whiteboard-view/WhiteboardView";

@@ -1,4 +1,5 @@
 import type { ParticipantEpisodeStatus } from "../generated/schemas";
+import type { TransportPath } from "../direct-path";
 import type { ConnectionReporter, ConnectionReportTransportEvent } from "./report";
 import type { ClientMediaPlane, CloudflareSFUBootstrap, ConnectionMediaSnapshot } from "../media";
 import type { ChalkChatFileTransport } from "../chat-files";
@@ -29,6 +30,11 @@ export type ConnectionMediaDevices = {
   readonly getDisplayMedia: (constraints: DisplayMediaStreamOptions) => Promise<MediaStream>;
   readonly enumerateDevices?: () => Promise<readonly MediaDeviceInfo[]>;
   /**
+   * Ends a local capture track and frees the capture behind it. Web stops the track. React Native also calls
+   * `release()`, because `stop()` there only marks the track ended and the native capture stays open.
+   */
+  readonly releaseTrack: (track: MediaStreamTrack) => void;
+  /**
    * An application-provided output sink selector. Browser capture APIs have no
    * global speaker switch, so an application that renders remote audio supplies the
    * element-specific implementation here.
@@ -46,6 +52,8 @@ export type ConnectionSyncClient = V1CollaborationClient & {
   readonly link?: LinkJudge;
   /** Whether the connected Sync advertised `media_off_reason`. Absent means no. */
   readonly offReasonNegotiated?: () => boolean;
+  /** Tells the other guests how well this link carries the call. Does nothing when this Sync did not offer the extension. */
+  readonly setConnectionQuality?: (quality: import("../media/link-quality").LinkTier) => void;
   readonly subscribe: (listener: (snapshot: V1EpisodeSnapshot) => void) => () => void;
   readonly leave: () => Promise<V1CommandResult>;
   readonly setMicrophoneEnabled: (enabled: boolean) => Promise<V1SelfMediaTargetResult>;
@@ -86,9 +94,12 @@ export type ConnectionMediaClient = ClientMediaPlane & {
 export type ConnectionMediaFactoryInput = {
   readonly access: ParsedAccessGrant;
   readonly credential: () => Promise<string>;
+  /** A fresh grant for the current media connection (no replacement); resolves to its media token. */
+  readonly refreshCredential?: () => Promise<string>;
   readonly replaceMediaConnection?: () => Promise<ParticipantMediaAccess>;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
   readonly onFailure: (error: unknown, mediaConnectionId?: string) => void;
   readonly onScreenEnded: () => void;
 };
@@ -98,6 +109,7 @@ export type ConnectionSyncFactoryInput = {
   readonly media: ConnectionMediaClient;
   readonly traceparent?: string;
   readonly onTransportDiagnostic?: (event: ConnectionReportTransportEvent) => void;
+  readonly onTransportPath?: (path: TransportPath) => void;
 };
 export type ConnectionWhiteboardFactoryInput = {
   readonly onWatchdogReplacement?: ChalkWhiteboardV1ClientOptions["onWatchdogReplacement"];

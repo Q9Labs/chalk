@@ -206,6 +206,13 @@ defmodule ChalkSync.Episodes.Coordinator do
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
 
+  @spec set_connection_quality(pid(), Identity.t(), String.t(), pid()) :: :ok | {:error, atom()}
+  def set_connection_quality(coordinator, %Identity{} = identity, quality, socket \\ self()) do
+    GenServer.call(coordinator, {:set_connection_quality, socket, identity, quality}, 3000)
+  catch
+    :exit, _reason -> {:error, :coordinator_unavailable}
+  end
+
   @doc false
   @spec expire_live_requests(pid(), integer()) :: :ok | {:error, atom()}
   def expire_live_requests(coordinator, now_ms) when is_integer(now_ms) do
@@ -472,6 +479,23 @@ defmodule ChalkSync.Episodes.Coordinator do
           )
 
         {:reply, :ok, %{state | live: live}}
+
+      _subscriber ->
+        {:reply, {:error, :not_live}, state}
+    end
+  end
+
+  def handle_call({:set_connection_quality, socket, identity, quality}, _from, state) do
+    case Map.get(state.sockets, socket) do
+      %{mode: :live, identity: ^identity} ->
+        case LiveEpisode.set_connection_quality(state.live, socket, quality) do
+          {:ok, live, frames} ->
+            broadcast_live_frames(live, frames)
+            {:reply, :ok, %{state | live: live}}
+
+          {:error, reason} ->
+            {:reply, {:error, reason}, state}
+        end
 
       _subscriber ->
         {:reply, {:error, :not_live}, state}

@@ -72,6 +72,7 @@ defmodule ChalkSync.Transport.SocketV1 do
       entry_confirmation: Map.get(opts, :entry_confirmation, false),
       participant_self_identity: Map.get(opts, :participant_self_identity, false),
       media_off_reason: Map.get(opts, :media_off_reason, false),
+      connection_quality: Map.get(opts, :connection_quality, false),
       participant_devices: Map.get(opts, :participant_devices, false),
       participant_device_admissions: Map.get(opts, :participant_device_admissions, false),
       requested_entry_generation: Map.get(opts, :entry_generation, :legacy),
@@ -561,6 +562,27 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: protocol_error(:recovery_required, state)
 
   defp handle_frame(
+         {:connection_quality_set, quality},
+         %{
+           phase: :live,
+           coordinator: coordinator,
+           identity: identity,
+           connection_quality: true
+         } = state
+       ) do
+    case Coordinator.set_connection_quality(coordinator, identity, quality, self()) do
+      :ok -> {:ok, state}
+      {:error, reason} -> protocol_error(reason, state)
+    end
+  end
+
+  defp handle_frame({:connection_quality_set, _quality}, %{phase: :live} = state),
+    do: protocol_error(:connection_quality_not_negotiated, state)
+
+  defp handle_frame({:connection_quality_set, _quality}, state),
+    do: protocol_error(:recovery_required, state)
+
+  defp handle_frame(
          {:reaction_send, input},
          %{phase: :live, identity: identity, collaboration_negotiated: true} = state
        ) do
@@ -757,7 +779,7 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp encode_with_context(state, frame) when is_map(frame) do
     frame
     |> own_identity_projection(state)
-    |> device_projection(device_hint_keys(state))
+    |> device_projection(presence_hint_keys(state))
     |> media_projection(state)
     |> Map.merge(Observability.frame_fields(state.observability))
     |> ProtocolV1.encode!()
@@ -775,6 +797,11 @@ defmodule ChalkSync.Transport.SocketV1 do
   defp own_identity_projection(frame, _state), do: frame
 
   # Each extension is opt-in so earlier SDKs keep their exact presence wire shape.
+  defp presence_hint_keys(%{connection_quality: false} = state),
+    do: ["connection_quality" | device_hint_keys(state)]
+
+  defp presence_hint_keys(state), do: device_hint_keys(state)
+
   defp device_hint_keys(%{participant_devices: false}),
     do: ["identity_id", "device_type", "admission_revision"]
 
@@ -1045,6 +1072,7 @@ defmodule ChalkSync.Transport.SocketV1 do
       protocol_options
       |> Map.put(:entry_confirmation, state.entry_confirmation)
       |> Map.put(:media_off_reason, state.media_off_reason)
+      |> Map.put(:connection_quality, state.connection_quality)
       |> Map.put(
         :entry_generation,
         state.requested_entry_generation != :legacy && not is_nil(identity.entry_generation)

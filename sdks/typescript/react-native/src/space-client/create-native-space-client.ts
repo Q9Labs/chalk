@@ -20,6 +20,7 @@ import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
 import { toNativeCaptureError } from "../media/native-capture-error";
+import { releaseNativeTrack } from "../media/native-release-track";
 import { createNativeSession, type NativeSession } from "./native-session";
 import { ensureRandomUUID } from "./random-uuid";
 type PlatformDependencies = NonNullable<SpaceClientPlatform["dependencies"]>;
@@ -75,6 +76,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
         }
       },
       getDisplayMedia: async () => (await mediaDevices.getDisplayMedia()) as unknown as globalThis.MediaStream,
+      releaseTrack: releaseNativeTrack,
     },
     createMediaClient: (input) => createMediaClient(apiBaseURL, input, fetch),
     createSyncClient: (input) => createSyncClient(syncURL, input, lifecycle, syncWebSocket, storage, syncDialTimeoutMs),

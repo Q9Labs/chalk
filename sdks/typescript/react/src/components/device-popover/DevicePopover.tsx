@@ -5,12 +5,14 @@ import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
+import type { HapticInput } from "../../internal/useHaptics";
 import { usePhoneCall } from "../../internal/call-width";
 import { useLongPress } from "../../internal/useLongPress";
-import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 import { CameraPreview, InputLevel } from "./DevicePreview";
 
 const DeviceSheet = lazy(() => import("./DeviceSheet"));
@@ -48,6 +50,8 @@ export interface DevicePopoverProps {
   /** The phone picker sheet. Press and hold on the button opens it; the dock's More sheet opens it too. */
   sheetOpen?: boolean;
   onSheetOpenChange?: (open: boolean) => void;
+  /** Set while the browser or the system refuses this device. Pressing the button opens the card instead of toggling. */
+  access?: DeviceAccessControl;
 }
 
 function DeviceSwitch({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
@@ -88,6 +92,7 @@ export function DevicePopover({
   toggleDisabled,
   busy,
   onCancelPending,
+  access,
   sheetOpen: controlledSheetOpen,
   onSheetOpenChange: controlledSheetChange,
 }: DevicePopoverProps) {
@@ -100,6 +105,7 @@ export function DevicePopover({
   if (sheetOpen && !sheetLoaded) setSheetLoaded(true);
   const phone = usePhoneCall();
   const hold = useLongPress(phone ? () => onSheetOpenChange(true) : undefined);
+  const [split, setSplit] = useState<HTMLDivElement | null>(null);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
@@ -109,26 +115,31 @@ export function DevicePopover({
   );
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
+  // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
+  const pressOpensCard = access && !busy;
+  const accessLabel = pressOpensCard ? access.label : undefined;
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive && !busy} data-camera-menu={!mic ? true : undefined}>
+    <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive && !busy} data-blocked={!!access || undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
           <button
             type="button"
             className="chalk-shell-main"
-            aria-label={busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label}
+            aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label)}
             aria-pressed={isActive}
             aria-busy={busy}
+            aria-haspopup={pressOpensCard ? "dialog" : undefined}
+            aria-expanded={pressOpensCard ? access.open : undefined}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
-            onClick={busy && onCancelPending ? onCancelPending : onToggle}
+            onClick={pressOpensCard ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
             {...hold}
           >
             <MediaGlyph kind={mic ? "mic" : "cam"} slashed={!isActive && !busy} busy={Boolean(busy)} />
           </button>
         }
       >
-        {warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
+        {accessLabel ?? (warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label)}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
@@ -203,7 +214,8 @@ export function DevicePopover({
           />
         </Suspense>
       ) : null}
-      {warning ? (
+      {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} /> : null}
+      {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
           <span className="sr-only">{mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.</span>

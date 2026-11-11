@@ -19,9 +19,10 @@ func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Conte
 		return nil, err
 	}
 	tenant := tenants.Tenant{
-		ID:                       tenantID,
-		DefaultMediaPlane:        nullableText(policy.DefaultMediaPlane),
-		MediaPlaneProviderConfig: json.RawMessage(policy.MediaPlaneProviderConfig),
+		ID:                        tenantID,
+		DefaultMediaPlane:         nullableText(policy.DefaultMediaPlane),
+		DefaultMediaPlaneApproved: policy.DefaultMediaPlaneApproved,
+		MediaPlaneProviderConfig:  json.RawMessage(policy.MediaPlaneProviderConfig),
 	}
 	binding, err := r.mediaBindingResolver.ResolveBinding(ctx, tenant, mapSpace(space), clients)
 	if err != nil {

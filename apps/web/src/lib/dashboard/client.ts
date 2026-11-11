@@ -1,3 +1,4 @@
+import { clearSignedInHint } from "../signed-in-hint";
 import type {
   TranscriptLanguageSettingsDTO,
   AllowedWebsitesDTO,
@@ -123,6 +124,7 @@ export async function loadSession(): Promise<SessionDTO> {
     csrfToken = body.csrfToken;
     return body;
   }
+  if (response.status === 401) clearSignedInHint();
   throw toError(response, body);
 }
 

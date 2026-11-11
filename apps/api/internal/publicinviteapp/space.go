@@ -94,6 +94,7 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		TenantID:                      a.config.ManagedTenantID,
 		Slug:                          publicSpaceSlug(input.RequestKey),
 		MediaPlane:                    a.config.DefaultMediaPlane,
+		MediaPlaneFromConfig:          true,
 		Metadata:                      json.RawMessage(`{}`),
 		AdmissionPolicy:               json.RawMessage(`{"mode":"open"}`),
 		DefaultEpisodeDurationSeconds: 3600,
