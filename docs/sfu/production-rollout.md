@@ -272,3 +272,9 @@ With `*` the allowlist no longer limits anything, so these Spaces use `chalk_sfu
 - The allowlist path is read from the controller and the quadlet, not run: the SSM edit (run once, version 31), the host edit and restart, and the runtime-only Release re-fetch.
 - Whether the controller's rollback restores the previous environment file.
 - Capture on `chalk_sfu` in production (M10) is not proven.
+
+## Follow-ups
+
+- **Reissue the node server certificate before May 2027.** It is hand-issued (`certs production server`, 180 days, expires 2027-05-05) and nothing renews it. The API identity certificate (2027-11-07), the service CA (2036) and the Provider Bridge CA (2028) are the other long-lived items on the path.
+- **Test recorder worker certificate renewal.** Worker certificates last 12 hours (`CHALK_RECORDER_FLEET_ISSUER_CERTIFICATE_LIFETIME`) and the bootstrap client renews them through the issuer's renewal endpoint. The code path is read, not exercised on a long recording.
+- **The operator certificate lasts one day.** Any check that reads the node's `/readyz` with it stops working when it ends. Reissue it with `certs production operator` before each window.
