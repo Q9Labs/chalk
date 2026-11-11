@@ -36,3 +36,11 @@ it("rates the connection from the newest window and says why when it is weak", (
 it("reports reconnecting regardless of old stats", () => {
   expect(rate({ live: false, samples: [sample({ rtt_ms: 40 }), sample({ rtt_ms: 41 })] })).toMatchObject({ level: 1, tone: "bad", word: "Reconnecting…" });
 });
+
+it("rates from the steady tier once the call has one, so the details agree with the header chip", () => {
+  const spiky = [sample({ rtt_ms: 40 }), sample({ rtt_ms: 900 })];
+  expect(rate({ live: true, samples: spiky, link: { tier: "poor", reason: "loss" } })).toMatchObject({ level: 1, tone: "bad", word: "Very poor" });
+  expect(rate({ live: true, samples: spiky, link: { tier: "weak", reason: "sync" } })).toMatchObject({ level: 2, word: "Unstable", helper: "Chat and reactions are slow to arrive." });
+  expect(rate({ live: true, samples: spiky, link: { tier: "weak", reason: "latency" } })).toMatchObject({ level: 2, word: "Unstable" });
+  expect(rate({ live: true, samples: [sample({ rtt_ms: 40 })], link: { tier: "good" } })).toMatchObject({ level: 4 });
+});

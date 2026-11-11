@@ -147,6 +147,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
           "chat_page_request",
           "chat_read_set",
           "chat_reaction_set",
+          "connection_quality_set",
           "ping"
         ],
         "heartbeat" => %{"intervalMs" => 20_000, "missedDeadlinesBeforeClose" => 5}
@@ -637,6 +638,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   ]
   @media_sources ["microphone", "camera", "screen"]
   @presence_states ["connected", "disconnected"]
+  @connection_qualities ["good", "weak", "poor"]
   @uuid ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i
   @traceparent ~r/\A00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}\z/
   @tracestate ~r/\A[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256}(,[a-z][a-z0-9_*\x2f-]{0,255}=[\x21-\x2b\x2d-\x3c\x3e-\x7e]{1,256})*\z/
@@ -667,6 +669,7 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         "chat_read_set" -> decode_chat_read_set(frame)
         "delivery_ack" -> decode_delivery_ack(frame)
         "recovery_ack" -> decode_recovery_ack(frame)
+        "connection_quality_set" -> decode_connection_quality_set(frame)
         "entered" -> if(exact_keys?(frame, ["type"]), do: {:ok, :entered}, else: {:error,
             :invalid_entered})
         "ping" -> if(exact_keys?(frame, ["type"]), do: {:ok, :ping}, else: {:error,
@@ -697,9 +700,15 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         {:error, :invalid_hello}
     end
   end
+
   defp decode_hello(%{"protocol" => protocol}) when is_integer(protocol), do: {:error,
       :unsupported_protocol}
   defp decode_hello(_frame), do: {:error, :invalid_hello}
+
+  defp decode_connection_quality_set(%{"quality" => quality} = frame) when quality in @connection_qualities,
+      do: if(exact_keys?(frame, ["type", "quality"]), do: {:ok, {:connection_quality_set,
+      quality}}, else: {:error, :invalid_connection_quality})
+  defp decode_connection_quality_set(_frame), do: {:error, :invalid_connection_quality}
 
   defp decode_command(%{"command_id" => command_id, "name" => name,
       "payload" => payload} = frame) do
@@ -995,6 +1004,8 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         else: base
     base = if Map.has_key?(frame, "media_off_reason"), do: base ++ ["media_off_reason"],
         else: base
+    base = if Map.has_key?(frame, "connection_quality"), do: base ++ ["connection_quality"],
+        else: base
     base = if Map.has_key?(frame, "entry_generation"), do: base ++ ["entry_generation"],
         else: base
     base = if Map.has_key?(frame, "participant_identity_id"),
@@ -1010,9 +1021,11 @@ defmodule ChalkSync.Contract.GeneratedV1 do
         frame["entry_confirmation"] == true
     valid_off_reason = not Map.has_key?(frame, "media_off_reason") or
         frame["media_off_reason"] == true
+    valid_quality = not Map.has_key?(frame, "connection_quality") or
+        frame["connection_quality"] == true
     valid_base = valid_uuid?(participant_id) and valid_positive_integer?(generation) and
         valid_uuid?(recovery_id) and valid_cursor?(head) and valid_extensions and valid_entry and
-        valid_off_reason and valid_generation and valid_identity
+        valid_off_reason and valid_quality and valid_generation and valid_identity
     case mode do
       "snapshot" -> correlation_exact_keys?(frame, base ++ ["snapshot"]) and valid_base and
           valid_snapshot?(frame["snapshot"]) and server_frame_within_limit?(frame,
@@ -1371,7 +1384,9 @@ defmodule ChalkSync.Contract.GeneratedV1 do
   defp valid_projection_item?("presence", %{"participant_id" => id, "state" => state,
       "speaking" => speaking, "active_speaker" => active} = item), do: exact_keys?(item,
       ["participant_id", "state", "speaking", "active_speaker"] ++ Enum.filter(["identity_id",
-      "device_type", "admission_revision"], &Map.has_key?(item, &1))) and (not Map.has_key?(item,
+      "device_type", "admission_revision", "connection_quality"], &Map.has_key?(item, &1))) and
+      (not Map.has_key?(item, "connection_quality") or
+      item["connection_quality"] in @connection_qualities) and (not Map.has_key?(item,
       "identity_id") or valid_uuid?(item["identity_id"])) and (not Map.has_key?(item,
       "device_type") or item["device_type"] in ["phone", "tablet", "computer"]) and
       (not Map.has_key?(item, "admission_revision") or

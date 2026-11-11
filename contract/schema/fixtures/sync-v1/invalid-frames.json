@@ -136,6 +136,15 @@
       "reaction": "🔥"
     },
     {
+      "type": "connection_quality_set",
+      "quality": "terrible"
+    },
+    {
+      "type": "connection_quality_set",
+      "quality": "weak",
+      "extra": true
+    },
+    {
       "type": "chat_send",
       "client_message_id": "chat-message-0001",
       "text": ""

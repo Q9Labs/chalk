@@ -333,7 +333,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
     }
     if (scenario.id === "reconnect") {
       await page.locator("[data-perf-reconnect]").dispatchEvent("click");
-      const notice = page.locator('[data-part="connection-notice"]');
+      const notice = page.locator('[data-part="connection-status"]');
       await notice.filter({ hasText: "Reconnecting" }).waitFor({ timeout: 10_000 });
       if ((await notice.evaluate((element) => getComputedStyle(element).pointerEvents)) !== "none") throw new Error("Recovery notice intercepts call controls");
       if (await page.locator('[data-call-limbo][data-covered="true"][aria-hidden="false"]').count()) throw new Error("Recovery covers the call");
@@ -345,7 +345,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       });
       await page.waitForTimeout(350);
       await page.locator("[data-perf-recover]").dispatchEvent("click");
-      await notice.waitFor({ state: "hidden" });
+      await notice.waitFor({ state: "hidden", timeout: 10_000 });
       await page.mouse.move(device.viewport.width / 2, device.viewport.height / 2);
       await page.getByRole("button", { name: "Leave call", exact: true }).click({ trial: true });
     }

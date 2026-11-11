@@ -80,6 +80,9 @@ export type ChalkProps = SpaceIntegration &
     /** Host-provided terminal reason when the transport cannot distinguish it. */
     readonly terminalState?: "removed" | "full" | "elsewhere";
   };
+/** A call that could not be recovered stays on screen, dimmed, with a card that offers a way back. */
+const keepsCallOnFailure = (code: string | undefined): boolean => code === "connection.sync_recovery_exhausted";
+
 export function Chalk(props: ChalkProps): React.JSX.Element {
   const [localColorScheme, setLocalColorScheme] = useState<ChalkColorScheme>("dark");
   const colorScheme = props.theme?.colorScheme ?? localColorScheme;
@@ -225,7 +228,7 @@ function SpaceExperience(
   if (connection.status === "joining") return <CallLimbo theme={{ ...props.theme, colorScheme: props.resolvedColorScheme }} recorded={recorded} spaceName={spaceName} message={`Joining ${spaceName}…`} />;
   if (connection.status === "failed" && connection.lastError?.code === "episode.ended")
     return <StatusSurface phase="episode-ended" callName={callName} episodeEndReason={connection.episodeEndReason} endAction={props.timeLimit?.endAction} theme={statusTheme} onHome={props.onHome} onReportProblem={props.onOpenReport} />;
-  if (connection.status === "failed") {
+  if (connection.status === "failed" && !keepsCallOnFailure(connection.lastError?.code)) {
     return (
       <StatusSurface
         phase="failed"
@@ -257,7 +260,7 @@ function SpaceExperience(
     );
   return (
     <div className="relative h-full min-h-0">
-      <SpaceSurface {...props} spaceName={spaceName} />
+      <SpaceSurface {...props} spaceName={spaceName} onRetry={retryAutomaticJoin} />
       <CallLimbo overlay active={false} initiallyCovered message="" />
     </div>
   );
@@ -267,6 +270,7 @@ function SpaceSurface(
     readonly resolvedColorScheme: ChalkColorScheme;
     readonly spaceName: string;
     readonly onOpenReport?: () => void;
+    readonly onRetry: () => void;
   },
 ): React.JSX.Element {
   const client = useSpaceClient();
@@ -348,7 +352,7 @@ function SpaceSurface(
       onToggleWhiteboard={canDrawWhiteboard && setWhiteboardPresentation ? () => void runCommand(() => setWhiteboardPresentation(!whiteboardState.engine.presenting)) : undefined}
       onLeft={() => runCommand(() => client.leave())}
       onEndEpisode={canEndEpisode ? () => runCommand(() => client.endEpisode()) : undefined}
-      reconnecting={{ isVisible: connection.status === "reconnecting", status: "reconnecting", showNotice: false }}
+      onRejoin={props.onRejoin ?? props.onRetry}
       overlay={
         media.microphoneMutedByOtherDevice ? (
           <div role="status" className="pointer-events-none absolute inset-x-3 top-16 z-40 flex justify-center">

@@ -11,6 +11,10 @@ import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
 import { TileShell } from "./TileShell";
 import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
+import { useFramesFrozen, useFrozenFrame } from "./useFrozenFrame";
+import { TileReconnecting, TileSignal } from "./TileConnection";
+import { RECONNECT_NOTICE_MS } from "../connection-status/use-connection-phase";
+import { useTrueFor } from "../../internal/useTrueFor";
 
 export interface ParticipantTileProps {
   participant: {
@@ -25,6 +29,8 @@ export interface ParticipantTileProps {
     isVideoEnabled?: boolean;
     /** Shows a badge while the SFU holds this camera back for the viewer's network. */
     isVideoPausedForNetwork?: boolean;
+    /** This guest dropped out of the call and is trying to come back. */
+    isReconnecting?: boolean;
     isScreenSharing?: boolean;
     isHandRaised?: boolean;
     handRaiseOrder?: number;
@@ -60,6 +66,8 @@ export interface ParticipantTileProps {
 export interface ParticipantTileSurfaceProps extends Omit<ParticipantTileProps, "videoTrack"> {
   readonly media?: React.ReactNode;
   readonly mediaVisible: boolean;
+  /** The last picture before the call dropped, drawn on a canvas; it takes the avatar's place while the call reconnects. */
+  readonly frozenFrame?: { readonly node: React.ReactNode; readonly shown: boolean };
   readonly animatedAvatars?: boolean;
 }
 
@@ -75,7 +83,9 @@ export const ParticipantTile = React.memo(function ParticipantTile({ videoTrack,
   const status = useVideoTrack(videoRef, videoTrack, props.participant.isVideoEnabled === true);
   useVideoTileVisibility(videoRef, props.participant.isLocal ? undefined : props.participant.videoPublicationId, props.hidden !== true);
 
-  return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} />;
+  const frozenFrame = useFrozenFrame(videoRef, useFramesFrozen());
+
+  return <ParticipantTileSurface {...props} media={<video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />} mediaVisible={status === "playing"} frozenFrame={frozenFrame} />;
 });
 
 export const ParticipantTileSurface = React.memo(function ParticipantTileSurface({
@@ -99,6 +109,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   hidden,
   media,
   mediaVisible,
+  frozenFrame,
   animatedAvatars = true,
 }: ParticipantTileSurfaceProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -110,7 +121,8 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const recipe = useMemo(() => getParticipantAvatarRecipe(participant.displayName || participant.id, gradientPreference), [participant.displayName, participant.id, gradientPreference]);
   const actionLabel = `${pinned ? "Unpin" : "Pin"} ${participant.displayName}`;
   const followLabel = following ? "Stop following" : "Follow";
-  const hasPoorConnection = participant.connectionQuality !== undefined && participant.connectionQuality > 0 && participant.connectionQuality <= 2;
+  const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
+  const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
 
   return (
     <TileShell
@@ -130,11 +142,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       hidden={hidden}
       corner={
         <>
-          {showStatus && hasPoorConnection ? (
-            <span role="img" data-part="tile-signal" aria-label={`${participant.displayName} has a weak connection`} className="pointer-events-none absolute top-2 left-2 z-30 flex h-6 items-center rounded-(--corner-md) bg-[var(--chalk-overlay)] px-(--space-2)">
-              <SignalBars />
-            </span>
-          ) : null}
+          {showStatus && signalLevel ? <TileSignal name={participant.displayName} level={signalLevel} /> : null}
           {showStatus && participant.isVideoEnabled && participant.isVideoPausedForNetwork ? (
             <span role="status" data-part="tile-video-paused" className="pointer-events-none absolute bottom-10 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-(--corner-md) bg-[var(--chalk-overlay)] px-2 py-1 text-xs text-[var(--chalk-on-overlay)]">
               Video paused for network
@@ -207,7 +215,12 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       }
     >
       <div className={cn("absolute inset-0 overflow-hidden motion-safe:transition-opacity motion-safe:duration-200 [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", mediaVisible ? "opacity-100" : "opacity-0")}>{media}</div>
-      {!mediaVisible && showAvatar && (
+      {frozenFrame ? (
+        <div aria-hidden="true" className={cn("absolute inset-0 overflow-hidden [&>*]:h-full [&>*]:w-full [&>*]:object-cover", mirrored && "scale-x-[-1]", !frozenFrame.shown && "hidden")}>
+          {frozenFrame.node}
+        </div>
+      ) : null}
+      {!mediaVisible && showAvatar && !frozenFrame?.shown && (
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
           <div aria-hidden="true" className="overflow-hidden rounded-full" style={{ width: "clamp(32px,42cqmin,150px)", height: "clamp(32px,42cqmin,150px)" }}>
             {generatedAvatars && !participant.avatarUrl ? (
@@ -235,6 +248,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           </div>
         </div>
       )}
+      {reconnecting ? <TileReconnecting name={participant.displayName} /> : null}
       {children}
     </TileShell>
   );

@@ -125,6 +125,12 @@ worth accepting. Do not raise a budget merely to turn CI green. Compare the
 production code against the pinned baseline commit in the data file; do not
 silently replace it with whichever revision happens to pass today.
 
+This round of call PRs is approved up to 395 KiB of call JavaScript. The 14
+non-board `js_gzip_kib` entries are 395 KiB (they were 390) and the two board
+entries are 744 KiB (they were 743), which matches PR #1134. PR #1134 makes the
+board lazy, which takes the non-board call back to about 374 KiB when it lands,
+and the limits should then tighten again.
+
 A budget with `gate: false` only warns. Real-node budgets (`sfu.*`, nightly
 `action.*`, `proof.*` and `device.*`) start there. One flips to `gate: true` in
 its own budgets pull request, once seven nightly values from at least three

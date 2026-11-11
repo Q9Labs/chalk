@@ -24,7 +24,8 @@ defmodule ChalkSync.Live.Episode do
     :media_items,
     :media_observation_cursor,
     :media_projection,
-    :presence_projection
+    :presence_projection,
+    :connection_qualities
   ]
   defstruct [
     :episode,
@@ -37,10 +38,13 @@ defmodule ChalkSync.Live.Episode do
     :media_items,
     :media_observation_cursor,
     :media_projection,
-    :presence_projection
+    :presence_projection,
+    :connection_qualities
   ]
 
   @type t :: %__MODULE__{}
+
+  @connection_qualities ["good", "weak", "poor"]
 
   @spec new(EpisodeKey.t()) :: t()
   def new(%EpisodeKey{} = episode) do
@@ -55,7 +59,8 @@ defmodule ChalkSync.Live.Episode do
       media_items: [],
       media_observation_cursor: nil,
       media_projection: nil,
-      presence_projection: nil
+      presence_projection: nil,
+      connection_qualities: %{}
     }
   end
 
@@ -98,7 +103,36 @@ defmodule ChalkSync.Live.Episode do
             socket
           )
 
-        %{state | connections: connections, requests: requests}
+        %{
+          state
+          | connections: connections,
+            requests: requests,
+            connection_qualities: Map.delete(state.connection_qualities, socket)
+        }
+    end
+  end
+
+  @doc """
+  Records how well one live socket's own link carries the call. The other guests see it in the
+  presence stream, so the returned frames are the presence changes to broadcast. A socket that
+  reports the tier it already reported changes nothing.
+  """
+  @spec set_connection_quality(t(), pid(), String.t()) ::
+          {:ok, t(), [map()]} | {:error, atom()}
+  def set_connection_quality(%__MODULE__{} = state, socket, quality)
+      when quality in @connection_qualities do
+    cond do
+      not Map.has_key?(state.connections, socket) ->
+        {:error, :not_live}
+
+      Map.get(state.connection_qualities, socket) == quality ->
+        {:ok, state, []}
+
+      true ->
+        presence_snapshot(%{
+          state
+          | connection_qualities: Map.put(state.connection_qualities, socket, quality)
+        })
     end
   end
 
@@ -403,11 +437,25 @@ defmodule ChalkSync.Live.Episode do
            }
            |> put_known("identity_id", seat.identity_id)
            |> put_known("device_type", seat.device_type)
+           |> put_known("connection_quality", seat_quality(state, seat))
          end)}
 
       {:retryable, reason} ->
         {:error, reason}
     end
+  end
+
+  # Two sockets of one seat can report different tiers; the guests see the worse one.
+  defp seat_quality(state, seat) do
+    state.connections
+    |> Enum.filter(fn {_socket, authority} ->
+      authority.participant_id == seat.participant_id and authority.generation == seat.generation
+    end)
+    |> Enum.map(fn {socket, _authority} -> Map.get(state.connection_qualities, socket) end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.max_by(&Enum.find_index(@connection_qualities, fn tier -> tier == &1 end), fn ->
+      nil
+    end)
   end
 
   defp put_known(item, _key, nil), do: item

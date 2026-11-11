@@ -89,6 +89,8 @@ export type V1Presence = {
   readonly state: "connected" | "disconnected";
   readonly speaking: boolean;
   readonly activeSpeaker: boolean;
+  /** How well this person's own link carries the call, as they rate it. Absent means unknown. */
+  readonly connectionQuality?: "good" | "weak" | "poor";
 };
 export type V1Projection<T> = {
   readonly projectionId: string;

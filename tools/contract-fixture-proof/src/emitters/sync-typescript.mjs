@@ -127,6 +127,7 @@ function renderTypeScript(contract) {
     "    case 'chat_read_set': return exactObject(value, " + JSON.stringify(contract.collaboration.clientFrames.setChatRead.exactFields) + ");",
     "    case 'delivery_ack': return exactObject(value, ['type', 'stream', 'revision', 'state_digest']);",
     "    case 'recovery_ack': return exactObject(value, ['type', 'recovery_id', 'revision', 'state_digest']);",
+    "    case 'connection_quality_set': return exactObject(value, " + JSON.stringify(contract.connectionQualitySet.exactFields) + ");",
     "    case 'entered': return exactObject(value, ['type']);",
     "    case 'ping': return exactObject(value, ['type']);",
     "    default: return false;",
@@ -183,7 +184,7 @@ function renderTypeScript(contract) {
       ", ...(Object.hasOwn(value, 'off_reason') ? ['off_reason'] : []), ...(Object.hasOwn(value, 'off_revision') ? ['off_revision'] : [])]) && validMediaOffReason(value);",
     "  if (stream === 'presence') return isObject(value) && exactObject(value, [..." +
       JSON.stringify(contract.projectionFrames.presenceSnapshot.items.exactFields) +
-      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : [])]);",
+      ", ...(Object.hasOwn(value, 'identity_id') ? ['identity_id'] : []), ...(Object.hasOwn(value, 'device_type') ? ['device_type'] : []), ...(Object.hasOwn(value, 'admission_revision') ? ['admission_revision'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : [])]);",
     "  return false;",
     "}",
     "function strictProjection(value: Record<string, unknown>): boolean {",
@@ -196,7 +197,8 @@ function renderTypeScript(contract) {
     "  const extensionValid = isObject(extension) && ['collaboration_v1', 'collaboration_v2'].includes(String(extension.name)) && exactObject(extension, ['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']) && Array.isArray(extension.read_receipts);",
     "  if (Object.hasOwn(value, 'entry_confirmation') && value.entry_confirmation !== true) return false;",
     "  if (Object.hasOwn(value, 'media_off_reason') && value.media_off_reason !== true) return false;",
-    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'media_off_reason') ? ['media_off_reason'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
+    "  if (Object.hasOwn(value, 'connection_quality') && value.connection_quality !== true) return false;",
+    "  const fields = [...base, ...(extensionValid ? ['extensions'] : []), ...(Object.hasOwn(value, 'entry_confirmation') ? ['entry_confirmation'] : []), ...(Object.hasOwn(value, 'media_off_reason') ? ['media_off_reason'] : []), ...(Object.hasOwn(value, 'connection_quality') ? ['connection_quality'] : []), ...(Object.hasOwn(value, 'entry_generation') ? ['entry_generation'] : []), ...(Object.hasOwn(value, 'participant_identity_id') ? ['participant_identity_id'] : [])];",
     "  if (!strictCursor(value.head)) return false;",
     "  if (value.mode === 'snapshot') return exactObjectWithCorrelation(value, [...fields, 'snapshot']) && strictSnapshot(value.snapshot);",
     "  if (value.mode === 'terminal') return exactObjectWithCorrelation(value, [...fields, 'reason']);",
@@ -389,7 +391,7 @@ function renderTypeScript(contract) {
     "export const CollaborationWelcomeExtensionSchema = Schema.Struct({ name: Schema.Literals(['collaboration_v1', 'collaboration_v2']), capabilities: CollaborationCapabilitiesSchema, participant_capabilities: Schema.Record(UuidSchema, CollaborationCapabilitiesSchema), chat_head_sequence: Schema.NullOr(UnsignedDecimalSchema), retained_floor_sequence: Schema.NullOr(UnsignedDecimalSchema), read_receipts: Schema.Array(ChatReadReceiptSchema).check(Schema.isMaxLength(500)) }).check(exactKeys(['name', 'capabilities', 'participant_capabilities', 'chat_head_sequence', 'retained_floor_sequence', 'read_receipts']));",
   );
   lines.push(
-    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), media_off_reason: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
+    `const WelcomeBase = { type: Schema.Literal('welcome'), protocol: Schema.Literal(${contract.protocol.value}), participant_id: UuidSchema, participant_generation: PositiveIntegerSchema, participant_identity_id: Schema.optionalKey(UuidSchema), recovery_id: UuidSchema, head: ControlCursorSchema, entry_confirmation: Schema.optionalKey(Schema.Literal(true)), media_off_reason: Schema.optionalKey(Schema.Literal(true)), connection_quality: Schema.optionalKey(Schema.Literal(true)), entry_generation: Schema.optionalKey(PositiveIntegerSchema.check(Schema.isLessThanOrEqualTo(${contract.welcome.entryGeneration.maximum}))) };`,
   );
   lines.push("const ExtendedWelcomeBase = { ...WelcomeBase, extensions: Schema.Tuple([CollaborationWelcomeExtensionSchema]) };");
   lines.push("export const WelcomeSnapshotFrameSchema = Schema.Struct({ ...WelcomeBase, mode: Schema.Literal('snapshot'), snapshot: SnapshotSchema, ...ServerCorrelationFields }).check(boundedServerFrame(SyncProtocolLimits.snapshotEncodedBytes));");
@@ -424,7 +426,7 @@ function renderTypeScript(contract) {
   lines.push(
     "export const PresenceProjectionItemSchema = Schema.Struct({ participant_id: UuidSchema, state: " +
       renderLiteralUnion(contract.projectionFrames.presenceSnapshot.items.state) +
-      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), admission_revision: Schema.optional(PositiveIntegerSchema) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
+      ", speaking: Schema.Boolean, active_speaker: Schema.Boolean, identity_id: Schema.optional(UuidSchema), device_type: Schema.optional(Schema.Literals(['phone', 'tablet', 'computer'])), admission_revision: Schema.optional(PositiveIntegerSchema), connection_quality: Schema.optional(Schema.Literals(['good', 'weak', 'poor'])) }).check(Schema.makeFilter((item) => item.state !== 'disconnected' || (!item.speaking && !item.active_speaker) ? undefined : { path: [], issue: 'disconnected presence cannot be speaking or active speaker' }));",
   );
   lines.push(
     "export const MediaProjectionSnapshotFrameSchema = Schema.Struct({ type: Schema.Literal('projection_snapshot'), stream: Schema.Literal('media'), projection_id: UuidSchema, sequence: Schema.Literal(0), items: Schema.Array(MediaProjectionItemSchema).check(Schema.isMaxLength(" +
@@ -497,11 +499,12 @@ function renderTypeScript(contract) {
   lines.push(`export const ErrorFrameSchema = Schema.Struct({ type: Schema.Literal('error'), code: ProtocolErrorCodeSchema, detail: boundedUtf8String(${limits.protocolErrorDetailBytes}), ...ServerCorrelationFields });`);
   lines.push("export const EnteredFrameSchema = Schema.Struct({ type: Schema.Literal('entered') });");
   lines.push("export const EnteredAckFrameSchema = Schema.Struct({ type: Schema.Literal('entered_ack'), ...ServerCorrelationFields });");
+  lines.push("export const ConnectionQualitySetFrameSchema = Schema.Struct({ type: Schema.Literal('connection_quality_set'), quality: " + renderLiteralUnion(contract.connectionQualitySet.quality) + " });");
   lines.push("export const PingFrameSchema = Schema.Struct({ type: Schema.Literal('ping') });");
   lines.push("export const PongFrameSchema = Schema.Struct({ type: Schema.Literal('pong'), ...ServerCorrelationFields });");
   lines.push("");
   lines.push(
-    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
+    `export const SyncV1ClientFrameSchema = Schema.Unknown.check(Schema.makeFilter((frame) => strictClientFrame(frame) ? undefined : { path: [], issue: 'must not contain unknown or missing fields' })).pipe(Schema.decodeTo(Schema.Union([ExtendedHelloFrameSchema, HelloFrameSchema, ${commandSchemaNames.join(", ")}, ${operationSchemaNames.join(", ")}, LiveTargetFrameSchema, DirectedRequestSendFrameSchema, RequestAckFrameSchema, ReactionSendFrameSchema, ChatSendFrameSchema, ChatPageRequestFrameSchema, ChatReadSetFrameSchema, ChatReactionSetFrameSchema, DeliveryAckFrameSchema, RecoveryAckFrameSchema, EnteredFrameSchema, ConnectionQualitySetFrameSchema, PingFrameSchema]))).check(boundedFrame(SyncProtocolLimits.decodedInboundFrameBytes));`,
   );
   lines.push("export type SyncV1ClientFrame = typeof SyncV1ClientFrameSchema.Type;");
   lines.push(
