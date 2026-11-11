@@ -12,9 +12,28 @@ import { viewerSeat } from "./owner-seats";
 import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
 import { pastMutation, pastSessionPage, pastTranscriptText } from "./past-session";
 import { developerMutation, developerPage } from "./developer";
+import { recordingsPage, sessionsPage } from "./sessions";
 import { edgeCache, favicon } from "./favicon";
 import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
-import { connectAction, connectQuery, connectionsAction, transcriptTextQuery, callAction, callQuery, callStatusQuery, callMetadataQuery, homeStatusQuery, developerAction, developerQuery, homeAction, pageQuery, pastAction, pastQuery } from "../src/lib/dashboard/contracts";
+import {
+  connectAction,
+  connectQuery,
+  connectionsAction,
+  transcriptTextQuery,
+  callAction,
+  callQuery,
+  callStatusQuery,
+  callMetadataQuery,
+  homeStatusQuery,
+  developerAction,
+  developerQuery,
+  homeAction,
+  pageQuery,
+  pastAction,
+  pastQuery,
+  recordingsQuery,
+  sessionsQuery,
+} from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
@@ -128,6 +147,10 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
           const input = pastQuery.parse(query(request));
           return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
         }
+        case "/dashboard-api/sessions":
+          return json(await sessionsPage(client, sessionsQuery.parse(query(request))));
+        case "/dashboard-api/recordings":
+          return json(await recordingsPage(client, recordingsQuery.parse(query(request))));
         case "/dashboard-api/developer":
           return json(await developerPage(client, developerQuery.parse(query(request))));
         case "/dashboard-api/connect":

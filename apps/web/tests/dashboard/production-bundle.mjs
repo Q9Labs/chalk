@@ -41,6 +41,8 @@ for (const path of [
   "/dashboard-api/home-status",
   "/dashboard-api/past-session",
   "/dashboard-api/transcript-text",
+  "/dashboard-api/sessions",
+  "/dashboard-api/recordings",
   "/dashboard-api/developer",
   "/dashboard-api/favicon",
 ]) {

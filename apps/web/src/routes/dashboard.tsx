@@ -5,6 +5,7 @@ import { SiteRoot } from "../components/site/theme";
 import coreCss from "../styles/dashboard-core.css?url";
 import dashboardCss from "../styles/dashboard.css?url";
 import developerCss from "../styles/dashboard-developer.css?url";
+import listsCss from "../styles/dashboard-lists.css?url";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/dashboard")({
       { rel: "stylesheet", href: coreCss },
       { rel: "stylesheet", href: dashboardCss },
       { rel: "stylesheet", href: developerCss },
+      { rel: "stylesheet", href: listsCss },
     ],
   }),
   component: DashboardRoute,

@@ -25,8 +25,11 @@ import type {
   PastSessionAction,
   PastSessionDTO,
   RecordingDTO,
+  RecordingsQuery,
   SecretDTO,
   SessionDTO,
+  SessionListDTO,
+  SessionsQuery,
   TranscriptDTO,
   WebhookDTO,
 } from "./contracts";
@@ -44,6 +47,8 @@ type Pages = {
   home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
   call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
   "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
+  sessions: { query: SessionsQuery; data: SessionListDTO; action: never };
+  recordings: { query: RecordingsQuery; data: SessionListDTO; action: never };
   developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
   connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
   connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };

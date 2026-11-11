@@ -15,6 +15,7 @@ import { KeysPanel } from "./DeveloperKeys";
 import { SitesPanel } from "./DeveloperSites";
 import { isFailing, WebhooksPanel } from "./DeveloperWebhooks";
 import { ErrorPanel, Sk, SkeletonRows, useToast } from "./kit";
+import { Page, Stat } from "./Page";
 
 type Open =
   | null
@@ -198,27 +199,20 @@ export function DeveloperPage() {
 /** The page frame: the section nav beside the heading and the panels. */
 function Shell({ nav, children }: { readonly nav?: ReactNode; readonly children: ReactNode }) {
   return (
-    <div className="dev">
-      <div className="dshell">
-        {nav}
-        <div className="dmain">
-          <div className="pagehead">
-            <span className="tile">
-              <Icon name="code" size={20} />
-            </span>
-            <div>
-              <h1>Developer</h1>
-              <p>API keys, allowed websites, webhooks and call settings for your app. A call is a Space; one session is an Episode, as in the API.</p>
-            </div>
-            <a className="btn out end" href="/docs">
-              <Icon name="book" size={16} />
-              Read the docs
-            </a>
-          </div>
-          {children}
-        </div>
-      </div>
-    </div>
+    <Page
+      icon="code"
+      title="Developer"
+      intro="API keys, allowed websites, webhooks and call settings for your app. A call is a Space; one session is an Episode, as in the API."
+      nav={nav}
+      end={
+        <a className="btn out end" href="/docs">
+          <Icon name="book" size={16} />
+          Read the docs
+        </a>
+      }
+    >
+      {children}
+    </Page>
   );
 }
 
@@ -321,19 +315,6 @@ function Summary({
           "None yet"
         )}
       </Stat>
-    </div>
-  );
-}
-
-function Stat({ icon, label, value, children }: { readonly icon: IconName; readonly label: string; readonly value: string; readonly children: ReactNode }) {
-  return (
-    <div className="stat">
-      <div className="l">
-        <Icon name={icon} size={14} />
-        {label}
-      </div>
-      <div className="v">{value}</div>
-      <div className="s">{children}</div>
     </div>
   );
 }

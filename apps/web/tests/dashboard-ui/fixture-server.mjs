@@ -169,6 +169,59 @@ const wait = (ms) => new Promise((done) => setTimeout(done, ms));
 const callDTO = ({ lastActiveAt: _last, recentPeople: _people, ...call }) => call;
 const homeCallDTO = (call) => ({ ...callDTO(call), inviteUrl: null, lastActiveAt: call.lastActiveAt ?? null, recentPeople: call.recentPeople ?? [] });
 const episodeDTO = ({ people: _people, kept: _kept, ...episode }) => episode;
+
+// The Sessions and Recordings lists: calls[0] keeps the sessions the rest of the fixture uses, and a few more sessions
+// belong to the other calls so every video state shows. Only calls[0] has a session page behind its rows.
+const GROUP = { play: "ready", capturing: "processing", preparing: "processing", preparable: "prepare", capture_failed: "failed", retryable: "failed", export_failed: "failed", expired: "expired" };
+const EXTRA_SESSIONS = [
+  [1, 2, 14, 38, 4, "preparable", null],
+  [2, 4, 11, 52, 3, "capture_failed", "The recording capture did not complete."],
+  [3, 8, 15, 29, 2, "retryable", "The recording export could not be completed."],
+  [4, 25, 10, 44, 5, "expired", null],
+];
+function listRows(data) {
+  if (!data.calls.length) return [];
+  const own = data.sessions
+    .filter((episode) => episode.status === "ended")
+    .map((episode, index) => ({
+      spaceId: data.calls[0].id,
+      callName: data.calls[0].name,
+      episode: episodeDTO(episode),
+      participantCount: episode.people.length,
+      recording: episode.kept === "none" ? null : { id: uuid(0x1800 + index), video: episode.kept === "processing" ? "capturing" : (data.videos?.get(episode.id) ?? "play"), failureMessage: null },
+      transcript: episode.kept === "none" || data.deleted?.has(episode.id) ? "none" : episode.kept === "processing" ? "processing" : "ready",
+      transcriptIds: episode.kept === "done" && !data.deleted?.has(episode.id) ? [uuid(0x1900 + index)] : [],
+    }));
+  const more = EXTRA_SESSIONS.map(([call, daysAgo, hh, length, count, video, failureMessage], index) => {
+    const startedAt = at(daysAgo, hh, 0);
+    const episode = { id: uuid(0xa00 + index), status: "ended", startedAt, endedAt: plus(startedAt, length) };
+    return { spaceId: data.calls[call].id, callName: data.calls[call].name, episode, participantCount: count, recording: { id: uuid(0x1a00 + index), video: data.videos?.get(episode.id) ?? video, failureMessage }, transcript: "none", transcriptIds: [] };
+  });
+  return [...own, ...more].sort((a, b) => Date.parse(b.episode.startedAt) - Date.parse(a.episode.startedAt));
+}
+function listPage(data, query, keep) {
+  const from = query.from ? Date.parse(query.from) : -Infinity;
+  const to = query.to ? Date.parse(query.to) : Infinity;
+  const name = query.q?.toLowerCase();
+  const all = listRows(data).filter((row) => {
+    const started = Date.parse(row.episode.startedAt);
+    return started >= from && started <= to && (!query.spaceId || row.spaceId === query.spaceId) && (!name || row.callName.toLowerCase().includes(name)) && keep(row);
+  });
+  const start = Number(query.cursor ?? 0);
+  const rows = all.slice(start, start + 10);
+  const totals = { sessions: all.length, seconds: 0, recorded: 0, transcripts: 0, video: { ready: 0, processing: 0, prepare: 0, failed: 0, expired: 0 } };
+  for (const row of all) {
+    totals.seconds += (Date.parse(row.episode.endedAt) - Date.parse(row.episode.startedAt)) / 1000;
+    if (row.recording) {
+      totals.recorded++;
+      totals.video[GROUP[row.recording.video]]++;
+    }
+    if (row.transcript === "ready") totals.transcripts++;
+  }
+  const calls = data.calls.filter((call) => listRows(data).some((row) => row.spaceId === call.id)).map(({ id, name }) => ({ id, name }));
+  return { rows, totals, calls, nextCursor: start + 10 < all.length ? String(start + 10) : null, truncated: state.truncated === true };
+}
+
 const inviteCode = (call) => {
   const letters = call.id
     .replaceAll("-", "")
@@ -335,6 +388,20 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, { latestEpisodeId: data.live ? uuid(0x2ff) : (data.sessions[0]?.id ?? null), episode: episode ? { id: episode.id, status: episode.status } : null, knocks: data.knocks ?? [] });
     }
     if (page === "home") return send(response, 200, homeDTO(data));
+    if (page === "sessions") {
+      const show = query.show ?? "all";
+      return send(
+        response,
+        200,
+        listPage(data, query, (row) => (show === "all" ? true : show === "recording" ? row.recording !== null : show === "transcript" ? row.transcript === "ready" : row.recording === null)),
+      );
+    }
+    if (page === "recordings")
+      return send(
+        response,
+        200,
+        listPage(data, query, (row) => row.recording !== null && (!query.status || GROUP[row.recording.video] === query.status)),
+      );
     if (page === "call-invite") {
       const call = data.calls.find((item) => item.id === query.spaceId);
       return call ? send(response, 200, { inviteUrl: inviteURL(call) }) : fail(response, 404, "not_found");
@@ -442,9 +509,18 @@ async function dashboard(request, response, page, url, entry) {
       return fail(response, 503, "fixture_has_no_engine");
     case "recording-url":
       return send(response, 200, { url: `${ORIGIN}/__fixture/video.mp4`, expiresAt: plus(new Date().toISOString(), 5), method: "GET", headers: {} });
-    case "export-recording":
+    case "delete-transcript":
+      (data.deleted ??= new Set()).add(action.episodeId);
+      return send(response, 200, { ok: true });
+    case "export-recording": {
+      const extra = listRows(data).find((row) => row.recording?.id === action.recordingId);
+      if (extra && extra.spaceId !== data.calls[0]?.id) {
+        (data.videos ??= new Map()).set(extra.episode.id, "preparing");
+        return send(response, 200, { recording: { ...recordingsFor(data.sessions[0], false)[0], id: action.recordingId, status: "pending", sourceStatus: "available", exportStatus: "pending" } });
+      }
       state.recordingScenario = "export_pending";
       return send(response, 200, { recording: recordingsFor(data.sessions[0], false)[0] });
+    }
     case "transcripts":
       if (state.recordingScenario === "missing") return fail(response, 404, "recording_not_found");
       return send(response, 200, { transcripts: transcriptsFor(new Date().toISOString()) });
@@ -559,6 +635,7 @@ const server = createServer(async (request, response) => {
           } else if (key === "fail" || key === "limit" || key === "freshSignIn") state[key] = new Set(value ? value.split(",") : []);
           else if (key === "expire") state.expire = value === "1";
           else if (key === "live") accounts.hasan.live = value === "1";
+          else if (key === "truncated") state.truncated = value === "1";
           else if (key === "manyConnections" && value === "1") accounts.hasan.connections.unshift(...Array.from({ length: 22 }, (_, n) => ({ id: uuid(0x4a0 + n), clientName: `Notes ${n + 1}`, scope: "chalk:read", lastUsedAt: null, createdAt: at(30 + n, 9, 0) })));
           else if (key === "freshLive") {
             accounts.hasan.live = true;
