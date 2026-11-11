@@ -169,6 +169,12 @@ export const CALL_STATES: readonly CallState[] = [
       actions: [{ click: `More options for ${nora.name}` }, { click: "Follow", role: "menuitem" }] satisfies readonly Action[],
       render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} />,
     },
+    {
+      id: `board-edges-${scheme}`,
+      title: `Board with a name tag at the edge and a pointer off screen, ${scheme}`,
+      render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik], pointers: "edges" }} />,
+    },
+    { id: `board-viewonly-${scheme}`, title: `Board, view only, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true })} board={{ scene: true, people: [nora, malik] }} /> },
     { id: `board-small-${scheme}`, title: `Board with one small word, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ scene: "small" }} /> },
     { id: `board-relay-${scheme}`, title: `Board shared with other tabs, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora], board: true, capabilities: HOST })} board={{ relay: `board-relay-${scheme}` }} /> },
     { id: `board-notes-${scheme}`, title: `Board sticky notes, ${scheme}`, render: () => <Live initialColorScheme={scheme} snapshot={liveSnapshot({ others: [nora, malik], board: true, capabilities: HOST })} board={{ scene: true, people: [nora, malik] }} /> },

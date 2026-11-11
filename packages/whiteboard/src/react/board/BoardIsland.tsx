@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { usePrefersReducedMotion } from "./useMediaQuery";
 import { ChalkMenu, ChalkMenuItem, ChalkPopover, ChalkTooltip } from "./controls";
-import { BoardIcon, GripIcon, type BoardGlyph } from "./BoardIcon";
-import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, penHex, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
+import { BoardIcon, GripIcon } from "./BoardIcon";
+import { ISLAND_PLACES, PEN_COLORS, PEN_WIDTHS, SHAPES, checkInk, strokeChip, strokePreview, strokeTarget, surfaceFill, surfaceInk, type BoardSurface, type BoardTool, type CallTheme, type IslandPlace, type PenColor, type PenWidth, type ShapeTool } from "./board-model";
+import { TOOL_GROUPS, TRAY_COLUMNS, TRAY_TOOLS, toolEntry, type ToolEntry } from "./board-tools";
 
 export type IslandProps = {
   readonly tool: BoardTool;
@@ -24,26 +25,6 @@ export type IslandProps = {
   readonly primaryToolsFirst?: boolean;
 };
 
-const TOOLS: readonly (readonly { readonly tool: BoardTool; readonly label: string; readonly key: string; readonly glyph: BoardGlyph }[])[] = [
-  [
-    { tool: "selection", label: "Select", key: "V", glyph: "select" },
-    { tool: "hand", label: "Hand", key: "H", glyph: "hand" },
-  ],
-  [
-    { tool: "pen", label: "Pen", key: "P", glyph: "pen" },
-    { tool: "highlighter", label: "Highlighter", key: "U", glyph: "highlighter" },
-  ],
-  [
-    { tool: "text", label: "Text", key: "T", glyph: "text" },
-    { tool: "note", label: "Sticky note", key: "N", glyph: "note" },
-  ],
-  [
-    { tool: "eraser", label: "Eraser", key: "E", glyph: "eraser" },
-    { tool: "laser", label: "Laser pointer", key: "K", glyph: "laser" },
-  ],
-];
-
-const LONG_PRESS_MS = 500;
 const DRAG_START_PX = 4;
 
 function Tip({ label, keyName, children }: { readonly label: string; readonly keyName?: string; readonly children: React.ReactElement }) {
@@ -55,7 +36,7 @@ function Tip({ label, keyName, children }: { readonly label: string; readonly ke
   );
 }
 
-function ToolButton({ entry, active, onTool }: { readonly entry: (typeof TOOLS)[number][number]; readonly active: boolean; readonly onTool: (tool: BoardTool) => void }) {
+function ToolButton({ entry, active, onTool }: { readonly entry: ToolEntry; readonly active: boolean; readonly onTool: (tool: BoardTool) => void }) {
   return (
     <Tip label={entry.label} keyName={entry.key}>
       <button type="button" className="chalk-board-tool" aria-label={entry.label} aria-keyshortcuts={entry.key} aria-pressed={active} onClick={() => onTool(entry.tool)}>
@@ -73,7 +54,7 @@ function ShapesButton({ tool, shape, onTool, side }: { readonly tool: BoardTool;
       trigger={
         <button type="button" className="chalk-board-tool" aria-label="Shapes" aria-keyshortcuts="R" aria-pressed={active}>
           <BoardIcon name={shape} />
-          <BoardIcon name="chevron" size={9} className="chalk-board-tool-caret" />
+          <span className="chalk-board-tool-notch" aria-hidden="true" />
         </button>
       }
     >
@@ -88,20 +69,33 @@ function ShapesButton({ tool, shape, onTool, side }: { readonly tool: BoardTool;
   );
 }
 
-function ColorPanel({ color, width, surface, theme, onColor, onWidth }: Pick<IslandProps, "color" | "width" | "surface" | "theme" | "onColor" | "onWidth">) {
+type StrokeProps = Pick<IslandProps, "tool" | "color" | "width" | "surface" | "theme" | "onColor" | "onWidth">;
+
+function StrokePanel({ tool, color, width, surface, theme, onColor, onWidth }: StrokeProps) {
+  const preview = strokePreview(tool, color, width, surface, theme);
   return (
     <div className="chalk-board-colors">
-      <div role="radiogroup" aria-label="Colour" className="chalk-board-swatches">
-        {PEN_COLORS.map((entry) => (
-          <button key={entry.id} type="button" role="radio" aria-checked={color === entry.id} aria-label={entry.label} className="chalk-board-swatch" onClick={() => onColor(entry.id)}>
-            <i style={{ background: penHex(entry.id, surface, theme) }} />
-          </button>
-        ))}
+      <div className="chalk-board-stroke-preview" style={{ background: surfaceFill(surface, theme), color: surfaceInk(surface, theme) }}>
+        <span className="chalk-board-stroke-target">{strokeTarget(tool)}</span>
+        <svg viewBox="0 0 264 64" fill="none" strokeLinecap="round" aria-hidden="true">
+          <path d="M28 40c22-26 44-26 66 0s44 18 70-4 46-12 72-2" stroke={preview.stroke} strokeWidth={preview.width} strokeOpacity={preview.opacity} />
+        </svg>
       </div>
-      <div role="radiogroup" aria-label="Stroke width" className="chalk-board-swatches">
+      <div role="radiogroup" aria-label="Colour" className="chalk-board-swatches">
+        {PEN_COLORS.map((entry) => {
+          const disc = strokeChip(entry.id, width, surface, theme).disc;
+          return (
+            <button key={entry.id} type="button" role="radio" aria-checked={color === entry.id} aria-label={entry.label} className="chalk-board-swatch" onClick={() => onColor(entry.id)}>
+              <i style={{ background: disc, color: checkInk(disc) }}>{color === entry.id ? <BoardIcon name="check" size={16} /> : null}</i>
+            </button>
+          );
+        })}
+      </div>
+      <div role="radiogroup" aria-label="Stroke width" className="chalk-board-swatches chalk-board-widths">
         {PEN_WIDTHS.map((entry) => (
           <button key={entry.id} type="button" role="radio" aria-checked={width === entry.id} aria-label={entry.label} className="chalk-board-width" onClick={() => onWidth(entry.id)}>
             <i style={{ height: entry.units }} />
+            {entry.label}
           </button>
         ))}
       </div>
@@ -109,24 +103,62 @@ function ColorPanel({ color, width, surface, theme, onColor, onWidth }: Pick<Isl
   );
 }
 
-function ColorButton(props: Pick<IslandProps, "color" | "width" | "surface" | "theme" | "onColor" | "onWidth"> & { readonly open?: boolean; readonly onOpenChange?: (open: boolean) => void; readonly trigger?: React.ReactElement }) {
-  const swatch = penHex(props.color, props.surface, props.theme);
+/** One pill showing the colour and the width together, so it never reads as a tool that is switched on. It opens the colour and width, on a phone too. */
+function StrokeChip({ side, ...props }: StrokeProps & { readonly side: "top" | "bottom" }) {
+  const chip = strokeChip(props.color, props.width, props.surface, props.theme);
   return (
     <ChalkPopover
-      label="Colour and width"
+      label={`${strokeTarget(props.tool)} colour and width`}
       tooltip="Colour and width"
-      open={props.open}
-      onOpenChange={props.onOpenChange}
+      side={side}
       className="chalk-board-color-popover"
       trigger={
-        props.trigger ?? (
-          <button type="button" className="chalk-board-tool" aria-label={`Colour: ${PEN_COLORS.find((entry) => entry.id === props.color)!.label}`}>
-            <span className="chalk-board-tool-swatch" style={{ background: swatch }} />
-          </button>
-        )
+        <button type="button" className="chalk-board-stroke" aria-label={chip.label}>
+          <span className="chalk-board-stroke-disc" style={{ background: chip.disc }} />
+          <span className="chalk-board-stroke-bar" style={{ height: chip.bar }} />
+        </button>
       }
     >
-      <ColorPanel {...props} />
+      <StrokePanel {...props} />
+    </ChalkPopover>
+  );
+}
+
+/** The phone's tool button: the current tool, and a tray with every tool and its name behind it. */
+function ToolTray({ tool, onTool }: { readonly tool: BoardTool; readonly onTool: (tool: BoardTool) => void }) {
+  const [open, setOpen] = useState(false);
+  const current = toolEntry(tool);
+  return (
+    <ChalkPopover
+      label="Tools"
+      side="top"
+      open={open}
+      onOpenChange={setOpen}
+      className="chalk-board-tray"
+      trigger={
+        <button type="button" className="chalk-board-tool" data-current aria-label={`Tools: ${current.label}`}>
+          <BoardIcon name={current.glyph} />
+          <span className="chalk-board-tool-notch" aria-hidden="true" />
+        </button>
+      }
+    >
+      <div className="chalk-board-tray-grid" style={{ gridTemplateColumns: `repeat(${TRAY_COLUMNS}, 1fr)` }}>
+        {TRAY_TOOLS.map((entry) => (
+          <button
+            key={entry.tool}
+            type="button"
+            className="chalk-board-tray-tool"
+            aria-pressed={tool === entry.tool}
+            onClick={() => {
+              onTool(entry.tool);
+              setOpen(false);
+            }}
+          >
+            <BoardIcon name={entry.glyph} />
+            {entry.label}
+          </button>
+        ))}
+      </div>
     </ChalkPopover>
   );
 }
@@ -149,12 +181,30 @@ function Separator() {
   return <span className="chalk-board-separator" aria-hidden="true" />;
 }
 
-function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, primaryToolsFirst, ...colors }: IslandProps & { readonly place: IslandPlace }) {
+function HistoryButtons({ canUndo, canRedo, onUndo, onRedo }: Pick<IslandProps, "canUndo" | "canRedo" | "onUndo" | "onRedo">) {
+  return (
+    <>
+      <Tip label="Undo" keyName="⌘Z">
+        <button type="button" className="chalk-board-tool" aria-label="Undo" disabled={!canUndo} onClick={onUndo}>
+          <BoardIcon name="undo" />
+        </button>
+      </Tip>
+      <Tip label="Redo" keyName="⇧⌘Z">
+        <button type="button" className="chalk-board-tool" aria-label="Redo" disabled={!canRedo} onClick={onRedo}>
+          <BoardIcon name="redo" />
+        </button>
+      </Tip>
+    </>
+  );
+}
+
+function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo, primaryToolsFirst, color, width, surface, theme, onColor, onWidth }: IslandProps) {
   const primaryTools = ["pen", "text", "note", "eraser"];
-  const entries = TOOLS.flat();
+  const entries = TOOL_GROUPS.flat();
+  const stroke = <StrokeChip tool={tool} color={color} width={width} surface={surface} theme={theme} onColor={onColor} onWidth={onWidth} side={place === "top" ? "bottom" : "top"} />;
   const shapes = <ShapesButton tool={tool} shape={shape} onTool={onTool} side={place === "top" ? "bottom" : "top"} />;
   const button = (entry: (typeof entries)[number]) => <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />;
-  const groups: ReactNode[] = TOOLS.map((group, index) => (
+  const groups: ReactNode[] = TOOL_GROUPS.map((group, index) => (
     <span key={index} className="chalk-board-group">
       {group.map((entry) => (
         <ToolButton key={entry.tool} entry={entry} active={tool === entry.tool} onTool={onTool} />
@@ -177,20 +227,11 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
       <Separator />
       {primaryToolsFirst ? (
         <>
-          <ColorButton {...colors} />
+          {stroke}
           <Separator />
         </>
       ) : null}
-      <Tip label="Undo" keyName="⌘Z">
-        <button type="button" className="chalk-board-tool" aria-label="Undo" disabled={!canUndo} onClick={onUndo}>
-          <BoardIcon name="undo" />
-        </button>
-      </Tip>
-      <Tip label="Redo" keyName="⇧⌘Z">
-        <button type="button" className="chalk-board-tool" aria-label="Redo" disabled={!canRedo} onClick={onRedo}>
-          <BoardIcon name="redo" />
-        </button>
-      </Tip>
+      <HistoryButtons canUndo={canUndo} canRedo={canRedo} onUndo={onUndo} onRedo={onRedo} />
       {primaryToolsFirst ? (
         <>
           <Separator />
@@ -199,7 +240,7 @@ function ToolRow({ tool, shape, onTool, place, canUndo, canRedo, onUndo, onRedo,
       ) : (
         <>
           <Separator />
-          <ColorButton {...colors} />
+          {stroke}
         </>
       )}
     </>
@@ -211,7 +252,7 @@ function nearestPlace(board: DOMRect, x: number, y: number): IslandPlace {
   return ISLAND_PLACES.map((entry) => entry.id).reduce((best, place) => (distances[place] < distances[best] ? place : best));
 }
 
-/** The tool island: a pill of tools that docks at the bottom, the top or the left, or one pen button when compact. */
+/** The tool island: a pill of tools that docks at the bottom, the top or the left, or, when compact, the current tool, the stroke chip and undo and redo. */
 export function BoardIsland(props: IslandProps) {
   const { place, onPlace, compact } = props;
   const island = useRef<HTMLDivElement>(null);
@@ -219,9 +260,6 @@ export function BoardIsland(props: IslandProps) {
   const reduced = usePrefersReducedMotion();
   const [drag, setDrag] = useState<{ readonly x: number; readonly y: number; readonly near: IslandPlace } | null>(null);
   const dropRect = useRef<DOMRect | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [colorsOpen, setColorsOpen] = useState(false);
-  const press = useRef<{ timer?: ReturnType<typeof setTimeout>; long: boolean }>({ long: false });
 
   useLayoutEffect(() => {
     const buttons = [...(island.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
@@ -287,46 +325,6 @@ export function BoardIsland(props: IslandProps) {
     }
   };
 
-  if (compact && !expanded) {
-    const cancelPress = () => clearTimeout(press.current.timer);
-    return (
-      <div ref={island} className="chalk-board-island" data-place="compact">
-        <ColorButton
-          {...props}
-          open={colorsOpen}
-          // Only a long press opens the colours; a tap opens the tool row.
-          onOpenChange={(open) => {
-            if (!open) setColorsOpen(false);
-          }}
-          trigger={
-            <button
-              type="button"
-              className="chalk-board-tool"
-              aria-label="Drawing tools"
-              aria-expanded={false}
-              onPointerDown={() => {
-                press.current.long = false;
-                press.current.timer = setTimeout(() => {
-                  press.current.long = true;
-                  setColorsOpen(true);
-                }, LONG_PRESS_MS);
-              }}
-              onPointerUp={cancelPress}
-              onPointerLeave={cancelPress}
-              onContextMenu={(event) => event.preventDefault()}
-              onClick={() => {
-                if (!press.current.long) setExpanded(true);
-              }}
-            >
-              <BoardIcon name="pen" />
-              <span className="chalk-board-tool-dot" style={{ background: penHex(props.color, props.surface, props.theme) }} />
-            </button>
-          }
-        />
-      </div>
-    );
-  }
-
   const vertical = place === "left" && !compact;
   return (
     <>
@@ -337,7 +335,7 @@ export function BoardIsland(props: IslandProps) {
         aria-label="Drawing tools"
         aria-orientation={vertical ? "vertical" : "horizontal"}
         className="chalk-board-island"
-        data-place={compact ? "expanded" : place}
+        data-place={compact ? "compact" : place}
         data-dragging={drag ? true : undefined}
         style={drag ? { transform: `translate(${drag.x}px, ${drag.y}px)` } : undefined}
         onKeyDownCapture={(event) => {
@@ -351,19 +349,23 @@ export function BoardIsland(props: IslandProps) {
       >
         {compact ? (
           <>
-            <button type="button" className="chalk-board-tool" aria-label="Close drawing tools" onClick={() => setExpanded(false)}>
-              <BoardIcon name="close" />
-            </button>
+            <ToolTray tool={props.tool} onTool={props.onTool} />
+            <StrokeChip tool={props.tool} color={props.color} width={props.width} surface={props.surface} theme={props.theme} onColor={props.onColor} onWidth={props.onWidth} side="top" />
             <Separator />
+            <HistoryButtons canUndo={props.canUndo} canRedo={props.canRedo} onUndo={props.onUndo} onRedo={props.onRedo} />
           </>
-        ) : !props.primaryToolsFirst ? (
-          <Tip label="Move the tools">
-            <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use Alt and the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
-              <GripIcon />
-            </button>
-          </Tip>
-        ) : null}
-        <ToolRow {...props} place={compact ? "bottom" : place} />
+        ) : (
+          <>
+            {!props.primaryToolsFirst ? (
+              <Tip label="Move the tools">
+                <button type="button" className="chalk-board-grip" aria-label="Move the tools. Use Alt and the arrow keys to dock them left, bottom or top." onPointerDown={startDrag} onKeyDown={gripKeys}>
+                  <GripIcon />
+                </button>
+              </Tip>
+            ) : null}
+            <ToolRow {...props} />
+          </>
+        )}
       </div>
     </>
   );
