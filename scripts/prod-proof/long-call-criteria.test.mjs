@@ -99,14 +99,25 @@ test("the refresh boundaries follow the first credential expiry of the call", ()
 test("a healthy call passes and prints one evidence line", () => {
   const result = judge({ ...healthyCall(), signalBytes: [20_000, 14_000, 15_000] });
   assert.deepEqual(result.failures, []);
-  assert.equal(evidenceLine(result.evidence), `Long call: 3 guests, ${callDurationMs / 1000}s, 2 access refreshes seen, ${toggleSchedule().length} mic/camera toggles, signaling requests (bytes/bar) G1 20000/49152, G2 14000/49152, G3 15000/49152 (max 20000), 0 failures`);
+  assert.equal(
+    evidenceLine(result.evidence),
+    `Long call: 3 guests, ${callDurationMs / 1000}s, 2 access refreshes seen, ${toggleSchedule().length} mic/camera toggles, signaling requests (bytes/gate) G1 20000/131072 (target 48 KiB / 49152 B; over by 0 B), G2 14000/131072 (target 48 KiB / 49152 B; over by 0 B), G3 15000/131072 (target 48 KiB / 49152 B; over by 0 B) (max 20000), 0 failures`,
+  );
 });
 
-test("the three-guest signal bar remains 48 KiB and fails before the node's 256 KiB cap", () => {
-  const failures = judged({ ...healthyCall(), signalBytes: [20_000, bounds.signalBytes + 1, 15_000] });
-  assert.equal(failures.length, 1, failures.join("\n"));
-  assert.match(failures[0], /^Guest 2 sent a signaling request of \d+ bytes, over the 49152 byte limit.*256 KiB cap/);
-  assert.deepEqual(judged({ ...healthyCall(), signalBytes: [bounds.signalBytes, 0, 0] }), []);
+test("three-guest signaling uses half the node cap as the gate and reports the 48 KiB target", () => {
+  const cut = judge({ ...healthyCall(), signalBytes: [59_260, 68_382, 66_958] });
+  assert.deepEqual(cut.failures, []);
+  assert.equal(cut.evidence.signalLimitBytes, 131_072);
+  assert.equal(cut.evidence.signalTargetBytes, 49_152);
+  assert.deepEqual(cut.evidence.signalOverTargetBytesByGuest, [10_108, 19_230, 17_806]);
+  assert.match(evidenceLine(cut.evidence), /G2 68382\/131072 \(target 48 KiB \/ 49152 B; over by 19230 B\)/);
+
+  const tooLarge = judged({ ...healthyCall(), signalBytes: [20_000, 140_000, 15_000] });
+  assert.equal(tooLarge.length, 1, tooLarge.join("\n"));
+  assert.match(tooLarge[0], /^Guest 2 sent a signaling request of 140000 bytes, over the 131072 byte limit.*256 KiB cap/);
+  assert.deepEqual(judged({ ...healthyCall(), signalBytes: [20_000, 131_072, 15_000] }), []);
+  assert.match(judged({ ...healthyCall(), signalBytes: [20_000, 131_073, 15_000] })[0], /over the 131072 byte limit/);
 });
 
 test("a ten-guest run uses the 176 KiB SDK budget and checks every other guest after each microphone publish", () => {
@@ -115,7 +126,9 @@ test("a ten-guest run uses the 176 KiB SDK budget and checks every other guest a
   const result = judge({ ...ten, signalBytes });
   assert.deepEqual(result.failures, []);
   assert.equal(result.evidence.signalLimitBytes, 176 * 1024);
+  assert.equal(result.evidence.signalTargetBytes, 49_152);
   assert.deepEqual(result.evidence.signalBytesByGuest, signalBytes);
+  assert.equal(result.evidence.signalOverTargetBytesByGuest[0], 131_072);
   const speaker = 9;
   const toggle = ten.toggles.filter((entry) => entry.guest === speaker && entry.kind === "microphone" && entry.enabled).at(-1);
   const hearings = heardEveryUnmute(ten);

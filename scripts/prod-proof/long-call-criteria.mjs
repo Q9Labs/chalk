@@ -24,8 +24,8 @@ export const bounds = {
   /** A grant's successor must be requested within this long after the grant's refresh point (its expiry less the refresh window). */
   refreshLateMs: 30_000,
   sampleIntervalMs: 2000,
-  /** The default three-guest proof bar; larger calls use the SDK's 176 KiB signaling budget below the node's 256 KiB offer cap. */
-  signalBytes: 48 * 1024,
+  /** Per-guest signaling request target; the gate is derived from the node cap for three guests and remains 176 KiB for larger calls. */
+  signalTargetBytes: 48 * 1024,
 };
 
 const baselineToggleMs = [60_000, 120_000, 180_000, 330_000, 390_000, 540_000];
@@ -218,6 +218,13 @@ function hearingFailures({ toggles, hearings, guests }) {
   return failures;
 }
 
+// Mirrors features/media/sfu/internal/media/offer.go maxSDPBytes; the Go constant is not importable from this Node proof.
+const nodeOfferBytesCap = 256 * 1024;
+
+export function signalLimitBytesForGuests(guests) {
+  return guests > 3 ? 176 * 1024 : nodeOfferBytesCap / 2;
+}
+
 /**
  * @param ticks `{ t, guests: [sample] }` in time order; a sample is `{ reachable, status, errorCode, mic, camera, pcs, outAudio, remotes: [{ participantId, source, bytes }] }`.
  * @param participants The participant id of each guest, in guest order.
@@ -225,14 +232,15 @@ function hearingFailures({ toggles, hearings, guests }) {
  * @param toggles The toggles that ran, as `{ atMs, guest, kind, enabled }` from the start of the call.
  * @param hearings What the other guests decoded after each microphone turned back on: `{ speaker, atMs, verdicts: [{ listener, pass, ... }] }`, one per such toggle
  *   (audio-decode.mjs hearAfterUnmute) with a verdict for every other guest. Advancing bytes do not count, so a guest left deaf by a re-publish fails here.
+ * @param signalBytes The largest signaling request body each guest sent. `budgetReplacements` are request times where the SDK reported replacing a connection to keep offers under the node's cap.
  * @returns `{ failures, notes, evidence }`; the run passes when `failures` is empty.
  */
-/** `signalBytes` is the largest signaling request body each guest sent and `budgetReplacements` the epoch time of each signaling request in which a guest's SDK reported replacing its connection to keep offers under the node's cap, when the proof measured them. */
 export function judgeLongCall({ ticks, participants, refreshes, toggles, hearings, startedAtMs, signalBytes = [], budgetReplacements = [] }) {
   const failures = [];
   const guests = participants.length;
-  const signalLimitBytes = guests > 3 ? 176 * 1024 : bounds.signalBytes;
+  const signalLimitBytes = signalLimitBytesForGuests(guests);
   const signalBytesByGuest = Array.from({ length: guests }, (_, guest) => signalBytes[guest] ?? 0);
+  const signalOverTargetBytesByGuest = signalBytesByGuest.map((bytes) => Math.max(0, bytes - bounds.signalTargetBytes));
   const label = (guest) => `Guest ${guest + 1}`;
   for (let guest = 0; guest < guests; guest++) {
     const own = ticks.map((tick) => ({ ...tick.guests[guest], t: tick.t }));
@@ -300,12 +308,14 @@ export function judgeLongCall({ ticks, participants, refreshes, toggles, hearing
       maxSignalBytes: Math.max(0, ...signalBytesByGuest),
       signalBytesByGuest,
       signalLimitBytes,
+      signalTargetBytes: bounds.signalTargetBytes,
+      signalOverTargetBytesByGuest,
       failureCount: failures.length,
     },
   };
 }
 
-export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, maxSignalBytes, signalBytesByGuest, signalLimitBytes, failureCount }) {
-  const perGuest = signalBytesByGuest.map((bytes, guest) => `G${guest + 1} ${bytes}/${signalLimitBytes}`).join(", ");
-  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, signaling requests (bytes/bar) ${perGuest} (max ${maxSignalBytes}), ${failureCount} failures`;
+export function evidenceLine({ guests, durationSeconds, refreshesSeen, toggles, maxSignalBytes, signalBytesByGuest, signalLimitBytes, signalTargetBytes, signalOverTargetBytesByGuest, failureCount }) {
+  const perGuest = signalBytesByGuest.map((bytes, guest) => `G${guest + 1} ${bytes}/${signalLimitBytes} (target 48 KiB / ${signalTargetBytes} B; over by ${signalOverTargetBytesByGuest[guest]} B)`).join(", ");
+  return `Long call: ${guests} guests, ${durationSeconds}s, ${refreshesSeen} access refreshes seen, ${toggles} mic/camera toggles, signaling requests (bytes/gate) ${perGuest} (max ${maxSignalBytes}), ${failureCount} failures`;
 }

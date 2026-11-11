@@ -1,7 +1,7 @@
 import { launchGuests } from "./media.mjs";
 import { hearAfterUnmute } from "./audio-decode.mjs";
 import { createEpisode, createSpace } from "./proofs.mjs";
-import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshWindowMs, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
+import { baselineToggles, bounds, callDurationMs, evidenceLine, judgeLongCall, planRefreshToggles, refreshIntervalMs, refreshWindowMs, signalLimitBytesForGuests, toggleSchedule, unreachableSample } from "./long-call-criteria.mjs";
 import { check, mediaPlane, save } from "./runtime.mjs";
 
 const guestCount = Number(process.env.LONG_CALL_GUESTS ?? 3);
@@ -45,6 +45,7 @@ export function longCallPlan() {
     `Long call: ${guestCount} guests on ${mediaPlane}, ${callDurationMs / 1000}s (the longer of 10 minutes and two ${refreshIntervalMs / 1000 + refreshWindowMs / 1000}s access lifetimes)`,
     `Access refresh every ${refreshIntervalMs / 1000}s after a grant; the schedule below assumes the first refresh at +${refreshIntervalMs / 1000}s of the call`,
     `Samples every ${bounds.sampleIntervalMs / 1000}s; fails on a lost call, outbound audio still for ${bounds.outboundStallMs / 1000}s, inbound audio or video still for ${bounds.inboundStallMs / 1000}s, or no connected peer connection for ${bounds.disconnectedMs / 1000}s`,
+    `Signaling requests fail above ${signalLimitBytesForGuests(guestCount)} B per guest; target ${bounds.signalTargetBytes} B (${bounds.signalTargetBytes / 1024} KiB), with over-target bytes reported`,
     ...schedule.map(({ atMs, guest, kind, enabled }) => `+${String(atMs / 1000).padStart(4)}s guest ${guest + 1} ${kind} ${enabled ? "on" : "off"}`),
   ].join("\n");
 }
