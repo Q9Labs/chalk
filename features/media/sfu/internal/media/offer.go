@@ -8,9 +8,11 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-// maxSDPBytes bounds an offer before it is parsed. A browser offer with a
-// handful of sections is a few kilobytes.
-const maxSDPBytes = 64 << 10
+// maxSDPBytes bounds an offer before it is parsed. A browser offer lists every section it ever
+// opened, live and closed: about 7.5 KB per camera-and-microphone guest, so a call with ten camera
+// guests passes 64 KiB. It must stay below the request body limit (SFU_MAX_REQUEST_BYTES), which
+// carries the offer inside JSON.
+const maxSDPBytes = 256 << 10
 
 // sectionHeadroom lets a session outlive closed tracks: Pion keeps a stopped
 // transceiver for the life of the peer connection, so the total is bounded

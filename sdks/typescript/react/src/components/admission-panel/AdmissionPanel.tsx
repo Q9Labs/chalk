@@ -5,6 +5,8 @@ import { cn } from "../../utils/cn";
 import { Cancel01Icon } from "../../utils/icons";
 import { Avatar } from "../atomic";
 import { ChalkButton } from "../chalk-ui";
+import { CallCardStyles } from "../call-card/CallCardStyles";
+import { answerAll } from "./answer-all";
 
 export interface AdmissionParticipant {
   id: string;
@@ -64,11 +66,11 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
   const list = (
     <>
       {error ? (
-        <p role="alert" className="text-sm text-[var(--chalk-danger-text)]">
+        <p role="alert" className="call-wait-error">
           {error}
         </p>
       ) : null}
-      {pending > 0 ? (
+      {pending > 0 && !inline ? (
         <div className="flex h-9 items-center justify-between gap-2">
           <span className="text-xs font-semibold text-[var(--chalk-app-text-muted)]" aria-live="polite">
             {pending === 1 ? "1 person waiting" : `${pending} people waiting`}
@@ -84,19 +86,19 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
           </li>
         ) : (
           participants.map((participant) => (
-            <li key={participant.id} className="call-person-row">
+            <li key={participant.id} className="call-person-row call-wait-row">
               <Avatar name={participant.displayName} src={participant.avatarUrl} size="sm" className="!h-8 !w-8" generated />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[var(--chalk-app-text)]">
+              <div className="call-person-who">
+                <b className="call-person-name">
                   <bdi>{participant.displayName}</bdi>
-                </p>
-                <p className="text-xs text-[var(--chalk-app-text-muted)]">{getWaitingLabel(participant.joinedAt)}</p>
+                </b>
+                <p className="call-person-sub">{getWaitingLabel(participant.joinedAt)}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <ChalkButton variant="ghost" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} aria-label={`Decline ${participant.displayName}`}>
+              <div className="call-wait-actions">
+                <ChalkButton disabled={busy || loading} onClick={() => void perform(() => onDeny(participant.id))} aria-label={`Decline ${participant.displayName}`}>
                   Decline
                 </ChalkButton>
-                <ChalkButton variant="solid" className="!h-8 !px-3" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} aria-label={`Let ${participant.displayName} in`}>
+                <ChalkButton variant="solid" disabled={busy || loading} onClick={() => void perform(() => onAdmit(participant.id))} aria-label={`Let ${participant.displayName} in`}>
                   Let in
                 </ChalkButton>
               </div>
@@ -105,8 +107,8 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
         )}
       </ul>
       {pending > 1 && onAdmitAll && onDenyAll ? (
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <ChalkButton disabled={busy || loading} onClick={() => void perform(onDenyAll)}>
+        <div className="call-wait-bulk">
+          <ChalkButton variant="ghost" disabled={busy || loading} onClick={() => void perform(onDenyAll)}>
             Decline all
           </ChalkButton>
           <ChalkButton variant="solid" disabled={busy || loading} onClick={() => void perform(onAdmitAll)}>
@@ -119,7 +121,11 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 
   if (inline) {
     return (
-      <section role="region" aria-label="Join requests" className={cn("flex flex-col", className)}>
+      <section role="region" aria-label="Join requests" className={cn("call-wait", className)}>
+        <h3 className="call-people-section call-wait-label">
+          <i aria-hidden="true" />
+          Waiting to join <span>{pending}</span>
+        </h3>
         {list}
       </section>
     );
@@ -127,6 +133,7 @@ const AdmissionPanelSurface = React.memo(({ participants, onAdmit, onDeny, onAdm
 
   return (
     <div className={cn("flex w-80 flex-col overflow-hidden rounded-(--corner-xl) border border-[var(--chalk-app-line-strong)] bg-[var(--chalk-app-panel)] shadow-[var(--chalk-app-shadow-sm)]", className)} role="complementary" aria-label="Join requests">
+      <CallCardStyles />
       <div className="flex items-center justify-between border-b border-[var(--chalk-app-line)] px-4 py-3">
         <h2 className="text-sm font-semibold text-[var(--chalk-app-text)]">Waiting to join</h2>
         {onClose ? <IconButton icon={<Cancel01Icon className="h-4 w-4" />} size="sm" variant="ghost" onClick={onClose} aria-label="Close join requests" className="text-[var(--chalk-app-text-muted)] hover:bg-[var(--chalk-app-control-hover)] hover:text-[var(--chalk-app-text)]" /> : null}
@@ -144,18 +151,16 @@ export function AdmissionPanel(props: AdmissionPanelProps): React.JSX.Element {
   const canManageAdmission = useCan("manageAdmission");
   const participants = canManageAdmission ? participantsSlice.admissionQueue.map((request) => ({ id: request.requestId, displayName: request.displayName })) : [];
 
+  const requestIds = participants.map((participant) => participant.id);
+
   return (
     <AdmissionPanelSurface
       {...props}
       participants={participants}
       onAdmit={(requestId) => client.participants.admit(requestId)}
       onDeny={(requestId) => client.participants.deny(requestId)}
-      onAdmitAll={async () => {
-        await Promise.all(participants.map((participant) => client.participants.admit(participant.id)));
-      }}
-      onDenyAll={async () => {
-        await Promise.all(participants.map((participant) => client.participants.deny(participant.id)));
-      }}
+      onAdmitAll={() => answerAll(requestIds, (requestId) => client.participants.admit(requestId), "let in")}
+      onDenyAll={() => answerAll(requestIds, (requestId) => client.participants.deny(requestId), "declined")}
     />
   );
 }

@@ -5,6 +5,8 @@ import { chalkThemeStyle, type ChalkTheme } from "../../theme";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { CallEventIcon } from "../toast-stack/CallEventIcon";
 import { ChalkButton } from "../chalk-ui";
+import { Avatar } from "../atomic/Avatar";
+import { CancelCircleIcon, Clock01Icon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 
 export interface CallLimboProps {
@@ -12,6 +14,10 @@ export interface CallLimboProps {
   readonly message: string;
   readonly detail?: string;
   readonly recorded?: boolean;
+  /** Who the guest will appear as, shown under the detail line while they wait. */
+  readonly joiningAs?: string;
+  /** A neutral symbol for a request that ended, so declined and expired look different from waiting before they are read. */
+  readonly glyph?: "declined" | "expired";
   readonly action?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean };
   readonly children?: ReactNode;
   /** Overlay the admitted call instead of rendering the privacy-safe stand-in. */
@@ -26,7 +32,7 @@ export interface CallLimboProps {
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -68,7 +74,7 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       if (blocking && previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
   }, [active, blocking, overlay]);
-  const stacked = blocking && (children ? "name" : message.endsWith("…") ? "entering" : detail && action ? "waiting" : null);
+  const stacked = blocking && (glyph ?? (children ? "name" : message.endsWith("…") ? "entering" : detail && action ? "waiting" : null));
   const layer = (
     <div
       ref={layerRef}
@@ -92,6 +98,8 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
           <span aria-hidden="true" className="mb-1 flex h-8 items-center text-[var(--chalk-soft-text)] [&>svg]:h-8 [&>svg]:w-8">
             {stacked === "name" ? <CallEventIcon kind="host" /> : null}
             {stacked === "waiting" ? <CallEventIcon kind="hand" /> : null}
+            {stacked === "declined" ? <CancelCircleIcon /> : null}
+            {stacked === "expired" ? <Clock01Icon /> : null}
             {stacked === "entering" ? <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--chalk-line-strong)] border-t-[var(--chalk-text)] motion-reduce:animate-none" /> : null}
           </span>
         ) : null}
@@ -102,6 +110,17 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
           </p>
         ) : null}
         {detail ? <p className="text-sm leading-[1.4] text-[var(--chalk-soft-text)]">{detail}</p> : null}
+        {joiningAs ? (
+          <span className="mt-3 flex items-center gap-2 text-sm text-[var(--chalk-muted-text)]">
+            <Avatar name={joiningAs} size="xs" generated animated={false} />
+            <span>
+              Joining as{" "}
+              <b dir="auto" className="font-semibold text-[var(--chalk-text)]">
+                {joiningAs}
+              </b>
+            </span>
+          </span>
+        ) : null}
         {recorded ? (
           <p className="mt-1 flex items-center gap-1.5 text-xs leading-[1.4] text-[var(--chalk-muted-text)]">
             <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">

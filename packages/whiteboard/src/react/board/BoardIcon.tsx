@@ -23,8 +23,8 @@ const GLYPHS = {
   eraser: <path d="M7 21h10M5.5 13.5l7-7a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L11 19H8l-2.5-2.5a2 2 0 0 1 0-3z" />,
   laser: (
     <>
-      <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+      <circle cx="17.5" cy="6.5" r="3" fill="currentColor" stroke="none" />
+      <path d="M4 20c2-6 6-11 10-13" />
     </>
   ),
   undo: (

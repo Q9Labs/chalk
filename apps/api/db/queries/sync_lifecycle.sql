@@ -506,7 +506,7 @@ where
     )
     and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.deadline_at, episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit sqlc.arg(batch_size);
 
 -- name: ReserveParticipantRemoval :one
@@ -717,7 +717,7 @@ where episodes.status='active' and empty_window.empty_since is not null
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
     and episodes.id <> all(sqlc.arg(excluded_episode_ids)::uuid[])
 order by episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit sqlc.arg(batch_size);
 
 -- name: EpisodeLingerStillDue :one

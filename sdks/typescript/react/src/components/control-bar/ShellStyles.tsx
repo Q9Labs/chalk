@@ -84,6 +84,79 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   width: 20px;
   height: 20px;
 }
+.chalk-shell-split > .chalk-shell-main {
+  transition: transform 0.15s ease-out, color 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.chalk-shell-media-body {
+  opacity: 1;
+  transition: opacity 0.12s ease-out;
+}
+.chalk-shell-media-cut,
+.chalk-shell-media-slash {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition: stroke-dashoffset 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0s 0.18s;
+}
+.chalk-shell-media[data-slashed="true"] .chalk-shell-media-cut,
+.chalk-shell-media[data-slashed="true"] .chalk-shell-media-slash {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0s;
+}
+.chalk-shell-media-trace {
+  opacity: 0;
+  stroke-dasharray: 0.24 0.76;
+  transition: opacity 0.12s ease-out;
+}
+.chalk-shell-media[data-busy="true"] .chalk-shell-media-body {
+  opacity: 0.4;
+}
+.chalk-shell-media[data-busy="true"] .chalk-shell-media-trace {
+  opacity: 1;
+  animation: chalk-shell-trace 1.1s linear infinite;
+}
+@keyframes chalk-shell-trace {
+  to {stroke-dashoffset: -1;}
+}
+.chalk-shell-dock .chalk-shell-reactions-button {
+  transition: transform 0.15s ease-out, background-color 0.18s ease-out, color 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+.chalk-shell-reactions-button svg {
+  grid-area: 1 / 1;
+  transition: transform 0.32s cubic-bezier(0.3, 1.4, 0.5, 1), opacity 0.18s ease-out;
+}
+.chalk-shell-reactions-button .chalk-shell-reactions-hand {
+  opacity: 0;
+  transform: translateY(6px) rotate(-20deg) scale(0.6);
+}
+.chalk-shell-dock .chalk-shell-reactions-button[aria-expanded="true"] {
+  background: var(--chalk-pressed);
+}
+.chalk-shell-dock .chalk-shell-reactions-button[data-hand-raised],
+.chalk-shell-dock .chalk-shell-reactions-button[data-hand-raised]:hover,
+.chalk-shell-dock .chalk-shell-reactions-button[data-hand-raised]:active {
+  background: var(--chalk-warning);
+  color: var(--chalk-accent-text);
+}
+.chalk-shell-dock .chalk-shell-reactions-button[data-hand-raised][aria-expanded="true"] {
+  /* token-ratchet-ignore: a 3px ring in the pressed role colour; no ring token exists */
+  box-shadow: 0 0 0 3px var(--chalk-pressed);
+}
+.chalk-shell-reactions-button[data-hand-raised] .chalk-shell-reactions-smile {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.4);
+}
+.chalk-shell-reactions-button[data-hand-raised] .chalk-shell-reactions-hand {
+  opacity: 1;
+  transform: none;
+  animation: chalk-shell-hand-wave 0.42s ease-out;
+}
+@keyframes chalk-shell-hand-wave {
+  from {opacity: 0; transform: translateY(6px) rotate(-20deg) scale(0.6);}
+  55% {opacity: 1; transform: rotate(12deg);}
+  78% {transform: rotate(-8deg);}
+}
 .chalk-shell-warning {
   position: absolute;
   top: -3px;
@@ -467,8 +540,22 @@ ${phoneRules(`
   }
 `)}
 @media (prefers-reduced-motion: reduce) {
-  .chalk-shell-split button {
+  .chalk-shell-split button,
+  .chalk-shell-split > .chalk-shell-main,
+  .chalk-shell-media-body,
+  .chalk-shell-media-cut,
+  .chalk-shell-media-slash,
+  .chalk-shell-media-trace,
+  .chalk-shell-dock .chalk-shell-reactions-button,
+  .chalk-shell-reactions-button svg {
     transition: none;
+  }
+  .chalk-shell-media[data-busy="true"] .chalk-shell-media-trace {
+    animation: none;
+    opacity: 0;
+  }
+  .chalk-shell-reactions-button[data-hand-raised] .chalk-shell-reactions-hand {
+    animation: none;
   }
 }
 .chalk-shell-more-actions {
@@ -511,6 +598,18 @@ ${phoneRules(`
 .chalk-shell-people-pill:active {
   transform: scale(0.97);
 }
+.chalk-shell-people-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-accent);
+  color: var(--chalk-accent-text);
+  font-size: var(--type-caption);
+  font-weight: 700;
+}
 .chalk-shell-faces {
   display: flex;
 }
@@ -549,25 +648,79 @@ ${phoneRules(`
 .chalk-shell-emoji:active {
   transform: scale(0.9);
 }
+/* A fixed 24px box with line-height 1 puts the glyph on the circle's true centre. */
+.chalk-shell-emoji > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: var(--type-title);
+  line-height: 1;
+  transform-origin: 50% 60%;
+}
+.chalk-shell-emoji:hover > span {
+  animation: var(--chalk-shell-emoji-move, chalk-shell-emoji-pop) 0.9s cubic-bezier(0.3, 1.3, 0.5, 1) infinite;
+}
+.chalk-shell-emoji[data-move="nod"] {--chalk-shell-emoji-move: chalk-shell-emoji-nod;}
+.chalk-shell-emoji[data-move="beat"] {--chalk-shell-emoji-move: chalk-shell-emoji-beat;}
+.chalk-shell-emoji[data-move="shake"] {--chalk-shell-emoji-move: chalk-shell-emoji-shake;}
+.chalk-shell-emoji[data-move="wiggle"] {--chalk-shell-emoji-move: chalk-shell-emoji-wiggle;}
+.chalk-shell-emoji[data-move="clap"] {--chalk-shell-emoji-move: chalk-shell-emoji-clap;}
+@keyframes chalk-shell-emoji-nod {
+  0%, 100% {transform: scale(0.88) rotate(0);}
+  40% {transform: scale(0.94) rotate(-14deg) translateY(-1px);}
+}
+@keyframes chalk-shell-emoji-beat {
+  0%, 100% {transform: scale(0.88);}
+  20% {transform: scale(1.04);}
+  40% {transform: scale(0.9);}
+  55% {transform: scale(1);}
+}
+@keyframes chalk-shell-emoji-shake {
+  0%, 100% {transform: scale(0.9) rotate(0);}
+  20% {transform: scale(0.9) rotate(-10deg);}
+  40% {transform: scale(0.9) rotate(10deg);}
+  60% {transform: scale(0.9) rotate(-6deg);}
+}
+@keyframes chalk-shell-emoji-pop {
+  0%, 100% {transform: scale(0.88);}
+  35% {transform: scale(1.04) translateY(-1px);}
+}
+@keyframes chalk-shell-emoji-wiggle {
+  0%, 100% {transform: scale(0.9) rotate(0);}
+  25% {transform: scale(0.9) rotate(-12deg);}
+  60% {transform: scale(0.9) rotate(8deg);}
+}
+@keyframes chalk-shell-emoji-clap {
+  0%, 100% {transform: scale(0.9);}
+  15% {transform: scale(0.8, 0.98);}
+  30% {transform: scale(0.94);}
+  45% {transform: scale(0.8, 0.98);}
+}
 .chalk-shell-raise {
   display: flex;
   align-items: center;
-  gap: var(--space-2-5);
-  min-height: 40px;
+  gap: var(--space-2);
+  height: 40px;
   border-radius: var(--corner-pill);
   padding: 0 var(--space-3) 0 var(--space-2-5);
-  margin-inline-end: var(--space-1);
-  background: var(--chalk-hover);
   white-space: nowrap;
   font-size: var(--type-body);
+  font-weight: 500;
 }
-.chalk-shell-raise svg {width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;}
-.chalk-shell-raise svg {color:var(--chalk-muted-text);}
-.chalk-shell-raise:hover {background:var(--chalk-pressed);}
-.chalk-shell-raise[aria-pressed="true"] svg {color:var(--chalk-accent-text);}
+.chalk-shell-raise svg {width:18px;height:18px;flex:none;}
+.chalk-shell-raise:not([aria-pressed="true"]):hover {background:var(--chalk-hover);}
 .chalk-shell-raise[aria-pressed="true"] {
   background: var(--chalk-warning);
   color: var(--chalk-accent-text);
+}
+.chalk-shell-rule {
+  width: 1px;
+  height: 24px;
+  margin: 0 var(--space-1);
+  flex: none;
+  background: var(--chalk-line-strong);
 }
 .chalk-shell-reactions-expanded {
   display: grid;
@@ -577,18 +730,28 @@ ${phoneRules(`
 .chalk-shell-reactions-expanded .chalk-shell-raise {
   grid-column: 1/-1;
 }
+.chalk-shell-reactions-expanded .chalk-shell-rule {
+  display: none;
+}
 ${phoneRules(`
   .chalk-shell-reactions {
     flex-wrap: wrap;
-    justify-content: center;
+    justify-content: space-between;
+    gap: var(--space-0-5) 0;
     width: 300px;
     border-radius: var(--corner-3xl);
   }
   .chalk-shell-raise {
     width: 100%;
-    min-height:48px;
+    height: 48px;
     justify-content: center;
+    border-radius: 18px;
+    background: var(--chalk-hover);
     margin: 0 0 var(--space-1);
+  }
+  .chalk-shell-raise:not([aria-pressed="true"]):hover {background:var(--chalk-pressed);}
+  .chalk-shell-rule {
+    display: none;
   }
   .chalk-shell-reactions-expanded {
     width: auto;
@@ -604,6 +767,9 @@ ${phoneRules(`
   .chalk-shell-emoji,
   .chalk-shell-people-pill {
     transition: none;
+  }
+  .chalk-shell-emoji:hover > span {
+    animation: none;
   }
 }
 `;

@@ -13,6 +13,7 @@ export const CALL_SHORTCUTS = [
   ["Open or close chat", "⌃ ⌘ C"],
   ["Open or close people", "⌃ ⌘ P"],
   ["Switch layout", "⌃ ⌘ L"],
+  ["Full screen", "⌃ ⌘ F"],
   ["Talk while muted", "Hold Space"],
   ["Show shortcuts", "?"],
   ["Close a menu or panel", "Esc"],

@@ -1,12 +1,16 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
 import type { ThemePreference } from "../../lib/theme";
+import { SIGNED_IN_COOKIE } from "../../lib/signed-in-hint";
 import { useTheme } from "../../lib/theme-context";
 import { Icon } from "./Icon";
 
 // Runs while the page parses, before it paints, so a light preference never flashes the dark default.
-// It reads the same cookie as readThemePreference in lib/theme.
-const THEME_SCRIPT = `document.currentScript.parentElement.setAttribute("data-chalk-theme",/(?:^|;\\s*)chalk_theme=light(?:;|$)/.test(document.cookie)?"light":"dark")`;
+// It reads the same cookie as readThemePreference in lib/theme, and marks a signed-in visitor so the
+// site header can swap Sign in for Dashboard in CSS, with no flash and no hydration mismatch.
+const THEME_SCRIPT = `var r=document.currentScript.parentElement;r.setAttribute("data-chalk-theme",/(?:^|;\\s*)chalk_theme=light(?:;|$)/.test(document.cookie)?"light":"dark");if(/(?:^|;\\s*)${SIGNED_IN_COOKIE}=1(?:;|$)/.test(document.cookie))r.setAttribute("data-chalk-signed-in","")`;
+
+const SIGNED_IN_PATTERN = new RegExp(`(?:^|;\\s*)${SIGNED_IN_COOKIE}=1(?:;|$)`);
 
 const noSubscription = () => () => {};
 
@@ -29,11 +33,21 @@ export function useSiteTheme(): { readonly theme: ThemePreference; readonly setT
   return { theme: hydrated ? preference : "dark", setTheme: setPreference };
 }
 
+/** True when this browser holds the session hint. False while hydrating, where the inline script has already marked the page. */
+function useSignedInHint(): boolean {
+  return useSyncExternalStore(
+    noSubscription,
+    () => SIGNED_IN_PATTERN.test(document.cookie),
+    () => false,
+  );
+}
+
 /** Opens the call's token scope for a site, docs or dashboard page. */
 export function SiteRoot({ children }: { readonly children: ReactNode }) {
   const { theme } = useSiteTheme();
+  const signedIn = useSignedInHint();
   return (
-    <div className="site" data-chalk="" data-chalk-theme={theme} suppressHydrationWarning>
+    <div className="site" data-chalk="" data-chalk-theme={theme} data-chalk-signed-in={signedIn ? "" : undefined} suppressHydrationWarning>
       <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       {children}
     </div>
