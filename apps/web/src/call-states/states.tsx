@@ -2,6 +2,7 @@ import { TimeLimitFixture } from "./time-limit";
 import { INTEGRATION_STATES } from "./integration";
 import { STAGE_STATES } from "./stage";
 import { SHELL_STATES } from "./shell";
+import { DEVICE_ACCESS_STATES } from "./device-access";
 import { CARD_STATES } from "./card";
 import { ChatJitterState } from "./chat-jitter";
 import { NoticeBandFixture, OfflineNoticeFixture } from "./notice-band";
@@ -53,6 +54,7 @@ export const CALL_STATES: readonly CallState[] = [
   { id: "chat-jitter", title: "Chat: idle three-person call", render: () => <ChatJitterState /> },
   ...PERFORMANCE_STATES,
   ...SHELL_STATES,
+  ...DEVICE_ACCESS_STATES,
   ...STAGE_STATES,
   ...CARD_STATES,
   ...PEOPLE_STATES,
