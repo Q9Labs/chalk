@@ -111,8 +111,12 @@ defmodule ChalkSync.Stateholder.PostgresPublicationLockOrderTest do
       )
 
     cond do
-      blocked > 0 -> :ok
-      attempts == 0 -> flunk("the Sync transaction never waited for the control row")
+      blocked > 0 ->
+        :ok
+
+      attempts == 0 ->
+        flunk("the Sync transaction never waited for the control row")
+
       true ->
         Process.sleep(10)
         wait_until_blocked_by(connection, blocker_pid, attempts - 1)
