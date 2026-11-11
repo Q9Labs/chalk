@@ -44,6 +44,33 @@ describe("join with unavailable capture devices", () => {
     }
   });
 
+  it("captures from the devices picked before joining and records them as the selection", async () => {
+    const platform = createCoreTestPlatform();
+    const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));
+    const selectSpeaker = vi.fn(async () => undefined);
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia, selectSpeaker } } });
+    try {
+      await client.join({ microphone: true, camera: true, microphoneDeviceId: "mic-2", cameraDeviceId: "cam-2", speakerDeviceId: "speaker-2" });
+      expect(getUserMedia).toHaveBeenCalledWith({ audio: { deviceId: { exact: "mic-2" } }, video: { deviceId: { exact: "cam-2" } } }, expect.anything());
+      expect(selectSpeaker).toHaveBeenCalledWith("speaker-2");
+      expect(client.getSnapshot().media.selection).toMatchObject({ microphone: "mic-2", camera: "cam-2", speaker: "speaker-2" });
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("joins with the system speaker when the runtime cannot select an output", async () => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("test") }, { ...platform, dependencies: { ...platform.dependencies, mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([]) } } });
+    try {
+      await client.join({ microphone: false, camera: false, speakerDeviceId: "speaker-2" });
+      expect(client.getSnapshot().connection.status).toBe("live");
+      expect(client.getSnapshot().media.selection.speaker).toBeNull();
+    } finally {
+      client.dispose();
+    }
+  });
+
   it("preserves devices switched off before leaving when rejoining with defaults", async () => {
     const platform = createCoreTestPlatform();
     const getUserMedia = vi.fn(async () => stream([track("audio"), track("video")]));

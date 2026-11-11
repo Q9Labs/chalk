@@ -48,6 +48,10 @@ export type JoinOptions = {
   readonly displayName?: string;
   readonly microphone?: boolean;
   readonly camera?: boolean;
+  /** Devices picked before joining. The call captures from these instead of the browser defaults. */
+  readonly microphoneDeviceId?: string;
+  readonly cameraDeviceId?: string;
+  readonly speakerDeviceId?: string;
 };
 export type ConnectionStatus = "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
 export type Capability = V1Capability;
