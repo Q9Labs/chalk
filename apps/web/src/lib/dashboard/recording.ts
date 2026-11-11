@@ -51,6 +51,18 @@ export function videoState(recording: RecordingDTO): VideoState {
   return "preparable";
 }
 
+/** The words a list uses for a video: Recordings filters by these, and rows draw one pill for each. */
+export type VideoGroup = "ready" | "processing" | "prepare" | "failed" | "expired";
+
+const GROUP: Record<VideoState, VideoGroup> = { play: "ready", capturing: "processing", preparing: "processing", preparable: "prepare", capture_failed: "failed", retryable: "failed", export_failed: "failed", expired: "expired" };
+
+export const videoGroup = (state: VideoState): VideoGroup => GROUP[state];
+
+/** What a session kept: its newest completed recording, else its newest recording. Recordings arrive newest first. */
+export function keptRecording<T extends { readonly status: string }>(recordings: readonly T[]): T | undefined {
+  return recordings.find((item) => item.status === "completed") ?? recordings[0];
+}
+
 export type TranscriptState = "ready" | "preparing" | "failed" | "deleted" | "expired" | "creatable" | "none";
 
 /** What the transcript panel says, and whether it may offer to make a transcript. */

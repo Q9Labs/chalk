@@ -8,6 +8,9 @@ async function startVisibleRead(tab, started) {
   return Promise.race([started.then(() => true), tab.waitForTimeout(6000).then(() => false)]);
 }
 
+// The call page lists its sessions in the shared row, where the transcript column says "Processing".
+const processing = (tab) => tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Processing" }).last();
+
 export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   for (const final of ["complete", "terminal_failure"]) {
@@ -15,10 +18,9 @@ export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
     await tab.getByRole("button", { name: "Anyone with the link", exact: true }).click();
     await tab.waitForTimeout(500);
     const full = await reads("call");
-    await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "visible" });
+    await processing(tab).waitFor({ state: "visible" });
     await fixture(`set?metadataComplete=${final}`);
-    const finished = await tab
-      .getByText("Transcript processing", { exact: true })
+    const finished = await processing(tab)
       .waitFor({ state: "hidden", timeout: 25000 })
       .then(
         () => true,
@@ -48,10 +50,10 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=pending", clock: true });
     try {
       const full = await reads("call");
-      check("completed recording waits for pending automatic transcription", (await tab.getByText("Transcript", { exact: true }).count()) === 0);
+      check("completed recording waits for pending automatic transcription", (await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).count()) === 0);
       await fixture("set?metadataDiscovery=ready");
       await metadataTick(tab);
-      await tab.getByText("Transcript", { exact: true }).waitFor();
+      await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).first().waitFor();
       const status = await reads("call-status");
       await tab.clock.runFor(15000);
       check("Call discovers a new automatic transcript and stops polling without a full reload", (await reads("call")) === full && (await reads("call-status")) === status);
@@ -63,11 +65,11 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure", clock: true });
     try {
       const full = await reads("call");
-      await tab.getByText("Transcript processing", { exact: true }).waitFor();
+      await processing(tab).waitFor();
       await fixture("set?metadataComplete=complete");
       await metadataTick(tab);
-      await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden" });
-      await tab.getByText("Transcript", { exact: true }).waitFor();
+      await processing(tab).waitFor({ state: "hidden" });
+      await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).first().waitFor();
       check("retryable transcripts keep polling until automatic recovery completes", (await reads("call")) === full);
     } finally {
       await context.close();
@@ -88,7 +90,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       .waitFor({ state: "visible", timeout })
       .then(
         () => true,
-        () => false,
+        (e) => (console.log("ERR", String(e).slice(0, 200)), false),
       );
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
   const screenshot = async (tab, name) => {
@@ -108,7 +110,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
         .waitFor({ state: "visible", timeout: 15000 })
         .then(
           () => true,
-          () => false,
+          (e) => (console.log("ERR", String(e).slice(0, 200)), false),
         )) && (await reads("call")) === full,
     );
     await context.close();
@@ -132,17 +134,17 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     });
     await screenshot(tab, "live");
     await fixture("set?ending=1&knocks=0");
-    check("Call shows the ending session during engine shutdown", await visible(tab, '.srow a[aria-label^="Session"]'));
+    check("Call shows the ending session during engine shutdown", await visible(tab, '.lr:not(.head) a[aria-label^="Session"]'));
     await fixture("set?end=1");
-    const ended = await visible(tab, '.srow a[aria-label*=", 7 min,"]', 40000);
+    const ended = await visible(tab, '.lr:not(.head) a[aria-label*=", 7 min,"]', 40000);
     await screenshot(tab, "ended");
-    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.knock").count()) === 0 && (await tab.locator(".srow").getByText("Recording", { exact: true }).count()) === 1);
+    check("Call refreshes live to ended, lists the recording and drops stale knocks without navigation", ended && navigations === 0 && (await tab.locator(".liveb,.knock").count()) === 0 && (await tab.locator(".lr:not(.head) .dsk .bdg", { hasText: "Recording" }).count()) === 1);
     await context.close();
   }
   {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0" });
     await fixture("set?freshLive=1&end=1");
-    check("Call discovers a session that started and ended between polls", await visible(tab, '.srow a[aria-label*=", 7 min,"]'));
+    check("Call discovers a session that started and ended between polls", await visible(tab, '.lr:not(.head) a[aria-label*=", 7 min,"]'));
     await context.close();
   }
   {
@@ -162,7 +164,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       .waitFor({ state: "hidden", timeout: 8000 })
       .then(
         () => true,
-        () => false,
+        (e) => (console.log("ERR", String(e).slice(0, 200)), false),
       );
     check("Call drops a pending knock when the server stops returning it", removed);
     await fixture("set?knocks=1");
@@ -193,7 +195,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       .waitFor({ state: "hidden", timeout: 8000 })
       .then(
         () => true,
-        () => false,
+        (e) => (console.log("ERR", String(e).slice(0, 200)), false),
       );
     const idle = await reads("home-status");
     await tab.waitForTimeout(5500);
@@ -217,7 +219,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    check("visible tab refreshes immediately", await visible(tab, '.srow a[aria-label^="Session"]'));
+    check("visible tab refreshes immediately", await visible(tab, '.lr:not(.head) a[aria-label^="Session"]'));
     await context.close();
   }
   {
@@ -227,7 +229,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.waitForTimeout(5500);
     check("failed background refresh keeps ready content without a skeleton or error", (await reads("call-status")) > before && (await tab.locator(".liveb").count()) === 1 && (await tab.locator('[aria-busy="true"],.errp').count()) === 0);
     await fixture("set?fail=&end=1");
-    check("background refresh retries after failure", await visible(tab, '.srow a[aria-label^="Session"]', 15000));
+    check("background refresh retries after failure", await visible(tab, '.lr:not(.head) a[aria-label^="Session"]', 15000));
     await context.close();
   }
   {
@@ -243,9 +245,9 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
     await tab.getByRole("button", { name: "Show older sessions" }).click();
     await tab.waitForTimeout(500);
     check("Call pagination reads only the appended page", (await reads("call")) === full + 1);
-    const rows = await tab.locator(".srow").count();
+    const rows = await tab.locator(".lr:not(.head)").count();
     await tab.waitForTimeout(5500);
-    check("Call refresh keeps previously opened history pages", rows === 9 && (await tab.locator(".srow").count()) === rows);
+    check("Call refresh keeps previously opened history pages", rows === 9 && (await tab.locator(".lr:not(.head)").count()) === rows);
     await context.close();
   }
   {
@@ -257,7 +259,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       .waitFor({ state: "visible", timeout: 4000 })
       .then(
         () => true,
-        () => false,
+        (e) => (console.log("ERR", String(e).slice(0, 200)), false),
       );
     check("explicit non-polling reload still exposes its error and retry", failure && (await tab.getByRole("button", { name: "Try again" }).count()) === 1);
     await context.close();
@@ -313,7 +315,7 @@ export async function refreshChecks({ open, fixture, check, CALL }) {
       .waitForFunction(() => window.__denyTrace.staleRead, null, { timeout: 10000 })
       .then(
         () => true,
-        () => false,
+        (e) => (console.log("ERR", String(e).slice(0, 200)), false),
       );
     const resurrected = (labels) => labels.slice(labels.findIndex((label) => label.includes("Denying…"))).some((label) => label.split(", ").includes("Deny"));
     const held = await tab.evaluate(() => window.__denyTrace.labels);
@@ -369,7 +371,7 @@ export async function missingMetadataChecks({ open, fixture, check, CALL }) {
   for (const status of [403, 404, 410]) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=ready&metadataComplete=retryable_failure&admission=knock", clock: true });
     try {
-      await tab.getByText("Transcript processing", { exact: true }).waitFor();
+      await processing(tab).waitFor();
       const reads = async (page) => (await fixture("log")).filter((entry) => entry.path === `/dashboard-api/${page}`).length;
       const full = await reads("call");
       await tab.route("**/dashboard-api/call-metadata?*", (route) => route.fulfill({ status, json: { error: { code: "artifact_unavailable" } } }));
@@ -381,8 +383,8 @@ export async function missingMetadataChecks({ open, fixture, check, CALL }) {
         await tab.waitForLoadState("networkidle");
       }
       await (await metadata).finished();
-      await tab.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden" });
-      check(`metadata ${status} removes the transcript while keeping Call available`, (await tab.locator(".errp").count()) === 0 && (await tab.getByText("Transcript processing", { exact: true }).count()) === 0 && (await tab.locator(".srow").count()) > 0);
+      await processing(tab).waitFor({ state: "hidden" });
+      check(`metadata ${status} removes the transcript while keeping Call available`, (await tab.locator(".errp").count()) === 0 && (await processing(tab).count()) === 0 && (await tab.locator(".slist .lr:not(.head)").count()) > 0);
       if (status === 404) {
         await mkdir(resolve("artifacts/dashboard-followups"), { recursive: true });
         await tab.screenshot({ path: resolve(`artifacts/dashboard-followups/metadata-${process.env.DASHBOARD_FOLLOWUP_PROOF ?? "after"}.png`), fullPage: true });

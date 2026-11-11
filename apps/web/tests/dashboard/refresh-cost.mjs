@@ -131,7 +131,7 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     // shutdown acknowledgement in storage; browser responses still use the API.
     assert.equal(sql(`update episodes set status='ended', ended_at=now() where id='${episodeId}' and tenant_id='${tenantId}' and status='ending' returning id`), episodeId);
     await callPage.locator(".liveb").waitFor({ state: "hidden", timeout: 12000 });
-    await callPage.locator('.srow a[aria-label^="Session"]').waitFor({ state: "visible", timeout: 12000 });
+    await callPage.locator('.lr:not(.head) a[aria-label^="Session"]').waitFor({ state: "visible", timeout: 12000 });
     await homePage.locator(".live").waitFor({ state: "hidden", timeout: 12000 });
     assert.equal(navigations, 0, "Both pages update without navigation or reload");
     const finalMetadata = await client.request(`/dashboard-api/home-status?home=1&spaceIds=${call.id}`);
@@ -149,12 +149,12 @@ export async function refreshCost({ client, session, post, origin, engineReads, 
     sql(`insert into recordings(id,tenant_id,space_id,episode_id,status,storage_provider) values('${recordingId}','${tenantId}','${call.id}','${episodeId}','completed','r2');
       insert into transcriptions(id,tenant_id,space_id,episode_id,recording_id,status,languages) values('${transcriptId}','${tenantId}','${call.id}','${episodeId}','${recordingId}','preparing','{en}');`);
     await callPage.reload();
-    await callPage.getByText("Transcript processing", { exact: true }).waitFor();
+    await callPage.locator(".lr:not(.head) .tc .bdg", { hasText: "Processing" }).last().waitFor();
     const fullBeforeDeletion = dashboardReads.filter((path) => path === "/dashboard-api/call").length;
     sql(`delete from transcriptions where id='${transcriptId}' and tenant_id='${tenantId}'`);
-    await callPage.getByText("Transcript processing", { exact: true }).waitFor({ state: "hidden", timeout: 20000 });
+    await callPage.locator(".lr:not(.head) .tc .bdg", { hasText: "Processing" }).last().waitFor({ state: "hidden", timeout: 20000 });
     assert.equal(await callPage.locator(".errp").count(), 0);
-    assert.equal(await callPage.locator(".srow").count(), 1);
+    assert.equal(await callPage.locator(".lr:not(.head)").count(), 1);
     const ticksAfterDeletion = dashboardReads.filter((path) => path === "/dashboard-api/call-status").length;
     await delay(5500);
     assert(dashboardReads.filter((path) => path === "/dashboard-api/call-status").length > ticksAfterDeletion);

@@ -27,6 +27,8 @@ import { Route as SpaceSpaceSlugRouteImport } from './routes/_space.space.$slug'
 import { Route as DashboardAppIndexRouteImport } from './routes/dashboard._app.index'
 import { Route as DashboardAppAppsRouteImport } from './routes/dashboard._app.apps'
 import { Route as DashboardAppDeveloperRouteImport } from './routes/dashboard._app.developer'
+import { Route as DashboardAppRecordingsRouteImport } from './routes/dashboard._app.recordings'
+import { Route as DashboardAppSessionsRouteImport } from './routes/dashboard._app.sessions'
 import { Route as DashboardCallSpaceIdJoinRouteImport } from './routes/dashboard_.call.$spaceId.join'
 import { Route as DashboardAppCallSpaceIdIndexRouteImport } from './routes/dashboard._app.call.$spaceId.index'
 import { Route as DashboardAppCallSpaceIdSessionEpisodeIdRouteImport } from './routes/dashboard._app.call.$spaceId.session.$episodeId'
@@ -119,6 +121,16 @@ const DashboardAppDeveloperRoute = DashboardAppDeveloperRouteImport.update({
   path: '/developer',
   getParentRoute: () => DashboardAppRoute,
 } as any)
+const DashboardAppRecordingsRoute = DashboardAppRecordingsRouteImport.update({
+  id: '/recordings',
+  path: '/recordings',
+  getParentRoute: () => DashboardAppRoute,
+} as any)
+const DashboardAppSessionsRoute = DashboardAppSessionsRouteImport.update({
+  id: '/sessions',
+  path: '/sessions',
+  getParentRoute: () => DashboardAppRoute,
+} as any)
 const DashboardCallSpaceIdJoinRoute =
   DashboardCallSpaceIdJoinRouteImport.update({
     id: '/dashboard_/call/$spaceId/join',
@@ -153,6 +165,8 @@ export interface FileRoutesByFullPath {
   '/space/$slug': typeof SpaceSpaceSlugRoute
   '/dashboard/apps': typeof DashboardAppAppsRoute
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/recordings': typeof DashboardAppRecordingsRoute
+  '/dashboard/sessions': typeof DashboardAppSessionsRoute
   '/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/': typeof DashboardAppIndexRoute
   '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
@@ -173,6 +187,8 @@ export interface FileRoutesByTo {
   '/space/$slug': typeof SpaceSpaceSlugRoute
   '/dashboard/apps': typeof DashboardAppAppsRoute
   '/dashboard/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/recordings': typeof DashboardAppRecordingsRoute
+  '/dashboard/sessions': typeof DashboardAppSessionsRoute
   '/space': typeof SpaceSpaceIndexRoute
   '/dashboard/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
   '/dashboard/call/$spaceId': typeof DashboardAppCallSpaceIdIndexRoute
@@ -196,6 +212,8 @@ export interface FileRoutesById {
   '/_space/space/$slug': typeof SpaceSpaceSlugRoute
   '/dashboard/_app/apps': typeof DashboardAppAppsRoute
   '/dashboard/_app/developer': typeof DashboardAppDeveloperRoute
+  '/dashboard/_app/recordings': typeof DashboardAppRecordingsRoute
+  '/dashboard/_app/sessions': typeof DashboardAppSessionsRoute
   '/_space/space/': typeof SpaceSpaceIndexRoute
   '/dashboard/_app/': typeof DashboardAppIndexRoute
   '/dashboard_/call/$spaceId/join': typeof DashboardCallSpaceIdJoinRoute
@@ -219,6 +237,8 @@ export interface FileRouteTypes {
     | '/space/$slug'
     | '/dashboard/apps'
     | '/dashboard/developer'
+    | '/dashboard/recordings'
+    | '/dashboard/sessions'
     | '/space/'
     | '/dashboard/'
     | '/dashboard/call/$spaceId/join'
@@ -239,6 +259,8 @@ export interface FileRouteTypes {
     | '/space/$slug'
     | '/dashboard/apps'
     | '/dashboard/developer'
+    | '/dashboard/recordings'
+    | '/dashboard/sessions'
     | '/space'
     | '/dashboard/call/$spaceId/join'
     | '/dashboard/call/$spaceId'
@@ -261,6 +283,8 @@ export interface FileRouteTypes {
     | '/_space/space/$slug'
     | '/dashboard/_app/apps'
     | '/dashboard/_app/developer'
+    | '/dashboard/_app/recordings'
+    | '/dashboard/_app/sessions'
     | '/_space/space/'
     | '/dashboard/_app/'
     | '/dashboard_/call/$spaceId/join'
@@ -407,6 +431,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAppDeveloperRouteImport
       parentRoute: typeof DashboardAppRoute
     }
+    '/dashboard/_app/recordings': {
+      id: '/dashboard/_app/recordings'
+      path: '/recordings'
+      fullPath: '/dashboard/recordings'
+      preLoaderRoute: typeof DashboardAppRecordingsRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
+    '/dashboard/_app/sessions': {
+      id: '/dashboard/_app/sessions'
+      path: '/sessions'
+      fullPath: '/dashboard/sessions'
+      preLoaderRoute: typeof DashboardAppSessionsRouteImport
+      parentRoute: typeof DashboardAppRoute
+    }
     '/dashboard_/call/$spaceId/join': {
       id: '/dashboard_/call/$spaceId/join'
       path: '/dashboard/call/$spaceId/join'
@@ -448,6 +486,8 @@ const SpaceRouteWithChildren = SpaceRoute._addFileChildren(SpaceRouteChildren)
 interface DashboardAppRouteChildren {
   DashboardAppAppsRoute: typeof DashboardAppAppsRoute
   DashboardAppDeveloperRoute: typeof DashboardAppDeveloperRoute
+  DashboardAppRecordingsRoute: typeof DashboardAppRecordingsRoute
+  DashboardAppSessionsRoute: typeof DashboardAppSessionsRoute
   DashboardAppIndexRoute: typeof DashboardAppIndexRoute
   DashboardAppCallSpaceIdIndexRoute: typeof DashboardAppCallSpaceIdIndexRoute
   DashboardAppCallSpaceIdSessionEpisodeIdRoute: typeof DashboardAppCallSpaceIdSessionEpisodeIdRoute
@@ -456,6 +496,8 @@ interface DashboardAppRouteChildren {
 const DashboardAppRouteChildren: DashboardAppRouteChildren = {
   DashboardAppAppsRoute: DashboardAppAppsRoute,
   DashboardAppDeveloperRoute: DashboardAppDeveloperRoute,
+  DashboardAppRecordingsRoute: DashboardAppRecordingsRoute,
+  DashboardAppSessionsRoute: DashboardAppSessionsRoute,
   DashboardAppIndexRoute: DashboardAppIndexRoute,
   DashboardAppCallSpaceIdIndexRoute: DashboardAppCallSpaceIdIndexRoute,
   DashboardAppCallSpaceIdSessionEpisodeIdRoute:

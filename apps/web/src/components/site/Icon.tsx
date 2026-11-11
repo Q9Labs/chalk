@@ -211,6 +211,25 @@ const PATHS = {
   terminal: <path d="M4 17l6-6-6-6M12 19h8" />,
   hash: <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />,
   cmd: <path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" />,
+  calendar: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="3" />
+      <path d="M3 10h18M8 2.5v4M16 2.5v4" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
+    </>
+  ),
+  cc: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="3" />
+      <path d="M10 10.2a2.4 2.4 0 1 0 0 3.6M16.5 10.2a2.4 2.4 0 1 0 0 3.6" />
+    </>
+  ),
 } satisfies Record<string, ReactElement>;
 
 export type IconName = keyof typeof PATHS;

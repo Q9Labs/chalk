@@ -78,7 +78,13 @@ try {
   if (!process.env.ASSET_PROOF_ONLY) {
     await completed(
       start(process.execPath, [
-        process.env.DASHBOARD_DEVELOPER_ONLY ? "apps/web/tests/dashboard-ui/developer-browser.mjs" : process.env.DASHBOARD_RECORDING_ONLY ? "apps/web/tests/dashboard-ui/recording-browser.mjs" : "apps/web/tests/dashboard-ui/checks.mjs",
+        process.env.DASHBOARD_DEVELOPER_ONLY
+          ? "apps/web/tests/dashboard-ui/developer-browser.mjs"
+          : process.env.DASHBOARD_RECORDING_ONLY
+            ? "apps/web/tests/dashboard-ui/recording-browser.mjs"
+            : process.env.DASHBOARD_LISTS_ONLY
+              ? "apps/web/tests/dashboard-ui/list-browser.mjs"
+              : "apps/web/tests/dashboard-ui/checks.mjs",
         require.resolve("playwright").replace(/index\.js$/, "index.mjs"),
         fixtureOrigin,
       ]),
