@@ -20,6 +20,18 @@ export function webMediaFixture(guest) {
       { deviceId: "proof-camera", groupId: "proof", kind: "videoinput", label: "Proof camera", toJSON() { return {}; } },
       { deviceId: "proof-microphone", groupId: "proof", kind: "audioinput", label: "Proof microphone", toJSON() { return {}; } }
     ];
+    // The devices above are fake, so the permission is too: a browser that has never been asked reports "prompt", and on a tablet or phone
+    // the pre-join step then covers Join call with the access sheet. Join with mic and camera off, as the proof did before that step.
+    const queryPermission = navigator.permissions?.query.bind(navigator.permissions);
+    if (queryPermission) {
+      navigator.permissions.query = async (descriptor) =>
+        descriptor.name === "camera" || descriptor.name === "microphone"
+          ? Object.assign(new EventTarget(), { name: descriptor.name, state: "granted" })
+          : queryPermission(descriptor);
+    }
+    try {
+      if (localStorage.getItem("chalk.prejoin-devices") === null) localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
+    } catch {}
     (${installFixture.toString()})({ speech: "", guest: ${guest}, tones: true });
   })();`;
 }
