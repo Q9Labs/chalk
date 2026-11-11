@@ -1656,6 +1656,9 @@ class MediaControllerRuntime implements MediaControllerEffects {
     const track = publication?.track ?? this.#track(source) ?? null;
     return { source, track, state: confirmedLocalMediaState(track, this.#hasConsent(source), pending, confirmed, this.#syncLive, this.#projection.state(source)) };
   }
+  #screenShareHasAudio(snapshot: ConnectionMediaSnapshot | undefined): boolean {
+    return Boolean(this.#screenAudioTrack?.readyState === "live" && snapshot?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live"));
+  }
   #publish(): void {
     const current = this.#store.getSnapshot();
     const snapshot = this.#ports?.media.getSnapshot();
@@ -1666,7 +1669,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
       camera: this.#confirmedLocal("camera"),
       screen: screenLocalMedia(this.#track("screen") ?? null, snapshot, state, this.#pendingSources.has("screen") && this.#sources.screen.desired.enabled),
     });
-    const pausedForNetwork = new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
+    const pausedForNetwork = pausedPublicationIds(snapshot);
     const remote = Object.freeze(
       (snapshot?.remoteTracks ?? []).map((track) => Object.freeze({ participantId: track.participantId, source: track.source, publicationId: track.publicationId, track: track.track, ...(pausedForNetwork.has(track.publicationId) ? { pausedForNetwork: true as const } : {}) })),
     );
@@ -1677,13 +1680,17 @@ class MediaControllerRuntime implements MediaControllerEffects {
       remote,
       screenShare: {
         ...local.screen,
-        hasAudio: Boolean(this.#screenAudioTrack?.readyState === "live" && snapshot?.localTracks.some((track) => track.source === "screen_audio" && track.enabled && track.track.readyState === "live")),
+        hasAudio: this.#screenShareHasAudio(snapshot),
         ...(local.screen.track ? { capture: screenShareCapture(local.screen.track) } : {}),
       },
       incomingRequests: this.#requests,
+      callStats: snapshot?.callStats,
     });
     if (!sameMediaSlice(current.media, media)) this.#store.updateMedia(media);
   }
+}
+function pausedPublicationIds(snapshot: ConnectionMediaSnapshot | undefined): ReadonlySet<string> {
+  return new Set(snapshot?.remoteDelivery?.flatMap((delivery) => (delivery.state === "paused_for_network" ? [delivery.publicationId] : [])));
 }
 function liveTrack(track: MediaStreamTrack): boolean {
   return track.enabled && track.readyState === "live" && !track.muted;
@@ -1738,7 +1745,7 @@ function screenLocalMediaState(track: MediaStreamTrack | null, enabled: boolean 
 function sameMediaSlice(left: MediaSlice, right: MediaSlice): boolean {
   if (left.selection !== right.selection || !sameDevices(left.devices, right.devices)) return false;
   for (const source of MEDIA_SOURCES) if (!sameLocalMedia(left.local[source], right.local[source])) return false;
-  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests);
+  return sameScreenShare(left.screenShare, right.screenShare) && sameRemoteMedia(left.remote, right.remote) && sameRequests(left.incomingRequests, right.incomingRequests) && left.callStats === right.callStats;
 }
 function sameScreenShare(left: MediaSlice["screenShare"], right: MediaSlice["screenShare"]): boolean {
   return sameLocalMedia(left, right) && left.hasAudio === right.hasAudio && left.capture?.surface === right.capture?.surface && left.capture?.label === right.capture?.label;

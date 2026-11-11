@@ -13,6 +13,9 @@ export const CALL_STATS_MAX_BATCH = 30;
 export const CALL_STATS_MAX_WINDOW_MS = 60_000;
 /** Per-call cap: about an hour of samples. Later windows are dropped. */
 export const CALL_STATS_CALL_CAP = 360;
+/** The call menu charts this many of the latest windows (about a minute), kept apart from the upload buffer. */
+export const CALL_STATS_HISTORY = 6;
+const NO_SAMPLES: readonly CallStatsSample[] = Object.freeze([]);
 
 const RID_ORDER = ["h", "m", "l"] as const;
 const MAX_ELAPSED_MS = 2_147_483_647;
@@ -31,6 +34,8 @@ export type CallStatsCollector = {
   readonly flush: (upload: Upload) => Promise<void>;
   /** A new peer connection starts new counters: drop the open window and its baseline, keep what is already buffered. */
   readonly reset: () => void;
+  /** The latest windows, oldest first. The array is replaced, never changed, when a window closes. */
+  readonly recent: () => readonly CallStatsSample[];
 };
 
 type Upload = (request: CallStatsRequest) => Promise<void>;
@@ -41,6 +46,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
   const now = options.now ?? (() => Date.now());
   const startedAt = now();
   let buffer: CallStatsSample[] = [];
+  let history = NO_SAMPLES;
   let produced = 0;
   let uploading: Promise<void> | null = null;
   let baseline: Baseline | null = null;
@@ -55,7 +61,9 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
     const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges, delivery);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
-    if (windowMs > CALL_STATS_MAX_WINDOW_MS || produced >= CALL_STATS_CALL_CAP) return;
+    if (windowMs > CALL_STATS_MAX_WINDOW_MS) return;
+    history = Object.freeze([...history, sample].slice(-CALL_STATS_HISTORY));
+    if (produced >= CALL_STATS_CALL_CAP) return;
     produced++;
     buffer.push(sample);
     if (buffer.length > CALL_STATS_MAX_BATCH) buffer = buffer.slice(-CALL_STATS_MAX_BATCH);
@@ -90,6 +98,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
       if (uploading) await uploading;
       await send(upload);
     },
+    recent: () => history,
     reset() {
       baseline = null;
       latest = null;

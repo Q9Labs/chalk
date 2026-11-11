@@ -327,6 +327,7 @@ export function SpaceView({
             onOpenReportProblem,
             reportUnavailableReason,
             diagnostics: callDiagnostics(connection, media),
+            network: { live: connection.status === "live", samples: media.callStats },
             shortcuts: {
               isMuted: media.local.microphone.state !== "enabled",
               onToggleMute: microphoneTarget === undefined ? undefined : () => void runCommand(() => client.media.setMicrophoneEnabled(microphoneTarget), "microphone", microphoneTarget ? "start" : "stop"),

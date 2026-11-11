@@ -13,7 +13,7 @@ import { fromWhiteboardWireElement, toWhiteboardCollaborationEvent } from "../..
 import { SpaceView, type SpaceViewProps } from "../space-view/SpaceView";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
 import { StatusSurface } from "./StatusSurface";
-import { CallDialog } from "../space-header/CallDetails";
+import { CallDialog } from "../space-header/CallDialog";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export type SpaceLayout = "focus" | "grid";
 export type ChalkFeatures = {
