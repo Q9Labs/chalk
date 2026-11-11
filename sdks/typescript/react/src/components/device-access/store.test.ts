@@ -72,6 +72,21 @@ describe("DeviceAccessStore", () => {
     expect(retry).not.toHaveBeenCalled();
   });
 
+  it("retries when the person allowed the site between reading the permission and watching it", async () => {
+    let queries = 0;
+    const store = new DeviceAccessStore({
+      permissions: { query: async () => Object.assign(new FakeTarget(), { state: ++queries === 1 ? "denied" : "granted" }) },
+      mediaDevices: undefined,
+      window: new FakeTarget(),
+      userAgent: ARM,
+    });
+    store.subscribe(() => {});
+    const retry = vi.fn(async () => {});
+    await store.report("microphone", failure("media.permission_denied"), retry);
+    await settle();
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
   it("starts no watch when the last subscriber leaves while a report is still reading the permission", async () => {
     const { store, window, stop } = setup({ permission: "granted" });
     const reported = store.report("microphone", failure("media.permission_denied"), async () => {});

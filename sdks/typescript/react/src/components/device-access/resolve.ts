@@ -94,14 +94,14 @@ const LOOK_WINDOW_MS = 10_000;
  * Calls `recovered` when the cause of a blocked device has probably gone away, so the failed command can run again without a click.
  * The browser setting fires a permission change, a plugged-in device fires devicechange, and a Mac setting only shows when the person comes back to the tab.
  */
-export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: DeviceAccessReason, recovered: () => void): () => void {
+export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: DeviceAccessReason, observed: PermissionAnswer, recovered: () => void): () => void {
   if (device === "screen") return () => {};
   if (reason.kind === "blocked-browser") {
-    // watchPermission reports the current answer first. Only a change after that counts, or a refusal with the permission already granted would retry forever.
-    let current = true;
+    // `observed` is the answer when the capture failed. Moving to "granted" from anything else counts, even if it happened before this watch began. A refusal with the permission already granted would retry forever.
+    let before = observed;
     return watchPermission(ports, device, (answer) => {
-      if (current) current = false;
-      else if (answer === "granted") recovered();
+      if (answer === "granted" && before !== "granted") recovered();
+      before = answer;
     });
   }
   if (reason.kind === "blocked-system") {
@@ -142,5 +142,5 @@ export async function resolveAccess(given: DevicePorts | undefined, device: Devi
   const ports = given ?? browserPorts();
   const permission = device === "screen" ? "unknown" : await readPermission(ports, device);
   const reason = deviceAccessReason(failure, device, { browser: detectBrowser(ports.userAgent), platform: detectPlatform(ports.userAgent), permission });
-  return reason && { reason, label: accessTooltip(device, reason), watch: (recovered) => watchRecovery(ports, device, reason, recovered) };
+  return reason && { reason, label: accessTooltip(device, reason), watch: (recovered) => watchRecovery(ports, device, reason, permission, recovered) };
 }
