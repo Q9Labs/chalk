@@ -506,6 +506,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                   platform.createMediaClient({
                     access: grant,
                     credential: () => toPromise(access.getMediaToken()),
+                    refreshCredential: () => toPromise(access.refresh("access_retry", false).pipe(Effect.map((fresh) => fresh.media.token))),
                     // Leave stops the local tracks and the server withdraws the publications, which the media layer reads
                     // as a lost connection. A refresh then would race the server's own Leave and replace a connection
                     // that is about to go.

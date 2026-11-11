@@ -2,7 +2,7 @@ import { check } from "../prod-proof/runtime.mjs";
 
 export function childEnvironment(environment, { config, apiKey, invite, directory, runId, webUrl, mediaPlane }) {
   return {
-    ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
+    ...Object.fromEntries(["PATH", "HOME", "TMPDIR", "TMP", "TEMP", "XDG_CACHE_HOME", "PLAYWRIGHT_BROWSERS_PATH", "CI", "CHALK_PROOF_JOIN_ORDER"].filter((name) => environment[name] !== undefined).map((name) => [name, environment[name]])),
     E2E_TELEMETRY_DISABLED: "1",
     CHALK_PROOF_WEBKIT: environment.CHALK_PROOF_WEBKIT === "1" ? "1" : "0",
     // The SDK guest fails when its admission grant is on another provider (an own SFU that overflows to Cloudflare).

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { createEpisode, createSpace } from "./proofs.mjs";
-import { ProofError, publicFailure } from "./runtime.mjs";
+import { ProofError, measured, publicFailure } from "./runtime.mjs";
 
 // The public API refuses a Create Space request that names the own SFU, so a proof names no
 // plane and fails at once when the Space it gets is not on the plane it asked for.
@@ -153,6 +153,35 @@ test("a Space setup mismatch keeps its bounded public reason", () => {
   const lines = [];
   publicFailure("setup-or-capture", new ProofError("media-plane-config", "private detail"), (line) => lines.push(line));
   assert.deepEqual(lines, ["PROOF setup-or-capture: failed (media-plane-config)"]);
+});
+
+test("a measured check prints its message, a nested one prints every message, and any other error stays private", () => {
+  const lines = [];
+  const write = (line) => lines.push(line);
+  const thrown = (run) => {
+    try {
+      run();
+    } catch (error) {
+      return error;
+    }
+  };
+  publicFailure(
+    "call-artifacts",
+    thrown(() => measured(false, "Transcript terminal_failure")),
+    write,
+  );
+  const both = new AggregateError([thrown(() => measured(false, "Recording shows no live video in guest 3's tile")), thrown(() => measured(false, "Transcript is empty"))]);
+  publicFailure("call-artifacts", both, write);
+  publicFailure("call-artifacts", new ProofError("evidence-assertion", "raw response body excerpt"), write);
+  publicFailure("call-artifacts", new ProofError("configuration", "private detail"), write);
+  publicFailure("call-artifacts", new Error("https://signed.example/?sig=secret"), write);
+  assert.deepEqual(lines, [
+    "PROOF call-artifacts: failed (evidence-assertion): Transcript terminal_failure",
+    "PROOF call-artifacts: failed (evidence-assertion): Recording shows no live video in guest 3's tile; Transcript is empty",
+    "PROOF call-artifacts: failed (evidence-assertion)",
+    "PROOF call-artifacts: failed (configuration)",
+    "PROOF call-artifacts: failed (unknown)",
+  ]);
 });
 
 // Both nightly lanes share one Tenant and one deployment. The Cloudflare lane takes the platform default and the own-SFU lane

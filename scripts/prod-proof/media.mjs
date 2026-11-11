@@ -62,7 +62,7 @@ export async function launchGuests(run, space, episode, speech, origin, tones = 
         headless: !options.headed,
         handleSIGINT: false,
         handleSIGTERM: false,
-        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--auto-select-tab-capture-source-by-title=Chalk proof screen share", "--enable-usermedia-screen-capturing"],
+        args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--autoplay-policy=no-user-gesture-required", "--enable-usermedia-screen-capturing"],
       });
       close[guest] = async () => {
         if (networks[guest]) await save(`${run.directory}/guest-${guest + 1}-network.json`, networks[guest]);

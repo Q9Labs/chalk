@@ -12,17 +12,22 @@ export async function withProofCall({ app, screen }, run) {
   const invite = process.env.CHALK_E2E_INVITE;
   const directory = process.env.CHALK_E2E_DIRECTORY;
   if (!invite || !directory) throw new Error("Run pnpm web:proof to provision and clean the proof Space");
-  const guest = await prepareGuest(directory);
+  const order = joinOrder();
+  let guest;
   const errors = [];
   let joined = false;
   const call = async () => {
+    if (order !== "web-first") guest = await prepareGuest(directory);
+    if (order === "guest-first") await guest.ready;
     await app.open(invite);
     await screen.getByLabel("Your name").fill("Web proof A");
     await screen.getByRole("button", "Join call", { exact: true }).click();
     joined = true;
+    await screen.getByRole("region", "Space stage", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+    if (order === "web-first") guest = await prepareGuest(directory);
     await run(guest);
   };
-  for (const step of [call, () => leaveWebCall(screen, joined), () => guest.dispose()]) {
+  for (const step of [call, () => leaveWebCall(screen, joined), () => guest?.dispose()]) {
     await step().catch(async (error) => {
       errors.push(error);
       if (step === call) await app.screenshot("before-cleanup").catch((error) => errors.push(error));
@@ -31,10 +36,18 @@ export async function withProofCall({ app, screen }, run) {
   throwErrors(errors, "Web proof call or cleanup failed");
 }
 
+// CHALK_PROOF_JOIN_ORDER: "web-first" or "guest-first" fixes who is in the Episode before the other joins;
+// unset, the SDK guest starts while the web app opens, as before.
+function joinOrder() {
+  const order = process.env.CHALK_PROOF_JOIN_ORDER;
+  if (order && !["web-first", "guest-first"].includes(order)) throw new Error("CHALK_PROOF_JOIN_ORDER must be web-first or guest-first");
+  return order;
+}
+
 function throwErrors(errors, message) {
   const failures = [...new Set(errors.flatMap(flattenErrors))];
   if (failures.length === 1) throw failures[0];
-  if (failures.length) throw new AggregateError(failures, message);
+  if (failures.length) throw new AggregateError(failures, `${message}: ${failures.map((failure) => String(failure?.message ?? failure).split("\n")[0]).join("; ")}`);
 }
 
 async function leaveWebCall(screen, joined) {

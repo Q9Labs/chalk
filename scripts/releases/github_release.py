@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from time import monotonic, sleep as backoff_sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 CUT_GAP = timedelta(hours=6)
@@ -58,6 +58,14 @@ def cut_decision(target, deployments, now, manual=False):
     if payload(last)['target_sha'] == target:
         return False, 'master has no new commits'
     return True, 'new master commits'
+
+
+def first_cut_of_day(deployments, now, manual=False):
+    """A cut pays for a Transcript until a cut recorded today has passed its proof with one; a manual cut always does."""
+    if manual:
+        return True
+    return not any(payload(item).get('transcribed') and datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date() == now.astimezone(timezone.utc).date()
+                   for item in held_candidates(deployments, held=False))
 
 
 def gate_branch_is_master(run):
@@ -170,6 +178,27 @@ class GitHub:
                 break
             page += 1
         return []
+
+    def cuts_on(self, day):
+        """Every finished, passed nightly cut recorded on the UTC date `day`, newest first: `deployments` stops at the newest one."""
+        cuts = []
+        page = 1
+        while True:
+            items = self.request(f'deployments?environment=nightly&task=nightly-cut&per_page=100&page={page}')
+            for item in items:
+                created = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00')).date()
+                if created < day:
+                    return cuts
+                if created != day or payload(item).get('channel') != 'nightly-cut' or payload(item).get('proof_result') != 'passed':
+                    continue
+                status = self.request(f"deployments/{item['id']}/statuses?per_page=1")
+                item['latest_status'] = status[0]['state'] if status else 'pending'
+                # A cut whose final status was never posted did not finish, so it does not count (as in `deployments`).
+                if item['latest_status'] not in ('pending', 'queued', 'in_progress'):
+                    cuts.append(item)
+            if len(items) < 100:
+                return cuts
+            page += 1
 
     def dispatch_nightly(self):
         route = f'repos/{self.repository}/actions/workflows/nightly.yml/dispatches'

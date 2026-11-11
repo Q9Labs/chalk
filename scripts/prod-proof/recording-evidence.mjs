@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { analyzeAudio, findFlashes, frameRate, markerHz, screenHz } from "./call-script.mjs";
-import { cameraEvidence, frameSize } from "./recording-rejoin.mjs";
+import { analyzeAudio, findFlashes, frameRate, markerHz } from "./call-script.mjs";
+import { frameSize } from "./recording-rejoin.mjs";
 import { decodeFrames, tileEvidence, tileFailure } from "./tile-frames.mjs";
 
 const execute = promisify(execFile);
@@ -66,13 +66,14 @@ export async function recordingEvidence(file, guestCount) {
     anomalies: analysis.anomalies,
     analyzerFailures: analysis.assertions.filter((assertion) => !assertion.passed).map(({ name, actual, expected }) => ({ name, actual, expected })),
     frameMeans: frames.map(meanChannel),
-    guests: Array.from({ length: guestCount }, (_, guest) => ({ guest: guest + 1, camera: frames.length === 3 ? cameraEvidence(frames, "before", guest) : null, tile: tiles[guest] ?? null })),
+    guests: Array.from({ length: guestCount }, (_, guest) => ({ guest: guest + 1, tile: tiles[guest] ?? null })),
   };
 }
 
 const audioRate = 16_000;
 const thumbnail = { width: 96, height: 54 };
-const screenGreen = [34, 197, 94]; // The proof's shared screen draws a green square on a dark blue page.
+// The proof browsers run with --use-fake-device-for-media-stream, so a screen share is Chromium's fake display: dark green (about 0, 150, 0) with a lighter green pie and a timer.
+export const screenGreenPixel = (red, green, blue) => green > 110 && red < 110 && blue < 80;
 
 /** The script's marks as found in the Recording: tones, silences and levels from the audio, flashes and the shared screen from the picture. */
 async function audioSignals(file, frequencies) {
@@ -84,7 +85,7 @@ async function audioSignals(file, frequencies) {
 export const trackSignals = (file) => audioSignals(file, markerHz);
 
 export async function recordingSignals(file) {
-  const audio = await audioSignals(file, [...markerHz, screenHz]);
+  const audio = await audioSignals(file, markerHz);
   const { stdout: raw } = await tool("ffmpeg", ["-hide_banner", "-loglevel", "error", "-i", file, "-an", "-vf", `fps=${frameRate},scale=${thumbnail.width}:${thumbnail.height}`, "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { encoding: "buffer" });
   const pixels = thumbnail.width * thumbnail.height;
   const lumas = [];
@@ -94,7 +95,7 @@ export async function recordingSignals(file) {
     let match = 0;
     for (let index = offset; index < offset + pixels * 3; index += 3) {
       luma += raw[index] * 0.299 + raw[index + 1] * 0.587 + raw[index + 2] * 0.114;
-      if (Math.abs(raw[index] - screenGreen[0]) + Math.abs(raw[index + 1] - screenGreen[1]) + Math.abs(raw[index + 2] - screenGreen[2]) < 90) match++;
+      if (screenGreenPixel(raw[index], raw[index + 1], raw[index + 2])) match++;
     }
     lumas.push(luma / pixels);
     green.push({ time: green.length / frameRate, share: match / pixels });
@@ -110,11 +111,11 @@ export function recordingFailures(evidence, minimumSeconds) {
   else if (evidence.audio.samples === 0 || !(evidence.audio.maxDb > -50)) failures.push("Recording audio is silent");
   if (evidence.durationSeconds < minimumSeconds) failures.push(`Recording is ${evidence.durationSeconds.toFixed(1)}s, shorter than the ${minimumSeconds}s call`);
   if (evidence.video && evidence.frameMeans.some((mean) => mean < 4)) failures.push("Recording has a black frame");
-  for (const { guest, camera, tile } of evidence.guests) {
-    const tileProblem = tile && tileFailure(tile);
-    if (evidence.video && !camera?.visible) failures.push(`Recording does not show guest ${guest}'s camera`);
-    else if (camera && !camera.moving) failures.push(`Recording shows guest ${guest}'s camera frozen`);
-    else if (evidence.video && tileProblem) failures.push(tileProblem);
+  for (const { guest, tile } of evidence.guests) {
+    if (!evidence.video) continue;
+    // Three sampled frames can land on a guest's own flash marker, so presence and motion come from the tile checked every half second.
+    if (!tile) failures.push(`Recording does not show guest ${guest}'s camera`);
+    else if (tileFailure(tile)) failures.push(tileFailure(tile));
   }
   return failures;
 }

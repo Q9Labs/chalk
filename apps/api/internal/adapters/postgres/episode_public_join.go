@@ -297,6 +297,10 @@ func (r EpisodeLifecycleRepository) LeavePublic(ctx context.Context, input episo
 		if err != nil {
 			return fmt.Errorf("lock public leave Space: %w", err)
 		}
+		// Sync locks the control row before the Episode; lock in that order so the two cannot wait on each other.
+		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
+			return err
+		}
 		episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID)
 		if err != nil {
 			return err

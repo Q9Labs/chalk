@@ -248,10 +248,7 @@ async function monitorShare(run, sample) {
   }
   return (Date.now() - started) / 1000;
 }
-async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
-  const share = await pages[0].context().newPage();
-  await share.goto(`${origin}/share`);
-  await pages[0].bringToFront();
+async function cameraShareWindow(run, pages, sample, forceLayerSwitch) {
   await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(true));
   await waitFor("screen share enabled", () => pages[0].evaluate(() => window.proofClient.getSnapshot().media.screenShare.state === "enabled"));
   console.log("Screen share enabled; holding for two minutes");
@@ -267,7 +264,6 @@ async function cameraShareWindow(run, pages, sample, origin, forceLayerSwitch) {
   const observed = await monitor;
   if (observed.error) throw observed.error;
   await pages[0].evaluate(() => window.proofClient.media.setScreenShareEnabled(false));
-  await share.close();
   return { seconds: observed.seconds, failure };
 }
 export function availableSource(run) {
@@ -318,7 +314,7 @@ export async function recordProof(run, receiver, cameraShare, forceLayerSwitch, 
   const sample = statsSampler(run, pages);
   const baselineError = await baselineLayers(run, sample);
   let share = { seconds: 0 };
-  if (cameraShare) share = await cameraShareWindow(run, pages, sample, receiver.origin, forceLayerSwitch);
+  if (cameraShare) share = await cameraShareWindow(run, pages, sample, forceLayerSwitch);
   else await shortRecordingWindow(run, guests, rejoin);
   console.log("Holding the real call through scheduled credential refresh and original expiry");
   await guests.waitForRefresh();

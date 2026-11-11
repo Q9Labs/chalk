@@ -56,6 +56,7 @@
     "scripts/gates/chalk-gate-plan.mjs",
     "features/media/sfu/tests/browser/chromium-check.mjs",
     "features/media/sfu/tests/browser/sdk-guest-toggle-repro.mjs",
+    "features/media/sfu/tests/browser/capture-offer.mjs",
     "scripts/gates/doclint.mjs",
     "scripts/gates/osv-snapshot.mjs",
     "scripts/integration-smoke/run.mjs",

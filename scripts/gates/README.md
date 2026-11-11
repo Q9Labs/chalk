@@ -10,9 +10,10 @@ q9gate concurrency 1; each of those environment variables, when already set, rep
 
 Every gate profile first runs `doclint.mjs` from this directory.
 The pre-commit hook runs `pnpm gate:fast`: those doc checks, the tracker check, plus the `scope`, `format`,
-`hygiene`, `secrets`, and `generated` lanes on staged files
-(about 10 seconds). A run with nothing in scope fails in the `scope` lane; set
-`GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
+`hygiene`, and `secrets` lanes on staged files (about 4 seconds). The `secrets` lane scans the staged
+diff, so a secret is caught before it enters history. The `generated` lane takes about 7 seconds, so it
+runs in the Gate workflow and in `pnpm gate`; run `pnpm run check:generated` yourself after editing a generator input.
+A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended. `GATE_SERVICES=external` drops
 the `services` lane, because CI runs the API and Sync gates as separate jobs.
 
 ## The Gate workflow
