@@ -21,7 +21,7 @@ try {
       await tab.goto(`${origin}${route}`, { waitUntil: "networkidle" });
       if (evidence) {
         await mkdir(evidence, { recursive: true });
-        await tab.getByRole("combobox", { name: "Make recording videos" }).waitFor();
+        await tab.getByRole("group", { name: "Recording videos" }).waitFor();
         await tab.screenshot({ path: resolve(evidence, "developer-on-demand.png") });
       }
       return { tab, context };
@@ -36,8 +36,7 @@ try {
       ]);
       const tab = await context.newPage();
       await tab.goto(`${origin}/dashboard/developer`, { waitUntil: "networkidle" });
-      await tab.getByRole("combobox", { name: "Make recording videos" }).selectOption("automatic");
-      await tab.getByRole("button", { name: "Save recording settings" }).click();
+      await tab.getByRole("group", { name: "Recording videos" }).getByRole("button", { name: "Automatic" }).click();
       await tab.getByText("Recording settings saved", { exact: true }).waitFor();
       await tab.screenshot({ path: resolve(evidence, "developer-automatic.png") });
       await tab.setViewportSize({ width: 390, height: 844 });

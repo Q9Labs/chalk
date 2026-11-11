@@ -27,7 +27,7 @@ export function transcriptDTO(transcript: Transcript): TranscriptDTO {
   return { id: transcript.id, status: transcript.status, languages: transcript.languages, createdAt: transcript.created_at };
 }
 export function keyDTO(key: APIKeyList["api_keys"][number]): KeyDTO {
-  return { id: key.id, name: key.name, prefix: key.key_prefix, scopes: key.scopes, expiresAt: key.expires_at, revokedAt: key.revoked_at, lastUsedAt: key.last_used_at };
+  return { id: key.id, name: key.name, prefix: `chalk_sk_${key.key_prefix}`, scopes: key.scopes, expiresAt: key.expires_at, revokedAt: key.revoked_at, lastUsedAt: key.last_used_at };
 }
 export function webhookDTO(webhook: WebhookEndpoint): WebhookDTO {
   return { id: webhook.id, name: webhook.name, url: webhook.url_redacted, enabled: webhook.enabled, revision: webhook.revision, eventTypes: webhook.event_types };

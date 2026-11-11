@@ -9,6 +9,7 @@
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import { readFileSync, existsSync } from "node:fs";
+import { deflateSync, crc32 } from "node:zlib";
 
 const PORT = Number(process.env.FIXTURE_PORT ?? 3071);
 const VITE = new URL(process.env.VITE_ORIGIN ?? "http://127.0.0.1:3070");
@@ -67,14 +68,14 @@ function richAccount() {
       {
         id: uuid(0x300),
         name: "TH portal production",
-        prefix: "chalk_sk_7Hq2",
+        prefix: "chalk_sk_7Hq2mXc9LpTz",
         scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write", "recordings:read", "recordings:write", "transcriptions:read", "transcriptions:write", "webhooks:read", "webhooks:write"],
         expiresAt: at(-319, 12, 0),
         revokedAt: null,
         lastUsedAt: new Date(Date.now() - 2 * 60000).toISOString(),
       },
-      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91P", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null, lastUsedAt: at(1, 15, 20) },
-      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4m", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null, lastUsedAt: at(21, 9, 40) },
+      { id: uuid(0x301), name: "MCP server", prefix: "chalk_sk_k91PvB3nWd8Q", scopes: ["spaces:read", "episodes:read", "recordings:read", "transcriptions:read", "webhooks:read"], expiresAt: at(-83, 12, 0), revokedAt: null, lastUsedAt: at(1, 15, 20) },
+      { id: uuid(0x302), name: "Staging", prefix: "chalk_sk_Zt4mRy6uHa2J", scopes: ["spaces:read", "spaces:write", "episodes:read", "episodes:write"], expiresAt: at(-5, 12, 0), revokedAt: null, lastUsedAt: at(21, 9, 40) },
     ],
     webhooks: [
       { id: uuid(0x400), name: "TH attendance", url: "https://api.tuitionhighway.com/chalk/…", enabled: true, revision: 3, eventTypes: ["participant.joined", "participant.left", "episode.started", "episode.ended"] },
@@ -267,6 +268,27 @@ function homeDTO(data) {
   return { calls: calls.map(homeCallDTO), live, nextCursor: null };
 }
 
+// Favicons: three known sites get a plain colored square, every other host has no icon (the page draws a lettered tile).
+const FAVICON_COLORS = { "chalkmeet.com": [0x2b, 0x7a, 0xff], "tuitionhighway.com": [0xf0, 0x8a, 0x24], "q9labs.ai": [0x7a, 0x4c, 0xe0] };
+function png([red, green, blue]) {
+  const size = 32;
+  const rows = Buffer.alloc((size * 3 + 1) * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) rows.set(x > 8 && x < 24 && y > 8 && y < 24 ? [255, 255, 255] : [red, green, blue], y * (size * 3 + 1) + 1 + x * 3);
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
 async function dashboard(request, response, page, url, entry) {
   const account = cookies(request).fx_session;
   if (request.method === "POST" && request.headers.origin !== ORIGIN) return fail(response, 403, "origin_rejected");
@@ -279,6 +301,15 @@ async function dashboard(request, response, page, url, entry) {
     if (state.limit.has(page)) return fail(response, 429, "engine_rate_limited", { retryable: true, retryAfterSeconds: 60 });
     if (state.fail.has(page)) return fail(response, 503, "service_unavailable");
     const query = Object.fromEntries(url.searchParams);
+    if (page === "favicon") {
+      const known = Object.keys(FAVICON_COLORS).find((site) => query.host === site || query.host?.endsWith(`.${site}`));
+      if (!known) {
+        response.writeHead(204, { "cache-control": "private, max-age=3600" });
+        return response.end();
+      }
+      response.writeHead(200, { "content-type": "image/png", "cache-control": "private, max-age=86400", "x-content-type-options": "nosniff" });
+      return response.end(png(FAVICON_COLORS[known]));
+    }
     if (page === "home-status") {
       const participants = ["Nora Patel", "Akash Rao", "Sofia Lind"].slice(0, state.liveParticipantCount).map((name, n) => ({ id: uuid(0x600 + n), name }));
       const ids = query.spaceIds ? query.spaceIds.split(",") : [];
@@ -361,6 +392,7 @@ async function dashboard(request, response, page, url, entry) {
       return send(response, 200, {
         tenantId: "00000000-0000-4000-8000-000000000001",
         recordingRenderMode: data.recordingRenderMode ?? "on_demand",
+        transcriptLanguage: data.transcriptLanguage ?? "auto",
         allowedWebsites: data.origins,
         keys: data.keys.filter((key) => !key.revokedAt),
         webhooks: data.webhooks.map((webhook) => ({ ...webhook, lastDelivery: data.deliveries[webhook.id]?.[0] ?? null })),
@@ -427,16 +459,19 @@ async function dashboard(request, response, page, url, entry) {
     case "set-recording-render-mode":
       data.recordingRenderMode = action.mode;
       return send(response, 200, { recordingRenderMode: data.recordingRenderMode });
+    case "set-default-transcript-language":
+      data.transcriptLanguage = action.transcriptLanguage;
+      return send(response, 200, { transcriptLanguage: data.transcriptLanguage });
     case "set-allowed-websites":
       data.origins = [...new Set(["https://chalkmeet.com", ...action.origins])];
       return send(response, 200, { allowedWebsites: data.origins });
     case "create-key": {
       const id = uuid(0x3000 + data.keys.length);
-      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null, lastUsedAt: null });
-      return send(response, 200, { id, secret: "chalk_sk_Rw8f2LqN0vXc4TzJ7hKp1sYd9mBaE3uG" });
+      data.keys.unshift({ id, name: action.name, prefix: "chalk_sk_Rw8f2LqN0vXc", scopes: action.scopes, expiresAt: action.expiresAt, revokedAt: null, lastUsedAt: null });
+      return send(response, 200, { id, secret: ["chalk_sk_Rw8f2LqN0vXc", "4TzJ7hKp1sYd9mBaE3uG"].join(".") });
     }
     case "rotate-key":
-      return send(response, 200, { id: action.keyId, secret: "chalk_sk_Pq3m8VtL1wXn6RzK2hJc9yBd4sFaG7eU" });
+      return send(response, 200, { id: action.keyId, secret: ["chalk_sk_Pq3m8VtL1wXn", "6RzK2hJc9yBd4sFaG7eU"].join(".") });
     case "revoke-key":
       data.keys.find((key) => key.id === action.keyId).revokedAt = new Date().toISOString();
       return send(response, 200, { ok: true });

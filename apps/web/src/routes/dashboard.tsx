@@ -4,6 +4,7 @@ import { ToastProvider } from "../components/dashboard/kit";
 import { SiteRoot } from "../components/site/theme";
 import coreCss from "../styles/dashboard-core.css?url";
 import dashboardCss from "../styles/dashboard.css?url";
+import developerCss from "../styles/dashboard-developer.css?url";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -11,6 +12,7 @@ export const Route = createFileRoute("/dashboard")({
     links: [
       { rel: "stylesheet", href: coreCss },
       { rel: "stylesheet", href: dashboardCss },
+      { rel: "stylesheet", href: developerCss },
     ],
   }),
   component: DashboardRoute,

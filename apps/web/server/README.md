@@ -23,7 +23,9 @@ harness compiles named Functions separately; the OAuth smoke harness excludes
 ## Browser contract
 
 Import DTOs and request schemas from `src/lib/dashboard/contracts.ts`.
-All responses, including errors and redirects, are `Cache-Control: no-store`.
+All responses, including errors and redirects, are `Cache-Control: no-store`,
+except `GET /dashboard-api/favicon`, whose icons are `private` and cached (a day
+when found, an hour when the site has none).
 POST JSON with `Origin` exactly equal to `DASHBOARD_ORIGIN` and `X-CSRF-Token`
 obtained from `GET /auth/session`. Apple is the only cross-site POST exception:
 its callback accepts only form data with `Origin: https://appleid.apple.com`,
@@ -70,6 +72,16 @@ All other mutation routes retain exact-Origin and session-bound CSRF checks.
 - `GET /dashboard-api/developer?keyCursor=...&webhookCursor=...`: keys and webhooks.
   `POST`: `DeveloperAction`. Secret mutations return only the newly minted,
   user-requested secret. Updates require revision and stable idempotency keys.
+- `GET /dashboard-api/favicon?host=...`: the icon of a website or webhook endpoint on the
+  Developer page. It needs a session, not a Tenant read. Chalk fetches the icon itself
+  (`/favicon.ico`, else the page's declared icon, else the registrable parent's), so a
+  visitor never contacts the site. Only public `https` DNS names on the default port are
+  fetched; each redirect is checked again; a hop waits 3 seconds and reads at most
+  128 KiB; the bytes must be PNG, ICO, GIF, JPEG or WebP (never SVG). Hits and misses
+  are kept in the Cloudflare Cache API for a day and an hour. A miss answers 204, which the
+  browser doesn't log as an error, and the page draws a lettered tile. The registrable parent comes from a short heuristic, not the
+  public suffix list. This code can't see which address a name resolves to (Workers don't
+  expose DNS before connecting), so it relies on the platform to refuse private addresses.
 
 Joined-only bookmarks use the public invite/call client. Owner `join` prepares
 an Entrance, creates/reuses a live Episode and admits an owner Guest.

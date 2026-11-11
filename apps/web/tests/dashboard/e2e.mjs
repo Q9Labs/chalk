@@ -81,7 +81,7 @@ try {
   }
   // Run the real named Pages route graph with a test-only composition root.
   for (const group of ["auth", "dashboard-api"]) {
-    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "past-session", "transcript-text", "developer"];
+    const names = group === "auth" ? ["start", "callback/google", "callback/apple", "session", "sign-out"] : ["home", "call", "call-invite", "call-status", "call-metadata", "home-status", "past-session", "transcript-text", "developer", "favicon"];
     await mkdir(resolve(sandbox, "functions", group));
     for (const name of names) {
       await mkdir(resolve(sandbox, "functions", group, name, ".."), { recursive: true });
@@ -255,6 +255,9 @@ try {
     const count = requests.length;
     assert.equal((await post(ada, "/dashboard-api/home", {}, session.csrfToken, { Origin: "https://evil.example" })).status, 403);
     assert.equal((await post(ada, "/dashboard-api/home", {}, "")).status, 403);
+    // The icon route needs a session and refuses hosts that are not public DNS names, before any request leaves.
+    assert.equal((await browser().request("/dashboard-api/favicon?host=example.com")).status, 401);
+    for (const host of ["127.0.0.1", "localhost", "169.254.169.254", "printer.local", "example.com:8443"]) assert.equal((await ada.request(`/dashboard-api/favicon?host=${encodeURIComponent(host)}`)).status, 400, host);
     assert.equal((await post(ada, "/dashboard-api/home", {}, other.csrfToken)).status, 403);
     assert.equal(requests.length, count);
     const apple = browser();
@@ -447,7 +450,8 @@ try {
 
     const keyResponse = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "Test", scopes: ["spaces:read"], expiresAt: "2027-01-01T00:00:00Z", idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(keyResponse.status, 200, await keyResponse.clone().text());
-    const keyId = (await keyResponse.json()).id;
+    const createdKey = await keyResponse.json();
+    const keyId = createdKey.id;
     const yearExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
     const yearKey = await post(ada, "/dashboard-api/developer", { action: "create-key", name: "One year", scopes: ["spaces:read"], expiresAt: yearExpiry, idempotencyKey: crypto.randomUUID() }, session.csrfToken);
     assert.equal(yearKey.status, 200, await yearKey.clone().text());
@@ -489,6 +493,7 @@ try {
     const developerDTO = await developer.json();
     assert.equal(developerDTO.tenantId, firstTenant);
     assert.equal(developerDTO.keys.find((key) => key.id === keyId).lastUsedAt, "2026-10-18T00:00:00Z");
+    assert.ok(createdKey.secret.startsWith(developerDTO.keys.find((key) => key.id === keyId).prefix), "a new secret starts with its row's prefix");
     const lastDelivery = developerDTO.webhooks.find((hook) => hook.id === webhookId).lastDelivery;
     assert.equal(lastDelivery.id, testDeliveryId);
     assert(lastDelivery.eventType);

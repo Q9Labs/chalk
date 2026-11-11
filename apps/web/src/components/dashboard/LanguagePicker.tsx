@@ -1,8 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { Icon, type IconName } from "../site/Icon";
 import { usePhone } from "./kit";
 import { languageByCode, languageOptions, readRecentLanguages, searchLanguages, splitMatch, suggestedLanguages, type LanguageOption } from "./transcript-languages";
+
+const POPOVER_WIDTH = 352;
+const SCREEN_MARGIN = 16;
+const POPOVER_HEIGHT = 400;
 
 /** What a row stands for. `null` is "use the account default". */
 type Choice = TranscriptLanguage | null;
@@ -42,9 +46,17 @@ function sectionsFor(query: string, allowDefault: boolean): readonly Section[] {
   ].filter((section) => section.rows.length > 0);
 }
 
+function Slot({ children }: { readonly children: ReactNode }) {
+  return (
+    <span className="lp-slot" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
 function Flag({ option }: { readonly option: LanguageOption }) {
   // The drawn flag is a hint, so it has no text of its own: the name beside it says the language.
-  return option.flag ? <img className="lp-flag" src={option.flag} alt="" width={24} height={16} loading="lazy" /> : <span className="lp-flag lp-code">{option.code}</span>;
+  return <Slot>{option.flag ? <img className="lp-flag" src={option.flag} alt="" width={20} height={14} loading="lazy" /> : <span className="lp-code">{option.code}</span>}</Slot>;
 }
 
 function Mark({ text, query }: { readonly text: string; readonly query: string }) {
@@ -60,11 +72,12 @@ function Mark({ text, query }: { readonly text: string; readonly query: string }
   );
 }
 
+/** An icon for a choice that is not a language. It sits bare in the slot: a box around it would read as a flag. */
 function Glyph({ icon }: { readonly icon: IconName }) {
   return (
-    <span className="lp-flag lp-glyph" aria-hidden="true">
-      <Icon name={icon} size={16} />
-    </span>
+    <Slot>
+      <Icon name={icon} size={18} />
+    </Slot>
   );
 }
 
@@ -128,6 +141,8 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const [alignEnd, setAlignEnd] = useState(false);
+  const [opensUp, setOpensUp] = useState(false);
   const phone = usePhone();
   const listId = useId();
   const statusId = useId();
@@ -155,6 +170,16 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
     };
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
+
+  // The popover opens below the control from its left edge. It uses the right edge when the left would push it past the screen, and opens upward when it would run off the bottom and there is more room above.
+  useLayoutEffect(() => {
+    if (!open || !wrap.current) return;
+    const popover = Math.min(POPOVER_WIDTH, window.innerWidth - 2 * SCREEN_MARGIN);
+    const box = wrap.current.getBoundingClientRect();
+    const below = window.innerHeight - box.bottom - SCREEN_MARGIN;
+    setAlignEnd(box.left + popover > window.innerWidth - SCREEN_MARGIN);
+    setOpensUp(below < POPOVER_HEIGHT && box.top > below);
   }, [open]);
 
   // A new search starts at its best match; opening starts on the chosen language.
@@ -228,6 +253,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
         />
+        {!query ? <kbd aria-hidden="true">Esc</kbd> : null}
         {query && rows.length ? (
           <button
             type="button"
@@ -271,7 +297,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
                         <Mark text={row.option.native} query={query} />
                       </span>
                     ) : null}
-                    {selected ? <Icon name="check" size={18} className="lp-check" /> : null}
+                    {selected ? <Icon name="check" size={16} className="lp-check" /> : null}
                   </div>
                 );
               })}
@@ -315,7 +341,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
         ref={trigger}
         id={id}
         type="button"
-        className={variant === "chip" ? "btn sm lp-trigger" : "inp lp-trigger"}
+        className={variant === "chip" ? "btn sm lp-trigger" : "lp-trigger"}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -343,7 +369,7 @@ export function LanguagePicker({ id, value, onChange, allowDefault = false, disa
             </div>
           </div>
         ) : (
-          <div className="lp-pop" role="dialog" aria-label="Transcript language" onMouseDown={keepFocusInSearch}>
+          <div className={`lp-pop${alignEnd ? " end" : ""}${opensUp ? " up" : ""}`} role="dialog" aria-label="Transcript language" onMouseDown={keepFocusInSearch}>
             {list}
           </div>
         )

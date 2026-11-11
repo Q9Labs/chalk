@@ -105,6 +105,11 @@ type DialogProps = {
   readonly tall?: boolean;
   /** Artwork above the title, such as the app and Chalk logos. */
   readonly lead?: ReactNode;
+  /** A tile beside the title, the heading shape the Developer dialogs use. Body and actions get their own bands. */
+  readonly icon?: IconName;
+  readonly tone?: "ok";
+  /** Quiet text on the left of the actions. */
+  readonly hint?: ReactNode;
   readonly onClose: () => void;
   readonly onSubmit?: () => void;
   readonly children?: ReactNode;
@@ -112,7 +117,7 @@ type DialogProps = {
 };
 
 /** Traps focus, closes on Esc or the scrim, and gives focus back to whatever opened it. */
-export function Dialog({ title, description, alert, wide, tall, lead, onClose, onSubmit, children, actions }: DialogProps) {
+export function Dialog({ title, description, alert, wide, tall, lead, icon, tone, hint, onClose, onSubmit, children, actions }: DialogProps) {
   const card = useRef<HTMLElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -135,20 +140,37 @@ export function Dialog({ title, description, alert, wide, tall, lead, onClose, o
     trapDialogFocus(event);
   }
 
+  const heading = (
+    <>
+      <h2 id={titleId}>{title}</h2>
+      {description ? <p id={descriptionId}>{description}</p> : null}
+    </>
+  );
   const inner = (
     <>
       <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
         <Icon name="x" />
       </button>
       {lead}
-      <h2 id={titleId}>{title}</h2>
-      {description ? <p id={descriptionId}>{description}</p> : null}
-      {children}
-      <div className="acts">{actions}</div>
+      {icon ? (
+        <div className="dh">
+          <span className={tone === "ok" ? "tile ok" : "tile"}>
+            <Icon name={icon} size={20} />
+          </span>
+          <div>{heading}</div>
+        </div>
+      ) : (
+        heading
+      )}
+      {icon && children ? <div className="db">{children}</div> : children}
+      <div className="acts">
+        {hint ? <span className="hint">{hint}</span> : null}
+        {actions}
+      </div>
     </>
   );
   const shared = {
-    className: ["dlg", wide && "w", tall && "tall"].filter(Boolean).join(" "),
+    className: ["dlg", icon && "titled", wide && "w", tall && "tall"].filter(Boolean).join(" "),
     role: alert ? "alertdialog" : "dialog",
     "aria-modal": true,
     "aria-labelledby": titleId,
@@ -315,8 +337,8 @@ export function ErrorPanel({ title, detail, onRetry }: { readonly title: string;
   );
 }
 
-/** A copy control that says what happened: the round icon button, or a labeled pill. */
-export function CopyAction({ text, label = "Copy link", pill, small, toastMessage = "Link copied" }: { readonly text: string | (() => Promise<string>); readonly label?: string; readonly pill?: boolean; readonly small?: boolean; readonly toastMessage?: string }) {
+/** Puts text on the clipboard and says what happened: `copied` is true for a moment, a toast confirms or explains the failure. */
+export function useCopy(toastMessage: string) {
   const [copied, setCopied] = useState(false);
   const toast = useToast();
   useEffect(() => {
@@ -324,24 +346,33 @@ export function CopyAction({ text, label = "Copy link", pill, small, toastMessag
     const timer = window.setTimeout(() => setCopied(false), 1800);
     return () => window.clearTimeout(timer);
   }, [copied]);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(typeof text === "string" ? text : await text());
-      setCopied(true);
-      toast(toastMessage);
-    } catch {
-      toast("Couldn’t copy. Select the text to copy it.", { icon: "alert" });
-    }
-  }
+  const copy = useCallback(
+    async (text: string | (() => Promise<string>)) => {
+      try {
+        await navigator.clipboard.writeText(typeof text === "string" ? text : await text());
+        setCopied(true);
+        toast(toastMessage);
+      } catch {
+        toast("Couldn’t copy. Select the text to copy it.", { icon: "alert" });
+      }
+    },
+    [toast, toastMessage],
+  );
+  return { copied, copy };
+}
+
+/** A copy control that says what happened: the round icon button, or a labeled pill. */
+export function CopyAction({ text, label = "Copy link", pill, small, toastMessage = "Link copied" }: { readonly text: string | (() => Promise<string>); readonly label?: string; readonly pill?: boolean; readonly small?: boolean; readonly toastMessage?: string }) {
+  const { copied, copy } = useCopy(toastMessage);
   if (pill)
     return (
-      <button type="button" className={small ? "btn sec sm" : "btn sec"} onClick={() => void copy()}>
+      <button type="button" className={small ? "btn sec sm" : "btn sec"} onClick={() => void copy(text)}>
         <Icon name={copied ? "check" : "copy"} />
         {copied ? "Copied" : label}
       </button>
     );
   return (
-    <button type="button" className={copied ? "ib ok" : "ib"} aria-label={copied ? "Copied" : label} data-tip onClick={() => void copy()}>
+    <button type="button" className={copied ? "ib ok" : "ib"} aria-label={copied ? "Copied" : label} data-tip onClick={() => void copy(text)}>
       <Icon name={copied ? "check" : "copy"} />
     </button>
   );
