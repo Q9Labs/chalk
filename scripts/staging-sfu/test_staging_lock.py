@@ -39,6 +39,12 @@ class LeaseTests(unittest.TestCase):
         _, _, previous = self.store.acquire("lane-b", "latency", "run-2", 180)
         self.assertEqual(previous["holder"], "lane-a")
 
+    def test_a_failing_git_command_is_named_in_the_error(self):
+        args = [sys.executable, str(Path(__file__).with_name("staging-lock")), "--remote", str(Path(self.directory.name) / "missing"), "--holder", "lane-a", "--purpose", "retest", "--run-id", "run-1", "--wait", "0", "--", sys.executable, "-c", "pass"]
+        result = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 75)
+        self.assertIn("git ls-remote failed:", result.stderr)
+
     def test_expired_takeover_cannot_be_released_by_previous_owner(self):
         sha, lease, _ = self.store.acquire("lane-a", "retest", "run-1", -1)
         self.store.acquire("lane-b", "latency", "run-2", 180)
@@ -76,9 +82,10 @@ class LeaseTests(unittest.TestCase):
 
     def test_measurement_timeout_stops_with_lease_before_release(self):
         source = (Path(__file__).resolve().parents[2] / "features/scorecard/staging-latency.mjs").read_text()
-        args = json.loads(re.search(r'workload\("timeout", (\[[^\n]*?\]),', source)[1])
+        # Only the options before "pnpm" matter here; the rest of the command holds the sample count, which can come from the environment.
+        options = json.loads("[" + re.search(r'workload\(\s*"timeout",\s*\[(.*?)"pnpm"', source, re.S)[1] + '"pnpm"]')
         # Exercise the real measurement command's timeout options, not a mirrored flag list.
-        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *args[:args.index("pnpm")]])
+        self.assert_group_stopped_before_release(cancel=False, command_prefix=["timeout", *options[:-1]])
 
     def assert_group_stopped_before_release(self, cancel, command_prefix=()):
         directory = Path(self.directory.name)
@@ -255,6 +262,37 @@ await writeFile("result.json", JSON.stringify({ own, foreign, episode, foreignEp
         self.assertEqual(failed.returncode, 1)
         self.assertIn("Remote cleanup failed", failed.stderr)
         self.assertEqual(self.store.read()[0], held)
+
+
+class DeployLeaseTests(unittest.TestCase):
+    """The nightly managed deploy restarts API, Sync and the SFU node, so it takes the staging lease like the proofs."""
+
+    workflows = Path(__file__).parents[2] / ".github/workflows"
+
+    def test_nightly_deploy_waits_for_the_lease_and_production_does_not(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        wrapped = re.search(r'if \[\[ "\$MANAGED_ENVIRONMENT" == nightly \]\]; then\n\s+#[^\n]*\n\s+(STAGING_LEASE_WAIT=\d+ scripts/staging-sfu/gate-lease [^\n]+)\n\s+else\n\s+(node scripts/deploy/deploy-managed-release.mjs "\$\{args\[@\]\}")\n', ci)
+        self.assertIsNotNone(wrapped)
+        self.assertEqual(wrapped[1], 'STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-deploy managed-deploy "$GITHUB_RUN_ID" -- node scripts/deploy/deploy-managed-release.mjs "${args[@]}"')
+        self.assertEqual(ci.count("deploy-managed-release.mjs"), ci.count("deploy-managed-release.mjs \"${args[@]}\" --dry-run") + 2)
+
+    def test_the_deploy_checkout_keeps_no_credentials_because_staging_lock_sends_its_own(self):
+        # A persisted extraheader plus the one staging-lock adds from GH_TOKEN is two Authorization headers, and GitHub rejects the request.
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        checkout = job[job.index("Checkout deployment tooling") :]
+        self.assertIn("persist-credentials: false", checkout[: checkout.index("- name: Setup Node")])
+
+    def test_the_deploy_job_and_every_caller_may_write_the_lease_ref(self):
+        ci = (self.workflows / "ci.yml").read_text()
+        job = ci[ci.index("\n  deploy-managed:") :]
+        self.assertRegex(job[: job.index("steps:")], r"permissions:\n\s+contents: write")
+        # A caller cannot grant less than a called job asks for, or the whole run fails at startup.
+        for name, jobs in (("nightly.yml", ["release"]), ("promote.yml", ["release", "rollback"])):
+            text = (self.workflows / name).read_text()
+            for job_name in jobs:
+                block = text[text.index(f"\n  {job_name}:") :]
+                self.assertRegex(block[: block.index("uses: ./.github/workflows/ci.yml")], r"permissions:\n\s+contents: write", f"{name} {job_name}")
 
 
 class GateLeaseTests(unittest.TestCase):

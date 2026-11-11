@@ -287,23 +287,45 @@ func TestCaptureAnchorsNeverEnterTheRecoveryGap(t *testing.T) {
 	track := func(boundAt time.Time) CaptureMediaTrack {
 		return captureBoundAtTrack{newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, mid, "late")), boundAt}
 	}
-	late := &lateTrackWatch{watching: map[string]*lateTrackEntry{"2": {}}}
-
-	before := bindAnchors(writer, late, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
+	before := bindAnchors(writer, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
 	if got := before[mid]; !got.Equal(start) {
 		t.Fatalf("anchor for a track bound before the attempt = %s, want the attempt start %s", got, start)
 	}
-	after := bindAnchors(writer, late, map[string]CaptureMediaTrack{mid: track(start.Add(3 * time.Second))}, nil)
+	after := bindAnchors(writer, map[string]CaptureMediaTrack{mid: track(start.Add(3 * time.Second))}, nil)
 	if got := after[mid]; !got.Equal(start.Add(3 * time.Second)) {
 		t.Fatalf("anchor for a track bound after the attempt start = %s, want its bind time", got)
 	}
 	first, _ := newCaptureTestWriter(t, start)
 	first.recoveryStart = time.Time{}
-	staggered := bindAnchors(first, late, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
+	staggered := bindAnchors(first, map[string]CaptureMediaTrack{mid: track(start.Add(-5 * time.Second))}, nil)
 	if got := staggered[mid]; !got.Equal(start.Add(-5 * time.Second)) {
 		t.Fatalf("anchor in a first attempt = %s, want the bind time kept so negotiation-time offsets survive", got)
 	}
-	if got := bindAnchors(writer, &lateTrackWatch{}, map[string]CaptureMediaTrack{mid: track(start)}, nil); got != nil {
-		t.Fatalf("anchors with nothing silent = %v, want none", got)
+}
+
+// An audio track bound hundreds of milliseconds before a camera must keep that
+// head start on the Recording's clock even when nothing is silent. Stamping both
+// at the instant their readers start put the beep 400 ms after its flash.
+func TestCaptureAnchorsKeepEveryTracksBindTime(t *testing.T) {
+	start := time.UnixMilli(10_000).UTC()
+	writer, _ := newCaptureTestWriter(t, start)
+	writer.recoveryStart = time.Time{}
+	audio := captureBoundAtTrack{newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, "1", "audio")), start.Add(100 * time.Millisecond)}
+	camera := captureBoundAtTrack{newCapturePlanWatchTrack(capturePlanWatchPulledTrack(t, "2", "camera")), start.Add(500 * time.Millisecond)}
+	anchors := bindAnchors(writer, map[string]CaptureMediaTrack{"1": audio, "2": camera}, nil)
+	if got := anchors["1"]; !got.Equal(audio.boundAt) {
+		t.Fatalf("audio anchor = %s, want its bind time %s", got, audio.boundAt)
+	}
+	if got := anchors["2"]; !got.Equal(camera.boundAt) {
+		t.Fatalf("camera anchor = %s, want its bind time %s", got, camera.boundAt)
+	}
+	writer.startAt(anchors)
+	// The loop takes the camera's packet first; the clock still starts at the audio's.
+	if got := writer.firstPacketOrigin(start.Add(900 * time.Millisecond)); !got.Equal(audio.boundAt) {
+		t.Fatalf("Recording origin = %s, want the earliest bind time %s", got, audio.boundAt)
+	}
+	unanchored, _ := newCaptureTestWriter(t, start)
+	if got := unanchored.firstPacketOrigin(start.Add(time.Second)); !got.Equal(start.Add(time.Second)) {
+		t.Fatalf("origin without anchors = %s, want the first event's time", got)
 	}
 }

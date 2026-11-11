@@ -115,6 +115,7 @@ function createMediaClient(apiBaseURL: string, directPath: DirectPathMode, input
     transport: createCloudflareSFUHTTPTransport({
       apiBaseURL,
       credential: input.credential,
+      ...(input.refreshCredential ? { refreshCredential: input.refreshCredential } : {}),
       onDiagnostic: input.onTransportDiagnostic,
       traceparent: input.traceparent,
       tenantId: subject.tenantId,

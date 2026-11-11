@@ -82,6 +82,9 @@ const RECEIVER_RETIREMENT_LIMIT = 64;
 const OFFER_REPLACEMENT_COOLDOWN_MS = 60_000;
 const TRACKS_PER_REQUEST = 16;
 const LONG_PULL_DEFERRAL_MS = 15_000;
+// A sender's Sync off can reach a receiver before the sender's SFU close does, so the first listing still names the source.
+// The listing then needs a quick re-read, not the idle poll, to drop the track the viewer sees as a frozen tile.
+const SYNC_OFF_REPOLL_MS = [150, 300, 600, 1200, 2400, 4800] as const;
 const PEER_OPERATION_TIMEOUT_MS = 8000;
 // An in-place ICE restart must reconnect within this budget, or the session is replaced.
 const ICE_RESTART_BUDGET_MS = 8000;
@@ -160,6 +163,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #pollAfterCurrent = false;
   #pollFailures = 0;
   #pollFailedPull = false;
+  #syncOffRepolls = 0;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
   // The current connection's in-place ICE restart. One that failed leaves only session replacement.
@@ -232,6 +236,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.remotePublicationsChanged();
   }
   remotePublicationsChanged(publications?: readonly MediaPublication[], projectionState: "available" | "unavailable" = "available"): void {
+    this.#syncOffRepolls = 0;
     if (projectionState === "unavailable") this.#syncPublications = [];
     else if (publications) this.#syncPublications = publications;
     if (projectionState === "unavailable") this.#receiveHealth.projection([]);
@@ -408,12 +413,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const dropped = droppedRemoteTracks(this.#remoteTracks, next);
     this.#remoteTracks.clear();
     for (const [key, publication] of next) this.#remoteTracks.set(key, publication);
-    for (const publication of pulled) {
-      this.#subscribedPublicationIds.add(publication.publicationId);
-      this.#invokeListener(() => this.#onRemoteTrack?.(publication));
-    }
-    this.#publishSnapshot();
-    this.#emitRemote();
+    this.#announcePulledTracks(pulled);
     // The listing that follows retires them, as it does for a reconcile.
     this.#queueDroppedReceivers(dropped);
   }
@@ -1342,14 +1342,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     // A replacement during the pull dropped the old receivers, so keeping their entries would keep ended tracks.
     const replaced = epoch !== this.#connectionEpoch;
     const dropped = this.#commitRemoteTracks(desired, pulled, replaced ? [] : unclosed, replaced ? [] : parked, cursor, inputRevision);
+    this.#announcePulledTracks(pulled);
+    this.#queueDroppedReceivers(dropped);
+    await this.#retireDroppedReceivers(generation);
+  }
+  #announcePulledTracks(pulled: readonly CloudflareSFURemoteTrack[]): void {
     for (const publication of pulled) {
       this.#subscribedPublicationIds.add(publication.publicationId);
       this.#invokeListener(() => this.#onRemoteTrack?.(publication));
     }
     this.#publishSnapshot();
     this.#emitRemote();
-    this.#queueDroppedReceivers(dropped);
-    await this.#retireDroppedReceivers(generation);
   }
   #queueDroppedReceivers(dropped: readonly CloudflareSFURemoteTrack[]): void {
     for (const publication of dropped) {
@@ -1488,9 +1491,14 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #updateTracks(tracks: readonly CloudflareSFUTrackRequest[]): Promise<CloudflareSFUTracksResponse> {
     const transport = this.#transport;
     const connectionId = this.#bootstrap.connectionId;
+    const owner = { generation: this.#generation, connectionId };
     const update = this.#trackUpdates.then(async () => {
       if (!transport?.updateTracks) throw new CloudflareSFUError("This media plane cannot update tracks in place", "signaling_failed");
-      return transport.updateTracks({ connectionId, tracks });
+      // A replacement issues a token for the new connection, so an update still addressed to the old one is refused (403) by the API.
+      // Owning the failure makes the error reporter drop it once the connection has changed; the new connection pulls the state afresh.
+      if (this.#bootstrap.connectionId !== connectionId) throw new CloudflareSFUError("Stale media connection", "stale_generation");
+      const updateTracks = transport.updateTracks.bind(transport);
+      return this.#signal(() => updateTracks({ connectionId, tracks }), owner);
     });
     this.#trackUpdates = update.catch(() => undefined);
     return update;
@@ -2447,7 +2455,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       let nextDelay = this.#pollIntervalMs;
       try {
         await this.refreshRemotePublications();
-        if (this.#remotePullIncomplete) nextDelay = this.#incompletePullDelay();
+        nextDelay = this.#nextPollDelay();
       } catch {
         // A hidden tab polls only after a tile change, so a failed refresh keeps that change for the retry.
         if (tilesChanged) this.#videoTilesChanged = true;
@@ -2461,6 +2469,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         this.#schedulePoll(nextDelay);
       }
     }, delayMs);
+  }
+  #nextPollDelay(): number {
+    if (this.#remotePullIncomplete) return this.#incompletePullDelay();
+    const repoll = SYNC_OFF_REPOLL_MS[this.#syncOffRepolls];
+    if (repoll === undefined || !this.#heldTrackSyncShowsOff()) return this.#pollIntervalMs;
+    this.#syncOffRepolls++;
+    return repoll;
+  }
+  #heldTrackSyncShowsOff(): boolean {
+    return this.#syncPublications.some(({ participantId, source, enabled }) => !enabled && this.#remoteTracks.has(publicationKey({ participantId, source })));
   }
   #incompletePullDelay(): number {
     this.#pollFailures = Math.min(this.#pollFailures + 1, 6);

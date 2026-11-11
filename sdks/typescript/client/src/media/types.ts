@@ -189,6 +189,11 @@ export type CloudflareSFUHTTPTransportOptions = {
   readonly onDiagnostic?: (event: ConnectionReportTransportEvent) => void;
   readonly apiBaseURL: string;
   readonly credential?: CloudflareSFUCredentialProvider;
+  /**
+   * Fetches a fresh grant for the current media connection and returns its token. The transport calls it once when the API answers 403 and
+   * sends the request again with the new token; a second 403 is final.
+   */
+  readonly refreshCredential?: CloudflareSFUCredentialProvider;
   /** @deprecated Use credential so refreshed media access is read before every request. */
   readonly bearerToken?: string;
   readonly tenantId: string;

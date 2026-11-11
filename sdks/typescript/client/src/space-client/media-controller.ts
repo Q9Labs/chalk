@@ -566,6 +566,8 @@ class MediaControllerRuntime implements MediaControllerEffects {
           )
         : Promise.resolve(Exit.succeed(undefined));
       const joinPause = foreign(() => settled);
+      let localStop: Promise<Exit.Exit<void, unknown>> | null = null;
+      const joinLocalStop = foreign(() => localStop ?? Promise.resolve(Exit.succeed(undefined)));
       return Effect.gen({ self: this }, function* () {
         // A turn-on republishes, so the SFU must be done with the old publication first. A turn-off tells Sync
         // beside the SFU close: the close is a network round trip, and receivers learn of the off from Sync.
@@ -573,13 +575,13 @@ class MediaControllerRuntime implements MediaControllerEffects {
         if (state.desired.revision !== intent.revision) return;
         if (state.awaitingLive === intent.revision) return yield* yield* joinPause;
         const ports = this.#ports;
-        const cleanup = source === "screen" && !intent.enabled ? yield* Effect.exit(this.#stopScreenLocally(ports)) : Exit.succeed(undefined);
+        if (source === "screen" && !intent.enabled) localStop = Effect.runPromiseExit(this.#stopScreenLocally(ports));
         if (state.desired.revision !== intent.revision) return;
         if (ports && this.#syncLive) yield* this.#executeRevision(ports, source, intent);
         else rejectOffline(state, intent);
         yield* yield* joinPause;
-        yield* cleanup;
-      }).pipe(Effect.ensuring(Effect.ignore(joinPause))); // The next revision never starts while this pause is in flight.
+        yield* yield* joinLocalStop;
+      }).pipe(Effect.ensuring(Effect.ignore(Effect.andThen(joinPause, joinLocalStop)))); // The next revision never starts while this pause or local stop is in flight.
     });
   }
   #executeRevision(ports: ConnectionPorts, source: MediaSource, intent: MediaIntent): Effect.Effect<void, unknown> {

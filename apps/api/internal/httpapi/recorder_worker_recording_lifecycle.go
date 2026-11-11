@@ -84,10 +84,15 @@ func recorderCaptureStoppedHandler(service RecorderRecordingLifecycleService) ht
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recording capture stopped callback")
 			return
 		}
+		startedAt := time.Now()
 		if _, err := service.PublishStopped(request.Context(), recordinglifecycle.StoppedInput{Authority: authority, RequestKey: body.RequestKey, StoppedAt: observedAt}); err != nil {
 			writeRecorderRecordingLifecycleError(w, request, err)
 			return
 		}
+		observability.RequestLogger(request.Context()).InfoContext(request.Context(), "recording capture stopped callback accepted",
+			"event", "recording.capture_stopped_callback", "outcome", "accepted",
+			"job_id", authority.JobID, "attempt_count", authority.AttemptCount, "capture_epoch", authority.CaptureEpoch,
+			"duration_ms", float64(time.Since(startedAt))/float64(time.Millisecond))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
