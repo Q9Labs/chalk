@@ -197,7 +197,8 @@ async function stroke(page: Page, y: number) {
   await page.bringToFront();
   const board = page.locator(".chalk-board[data-ready]");
   await board.waitFor();
-  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+  // A narrow board keeps its tools in a tray behind the current-tool button.
+  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: /^Tools: / }).click();
   await page.getByRole("button", { name: "Pen", exact: true }).click();
   const box = await board.boundingBox();
   if (!box) throw new Error("Whiteboard has no drawing bounds");

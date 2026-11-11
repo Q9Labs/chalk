@@ -52,7 +52,8 @@ async function settleStage(page: Page) {
 async function drawStroke(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   const box = await page.evaluate(boardBox);
   if (!box) throw new Error("The board did not open");
-  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: "Drawing tools", exact: true }).click();
+  // A narrow board keeps its tools in a tray behind the current-tool button.
+  if (!(await page.getByRole("button", { name: "Pen", exact: true }).isVisible())) await page.getByRole("button", { name: /^Tools: / }).click();
   await page.getByRole("button", { name: "Pen", exact: true }).click();
   await page.mouse.move(box.x + box.width * from.x, box.y + box.height * from.y);
   await page.mouse.down();
@@ -208,8 +209,12 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     await guest.ready;
     await guest.board.open();
     await browser.locator(".chalk-board[data-ready]").waitFor({ state: "visible" });
-    const compactTools = screen.getByRole("button", "Drawing tools", { exact: true });
-    if (await compactTools.count()) await compactTools.click();
+    // A narrow board keeps its tools in a tray behind the current-tool button.
+    const chooseTool = async (name: string) => {
+      const tool = screen.getByRole("button", name, { exact: true });
+      if (!(await tool.count())) await screen.getByRole("button", /^Tools: /).click();
+      await tool.click();
+    };
     await expect(screen.getByRole("toolbar", "Drawing tools", { exact: true })).toBeVisible();
     const following = browser.locator('.chalk-board-chip[role="status"]').filter({ hasText: "Following Proof" });
     await expect(following).toBeVisible();
@@ -227,9 +232,9 @@ test("the board syncs strokes, sticky notes, follow and bring everyone between t
     // A pen stroke and a sticky note from the web reach the guest.
     const box = await browser.evaluate(boardBox);
     if (!box) throw new Error("The board did not open in the web app");
-    await screen.getByRole("button", "Pen", { exact: true }).click();
+    await chooseTool("Pen");
     await screen.swipe({ from: { x: box.x + box.width * 0.3, y: box.y + box.height * 0.3 }, to: { x: box.x + box.width * 0.5, y: box.y + box.height * 0.4 }, duration: 400 });
-    await screen.getByRole("button", "Sticky note", { exact: true }).click();
+    await chooseTool("Sticky note");
     await screen.tapAt({ x: box.x + box.width * 0.6, y: box.y + box.height * 0.6 });
     await browser.locator("textarea.excalidraw-wysiwyg").pressSequentially("Ship Friday");
     await browser.locator("textarea.excalidraw-wysiwyg").press("Escape");
