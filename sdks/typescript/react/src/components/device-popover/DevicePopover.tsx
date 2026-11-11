@@ -7,7 +7,7 @@ import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
-import { ShellIcon } from "../control-bar/ShellIcon";
+import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
@@ -185,7 +185,7 @@ export function DevicePopover({
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-menu={!mic ? true : undefined}>
+    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive && !busy} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
@@ -198,7 +198,7 @@ export function DevicePopover({
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
             onClick={busy && onCancelPending ? onCancelPending : onToggle}
           >
-            {busy ? <span aria-hidden="true">…</span> : <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />}
+            <MediaGlyph kind={mic ? "mic" : "cam"} slashed={!isActive && !busy} busy={Boolean(busy)} />
           </button>
         }
       >

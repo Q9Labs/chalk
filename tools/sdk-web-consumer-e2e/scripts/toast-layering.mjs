@@ -38,17 +38,22 @@ async function proveViewport(page, baseURL, { screenshotDirectory, label, notice
   await page.getByRole("button", { name: "React with 👍", exact: true }).click();
   await page.waitForFunction(() => window.__toastLayering.state().reactions.includes("👍"));
   await page.getByRole("button", { name: "Reactions", exact: true }).click();
-  const hand = page.getByRole("button", { name: "Raise hand", exact: true });
-  await hand.click();
+  await page.getByRole("button", { name: "Raise hand", exact: true }).click();
   await page.waitForFunction(() => window.__toastLayering.state().raised);
   await page.evaluate(() => window.__toastLayering.peerHand());
   await notice("Nora raised a hand", "polite").waitFor();
   await page.locator("[data-part=notice-announcer] [aria-live=polite]", { hasText: "Nora raised a hand" }).waitFor();
-  await hand.click();
+  // Raising a hand closes the tray and turns the trigger into the raised-hand button.
+  await page.getByRole("button", { name: "Reactions, hand raised", exact: true }).click();
+  await page.getByRole("button", { name: "Lower hand", exact: true }).click();
   await page.waitForFunction(() => !window.__toastLayering.state().raised);
+  await page.getByRole("button", { name: "Reactions", exact: true }).click();
   const reactions = await page.evaluate(() => window.__toastLayering.state().reactions);
   if (screenshotDirectory) await page.screenshot({ path: `${screenshotDirectory}/${label}-${width}x${height}.png` });
   if (place === "header") {
+    // The open tray's backdrop covers the header, so the first click closes the tray and the second opens the list.
+    await page.locator("[data-part='notice-button']").click({ force: true });
+    await page.locator(".chalk-shell-reactions").waitFor({ state: "detached" });
     await page.locator("[data-part='notice-button']").click();
     const list = page.getByRole("dialog", { name: "Notices" });
     const row = list.locator("[data-part='notice']", { hasText: error });
