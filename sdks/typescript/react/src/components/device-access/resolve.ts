@@ -86,6 +86,10 @@ export function detectPlatform(userAgent: string): Platform {
 
 const KIND_OF = { microphone: "audioinput", camera: "videoinput" } as const;
 
+/** When each device last looked for an input that was plugged in while its card was loading. One look per window stops a device that is listed but still refused from retrying forever. */
+const lastLook: Partial<Record<DeviceKind, number>> = {};
+const LOOK_WINDOW_MS = 10_000;
+
 /**
  * Calls `recovered` when the cause of a blocked device has probably gone away, so the failed command can run again without a click.
  * The browser setting fires a permission change, a plugged-in device fires devicechange, and a Mac setting only shows when the person comes back to the tab.
@@ -115,6 +119,11 @@ export function watchRecovery(ports: DevicePorts, device: DeviceKind, reason: De
       () => undefined,
     );
   mediaDevices.addEventListener("devicechange", changed);
+  // An input plugged in while the card was loading fired its event before this listener existed.
+  if (Date.now() - (lastLook[device] ?? 0) > LOOK_WINDOW_MS) {
+    lastLook[device] = Date.now();
+    changed();
+  }
   return () => {
     stopped = true;
     mediaDevices.removeEventListener("devicechange", changed);

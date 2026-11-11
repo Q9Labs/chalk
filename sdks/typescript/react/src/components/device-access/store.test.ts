@@ -167,6 +167,18 @@ describe("DeviceAccessStore", () => {
     expect(store.getSnapshot().issues.microphone).toBeDefined();
   });
 
+  it("finds an input that was plugged in while the card was loading, once", async () => {
+    const { store } = setup({ devices: ["videoinput"] });
+    const retry = vi.fn(async () => {});
+    await store.report("camera", failure("media.device_not_found"), retry);
+    await settle();
+    expect(retry).toHaveBeenCalledTimes(1);
+    // The retry failed again with the device still listed: no second automatic retry.
+    await store.report("camera", failure("media.device_not_found"), retry);
+    await settle();
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
   it("works in a browser that cannot be asked about permissions", async () => {
     const { store } = setup({ askable: false });
     await store.report("microphone", failure("media.permission_denied"), async () => {});
