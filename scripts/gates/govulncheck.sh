@@ -22,6 +22,7 @@ if ! git cat-file -e "${base}:${module_path}go.mod" 2>/dev/null; then
   exit
 fi
 mkdir "${report_directory}/base"
-git -C "$(git rev-parse --show-toplevel)" archive "${base}" ${module_path:+"${module_path}"} | tar -x -C "${report_directory}/base"
+# The whole tree, because the module's replace directives point at sibling modules.
+git -C "$(git rev-parse --show-toplevel)" archive "${base}" | tar -x -C "${report_directory}/base"
 (cd "${report_directory}/base/${module_path}" && go tool govulncheck -format json ./...) > "${report_directory}/base.json"
 node "${compare}" govulncheck "${report_directory}/head.json" "${report_directory}/base.json"
