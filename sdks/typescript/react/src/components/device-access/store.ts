@@ -51,7 +51,7 @@ export class DeviceAccessStore {
 
   /**
    * Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed.
-   * Rejects when the card code cannot load, so the caller can show the failure another way. Any other failure clears the old card.
+   * Rejects when the card code cannot load or no control bar is subscribed, so the caller can show the failure another way. Any other failure clears the old card.
    */
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
     if (!isDeviceAccessFailure(failure, device)) {
@@ -60,8 +60,11 @@ export class DeviceAccessStore {
     }
     const pending = this.#entry(device);
     const attempt = ++pending.attempt;
-    const resolved = await import("./resolve").then(({ resolveAccess }) => resolveAccess(this.#ports, device, failure));
+    // The card code loads with the resolver, so a failed download rejects here and the caller can show the toast instead.
+    const [{ resolveAccess }] = await Promise.all([import("./resolve"), import("./DeviceAccessCard")]);
+    const resolved = await resolveAccess(this.#ports, device, failure);
     if (pending.attempt !== attempt) return;
+    if (this.#listeners.size === 0) throw new Error("no subscriber");
     if (!resolved) {
       this.clear(device);
       return;

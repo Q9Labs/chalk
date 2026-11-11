@@ -142,6 +142,16 @@ describe("DeviceAccessStore", () => {
     expect(store.getSnapshot().issues.microphone).toBeUndefined();
   });
 
+  it("rejects a report that starts after the last subscriber left", async () => {
+    const { store, stop, window } = setup({ permission: "granted" });
+    const retry = vi.fn(async () => {});
+    stop();
+    await expect(store.report("camera", failure("media.permission_denied", "system"), retry)).rejects.toThrow();
+    window.emit("focus");
+    await settle();
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it("works in a browser that cannot be asked about permissions", async () => {
     const { store } = setup({ askable: false });
     await store.report("microphone", failure("media.permission_denied"), async () => {});

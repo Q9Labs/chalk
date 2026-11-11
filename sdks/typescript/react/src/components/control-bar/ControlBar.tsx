@@ -14,7 +14,7 @@ import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type Cont
 import { ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
-const DeviceAccessWaiting = lazy(() => import("../device-access/DeviceAccessWaiting").then((module) => ({ default: module.DeviceAccessWaiting })));
+const DeviceAccessWaiting = lazy(() => import("../device-access/DeviceAccessWaiting").then((module) => ({ default: module.DeviceAccessWaiting })).catch(() => ({ default: () => null })));
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
