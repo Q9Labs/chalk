@@ -511,6 +511,18 @@ ${phoneRules(`
 .chalk-shell-people-pill:active {
   transform: scale(0.97);
 }
+.chalk-shell-people-badge {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-accent);
+  color: var(--chalk-accent-text);
+  font-size: var(--type-caption);
+  font-weight: 700;
+}
 .chalk-shell-faces {
   display: flex;
 }

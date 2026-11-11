@@ -11,6 +11,9 @@ export type Person = {
   readonly speaking?: boolean;
   readonly handRaised?: boolean;
   readonly sharing?: boolean;
+  /** Holds the host capabilities, so the roster marks the person as a host. */
+  readonly host?: boolean;
+  readonly reconnecting?: boolean;
 };
 
 const BACKGROUNDS = ["#4d5d73", "#5c6650", "#6b5b4f", "#64576b", "#49645d", "#665d42", "#315f72", "#6d5158"];
@@ -61,7 +64,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const self = { camera: true, microphone: true, ...options.self };
   const others = options.others ?? [];
   const now = Date.now();
-  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, GUEST))];
+  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, person.host ? HOST : GUEST))];
   const remote: RemoteMedia[] = others.flatMap((person, index) => [
     ...(person.camera === false ? [] : [{ participantId: person.id, source: "camera" as const, publicationId: `${person.id}-camera`, track: cameraTrack(person.name, BACKGROUNDS[index % BACKGROUNDS.length]!) }]),
     ...(person.sharing ? [{ participantId: person.id, source: "screen" as const, publicationId: `${person.id}-screen`, track: screenTrack() }] : []),
@@ -116,7 +119,7 @@ function participant(person: Person, capabilities: readonly Capability[]): Parti
     capabilities,
     handRaised: person.handRaised ?? false,
     media: { microphone: person.microphone === false ? "inactive" : "active", camera: person.camera === false ? "inactive" : "active", screenShare: person.sharing ? "active" : "inactive" },
-    presence: { state: "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false },
+    presence: { state: person.reconnecting ? "disconnected" : "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false },
   };
 }
 

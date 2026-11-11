@@ -3,7 +3,7 @@ import { commandFailure, type MediaCommandSource, type MediaCommandAction } from
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useParticipants, useRecording, useSelf, useSpaceClient } from "../../bindings/hooks";
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
@@ -14,11 +14,12 @@ import { useSoundCues } from "../../internal/useSoundCues";
 import { toVideoParticipants } from "../../selectors/space-selectors";
 import { AudioOutput } from "../audio-output/AudioOutput";
 import { AdmissionPanel } from "../admission-panel/AdmissionPanel";
+import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
+import { useHandOrder } from "../../internal/useHandOrder";
 import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
-import { ParticipantsPanel } from "../participants-panel/ParticipantsPanel";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { OfflineActions } from "../offline-actions/OfflineActions";
 import { ReconnectingOverlay } from "../reconnecting-overlay/ReconnectingOverlay";
@@ -37,6 +38,9 @@ import { DRAWER_EXIT_MS, useDrawerPresence } from "./useDrawerPresence";
 import type { ChatUploadFile } from "@q9labsai/chalk-client";
 import { type ReconnectingOverlayProps } from "../reconnecting-overlay/ReconnectingOverlay";
 import type { WhiteboardViewProps } from "../whiteboard-view/WhiteboardView";
+
+// The knock notice is not needed to start a call, so it loads when the first request arrives.
+const KnockNotice = lazy(() => import("../admission-panel/KnockNotice").then((module) => ({ default: module.KnockNotice })));
 
 export type SpacePanel = "chat" | "participants" | "admission";
 
@@ -173,6 +177,8 @@ export function SpaceView({
   const [uncontrolledLayout, setUncontrolledLayout] = useState<"grid" | "focus">(controlledLayout ?? "focus");
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<SpacePanel | null>(initialPanel);
+  const [hiddenKnocks, setHiddenKnocks] = useState<ReadonlySet<string>>(new Set());
+  const handOrders = useHandOrder(useMemo(() => participantsSlice.roster.filter((person) => person.handRaised).map((person) => person.participantId), [participantsSlice.roster]));
   const [previousInitialPanel, setPreviousInitialPanel] = useState(initialPanel);
   if (previousInitialPanel !== initialPanel) {
     setPreviousInitialPanel(initialPanel);
@@ -202,10 +208,6 @@ export function SpaceView({
       })),
     [localId, media.local, media.remote, media.screenShare.hasAudio, participantsSlice.roster, self.displayName],
   );
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Open the participants drawer when admission inputs change; do not force it open on every render after a user closes it.
-  useEffect(() => {
-    if (feature("admission") && feature("participants") && canManageAdmission && participantsSlice.admissionQueue.length > 0) setActivePanel("participants");
-  }, [canManageAdmission, participantsSlice.admissionQueue.length, features?.admission, features?.participants]);
   const buttons: ControlBarButtonName[] = [
     "mic",
     "video",
@@ -410,13 +412,18 @@ export function SpaceView({
                     if (phone) setActivePanel(null);
                   }}
                   variant="mobile"
+                  handOrders={handOrders}
                   admissionEnabled={feature("admission")}
                   generatedAvatars={generatedAvatars}
                   onCommandError={onCommandError}
                   onClose={() => setActivePanel(null)}
                 />
               ) : null}
-              {drawer.panel === "admission" && feature("admission") ? <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} /> : null}
+              {drawer.panel === "admission" && feature("admission") ? (
+                <Suspense fallback={null}>
+                  <AdmissionPanel className="h-full w-full rounded-none shadow-none" onClose={() => setActivePanel(null)} />
+                </Suspense>
+              ) : null}
             </CallCard>
           }
           toasts={
@@ -437,6 +444,11 @@ export function SpaceView({
           }
           overlays={
             <>
+              {feature("admission") && canManageAdmission && participantsSlice.admissionQueue.length > 0 && activePanel !== "participants" ? (
+                <Suspense fallback={null}>
+                  <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />
+                </Suspense>
+              ) : null}
               <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
               {overlay}
               {reconnecting && reconnecting.status !== "reconnecting" ? <ReconnectingOverlay {...reconnecting} /> : null}

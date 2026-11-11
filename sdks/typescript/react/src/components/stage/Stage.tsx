@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-
+import { useHandOrder } from "../../internal/useHandOrder";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
@@ -167,14 +167,8 @@ export function Stage({
     return stabilizeOrder(orderRef.current, items);
   }, [interactive, items]);
 
-  const handOrderRef = useRef<readonly string[]>([]);
-  const handOrders = useMemo(() => {
-    const raised = ordered.filter((item) => item.kind === "participant" && item.participant.isHandRaised).map((item) => item.id);
-    const survivors = handOrderRef.current.filter((id) => raised.includes(id));
-    const next = [...survivors, ...raised.filter((id) => !survivors.includes(id))];
-    handOrderRef.current = next;
-    return new Map(next.map((id, index) => [id, index + 1]));
-  }, [ordered]);
+  const raisedIds = useMemo(() => ordered.filter((item) => item.kind === "participant" && item.participant.isHandRaised).map((item) => item.id), [ordered]);
+  const handOrders = useHandOrder(raisedIds);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [transition] Remember committed tile order and speakers; abandoned renders must not rewrite stage history.
   useEffect(() => {
