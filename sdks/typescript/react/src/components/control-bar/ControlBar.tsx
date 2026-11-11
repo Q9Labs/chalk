@@ -1,7 +1,7 @@
 import { commandFailureMessage } from "./command-failure";
 import { LazyDeviceAccessWaiting } from "../device-access/LazyDeviceAccessCard";
 import { isDeviceAccessFailure } from "../device-access/model";
-import React, { useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon } from "../../utils/icons";
@@ -194,7 +194,11 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
     <>
       <ControlBarSurface {...surfaceProps} />
       <CommandErrorAlert message={mediaNotice ?? failure} />
-      {requestingDevice ? <LazyDeviceAccessWaiting device={requestingDevice} /> : null}
+      {requestingDevice ? (
+        <Suspense fallback={null}>
+          <LazyDeviceAccessWaiting device={requestingDevice} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

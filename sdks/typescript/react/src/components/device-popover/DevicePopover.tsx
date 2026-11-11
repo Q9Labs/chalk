@@ -194,7 +194,7 @@ export function DevicePopover({
   const pressOpensCard = access && !busy;
   const accessLabel = pressOpensCard ? access.label : undefined;
   return (
-    <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={access ? true : undefined} data-camera-menu={!mic ? true : undefined}>
+    <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-blocked={!!access || undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={

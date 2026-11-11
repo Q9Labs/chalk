@@ -56,7 +56,7 @@ export function ShareControl({
     onStart?.({ surface: next, audio: next === "browser" && audio });
   };
   return (
-    <div ref={setSplit} data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing} data-blocked={access ? true : undefined}>
+    <div ref={setSplit} data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing} data-blocked={!!access || undefined}>
       <ChalkTooltip
         trigger={
           <button
@@ -66,7 +66,7 @@ export function ShareControl({
             aria-label={accessLabel ?? (sharing ? "Stop sharing" : "Share screen")}
             aria-pressed={sharing}
             aria-haspopup={access ? "dialog" : undefined}
-            aria-expanded={access ? access.open : undefined}
+            aria-expanded={access?.open}
             onClick={access ? () => access.onOpenChange(!access.open) : () => (sharing || !onStart ? onToggle?.() : start(surface))}
           >
             <ShellIcon name={sharing ? "shareOff" : "share"} />
