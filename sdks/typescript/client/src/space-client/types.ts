@@ -182,6 +182,8 @@ export type MediaSlice = {
   readonly remote: readonly RemoteMedia[];
   readonly screenShare: LocalMedia & { readonly hasAudio?: boolean; readonly capture?: ScreenShareCapture };
   readonly incomingRequests: readonly IncomingMediaRequest[];
+  /** The latest call-stats windows (about a minute), oldest first. Omitted until the first window closes. */
+  readonly callStats?: readonly import("../media/call-stats").CallStatsSample[];
 };
 export type ChatAttachment = ChalkChatAttachment;
 export type ChatMessage = ChalkChatMessage;

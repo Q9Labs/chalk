@@ -111,7 +111,7 @@ export async function longCallProof(run, receiver) {
 
   const judged = judgeLongCall({ ticks, participants: guests.participants, refreshes: guests.refreshes, toggles: ran, hearings: heard, startedAtMs, signalBytes: guests.signalBytes, budgetReplacements: guests.budgetReplacements });
   failures.push(...judged.failures);
-  const evidence = { ...judged.evidence, signalRequestFailures, signaling400Responses, budgetReplacements: budgetReplacementEvidence, hearingPasses, hearingFailures: hearingVerdicts.length - hearingPasses, failureCount: failures.length };
+  const evidence = { ...judged.evidence, signalingRequestFailures, signaling400Responses, budgetReplacements: budgetReplacementEvidence, hearingPasses, hearingFailures: hearingVerdicts.length - hearingPasses, failureCount: failures.length };
   console.log(evidenceLine(evidence));
   console.log(`Signaling requests: ${signalingRequestFailures} failed, ${signaling400Responses} HTTP 400 responses`);
   const replacements = budgetReplacementEvidence.filter((entry) => entry.count).map((entry) => `G${entry.guest} ${entry.count} (${[...new Set(entry.causes)].join(", ")})`);
