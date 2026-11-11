@@ -364,7 +364,7 @@ test("whiteboard keeps local zoom with desktop teacher and phone follower", asyn
   let pages: Page[] = [];
   try {
     const teacher = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    const follower = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const follower = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["camera", "microphone"] });
     const [a, b] = await joinBoardParticipants([teacher, follower]);
     pages = [a, b];
     await a.getByRole("button", { name: "Board", exact: true }).click();
