@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { ScreenShareOptions, ScreenShareSurface } from "@q9labsai/chalk-client";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { ShellIcon } from "./ShellIcon";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 
 function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   return (
@@ -27,10 +29,26 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
   );
 }
 
-export function ShareControl({ sharing, onToggle, onStart, disabled = false, startDisabled = false }: { readonly disabled?: boolean; readonly startDisabled?: boolean; readonly sharing: boolean; readonly onToggle?: () => void; readonly onStart?: (options: ScreenShareOptions) => void }) {
+export function ShareControl({
+  sharing,
+  onToggle,
+  onStart,
+  access,
+  disabled = false,
+  startDisabled = false,
+}: {
+  readonly disabled?: boolean;
+  readonly startDisabled?: boolean;
+  readonly sharing: boolean;
+  readonly access?: DeviceAccessControl;
+  readonly onToggle?: () => void;
+  readonly onStart?: (options: ScreenShareOptions) => void;
+}) {
+  const [split, setSplit] = useState<HTMLDivElement | null>(null);
   const [surface, setSurface] = useState<ScreenShareSurface>("window");
   const [audio, setAudio] = useState(true);
   const [replace, setReplace] = useState(false);
+  const accessLabel = access?.label;
   const start = (next: ScreenShareSurface) => {
     if (disabled || startDisabled) return;
     setSurface(next);
@@ -38,16 +56,26 @@ export function ShareControl({ sharing, onToggle, onStart, disabled = false, sta
     onStart?.({ surface: next, audio: next === "browser" && audio });
   };
   return (
-    <div data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing}>
+    <div ref={setSplit} data-part="share-split" className="chalk-shell-split chalk-shell-desktop" data-active={sharing} data-blocked={!!access || undefined}>
       <ChalkTooltip
         trigger={
-          <button type="button" className="chalk-shell-main" disabled={disabled} aria-label={sharing ? "Stop sharing" : "Share screen"} aria-pressed={sharing} onClick={() => (sharing || !onStart ? onToggle?.() : start(surface))}>
+          <button
+            type="button"
+            className="chalk-shell-main"
+            disabled={disabled}
+            aria-label={accessLabel ?? (sharing ? "Stop sharing" : "Share screen")}
+            aria-pressed={sharing}
+            aria-haspopup={access ? "dialog" : undefined}
+            aria-expanded={access?.open}
+            onClick={access ? () => access.onOpenChange(!access.open) : () => (sharing || !onStart ? onToggle?.() : start(surface))}
+          >
             <ShellIcon name={sharing ? "shareOff" : "share"} />
           </button>
         }
       >
-        {sharing ? "Stop sharing" : "Share screen"}
+        {accessLabel ?? (sharing ? "Stop sharing" : "Share screen")}
       </ChalkTooltip>
+      {access ? <LazyDeviceAccessCard device="screen" anchor={split} control={access} /> : null}
       <ChalkMenu
         side="top"
         className="chalk-device-menu"

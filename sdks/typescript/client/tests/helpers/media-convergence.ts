@@ -37,7 +37,7 @@ export function capturedClient(
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        mediaDevices: { getUserMedia: async () => mediaStream(track), ...overrides.mediaDevices },
+        mediaDevices: { getUserMedia: async () => mediaStream(track), releaseTrack: (released) => released.stop(), ...overrides.mediaDevices },
         createMediaClient: (input) => ({ ...platform.dependencies.createMediaClient(input), ...overrides.media }),
         createSyncClient: () => ({ ...platform.sync, ...overrides.sync }),
       },

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { GitHubMark } from "./GitHubMark";
 import { Icon } from "./Icon";
-import { GITHUB_URL, SIGN_IN_HREF, START_CALL_HREF } from "./links";
+import { DASHBOARD_HREF, GITHUB_URL, SIGN_IN_HREF, START_CALL_HREF } from "./links";
 import { Lockup } from "./Lockup";
 import { ThemeButton } from "./theme";
 
@@ -39,8 +39,11 @@ export function SiteNav() {
         </nav>
         <div className="nr">
           <ThemeButton />
-          <a className="btn gh when-wide" href={SIGN_IN_HREF}>
+          <a className="btn gh when-wide when-signed-out" href={SIGN_IN_HREF}>
             Sign in
+          </a>
+          <a className="btn gh when-wide when-signed-in" href={DASHBOARD_HREF}>
+            Dashboard
           </a>
           <a className="btn pri" href={START_CALL_HREF}>
             Start a call
@@ -57,7 +60,12 @@ export function SiteNav() {
           </a>
           <a href="/docs">Docs</a>
           <a href={GITHUB_URL}>GitHub</a>
-          <a href={SIGN_IN_HREF}>Sign in</a>
+          <a className="when-signed-out" href={SIGN_IN_HREF}>
+            Sign in
+          </a>
+          <a className="when-signed-in" href={DASHBOARD_HREF}>
+            Dashboard
+          </a>
         </nav>
       ) : null}
     </header>

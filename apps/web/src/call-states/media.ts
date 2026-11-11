@@ -37,7 +37,7 @@ export function installFakeDevices({ blocked }: { readonly blocked: boolean }): 
   mediaDevices.enumerateDevices = async () => [device("audioinput", "mic", "MacBook Air Microphone"), device("videoinput", "cam", "FaceTime HD Camera"), device("audiooutput", "speaker", "MacBook Air Speakers")];
 }
 
-function device(kind: MediaDeviceKind, deviceId: string, label: string): MediaDeviceInfo {
+export function device(kind: MediaDeviceKind, deviceId: string, label: string): MediaDeviceInfo {
   return { kind, deviceId, label, groupId: "call-states", toJSON: () => ({ kind, deviceId, label }) };
 }
 

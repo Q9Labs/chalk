@@ -1,4 +1,5 @@
 import type { CloudflareSFUIceServer } from "../media/types";
+import { directOrigin } from "../direct-path";
 import { decodeBase64Url } from "./base64-url";
 declare const syncCredentialBrand: unique symbol;
 declare const mediaCredentialBrand: unique symbol;
@@ -33,6 +34,8 @@ export type ChalkSFUCapabilities = {
   readonly unifiedSignaling: boolean;
   /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute moves no SDP. */
   readonly muteInPlace: boolean;
+  /** The https origin of the direct door for Sync and SFU signalling; absent when the API advertises none. */
+  readonly directSignalingUrl?: string;
 };
 export type CloudflareSFUClientPayload = {
   readonly connectionId: string;
@@ -218,6 +221,7 @@ function parseChalkSFUPayload(payload: Readonly<Record<string, unknown>>): Chalk
 }
 function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
   const flags = isRecord(value) ? value : {};
+  const direct = directOrigin(flags.directSignalingUrl);
   return {
     serverLayerAdaptation: flags.serverLayerAdaptation === true,
     subscriptionState: flags.subscriptionState === true,
@@ -225,6 +229,7 @@ function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
     pullPublished: flags.pullPublished === true,
     unifiedSignaling: flags.unifiedSignaling === true,
     muteInPlace: flags.muteInPlace === true,
+    ...(direct ? { directSignalingUrl: direct.origin } : {}),
   };
 }
 function parseIceServers(value: unknown): readonly CloudflareSFUIceServer[] {

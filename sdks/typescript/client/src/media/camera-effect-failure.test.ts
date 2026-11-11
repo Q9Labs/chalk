@@ -28,7 +28,7 @@ it("carries a failed processor through camera termination into the bounded repor
     },
   };
   const camera = track("video");
-  const client = captureClient(platform, { mediaDevices: { getUserMedia: async () => stream([camera]) } });
+  const client = captureClient(platform, { mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => stream([camera]) } });
   try {
     await client.join({ microphone: false, camera: true });
     markCameraEffectFailure(camera);

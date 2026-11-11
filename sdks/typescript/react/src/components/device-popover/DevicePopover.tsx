@@ -6,9 +6,12 @@ import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
+import { useInputLevel } from "../../internal/useInputLevel";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
-import { ShellIcon } from "../control-bar/ShellIcon";
+import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
+import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
+import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
 
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
@@ -41,30 +44,12 @@ export interface DevicePopoverProps {
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
+  /** Set while the browser or the system refuses this device. Pressing the button opens the card instead of toggling. */
+  access?: DeviceAccessControl;
 }
 
 function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
-  const [level, setLevel] = useState(0);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Own the microphone meter AudioContext and sampling interval; disconnect, close and clear them on track replacement.
-  useEffect(() => {
-    if (!track || track.readyState !== "live") return;
-    const context = new AudioContext();
-    const source = context.createMediaStreamSource(new MediaStream([track]));
-    const analyser = context.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    const samples = new Uint8Array(analyser.fftSize);
-    const timer = window.setInterval(() => {
-      analyser.getByteTimeDomainData(samples);
-      const rms = Math.sqrt(samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length);
-      setLevel(Math.min(100, Math.round(rms * 400)));
-    }, 100);
-    return () => {
-      clearInterval(timer);
-      source.disconnect();
-      void context.close();
-    };
-  }, [track]);
+  const level = useInputLevel(track);
   return (
     <span className="chalk-shell-level" role="meter" aria-label="Input level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}>
       <i style={{ transform: `scaleX(${level / 100})` }} />
@@ -173,8 +158,10 @@ export function DevicePopover({
   toggleDisabled,
   busy,
   onCancelPending,
+  access,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  const [split, setSplit] = useState<HTMLDivElement | null>(null);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
   const backgroundFallback = useSyncExternalStore(
@@ -184,25 +171,30 @@ export function DevicePopover({
   );
   const mic = type === "mic";
   const label = mic ? (isActive ? "Mute microphone" : "Unmute microphone") : isActive ? "Turn off camera" : "Turn on camera";
+  // While a retry is connecting, the button cancels it; the card button comes back when the retry fails.
+  const pressOpensCard = access && !busy;
+  const accessLabel = pressOpensCard ? access.label : undefined;
   return (
-    <div data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive} data-camera-menu={!mic ? true : undefined}>
+    <div ref={setSplit} data-part={`${type}-split`} className={cn("chalk-shell-split", className)} data-off={!isActive && !busy} data-blocked={!!access || undefined} data-camera-menu={!mic ? true : undefined}>
       <ShellStyles />
       <ChalkTooltip
         trigger={
           <button
             type="button"
             className="chalk-shell-main"
-            aria-label={busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label}
+            aria-label={accessLabel ?? (busy ? `${onCancelPending ? "Cancel connecting" : "Updating"} ${mic ? "microphone" : "camera"}` : label)}
             aria-pressed={isActive}
             aria-busy={busy}
+            aria-haspopup={pressOpensCard ? "dialog" : undefined}
+            aria-expanded={pressOpensCard ? access.open : undefined}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
-            onClick={busy && onCancelPending ? onCancelPending : onToggle}
+            onClick={pressOpensCard ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
           >
-            {busy ? <span aria-hidden="true">…</span> : <ShellIcon name={mic ? (isActive ? "mic" : "micOff") : isActive ? "cam" : "camOff"} />}
+            <MediaGlyph kind={mic ? "mic" : "cam"} slashed={!isActive && !busy} busy={Boolean(busy)} />
           </button>
         }
       >
-        {warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label}
+        {accessLabel ?? (warning ? `${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.` : busy ? `Connecting ${mic ? "microphone" : "camera"}…` : label)}
       </ChalkTooltip>
       <ChalkMenu
         side={orientation === "up" ? "top" : "bottom"}
@@ -255,7 +247,8 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
-      {warning ? (
+      {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} /> : null}
+      {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>
           <span aria-hidden="true">!</span>
           <span className="sr-only">{mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.</span>

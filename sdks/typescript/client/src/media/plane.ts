@@ -38,6 +38,8 @@ export type ConnectionMediaSnapshot = {
   readonly receiveStalls?: readonly import("./receive-stall").ReceiveStallObservation[];
   /** Remote videos whose delivery the SFU reported. Omitted or empty on planes without `subscriptionState`. */
   readonly remoteDelivery?: readonly import("./subscription-delivery").RemoteVideoDelivery[];
+  /** The latest call-stats windows, oldest first, for the call menu's charts. Omitted by planes that do not measure the connection. */
+  readonly callStats?: readonly import("./call-stats").CallStatsSample[];
   readonly connection: {
     readonly phase: ConnectionMediaPhase;
     readonly peerConnectionState: RTCPeerConnectionState | null;

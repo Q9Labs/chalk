@@ -167,7 +167,7 @@ describe("an off that never reached Sync survives a replaced Sync connection", (
         ...first,
         dependencies: {
           ...first.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track) },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track) },
           createSyncClient: () => {
             const attempt = creations++;
             if (attempt === 0) return { ...first.sync, setMicrophoneEnabled: command, setCameraEnabled: command };
@@ -239,7 +239,7 @@ describe("an off stays owed until Sync shows the source off", () => {
         ...first,
         dependencies: {
           ...first.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track) },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track) },
           createSyncClient: () => {
             const attempt = creations++;
             if (attempt === 0) return { ...first.sync, setMicrophoneEnabled: command, setCameraEnabled: command };

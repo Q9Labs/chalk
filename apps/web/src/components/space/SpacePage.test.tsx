@@ -68,6 +68,7 @@ async function entry(code: string, slug: string | undefined = "design-lab", stat
 
 it("joins fresh when window.open inherits a copy of the reload marker", async () => {
   localStorage.setItem("chalk.display-name", "Ada");
+  localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
   writeReloadRejoin(sessionStorage, marker);
   window.name = "";
   await entry("access.media_proof_rejected");
@@ -117,6 +118,14 @@ it("opens the Sync socket and API connection while the name prompt shows, withou
   expect([...document.head.querySelectorAll('link[rel="preconnect"]')].map((link) => link.getAttribute("href"))).toContain(window.location.origin);
   expect(sockets).toHaveLength(1);
   expect(new URL(sockets[0] ?? "").pathname).toBe("/v1/sync");
+  expect(requests).toEqual([]);
+});
+
+it("opens the device step for a saved name until the visitor has chosen devices", async () => {
+  localStorage.setItem("chalk.display-name", "Ada");
+  await entry("access.media_proof_rejected");
+  await expectMessage("Join call");
+  expect(document.querySelector<HTMLInputElement>("#join-display-name")?.value).toBe("Ada");
   expect(requests).toEqual([]);
 });
 

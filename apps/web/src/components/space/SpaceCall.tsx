@@ -1,4 +1,4 @@
-import { reloadRejoinStorageKey, writeReloadRejoin, type ClientFailure } from "@q9labsai/chalk-client";
+import { reloadRejoinStorageKey, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PreparedPublicSpace, PublicSpaceCredential, SpaceAccessCleanupOptions } from "../../lib/chalk-access";
@@ -37,10 +37,7 @@ export function LocalSpace({
   readonly credential: PublicSpaceCredential;
   readonly hostCanExtend: boolean;
   readonly displayName: string;
-  readonly defaults: {
-    readonly microphone: boolean;
-    readonly camera: boolean;
-  };
+  readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
   readonly getAccess: PreparedPublicSpace["getAccess"];
   readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;

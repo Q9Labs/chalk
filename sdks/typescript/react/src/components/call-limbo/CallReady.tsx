@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
-import { ChalkCopyButton, ChalkSheet } from "../chalk-ui";
+import { ChalkSheet } from "../chalk-ui";
+import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 
 export interface CallReadyProps {
@@ -10,15 +11,13 @@ export interface CallReadyProps {
   readonly link?: string;
 }
 export function CallReady({ open, onClose, link = typeof location === "undefined" ? "" : location.href }: CallReadyProps) {
-  const [showQR, setShowQR] = useState(false);
-  const qrRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLElement>(null);
   const phone = useIsMobile();
   const reducedMotion = usePrefersReducedMotion();
   const [entered, setEntered] = useState(false);
   const [present, setPresent] = useState(open);
   const id = useId();
-  const qr = showQR && canEncodeInviteQr(link);
+  const qr = canEncodeInviteQr(link);
   const close = () => {
     onClose();
     cardRef.current?.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
@@ -27,12 +26,6 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   useEffect(() => {
     if (!open && cardRef.current?.contains(document.activeElement)) cardRef.current.closest("[data-chalk]")?.querySelector<HTMLButtonElement>("[data-call-link-trigger]")?.focus();
   }, [open]);
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Fade the mounted QR code with Web Animations; cancel it when dependencies change.
-  useEffect(() => {
-    if (!showQR || reducedMotion) return;
-    const animation = qrRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "ease-out" });
-    return () => animation?.cancel();
-  }, [showQR, reducedMotion]);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [animation] Retain the card through its exit and stage entry on a frame; cancel frame and timeout on cleanup.
   useEffect(() => {
     if (open) setPresent(true);
@@ -50,37 +43,24 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
   }, [open, reducedMotion]);
   const content = (
     <>
-      <div className="-mt-1.5 mb-0.5 flex items-center justify-between">
+      <div className="flex items-center justify-between pb-2 pl-3 pr-1 pt-1">
         <h2 id={id} data-part="ready-title" tabIndex={-1} style={{ fontSize: "var(--type-body-lg)", fontWeight: 600, lineHeight: 1.4, fontFamily: "inherit", letterSpacing: "normal", textWrap: "wrap", outline: "none" }}>
           Your call is ready
         </h2>
-        <button type="button" data-part="ready-dismiss" className="chalk-dismiss max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
-          <svg width="20" height="20" style={{ width: 20, height: 20 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+        <button type="button" data-part="ready-dismiss" className="chalk-dismiss !h-8 !w-8 max-sm:!h-11 max-sm:!w-11" aria-label="Close call link" onClick={close}>
+          <svg width="18" height="18" style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
             <path d="m6 6 12 12M6 18 18 6" />
           </svg>
         </button>
       </div>
-      <p className="mr-1 text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">Share this link with people you want in the call</p>
-      <div data-part="ready-link" style={{ borderRadius: "var(--corner-pill)" }} className="mt-3 flex h-11 items-center justify-between gap-2 bg-[var(--chalk-hover)] pl-3.5 pr-1 font-medium">
-        <span className="min-w-0 truncate">{link.replace(/^https?:\/\//, "")}</span>
-        <span className="flex gap-0.5">
-          <button type="button" className="chalk-copy" aria-label={showQR ? "Hide QR code" : "Show QR code"} aria-expanded={showQR} aria-controls={`${id}-qr`} onClick={() => setShowQR(!showQR)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
-              <rect x="3" y="3" width="7" height="7" rx="1.5" />
-              <rect x="14" y="3" width="7" height="7" rx="1.5" />
-              <rect x="3" y="14" width="7" height="7" rx="1.5" />
-              <path d="M14 14h3v3M21 14v.01M14 21h3M21 17v4h-1" />
-            </svg>
-          </button>
-          <ChalkCopyButton text={link} announcement="Copied" />
-        </span>
-      </div>
-      <div ref={qrRef} id={`${id}-qr`} hidden={!showQR}>
-        <div className="mt-3 flex items-center gap-3.5">
-          {qr ? <InviteQR value={link} /> : null}
-          <p className="text-(length:--type-body-sm) text-[var(--chalk-soft-text)]">{qr ? "Scan with a phone camera to join this call." : "This link is too long for a QR code. Copy the link to share it."}</p>
+      {qr ? (
+        <div className="grid place-items-center px-5 pb-4 pt-3">
+          <InviteQR value={link} />
         </div>
-      </div>
+      ) : (
+        <p className="px-3 pb-3 text-(length:--type-body-sm) text-[var(--chalk-muted-text)]">This link is too long for a QR code. Copy the link to share it.</p>
+      )}
+      <InviteLinkButton link={link} variant="card" />
     </>
   );
   if (phone)
@@ -93,7 +73,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
         }}
         title="Your call is ready"
       >
-        <section ref={cardRef} aria-labelledby={id}>
+        <section ref={cardRef} aria-labelledby={id} className="grid gap-1">
           {content}
         </section>
       </ChalkSheet>
@@ -106,7 +86,7 @@ export function CallReady({ open, onClose, link = typeof location === "undefined
       aria-hidden={!open}
       inert={!open}
       style={{ opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(8px)", transition: reducedMotion ? "none" : "opacity .2s cubic-bezier(.16,1,.3,1), transform .2s cubic-bezier(.16,1,.3,1)" }}
-      className="absolute bottom-[76px] left-5 z-40 w-80 rounded-xl border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] shadow-(--elevation-menu) pb-4 pl-4 pr-3 pt-3.5 text-[var(--chalk-text)]"
+      className="absolute bottom-[76px] left-5 z-40 grid w-[296px] gap-1 rounded-[var(--corner-3xl)] border border-[var(--chalk-line-strong)] bg-[var(--chalk-popover)] p-2 shadow-(--elevation-menu) text-[var(--chalk-text)]"
     >
       {content}
     </section>

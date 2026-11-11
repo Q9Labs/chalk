@@ -260,6 +260,7 @@ export const STATES_LANE: readonly CallState[] = [
   { id: "states-events", title: "Call event journeys", render: () => <StatesCall /> },
   { id: "states-ready", title: "Ready card", render: () => <StatesCall ready /> },
   { id: "states-ready-qr", title: "Ready card QR regression", render: () => <StatesCall ready shareUrl="https://chalk.example/join/example" /> },
+  { id: "states-ready-qr-light", title: "Ready card QR, Light", render: () => <StatesCall ready light shareUrl="https://chalk.example/join/example" /> },
   { id: "states-ready-light", title: "Ready card Light", render: () => <StatesCall ready light /> },
   {
     id: "states-joining",

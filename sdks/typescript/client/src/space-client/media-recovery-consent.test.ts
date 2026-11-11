@@ -19,7 +19,7 @@ it.each((["microphone", "camera"] as const).flatMap((source) => [false, true].ma
       ...first,
       dependencies: {
         ...first.dependencies,
-        mediaDevices: { getUserMedia: async () => mediaStream(track) },
+        mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track) },
         createSyncClient: () => ({ ...(creations++ === 0 ? first.sync : next.sync), setMicrophoneEnabled: command, setCameraEnabled: command }),
       },
     },
@@ -55,7 +55,7 @@ it.each(["microphone", "camera"] as const)("does not resurrect unconfirmed %s co
       ...platform,
       dependencies: {
         ...platform.dependencies,
-        mediaDevices: { getUserMedia: async () => mediaStream(track) },
+        mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track) },
         createSyncClient: () => ({ ...platform.sync, setMicrophoneEnabled: command, setCameraEnabled: command }),
       },
     },

@@ -48,7 +48,7 @@ export function useStageRefit(root: RefObject<HTMLElement | null>): void {
   }, [root]);
 }
 // Folded notices count as an open layer, because the header's notice button is the only way to reach them.
-const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-part="notice-button"],[data-chalk-drawer]';
+const ACTIVE_LAYERS = '[role="menu"],[role="dialog"],[data-part="toast"],[data-part="notice-button"],[data-part="access-waiting"],[data-chalk-drawer]';
 /** Chrome stays visible while a layer is open, on touch, and for keyboard focus. */
 export function useIdleChrome(root: RefObject<HTMLElement | null>, enabled: boolean): boolean {
   const [idle, setIdle] = useState(false);

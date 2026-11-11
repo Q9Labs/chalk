@@ -97,37 +97,30 @@ function toggles(participantId) {
   ];
 }
 
-async function shareSteps(origin, pages, participantId, sample, stages) {
-  const share = await pages[0].context().newPage();
-  try {
-    await share.goto(`${origin}/share`);
-    await pages[0].bringToFront();
-    const start = {
-      group: "screen_start",
-      command: "live_target:set_screen_share_enabled:true",
-      specs: [
-        { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
-        { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
-      ],
-    };
-    const started = await measure(pages[0], pages[1], "screen", true, start.specs);
-    Object.assign(sample, started.delays);
-    Object.assign(stages, await toggleTrace(pages, start, started));
-    await sleep(settleMs);
-    const stop = {
-      group: "screen_stop",
-      command: "live_target:set_screen_share_enabled:false",
-      specs: [
-        { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
-        { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
-      ],
-    };
-    const stopped = await measure(pages[0], pages[1], "screen", false, stop.specs);
-    Object.assign(sample, stopped.delays);
-    Object.assign(stages, await toggleTrace(pages, stop, stopped));
-  } finally {
-    await share.close();
-  }
+async function shareSteps(pages, participantId, sample, stages) {
+  const start = {
+    group: "screen_start",
+    command: "live_target:set_screen_share_enabled:true",
+    specs: [
+      { name: "action.screenshare.start_signal_ms", kind: "roster", participantId, field: "screenShare", value: "active" },
+      { name: "action.screenshare.start_ms", kind: "frame", participantId, source: "screen" },
+    ],
+  };
+  const started = await measure(pages[0], pages[1], "screen", true, start.specs);
+  Object.assign(sample, started.delays);
+  Object.assign(stages, await toggleTrace(pages, start, started));
+  await sleep(settleMs);
+  const stop = {
+    group: "screen_stop",
+    command: "live_target:set_screen_share_enabled:false",
+    specs: [
+      { name: "action.screenshare.stop_signal_ms", kind: "roster", participantId, field: "screenShare", value: "inactive" },
+      { name: "action.screenshare.stop_ms", kind: "gone", participantId, source: "screen" },
+    ],
+  };
+  const stopped = await measure(pages[0], pages[1], "screen", false, stop.specs);
+  Object.assign(sample, stopped.delays);
+  Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
 async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
@@ -181,7 +174,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
     Object.assign(stages, await toggleTrace(pages, step, result));
   }
   await sleep(settleMs);
-  await shareSteps(origin, pages, sender, sample, stages);
+  await shareSteps(pages, sender, sample, stages);
   // The call is steady for the settle pause after the actions: the listener's audio counters are read on both sides of it.
   const audioBefore = await observe("audio counters", () => pages[1].evaluate(() => window.proofTrace.audioStats()), null);
   await sleep(settleMs);

@@ -30,6 +30,14 @@ Signed webhook proofs use a temporary Webhook.site receiver. Voice generation us
 No new JavaScript dependencies are needed; Playwright and esbuild come from the
 client SDK workspace. Run from the repository root. Automated proofs use headless Chromium.
 
+A proof Space is shared with the run before it, and a Space holds one live
+Episode. Before it creates an Episode in a reused Space, every proof ends a live
+Episode whose `proof_run_id` names another run: the staging lease serialises
+proof runs, so a finished run's Episode is one its cleanup left. An Episode
+with no `proof_run_id` is never ended. When Create Episode still answers
+409 `episode.capacity_exceeded`, the proof retries every 3 seconds for 90
+seconds, then fails with reason `proof-space-busy`.
+
 The Capture pool is shared and small, so one stale Capture job can block every
 Recording. Every proof that records reads
 `GET /v1/tenants/{tenant_id}/recording-capture-pool` (the proof key's
@@ -270,7 +278,17 @@ clients declare both media providers, so the Episode binds the Space's choice.
 The older Recording, export and transcript proofs need Cloudflare, so use `camera-share`
 for the own SFU's call alone and `call-artifacts` for its Recording and Transcript.
 
+`pnpm prod:proof leave-own-sfu` (`CHALK_PROOF_MEDIA_PLANE=chalk_sfu`) is the own SFU's Leave proof: two guests join with the
+current client and one leaves. It fails unless the Sync acknowledgement arrives before the SDK's deadline and within
+5 s, the leaver's microphone and camera tracks end within 10 s, the other guest drops the leaver from its roster and
+its received media and keeps its own capture, and the Episode is not ended. It writes a Leave result in the
+shape the scorecard reads. `pnpm prod:proof own-sfu-spaces` finds or creates Promote's two proof Spaces by slug
+and moves them to `chalk_sfu` through the public API, which only a release before the per-Space setting accepts
+(an allowlisted Space); `CHALK_PROOF_SPACE_BY_SLUG=true` makes the proofs reuse them.
+
 ### Recording and Transcript of a three-guest call (`call-artifacts`)
+
+`CHALK_PROOF_TRANSCRIBE=false` records and checks the call without a Transcript: the proof sets the reused Space's `transcription_policy` to `on_demand` just while it creates the Episode (an Episode keeps the policies it was created with), puts `automatic` back at once, and skips the Transcript check. The nightly cut passes it once a cut of the same UTC day has passed its proof (the plan's `transcribe` output), because each Transcript costs provider credit.
 
 `pnpm prod:proof call-artifacts` creates a Space with `recording_policy=automatic` and
 `transcription_policy=automatic` on `CHALK_PROOF_MEDIA_PLANE` (default `cf_sfu`) and joins three
@@ -279,7 +297,7 @@ The call then plays a script (`call-script.mjs` holds its constants and the chec
 plays it) and the Recording must contain it:
 
 1. **Turns.** All three pages start their audio loop from one wall-clock instant, 3 s after every guest is live and the Capture is recording. Each page schedules its sounds on its own `AudioContext` clock anchored on that instant, logs its loop start (`Guest N loop starts at ... (+x ms from the shared start)`), and the proof fails when a page starts more than 150 ms away from it or its clock is late. Two 24-second cycles follow. In its 8-second slot a guest sounds a 0.5 s marker tone (1500, 2000 or 2500 Hz, one per guest), shows a full white picture for 0.4 s at the same instant, and speaks its phrase 1 s later.
-2. **Mute and screen share.** Guest 2 holds a 2000 Hz tone for 12 s and then mutes its microphone. Guest 1 shares a tab that plays a 3200 Hz tone (screen audio) and a green square for 24 s, then stops.
+2. **Mute and screen share.** Guest 2 holds a 2000 Hz tone for 12 s and then mutes its microphone. Guest 1 shares its screen for 24 s, then stops. The proof browsers use a fake capture device, so the shared screen is Chromium's fake display: dark green with a lighter green pie and a timer. The Recording does not carry shared-screen audio (the capture plan leaves it out for every media plane), so the script plays none and expects none.
 3. **Capture-node restart (optional).** When `CHALK_PROOF_CAPTURE_RESTART_COMMAND` is set, the proof runs that shell command once, waits 30 s, and plays one more round of markers for guests 1 and 3. The command is operator-supplied (the capture nodes belong to the recorder fleet controller, not to the proof's Tenant key) and its output is never printed. When unset, the console and the evidence say the restart was skipped.
 4. **Host stop.** Guest 3 holds a 2500 Hz tone and the host stops the Recording 10 s later; the tone keeps playing for 18 s more.
 
@@ -287,12 +305,11 @@ The `export` proof downloads the Recording MP4. The `call-artifacts` proof then 
 
 - `scripts/recorder/analyze-media.mjs` and `ffprobe` find a video stream with decoded frames, an audio stream, and a duration of at least 80% of the scripted call (first marker to host stop);
 - `ffmpeg volumedetect` hears sound (peak above -50 dB) and three sampled frames are not black;
-- each guest's camera colour is visible and moving in all three sampled frames of the composite;
 - each guest's own tile is live in a clear majority of the whole Recording. The proof decodes the composite at two frames per second and, for every sampled interval, takes the largest connected patch of the guest's camera colour, plus any piece of it that a label or border across the tile cut off, as that guest's tile (so another guest's animation in the same colour cannot widen it), checks that the tile fills at least 3% of the frame (so a black tile never counts) and that the picture inside moved since the previous sample (so a frozen tile never counts). A tile with no live interval fails, and so does one live in fewer than 60% of the intervals, so "3/3 guests on camera" proves each guest's video and not the total;
 - every guest's marker tone is found, anchored on guest 1's first marker, within 1.5 s of the time the script gives, with speech after it (per-guest audio completeness: tone and phrase for every cycle). Markers inside the restart window are excused;
 - the longest silence (`silencedetect` threshold -50 dB, at least 0.5 s) is no longer than the script's own longest gap between sounds plus 2.5 s, which is about 6.6 s for the default phrases. The 8 Nov proof had four silences of 10.9 to 15.7 s because each guest looped on its own clock, so its pauses were never aligned; one shared start and the derived bound catch that;
 - each marker's white flash and beep are less than 300 ms apart in the Recording (the A/V sync check; this bound is a first estimate and the first live run calibrates it);
-- guest 2's tone ends within 15 s of the mute, the screen's tone and green square within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` (the "bounded mute-enforcement window"); the console prints the measured values;
+- guest 2's tone ends within 15 s of the mute, the shared screen's green within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` (the "bounded mute-enforcement window"); the console prints the measured values;
 - when `CHALK_PROOF_RECORDER_TRACKS_COMMAND` is set, every guest's markers are also checked in that guest's own recorder track, and the console prints a `Verdict:` line for each. A marker absent from the guest's own track was lost at capture. A marker in its own track but absent from the mix was lost by the mixer. A mix silence longer than the bound that a track covers was lost by the mixer; one that no track covers and the script does not cover is a gap in the script itself. The public API serves only the mixed MP4 and keeps the encrypted bundles behind a key the proof never holds, so the operator supplies the command: it runs once with `CHALK_PROOF_TRACKS_DIR` (an empty private folder in the run's encrypted evidence), `CHALK_PROOF_RECORDING_ID` and `CHALK_PROOF_PARTICIPANT_IDS` (comma separated, in guest order), and writes each participant's decrypted audio to a WAV file named after the participant id. It may leave the bundle and manifest in the folder too; everything there is uploaded only inside the encrypted evidence. Without the command the proof prints that the per-track check was skipped and judges the mix alone;
 - the Recording source is `available` (the public API sets that only after Capture completion, so it stands for the sealed encrypted bundles and manifest; the API exposes no bundle objects), has an R2 storage key, did not stop early, and its export is `ready`;
 - the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.
@@ -323,7 +340,7 @@ It prints one line, `Long call: <guests> guests, <seconds>s, <n> access refreshe
 
 `pnpm prod:proof long-call --dry-run` prints the duration, thresholds and toggle schedule without configuration or network.
 
-Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `own-sfu` job, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
+Cost: about 11 minutes of one runner and one shared-node call of three guests; no paid API beyond the SFU. The nightly runs it on `chalk_sfu` in the `proof` job of `Cut nightly`, inside the staging lease, so it adds about 11 minutes to that job. To run it by hand against staging, hold the lease for the whole run (it renews itself): `scripts/staging-sfu/staging-lock --holder <you> --purpose long-call --run-id <id> --wait 600 -- pnpm prod:proof long-call`. On the Cloudflare plane, dispatch `.github/workflows/real-call-proof.yml` with `proofs: long-call` and `media_plane: cf_sfu`; it is not in the nightly.
 
 ### Offers stay flat under toggles, and nobody goes deaf (`toggle-offers`)
 

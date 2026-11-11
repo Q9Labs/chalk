@@ -2,6 +2,8 @@
 import { recordingRejoinProof } from "./recording-rejoin.mjs";
 import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
+import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
+import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
 import { offReasonProof } from "./off-reason.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
@@ -10,10 +12,14 @@ import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createRun, loadConfig, save, check, publicFailure, recordResult, errorEvidence } from "./runtime.mjs";
 import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.mjs";
-import { prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
+import { createProofKey, prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = {
   leave: { media: false, webhooks: false, proofs: ["leave"] },
+  // The current client's Leave on the own SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
+  "leave-own-sfu": { media: false, webhooks: false, proofs: ["leave-own-sfu"] },
+  // Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
+  "own-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["own-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
   all: {
     media: true,
@@ -75,7 +81,7 @@ const plans = {
   },
 };
 const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -119,10 +125,13 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     call = await captureCall(run, receiver);
   }
   if (plan.longCall) receiver = await prepareIntegration(run, false);
+  if (plan.ensureSpaces) await createProofKey(run);
   const actions = {
     "long-call": () => longCallProof(run, receiver),
     "toggle-offers": () => toggleOffersProof(run, receiver),
     leave: () => leaveProof(run),
+    "leave-own-sfu": () => leaveOwnSfuProof(run),
+    "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
     offreason: () => offReasonProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);
