@@ -15,14 +15,14 @@
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		54F978A64DA9F441EF09506F /* libPods-ChalkScreenShare.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E5E2632839486D4488B2187 /* libPods-ChalkScreenShare.a */; };
 		6378BDE637F28F8DF474F61A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */; };
+		8F1ED402EB24405EA675322C /* Figtree-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76533C78F08040EFBD24185C /* Figtree-Medium.ttf */; };
+		98322BD98A914EB7A2DBF346 /* Figtree-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */; };
 		99CA4E3AB044AE01EF4F2987 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */; };
+		BA2AD7240F9D4582AD7F92CE /* Figtree-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 610AE609B48347409357EBCE /* Figtree-Regular.ttf */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		C06F3BFA93E64265A698B31F /* ChalkRuntimeInfo.m in Sources */ = {isa = PBXBuildFile; fileRef = 3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */; };
-		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		BA2AD7240F9D4582AD7F92CE /* Figtree-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 610AE609B48347409357EBCE /* Figtree-Regular.ttf */; };
-		8F1ED402EB24405EA675322C /* Figtree-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 76533C78F08040EFBD24185C /* Figtree-Medium.ttf */; };
 		C500990A133C43A9A390418E /* Figtree-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */; };
-		98322BD98A914EB7A2DBF346 /* Figtree-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */; };
+		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -59,23 +59,23 @@
 		3283D8E245714031B1AE3F35 /* ChalkRuntimeInfo.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = Chalk/ChalkRuntimeInfo.m; sourceTree = "<group>"; };
 		3FD4C2F7B7F8C647198F1508 /* Pods-ChalkScreenShare.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChalkScreenShare.debug.xcconfig"; path = "Target Support Files/Pods-ChalkScreenShare/Pods-ChalkScreenShare.debug.xcconfig"; sourceTree = "<group>"; };
 		530BDEA809FC013FF5C7E4DF /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = Chalk/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		610AE609B48347409357EBCE /* Figtree-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Regular.ttf"; path = "../assets/fonts/Figtree-Regular.ttf"; sourceTree = "<group>"; };
 		6778B8516BBA733018016AFC /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = Info.plist; path = ChalkScreenShare/Info.plist; sourceTree = "<group>"; };
 		6CB5E7BA33E7A1A74E4AB9AA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-SemiBold.ttf"; path = "../assets/fonts/Figtree-SemiBold.ttf"; sourceTree = "<group>"; };
 		6F2A335583B0883B92A90539 /* libPods-Chalk.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Chalk.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		76533C78F08040EFBD24185C /* Figtree-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Medium.ttf"; path = "../assets/fonts/Figtree-Medium.ttf"; sourceTree = "<group>"; };
 		86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Chalk/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		9E5E2632839486D4488B2187 /* libPods-ChalkScreenShare.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-ChalkScreenShare.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A0608382B6C2163B98B7F57C /* SampleHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SampleHandler.swift; path = ChalkScreenShare/SampleHandler.swift; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Chalk/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
+		C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = "Figtree-Bold.ttf"; path = "../assets/fonts/Figtree-Bold.ttf"; sourceTree = "<group>"; };
 		D5DA032C7E0F3707825267CB /* Pods-Chalk.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Chalk.debug.xcconfig"; path = "Target Support Files/Pods-Chalk/Pods-Chalk.debug.xcconfig"; sourceTree = "<group>"; };
 		D6380DA08C282E9D0CE39038 /* ChalkScreenShare.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = ChalkScreenShare.entitlements; path = ChalkScreenShare/ChalkScreenShare.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Chalk/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Chalk-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Chalk-Bridging-Header.h"; path = "Chalk/Chalk-Bridging-Header.h"; sourceTree = "<group>"; };
-		610AE609B48347409357EBCE /* Figtree-Regular.ttf */ = {isa = PBXFileReference; name = "Figtree-Regular.ttf"; path = "../assets/fonts/Figtree-Regular.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		76533C78F08040EFBD24185C /* Figtree-Medium.ttf */ = {isa = PBXFileReference; name = "Figtree-Medium.ttf"; path = "../assets/fonts/Figtree-Medium.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */ = {isa = PBXFileReference; name = "Figtree-SemiBold.ttf"; path = "../assets/fonts/Figtree-SemiBold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
-		C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */ = {isa = PBXFileReference; name = "Figtree-Bold.ttf"; path = "../assets/fonts/Figtree-Bold.ttf"; sourceTree = "<group>"; fileEncoding = undefined; lastKnownFileType = unknown; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +131,18 @@
 				86F84095BB309D131FEB7234 /* ExpoModulesProvider.swift */,
 			);
 			name = Chalk;
+			sourceTree = "<group>";
+		};
+		795C0B65E3A540589CE0D13C /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				610AE609B48347409357EBCE /* Figtree-Regular.ttf */,
+				76533C78F08040EFBD24185C /* Figtree-Medium.ttf */,
+				6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */,
+				C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */,
+			);
+			name = Resources;
+			path = "";
 			sourceTree = "<group>";
 		};
 		7D392F3AE84E1B79B9C1CED1 /* ExpoModulesProviders */ = {
@@ -211,18 +223,6 @@
 			name = Supporting;
 			path = Chalk/Supporting;
 			sourceTree = "<group>";
-		};
-		795C0B65E3A540589CE0D13C /* Resources */ = {
-			isa = "PBXGroup";
-			children = (
-				610AE609B48347409357EBCE /* Figtree-Regular.ttf */,
-				76533C78F08040EFBD24185C /* Figtree-Medium.ttf */,
-				6EC981C6EDE04CF69AA559C5 /* Figtree-SemiBold.ttf */,
-				C14CED88E6384599807DE4CD /* Figtree-Bold.ttf */,
-			);
-			name = Resources;
-			sourceTree = "<group>";
-			path = "";
 		};
 /* End PBXGroup section */
 
@@ -678,7 +678,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_supports-color@10.2.2__@types+react@19.2.18_react@19.2.7_supports-color@10.2.2/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
@@ -735,7 +735,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_@types+react@19.2.14_react@19.2.7/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.2_@babel+core@7.29.7_supports-color@10.2.2__@types+react@19.2.18_react@19.2.7_supports-color@10.2.2/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				USE_HERMES = true;
