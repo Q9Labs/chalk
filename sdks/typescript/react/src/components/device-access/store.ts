@@ -11,6 +11,8 @@ export interface DeviceIssue {
 
 export interface DeviceAccessSnapshot {
   readonly issues: Readonly<Partial<Record<DeviceKind, DeviceIssue>>>;
+  /** The card code did not download, so a refused device needs its old toast or notice. */
+  readonly unavailable: boolean;
 }
 
 /** What one device is waiting on: the newest report, the command to run again, and the listener that fixes it. */
@@ -29,7 +31,7 @@ export class DeviceAccessStore {
   readonly #ports: DevicePorts | undefined;
   readonly #listeners = new Set<() => void>();
   readonly #pending = new Map<DeviceKind, Pending>();
-  #snapshot: DeviceAccessSnapshot = { issues: {} };
+  #snapshot: DeviceAccessSnapshot = { issues: {}, unavailable: false };
 
   constructor(ports?: DevicePorts) {
     this.#ports = ports;
@@ -43,32 +45,29 @@ export class DeviceAccessStore {
       for (const pending of this.#pending.values()) {
         pending.attempt++;
         pending.stop?.();
-        pending.stop = undefined;
       }
     };
   };
 
   readonly getSnapshot = (): DeviceAccessSnapshot => this.#snapshot;
 
-  /**
-   * Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed.
-   * Rejects when the card code cannot load or no control bar is subscribed, so the caller can show the failure another way. Any other failure clears the old card.
-   */
+  /** Shows the card for a failed command and starts watching for the fix. `retry` is the exact command that failed. A failure that is not an access problem clears the old card. */
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
     if (!isDeviceAccessFailure(failure, device)) return this.clear(device);
     const pending = this.#entry(device);
     const attempt = ++pending.attempt;
-    // The card code loads with the resolver, so a failed download rejects here and the caller can show the toast instead.
-    const [{ resolveAccess }] = await Promise.all([import("./resolve"), loadDeviceAccessCard()]);
-    const resolved = await resolveAccess(this.#ports, device, failure);
-    if (pending.attempt !== attempt) return;
-    if (this.#listeners.size === 0) throw new Error("no subscriber");
+    // The card chunk carries the resolver, so a failed download is known before any card opens.
+    const resolved = await loadDeviceAccessCard()
+      .then(({ resolveAccess }) => resolveAccess(this.#ports, device, failure))
+      .catch(() => undefined);
+    if (pending.attempt !== attempt || this.#listeners.size === 0) return;
+    if (resolved === undefined) return this.#set({ unavailable: true });
     if (!resolved) return this.clear(device);
     const { reason, label, watch } = resolved;
     pending.stop?.();
     pending.retry = retry;
     pending.stop = watch(() => void this.retry(device));
-    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, label, open: true } } });
+    this.#set({ issues: { ...this.#snapshot.issues, [device]: { reason, label, open: true } }, unavailable: false });
   }
 
   /** The command worked, or something else turned the device on. */

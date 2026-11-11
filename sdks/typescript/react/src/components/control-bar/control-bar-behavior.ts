@@ -239,6 +239,8 @@ interface ConnectedControlBarBehavior {
   readonly mediaNotice?: string;
   /** The device being requested right now. The browser may be showing its own permission prompt for it. */
   readonly requestingDevice: "microphone" | "camera" | undefined;
+  /** The access card could not load, so a refused device shows its failure the old way. */
+  readonly cardUnavailable: boolean;
   readonly commandSource?: MediaCommandSource;
   readonly commandAction?: MediaCommandAction;
 }
@@ -424,7 +426,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   };
 
   const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. */

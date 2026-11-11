@@ -6,12 +6,8 @@ const DeviceAccessContext = createContext<DeviceAccessStore | null>(null);
 /** SpaceView shares one store with its dock, so keyboard shortcuts and dock buttons report to the same card. */
 export const DeviceAccessProvider = DeviceAccessContext.Provider;
 
-export function useDeviceAccessStore(): DeviceAccessStore {
-  const [own] = useState(() => new DeviceAccessStore());
-  return useContext(DeviceAccessContext) ?? own;
-}
-
 export function useDeviceAccess(): { readonly store: DeviceAccessStore; readonly snapshot: DeviceAccessSnapshot } {
-  const store = useDeviceAccessStore();
+  const [own] = useState(() => new DeviceAccessStore());
+  const store = useContext(DeviceAccessContext) ?? own;
   return { store, snapshot: useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot) };
 }

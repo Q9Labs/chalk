@@ -1,6 +1,7 @@
 import { commandFailureMessage } from "./command-failure";
+import { LazyDeviceAccessWaiting } from "../device-access/LazyDeviceAccessCard";
 import { isDeviceAccessFailure } from "../device-access/model";
-import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon } from "../../utils/icons";
@@ -14,7 +15,6 @@ import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type Cont
 import { ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
-const DeviceAccessWaiting = lazy(() => import("../device-access/DeviceAccessWaiting").then((module) => ({ default: module.DeviceAccessWaiting })));
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
 export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX.Element {
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
@@ -188,17 +188,13 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
-  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice } = useConnectedControlBarBehavior(props);
-  const failure = !props.onCommandError && commandError && !isDeviceAccessFailure(commandError, commandSource) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
+  const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice, cardUnavailable } = useConnectedControlBarBehavior(props);
+  const failure = !props.onCommandError && commandError && (cardUnavailable || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
       <CommandErrorAlert message={mediaNotice ?? failure} />
-      {requestingDevice ? (
-        <Suspense fallback={null}>
-          <DeviceAccessWaiting device={requestingDevice} />
-        </Suspense>
-      ) : null}
+      {requestingDevice ? <LazyDeviceAccessWaiting device={requestingDevice} /> : null}
     </>
   );
 }

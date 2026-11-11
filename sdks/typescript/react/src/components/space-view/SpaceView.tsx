@@ -1,7 +1,7 @@
 "use client";
 import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
-import { DeviceAccessProvider, useDeviceAccessStore } from "../device-access/useDeviceAccess";
+import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
 import { type ChalkWhiteboardView, type ClientFailure, type Reaction } from "@q9labsai/chalk-client";
 import { DEFAULT_QUICK_REACTIONS } from "@q9labsai/chalk-ui/reactions";
@@ -229,8 +229,7 @@ export function SpaceView({
   const playSound = useSoundCues(feature("sounds") && soundsEnabled);
   const prefersReducedMotion = usePrefersReducedMotion();
   const drawer = useDrawerPresence(activePanel, prefersReducedMotion ? 0 : DRAWER_EXIT_MS);
-  const deviceAccess = useDeviceAccessStore();
-  const [cardFailed, setCardFailed] = useState(false);
+  const { store: deviceAccess, snapshot: deviceAccessSnapshot } = useDeviceAccess();
   const runCommand = useCallback(
     async (command: () => Promise<unknown>, source?: MediaCommandSource, action?: MediaCommandAction) => {
       try {
@@ -242,8 +241,7 @@ export function SpaceView({
         setRetryCommand(undefined);
       } catch (cause) {
         const failure = commandFailure(cause);
-        setCardFailed(false);
-        if (source && source !== "speaker") deviceAccess.report(source, failure, () => runCommand(command, source, action)).catch(() => setCardFailed(true));
+        if (source && source !== "speaker") void deviceAccess.report(source, failure, () => runCommand(command, source, action));
         setCommandError(failure);
         setCommandSource(source);
         setCommandAction(action);
@@ -269,7 +267,9 @@ export function SpaceView({
   const failureAction = externalCommandError != null ? externalCommandAction : commandAction;
   // A refused microphone, camera or screen share that the dock ran is shown by the access card on its button, not as a toast. A failure a caller passes in has no card.
   const mappedFailure =
-    externalCommandError == null && !cardFailed && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource) ? null : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
+    externalCommandError == null && !deviceAccessSnapshot.unavailable && shownFailure && isDeviceAccessFailure(shownFailure, displayedCommandSource)
+      ? null
+      : mediaFailureToast(shownFailure, displayedCommandSource, failureAction, externalCommandError == null && retryCommand ? () => void retryMedia() : undefined);
   const commandToasts: Toast[] = mappedFailure ? [{ id: "space-command-error", ...mappedFailure }] : typeof displayedCommandError === "string" ? [{ id: "space-command-error", message: displayedCommandError, type: "error" }] : [];
   const [boardToasts, setBoardToasts] = useState<readonly Toast[]>([]);
   const boardToastCount = useRef(0);

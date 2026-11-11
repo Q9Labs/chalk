@@ -4,8 +4,9 @@ import { isDeviceAccessFailure } from "./model";
 import type { DevicePorts, Listenable } from "./ports";
 import { DeviceAccessStore } from "./store";
 
-// The store downloads the card with its resolver; the card pulls in the whole UI kit, which these tests do not need.
-vi.mock("./load-card", () => ({ loadDeviceAccessCard: async () => ({}) }));
+// The store gets its resolver through the card chunk, which pulls in the whole UI kit; the tests load the resolver alone.
+const loadCard = vi.hoisted(() => vi.fn(() => import("./resolve")));
+vi.mock("./load-card", () => ({ loadDeviceAccessCard: loadCard }));
 
 class FakeTarget implements Listenable {
   readonly #listeners = new Map<string, Set<() => void>>();
@@ -145,14 +146,25 @@ describe("DeviceAccessStore", () => {
     expect(store.getSnapshot().issues.microphone).toBeUndefined();
   });
 
-  it("rejects a report that starts after the last subscriber left", async () => {
+  it("installs nothing for a report that starts after the last subscriber left", async () => {
     const { store, stop, window } = setup({ permission: "granted" });
     const retry = vi.fn(async () => {});
     stop();
-    await expect(store.report("camera", failure("media.permission_denied", "system"), retry)).rejects.toThrow();
+    await store.report("camera", failure("media.permission_denied", "system"), retry);
+    expect(store.getSnapshot().issues.camera).toBeUndefined();
     window.emit("focus");
     await settle();
     expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("marks the card unavailable when its code does not download, and recovers on the next report", async () => {
+    const { store } = setup();
+    loadCard.mockRejectedValueOnce(new Error("chunk"));
+    await store.report("microphone", failure("media.permission_denied"), async () => {});
+    expect(store.getSnapshot()).toMatchObject({ issues: {}, unavailable: true });
+    await store.report("microphone", failure("media.permission_denied"), async () => {});
+    expect(store.getSnapshot()).toMatchObject({ unavailable: false });
+    expect(store.getSnapshot().issues.microphone).toBeDefined();
   });
 
   it("works in a browser that cannot be asked about permissions", async () => {

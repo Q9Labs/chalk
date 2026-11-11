@@ -1,5 +1,6 @@
 import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
 import { useRef } from "react";
+import { useNarrowCall } from "../../internal/call-width";
 import { useMediaQuery } from "../../internal/useMediaQuery";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { BROWSER_MARKS } from "./browser-marks";
@@ -8,6 +9,8 @@ import { cardCopy, DEVICE_NAMES, systemSettingsLink } from "./card-copy";
 import { type BrowserName, type DeviceAccessReason, type DeviceKind } from "./model";
 
 /** What a dock button needs to show its problem and open the card. */
+export { resolveAccess } from "./resolve";
+
 export interface DeviceAccessControl {
   readonly reason: DeviceAccessReason;
   /** The dock button's tooltip and label. */
@@ -231,7 +234,8 @@ export function DeviceAccessCard(props: { readonly device: DeviceKind; readonly 
 
 /** One card for every way a microphone, camera or screen share can be refused. Popover above the dock button, bottom sheet on phones. */
 function DeviceAccessSurface({ device, anchor, control }: { readonly device: DeviceKind; readonly anchor: HTMLElement | null; readonly control: DeviceAccessControl }) {
-  const phone = useMediaQuery("(max-width: 640px)");
+  const narrowWindow = useMediaQuery("(max-width: 640px)");
+  const phone = useNarrowCall() || narrowWindow;
   const popup = useRef<HTMLDivElement>(null);
   const label = cardCopy(device, control.reason).title;
   // "Choose another" closes the card and opens the device menu beside the button. The phone dock has no microphone menu.
