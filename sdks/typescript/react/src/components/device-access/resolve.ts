@@ -1,7 +1,25 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
-import { isDeviceAccessFailure, type AccessEnvironment, type BrowserName, type DeviceAccessReason, type DeviceKind, type PermissionAnswer, type Platform } from "./model";
+import type { AccessEnvironment, BrowserName, DeviceAccessReason, DeviceKind, PermissionAnswer, Platform } from "./model";
 import { accessTooltip } from "./card-copy";
 import type { DevicePorts } from "./ports";
+
+/** Reads the browser on use, so building it during server rendering is safe. */
+export function browserPorts(): DevicePorts {
+  return {
+    get permissions() {
+      return navigator.permissions;
+    },
+    get mediaDevices() {
+      return navigator.mediaDevices;
+    },
+    get window() {
+      return window;
+    },
+    get userAgent() {
+      return navigator.userAgent;
+    },
+  };
+}
 
 function answerOf(state: string): PermissionAnswer {
   return state === "prompt" || state === "granted" || state === "denied" ? state : "unknown";
@@ -42,8 +60,8 @@ export async function readPermission(ports: DevicePorts, device: "microphone" | 
  * A refusal while the browser says "granted" can only come from the operating system, and so can Chrome's "Permission denied by system".
  * A screen refusal without that signal is the person cancelling the browser picker.
  */
+/** Only for failures `isDeviceAccessFailure` accepts; the store checks that before it loads this file. */
 export function deviceAccessReason(failure: ClientFailure, device: DeviceKind, environment: AccessEnvironment): DeviceAccessReason | null {
-  if (!isDeviceAccessFailure(failure, device)) return null;
   if (failure.code === "media.device_busy") return { kind: "busy" };
   if (failure.code === "media.device_not_found") return { kind: "missing" };
   const system = failure.permissionBlock === "system" || (device !== "screen" && environment.permission === "granted");
@@ -111,7 +129,8 @@ export interface ResolvedAccess {
 }
 
 /** Everything the store needs to know about a failure, loaded on the first refusal so the call does not carry it. */
-export async function resolveAccess(ports: DevicePorts, device: DeviceKind, failure: ClientFailure): Promise<ResolvedAccess | null> {
+export async function resolveAccess(given: DevicePorts | undefined, device: DeviceKind, failure: ClientFailure): Promise<ResolvedAccess | null> {
+  const ports = given ?? browserPorts();
   const permission = device === "screen" ? "unknown" : await readPermission(ports, device);
   const reason = deviceAccessReason(failure, device, { browser: detectBrowser(ports.userAgent), platform: detectPlatform(ports.userAgent), permission });
   return reason && { reason, label: accessTooltip(device, reason), watch: (recovered) => watchRecovery(ports, device, reason, recovered) };

@@ -1,5 +1,6 @@
 import type { ClientFailure } from "@q9labsai/chalk-client";
 import { isDeviceAccessFailure, type DeviceAccessReason, type DeviceKind } from "./model";
+import { loadDeviceAccessCard } from "./load-card";
 import type { DevicePorts } from "./ports";
 
 export interface DeviceIssue {
@@ -25,12 +26,12 @@ interface Pending {
  * Browser permission changes are only watched while something is subscribed.
  */
 export class DeviceAccessStore {
-  readonly #ports: DevicePorts;
+  readonly #ports: DevicePorts | undefined;
   readonly #listeners = new Set<() => void>();
   readonly #pending = new Map<DeviceKind, Pending>();
   #snapshot: DeviceAccessSnapshot = { issues: {} };
 
-  constructor(ports: DevicePorts) {
+  constructor(ports?: DevicePorts) {
     this.#ports = ports;
   }
 
@@ -54,21 +55,15 @@ export class DeviceAccessStore {
    * Rejects when the card code cannot load or no control bar is subscribed, so the caller can show the failure another way. Any other failure clears the old card.
    */
   async report(device: DeviceKind, failure: ClientFailure, retry: () => Promise<unknown>): Promise<void> {
-    if (!isDeviceAccessFailure(failure, device)) {
-      this.clear(device);
-      return;
-    }
+    if (!isDeviceAccessFailure(failure, device)) return this.clear(device);
     const pending = this.#entry(device);
     const attempt = ++pending.attempt;
     // The card code loads with the resolver, so a failed download rejects here and the caller can show the toast instead.
-    const [{ resolveAccess }] = await Promise.all([import("./resolve"), import("./DeviceAccessCard")]);
+    const [{ resolveAccess }] = await Promise.all([import("./resolve"), loadDeviceAccessCard()]);
     const resolved = await resolveAccess(this.#ports, device, failure);
     if (pending.attempt !== attempt) return;
     if (this.#listeners.size === 0) throw new Error("no subscriber");
-    if (!resolved) {
-      this.clear(device);
-      return;
-    }
+    if (!resolved) return this.clear(device);
     const { reason, label, watch } = resolved;
     pending.stop?.();
     pending.retry = retry;

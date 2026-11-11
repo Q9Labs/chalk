@@ -10,21 +10,3 @@ export interface DevicePorts {
   readonly window: Listenable;
   readonly userAgent: string;
 }
-
-/** Reads the browser on use, so building it during server rendering is safe. */
-export function browserPorts(): DevicePorts {
-  return {
-    get permissions() {
-      return navigator.permissions;
-    },
-    get mediaDevices() {
-      return navigator.mediaDevices;
-    },
-    get window() {
-      return window;
-    },
-    get userAgent() {
-      return navigator.userAgent;
-    },
-  };
-}

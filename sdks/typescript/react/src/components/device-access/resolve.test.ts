@@ -41,11 +41,6 @@ describe("deviceAccessReason", () => {
     expect(deviceAccessReason(failure("media.permission_denied", "system"), "screen", env("unknown", "mac"))).toMatchObject({ kind: "blocked-system", platform: "mac" });
     expect(deviceAccessReason(failure("media.permission_denied", "system"), "screen", env("unknown", "windows"))).toBeNull();
   });
-
-  it("ignores failures that are not about device access", () => {
-    expect(deviceAccessReason(failure("client.internal_error"), "microphone", env("denied"))).toBeNull();
-    expect(deviceAccessReason(failure("media.device_busy"), "screen", env("denied"))).toBeNull();
-  });
 });
 
 describe("browser and platform detection", () => {

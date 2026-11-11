@@ -21,6 +21,5 @@ export type DeviceAccessReason = { readonly kind: "blocked-browser"; readonly br
  */
 export function isDeviceAccessFailure(failure: ClientFailure, device: string | undefined): device is DeviceKind {
   if (device === "screen") return failure.code === "media.permission_denied";
-  if (device !== "microphone" && device !== "camera") return false;
-  return failure.code === "media.permission_denied" || failure.code === "media.device_busy" || failure.code === "media.device_not_found";
+  return (device === "microphone" || device === "camera") && (failure.code === "media.permission_denied" || failure.code === "media.device_busy" || failure.code === "media.device_not_found");
 }

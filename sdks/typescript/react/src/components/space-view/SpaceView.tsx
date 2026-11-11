@@ -236,7 +236,6 @@ export function SpaceView({
       try {
         await command();
         if (source && source !== "speaker") deviceAccess.clear(source);
-        setCardFailed(false);
         setCommandError(null);
         setCommandSource(undefined);
         setCommandAction(undefined);

@@ -5,7 +5,7 @@ import type { DevicePorts, Listenable } from "./ports";
 import { DeviceAccessStore } from "./store";
 
 // The store downloads the card with its resolver; the card pulls in the whole UI kit, which these tests do not need.
-vi.mock("./DeviceAccessCard", () => ({}));
+vi.mock("./load-card", () => ({ loadDeviceAccessCard: async () => ({}) }));
 
 class FakeTarget implements Listenable {
   readonly #listeners = new Map<string, Set<() => void>>();

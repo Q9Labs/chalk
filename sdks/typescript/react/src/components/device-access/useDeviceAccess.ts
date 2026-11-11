@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useSyncExternalStore } from "react";
-import { browserPorts } from "./ports";
 import { DeviceAccessStore, type DeviceAccessSnapshot } from "./store";
 
 const DeviceAccessContext = createContext<DeviceAccessStore | null>(null);
@@ -8,7 +7,7 @@ const DeviceAccessContext = createContext<DeviceAccessStore | null>(null);
 export const DeviceAccessProvider = DeviceAccessContext.Provider;
 
 export function useDeviceAccessStore(): DeviceAccessStore {
-  const [own] = useState(() => new DeviceAccessStore(browserPorts()));
+  const [own] = useState(() => new DeviceAccessStore());
   return useContext(DeviceAccessContext) ?? own;
 }
 

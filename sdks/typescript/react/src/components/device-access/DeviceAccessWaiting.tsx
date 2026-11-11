@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { DeviceAccessStyles } from "./DeviceAccessStyles";
-import { browserPorts } from "./ports";
-import { watchPermission } from "./resolve";
+import { browserPorts, watchPermission } from "./resolve";
 
 /** A device is being requested. When the browser has not decided yet, its own prompt is open: the page dims and one pill points at the prompt. */
 export function DeviceAccessWaiting({ device }: { readonly device: "microphone" | "camera" }) {
