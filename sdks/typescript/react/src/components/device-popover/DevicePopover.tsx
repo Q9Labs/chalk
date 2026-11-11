@@ -1,18 +1,21 @@
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import { getCameraBackgroundFallback, subscribeCameraBackground } from "@q9labsai/chalk-client";
 import { ChalkMenuPrimitive as Menu } from "../chalk-ui";
-import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useState, useSyncExternalStore } from "react";
 import { ChalkMenu, ChalkMenuItem, ChalkMenuLabel, ChalkTooltip } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import { cn } from "../../utils/cn";
 import type { HapticInput } from "../../internal/useHaptics";
-import { useInputLevel } from "../../internal/useInputLevel";
+import { usePhoneCall } from "../../internal/call-width";
+import { useLongPress } from "../../internal/useLongPress";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
 import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import type { DeviceAccessControl } from "../device-access/DeviceAccessCard";
 import { LazyDeviceAccessCard } from "../device-access/LazyDeviceAccessCard";
+import { CameraPreview, InputLevel } from "./DevicePreview";
 
+const DeviceSheet = lazy(() => import("./DeviceSheet"));
 const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 const backgroundMenu = { Label: ChalkMenuLabel, Item: ChalkMenuItem };
 
@@ -44,80 +47,11 @@ export interface DevicePopoverProps {
   haptic?: HapticInput | false;
   size?: "sm" | "md" | "lg";
   appearance?: "default" | "floating";
+  /** The phone picker sheet. Press and hold on the button opens it; the dock's More sheet opens it too. */
+  sheetOpen?: boolean;
+  onSheetOpenChange?: (open: boolean) => void;
   /** Set while the browser or the system refuses this device. Pressing the button opens the card instead of toggling. */
   access?: DeviceAccessControl;
-}
-
-function InputLevel({ track }: { readonly track?: MediaStreamTrack | null }) {
-  const level = useInputLevel(track);
-  return (
-    <span className="chalk-shell-level" role="meter" aria-label="Input level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}>
-      <i style={{ transform: `scaleX(${level / 100})` }} />
-    </span>
-  );
-}
-
-function CameraPreview({
-  track,
-  mirrored,
-  open,
-  selectedDeviceId,
-  captureCameraPreview,
-  onDeviceId,
-}: {
-  readonly onDeviceId: (deviceId: string | null) => void;
-  readonly track?: MediaStreamTrack | null;
-  readonly mirrored: boolean;
-  readonly open: boolean;
-  readonly selectedDeviceId?: string;
-  readonly captureCameraPreview?: () => Promise<CameraPreviewHandle>;
-}) {
-  const video = useRef<HTMLVideoElement>(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const trackEnabled = track?.enabled;
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Acquire a camera preview for the mounted open popover; release late captures and the owned preview on cleanup.
-  useEffect(() => {
-    const element = video.current;
-    if (!element || !open) return;
-    let cancelled = false;
-    let preview: CameraPreviewHandle | undefined;
-    setUnavailable(false);
-    onDeviceId(null);
-    if (captureCameraPreview) {
-      void captureCameraPreview().then(
-        (captured) => {
-          if (cancelled) {
-            captured.release();
-            return;
-          }
-          preview = captured;
-          onDeviceId(captured.track.getSettings().deviceId ?? selectedDeviceId ?? "default");
-          element.srcObject = new MediaStream([captured.track]);
-        },
-        () => {
-          if (!cancelled) setUnavailable(true);
-        },
-      );
-    } else if (track?.enabled && track.readyState === "live") {
-      onDeviceId(track.getSettings().deviceId ?? selectedDeviceId ?? "default");
-      element.srcObject = new MediaStream([track]);
-    } else {
-      setUnavailable(true);
-    }
-    return () => {
-      cancelled = true;
-      element.srcObject = null;
-      preview?.release();
-    };
-  }, [track, trackEnabled, open, selectedDeviceId, captureCameraPreview, onDeviceId]);
-  return (
-    <>
-      <div className="chalk-shell-preview">
-        <video ref={video} autoPlay muted playsInline style={{ transform: mirrored ? "scaleX(-1)" : undefined }} />
-        <small>{unavailable ? "Camera preview unavailable. Check camera access." : "Only you see this preview"}</small>
-      </div>
-    </>
-  );
 }
 
 function DeviceSwitch({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
@@ -159,8 +93,18 @@ export function DevicePopover({
   busy,
   onCancelPending,
   access,
+  sheetOpen: controlledSheetOpen,
+  onSheetOpenChange: controlledSheetChange,
 }: DevicePopoverProps) {
   const [open, setOpen] = useState(false);
+  // The dock owns the sheet so its More rows can open it; a popover used on its own keeps the state itself.
+  const [ownSheetOpen, setOwnSheetOpen] = useState(false);
+  const sheetOpen = controlledSheetChange ? Boolean(controlledSheetOpen) : ownSheetOpen;
+  const onSheetOpenChange = controlledSheetChange ?? setOwnSheetOpen;
+  const [sheetLoaded, setSheetLoaded] = useState(false);
+  if (sheetOpen && !sheetLoaded) setSheetLoaded(true);
+  const phone = usePhoneCall();
+  const hold = useLongPress(phone ? () => onSheetOpenChange(true) : undefined);
   const [split, setSplit] = useState<HTMLDivElement | null>(null);
   const [previewDeviceId, setPreviewDeviceId] = useState<string | null>(null);
   const deviceId = previewDeviceId ?? selectedDeviceId ?? track?.getSettings().deviceId ?? "default";
@@ -189,6 +133,7 @@ export function DevicePopover({
             aria-expanded={pressOpensCard ? access.open : undefined}
             disabled={disabled || (toggleDisabled && !(busy && onCancelPending)) || (busy && !onCancelPending)}
             onClick={pressOpensCard ? () => access.onOpenChange(!access.open) : busy && onCancelPending ? onCancelPending : onToggle}
+            {...hold}
           >
             <MediaGlyph kind={mic ? "mic" : "cam"} slashed={!isActive && !busy} busy={Boolean(busy)} />
           </button>
@@ -247,6 +192,28 @@ export function DevicePopover({
           </>
         )}
       </ChalkMenu>
+      {sheetLoaded ? (
+        <Suspense fallback={null}>
+          <DeviceSheet
+            type={type}
+            open={sheetOpen}
+            onOpenChange={onSheetOpenChange}
+            devices={devices}
+            selectedDeviceId={selectedDeviceId}
+            onDeviceChange={onDeviceChange}
+            secondaryDevices={secondaryDevices}
+            selectedSecondaryDeviceId={selectedSecondaryDeviceId}
+            onSecondaryDeviceChange={onSecondaryDeviceChange}
+            track={track}
+            captureCameraPreview={captureCameraPreview}
+            noiseSuppression={noiseSuppression}
+            onNoiseSuppressionChange={onNoiseSuppressionChange}
+            mirrored={mirrored}
+            onMirrorChange={onMirrorChange}
+            onTestSpeaker={onTestSpeaker}
+          />
+        </Suspense>
+      ) : null}
       {access ? <LazyDeviceAccessCard device={mic ? "microphone" : "camera"} anchor={split} control={access} /> : null}
       {warning && !access ? (
         <span className="chalk-shell-warning" role="status" aria-label={`${mic ? "Microphone" : "Camera"} didn’t reach the call. Try turning it on again.`}>

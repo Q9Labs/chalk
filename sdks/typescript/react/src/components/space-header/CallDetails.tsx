@@ -27,7 +27,10 @@ export function CallDetails({
   onDialog,
   onReportProblem,
   revealConnection = false,
+  hideShortcuts = false,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+  /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
+  readonly hideShortcuts?: boolean;
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
@@ -142,15 +145,17 @@ export function CallDetails({
           <span />
         </span>
       </button>
-      <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-        <span className="chalk-shell-detail-lead">
-          <RowIcon name="keyboard" />
-        </span>
-        <span className="chalk-shell-detail-label">Keyboard shortcuts</span>
-        <span className="chalk-shell-detail-trail">
-          <ShellIcon name="right" size={16} />
-        </span>
-      </button>
+      {hideShortcuts ? null : (
+        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
+          <span className="chalk-shell-detail-lead">
+            <RowIcon name="keyboard" />
+          </span>
+          <span className="chalk-shell-detail-label">Keyboard shortcuts</span>
+          <span className="chalk-shell-detail-trail">
+            <ShellIcon name="right" size={16} />
+          </span>
+        </button>
+      )}
       {onReportProblem ? (
         <>
           <div className="chalk-shell-sep" />

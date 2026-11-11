@@ -4,15 +4,15 @@ import { isDeviceAccessFailure } from "../device-access/model";
 import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
-import { HandIcon } from "../../utils/icons";
+import { HandIcon, VolumeHighIcon } from "../../utils/icons";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { CallLinkIcon } from "./CallLinkIcon";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
-import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps, type ControlBarProps } from "./control-bar-behavior";
-import { ShellIcon } from "./ShellIcon";
+import { useConnectedControlBarBehavior, useControlBarSurfaceBehavior, type ControlBarSurfaceProps, type ControlBarProps, type MediaDevice } from "./control-bar-behavior";
+import { MediaGlyph, ShellIcon } from "./ShellIcon";
 import { nextCamera } from "./next-camera";
 import { ShellStyles } from "./ShellStyles";
 export type { ControlBarProps, ControlBarButtonName } from "./control-bar-behavior";
@@ -20,9 +20,16 @@ export function ControlBarPresentation(props: ControlBarSurfaceProps): React.JSX
   return <ControlBarSurface {...props} detectDevices={props.displayOnly ? false : props.detectDevices} />;
 }
 
+/** The selected device's name, or the first one when none is chosen yet, for a row of the More sheet. */
+function DeviceValue({ devices, selectedDeviceId }: { readonly devices: readonly MediaDevice[]; readonly selectedDeviceId?: string }) {
+  const device = devices.find((candidate) => candidate.deviceId === selectedDeviceId) ?? devices[0];
+  return device?.label ? <span className="chalk-sheet-value">{device.label}</span> : null;
+}
+
 export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   const { buttonsToRender, effectiveAudioInputDevices, effectiveAudioOutputDevices, effectiveVideoInputDevices, showLeave } = useControlBarSurfaceBehavior({ ...props, density: props.density ?? "comfortable", detectDevices: props.detectDevices ?? true });
   const [canCaptureDisplay, setCanCaptureDisplay] = useState(false);
+  const [deviceSheet, setDeviceSheet] = useState<"mic" | "video" | null>(null);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [dom] Detect display-capture support after hydration so server and first client markup agree.
   useEffect(() => setCanCaptureDisplay(typeof navigator.mediaDevices?.getDisplayMedia === "function"), []);
   const has = (button: (typeof buttonsToRender)[number]) => buttonsToRender.includes(button);
@@ -87,6 +94,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onNoiseSuppressionChange={props.onNoiseSuppressionChange}
           onTestSpeaker={props.onTestSpeaker}
           access={props.deviceAccess?.microphone}
+          sheetOpen={deviceSheet === "mic"}
+          onSheetOpenChange={(open) => setDeviceSheet(open ? "mic" : null)}
         />
       ) : null}
       {has("video") ? (
@@ -106,6 +115,8 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           mirrored={props.mirrored}
           onMirrorChange={props.onMirrorChange}
           access={props.deviceAccess?.camera}
+          sheetOpen={deviceSheet === "video"}
+          onSheetOpenChange={(open) => setDeviceSheet(open ? "video" : null)}
         />
       ) : null}
       {has("screenshare") && canCaptureDisplay ? (
@@ -116,11 +127,28 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
 
       <span className="chalk-shell-phone">
-        <DockLayout layout={props.layout ?? "focus"} onLayoutChange={props.onLayoutChange ?? (() => {})}>
-          <button type="button" data-call-link-trigger className="chalk-sheet-row" aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
-            <CallLinkIcon />
-            <span>{props.onCallLinkToggle ? linkLabel : "Copy link"}</span>
-          </button>
+        <DockLayout
+          layout={props.layout ?? "focus"}
+          onLayoutChange={props.onLayoutChange ?? (() => {})}
+          devices={
+            <>
+              {has("mic") ? (
+                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setDeviceSheet("mic")}>
+                  <VolumeHighIcon />
+                  <span className="chalk-sheet-label-text">Microphone and speaker</span>
+                  <DeviceValue devices={effectiveAudioInputDevices} selectedDeviceId={props.selectedAudioInput} />
+                </button>
+              ) : null}
+              {has("video") ? (
+                <button type="button" className="chalk-sheet-row" aria-haspopup="dialog" onClick={() => setDeviceSheet("video")}>
+                  <MediaGlyph kind="cam" slashed={false} busy={false} />
+                  <span className="chalk-sheet-label-text">Camera</span>
+                  <DeviceValue devices={effectiveVideoInputDevices} selectedDeviceId={props.selectedVideoInput} />
+                </button>
+              ) : null}
+            </>
+          }
+        >
           {has("video") && effectiveVideoInputDevices.length >= 2 ? (
             <button
               type="button"
@@ -151,6 +179,11 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             <button type="button" className="chalk-sheet-row" onClick={props.onToggleChat}>
               <ShellIcon name="chat" />
               <span>Chat</span>
+              {props.unreadChatCount && !props.isChatOpen ? (
+                <span className="chalk-sheet-badge" aria-label={`${props.unreadChatCount} unread`}>
+                  {props.unreadChatCount}
+                </span>
+              ) : null}
               <ShellIcon name="right" size={20} className="chalk-shell-sheet-end" />
             </button>
           ) : null}
