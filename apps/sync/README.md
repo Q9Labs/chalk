@@ -353,6 +353,21 @@ best-effort user-agent hint. These fields do not change the canonical control
 digest. Sockets without the query retain the previous exact presence shape;
 new SDKs also accept presence from older servers without these optional hints.
 
+## Connection quality
+
+New web SDKs opt in with the `connection_quality=1` WebSocket query. The welcome
+then carries `"connection_quality": true`, and the socket may send
+`{"type": "connection_quality_set", "quality": "good" | "weak" | "poor"}` in the
+live phase. The SDK rates its own link from its call-stats windows and sends a
+frame only when the tier changes. Sync keeps the tier of each live socket in
+memory, drops it when the socket goes, and projects it as the optional
+`connection_quality` key on that participant's presence item while the seat is
+connected. If one seat has two live sockets, guests see the worse tier. Sockets
+without the query never get the key, and a `connection_quality_set` frame from
+one is a `protocol_error`. Nothing is stored, and the field does not change the
+canonical control digest. New SDKs accept presence from older servers that never
+send it, and treat a missing value as unknown.
+
 ## Media off reasons
 
 New web SDKs opt into the reason a media item is off with the

@@ -6,7 +6,7 @@ import { useSoundCues } from "../../../../sdks/typescript/react/src/internal/use
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
 import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
-import { ReconnectingOverlay } from "../../../../sdks/typescript/react/src/components/reconnecting-overlay/ReconnectingOverlay";
+import { ConnectionStatus } from "../../../../sdks/typescript/react/src/components/connection-status/ConnectionStatus";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
 import type { CallState } from "./states";
 
@@ -188,7 +188,7 @@ function ReconnectingInputFixture() {
         Message
         <textarea aria-label="Message" />
       </label>
-      <ReconnectingOverlay isVisible status="reconnecting" />
+      <ConnectionStatus phase="reconnecting" since={Date.now()} />
     </main>
   );
 }

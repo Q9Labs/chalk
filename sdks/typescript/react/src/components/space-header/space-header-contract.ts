@@ -12,7 +12,10 @@ export interface SpaceHeaderProps {
   diagnostics?: readonly { readonly label: string; readonly value: string }[];
   /** Connection quality and its charts for the call menu. Without it the menu has no Connection row. */
   network?: CallNetwork;
-  weakConnection?: boolean;
+  /** Whether the camera is on, so a very poor link can offer to turn it off. */
+  videoOn?: boolean;
+  /** The "Turn off video" action of the connection chip. The video stays off until the person turns it back on. */
+  onTurnOffVideo?: () => void;
   onReportProblem?: (report: { readonly description: string; readonly diagnostics?: string }) => void | Promise<void>;
   reportUnavailableReason?: string;
   onOpenReportProblem?: () => void;

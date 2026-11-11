@@ -3,6 +3,7 @@ import { ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chal
 import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
+import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
 import { RowIcon } from "./RowIcon";
@@ -25,16 +26,19 @@ export function CallDetails({
   onSoundsChange,
   onDialog,
   onReportProblem,
+  revealConnection = false,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
   readonly onDialog: (kind: "shortcuts" | "report") => void;
+  /** Opened from the connection chip: the Connection row starts expanded and ringed so the person sees where the chip led. */
+  readonly revealConnection?: boolean;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
   const [qrOpen, setQrOpen] = useState(false);
-  const [details, setDetails] = useState(false);
+  const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
   const summary = [isRecording ? "Recording" : null, people ? `${people.length} in call` : null].filter(Boolean).join(" · ");
@@ -77,13 +81,9 @@ export function CallDetails({
       {network && quality ? (
         <>
           <div className="chalk-shell-sep" />
-          <button type="button" className="chalk-shell-detail-action" aria-expanded={details} aria-controls="chalk-details-connection" onClick={() => setDetails(!details)}>
+          <button type="button" className="chalk-shell-detail-action" data-ringed={revealConnection || undefined} aria-expanded={details} aria-controls="chalk-details-connection" onClick={() => setDetails(!details)}>
             <span className="chalk-shell-detail-lead">
-              <span className="chalk-shell-connection-bars" data-level={quality.level} aria-hidden="true">
-                {[5, 8, 11, 14].map((height) => (
-                  <i key={height} style={{ height }} />
-                ))}
-              </span>
+              <ConnectionBars level={quality.level} />
             </span>
             <span className="chalk-shell-detail-label">Connection</span>
             <span className="chalk-shell-detail-value" data-tone={quality.tone}>

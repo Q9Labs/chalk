@@ -1,4 +1,4 @@
-import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
+import type { CallStatsSample, Capability, ChalkWhiteboardV1Element, ChalkWhiteboardV1Event, ChalkWhiteboardV1Transport, ChatMessage, ClientEventHandler, ClientEventMap, ClientEventName, LinkQuality, Participant, RemoteMedia, SpaceSnapshot } from "@q9labsai/chalk-client";
 import { createPreviewClient, createSnapshot } from "@q9labsai/chalk-react/preview";
 import { boardActivity, planScene, smallScene } from "./board-scene";
 import { cameraTrack, screenTrack } from "./media";
@@ -13,6 +13,9 @@ export type Person = {
   readonly sharing?: boolean;
   /** Holds the host capabilities, so the roster marks the person as a host. */
   readonly host?: boolean;
+  /** How this guest's own link reads to everyone else. */
+  readonly quality?: "good" | "weak" | "poor";
+  /** This guest dropped out of the call and is trying to come back. */
   readonly reconnecting?: boolean;
 };
 
@@ -56,6 +59,8 @@ export type LiveOptions = {
   readonly reactions?: boolean;
   /** A minute of call-stats windows for the call menu charts. */
   readonly network?: "steady" | "unstable";
+  /** The tier the call menu and the header chip show for your own link. */
+  readonly link?: LinkQuality;
 };
 
 const STEADY_RTT = [44, 43, 52, 47, 42, 41];
@@ -111,6 +116,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
       },
       remote,
       ...(options.network ? { callStats: networkSamples(options.network) } : {}),
+      ...(options.link ? { link: options.link } : {}),
       incomingRequests: options.mediaRequest ? [{ requestId: "media-1", kind: "unmute", actorParticipantId: "nora", actorDisplayName: "Nora Patel", expiresAt: new Date(now + 60_000).toISOString() }] : [],
     },
     chat: options.chat ? { ...base.chat, status: "ready", messages: options.chat } : { ...base.chat, status: "ready" },
@@ -143,7 +149,7 @@ function participant(person: Person, capabilities: readonly Capability[]): Parti
     capabilities,
     handRaised: person.handRaised ?? false,
     media: { microphone: person.microphone === false ? "inactive" : "active", camera: person.camera === false ? "inactive" : "active", screenShare: person.sharing ? "active" : "inactive" },
-    presence: { state: person.reconnecting ? "disconnected" : "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false },
+    presence: { state: person.reconnecting ? "disconnected" : "connected", speaking: person.speaking ?? false, activeSpeaker: person.speaking ?? false, ...(person.quality ? { connectionQuality: person.quality } : {}) },
   };
 }
 

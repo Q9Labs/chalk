@@ -323,7 +323,7 @@ function participantMedia(participantId: string, media: ReturnType<ConnectionPor
 function participantPresence(participantId: string, presence: ReturnType<ConnectionPorts["sync"]["getSnapshot"]>["presence"]): ParticipantPresence {
   const item = presence?.items.find((candidate) => candidate.participantId === participantId);
   if (!item) return Object.freeze({ state: "unknown", speaking: false, activeSpeaker: false });
-  return Object.freeze({ state: item.state, speaking: item.speaking, activeSpeaker: item.activeSpeaker });
+  return Object.freeze({ state: item.state, speaking: item.speaking, activeSpeaker: item.activeSpeaker, ...(item.connectionQuality === undefined ? {} : { connectionQuality: item.connectionQuality }) });
 }
 function sameParticipants(left: ParticipantsSlice, right: ParticipantsSlice): boolean {
   return (
@@ -352,7 +352,14 @@ function sameParticipantMedia(left: Participant, right: Participant): boolean {
   );
 }
 function sameParticipantPresence(left: Participant, right: Participant): boolean {
-  return left.identityId === right.identityId && left.deviceType === right.deviceType && left.presence.state === right.presence.state && left.presence.speaking === right.presence.speaking && left.presence.activeSpeaker === right.presence.activeSpeaker;
+  return (
+    left.identityId === right.identityId &&
+    left.deviceType === right.deviceType &&
+    left.presence.state === right.presence.state &&
+    left.presence.speaking === right.presence.speaking &&
+    left.presence.activeSpeaker === right.presence.activeSpeaker &&
+    left.presence.connectionQuality === right.presence.connectionQuality
+  );
 }
 function sameSelf(left: SelfSlice, right: SelfSlice): boolean {
   return left.participantId === right.participantId && left.identityId === right.identityId && left.displayName === right.displayName && left.role === right.role && left.handRaised === right.handRaised && sameValues(left.capabilities, right.capabilities);

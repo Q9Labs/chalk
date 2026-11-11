@@ -42,6 +42,9 @@ defmodule ChalkSync.ProtocolV1 do
 
   defp drop_invalid_baggage(frame), do: frame
 
+  # Each negotiated extension shows up in the welcome as `<name>: true`.
+  @welcome_flags [:entry_confirmation, :media_off_reason, :connection_quality]
+
   def recovery_id, do: UUID.generate()
 
   def recovery_welcome(%Identity{} = identity, %Recovery{} = recovery, recovery_id),
@@ -90,14 +93,9 @@ defmodule ChalkSync.ProtocolV1 do
       end
 
     frame =
-      if Map.get(options, :entry_confirmation, false),
-        do: Map.put(frame, "entry_confirmation", true),
-        else: frame
-
-    frame =
-      if Map.get(options, :media_off_reason, false),
-        do: Map.put(frame, "media_off_reason", true),
-        else: frame
+      Enum.reduce(@welcome_flags, frame, fn flag, acc ->
+        if Map.get(options, flag, false), do: Map.put(acc, Atom.to_string(flag), true), else: acc
+      end)
 
     frame |> maybe_entry_generation(identity, options) |> encode!()
   end

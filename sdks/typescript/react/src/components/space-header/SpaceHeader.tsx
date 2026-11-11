@@ -9,15 +9,18 @@ import { LayoutMenu } from "./LayoutMenu";
 import { CallDialog } from "./CallDialog";
 import { useCallShortcuts } from "./useCallShortcuts";
 import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
+import { shownNotice, type NoticeTier } from "../connection-notice/shown-notice";
 import { CallLinkIcon } from "../control-bar/CallLinkIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 export { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 // The menu body loads when the menu first opens, so a call that never opens it never downloads it.
 const CallDetails = lazy(() => import("./CallDetails").then((module) => ({ default: module.CallDetails })));
+// The chip loads the first time the link turns weak, so a call on a good link never downloads it.
+const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
-  const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className, weakConnection } = props;
+  const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
   const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
@@ -25,6 +28,16 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
+  // The chip opens the menu with the connection charts showing; the plain trigger opens it closed.
+  const [revealConnection, setRevealConnection] = useState(false);
+  const [dismissed, setDismissed] = useState<NoticeTier | null>(null);
+  const link = props.network?.live ? props.network.link : undefined;
+  if (dismissed !== null && (link === undefined || link.tier === "good")) setDismissed(null);
+  const notice = shownNotice(link, dismissed);
+  const changeOpen = useCallback((next: boolean) => {
+    setOpen(next);
+    setRevealConnection(false);
+  }, []);
   const [dialog, setDialog] = useState<{ kind: "shortcuts" | "report"; open: boolean }>({ kind: "shortcuts", open: false });
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
@@ -48,38 +61,56 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     <Suspense fallback={null}>
       <CallDetails
         {...props}
-        onClose={() => setOpen(false)}
+        onClose={() => changeOpen(false)}
+        revealConnection={revealConnection}
         sounds={sounds}
         onSoundsChange={setSounds}
         onDialog={(kind) => {
-          setOpen(false);
+          changeOpen(false);
           if (kind === "report" && props.onOpenReportProblem) props.onOpenReportProblem();
           else setDialog({ kind, open: true });
         }}
       />
     </Suspense>
   );
+  const noticeSlot = notice ? (
+    <div data-part="connection-notice-slot" data-phone={phone || undefined} className="chalk-connection-notice-slot">
+      <Suspense fallback={null}>
+        <ConnectionNotice
+          tier={notice.tier}
+          reason={notice.reason}
+          videoOn={props.videoOn === true}
+          onOpenDetails={() => {
+            setRevealConnection(true);
+            setOpen(true);
+          }}
+          onTurnOffVideo={() => props.onTurnOffVideo?.()}
+          onDismiss={() => setDismissed(notice.tier)}
+        />
+      </Suspense>
+    </div>
+  ) : null;
   return (
     <header ref={focusScope} data-part="header-region" className={cn("chalk-header", className)} role="banner">
       <ShellStyles />
       <div className="chalk-header-title flex min-w-0 items-center gap-3">
         {phone ? (
           <>
-            <button ref={triggerRef} type="button" data-call-link-trigger data-part="call-name" title={spaceName} className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+            <button ref={triggerRef} type="button" data-call-link-trigger data-part="call-name" title={spaceName} className="chalk-call-name chalk-call-name-phone" aria-label="Call details" aria-haspopup="dialog" aria-expanded={open} onClick={() => changeOpen(true)}>
               <span dir="auto">{spaceName}</span>
               {chevron}
             </button>
             <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
               {timer}
             </span>
-            <ChalkSheet variant="details" open={open} onOpenChange={setOpen} title={spaceName} accessibleLabel="Call details">
+            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={spaceName} accessibleLabel="Call details">
               {props.onCallLinkToggle ? (
                 <button
                   type="button"
                   className="chalk-sheet-row"
                   aria-pressed={props.callLinkOpen ?? false}
                   onClick={() => {
-                    setOpen(false);
+                    changeOpen(false);
                     props.onCallLinkToggle?.();
                   }}
                 >
@@ -91,17 +122,11 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover open={open} onOpenChange={setOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
+          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
             {content}
           </ChalkPopover>
         )}
-        {weakConnection ? (
-          <span className="chalk-shell-quality" role="img" aria-label="Your connection is weak">
-            {[5, 8, 11, 15].map((height) => (
-              <i key={height} style={{ height }} />
-            ))}
-          </span>
-        ) : null}
+        {phone ? null : noticeSlot}
         {isRecording ? (
           <span className="chalk-shell-recording">
             <i />
@@ -109,6 +134,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
           </span>
         ) : null}
       </div>
+      {phone ? noticeSlot : null}
       {props.notices}
       <div className="chalk-header-layout flex items-center gap-2">
         {props.onTogglePeople ? (
