@@ -46,6 +46,36 @@ H264 with more than 512 variable frame intervals keeps every decoded frame's
 timestamp in both copy and re-encode paths. Worker and API tests check accepted-failure evidence, trace correlation,
 and redaction; rejected failure reports do not emit accepted-failure evidence.
 
+### Recording maintenance transitions
+
+The API emits `recording.job_recovered` for each job returned by committed
+recovery, including recovery before a worker claim and background maintenance.
+It carries `tenant_id`, `episode_id`, `recording_id`, `job_id`, `kind`, the resulting
+`state`, `attempt_count`, `attempt_limit`, `fencing_generation`, and the row's
+`transition_at`. Both pending retries and terminal failures appear; "recovered"
+does not mean a recording or retained media was recovered.
+
+`reason` permits only `recording_source_expired`, `render_deadline_exceeded`,
+`capture_completion_expired`, `capture_stopped_before_completion`, and
+`lease_expired`; other stored codes become `other`. Recovery can retain an older
+error code, so the reason is the committed row's code, not proof of which recovery
+predicate matched. `capture_outcome=stopped_before_claim` appears only for the
+exact SQL marker with zero attempts. It does not explain why the Episode stopped.
+No free-text error, payload, lease, worker identity, storage path, or media is logged.
+
+`recording.reservation_expired` carries Tenant, Space, Episode, Recording and
+reservation IDs, the resulting reservation `state`, `transition_at`, and fixed
+`reason=capture_reservation_expired`. The expiry result does not contain a job ID;
+join by Recording ID rather than guessing a job or its previous state.
+
+Events appear only after the enclosing transaction succeeds, including webhook
+writes. Failed or empty transactions emit no per-row transition event. A later
+expiry error cannot hide already committed job recovery. The aggregate
+`recording.pipeline_maintenance.completed` event remains unchanged. These events
+use the caller's context and introduce no durable journey event or lifecycle change.
+The repository diagnostics tests cover maintenance, preclaim recovery, expiry,
+no-op retries, transaction failure, and telemetry redaction with synthetic fixtures.
+
 ### Recording stopped callbacks
 
 The API emits `recording.capture_stopped_callback` with `outcome=accepted` only
