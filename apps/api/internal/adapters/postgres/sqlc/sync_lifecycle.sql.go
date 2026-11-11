@@ -38,7 +38,7 @@ where
     )
     and episodes.id <> all($1::uuid[])
 order by episodes.deadline_at, episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit $2
 `
 
@@ -125,7 +125,7 @@ where episodes.status='active' and empty_window.empty_since is not null
     and empty_window.empty_since + make_interval(secs => coalesce((episodes.config_snapshot->>'linger_window_seconds')::integer, 0)) <= clock_timestamp()
     and episodes.id <> all($2::uuid[])
 order by episodes.id
-for update of episodes skip locked
+for update of control skip locked
 limit $3
 `
 
@@ -2058,7 +2058,7 @@ func (q *Queries) LockTenantExternalOperationForRequest(ctx context.Context, arg
 }
 
 const lockTenantSpaceForUpdate = `-- name: LockTenantSpaceForUpdate :one
-select id, name, tenant_id, slug, media_plane, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
+select id, name, tenant_id, slug, media_plane, media_plane_setting_written, media_plane_setting_against, media_plane_setting, metadata, recurring_policy, admission_policy, recording_policy, transcription_policy, transcript_language, default_episode_duration_seconds, maximum_episode_duration_seconds, linger_window_seconds, created_by_user_id, updated_at, created_at, archived_at
 from spaces
 where
     tenant_id = $1
@@ -2080,6 +2080,9 @@ func (q *Queries) LockTenantSpaceForUpdate(ctx context.Context, arg LockTenantSp
 		&i.TenantID,
 		&i.Slug,
 		&i.MediaPlane,
+		&i.MediaPlaneSettingWritten,
+		&i.MediaPlaneSettingAgainst,
+		&i.MediaPlaneSetting,
 		&i.Metadata,
 		&i.RecurringPolicy,
 		&i.AdmissionPolicy,

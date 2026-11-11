@@ -20,6 +20,7 @@ export function mediaBootstrap(media: ParticipantMediaAccess): CloudflareSFUBoot
           pullPublished: media.clientPayload.capabilities.pullPublished,
           unifiedSignaling: media.clientPayload.capabilities.unifiedSignaling,
           muteInPlace: media.clientPayload.capabilities.muteInPlace,
+          ...(media.clientPayload.capabilities.directSignalingUrl ? { directSignalingUrl: media.clientPayload.capabilities.directSignalingUrl } : {}),
         },
       };
     default:

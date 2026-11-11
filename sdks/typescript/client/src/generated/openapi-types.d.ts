@@ -1577,7 +1577,8 @@ export interface components {
         | "remote_signaling_failure"
         | "dormant_connection"
         | "access_refresh"
-        | "receive_stalled";
+        | "receive_stalled"
+        | "section_budget";
       session_description?: {
         sdp: string;
         type: string;
@@ -2409,10 +2410,12 @@ export interface components {
       created_at: components["schemas"]["DateTimeString"];
       created_by_user_id: components["schemas"]["UserId"] | null;
       default_episode_duration_seconds: number;
+      effective_media_plane: string | null;
       id: components["schemas"]["SpaceId"];
       linger_window_seconds: number;
       maximum_episode_duration_seconds: number;
       media_plane: string;
+      media_plane_setting: string | null;
       metadata:
         | {
             [key: string]: unknown;
@@ -8726,7 +8729,8 @@ export interface operations {
           | "remote_signaling_failure"
           | "dormant_connection"
           | "access_refresh"
-          | "receive_stalled";
+          | "receive_stalled"
+          | "section_budget";
       };
       header?: never;
       path: {

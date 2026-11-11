@@ -47,7 +47,7 @@ describe("media readiness", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track), getDisplayMedia: async () => mediaStream(track), enumerateDevices: async () => [] },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track), getDisplayMedia: async () => mediaStream(track), enumerateDevices: async () => [] },
           createSyncClient: () => ({ ...platform.sync, setCameraEnabled: command, setMicrophoneEnabled: command }),
         },
       },
@@ -91,7 +91,7 @@ describe("media readiness", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
-          mediaDevices: { getUserMedia: async () => mediaStream(track), getDisplayMedia: async () => mediaStream(track), enumerateDevices: async () => [] },
+          mediaDevices: { releaseTrack: (stopped) => stopped.stop(), getUserMedia: async () => mediaStream(track), getDisplayMedia: async () => mediaStream(track), enumerateDevices: async () => [] },
           createMediaClient: (input) => {
             const media = platform.dependencies.createMediaClient(input);
             return {

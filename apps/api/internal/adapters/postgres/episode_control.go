@@ -36,6 +36,10 @@ type tenantExternalOperationInput struct {
 func (r EpisodeLifecycleRepository) SetDeadline(ctx context.Context, input episodes.SetDeadlineInput) (episodes.ControlRequest, error) {
 	var result episodes.ControlRequest
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// Sync locks the control row before the Episode; lock in that order so the two cannot wait on each other.
+		if _, err := lockLifecycleControlRow(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID); err != nil {
+			return err
+		}
 		operation, err := lockTenantExternalOperation(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, episodes.OperationTenantSetDeadline, input.Request)
 		if err == nil {
 			return resolveControlRetry(ctx, queries, input.TenantID, input.SpaceID, input.EpisodeID, operation, &result)
@@ -122,15 +126,25 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 				if err != nil {
 					return err
 				}
+				enqueued := false
 				done, err := cycle.step(ctx, tx, deadlinePhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
-					_, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+					// The claim holds the control row; take the Episode next and recheck it is still the claimed deadline.
+					episode, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID)
+					if err != nil {
+						return err
+					}
+					if episode.Status != episodes.EpisodeStatusActive || episode.DeadlineGeneration != row.DeadlineGeneration {
+						return nil
+					}
+					_, err = createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
 						TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
 						OperationName: episodes.OperationMaximumDurationExpired, Request: request,
 						DeadlineGeneration: row.DeadlineGeneration, JourneyName: "episode.maximum_duration_expired", Payload: request.Payload(),
 					})
+					enqueued = err == nil
 					return err
 				})
-				if done {
+				if done && enqueued {
 					cycle.result.Enqueued++
 				}
 				return err
@@ -167,6 +181,10 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 				}
 				ended := false
 				done, err := cycle.step(ctx, tx, emptyLingerPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+					// The claim holds the control row; take the Episode next, as the recheck below expects.
+					if _, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID); err != nil {
+						return err
+					}
 					window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
 						TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
 						PresenceRecoverAfter: presenceFloor,
@@ -200,8 +218,8 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 	if err != nil {
 		return episodes.DeadlineCycle{}, err
 	}
-	// Deadline claims lock Episodes first. Release those locks before admission
-	// expiry takes Sync's canonical control-before-Episode lock order.
+	// Deadline claims hold control rows and Episodes. Release those locks before admission
+	// expiry takes its own, in the same control-before-Episode order.
 	var outcomes []uncollectedAdmissionOutcome
 	err = r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
 		expired, committedOutcomes, err := enqueueDueAdmissionRequests(ctx, queries, tx, batch-int32(cycle.result.Enqueued))

@@ -149,7 +149,7 @@ now: they have too few kept runs, or no workflow scores them yet.
 
 A gated entry blocks only where something scores it. `scorecard diff
 --fail-on-gate` fails on a gated metric over its budget, and `pnpm prod:latency`
-fails on a gated action p95 over its limit. The nightly `own-sfu` job runs
+fails on a gated action p95 over its limit. The nightly `latency` job runs
 `prod:latency --planes chalk_sfu` against staging for each cut, so the nightly
 tier scores the `chalk_sfu.action.*` values. The PR tier and the Promote tier
 score none yet, so run `prod:latency` for those.

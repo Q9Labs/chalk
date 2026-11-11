@@ -556,6 +556,12 @@ html:has(.site[data-chalk-theme="light"]) {
     background: var(--chalk-hover);
   }
 
+  /* The inline script in SiteRoot marks a visitor with a session hint; one of the two links shows. */
+  &[data-chalk-signed-in] .when-signed-out,
+  &:not([data-chalk-signed-in]) .when-signed-in {
+    display: none !important;
+  }
+
   /* ---------- the site footer ---------- */
 
   & .foot {

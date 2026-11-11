@@ -1,9 +1,19 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { ShellIcon } from "../control-bar/ShellIcon";
 import { ShellStyles } from "../control-bar/ShellStyles";
 import { useHaptics } from "../../internal/useHaptics";
 import { usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { cn } from "../../utils/cn";
+
+/** How each quick reaction moves on hover; any other emoji pops. */
+const EMOJI_MOVE = new Map([
+  ["👍", "nod"],
+  ["❤️", "beat"],
+  ["😂", "shake"],
+  ["🎉", "wiggle"],
+  ["👏", "clap"],
+]);
 
 export interface ReactionTrayProps {
   readonly isHandRaised?: boolean;
@@ -31,7 +41,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     const tray = listRef.current;
     const frame = tray?.closest<HTMLElement>("[data-part='call-frame']");
     const notices = frame?.querySelector<HTMLElement>("[data-part='toast-stack']");
-    const anchor = tray?.closest("[data-part='call-frame']")?.querySelector("[data-part='dock'] button[aria-label='Reactions']") ?? returnFocus.current;
+    const anchor = tray?.closest("[data-part='call-frame']")?.querySelector("[data-part='dock'] button[data-reactions-trigger]") ?? returnFocus.current;
     const place = () => {
       if (!tray || !(anchor instanceof HTMLElement) || !(tray.offsetParent instanceof HTMLElement)) return;
       const trigger = anchor.getBoundingClientRect();
@@ -89,7 +99,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   };
 
   const buttons = (more ? reactions : reactions.slice(0, 6)).map((emoji) => (
-    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" aria-label={`React with ${emoji}`}>
+    <button key={emoji} type="button" onClick={() => handleSelect(emoji)} className="chalk-shell-emoji" data-move={EMOJI_MOVE.get(emoji) ?? "pop"} aria-label={`React with ${emoji}`}>
       <span aria-hidden="true">{emoji}</span>
     </button>
   ));
@@ -103,13 +113,21 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
       {
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
           {onToggleHandRaise ? (
-            <button type="button" className="chalk-shell-raise" aria-pressed={isHandRaised} onClick={onToggleHandRaise}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" />
-                <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" />
-              </svg>
-              Raise hand
-            </button>
+            <>
+              <button
+                type="button"
+                className="chalk-shell-raise"
+                aria-pressed={isHandRaised}
+                onClick={() => {
+                  onToggleHandRaise();
+                  onClose();
+                }}
+              >
+                <ShellIcon name="hand" size={18} />
+                {isHandRaised ? "Lower hand" : "Raise hand"}
+              </button>
+              <span className="chalk-shell-rule" role="separator" aria-orientation="vertical" />
+            </>
           ) : null}
           {buttons}
           {!more && reactions.length > 6 ? (

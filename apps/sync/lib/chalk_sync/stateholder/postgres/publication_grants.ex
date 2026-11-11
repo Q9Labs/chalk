@@ -18,6 +18,7 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
       Postgrex.rollback(connection, {:error, :invalid_operation})
     end
 
+    Authority.lock_control(connection, identity.episode)
     policy = Authority.lock_episode(connection, identity.episode)
 
     participant =
@@ -98,6 +99,7 @@ defmodule ChalkSync.Stateholder.Postgres.PublicationGrants do
 
   def complete_transaction(connection, episode, reservation_id, outcome) do
     Transaction.configure(connection)
+    Authority.lock_control(connection, episode)
     policy = Authority.lock_episode(connection, episode)
     params = Scope.episode(episode) ++ [Scope.uuid(reservation_id)]
     observed = read_publication_reservation!(connection, params)

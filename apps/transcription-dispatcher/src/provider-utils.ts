@@ -229,7 +229,29 @@ export function classifyProviderStatus(status: number, provider: "deepinfra" | "
     return "nonretryable";
   }
   if (status === 408 || status === 425 || status === 429 || status >= 500) return "retryable";
+  // OpenRouter answers 402 while the account credit is short, for example during an automatic reload, so a later attempt can succeed.
+  if (provider === "openrouter" && status === 402) return "retryable";
   return "nonretryable";
+}
+
+// OpenRouter names why it refused a request in error.metadata.reason (for example in_flight_budget_exhausted). Only a short snake_case word or number is kept, so the body's free text never reaches a log.
+const REASON_WORD = /^(?:[a-z][a-z_]{0,63}|\d{1,6})$/;
+
+export function isReasonWord(value: string): boolean {
+  return REASON_WORD.test(value);
+}
+
+export async function openRouterReason(response: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = parseJson(await readBoundedBody(response, 4096));
+    if (!body || typeof body !== "object" || !("error" in body) || !body.error || typeof body.error !== "object" || !("metadata" in body.error)) return undefined;
+    const metadata = body.error.metadata;
+    if (!metadata || typeof metadata !== "object" || !("reason" in metadata)) return undefined;
+    return typeof metadata.reason === "string" && isReasonWord(metadata.reason) ? metadata.reason : undefined;
+  } catch {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
+  }
 }
 
 export function errorCodeFromBody(value: unknown): string | undefined {

@@ -9,7 +9,7 @@ omits recorder control, media builds and dispatcher binding, even if the build
 baseline enabled them. Set `CHALK_RECORDING_ENABLED=false` and
 `CHALK_TRANSCRIPTION_ENABLED=false` in nightly's API runtime configuration first;
 this input does not rewrite SSM values. This mode is not a held nightly. Cut still
-enables recording and requires `smoke transcript` plus the web-call proof.
+enables recording and requires the own-SFU (`chalk_sfu`) real-call proof (`camera-share`, `call-artifacts`, `long-call`) plus the web-call proof on the same plane.
 Promote rejects held records without immutable media. Release also rejects any
 production manifest without recorder control
 before writing the deployment envelope or acquiring deployment credentials.
@@ -87,7 +87,13 @@ the cut. Production Promote records the previous media members before mutation,
 including the legacy first-promotion baseline, and rollback restores those pins.
 
 Release builds changed backend images and two target-specific web archives.
-After nightly deployment, the real-call workflow runs `smoke transcript`.
+After nightly deployment, the real-call workflow runs `camera-share`, `call-artifacts`
+and `long-call` on the own SFU (`chalk_sfu`) under the staging SFU lease, and the
+web-call proof runs on the same plane. The latency run is a separate job: it blocks
+Promote, never the cut. A lease that stays busy for the whole 30-minute wait fails
+the gate as `staging-sfu-lease-timeout`; a lease lost mid-run is
+`staging-sfu-lease-lost`, and a lease tool failure before the lease is taken is
+`staging-sfu-lease-error`. The `record` job prints the name.
 A passed call and the controller's checked applied release ID create a held
 `nightly` deployment record. It contains the source SHA, run/artifact IDs,
 SHA256 hashes, applied identity and proof result. Actions artifacts are retained for 90 days (the public-repository maximum).
@@ -100,10 +106,8 @@ Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
 
 ## Promote
 
-Dispatch `Promote newest held nightly` from master with three required inputs:
-`expected_sha` (the held release revision you approve), `leave_baseline_median_ms` and
-`leave_baseline_evidence_sha256` (from the same-session Leave comparison in
-[prod-proof](../scripts/prod-proof/README.md)). `scorecard_override` is optional.
+Dispatch `Promote newest held nightly` from master with one required input,
+`expected_sha` (the held release revision you approve), and the optional `scorecard_override`. `capture_proofs` (default true) runs `call-artifacts`; set it false only when this deploy does not turn the capture flags on.
 Selection fails before deployment if the newest held release is not `expected_sha`.
 It selects the newest successful, proof-passed nightly, breaking timestamp ties
 by deployment ID. Deployment lookups filter environment and task, stop at the
@@ -114,13 +118,34 @@ The exact selection, all three artifacts, ancestry, latest Gate and rollback
 manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
 Both Nightly and Promote refuse non-master dispatches in their first step.
 The exact status, payload and previous production source are rechecked after approval.
-Nightly also records `own_sfu_proof_result` (`passed`, `failed` or `skipped`),
-bound to the cut's `target_sha` and `proof_run_id`. Promote requires a passed
+The nightly proof step runs every proof in its list even when one fails, and the held cut prints each proof's result
+(`passed`, `failed` or `not-run`); a lease failure stops it, since the next proof would wait for the lease again.
+The cut is held by the `chalk_sfu` real-call proof (recorded as `real_call_proof_result`)
+and the web-call proof on `chalk_sfu` (`web_e2e_result`). Nightly also records `own_sfu_proof_result`
+(`passed`, `failed` or `skipped`), the proof together with the latency run,
+bound to the cut's `target_sha` and `proof_run_id`. A failed latency run never holds
+the cut. Promote requires a passed
 own-SFU proof for that exact SHA, both at selection and in the approval recheck.
 Missing results (including older cuts), skipped proofs and failed proofs block
 promotion with an error naming the SHA and nightly run unless the existing
-`scorecard_override` input supplies a written reason. The existing Cloudflare
-proof and held-cut rules are unchanged.
+`scorecard_override` input supplies a written reason. Promote's own production
+proof runs on `chalk_sfu`: `leave-own-sfu` (the current client leaves; the acknowledgement,
+the released microphone and camera, and the removal of the participant and its media are
+checked), `camera-share` and `call-artifacts` (the call, the Recording and the Transcript).
+The old `smoke` and `transcript` proofs and the Leave comparison with the published 5.2.6
+client need Cloudflare and no longer run in Promote; `pnpm prod:proof leave` still runs by hand.
+
+The proof reuses two Spaces of the production proof Tenant, found by slug
+(`promote-proof-chalk-sfu`, `promote-proof-chalk-sfu-automatic`). The `own-sfu-spaces` job
+creates them if missing and moves them to `chalk_sfu` before `release` starts, so the
+release that is still in production does it: its public API accepts `chalk_sfu` for a
+Space in `CHALK_SFU_ALLOWED_SPACES`, the release with the per-Space setting refuses it, and
+a plane stored by the older release survives the upgrade. If the API refuses, Promote stops
+before it deploys and names the Space. One-time operator step, off the Promote path: add
+the two Spaces to `CHALK_SFU_ALLOWED_SPACES` (or run `media-settings` where the setting
+exists). Only these two Spaces move, so live Spaces keep their plane. The undo is to revert
+the change; the two Spaces can go back to `cf_sfu` with `media-settings set --plane cf_sfu`.
+A held release cut before this change lacks the `leave-own-sfu` proof, so cut a nightly after it merges.
 The scorecard job evaluates every `gate: true` budget before the cut is recorded.
 It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
 newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
@@ -191,6 +216,32 @@ the previous production source, plus the canonical Pages ID to match the saved I
 Missing, skipped, cancelled or failed recovery evidence keeps the run red with
 `RECOVERY NOT RUN — manual recovery required` and exact manual Release inputs in
 the summary. A verified recovery also leaves the promotion red. No nightly rollback exists.
+
+## Iterate on the deployed staging build
+
+A Cut nightly only confirms. To find and fix a failure, deploy master to staging alone and run single proofs against it.
+
+Deploy without proofs (about 22 minutes: builds 7, SSM deploy 11, web 2). The Gate of `target_sha` on master must have passed, and the run queues behind a running cut in the `nightly` environment lock:
+
+```sh
+gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -f release_managed=true -f deploy_managed=true -f deploy_web=true -f managed_environment=nightly -f enable_recorder_control=true
+```
+
+Without `stable_manifest_run_id` the run rebuilds every enabled component, which costs no extra wall time.
+
+Run one proof against that build. `.github/workflows/real-call-proof.yml` refuses a ref other than master and runs only proof code that master already contains, so a fix to proof or harness code merges first. Until then, run the proof from the branch with `pnpm prod:proof <name>`. All runs use `-f environment=nightly -f media_plane=chalk_sfu` and share the staging-SFU lease, so they queue one at a time:
+
+| Check                       | `-f` flags                                                    | Run time     |
+| --------------------------- | ------------------------------------------------------------- | ------------ |
+| camera-share                | `proofs=camera-share`                                         | about 10 min |
+| call-artifacts              | `proofs=call-artifacts`                                       | about 11 min |
+| long-call                   | `proofs=long-call`                                            | about 14 min |
+| leave-own-sfu               | `proofs=leave-own-sfu`                                        | about 6 min  |
+| own-sfu-spaces              | `proofs=own-sfu-spaces`                                       | about 5 min  |
+| latency rows, short         | `proofs=own-sfu-spaces -f latency=true -f latency_samples=10` | about 12 min |
+| latency rows, full gate run | `proofs=own-sfu-spaces -f latency=true`                       | about 40 min |
+
+Each run adds about 4 minutes of job setup to the proof itself. The latency run measures every action row; `latency_samples` (1 to 60) only shortens it, so a p95 over 10 cycles is a quick check and not the gate value.
 
 ## Manual Release and setup
 

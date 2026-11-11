@@ -1,5 +1,5 @@
 import type { ParsedAccessGrant } from "../access/grant";
-import type { ConnectionDiagnostic } from "./diagnostics";
+import type { ConnectionDiagnostic, ReportedConnectionDiagnostic } from "./diagnostics";
 
 import type { ConnectionReport, ConnectionReportTransportEvent } from "../transport-diagnostics";
 export type { ConnectionReport, ConnectionReportTransportEvent } from "../transport-diagnostics";
@@ -99,7 +99,7 @@ export class ConnectionReporter {
     this.#startedAt = options.now();
   }
 
-  recordDiagnostic(diagnostic: ConnectionDiagnostic): void {
+  recordDiagnostic(diagnostic: ReportedConnectionDiagnostic): void {
     this.#record({
       event: diagnostic.event,
       elapsed_ms: this.#elapsed(),

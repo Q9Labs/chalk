@@ -167,12 +167,15 @@ export function BoardMenu({ surface, onSurface, place, onPlace, onDownload, onCo
         </ChalkMenuItem>
       ) : null}
       {onClear ? (
-        <ChalkMenuItem onClick={onClear}>
-          <span className="chalk-board-danger">
-            <BoardIcon name="trash" size={18} />
-            Clear board
-          </span>
-        </ChalkMenuItem>
+        <>
+          {onBring ? <Menu.Separator className="chalk-board-menu-rule" /> : null}
+          <ChalkMenuItem onClick={onClear}>
+            <span className="chalk-board-danger">
+              <BoardIcon name="trash" size={18} />
+              Clear board
+            </span>
+          </ChalkMenuItem>
+        </>
       ) : null}
       {onClose ? (
         <>

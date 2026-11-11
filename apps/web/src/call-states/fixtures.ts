@@ -11,6 +11,8 @@ export type Person = {
   readonly speaking?: boolean;
   readonly handRaised?: boolean;
   readonly sharing?: boolean;
+  /** Holds the host capabilities, so the roster marks the person as a host. */
+  readonly host?: boolean;
   /** How this guest's own link reads to everyone else. */
   readonly quality?: "good" | "weak" | "poor";
   /** This guest dropped out of the call and is trying to come back. */
@@ -90,7 +92,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
   const self = { camera: true, microphone: true, ...options.self };
   const others = options.others ?? [];
   const now = Date.now();
-  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, GUEST))];
+  const roster: Participant[] = [participant({ id: SELF_ID, name: SELF_NAME, ...self }, capabilities), ...others.map((person) => participant(person, person.host ? HOST : GUEST))];
   const remote: RemoteMedia[] = others.flatMap((person, index) => [
     ...(person.camera === false ? [] : [{ participantId: person.id, source: "camera" as const, publicationId: `${person.id}-camera`, track: cameraTrack(person.name, BACKGROUNDS[index % BACKGROUNDS.length]!) }]),
     ...(person.sharing ? [{ participantId: person.id, source: "screen" as const, publicationId: `${person.id}-screen`, track: screenTrack() }] : []),
@@ -173,7 +175,7 @@ export type CallStateClient = ReturnType<typeof createCallStateClient>;
 
 /** The preview client plus the two seams Chalk needs from a live client: lifecycle events and a whiteboard transport. */
 /** What the fixture board holds: the plan scene or one small word, the people who move their pointers over it, and a relay channel to other tabs. */
-export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string };
+export type BoardFixture = { readonly scene?: boolean | "small"; readonly people?: readonly Person[]; readonly relay?: string; readonly pointers?: "roaming" | "edges" };
 
 export function createCallStateClient(snapshot: SpaceSnapshot, board: BoardFixture = {}) {
   const client = createPreviewClient(snapshot);
@@ -222,7 +224,7 @@ function boardTransport(board: BoardFixture, present: (presenting: boolean) => v
     subscribe: (listener) => {
       listeners.add(listener);
       queueMicrotask(() => listener(snapshot()));
-      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)));
+      if (board.people?.length && !stopActivity) stopActivity = boardActivity(board.people, (event) => listeners.forEach((each) => each(event)), board.pointers);
       return () => {
         listeners.delete(listener);
         if (listeners.size > 0) return;

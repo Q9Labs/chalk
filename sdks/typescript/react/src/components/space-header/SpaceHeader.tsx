@@ -138,14 +138,14 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
       {props.notices}
       <div className="chalk-header-layout flex items-center gap-2">
         {props.onTogglePeople ? (
-          <button type="button" className="chalk-shell-people-pill" aria-label={`People, ${props.people?.length ?? 0}`} onClick={props.onTogglePeople}>
+          <button type="button" className="chalk-shell-people-pill" aria-label={`People, ${props.people?.length ?? 0}${props.knockCount ? `, ${props.knockCount} waiting to join` : ""}`} onClick={props.onTogglePeople}>
             <span className="chalk-shell-faces">
               {props.people?.slice(0, 3).map((person) => (
                 <Avatar key={person.participantId} name={person.displayName} size="xs" />
               ))}
             </span>
             <span>{props.people?.length ?? 0}</span>
-            {props.knockCount ? <span aria-label={`${props.knockCount} waiting to join`}>{props.knockCount}</span> : null}
+            {props.knockCount ? <span className="chalk-shell-people-badge">{props.knockCount}</span> : null}
           </button>
         ) : null}
         {onLayoutChange ? <LayoutMenu layout={layout} onLayoutChange={onLayoutChange} /> : null}
