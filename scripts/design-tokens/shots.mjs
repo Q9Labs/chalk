@@ -48,12 +48,27 @@ async function shoot() {
   const jobs = [];
 
   if (states) {
-    const probe = await browser.newPage();
-    await probe.goto(`${states}/call-states.html`);
-    await probe.waitForFunction(() => window.__CALL_STATES__);
-    const stateList = await probe.evaluate(() => window.__CALL_STATES__.map((state) => ({ id: state.id, actions: state.actions ?? [], stallBoard: Boolean(state.stallBoard) })));
-    await probe.close();
-    for (const state of stateList) jobs.push({ id: `state-${state.id}`, url: `${states}/call-states.html?state=${state.id}`, viewport: { width: 1280, height: 800 }, fullPage: false, scheme: "dark", actions: state.actions, stallBoard: state.stallBoard });
+    // The pre-join states have their own page, so the call budgets do not measure them.
+    for (const page of ["call-states.html", "pre-join-states.html"]) {
+      const probe = await browser.newPage();
+      await probe.goto(`${states}/${page}`);
+      // A baseline from before a page existed has no states to shoot there.
+      const listed = await probe
+        .waitForFunction(() => window.__CALL_STATES__, undefined, { timeout: page === "call-states.html" ? 30000 : 5000 })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!listed) {
+        await probe.close();
+        if (page === "call-states.html") throw new Error(`${states}/${page} has no call states`);
+        console.warn(`${states}/${page} has no call states; skipping that page.`);
+        continue;
+      }
+      const stateList = await probe.evaluate(() => window.__CALL_STATES__.map((state) => ({ id: state.id, actions: state.actions ?? [], stallBoard: Boolean(state.stallBoard) })));
+      await probe.close();
+      for (const state of stateList) jobs.push({ id: `state-${state.id}`, url: `${states}/${page}?state=${state.id}`, viewport: { width: 1280, height: 800 }, fullPage: false, scheme: "dark", actions: state.actions, stallBoard: state.stallBoard });
+    }
   }
   if (web) {
     const probe = await browser.newPage();

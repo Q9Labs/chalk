@@ -1,6 +1,10 @@
 export { ChalkProvider } from "./bindings/context";
 export type { ChalkProviderProps } from "./bindings/context";
 export { useCan, useChat, useConnection, useMedia, useScreenShare, useOffline, useParticipants, useReactions, useRecording, useSelf, useSpaceClient, useWhiteboard } from "./bindings/hooks";
+export { usePreJoinDevices } from "./pre-join/usePreJoinDevices";
+export type { PreJoinAccess, PreJoinDevices, PreJoinJoinOptions } from "./pre-join/usePreJoinDevices";
+export { listedRememberedDevices, readRememberedDevices } from "./pre-join/remembered-devices";
+export type { RememberedDevices } from "./pre-join/remembered-devices";
 export { Chalk } from "./components/chalk/Chalk";
 export type { ChalkFeatures, ChalkProps, SpaceLayout } from "./components/chalk/Chalk";
 export { RecordingSpaceView } from "./components/space-view/RecordingSpaceView";
