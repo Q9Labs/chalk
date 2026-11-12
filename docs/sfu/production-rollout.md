@@ -30,7 +30,7 @@ Add the capture flag only if the staging `call-artifacts` proof passed with the 
 
 ## Recording beside the node
 
-Recording starts fast when a capture worker runs on the SFU node, and the on-demand fleet stays as the fallback. The design and its limits are in `docs/recording-transcription.md`. The node's CPU and memory per recorded Episode, the effect on the call and the number of concurrent recordings a node holds are measured in the pull request that added it; read those before changing the worker's limits in `features/media/sfu/deploy/deploy`.
+Recording starts fast when a capture worker runs on the SFU node, and the on-demand fleet stays as the fallback. The design and its limits are in `docs/recording-transcription.md`. The node's CPU and memory per recorded Episode, the effect on the call and the number of concurrent recordings a node holds are measured in the pull request that added it; read those before changing the worker's limits in `infrastructure/sfu/deploy`.
 
 To turn it on:
 

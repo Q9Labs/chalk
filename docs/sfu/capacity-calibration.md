@@ -1,7 +1,7 @@
 # SFU packet budget calibration
 
-Why the SFU nodes admit as many Episodes as they do. `infrastructure/sfu/deploy` renders the values
-(`SFU_PACKET_BUDGET`, `SFU_GUARD_MAX_STEAL_PERCENT`); read them there, not here.
+Why the SFU nodes admit as many Episodes as they do. The values (packet budget and steal limit per node
+size) live in `features/media/sfu/internal/config/node.json`; read them there, not here.
 
 ## Decision
 
