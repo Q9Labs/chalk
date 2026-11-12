@@ -29,3 +29,15 @@ it("marks a guest whose presence dropped as reconnecting", () => {
   expect(tileOf({ state: "disconnected" })?.isReconnecting).toBe(true);
   expect(tileOf({})?.isReconnecting).toBeUndefined();
 });
+
+it("keeps your own picture and microphone on while Sync recovers a source it had confirmed", () => {
+  const track = (kind: string, enabled = true) => ({ kind, enabled, readyState: "live" }) as MediaStreamTrack;
+  const own = (camera: ReturnType<typeof off> | { source: "camera"; state: "requesting"; track: MediaStreamTrack }, microphone: ReturnType<typeof off> | { source: "microphone"; state: "requesting"; track: MediaStreamTrack }) =>
+    toVideoParticipants([], [], "you", "Alex", { ...localMedia, camera, microphone }).find((tile) => tile.id === "you");
+  const recovering = own({ source: "camera", state: "requesting", track: track("video") }, { source: "microphone", state: "requesting", track: track("audio") });
+  expect(recovering?.isVideoEnabled).toBe(true);
+  expect(recovering?.isMuted).toBe(false);
+  const stopped = own({ source: "camera", state: "requesting", track: track("video", false) }, off("microphone"));
+  expect(stopped?.isVideoEnabled).toBe(false);
+  expect(stopped?.isMuted).toBe(true);
+});
