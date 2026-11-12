@@ -71,8 +71,9 @@ export type ClientMediaPlane = {
    * Runs the part of an enable that needs no grant, while Sync still decides it. It never creates a
    * publication: `setLocalPublicationTarget` stays the only step that publishes, and it redoes whatever
    * this left undone. A rejection is safe to ignore for that reason. A plane that parks a muted track
-   * on its server (mute in place) may resume that track here, because the server forwards it only
-   * under the grant Sync's answer opens or revokes; a refusal then closes the publication.
+   * on its server (mute in place) may resume that track here. The server's source lease authorizes what it
+   * forwards, and a role change, a removal and the end of the Episode revoke it. Until the plane sees Sync's
+   * result the track may forward under a standing lease; on a refusal the plane closes the publication at once.
    */
   readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;

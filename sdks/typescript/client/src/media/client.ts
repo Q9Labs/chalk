@@ -144,10 +144,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
-  // The unmute of a parked track that started before Sync answered. It never rejects.
-  #headStart: Promise<void> = Promise.resolve();
-  #resumeInFlight: Promise<unknown> = Promise.resolve();
-  #resumedAhead: OwnedLocalPublication | null = null;
+  // The unmute of a parked track that started before Sync answered, one per source. It never rejects.
+  readonly #headStarts = new Map<MediaPublicationSource, Promise<void>>();
+  readonly #resumesInFlight = new WeakMap<OwnedLocalPublication, Promise<unknown>>();
+  // The publication each source's head start resumed, until that source's enable has used it.
+  readonly #resumedAhead = new Map<MediaPublicationSource, OwnedLocalPublication>();
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
   #remoteParticipantIds: ReadonlySet<string> | null = null;
@@ -587,10 +588,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   /**
    * Runs what an enable can do while Sync still decides it, so the grant does not wait behind that round trip.
-   * A parked track (mute in place) is resumed on the SFU at once: the node's source lease, which Sync's grant
-   * opens and every refusal revokes, decides what it forwards, and a resumed track under a closed lease forwards
-   * nothing. Otherwise it swaps a connection that never carried media for a fresh one, adds no transceiver and
-   * sends no offer. A fresh publish never goes ahead, because a new publication needs the grant.
+   * A parked track (mute in place) is resumed on the SFU at once. The node's source lease authorizes what it
+   * forwards: a closed lease forwards nothing, and a role change, a removal and the end of the Episode revoke it.
+   * Until the SDK sees Sync's result, a resumed track may forward under a standing lease; on a refusal the SDK
+   * closes the publication at once. Otherwise this swaps a connection that never carried media for a fresh one,
+   * adds no transceiver and sends no offer. A fresh publish never goes ahead, because a new publication needs the grant.
    * `setLocalPublicationTarget` redoes whatever this left undone, so a rejection is safe to ignore.
    */
   async prepareLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
@@ -598,8 +600,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind !== "state") return;
     if (this.#heldPublication(target.source) && !this.#replacement) {
-      this.#headStart = this.#headStart.then(() => this.#resumeHeldAheadOfGrant(resolved.value));
-      return this.#headStart;
+      const headStart = (this.#headStarts.get(target.source) ?? Promise.resolve()).then(() => this.#resumeHeldAheadOfGrant(resolved.value));
+      this.#headStarts.set(target.source, headStart);
+      void headStart.then(() => {
+        if (this.#headStarts.get(target.source) === headStart) this.#headStarts.delete(target.source);
+      });
+      return headStart;
     }
     const generation = this.#generation;
     const attemptedBefore = this.#replacementAttemptedGeneration === generation;
@@ -617,8 +623,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
-    await this.#headStart;
-    const result = await this.#enablePublicationTarget(target);
+    await this.#headStarts.get(target.source);
+    const result = await this.#enablePublicationTarget(target).finally(() => this.#resumedAhead.delete(target.source));
     if (target.source !== "screen" || !this.#localTracks.has("screen_audio") || (result.outcome !== "confirmed" && result.outcome !== "satisfied")) return result;
     return this.#enablePublicationTarget({ ...target, source: "screen_audio" });
   }
@@ -746,7 +752,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const publicationId = state.providerPublicationId;
     if (!publicationId) return;
     // The publication list leaves out a parked publication, so absence there is not loss.
-    if (this.#heldPublication(state.source)?.handle.publicationId === publicationId) return;
+    if ((this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state))?.handle.publicationId === publicationId) return;
     const authoritative = await this.#signal(() => this.#requireTransport().listPublications());
     if (authoritative.publications.some((publication) => publication.publicationId === publicationId)) return;
     if (state.providerPublicationId !== publicationId || this.#localRecoveries.has(state.source)) return;
@@ -900,7 +906,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #closeOwnedPublication(publication: OwnedLocalPublication): Promise<void> {
     // A resume still in flight must reach the SFU before the close, or the close would be answered by the resume.
-    await this.#resumeInFlight;
+    await this.#resumesInFlight.get(publication);
     const phase = publication.lifecycle;
     if (phase.kind !== "retiring" || !phase.handle) return;
     const handle = phase.handle;
@@ -1038,7 +1044,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (this.#locallyPausedSources.has(state.source)) return false;
       state.desiredEnabled = true;
       state.track.enabled = true;
-      const parked = this.#heldPublication(state.source) ?? this.#takeResumedAhead(state);
+      const parked = this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state);
       if (parked && !state.transceiver) {
         state.transceiver = parked.publication.transceiver;
         state.providerPublicationId = parked.handle.publicationId;
@@ -1113,21 +1119,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       state.track.enabled = true;
       await this.#boundPeerOperation(held.publication.transceiver.sender.replaceTrack(state.track));
       if (this.#heldPublication(state.source)?.publication === held.publication && !this.#locallyPausedSources.has(state.source)) {
-        this.#resumeInFlight = this.#resumeHeldPublication(held.publication, held.handle, state);
-        await this.#resumeInFlight;
+        const resuming = this.#resumeHeldPublication(held.publication, held.handle, state);
+        this.#resumesInFlight.set(held.publication, resuming);
+        await resuming;
+        if (held.publication.lifecycle.kind === "confirmed") this.#resumedAhead.set(state.source, held.publication);
       }
       const cause = this.#locallyPausedSources.get(state.source);
       if (cause) {
         this.#pauseLocalSource(state.source, cause);
         await this.#retireOwnedPublications();
-      } else if (held.publication.lifecycle.kind === "confirmed") this.#resumedAhead = held.publication;
+      }
     } catch {
       // The grant-gated enable redoes the resume and reports its own failure.
     }
   }
-  #takeResumedAhead(state: LocalTrackState): { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle } | undefined {
-    const publication = this.#resumedAhead;
-    this.#resumedAhead = null;
+  #resumedAheadPublication(state: LocalTrackState): { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle } | undefined {
+    const publication = this.#resumedAhead.get(state.source);
     if (publication?.state !== state || publication.connection !== this.#connection || publication.lifecycle.kind !== "confirmed") return undefined;
     return { publication, handle: publication.lifecycle.handle };
   }

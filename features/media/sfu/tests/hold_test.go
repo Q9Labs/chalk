@@ -252,7 +252,9 @@ func TestViewerThatPullsAParkedMicrophoneHearsItOnResume(t *testing.T) {
 
 // The SDK resumes a parked microphone before Sync answers its unmute, so the lease has to be what decides
 // that audio. A mute leaves the lease standing, so the resume forwards at once with no grant after it. A
-// revoke, which every cause of a Sync refusal ends in, stops the resumed microphone at once.
+// revoke, which a role change, a removal and the end of the Episode end in, stops the resumed microphone at
+// once. Until the SDK sees Sync's result the microphone may forward under a standing lease; on a refusal
+// the SDK closes at once.
 // TestParkedPublicationKeepsItsTrackAndForwardsNothing covers the other order, where the lease is closed
 // at the resume and the grant comes after it: nothing forwards until the grant.
 func TestResumeUnderAStandingLeaseForwardsAtOnceAndARevokeStopsIt(t *testing.T) {

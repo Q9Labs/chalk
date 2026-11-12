@@ -102,7 +102,7 @@ export class V1LiveTargetCoordinator {
     return promise;
   }
 
-  // The frame is already on the wire. Only work that needs no grant starts here (the plane may resume a parked track, which the server forwards only under the grant). A new publication waits for the server result in #executeLocal, which settles only when that result and the local step are both done.
+  // The frame is already on the wire. Only work that needs no grant starts here (the plane may resume a parked track, which the server forwards under its source lease until a refusal closes it). A new publication waits for the server result in #executeLocal, which settles only when that result and the local step are both done.
   #prepareLocal(operationId: string, source: V1MediaSource, participantId: string): void {
     const prepare = this.#options.mediaPlane?.prepareLocalPublicationTarget;
     if (!prepare) return;
