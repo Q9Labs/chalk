@@ -9,7 +9,7 @@ import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
 import { act, clearOwnerSeats, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { dashboardAccessFailure } from "../../lib/dashboard/owner-access";
 import { SiteRoot, useSiteTheme } from "../site/theme";
-import { useLoad, useSession } from "./AppShell";
+import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./transcript-languages";
 

@@ -7,7 +7,7 @@ import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, expiresSoon, hasExpired } from "../../lib/dashboard/format";
 import { Icon, type IconName } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { ConnectPanel, type FreshSecret } from "./DeveloperConnect";
 import { CallsPanel } from "./DeveloperCalls";
 import { AddWebsiteDialog, CreateKeyDialog, EndpointDialog, RemoveWebsiteDialog, RevokeKeyDialog, RotateKeyDialog, RotateWebhookDialog, SecretDialog, type Secret } from "./DeveloperDialogs";

@@ -8,7 +8,7 @@ import { keptRecording, videoState, workingRecording } from "../../lib/dashboard
 import { clock, displayLink } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { RenameDialog } from "./HomePage";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
