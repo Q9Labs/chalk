@@ -1,6 +1,6 @@
 {
   "$comment": "Facts the Go recorder worker and the Node recording renderer both enforce. The renderer's constants are generated from this file by scripts/codegen/recording-render-contract.mjs, and apps/api/internal/recorderworker/render_contract_test.go fails when the Go side stops matching it.",
-  "frameRenderRequest": {
+  "composeRequest": {
     "version": "recording-frame-render-request.v1",
     "maxWidth": 3840,
     "maxHeight": 2160,

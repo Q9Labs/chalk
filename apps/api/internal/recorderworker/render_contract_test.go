@@ -12,13 +12,13 @@ import (
 // renderContract is contract/schema/recording-render-v1.json: the facts the
 // Node renderer's generated constants take from one file.
 type renderContract struct {
-	FrameRenderRequest struct {
+	ComposeRequest struct {
 		Version       string `json:"version"`
 		MaxWidth      int    `json:"maxWidth"`
 		MaxHeight     int    `json:"maxHeight"`
 		MaxFPS        int    `json:"maxFps"`
 		MaxDurationMs int64  `json:"maxDurationMs"`
-	} `json:"frameRenderRequest"`
+	} `json:"composeRequest"`
 	ComposeResult struct {
 		Version string `json:"version"`
 	} `json:"composeResult"`
@@ -47,7 +47,7 @@ func loadRenderContract(t *testing.T) renderContract {
 }
 
 func TestRenderRequestMatchesTheSharedContract(t *testing.T) {
-	contract := loadRenderContract(t).FrameRenderRequest
+	contract := loadRenderContract(t).ComposeRequest
 	if FrameRenderRequestVersion != contract.Version {
 		t.Fatalf("request version %q, contract %q", FrameRenderRequestVersion, contract.Version)
 	}
