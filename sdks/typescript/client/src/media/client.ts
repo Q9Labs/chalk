@@ -66,7 +66,7 @@ const EMPTY_LOCAL: readonly CloudflareSFULocalTrack[] = Object.freeze([]);
 const EMPTY_REMOTE: readonly CloudflareSFURemoteTrack[] = Object.freeze([]);
 const EMPTY_RECEIVE_STALLS = Object.freeze([]);
 type RemoteTrackEntry = readonly [string, CloudflareSFURemoteTrack];
-const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false });
+const NO_CAPABILITIES: SFUMediaCapabilities = Object.freeze({ serverLayerAdaptation: false, subscriptionState: false, iceRestart: false, pullPublished: false, unifiedSignaling: false, muteInPlace: false, keepsIdleSession: false });
 const INVALID_PUBLICATION_SIGNATURE = "\u0000invalid";
 const CONNECTION_TIMEOUT_MS = 8000;
 const RECOVERY_BACKOFF_MS = [1000, 2000, 4000, 5000] as const;
@@ -2290,6 +2290,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #replaceDormantConnectionBeforeNegotiation(generation: number): Promise<void> {
     if (!this.#started || this.#negotiatedGeneration === generation || this.#replacementAttemptedGeneration === generation || !this.#replaceMediaConnection) return;
+    // The own SFU keeps an unused connection until it reports it gone, and the publish recovers from that report.
+    if (this.#capabilities().keepsIdleSession) return;
     await this.#replaceMediaConnectionForRecovery(generation, "dormant_connection");
   }
   #addTracks(input: Omit<Parameters<CloudflareSFUSignalingTransport["addTracks"]>[0], "replacementCause">): Promise<CloudflareSFUTracksResponse> {

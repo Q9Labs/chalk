@@ -400,6 +400,8 @@ type PublicAccessCapabilities struct {
 	// UnifiedSignaling says the SDK may send every signalling call to the single signal route.
 	UnifiedSignaling bool
 	MuteInPlace      bool
+	// KeepsIdleSession says an unused connection stays valid until the SFU reports it gone, so the SDK keeps it for its first offer.
+	KeepsIdleSession bool
 	// DirectSignalingURL is the origin of the direct door for signalling; empty when off.
 	DirectSignalingURL string
 }

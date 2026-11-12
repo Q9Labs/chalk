@@ -431,6 +431,7 @@ func publicJoinPayload(provider mediaplane.Provider, join mediaplane.Join) (stri
 			PullPublished:         flags["pullPublished"] == true,
 			UnifiedSignaling:      flags["unifiedSignaling"] == true,
 			MuteInPlace:           flags["muteInPlace"] == true,
+			KeepsIdleSession:      flags["keepsIdleSession"] == true,
 		}
 		capabilities.DirectSignalingURL, _ = flags["directSignalingUrl"].(string)
 		return connectionID, publicinvites.PublicAccessClientPayload{ConnectionID: connectionID, EpisodeRef: episodeRef, ICEServers: iceServers, Capabilities: capabilities}, nil

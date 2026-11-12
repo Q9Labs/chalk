@@ -34,6 +34,8 @@ export type ChalkSFUCapabilities = {
   readonly unifiedSignaling: boolean;
   /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute moves no SDP. */
   readonly muteInPlace: boolean;
+  /** A connection nobody has used yet stays valid until the SFU reports it gone, so the client keeps it for its first offer. */
+  readonly keepsIdleSession: boolean;
   /** The https origin of the direct door for Sync and SFU signalling; absent when the API advertises none. */
   readonly directSignalingUrl?: string;
 };
@@ -229,6 +231,7 @@ function parseChalkSFUCapabilities(value: unknown): ChalkSFUCapabilities {
     pullPublished: flags.pullPublished === true,
     unifiedSignaling: flags.unifiedSignaling === true,
     muteInPlace: flags.muteInPlace === true,
+    keepsIdleSession: flags.keepsIdleSession === true,
     ...(direct ? { directSignalingUrl: direct.origin } : {}),
   };
 }
