@@ -16,6 +16,7 @@ export type ProbeState = { readonly status: "up" | "down"; readonly failures: nu
 export const FAILURES_BEFORE_PAGE = 2;
 const STATE_KEY = "join-probe";
 const STEP_TIMEOUT_MS = 10_000;
+const KV_WRITE_SPACING_MS = 1_000;
 
 export function transition(previous: ProbeState | null, result: JoinResult): { readonly next: ProbeState; readonly message?: string } {
   if (result.ok) {
@@ -132,9 +133,12 @@ export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: 
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
   const pending = message ?? previous?.pending;
+  const wroteAt = Date.now();
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
   console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");
   if (!pending) return;
   await deliver(pending);
+  // KV accepts one write per key per second, and a rejected clear would resend the delivered message every cycle.
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, KV_WRITE_SPACING_MS - (Date.now() - wroteAt))));
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(next));
 }

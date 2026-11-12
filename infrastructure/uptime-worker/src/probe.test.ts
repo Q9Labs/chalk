@@ -67,7 +67,14 @@ test("a rejected admission names its stage", async () => {
 
 test("a page whose delivery fails is kept and delivered on the next cycle", async () => {
   const store = new Map<string, string>();
-  const kv = { get: async (key: string) => (store.has(key) ? JSON.parse(store.get(key) ?? "null") : null), put: async (key: string, value: string) => void store.set(key, value) } as unknown as KVNamespace;
+  const writeTimes: number[] = [];
+  const kv = {
+    get: async (key: string) => (store.has(key) ? JSON.parse(store.get(key) ?? "null") : null),
+    put: async (key: string, value: string) => {
+      writeTimes.push(Date.now());
+      store.set(key, value);
+    },
+  } as unknown as KVNamespace;
   const env = { PROBE_API_KEY: "k", PROBE_TENANT_ID: "t", PROBE_SPACE_ID: "s", PROBE_STATE: kv };
   const original = globalThis.fetch;
   globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
@@ -83,6 +90,9 @@ test("a page whose delivery fails is kept and delivered on the next cycle", asyn
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 1);
     assert.match(sent[0], /create episode/);
+    // KV rejects a second write to the same key within a second, so the clear must wait.
+    const [before = 0, last = 0] = writeTimes.slice(-2);
+    assert.ok(last - before >= 990);
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 1);
   } finally {
