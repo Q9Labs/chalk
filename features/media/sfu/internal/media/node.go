@@ -465,7 +465,7 @@ func (n *Node) create(operationID string, scope protocol.Scope, kind sessionKind
 	}
 	response, fenced, err := n.register(operationID, scope, kind, allocation)
 	if fenced != nil {
-		fenced.Close()
+		fenced.CloseFor(CloseReplaced)
 	}
 	return response, err
 }
@@ -487,7 +487,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	// joins and reconnects, so it can run to its end before the restart. A held Episode is not
 	// new: its reserve passed the drain check.
 	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) && n.heldParticipants(episodeOf(scope)) == 0 {
-		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedDraining, ErrDraining)
+		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedDraining, ErrDraining)
 	}
 	if record, ok := n.creates[operationID]; ok {
 		if record.digest != digest {
@@ -507,14 +507,14 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	}
 	evict, err := n.fenceVictim(key)
 	if err != nil {
-		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedFences, err)
+		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedFences, err)
 	}
 	// A create with a new operation ID replaces the Participant's live session, also at the
 	// same generation: the API replaces a media connection that way, and its database has
 	// already superseded the old connection ID.
 	fenced := n.participants[key]
 	if n.sessionSlots(scope, kind, fenced) > n.cfg.MaxSessions {
-		return protocol.CreateSessionResponse{}, nil, n.refuse(RefusedSessions, ErrCapacityExceeded)
+		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedSessions, ErrCapacityExceeded)
 	}
 	admit := n.admit
 	if kind == kindCapture {
@@ -603,7 +603,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 		}
 	}
 	if n.mandatoryPackets(participants, true) > n.episodeCeiling(participants) {
-		_ = n.refuse(RefusedScreenCeiling, nil)
+		_ = n.refuseFor(s.scope, RefusedScreenCeiling, nil)
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}
 	n.screens[key] = s
@@ -612,10 +612,10 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 
 // refuseCamera counts a camera push over the Participant's reserved cameras. The caller may hold
 // the session's own mutex: nothing takes it while holding n.mu.
-func (n *Node) refuseCamera() {
+func (n *Node) refuseCamera(s *Session) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	_ = n.refuse(RefusedCameras, nil)
+	_ = n.refuseFor(s.scope, RefusedCameras, nil)
 }
 
 // releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
@@ -639,7 +639,7 @@ func (n *Node) EndEpisode(tenantID, episodeID string) int {
 	}
 	n.mu.Unlock()
 	for _, session := range ended {
-		session.Close()
+		session.CloseFor(CloseEpisodeEnded)
 	}
 	return len(ended)
 }
@@ -719,7 +719,7 @@ func (n *Node) Close() {
 	}
 	n.mu.Unlock()
 	for _, session := range sessions {
-		session.Close()
+		session.CloseFor(CloseNodeShutdown)
 	}
 	// When a publisher sends a second SSRC under a RID it already sent, such as
 	// RTX packets that carry the RID instead of the repaired RID, Pion rebinds

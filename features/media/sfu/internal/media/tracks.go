@@ -69,6 +69,7 @@ func newPublication(session *Session, track protocol.Track, kind webrtc.RTPCodec
 	if err != nil {
 		return nil, err
 	}
+	session.tracePublicationStarted(track.Source, kind)
 	return &publication{
 		session: session, name: track.TrackName, source: track.Source, kind: kind, done: make(chan struct{}),
 		authority: authority, revision: revision, revoked: revoked, order: serials.Add(1),
@@ -347,6 +348,7 @@ func (p *publication) close() {
 	}
 	close(p.done)
 	p.mu.Unlock()
+	p.session.tracePublicationStopped(p)
 	if p.source == sourceScreen {
 		p.session.node.releaseScreen(p.session)
 	}

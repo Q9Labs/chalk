@@ -128,6 +128,57 @@ later reconnects. The whiteboard client sends the same baggage member beside its
 presenter-view extensions, then retries without baggage after a 1009 close from
 an older server.
 
+### Follow one Participant through the own SFU
+
+The own SFU ships its logs over OTLP/HTTP to the dataset the API's logs go to
+(`service.name=chalk-sfu`), so a bad call is explained without SSH. Every event
+carries `event` (also the log body), `tenant_id`, `episode_id`, `participant_id`
+and `generation`, the same names the API uses, plus `connection_id`,
+`session_kind` (`participant`, `capture`) and `node_incarnation`. When the API
+sends `traceparent` and `X-Chalk-Journey-ID` on a control request, the session's
+later events carry `trace_id` and `journey_id` of the latest request that
+touched it, and the `control request` line carries the ones of its own request.
+A malformed header is ignored. No event holds SDP, an address, a candidate, a
+certificate, a name or a token; values are ids, counts and closed sets.
+
+| Event                                             | When                                                             | Attributes besides the ids                                                                                                                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sfu.session.registered`                          | a create was accepted                                            | `allocation`                                                                                                                                                                                        |
+| `sfu.session.refused`                             | a create was refused                                             | `code` (the API's error code)                                                                                                                                                                       |
+| `sfu.admission.refused`                           | admission or a screen or camera limit said no                    | `reason` (`episode_full`, `node_full`, `cpu_steal`, `screen_ceiling`, ...), `sessions`                                                                                                              |
+| `sfu.peer.state`                                  | the peer connection changed state                                | `state`                                                                                                                                                                                             |
+| `sfu.ice.state`                                   | ICE changed state                                                | `state`, and `path` (such as `host/relay`, the candidate type of each end) once connected                                                                                                           |
+| `sfu.dtls.state`                                  | DTLS changed state                                               | `state`                                                                                                                                                                                             |
+| `sfu.publication.started` / `.stopped`            | a track was published or ended                                   | `source`, `media_kind`, `reason` on stop                                                                                                                                                            |
+| `sfu.subscription.started` / `.stopped`           | a Participant began or ended receiving a track                   | `publisher_id`, `source`, `media_kind`, `mid`, `reason` on stop (`session_closed`, `source_closed`, `released`)                                                                                     |
+| `sfu.subscription.paused` / `.resumed`            | delivery stopped or restarted                                    | `reason` (`viewer`, `congestion`, `source_inactive`), `was` on resume                                                                                                                               |
+| `sfu.subscription.layer`                          | the layer the SFU wants to forward changed                       | `rid` (`none` when nothing flows)                                                                                                                                                                   |
+| `sfu.subscription.congestion_paused` / `_resumed` | the downlink estimate paused or resumed video                    | the estimate and loss readings that decided it                                                                                                                                                      |
+| `sfu.camera.plan`                                 | the Episode's packet ceiling lowered or restored a camera        | `level` (`open`, `lowest`, `paused`), `was`, `ceiling_packets`                                                                                                                                      |
+| `sfu.source.lease_opened` / `.lease_lost`         | a grant opened a source or a revoke or newer allocation ended it | `source`, `cause` (`revoked`, `newer_allocation`)                                                                                                                                                   |
+| `sfu.session.closed`                              | the session ended                                                | `cause` (`removed`, `replaced`, `episode_ended`, `never_connected`, `peer_failed`, `peer_closed`, `negotiation_failed`, `retired`, `node_shutdown`), `lifetime_ms`, `publications`, `subscriptions` |
+
+The first cause to reach a session decides `cause`; a later close changes
+nothing. A source lease that merely expires (no renewal within the TTL) logs no
+event: its subscribers show `reason=source_unauthorized` in `/inspect`. The
+node-wide lines `new Episodes refused`, `new Episodes admitted again` and
+`media telemetry` stay, and carry no Episode.
+
+To read one Participant's account of a call, run in the API log dataset:
+
+```apl
+| where ['episode_id'] == "<episode-id>" and ['service.name'] == "chalk-sfu"
+| where _time between (datetime(<from>) .. datetime(<to>))
+| project _time, event, participant_id, connection_id, state, cause, reason, path, source, rid, trace_id
+| sort by _time asc
+```
+
+Drop the `service.name` filter to see the API's and the SFU's lines together, and
+add `and participant_id == "<participant-id>"` to follow one person. The deploy
+installs the export when `~/.config/chalk-sfu/<env>/otlp-log-headers` exists (see
+the [SFU README](../features/media/sfu/README.md)); without it the node logs to
+its journal only.
+
 ### Measure client readiness for the own SFU
 
 `chalk.api.access_grant.issuance` has bounded tags `outcome`, `reason`, and
