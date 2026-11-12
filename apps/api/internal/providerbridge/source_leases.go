@@ -9,8 +9,9 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-// The own SFU forwards a granted source only while its lease lasts (15 s by
-// default). Renewing every 5 s keeps a live grant two renewals clear of expiry.
+// The own SFU forwards a granted source only while its lease lasts (60 s by
+// default). Renewing every 5 s keeps a live grant many renewals clear of expiry,
+// so an API restart that answers again within the lease never stops a call.
 const (
 	SourceLeaseRenewInterval = 5 * time.Second
 	sourceLeasePageSize      = 512

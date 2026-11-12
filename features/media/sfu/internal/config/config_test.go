@@ -35,6 +35,18 @@ func TestAdmissionSettingsAreConfigurable(t *testing.T) {
 	}
 }
 
+// The default lease is the grace an API restart or deploy has to finish inside, so it stays
+// well above the 29 s an API restart takes and below the 2 minute ceiling.
+func TestSourceLeaseDefaultOutlastsAnAPIRestart(t *testing.T) {
+	cfg, err := Load(lookupOf(required))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SourceLeaseTTL < 45*time.Second || cfg.SourceLeaseTTL > 2*time.Minute {
+		t.Fatalf("default source lease = %v, want 45s to 2m", cfg.SourceLeaseTTL)
+	}
+}
+
 func TestTelemetrySettings(t *testing.T) {
 	base := map[string]string{"SFU_TLS_CERT_FILE": "c", "SFU_TLS_KEY_FILE": "k", "SFU_CLIENT_CA_FILE": "ca", "SFU_CLIENT_IDENTITY": "id"}
 	cases := []struct {
