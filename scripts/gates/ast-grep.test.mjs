@@ -41,6 +41,7 @@ const suppressed = {
   "blanket.test.ts": 'import { vi } from "vitest";\n// ast-grep-ignore\nvi.mock("./own", () => ({}));',
   "trailing-blanket.test.ts": 'import { vi } from "vitest";\nvi.mock("./own", () => ({})); // ast-grep-ignore',
   "multiline-block.test.ts": '/* ast-grep-ignore:\nchalk.forbid-own-module-mocks-ts -- reason */\nimport { vi } from "vitest";\nvi.mock("./own", () => ({}));',
+  "url-string-before-block.test.ts": 'import { vi } from "vitest";\nvi.mock("./own", () => ({ default: "https://example.test" })); /* ast-grep-ignore:\nchalk.forbid-own-module-mocks-ts -- reason */',
   "blanket-in-helper.ts": 'import { vi } from "vitest";\nvi.doMock("./own", () => ({})); // ast-grep-ignore -- reason',
 };
 

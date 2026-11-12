@@ -2,8 +2,11 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const ts = createRequire(import.meta.url)("typescript");
 
 // ast-grep parses JavaScript, TypeScript, and TSX separately. Keep each rule's
 // intent here once, then give each grammar its own ID for precise suppressions.
@@ -184,9 +187,20 @@ for (const [suffix, language] of [["yaml", "Yaml"], ...sourceLanguages]) {
 
 // ast-grep honors `// ast-grep-ignore` on or above a line, and a trailing one hides the comment itself too, so a rule cannot
 // guard against it. Check the comments as text instead: a suppression must name its rule, and may not name the own-module mock ban.
-// A block comment can carry the rule list over several lines, so whole comments are read, not lines.
+// A block comment can carry the rule list over several lines, and a string such as "https://x" must not pass for a comment,
+// so the comments are the ones the TypeScript parser finds, read whole.
 const sourceFile = /\.[cm]?[jt]sx?$/u;
-const comment = /\/\/[^\n]*|\/\*[\s\S]*?\*\//gu;
+function commentRanges(file, text) {
+  const jsx = /x$/u.test(file);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false, jsx ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const found = new Map();
+  const visit = (node) => {
+    for (const range of [...(ts.getLeadingCommentRanges(text, node.pos) ?? []), ...(ts.getTrailingCommentRanges(text, node.end) ?? [])]) found.set(range.pos, range);
+    node.getChildren(source).forEach(visit);
+  };
+  visit(source);
+  return [...found.values()];
+}
 const forbiddenSuppression = /ast-grep-ignore(?!\s*:)|ast-grep-ignore\s*:[\s\S]*forbid-own-module-mocks/u;
 function forbiddenSuppressions(paths) {
   const listed = spawnSync("git", ["grep", "--no-index", "--exclude-standard", "-l", "-E", "ast-grep-ignore", "--", ...(paths.length > 0 ? paths : ["."]), ":!scripts/gates/ast-grep*"], { encoding: "utf8", maxBuffer: 1 << 26 });
@@ -196,7 +210,10 @@ function forbiddenSuppressions(paths) {
     .filter((file) => sourceFile.test(file))
     .flatMap((file) => {
       const text = readFileSync(file, "utf8");
-      return [...text.matchAll(comment)].filter(([match]) => forbiddenSuppression.test(match)).map((match) => `${file}:${text.slice(0, match.index).split("\n").length}: ${match[0].split("\n", 1)[0]}`);
+      return commentRanges(file, text)
+        .map((range) => ({ range, body: text.slice(range.pos, range.end) }))
+        .filter(({ body }) => forbiddenSuppression.test(body))
+        .map(({ range, body }) => `${file}:${text.slice(0, range.pos).split("\n").length}: ${body.split("\n", 1)[0]}`);
     });
 }
 
