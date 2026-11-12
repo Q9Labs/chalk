@@ -96,6 +96,19 @@ type Snapshot struct {
 	Publications []provideroperations.Publication
 }
 
+// Listed holds the publications a listener may subscribe to: the enabled ones, and a microphone its owner muted in place,
+// which a listener keeps subscribed so that the unmute reaches it with no signalling. A quiet video would read as a stall to
+// a listener, so a muted camera is not listed.
+func (s Snapshot) Listed() []provideroperations.Publication {
+	listed := make([]provideroperations.Publication, 0, len(s.Publications))
+	for _, publication := range s.Publications {
+		if publication.PublicationID != "" && (publication.Enabled || publication.Held) {
+			listed = append(listed, publication)
+		}
+	}
+	return listed
+}
+
 type Registry interface {
 	RecordPublishedTracks(context.Context, RecordInput) ([]PublishedReference, error)
 	RecordPublicationAvailability(context.Context, AvailabilityInput) error

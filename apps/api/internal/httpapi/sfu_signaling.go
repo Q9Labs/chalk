@@ -232,15 +232,8 @@ func listPublications(ctx context.Context, publications mediapublications.Regist
 		return mediaplane.PublicationList{}, err
 	}
 	list := mediaplane.PublicationList{Incarnation: snapshot.Incarnation, Sequence: snapshot.Sequence, Publications: make([]mediaplane.ListedPublication, 0, len(snapshot.Publications))}
-	for _, publication := range snapshot.Publications {
-		if publication.PublicationID == "" {
-			continue
-		}
-		// Only a microphone is ever held: a listener keeps its receiver, so the unmute needs no pull. A quiet video would
-		// read as a stall to a listener, so a muted camera leaves the list as it always did.
-		if publication.Enabled || publication.Held {
-			list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID, Paused: !publication.Enabled})
-		}
+	for _, publication := range snapshot.Listed() {
+		list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID, Paused: !publication.Enabled})
 	}
 	return list, nil
 }
