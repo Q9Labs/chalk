@@ -6585,43 +6585,81 @@ describe("own-SFU subscription state", () => {
     );
   });
 
-  it("replaces the connection once when a publish in flight fails on the same dead session", async () => {
+  it.each(["404", "success"] as const)("leaves a session-gone read behind a delayed publish to the publish: %s", async (publishResult) => {
     let replacements = 0;
+    const onError = vi.fn();
+    const kept = { ...own, capabilities: { ...own.capabilities, keepsIdleSession: true } };
+    let dropOldPublications = () => {};
     await withTimedHarness(
       async (h) => {
-        let gone = false;
+        dropOldPublications = () => h.transport.localPublications.clear();
+        const read = Promise.withResolvers<SFUSubscriptionState[]>();
+        const readStarted = vi.fn();
+        let armRead = false;
         h.transport.listSubscriptions = async () => {
-          if (gone) throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
-          return [];
+          if (!armRead) return [];
+          armRead = false;
+          readStarted();
+          return read.promise;
         };
         await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
         await reviewSubscribe(h);
         let flowing = true;
         sampleMedia(h, () => flowing);
         await vi.advanceTimersByTimeAsync(3000);
-        const failPublish = Promise.withResolvers<void>();
+        armRead = true;
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(readStarted).toHaveBeenCalledTimes(1);
+
+        const publishStarted = vi.fn();
+        const releasePublish = Promise.withResolvers<void>();
         const addTracks = h.transport.addTracks.bind(h.transport);
         h.transport.addTracks = async (input) => {
-          if (input.connectionId !== "own-connection-1") return addTracks(input);
-          await failPublish.promise;
-          throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
+          if (input.connectionId !== own.connectionId || !input.tracks.some((track) => track.location === "local")) return addTracks(input);
+          publishStarted();
+          if (publishResult === "404") {
+            await releasePublish.promise;
+            throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
+          }
+          const response = await addTracks(input);
+          await releasePublish.promise;
+          return response;
         };
+        // A closed browser peer rejects a description, as a real one does.
+        const oldPeer = h.peers[0]!;
+        const applyDescription = oldPeer.setRemoteDescription.bind(oldPeer);
+        vi.spyOn(oldPeer, "setRemoteDescription").mockImplementation(async (description) => {
+          if (oldPeer.closed) throw new DOMException("The RTCPeerConnection is closed", "InvalidStateError");
+          await applyDescription(description);
+        });
+
         h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
-        const enabling = h.client.setLocalPublicationTarget({ operationId: "cam-on", participantId: "participant-1", source: "camera", enabled: true }).catch(() => undefined);
+        const enabling = h.client.setLocalPublicationTarget({ operationId: "cam-on", participantId: "participant-1", source: "camera", enabled: true });
         await vi.advanceTimersByTimeAsync(0);
-        gone = true;
-        flowing = false;
-        await vi.advanceTimersByTimeAsync(12_000);
-        // The read found the session gone while the publish still held the SDP queue, so nothing was replaced yet.
+        expect(publishStarted).toHaveBeenCalledTimes(1);
+        expect(oldPeer.signalingState).toBe("have-local-offer");
+
+        read.reject(new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true }));
+        await vi.advanceTimersByTimeAsync(0);
         expect(replacements).toBe(0);
-        failPublish.resolve();
-        await enabling;
-        await vi.advanceTimersByTimeAsync(10_000);
-        expect(replacements).toBe(1);
+        flowing = true;
+        releasePublish.resolve();
+        const result = await enabling;
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(replacements).toBe(publishResult === "404" ? 1 : 0);
+        expect(result).toMatchObject({ outcome: "confirmed", errorCode: null });
+        expect(onError).not.toHaveBeenCalled();
+        expect(h.client.getSnapshot().localTracks.find((track) => track.source === "camera")?.enabled).toBe(true);
       },
       {
-        bootstrap: { ...own, capabilities: { ...own.capabilities, keepsIdleSession: true } },
-        replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`),
+        bootstrap: kept,
+        onError,
+        replaceMediaConnection: async () => {
+          dropOldPublications();
+          return { ...kept, connectionId: `replacement-${++replacements}` };
+        },
       },
     );
   });
