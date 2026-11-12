@@ -15,9 +15,6 @@
 
 export { ICE_PATHS } from "../../features/scorecard/diagnostics.mjs";
 
-/** The relay protocols a relay candidate reports (RTCIceCandidateStats.relayProtocol). */
-export const RELAY_PROTOCOLS = ["udp", "tcp", "tls"];
-
 const BLOCK_UDP_ARG = "--force-webrtc-ip-handling-policy=disable_non_proxied_udp";
 
 /** Chromium launch arguments a path needs. */
