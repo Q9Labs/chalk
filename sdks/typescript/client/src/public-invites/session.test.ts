@@ -67,4 +67,13 @@ describe("public Space session", () => {
     await session.leave();
     expect(leaveFirstFails).toHaveBeenCalledTimes(2);
   });
+
+  it("shares one request between leaves that overlap", async () => {
+    const leaveOnce = vi.fn(async () => undefined);
+    const { client } = fakeClient({ leaveSpacePublicInviteArrival: leaveOnce });
+    const session = createPublicSpaceSession(client, { arrivalHandle: "handle-1", access: opaqueAccessGrant(1) });
+
+    await Promise.all([session.leave(), session.leave()]);
+    expect(leaveOnce).toHaveBeenCalledOnce();
+  });
 });

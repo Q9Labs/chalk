@@ -9,7 +9,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
-import { apiUrls } from "../urls";
+import { apiUrls, DEFAULT_API_BASE_URL } from "../urls";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
@@ -43,7 +43,7 @@ export const makeChatController = (input: {
     const controller = yield* Effect.sync(() => {
       let instance: ChatControllerRuntime | null = null;
       const transport = input.createTransport?.({ token: () => Effect.runPromiseWith(context)(input.connection.getSyncToken()) }) ?? null;
-      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? "https://api.chalkmeet.com", input.fetch ?? globalThis.fetch, fork, input.offline);
+      instance = new ChatControllerRuntime(input.connection, input.store, transport, input.apiBaseUrl ?? DEFAULT_API_BASE_URL, input.fetch ?? globalThis.fetch, fork, input.offline);
       return instance;
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => controller.dispose()));

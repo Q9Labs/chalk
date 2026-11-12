@@ -1,4 +1,4 @@
-import type { AdmissionRequest, Participant } from "@q9labsai/chalk-client";
+import { nextHandOrder, type AdmissionRequest, type Participant } from "@q9labsai/chalk-client";
 import { memo, useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { FlatList, Pressable, StyleSheet, View, type ListRenderItemInfo } from "react-native";
 import Animated from "react-native-reanimated";
@@ -14,7 +14,7 @@ import { PillButton } from "../../primitives/PillButton";
 import { useToasts } from "../../primitives/toast/ToastStack";
 import { useTheme } from "../../theme/theme";
 import { fixed, space, corners } from "../../theme/tokens";
-import { nextHandOrder, peopleRows, type PeopleRow } from "./people-model";
+import { peopleRows, type PeopleRow } from "./people-model";
 import { TextField } from "./TextField";
 
 /** Past this many people the list gets a search field. */
@@ -36,7 +36,7 @@ export function PeopleTab(): React.JSX.Element {
   const muteAllRef = useRef<View>(null);
 
   const handOrder = useRef<readonly string[]>([]);
-  handOrder.current = useMemo(() => nextHandOrder(handOrder.current, roster), [roster]);
+  handOrder.current = useMemo(() => nextHandOrder(handOrder.current, roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId)), [roster]);
   const waiting = canAdmit ? admissionQueue : NONE;
   const rows = useMemo(() => peopleRows({ roster, waiting, handOrder: handOrder.current, query }), [roster, waiting, query]);
 
