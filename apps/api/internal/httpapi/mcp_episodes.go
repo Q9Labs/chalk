@@ -7,15 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
-func bindMCPEpisodeTools(server *mcp.Server, o Options) {
-	mcptools.Bind(server, mcptools.InspectEpisodes, func(ctx context.Context, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
+func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
+	mcptools.Bind(registry, mcptools.InspectEpisodes, func(ctx context.Context, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "episode":
@@ -32,21 +31,21 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, listEpisodesEndpoint(o.Episodes, o.TenantAuthz), listEpisodesRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), Page: b.page(i.PageInput)})
 		}
 	})
-	bindMCPEndpoint(server, mcptools.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
+	bindMCPEndpoint(registry, mcptools.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
 		// The tool has no SDK to ask, like its admit and grant tools below.
 		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, MediaClients: mediaplane.AllClientProviders(), Body: i.Body}
 	})
-	bindMCPEndpoint(server, mcptools.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.EpisodeInput) endEpisodeEndpointRequest {
+	bindMCPEndpoint(registry, mcptools.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.EpisodeInput) endEpisodeEndpointRequest {
 		return endEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey}
 	})
-	bindMCPEndpoint(server, mcptools.SetEpisodeDeadline, setDeadlineEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.DeadlineInput) setDeadlineEndpointRequest {
+	bindMCPEndpoint(registry, mcptools.SetEpisodeDeadline, setDeadlineEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.DeadlineInput) setDeadlineEndpointRequest {
 		deadline, err := time.Parse(time.RFC3339Nano, i.DeadlineAt)
 		if err != nil {
 			b.err = apiErrorInvalidRequest
 		}
 		return setDeadlineEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey, Body: setDeadlineRequest{DeadlineAt: deadline}}
 	})
-	mcptools.Bind(server, mcptools.DecideAdmissionRequest, func(ctx context.Context, i mcptools.AdmissionDecisionInput) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.DecideAdmissionRequest, func(ctx context.Context, i mcptools.AdmissionDecisionInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		request := decidePublicAdmissionRequestRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestHandle: i.RequestHandle, RequestKey: i.RequestKey}
 		switch i.Decision {
@@ -58,7 +57,7 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
 	})
-	mcptools.Bind(server, mcptools.ControlCall, func(ctx context.Context, i mcptools.CallInput) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.ControlCall, func(ctx context.Context, i mcptools.CallInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		space, episode, participant := b.id(i.SpaceID), b.id(i.EpisodeID), b.optionalID(i.ParticipantID)
 		var (
@@ -87,10 +86,10 @@ func bindMCPEpisodeTools(server *mcp.Server, o Options) {
 			outcome = "rejected"
 		}
 		// The audit line names who minted credentials for whom. It never holds a credential.
-		slog.InfoContext(ctx, "MCP call credentials requested", "event", "mcp.call_credentials.requested", "action", i.Action, "tenant_id", b.tenant.String(), "actor_id", mcptools.Connection(ctx).ActorID, "space_id", space.String(), "episode_id", episode.String(), "participant_id", participant.String(), "outcome", outcome)
+		slog.InfoContext(ctx, "MCP call credentials requested", "event", "mcp.call_credentials.requested", "action", i.Action, "tenant_id", b.tenant.String(), "actor_id", mcptools.ConnectionFrom(ctx).ActorID, "space_id", space.String(), "episode_id", episode.String(), "participant_id", participant.String(), "outcome", outcome)
 		return data, err
 	})
-	bindMCPEndpoint(server, mcptools.RemoveParticipant, removeParticipantEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.RemovalInput) removeParticipantEndpointRequest {
+	bindMCPEndpoint(registry, mcptools.RemoveParticipant, removeParticipantEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.RemovalInput) removeParticipantEndpointRequest {
 		return removeParticipantEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), ParticipantID: b.id(i.ParticipantID), RequestKey: i.RequestKey, Body: removeParticipantRequest{ParticipantGeneration: i.ParticipantGeneration}}
 	})
 }
