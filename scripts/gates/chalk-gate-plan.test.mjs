@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan, laneGroup } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -11,6 +11,7 @@ const selected = (files, event) =>
 test("documentation selects only the always-on lane group on every event", () => {
   for (const event of ["pull_request", undefined]) {
     assert.deepEqual(jobs(["docs/observability.md"], event), { api: false, sync: false, rootGroups: ["checks"] });
+    assert.ok(selected(["docs/observability.md"], event).includes("feature-map"));
   }
 });
 
@@ -101,4 +102,10 @@ test("the SFU lane runs in its own group, so an SFU change does not lengthen the
   assert.ok(jobs(["features/media/sfu/server/main.go"], "pull_request").rootGroups.includes("sfu"));
   assert.ok(!jobs(["apps/web/src/main.tsx"], "pull_request").rootGroups.includes("sfu"));
   assert.equal(laneGroup("sfu"), "sfu");
+});
+
+test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {
+  const context = { scope: "branch", classification: { fullRequired: true } };
+  assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
+  assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
 });
