@@ -371,7 +371,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
     await page.getByLabel("1 waiting to join", { exact: true }).waitFor({ state: "hidden" });
     await terminalProjection("Expired guest", "expired");
     await expired.guest.screenshot({ path: resolve(out, "after-guest-expired.png") });
-    assert.equal(await expired.guest.getByText(/Chalk could not connect/).count(), 0);
+    assert.equal(await expired.guest.getByText(/Couldn’t reach Chalk|Chalk is having trouble/).count(), 0);
   } finally {
     await expired.context.close();
   }

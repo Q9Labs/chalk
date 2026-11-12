@@ -23,9 +23,6 @@ export interface MediaDevice {
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  shareUrl?: string;
-  callLinkOpen?: boolean;
-  onCallLinkToggle?: () => void;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -45,7 +42,6 @@ export interface ControlBarSurfaceProps {
   onMirrorChange?: (mirrored: boolean) => void;
   onTestSpeaker?: () => void;
   onStartScreenShare?: (options: ScreenShareOptions) => void;
-  onCopyError?: () => void;
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
@@ -100,9 +96,6 @@ export interface ControlBarProps {
   /** Local self-view only. Omit to use the persisted mirror preference. */
   readonly mirrored?: boolean;
   readonly onMirrorChange?: (mirrored: boolean) => void;
-  readonly shareUrl?: string;
-  readonly callLinkOpen?: boolean;
-  readonly onCallLinkToggle?: () => void;
   readonly layout?: "focus" | "grid";
   readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
@@ -111,6 +104,7 @@ export interface ControlBarProps {
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
+  readonly isWhiteboardOpen?: boolean;
   readonly onOpenReactions?: () => void;
   readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;
@@ -230,7 +224,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageRecording = useCan("manageRecording");
-  const live = useConnection().status === "live";
+  const { status } = useConnection();
+  const live = status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
   const microphoneTarget = mediaToggleTarget(media.local.microphone.state, live);
@@ -326,12 +321,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         "screen",
         "start",
       ),
-    shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     onCancelMicrophonePending: toggleMicrophone,
     mediaEnableDisabled: !live,
-    reactionsDisabled: !live,
+    reactionsDisabled: !live && status !== "reconnecting",
     cameraPending: media.local.camera.state === "requesting",
     onCancelCameraPending: toggleCamera,
     isVideoEnabled: cameraEnabled,
@@ -361,6 +355,7 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
     onToggleWhiteboard: props.onToggleWhiteboard,
+    isWhiteboardOpen: props.isWhiteboardOpen,
     onOpenReactions: props.onOpenReactions,
     onLeft: leave,
     onEndForEveryone: props.onEndForEveryone,

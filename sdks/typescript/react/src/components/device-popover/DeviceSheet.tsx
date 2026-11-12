@@ -1,11 +1,10 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { ChalkSheet } from "../chalk-ui";
 import { VolumeHighIcon } from "../../utils/icons";
 import type { CameraPreview as CameraPreviewHandle } from "@q9labsai/chalk-client";
 import type { MediaDevice } from "../control-bar/control-bar-behavior";
+import { cameraBackgroundPicker } from "./camera-background-loader";
 import { CameraPreview, InputLevel } from "./DevicePreview";
-
-const CameraBackgroundPicker = lazy(() => import("./CameraBackgroundPicker").then((module) => ({ default: module.CameraBackgroundPicker })));
 
 interface DeviceSheetProps {
   readonly type: "mic" | "video";
@@ -177,7 +176,7 @@ export default function DeviceSheet({
           {previewDeviceId && open ? (
             <Suspense fallback={null}>
               <div className="chalk-sheet-group">
-                <CameraBackgroundPicker key={previewDeviceId} deviceId={previewDeviceId} menu={sheetBackground} />
+                <cameraBackgroundPicker.Component key={previewDeviceId} deviceId={previewDeviceId} menu={sheetBackground} />
               </div>
             </Suspense>
           ) : null}

@@ -10,12 +10,20 @@ export interface CameraBackgroundMenu {
   readonly Item: ComponentType<MenuItemProps>;
 }
 
+let preloaded: Controls | undefined;
+
+/** Load the controls ahead of the first open, so the picker mounts with its rows instead of growing a frame later. */
+export function preloadCameraBackgroundControls(): Promise<Controls> {
+  return loadCameraBackgroundControls().then((controls) => (preloaded = controls));
+}
+
 /** `load` is the controls chunk download; only a test replaces it. */
 export function CameraBackgroundPicker({ deviceId, menu, load = loadCameraBackgroundControls }: { readonly deviceId: string; readonly menu: CameraBackgroundMenu; readonly load?: typeof loadCameraBackgroundControls }) {
-  const [controls, setControls] = useState<Controls>();
+  const [controls, setControls] = useState<Controls | undefined>(() => (load === loadCameraBackgroundControls ? preloaded : undefined));
   const [failed, setFailed] = useState(false);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [resource] Load optional controls for this open picker; ignore late results on unmount so reopening can retry failures.
   useEffect(() => {
+    if (controls) return;
     let active = true;
     void load().then(
       (loaded) => {

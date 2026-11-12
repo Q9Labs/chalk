@@ -7,7 +7,7 @@ import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { ChalkMenu, ChalkMenuItem } from "../chalk-ui";
+import { TileOptions } from "./TileOptions";
 import { TileShell } from "./TileShell";
 import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
@@ -150,20 +150,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
           ) : null}
           {onClick || onFollow ? (
             <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
-              <ChalkMenu
-                trigger={
-                  <button
-                    type="button"
-                    aria-label={`More options for ${participant.displayName}`}
-                    className="grid h-8 w-8 place-items-center rounded-full bg-[var(--chalk-overlay)] text-[var(--chalk-on-overlay)] outline-none hover:bg-[var(--chalk-overlay-hover)] focus-visible:ring-2 focus-visible:ring-[var(--chalk-focus)]"
-                  >
-                    <StageIcon name="more" size={18} />
-                  </button>
-                }
-              >
-                {onClick ? <ChalkMenuItem onClick={onClick}>{actionLabel}</ChalkMenuItem> : null}
-                {onFollow ? <ChalkMenuItem onClick={onFollow}>{followLabel}</ChalkMenuItem> : null}
-              </ChalkMenu>
+              <TileOptions name={participant.displayName} actions={[...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])]} />
             </span>
           ) : null}
         </>
@@ -175,7 +162,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             <span data-part="tile-label" className="inline-flex h-[1lh] min-w-0 max-w-full flex-wrap content-start items-center gap-x-(--space-1-5) overflow-hidden">
               {showName && (
                 <>
-                  <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full shrink-0 items-center [unicode-bidi:plaintext]" title={participant.displayName}>
+                  <span dir="auto" data-part="tile-full-name" className="inline-flex h-full min-w-0 max-w-full items-center [unicode-bidi:plaintext]" title={participant.displayName}>
                     <span className="min-w-0 truncate">{participant.displayName}</span>
                     {participant.isLocal && participant.displayName !== "You" && (
                       <span data-part="tile-self-label" className="shrink-0 whitespace-pre text-[var(--chalk-on-overlay)]">

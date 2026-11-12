@@ -81,13 +81,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   height: 16px;
 }
 .chalk-shell-muted-hint.chalk-shell-background-hint {inset-inline-start:50%;transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);white-space:normal;}
-[data-chalk] .chalk-shell-split button:focus {
-  outline: 0;
-  box-shadow: none;
-}
-.chalk-shell-split:has(button:focus-visible) {
-  outline: 2px solid var(--chalk-focus);
-  outline-offset: 3px;
+[data-chalk] .chalk-shell-split button:focus-visible {
+  outline-offset: -2px;
 }
 .chalk-shell-split button:hover,
 .chalk-shell-caret[aria-expanded="true"] {
@@ -226,17 +221,19 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   bottom: 0;
   pointer-events: auto;
 }
-.chalk-shell-people {
-  inset-inline-start: 20px;
+.chalk-shell-dock .chalk-icon-button {
+  transition:
+    transform 0.15s ease-out,
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    opacity 0.25s ease-out;
 }
-.chalk-shell-record {
-  inset-inline-start: 72px;
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"] {
+  background: var(--chalk-danger);
+  color: var(--chalk-on-overlay);
 }
-@media (min-width: 641px) and (max-width: 800px) {
-  .chalk-shell-record {
-    inset-inline-start: 20px;
-    bottom: 52px;
-  }
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"]:hover {
+  background: var(--chalk-danger-hover);
 }
 .chalk-shell-chat {
   inset-inline-end: 20px;
@@ -338,12 +335,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-details-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-1) var(--space-3) var(--space-3);}
 .chalk-shell-details-heading h2 {font-size:var(--type-body-lg);font-weight:600;line-height:1.3;margin:0;}
 .chalk-shell-details-sub {display:flex;align-items:center;gap:var(--space-1-5);margin:var(--space-0-5) 0 0;color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
-.chalk-shell-details-sub i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
-.chalk-shell-diagnostics-copy {margin:0 0 var(--space-2) var(--space-2);}
-.chalk-shell-diagnostics-copy .chalk-copy {display:inline-flex;width:auto;height:32px;padding:0 var(--space-3);gap:var(--space-1-5);border-radius:var(--corner-pill);background:var(--chalk-hover);font-weight:500;}
-.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-pressed);}
-.chalk-shell-diagnostics-copy .chalk-copy-label {font-size:var(--type-caption);}
-.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:14px;height:14px;}
+.chalk-shell-diagnostics-copy {display:flex;justify-content:flex-end;margin:calc(var(--space-1) * -1) var(--space-2) var(--space-2);}
+.chalk-shell-diagnostics-copy .chalk-copy {display:grid;place-items:center;width:32px;height:32px;border-radius:var(--corner-pill);color:var(--chalk-muted-text);transition:background-color 150ms ease-out,color 150ms ease-out;}
+.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-hover);color:var(--chalk-text);}
+.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:16px;height:16px;}
 .chalk-shell-quality {
   display: inline-flex;
   align-items: flex-end;
@@ -453,7 +448,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 ${phoneRules(`
   .chalk-shell-details-heading {display:none;}
   .chalk-shell-detail-action,.chalk-invite-link[data-variant="menu"],.chalk-details-row {min-height:48px;}
-  .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
+  .chalk-shell-diagnostics-copy .chalk-copy {width:44px;height:44px;}
   .chalk-shell-dock {
     height: 52px;
     justify-content: space-between;
@@ -503,6 +498,25 @@ ${phoneRules(`
     min-height: 48px;
   }
 `)}
+/* A call under 300 CSS px wide is a phone at 200% zoom, where a 32px button is still about 64 device pixels, so all five dock buttons, Leave included, fit in the dock. */
+@container chalk-call (max-width: 300px) {
+  .chalk-shell-dock {
+    padding-inline: var(--space-1-5);
+  }
+  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + var(--space-1-5) * 2);margin-inline:calc(var(--space-1-5) * -1);}
+  .chalk-shell-split,
+  .chalk-shell-split .chalk-shell-main,
+  .chalk-shell-dock .chalk-icon-button,
+  .chalk-shell-dock .chalk-icon-button[data-chalk-size] {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+  .chalk-shell-dock {
+    height: 32px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-split button,
   .chalk-shell-split > .chalk-shell-main,
@@ -527,23 +541,6 @@ ${phoneRules(`
   gap: var(--space-2);
   padding: var(--space-2);
 }
-.chalk-shell-recording {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
-  font-size: var(--type-body-sm);
-}
-.chalk-shell-recording i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--chalk-danger);
-}
-${phoneRules(`
-  .chalk-shell-recording {
-    display: none;
-  }
-`)}
 .chalk-shell-people-pill {
   display: flex;
   align-items: center;
@@ -606,8 +603,12 @@ ${phoneRules(`
   place-items: center;
   transition: transform 0.12s ease-out;
 }
-.chalk-shell-emoji:hover {
+.chalk-shell-emoji:hover:not(:disabled) {
   background: var(--chalk-hover);
+}
+.chalk-shell-emoji:disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 .chalk-shell-emoji:active {
   transform: scale(0.9);
@@ -623,7 +624,7 @@ ${phoneRules(`
   line-height: 1;
   transform-origin: 50% 60%;
 }
-.chalk-shell-emoji:hover > span {
+.chalk-shell-emoji:hover:not(:disabled) > span {
   animation: var(--chalk-shell-emoji-move, chalk-shell-emoji-pop) 0.9s cubic-bezier(0.3, 1.3, 0.5, 1) infinite;
 }
 .chalk-shell-emoji[data-move="nod"] {--chalk-shell-emoji-move: chalk-shell-emoji-nod;}
@@ -664,6 +665,7 @@ ${phoneRules(`
 }
 .chalk-shell-raise {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   height: 40px;

@@ -1,7 +1,7 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
 import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
-import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
+import { CallLimbo, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
 import { getAccount } from "../../lib/account-api";
@@ -9,7 +9,7 @@ import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
-import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
+import { reportUnavailableReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
@@ -89,13 +89,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       return "";
     }
   });
-  // A visitor who already chose devices in this browser skips the device step and joins with that choice.
-  const [rememberedDevices] = useState(() => readRememberedDevices());
-  const [stepOpen, setStepOpen] = useState(!reloadMarker && !(automaticName && rememberedDevices));
+  // Every new entry goes through the device step, prefilled with this browser's last choice. A reload resumes the seat it held, muted and with the camera off.
+  const [stepOpen, setStepOpen] = useState(!reloadMarker);
   const [displayName, setDisplayName] = useState(reloadMarker?.displayName ?? automaticName);
   const [entranceSettings, setEntranceSettings] = useState<WebJoinSettings | null>(reloadMarker ? { displayName: reloadMarker.displayName, ...devicesOff } : null);
   const [callName, setCallName] = useState<string>();
-  const autoArrivalAttempted = useRef(false);
   const nameEdited = useRef(false);
   const [spaceAccess, setSpaceAccess] = useState<JoinedSpaceAccess | null>(null);
   const [callSurface, setCallSurface] = useState<typeof CallSurface | null>(null);
@@ -249,11 +247,6 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     };
   }, [automaticName, reloadMarker]);
   useEffect(() => {
-    if (!automaticName || !rememberedDevices || reloadMarker || autoArrivalAttempted.current) return;
-    autoArrivalAttempted.current = true;
-    void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
-  }, [automaticName, reloadMarker, rememberedDevices, start]);
-  useEffect(() => {
     if (preparing || cancelRequested.current) return;
     pendingRef.current = pending;
     if (!pending?.arrival.arrival_handle) return;
@@ -377,13 +370,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             errorCode={terminal.failure?.code}
             sync={terminal.failure?.sync}
             theme={{ colorScheme: mode }}
-            onReportProblem={
-              reportsAvailable && terminal.reportProblem && !reportExpired
-                ? () => {
-                    setReportOpen(true);
-                  }
-                : undefined
-            }
+            onReportProblem={terminal.reportProblem ? () => setReportOpen(true) : undefined}
             rejoinDisabled={preparing}
             onRejoin={() => {
               start(entranceSettings ?? defaultJoinOptions);
@@ -416,8 +403,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           reloadMarker={spaceAccess.prepared.reloadMarker}
           reportCredential={spaceAccess.prepared.reportCredential}
           reportCredentialExpiresAt={spaceAccess.prepared.reportCredentialExpiresAt}
-          reportsAvailable={reportsAvailable}
-          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+          reportUnavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
           onOpenReportProblem={(send, diagnostics) => {
             setReportDialog({ send, diagnostics });
             setReportOpen(true);
@@ -451,7 +437,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }}
             />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} glyph={error.reason} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : undefined} />
+            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} glyph={error.reason} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : { label: "Go to Chalk", onClick: () => globalThis.location.assign("/") }} />
           ) : stepOpen ? (
             <PreJoin
               spaceName={callName}
@@ -477,7 +463,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {renderSurface()}
       {sendReport && callSurface ? (
         <callSurface.ReportProblemDialog
-          unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
+          unavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
           diagnostics={terminal ? `Connection: ${terminal.phase}\nLast error: ${terminal.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}
@@ -575,5 +561,7 @@ function neutralMessage(cause: unknown): EntryFailure {
     if (cause.status === 429) return { message: "Too many requests. Wait a minute, then enter this Space again.", retryable: true };
     if (cause.status === 409) return { message: "You could not enter this Space. Try entering again.", retryable: true };
   }
-  return { message: "Chalk could not connect. Check your connection and try entering again.", retryable: true };
+  if (globalThis.navigator?.onLine === false) return { message: "You’re offline. Reconnect, then try again.", retryable: true };
+  if (cause && typeof cause === "object" && "status" in cause && typeof cause.status === "number" && cause.status >= 500) return { message: "Chalk is having trouble right now. Try again in a minute.", retryable: true };
+  return { message: "Couldn’t reach Chalk. Check your connection, then try again.", retryable: true };
 }
