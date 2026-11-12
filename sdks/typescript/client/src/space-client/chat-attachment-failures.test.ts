@@ -167,9 +167,9 @@ describe("reporting a failed chat upload", () => {
     { operation: "initiate_upload", httpStatus: 403, upload_failure: "initiate_failed" },
     { operation: "finalize_upload", httpStatus: 409, upload_failure: "finalize_failed" },
   ] as const)("reports a failed $operation with its HTTP status", ({ operation, httpStatus, upload_failure }) => {
-    const recordTransportDiagnostic = vi.fn();
-    reportUploadFailure({ recordTransportDiagnostic }, new ChalkChatFileError({ operation, code: "permission_denied", recoverable: false, message: "Chat attachment request failed.", httpStatus }));
-    expect(recordTransportDiagnostic).toHaveBeenCalledExactlyOnceWith({ event: "chat_upload_failed", upload_failure, http_status: httpStatus });
+    const sent: unknown[] = [];
+    reportUploadFailure({ recordTransportDiagnostic: (diagnostic) => void sent.push(diagnostic) }, new ChalkChatFileError({ operation, code: "permission_denied", recoverable: false, message: "Chat attachment request failed.", httpStatus }));
+    expect(sent).toEqual([{ event: "chat_upload_failed", upload_failure, http_status: httpStatus }]);
   });
 
   it("reports nothing for an error that is not an upload failure", () => {

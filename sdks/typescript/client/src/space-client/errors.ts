@@ -90,12 +90,17 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
 
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {
   if (!(cause instanceof ChalkChatFileError)) return null;
-  if (cause.operation === "store_upload") return uploadError(cause);
-  if (cause.code !== "unavailable") return cause.operation === "get_download" || cause.code === "access.invalid" ? null : uploadError(cause);
+  if (cause.operation === "store_upload" || isRefusedUpload(cause)) return uploadError(cause);
+  if (cause.code !== "unavailable") return null;
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
   }
   return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message, ...uploadDetail(cause) });
+}
+
+/** The API refused to start or finish an upload. A rejected token (HTTP 401) and download errors keep their own paths. */
+function isRefusedUpload(cause: ChalkChatFileError): boolean {
+  return cause.operation !== "get_download" && cause.code !== "unavailable" && cause.code !== "access.invalid";
 }
 
 function uploadError(cause: ChalkChatFileError): SpaceClientError {
