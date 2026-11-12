@@ -169,8 +169,9 @@ async function runOne({ context, origin, out, run }) {
       .waitFor({ timeout: 25_000 });
     await settle(page);
     const frame = async (step, label, extra = []) => {
-      // A sheet that animates with script (not CSS) is still sliding in when measured unless every animation is finished.
-      await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
+      // A sheet that animates with script is still sliding in when measured unless that animation is finished. CSS animations are
+      // already off (STILL); finishing them too removed the join toasts from the frame.
+      await page.evaluate(() => document.getAnimations().forEach((animation) => animation instanceof CSSAnimation || animation instanceof CSSTransition || animation.finish()));
       await settle(page);
       const findings = [...(await stableFindings(page)), ...extra];
       const shot = `${name}.${step}.png`;
