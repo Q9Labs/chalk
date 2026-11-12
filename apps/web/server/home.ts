@@ -3,7 +3,7 @@ import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
 import { live, run } from "./engine";
 import { callDTO } from "./dto";
-import type { HomeAction, HomeDTO, HomeStatusDTO, HomeStatusQuery, LiveDTO } from "../src/lib/dashboard/contracts";
+import type { ActionResult, HomeAction, HomeDTO, HomeStatusDTO, HomeStatusQuery, LiveDTO } from "../src/lib/dashboard/contracts";
 type Activity = { live: LiveDTO; call: HomeStatusDTO["calls"][number] };
 /** What a Home row shows for each Space: one tenant read for up to 300 Spaces. */
 async function activity(engine: Engine, spaceIds: readonly string[]): Promise<Activity[]> {
@@ -46,7 +46,7 @@ export async function homeStatus(engine: Engine, query: HomeStatusQuery): Promis
   const status = { live: rows.map((row) => row.live), calls: rows.map((row) => row.call) };
   return newest.spaces.some((space) => !query.spaceIds.includes(space.id)) ? { ...status, first: await pageOf(engine, newest) } : status;
 }
-export async function homeMutation(engine: Engine, action: HomeAction) {
+export async function homeMutation(engine: Engine, action: HomeAction): Promise<ActionResult<HomeAction>> {
   const params = { tenant_id: engine.tenantId };
   if (action.action === "create-call") {
     const space = await run(

@@ -7,7 +7,7 @@ import { attendance, listedRecording, live, run } from "./engine";
 import { callDTO, episodeDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
-import { knockDecisionAction, knockDecisionState, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
+import { knockDecisionAction, knockDecisionState, type ActionResult, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
 function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
   return requests
     .filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now())
@@ -61,7 +61,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
     knocks: mapKnocks(knocks.requests),
   };
 }
-export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>) {
+export async function callMutation(engine: Engine, action: Exclude<CallAction, { action: "join" | "refresh-access" }>): Promise<ActionResult<Exclude<CallAction, { action: "join" | "refresh-access" }>>> {
   if (action.action === "set-transcript-language" || action.action === "rename-call" || action.action === "set-admission") return homeMutation(engine, action);
   const params = { tenant_id: engine.tenantId, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(action.spaceId) };
   await run(engine.api.spaces.getSpace({ params }));
