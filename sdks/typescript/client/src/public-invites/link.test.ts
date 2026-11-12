@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseInviteCode } from "./code";
 import { buildSpaceInviteLink, canonicalSpaceInviteLink, parseChalkInviteLink, parseSpaceInviteLink, verifiedSpaceInviteLink } from "./link";
 
 const token = ["cspi1", "abc_-", "def_-", "ghi_-"].join(".");
@@ -42,6 +43,22 @@ describe("link shown to the host", () => {
   it("prefers the short code and keeps a long link that carries its capability", () => {
     expect(canonicalSpaceInviteLink(origin, "team-room", "abc-defg-hij")).toBe(`${origin}/abc-defg-hij`);
     expect(canonicalSpaceInviteLink(origin, "team-room", longLink)).toBe(longLink);
+    expect(canonicalSpaceInviteLink(origin, "team-room", token)).toBe(longLink);
+  });
+
+  it.each([
+    ["ten letters", "abcdefghij", "abc-defg-hij"],
+    ["three groups", "ABC-DEFG-HIJ", "abc-defg-hij"],
+    ["hyphenated words", "apple-banana-cherry-date", "apple-banana-cherry-date"],
+    ["dotted words", "apple.banana.cherry.date", "apple-banana-cherry-date"],
+    ["spoken words", "apple banana cherry date", "apple-banana-cherry-date"],
+    ["mixed case and separators", "  Apple. banana-Cherry\tdate ", "apple-banana-cherry-date"],
+  ])("shows the short link for a code typed as %s, as parseInviteCode normalizes it", (_form, credential, code) => {
+    expect(parseInviteCode(credential)).toBe(code);
+    expect(canonicalSpaceInviteLink(origin, "team-room", credential)).toBe(`${origin}/${code}`);
+  });
+
+  it("never reads a capability token as a code", () => {
     expect(canonicalSpaceInviteLink(origin, "team-room", token)).toBe(longLink);
   });
 
