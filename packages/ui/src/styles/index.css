@@ -356,28 +356,6 @@
   }
 }
 
-/* =============================================================================
-   Animations
-   ============================================================================= */
-
-@keyframes chalk-episode-exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-    filter: blur(4px);
-  }
-}
-
-.chalk-animate-exit {
-  animation: chalk-episode-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 @keyframes chalk-scale-in {
   from {
     opacity: 0;
@@ -387,97 +365,6 @@
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes chalk-fade-out {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes chalk-speaking-pulse {
-  0%,
-  100% {
-    box-shadow: var(--elevation-speaking-pulse-low);
-  }
-
-  50% {
-    box-shadow: var(--elevation-speaking-pulse-high);
-  }
-}
-
-@keyframes chalk-speaking-glow {
-  0%,
-  100% {
-    box-shadow: var(--elevation-speaking-ring);
-  }
-
-  50% {
-    box-shadow: var(--elevation-speaking-ring-wide);
-  }
-}
-
-@keyframes chalk-bounce {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(0.95);
-  }
-}
-
-@keyframes chalk-panel-slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-slide-right {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-slide-left {
-  from {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-float-up {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-50px) scale(1.2);
   }
 }
 
@@ -535,18 +422,7 @@
   }
 }
 
-@keyframes chalk-particle-burst {
-  0% {
-    transform: translate(-50%, -50%) rotate(var(--particle-angle, 0deg)) translateY(0) scale(1);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translate(-50%, -50%) rotate(var(--particle-angle, 0deg)) translateY(calc(var(--particle-distance, 50px) * -1)) scale(0);
-    opacity: 0;
-  }
-}
-
+/* ReactionBubble animates its particles with this from an inline style. */
 @keyframes chalk-particle-explode {
   0% {
     transform: translate(0, 0) scale(1);
@@ -559,34 +435,6 @@
   }
 }
 
-@keyframes chalk-hand-wave {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-
-  10% {
-    transform: rotate(14deg);
-  }
-
-  20% {
-    transform: rotate(-8deg);
-  }
-
-  30% {
-    transform: rotate(14deg);
-  }
-
-  40% {
-    transform: rotate(-4deg);
-  }
-
-  50%,
-  100% {
-    transform: rotate(0deg);
-  }
-}
-
 @keyframes chalk-hand-bounce {
   0%,
   100% {
@@ -596,144 +444,6 @@
   50% {
     transform: translateY(-5px);
   }
-}
-
-@keyframes chalk-recording-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: var(--elevation-danger-pulse-rest);
-  }
-
-  50% {
-    opacity: 0.8;
-    box-shadow: var(--elevation-danger-pulse-wide);
-  }
-}
-
-@keyframes chalk-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.5;
-  }
-}
-
-@keyframes chalk-scale-spring {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-
-  60% {
-    transform: scale(1.05);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes chalk-toast-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-control-hover {
-  from {
-    transform: scale(1);
-  }
-
-  to {
-    transform: scale(1.04);
-  }
-}
-
-@keyframes chalk-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes chalk-glow-pulse {
-  0%,
-  100% {
-    box-shadow: var(--elevation-glow-rest);
-  }
-
-  50% {
-    box-shadow: var(--elevation-glow-wide);
-  }
-}
-
-@keyframes chalk-audio-pulse {
-  0%,
-  100% {
-    transform: scaleX(1);
-  }
-
-  50% {
-    transform: scaleX(1.02);
-  }
-}
-
-@keyframes chalk-ripple-expand {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.8;
-    border-width: 4px;
-  }
-
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-    border-width: 0;
-  }
-}
-
-@keyframes chalk-spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes chalk-spin-reverse-slow {
-  from {
-    transform: rotate(360deg);
-  }
-
-  to {
-    transform: rotate(0deg);
-  }
-}
-
-/* Transition for theme switching */
-.chalk-theme-transition,
-.chalk-theme-transition *,
-.chalk-theme-transition *::before,
-.chalk-theme-transition *::after {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Tactile button base styles */
@@ -750,132 +460,6 @@
 
 .chalk-button-tactile:hover {
   transform: scale(1.05);
-}
-
-/* Dock Entrance & Exit */
-@keyframes chalk-dock-slide-up {
-  0% {
-    transform: translateY(150%) scale(0.9);
-    opacity: 0;
-  }
-
-  60% {
-    transform: translateY(-10%) scale(1.02);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-dock-slide-down {
-  0% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(150%);
-    opacity: 0;
-  }
-}
-
-/* Tile Staggered Entrance */
-@keyframes chalk-tile-pop-in {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Void Exit */
-@keyframes chalk-void-exit {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-    filter: blur(0);
-  }
-
-  100% {
-    transform: scale(0);
-    opacity: 0;
-    filter: blur(20px);
-  }
-}
-
-/* Voice halo behind the avatar of a speaking, camera-off participant: a soft ring that breathes.
-   The ring lives on a pseudo-element so the breathe animates transform/opacity only
-   (composited) instead of box-shadow spread, which repainted the whole tile every frame. */
-@keyframes chalk-voice-halo-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  50% {
-    transform: scale(1.3);
-    opacity: 0.5;
-  }
-}
-
-/* Sound bars in the tile chip while someone speaks. */
-@keyframes chalk-sound-bar {
-  0%,
-  100% {
-    transform: scaleY(0.35);
-  }
-
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-/* Animation utilities */
-.chalk-animate-dock-up {
-  animation: chalk-dock-slide-up 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
-}
-
-.chalk-animate-dock-down {
-  animation: chalk-dock-slide-down 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
-}
-
-.chalk-animate-void-exit {
-  animation: chalk-void-exit 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
-}
-
-.chalk-animate-tile-pop {
-  animation: chalk-tile-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards !important;
-}
-
-.chalk-voice-halo {
-  position: relative;
-}
-
-.chalk-voice-halo::before {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border-radius: var(--corner-pill);
-  /* token-ratchet-ignore: the halo reads --chalk-participant-color, which is set on each tile, so no root token can hold it */
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
-  animation: chalk-voice-halo-breathe 1.8s ease-in-out infinite;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-
-.chalk-sound-bars {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  height: 12px;
 }
 
 /* Faces float over the board on a narrow stage, so an edge and a shadow lift each face off the drawing. */
@@ -915,121 +499,13 @@
   }
 }
 
-@container (min-width: 240px) {
-  .chalk-sound-bars {
-    height: 14px;
-  }
-}
-
-.chalk-sound-bars > i {
-  display: block;
-  width: 3px;
-  height: 100%;
-  border-radius: var(--corner-xs);
-  background: currentColor;
-  transform-origin: center;
-  animation: chalk-sound-bar 0.9s ease-in-out infinite;
-}
-
-.chalk-sound-bars > i:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.chalk-sound-bars > i:nth-child(2) {
-  animation-delay: 150ms;
-}
-
-.chalk-sound-bars > i:nth-child(3) {
-  animation-delay: 300ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chalk-voice-halo::before {
-    animation: none;
-  }
-
-  .chalk-sound-bars > i {
-    animation: none;
-    transform: scaleY(0.7);
-  }
-}
-
 /* Animation utility classes */
 .chalk-animate-scale-in {
   animation: chalk-scale-in var(--chalk-duration-normal) var(--chalk-ease-out-expo);
 }
 
-.chalk-animate-fade-out {
-  animation: chalk-fade-out var(--chalk-duration-normal) ease-out forwards;
-}
-
-.chalk-animate-speaking {
-  animation: chalk-speaking-pulse 1.5s ease-in-out infinite;
-}
-
-.chalk-animate-speaking-glow {
-  animation: chalk-speaking-glow 1.5s ease-in-out infinite;
-}
-
-.chalk-animate-bounce {
-  animation: chalk-bounce var(--chalk-duration-fast) ease-out;
-}
-
-.chalk-animate-slide-right {
-  animation: chalk-slide-right var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-slide-left {
-  animation: chalk-slide-left var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-panel-slide-in {
-  animation: chalk-panel-slide-in var(--chalk-duration-slow) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-float-up {
-  animation: chalk-float-up 2s ease-out forwards;
-}
-
 .chalk-animate-reaction-float {
   animation: chalk-reaction-float var(--float-duration, 3000ms) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-/* Classic reactions: rise from the stage floor, sway once, fade at the top of the travel. */
-@keyframes chalk-reaction-rise {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0) scale(0.6);
-  }
-
-  12% {
-    opacity: 1;
-    transform: translate3d(var(--reaction-sway, 0px), -36px, 0) scale(1.12);
-  }
-
-  55% {
-    transform: translate3d(calc(var(--reaction-sway, 0px) * -0.6), calc(var(--reaction-travel, -280px) * 0.55), 0) scale(1);
-  }
-
-  82% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(var(--reaction-sway, 0px) * 0.4), var(--reaction-travel, -280px), 0) scale(0.92);
-  }
-}
-
-.chalk-reaction-rise {
-  animation: chalk-reaction-rise var(--reaction-duration, 3200ms) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-  will-change: transform, opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chalk-reaction-rise {
-    animation: chalk-fade-out 400ms ease-out calc(var(--reaction-duration, 3200ms) - 400ms) forwards;
-  }
 }
 
 .chalk-animate-reaction-bounce-in {
@@ -1042,48 +518,6 @@
 
 .chalk-animate-hand-bounce {
   animation: chalk-hand-bounce 0.6s ease-in-out infinite;
-}
-
-.chalk-animate-hand-wave {
-  animation: chalk-hand-wave 2.5s ease-in-out infinite;
-}
-
-.chalk-animate-pulse {
-  animation: chalk-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-recording {
-  animation: chalk-recording-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-toast-in {
-  animation: chalk-toast-in var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-scale-spring {
-  animation: chalk-scale-spring var(--chalk-duration-slow) var(--chalk-ease-out-back);
-}
-
-.chalk-animate-shimmer {
-  background: linear-gradient(90deg, transparent 0%, var(--chalk-shimmer) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: chalk-shimmer 2s ease-in-out infinite;
-}
-
-.chalk-animate-glow-pulse {
-  animation: chalk-glow-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-ripple {
-  animation: chalk-ripple-expand 2s ease-out infinite;
-}
-
-.chalk-animate-spin-slow {
-  animation: chalk-spin-slow 8s linear infinite;
-}
-
-.chalk-animate-spin-reverse-slow {
-  animation: chalk-spin-reverse-slow 12s linear infinite;
 }
 
 .chalk-logo {
@@ -1988,9 +1422,6 @@
     opacity 0.2s var(--chalk-ease-out-expo),
     transform 0.2s var(--chalk-ease-out-expo);
   pointer-events: none;
-}
-.chalk-drawer-scrim {
-  display: none;
 }
 .chalk-tooltip {
   position: relative;
