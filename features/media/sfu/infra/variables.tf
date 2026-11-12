@@ -52,3 +52,14 @@ variable "media_port" {
   type        = number
   default     = 50000
 }
+
+variable "node_suffix" {
+  description = "Names a second node of the same environment, such as -standby. Empty for the environment's first node. Give each node its own state key."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = can(regex("^(-[a-z0-9]+)?$", var.node_suffix))
+    error_message = "node_suffix must be empty or a dash and lowercase letters or digits."
+  }
+}

@@ -6,6 +6,7 @@ module "node" {
   environment       = var.environment
   size              = var.size
   control_addresses = var.control_addresses
+  node_suffix       = var.node_suffix
 }
 
 variable "environment" {
@@ -15,6 +16,12 @@ variable "environment" {
 variable "size" {
   type    = string
   default = "s-1vcpu-1gb"
+}
+
+variable "node_suffix" {
+  description = "Empty for the environment's first node, -standby for its standby."
+  type        = string
+  default     = ""
 }
 
 variable "control_addresses" {

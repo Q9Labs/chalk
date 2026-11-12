@@ -1,5 +1,5 @@
 locals {
-  name = "chalk-sfu-${var.environment}"
+  name = "chalk-sfu-${var.environment}${var.node_suffix}"
   # chalk-sfu marks every own-SFU node; the second tag names its environment.
   # The droplet creates them by name, so neither environment's state owns them.
   tags = ["chalk-sfu", var.environment == "production" ? "chalk-sfu-prod" : "chalk-sfu-staging"]
