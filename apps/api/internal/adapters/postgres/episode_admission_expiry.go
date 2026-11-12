@@ -33,95 +33,125 @@ func enqueueDueAdmissionRequests(ctx context.Context, queries *sqlc.Queries, tx 
 	count := 0
 	var outcomes []uncollectedAdmissionOutcome
 	for _, candidate := range due {
-		tenantID, spaceID, episodeID := utilities.IDFromBytes(candidate.TenantID.Bytes), utilities.IDFromBytes(candidate.SpaceID.Bytes), utilities.IDFromBytes(candidate.EpisodeID.Bytes)
-		if _, err := lockLifecycleControlRow(ctx, queries, tenantID, spaceID, episodeID); err != nil {
-			return count, nil, err
-		}
-		episode, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID)
+		expired, outcome, err := expireAdmissionCandidate(ctx, queries, tx, candidate)
 		if err != nil {
 			return count, nil, err
 		}
-		if episode.Status != episodes.EpisodeStatusActive {
-			continue
+		if expired {
+			count++
 		}
-		request, err := queries.LockEpisodeAdmissionRequest(ctx, sqlc.LockEpisodeAdmissionRequestParams{TenantID: candidate.TenantID, SpaceID: candidate.SpaceID, EpisodeID: candidate.EpisodeID, AdmissionRequestID: candidate.AdmissionRequestID})
-		if err != nil {
-			return count, nil, err
+		if outcome != nil {
+			outcomes = append(outcomes, *outcome)
 		}
-		if request.Status == "admitted" && candidate.PublicArrivalHandle.Valid {
-			cleanupCtx := ctx
-			if candidate.JourneyID.Valid {
-				cleanupCtx = observability.ContextWithJourneyID(cleanupCtx, utilities.IDFromBytes(candidate.JourneyID.Bytes))
-			}
-			arrival, err := expireUncollectedAdmission(cleanupCtx, queries, tx, request, candidate.PublicArrivalHandle)
-			if err != nil {
-				return count, nil, err
-			}
-			if arrival != nil {
-				count++
-				outcomes = append(outcomes, uncollectedAdmissionOutcome{ctx: cleanupCtx, arrival: *arrival, traceID: candidate.ProducingTraceID.String, spanID: candidate.ProducingSpanID.String})
-			}
-			continue
-		}
-		if request.Status != "pending" || request.DecisionExternalOperationID.Valid {
-			continue
-		}
-		var arrivalState pgtype.Text
-		if candidate.PublicArrivalHandle.Valid {
-			arrival, err := queries.LockSpacePublicArrival(ctx, candidate.PublicArrivalHandle)
-			if err != nil {
-				return count, nil, err
-			}
-			arrivalState = textValue(arrival.State)
-		}
-		due, err := queries.IsAdmissionRequestExpiryDue(ctx, sqlc.IsAdmissionRequestExpiryDueParams{ExpiresAt: request.ExpiresAt, ArrivalState: arrivalState})
-		if err != nil {
-			return count, nil, fmt.Errorf("validate admission expiry: %w", err)
-		}
-		if !due {
-			continue
-		}
-		requestID := utilities.IDFromBytes(request.AdmissionRequestID.Bytes)
-		payload, err := json.Marshal(struct {
-			ID string `json:"admissionRequestId"`
-		}{requestID.String()})
-		if err != nil {
-			return count, nil, err
-		}
-		expiryCtx := ctx
-		if candidate.JourneyID.Valid {
-			expiryCtx = observability.ContextWithJourneyID(expiryCtx, utilities.IDFromBytes(candidate.JourneyID.Bytes))
-		}
-		options := []trace.SpanStartOption{trace.WithNewRoot()}
-		traceID, traceErr := trace.TraceIDFromHex(candidate.ProducingTraceID.String)
-		spanID, spanErr := trace.SpanIDFromHex(candidate.ProducingSpanID.String)
-		if traceErr == nil && spanErr == nil {
-			options = append(options, trace.WithLinks(trace.Link{SpanContext: trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID})}))
-		}
-		expiryCtx, span := otel.Tracer("chalk.public_invite").Start(expiryCtx, "admission.expire", options...)
-		input := tenantExternalOperationInput{
-			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID, OperationName: "admission_request_expired",
-			Request: episodes.Request{Key: "expired_" + requestID.String(), Fingerprint: sha256.Sum256(payload)},
-			Payload: payload, JourneyName: "participant.admission_expired",
-		}
-		operation, err := createOrRetryAdmissionDecision(expiryCtx, queries, tx, input)
-		if err != nil {
-			span.RecordError(err)
-		}
-		span.End()
-		if err != nil {
-			return count, nil, err
-		}
-		reserved, err := queries.ReserveEpisodeAdmissionDecision(ctx, sqlc.ReserveEpisodeAdmissionDecisionParams{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, AdmissionRequestID: request.AdmissionRequestID, ExternalOperationID: operation.ExternalOperationID})
-		if err != nil {
-			return count, nil, err
-		}
-		if reserved != 1 {
-			return count, nil, episodes.ErrIdempotencyConflict
-		}
-		count++
 	}
 	return count, outcomes, nil
+}
+
+// expireAdmissionCandidate takes the locks in control, Episode, request order and then either releases
+// an admission its guest never collected or enqueues the expiry operation for a pending request.
+func expireAdmissionCandidate(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, candidate sqlc.ListDueAdmissionRequestsRow) (bool, *uncollectedAdmissionOutcome, error) {
+	tenantID, spaceID, episodeID := utilities.IDFromBytes(candidate.TenantID.Bytes), utilities.IDFromBytes(candidate.SpaceID.Bytes), utilities.IDFromBytes(candidate.EpisodeID.Bytes)
+	if _, err := lockLifecycleControlRow(ctx, queries, tenantID, spaceID, episodeID); err != nil {
+		return false, nil, err
+	}
+	episode, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID)
+	if err != nil {
+		return false, nil, err
+	}
+	if episode.Status != episodes.EpisodeStatusActive {
+		return false, nil, nil
+	}
+	request, err := queries.LockEpisodeAdmissionRequest(ctx, sqlc.LockEpisodeAdmissionRequestParams{TenantID: candidate.TenantID, SpaceID: candidate.SpaceID, EpisodeID: candidate.EpisodeID, AdmissionRequestID: candidate.AdmissionRequestID})
+	if err != nil {
+		return false, nil, err
+	}
+	if request.Status == "admitted" && candidate.PublicArrivalHandle.Valid {
+		return releaseUncollectedAdmission(ctx, queries, tx, candidate, request)
+	}
+	if request.Status != "pending" || request.DecisionExternalOperationID.Valid {
+		return false, nil, nil
+	}
+	due, err := admissionExpiryDue(ctx, queries, candidate, request)
+	if err != nil || !due {
+		return false, nil, err
+	}
+	if err := enqueueAdmissionExpiry(ctx, queries, tx, candidate, request); err != nil {
+		return false, nil, err
+	}
+	return true, nil, nil
+}
+
+func releaseUncollectedAdmission(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, candidate sqlc.ListDueAdmissionRequestsRow, request sqlc.SyncAdmissionRequest) (bool, *uncollectedAdmissionOutcome, error) {
+	cleanupCtx := journeyContext(ctx, candidate)
+	arrival, err := expireUncollectedAdmission(cleanupCtx, queries, tx, request, candidate.PublicArrivalHandle)
+	if err != nil || arrival == nil {
+		return false, nil, err
+	}
+	return true, &uncollectedAdmissionOutcome{ctx: cleanupCtx, arrival: *arrival, traceID: candidate.ProducingTraceID.String, spanID: candidate.ProducingSpanID.String}, nil
+}
+
+func journeyContext(ctx context.Context, candidate sqlc.ListDueAdmissionRequestsRow) context.Context {
+	if candidate.JourneyID.Valid {
+		return observability.ContextWithJourneyID(ctx, utilities.IDFromBytes(candidate.JourneyID.Bytes))
+	}
+	return ctx
+}
+
+// admissionExpiryDue rechecks, with the public arrival locked, that the request still has to expire.
+func admissionExpiryDue(ctx context.Context, queries *sqlc.Queries, candidate sqlc.ListDueAdmissionRequestsRow, request sqlc.SyncAdmissionRequest) (bool, error) {
+	var arrivalState pgtype.Text
+	if candidate.PublicArrivalHandle.Valid {
+		arrival, err := queries.LockSpacePublicArrival(ctx, candidate.PublicArrivalHandle)
+		if err != nil {
+			return false, err
+		}
+		arrivalState = textValue(arrival.State)
+	}
+	due, err := queries.IsAdmissionRequestExpiryDue(ctx, sqlc.IsAdmissionRequestExpiryDueParams{ExpiresAt: request.ExpiresAt, ArrivalState: arrivalState})
+	if err != nil {
+		return false, fmt.Errorf("validate admission expiry: %w", err)
+	}
+	return due, nil
+}
+
+// enqueueAdmissionExpiry creates the expiry operation under a new root span linked to the span that
+// produced the request, then reserves the decision.
+func enqueueAdmissionExpiry(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, candidate sqlc.ListDueAdmissionRequestsRow, request sqlc.SyncAdmissionRequest) error {
+	requestID := utilities.IDFromBytes(request.AdmissionRequestID.Bytes)
+	payload, err := json.Marshal(struct {
+		ID string `json:"admissionRequestId"`
+	}{requestID.String()})
+	if err != nil {
+		return err
+	}
+	options := []trace.SpanStartOption{trace.WithNewRoot()}
+	traceID, traceErr := trace.TraceIDFromHex(candidate.ProducingTraceID.String)
+	spanID, spanErr := trace.SpanIDFromHex(candidate.ProducingSpanID.String)
+	if traceErr == nil && spanErr == nil {
+		options = append(options, trace.WithLinks(trace.Link{SpanContext: trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID})}))
+	}
+	expiryCtx, span := otel.Tracer("chalk.public_invite").Start(journeyContext(ctx, candidate), "admission.expire", options...)
+	operation, err := createOrRetryAdmissionDecision(expiryCtx, queries, tx, tenantExternalOperationInput{
+		TenantID: utilities.IDFromBytes(candidate.TenantID.Bytes), SpaceID: utilities.IDFromBytes(candidate.SpaceID.Bytes), EpisodeID: utilities.IDFromBytes(candidate.EpisodeID.Bytes),
+		OperationName: "admission_request_expired",
+		Request:       episodes.Request{Key: "expired_" + requestID.String(), Fingerprint: sha256.Sum256(payload)},
+		Payload:       payload, JourneyName: "participant.admission_expired",
+	})
+	if err != nil {
+		span.RecordError(err)
+	}
+	span.End()
+	if err != nil {
+		return err
+	}
+	reserved, err := queries.ReserveEpisodeAdmissionDecision(ctx, sqlc.ReserveEpisodeAdmissionDecisionParams{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, AdmissionRequestID: request.AdmissionRequestID, ExternalOperationID: operation.ExternalOperationID})
+	if err != nil {
+		return err
+	}
+	if reserved != 1 {
+		return episodes.ErrIdempotencyConflict
+	}
+	return nil
 }
 
 func createOrRetryAdmissionDecision(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, input tenantExternalOperationInput) (sqlc.SyncExternalOperation, error) {

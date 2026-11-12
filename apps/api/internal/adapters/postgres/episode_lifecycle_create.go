@@ -26,104 +26,25 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 			RequestFingerprint: input.Request.Fingerprint[:], EpisodeID: uuid(input.ID),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			request, err = queries.GetEpisodeCreateRequest(ctx, sqlc.GetEpisodeCreateRequestParams{
-				TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestKey: input.Request.Key,
-			})
-			if err != nil {
-				return fmt.Errorf("read episode create request: %w", err)
-			}
-			if !bytes.Equal(request.RequestFingerprint, input.Request.Fingerprint[:]) {
-				return episodes.ErrIdempotencyConflict
-			}
-			episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, utilities.IDFromBytes(request.EpisodeID.Bytes))
-			if err != nil {
-				return err
-			}
-			result = mapLifecycleEpisode(episode)
-			return nil
+			result, err = replayEpisodeCreate(ctx, queries, input)
+			return err
 		}
 		if err != nil {
 			return fmt.Errorf("reserve episode create request: %w", err)
 		}
-
 		if err := r.checkLiveEpisodeLimit(ctx, queries, input.TenantID); err != nil {
 			return err
 		}
-
-		space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return episodes.ErrSpaceNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock episode space policy: %w", err)
-		}
-		mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space, input.MediaClients)
-		if err != nil {
-			return fmt.Errorf("resolve episode media binding: %w", err)
-		}
-		artifactPolicy, err := resolveArtifactPolicyDocument(ctx, queries, input.TenantID, space)
-		if err != nil {
-			return fmt.Errorf("resolve episode Artifact policy: %w", err)
-		}
-		if input.DeadlineAt.IsZero() {
-			input.DeadlineAt = timestamp(request.CreatedAt).UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
-		} else {
-			input.DeadlineAt = input.DeadlineAt.UTC().Truncate(time.Millisecond)
-		}
-
-		episode, err := queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
-			ID: uuid(input.ID), Metadata: jsonBytes(input.Metadata), CreatedByUserID: uuid(input.CreatedByUserID),
-			StartedAt: timestamptz(input.StartedAt), DeadlineAt: timestamptz(&input.DeadlineAt),
-			ArtifactPolicy:    artifactPolicy,
-			MediaPlaneBinding: mediaBinding,
-			TenantID:          uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return episodes.ErrSpaceNotFound
-		}
-		if episodeAlreadyExists(err) {
-			return episodes.ErrEpisodeAlreadyExists
-		}
-		if err != nil {
-			return fmt.Errorf("create lifecycle episode: %w", err)
-		}
-
-		initialControl, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{
-			ConfigSnapshot:     episode.ConfigSnapshot,
-			DeadlineAt:         timestamp(episode.DeadlineAt),
-			DeadlineGeneration: episode.DeadlineGeneration,
-		})
+		episode, err := r.insertEpisode(ctx, queries, input, timestamp(request.CreatedAt))
 		if err != nil {
 			return err
 		}
-		if _, err := queries.CreateSyncEpisodeControl(ctx, sqlc.CreateSyncEpisodeControlParams{
-			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.ID),
-			FoldedState: jsonBytes(initialControl.FoldedState), StateSchemaVersion: initialControl.SchemaVersion,
-			StateDigest: initialControl.Digest[:], SnapshotBytes: initialControl.SnapshotBytes,
-		}); err != nil {
-			return fmt.Errorf("create episode control: %w", err)
+		if err := createEpisodeControl(ctx, queries, input, episode); err != nil {
+			return err
 		}
-
-		snapshot := webhooks.EpisodeSnapshot{
-			ID: input.ID.String(), SpaceID: input.SpaceID.String(), Status: episode.Status,
-			StartedAt: nullableTimestamp(episode.StartedAt), EndedAt: nullableTimestamp(episode.EndedAt),
-			CreatedAt: timestamp(episode.CreatedAt), UpdatedAt: timestamp(episode.UpdatedAt),
-		}
-		occurredAt := timestamp(episode.CreatedAt)
-		if episode.StartedAt.Valid {
-			occurredAt = timestamp(episode.StartedAt)
-		}
-		commitMetric, err = fanoutWebhookEvent(ctx, tx, webhookProduction{
-			TenantID: input.TenantID, EventName: webhooks.EventEpisodeStarted, SemanticKey: "episode:" + input.ID.String() + ":started",
-			ResourceType: "episode", ResourceID: input.ID, OccurredAt: occurredAt,
-			Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
-				return webhooks.EncodeEpisodeEvent(metadata, snapshot)
-			},
-		})
-		if err != nil {
+		if commitMetric, err = produceEpisodeStarted(ctx, tx, input, episode); err != nil {
 			return fmt.Errorf("produce episode.started webhook: %w", err)
 		}
-
 		result = mapLifecycleEpisode(episode)
 		return nil
 	})
@@ -132,6 +53,102 @@ func (r EpisodeLifecycleRepository) CreateEpisode(ctx context.Context, input epi
 	}
 	commitMetric.Record(ctx)
 	return result, nil
+}
+
+// replayEpisodeCreate answers a repeated create request with the Episode the first attempt made.
+func replayEpisodeCreate(ctx context.Context, queries *sqlc.Queries, input episodes.CreateEpisodeInput) (episodes.Episode, error) {
+	request, err := queries.GetEpisodeCreateRequest(ctx, sqlc.GetEpisodeCreateRequestParams{
+		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestKey: input.Request.Key,
+	})
+	if err != nil {
+		return episodes.Episode{}, fmt.Errorf("read episode create request: %w", err)
+	}
+	if !bytes.Equal(request.RequestFingerprint, input.Request.Fingerprint[:]) {
+		return episodes.Episode{}, episodes.ErrIdempotencyConflict
+	}
+	episode, err := lockLifecycleEpisode(ctx, queries, input.TenantID, input.SpaceID, utilities.IDFromBytes(request.EpisodeID.Bytes))
+	if err != nil {
+		return episodes.Episode{}, err
+	}
+	return mapLifecycleEpisode(episode), nil
+}
+
+// insertEpisode locks the Space, resolves its media binding and Artifact policy, and creates the row.
+func (r EpisodeLifecycleRepository) insertEpisode(ctx context.Context, queries *sqlc.Queries, input episodes.CreateEpisodeInput, requestedAt time.Time) (sqlc.Episode, error) {
+	space, err := queries.LockTenantSpaceForUpdate(ctx, sqlc.LockTenantSpaceForUpdateParams{TenantID: uuid(input.TenantID), ID: uuid(input.SpaceID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.Episode{}, episodes.ErrSpaceNotFound
+	}
+	if err != nil {
+		return sqlc.Episode{}, fmt.Errorf("lock episode space policy: %w", err)
+	}
+	mediaBinding, err := r.resolveEpisodeMediaBinding(ctx, queries, input.TenantID, space, input.MediaClients)
+	if err != nil {
+		return sqlc.Episode{}, fmt.Errorf("resolve episode media binding: %w", err)
+	}
+	artifactPolicy, err := resolveArtifactPolicyDocument(ctx, queries, input.TenantID, space)
+	if err != nil {
+		return sqlc.Episode{}, fmt.Errorf("resolve episode Artifact policy: %w", err)
+	}
+	deadlineAt := input.DeadlineAt.UTC().Truncate(time.Millisecond)
+	if input.DeadlineAt.IsZero() {
+		deadlineAt = requestedAt.UTC().Truncate(time.Millisecond).Add(time.Duration(space.DefaultEpisodeDurationSeconds) * time.Second)
+	}
+	episode, err := queries.CreateLifecycleEpisode(ctx, sqlc.CreateLifecycleEpisodeParams{
+		ID: uuid(input.ID), Metadata: jsonBytes(input.Metadata), CreatedByUserID: uuid(input.CreatedByUserID),
+		StartedAt: timestamptz(input.StartedAt), DeadlineAt: timestamptz(&deadlineAt),
+		ArtifactPolicy:    artifactPolicy,
+		MediaPlaneBinding: mediaBinding,
+		TenantID:          uuid(input.TenantID), SpaceID: uuid(input.SpaceID),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sqlc.Episode{}, episodes.ErrSpaceNotFound
+	}
+	if episodeAlreadyExists(err) {
+		return sqlc.Episode{}, episodes.ErrEpisodeAlreadyExists
+	}
+	if err != nil {
+		return sqlc.Episode{}, fmt.Errorf("create lifecycle episode: %w", err)
+	}
+	return episode, nil
+}
+
+func createEpisodeControl(ctx context.Context, queries *sqlc.Queries, input episodes.CreateEpisodeInput, episode sqlc.Episode) error {
+	initialControl, err := episodes.NewInitialControlState(episodes.InitialControlPolicy{
+		ConfigSnapshot:     episode.ConfigSnapshot,
+		DeadlineAt:         timestamp(episode.DeadlineAt),
+		DeadlineGeneration: episode.DeadlineGeneration,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := queries.CreateSyncEpisodeControl(ctx, sqlc.CreateSyncEpisodeControlParams{
+		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), EpisodeID: uuid(input.ID),
+		FoldedState: jsonBytes(initialControl.FoldedState), StateSchemaVersion: initialControl.SchemaVersion,
+		StateDigest: initialControl.Digest[:], SnapshotBytes: initialControl.SnapshotBytes,
+	}); err != nil {
+		return fmt.Errorf("create episode control: %w", err)
+	}
+	return nil
+}
+
+func produceEpisodeStarted(ctx context.Context, tx pgx.Tx, input episodes.CreateEpisodeInput, episode sqlc.Episode) (webhookCommitMetric, error) {
+	snapshot := webhooks.EpisodeSnapshot{
+		ID: input.ID.String(), SpaceID: input.SpaceID.String(), Status: episode.Status,
+		StartedAt: nullableTimestamp(episode.StartedAt), EndedAt: nullableTimestamp(episode.EndedAt),
+		CreatedAt: timestamp(episode.CreatedAt), UpdatedAt: timestamp(episode.UpdatedAt),
+	}
+	occurredAt := timestamp(episode.CreatedAt)
+	if episode.StartedAt.Valid {
+		occurredAt = timestamp(episode.StartedAt)
+	}
+	return fanoutWebhookEvent(ctx, tx, webhookProduction{
+		TenantID: input.TenantID, EventName: webhooks.EventEpisodeStarted, SemanticKey: "episode:" + input.ID.String() + ":started",
+		ResourceType: "episode", ResourceID: input.ID, OccurredAt: occurredAt,
+		Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
+			return webhooks.EncodeEpisodeEvent(metadata, snapshot)
+		},
+	})
 }
 
 func resolveArtifactPolicyDocument(ctx context.Context, queries *sqlc.Queries, tenantID utilities.ID, space sqlc.Space) ([]byte, error) {

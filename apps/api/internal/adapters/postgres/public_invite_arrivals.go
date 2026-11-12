@@ -128,42 +128,11 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 	var result publicinvites.Arrival
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
 		collecting := input.RequirePending && input.State == publicinvites.ArrivalAdmitted
-		var invite sqlc.SpacePublicInvite
-		var space sqlc.Space
-		var episode sqlc.Episode
+		var rows collectionRows
 		if collecting {
-			// The immutable binding locates the rows. Match admission decisions:
-			// invite, Space, Episode, arrival, participant.
-			binding, err := queries.GetSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
-			if errors.Is(err, pgx.ErrNoRows) {
-				return publicinvites.ErrArrivalNotFound
-			}
-			if err != nil {
-				return fmt.Errorf("read public collection binding: %w", err)
-			}
-			if utilities.IDFromBytes(binding.TenantID.Bytes) != input.TenantID {
-				return publicinvites.ErrArrivalNotFound
-			}
-			invite, err = queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return publicinvites.ErrArrivalUnavailable
-			}
-			if err != nil {
-				return fmt.Errorf("lock public collection invite: %w", err)
-			}
-			space, err = queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: binding.TenantID, ID: binding.SpaceID})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return publicinvites.ErrArrivalUnavailable
-			}
-			if err != nil {
-				return fmt.Errorf("lock public collection Space: %w", err)
-			}
-			episode, err = queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return publicinvites.ErrArrivalUnavailable
-			}
-			if err != nil {
-				return fmt.Errorf("lock public collection Episode: %w", err)
+			var err error
+			if rows, err = lockCollectionRows(ctx, queries, input); err != nil {
+				return err
 			}
 		}
 		current, err := queries.LockSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
@@ -180,22 +149,8 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 			return publicinvites.ErrArrivalUnavailable
 		}
 		if collecting {
-			valid, err := publicAdmissionProvenanceValid(space, invite, current, episode, time.Now())
-			if err != nil {
+			if err := checkCollection(ctx, queries, input, rows, current); err != nil {
 				return err
-			}
-			if !valid {
-				return publicinvites.ErrArrivalUnavailable
-			}
-			participant, err := queries.LockLifecycleParticipantForUpdate(ctx, sqlc.LockLifecycleParticipantForUpdateParams{TenantID: current.TenantID, SpaceID: current.SpaceID, EpisodeID: uuid(input.EpisodeID), ParticipantID: uuid(input.ParticipantID)})
-			if errors.Is(err, pgx.ErrNoRows) {
-				return publicinvites.ErrArrivalUnavailable
-			}
-			if err != nil {
-				return fmt.Errorf("lock public collection participant: %w", err)
-			}
-			if participant.Status != episodes.ParticipantStatusActive || participant.Generation != input.ParticipantGeneration {
-				return publicinvites.ErrArrivalUnavailable
 			}
 		}
 		if !matchesExpectedProviderBinding(current, input) {
@@ -218,21 +173,93 @@ func (r PublicInviteRepository) UpdateArrivalState(ctx context.Context, input pu
 		}
 		result = mapPublicArrival(row)
 		if current.State == string(publicinvites.ArrivalPending) && input.State == publicinvites.ArrivalUnavailable && input.Reason == "cancelled" {
-			journey, err := lifecycleJourneyFromContext(ctx)
-			if err != nil {
-				return fmt.Errorf("create admission cancellation journey: %w", err)
-			}
-			if err := queries.RecordPublicAdmissionCancellation(ctx, sqlc.RecordPublicAdmissionCancellationParams{
-				EventID: uuid(journey.ParentEventID), JourneyID: uuid(journey.JourneyID),
-				TraceID: textValue(journey.TraceID), SpanID: textValue(journey.SpanID),
-				TenantID: current.TenantID, SpaceID: current.SpaceID, ArrivalHandle: current.ArrivalHandle,
-			}); err != nil {
-				return fmt.Errorf("record admission cancellation journey: %w", err)
-			}
+			return recordAdmissionCancellation(ctx, queries, current)
 		}
 		return nil
 	})
 	return result, err
+}
+
+// collectionRows are the rows an admitted-arrival collection locks before the arrival itself.
+type collectionRows struct {
+	invite  sqlc.SpacePublicInvite
+	space   sqlc.Space
+	episode sqlc.Episode
+}
+
+// lockCollectionRows locks in the order admission decisions use: invite, Space, Episode, then (in the
+// caller) arrival and (in checkCollection) participant. The immutable binding locates the rows.
+func lockCollectionRows(ctx context.Context, queries publicInviteQuerier, input publicinvites.UpdateArrivalStateInput) (collectionRows, error) {
+	binding, err := queries.GetSpacePublicArrival(ctx, uuid(input.ArrivalHandle))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collectionRows{}, publicinvites.ErrArrivalNotFound
+	}
+	if err != nil {
+		return collectionRows{}, fmt.Errorf("read public collection binding: %w", err)
+	}
+	if utilities.IDFromBytes(binding.TenantID.Bytes) != input.TenantID {
+		return collectionRows{}, publicinvites.ErrArrivalNotFound
+	}
+	invite, err := queries.LockSpacePublicInvite(ctx, sqlc.LockSpacePublicInviteParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collectionRows{}, publicinvites.ErrArrivalUnavailable
+	}
+	if err != nil {
+		return collectionRows{}, fmt.Errorf("lock public collection invite: %w", err)
+	}
+	space, err := queries.LockTenantSpaceForAdmission(ctx, sqlc.LockTenantSpaceForAdmissionParams{TenantID: binding.TenantID, ID: binding.SpaceID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collectionRows{}, publicinvites.ErrArrivalUnavailable
+	}
+	if err != nil {
+		return collectionRows{}, fmt.Errorf("lock public collection Space: %w", err)
+	}
+	episode, err := queries.LockLifecycleEpisodeForUpdate(ctx, sqlc.LockLifecycleEpisodeForUpdateParams{TenantID: binding.TenantID, SpaceID: binding.SpaceID, EpisodeID: uuid(input.EpisodeID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return collectionRows{}, publicinvites.ErrArrivalUnavailable
+	}
+	if err != nil {
+		return collectionRows{}, fmt.Errorf("lock public collection Episode: %w", err)
+	}
+	return collectionRows{invite: invite, space: space, episode: episode}, nil
+}
+
+// checkCollection confirms the locked arrival still has valid provenance and an active participant at
+// the generation the caller names.
+func checkCollection(ctx context.Context, queries publicInviteQuerier, input publicinvites.UpdateArrivalStateInput, rows collectionRows, current sqlc.SpacePublicArrival) error {
+	valid, err := publicAdmissionProvenanceValid(rows.space, rows.invite, current, rows.episode, time.Now())
+	if err != nil {
+		return err
+	}
+	if !valid {
+		return publicinvites.ErrArrivalUnavailable
+	}
+	participant, err := queries.LockLifecycleParticipantForUpdate(ctx, sqlc.LockLifecycleParticipantForUpdateParams{TenantID: current.TenantID, SpaceID: current.SpaceID, EpisodeID: uuid(input.EpisodeID), ParticipantID: uuid(input.ParticipantID)})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return publicinvites.ErrArrivalUnavailable
+	}
+	if err != nil {
+		return fmt.Errorf("lock public collection participant: %w", err)
+	}
+	if participant.Status != episodes.ParticipantStatusActive || participant.Generation != input.ParticipantGeneration {
+		return publicinvites.ErrArrivalUnavailable
+	}
+	return nil
+}
+
+func recordAdmissionCancellation(ctx context.Context, queries publicInviteQuerier, current sqlc.SpacePublicArrival) error {
+	journey, err := lifecycleJourneyFromContext(ctx)
+	if err != nil {
+		return fmt.Errorf("create admission cancellation journey: %w", err)
+	}
+	if err := queries.RecordPublicAdmissionCancellation(ctx, sqlc.RecordPublicAdmissionCancellationParams{
+		EventID: uuid(journey.ParentEventID), JourneyID: uuid(journey.JourneyID),
+		TraceID: textValue(journey.TraceID), SpanID: textValue(journey.SpanID),
+		TenantID: current.TenantID, SpaceID: current.SpaceID, ArrivalHandle: current.ArrivalHandle,
+	}); err != nil {
+		return fmt.Errorf("record admission cancellation journey: %w", err)
+	}
+	return nil
 }
 
 func publicAdmissionProvenanceValid(space sqlc.Space, invite sqlc.SpacePublicInvite, arrival sqlc.SpacePublicArrival, episode sqlc.Episode, now time.Time) (bool, error) {

@@ -43,110 +43,141 @@ func (r PublicInviteRepository) decideLegacyAdmissionRequest(ctx context.Context
 	if input.Decision != publicinvites.DecisionApprove && input.Decision != publicinvites.DecisionDeny {
 		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, publicinvites.ErrInvalidAdmissionDecision
 	}
-	var requestResult publicinvites.AdmissionRequest
-	var arrivalResult publicinvites.Arrival
-	var outcomeErr error
+	decision := &legacyAdmissionDecision{input: input}
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
-		request, err := queries.LockSpacePublicAdmissionRequest(ctx, sqlc.LockSpacePublicAdmissionRequestParams{
-			TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return publicinvites.ErrAdmissionRequestNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock public admission request: %w", err)
-		}
-		arrival, err := queries.LockSpacePublicArrival(ctx, request.ArrivalHandle)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return publicinvites.ErrArrivalNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("lock public arrival for admission decision: %w", err)
-		}
-		if !arrival.TenantID.Valid || !arrival.SpaceID.Valid || arrival.TenantID != request.TenantID || arrival.SpaceID != request.SpaceID {
-			return publicinvites.ErrAdmissionRequestNotFound
-		}
-		requestState := publicinvites.AdmissionRequestState(request.State)
-		if requestState != publicinvites.AdmissionRequestPending {
-			savedKey := publicInviteNullableString(request.DecisionRequestKey)
-			if input.RequestKey != "" && savedKey == input.RequestKey {
-				if (requestState == publicinvites.AdmissionRequestApproved && input.Decision == publicinvites.DecisionApprove) ||
-					(requestState == publicinvites.AdmissionRequestDenied && input.Decision == publicinvites.DecisionDeny) {
-					requestResult, arrivalResult = mapPublicAdmissionRequest(request), mapPublicArrival(arrival)
-					return nil
-				}
-				if requestState == publicinvites.AdmissionRequestApproved || requestState == publicinvites.AdmissionRequestDenied {
-					return publicinvites.ErrIdempotencyConflict
-				}
-			}
-			return publicinvites.ErrAdmissionRequestTerminal
-		}
-		if publicinvites.ArrivalState(arrival.State) != publicinvites.ArrivalPending {
-			updatedRequest, updateErr := queries.UpdateSpacePublicAdmissionRequest(ctx, sqlc.UpdateSpacePublicAdmissionRequestParams{
-				State: string(publicinvites.AdmissionRequestInvalidated), DecidedBy: uuid(input.ActorID),
-				DecisionRequestKey: textValue(input.RequestKey),
-				TenantID:           uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
-			})
-			if updateErr != nil {
-				return fmt.Errorf("invalidate terminal public admission request: %w", updateErr)
-			}
-			requestResult, arrivalResult = mapPublicAdmissionRequest(updatedRequest), mapPublicArrival(arrival)
-			outcomeErr = publicinvites.ErrAdmissionRequestTerminal
-			return nil
-		}
-
-		now := time.Now().UTC()
-		if (request.ExpiresAt.Valid && !request.ExpiresAt.Time.After(now)) || (arrival.ExpiresAt.Valid && !arrival.ExpiresAt.Time.After(now)) {
-			updatedRequest, updateErr := queries.UpdateSpacePublicAdmissionRequest(ctx, sqlc.UpdateSpacePublicAdmissionRequestParams{
-				State: string(publicinvites.AdmissionRequestExpired), DecidedBy: uuid(input.ActorID),
-				DecisionRequestKey: textValue(input.RequestKey),
-				TenantID:           uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
-			})
-			if updateErr != nil {
-				return fmt.Errorf("expire public admission request: %w", updateErr)
-			}
-			updatedArrival, updateErr := queries.UpdateSpacePublicArrivalState(ctx, sqlc.UpdateSpacePublicArrivalStateParams{
-				State: string(publicinvites.ArrivalUnavailable), TerminalReason: textValue("admission_request_expired"),
-				TenantID: uuid(input.TenantID), ArrivalHandle: request.ArrivalHandle,
-			})
-			if updateErr != nil {
-				return fmt.Errorf("tombstone expired public arrival: %w", updateErr)
-			}
-			requestResult, arrivalResult = mapPublicAdmissionRequest(updatedRequest), mapPublicArrival(updatedArrival)
-			outcomeErr = publicinvites.ErrAdmissionRequestTerminal
-			return nil
-		}
-
-		requestState = publicinvites.AdmissionRequestApproved
-		if input.Decision == publicinvites.DecisionDeny {
-			requestState = publicinvites.AdmissionRequestDenied
-		}
-		updatedRequest, err := queries.UpdateSpacePublicAdmissionRequest(ctx, sqlc.UpdateSpacePublicAdmissionRequestParams{
-			State: string(requestState), DecidedBy: uuid(input.ActorID), TenantID: uuid(input.TenantID),
-			DecisionRequestKey: textValue(input.RequestKey),
-			SpaceID:            uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
-		})
-		if err != nil {
-			return fmt.Errorf("decide public admission request: %w", err)
-		}
-		requestResult = mapPublicAdmissionRequest(updatedRequest)
-		if input.Decision == publicinvites.DecisionApprove {
-			// Approval only authorizes the runtime to grant access. The arrival
-			// stays pending until the runtime persists its participant binding.
-			arrivalResult = mapPublicArrival(arrival)
-			return nil
-		}
-		updatedArrival, err := queries.UpdateSpacePublicArrivalState(ctx, sqlc.UpdateSpacePublicArrivalStateParams{
-			State: string(publicinvites.ArrivalRejected), TerminalReason: textValue("admission_denied"), TenantID: uuid(input.TenantID), ArrivalHandle: request.ArrivalHandle,
-		})
-		if err != nil {
-			return fmt.Errorf("apply public admission decision: %w", err)
-		}
-		arrivalResult = mapPublicArrival(updatedArrival)
-		return nil
+		decision.queries = queries
+		return decision.run(ctx)
 	})
 	if err != nil {
 		return publicinvites.AdmissionRequest{}, publicinvites.Arrival{}, err
 	}
-	return requestResult, arrivalResult, outcomeErr
+	return decision.requestResult, decision.arrivalResult, decision.outcomeErr
+}
+
+// legacyAdmissionDecision decides a public admission request that has no canonical Episode admission.
+// outcomeErr is a terminal outcome that still commits its writes.
+type legacyAdmissionDecision struct {
+	queries       publicInviteQuerier
+	input         publicinvites.DecideAdmissionRequestInput
+	request       sqlc.SpacePublicAdmissionRequest
+	arrival       sqlc.SpacePublicArrival
+	requestResult publicinvites.AdmissionRequest
+	arrivalResult publicinvites.Arrival
+	outcomeErr    error
+}
+
+func (d *legacyAdmissionDecision) run(ctx context.Context) error {
+	input := d.input
+	request, err := d.queries.LockSpacePublicAdmissionRequest(ctx, sqlc.LockSpacePublicAdmissionRequestParams{
+		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return publicinvites.ErrAdmissionRequestNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock public admission request: %w", err)
+	}
+	arrival, err := d.queries.LockSpacePublicArrival(ctx, request.ArrivalHandle)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return publicinvites.ErrArrivalNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock public arrival for admission decision: %w", err)
+	}
+	if !arrival.TenantID.Valid || !arrival.SpaceID.Valid || arrival.TenantID != request.TenantID || arrival.SpaceID != request.SpaceID {
+		return publicinvites.ErrAdmissionRequestNotFound
+	}
+	d.request, d.arrival = request, arrival
+	if state := publicinvites.AdmissionRequestState(request.State); state != publicinvites.AdmissionRequestPending {
+		return d.replayDecided(state)
+	}
+	if publicinvites.ArrivalState(arrival.State) != publicinvites.ArrivalPending {
+		return d.invalidate(ctx)
+	}
+	now := time.Now().UTC()
+	if (request.ExpiresAt.Valid && !request.ExpiresAt.Time.After(now)) || (arrival.ExpiresAt.Valid && !arrival.ExpiresAt.Time.After(now)) {
+		return d.expire(ctx)
+	}
+	return d.decide(ctx)
+}
+
+// replayDecided answers a request that is no longer pending: the same decision under the same key
+// replays, any other attempt is a conflict or terminal.
+func (d *legacyAdmissionDecision) replayDecided(state publicinvites.AdmissionRequestState) error {
+	input := d.input
+	if input.RequestKey != "" && publicInviteNullableString(d.request.DecisionRequestKey) == input.RequestKey {
+		if (state == publicinvites.AdmissionRequestApproved && input.Decision == publicinvites.DecisionApprove) ||
+			(state == publicinvites.AdmissionRequestDenied && input.Decision == publicinvites.DecisionDeny) {
+			d.requestResult, d.arrivalResult = mapPublicAdmissionRequest(d.request), mapPublicArrival(d.arrival)
+			return nil
+		}
+		if state == publicinvites.AdmissionRequestApproved || state == publicinvites.AdmissionRequestDenied {
+			return publicinvites.ErrIdempotencyConflict
+		}
+	}
+	return publicinvites.ErrAdmissionRequestTerminal
+}
+
+func (d *legacyAdmissionDecision) setRequestState(ctx context.Context, state publicinvites.AdmissionRequestState) (sqlc.SpacePublicAdmissionRequest, error) {
+	input := d.input
+	return d.queries.UpdateSpacePublicAdmissionRequest(ctx, sqlc.UpdateSpacePublicAdmissionRequestParams{
+		State: string(state), DecidedBy: uuid(input.ActorID), DecisionRequestKey: textValue(input.RequestKey),
+		TenantID: uuid(input.TenantID), SpaceID: uuid(input.SpaceID), RequestHandle: uuid(input.RequestHandle),
+	})
+}
+
+func (d *legacyAdmissionDecision) setArrivalState(ctx context.Context, state publicinvites.ArrivalState, reason string) (sqlc.SpacePublicArrival, error) {
+	return d.queries.UpdateSpacePublicArrivalState(ctx, sqlc.UpdateSpacePublicArrivalStateParams{
+		State: string(state), TerminalReason: textValue(reason), TenantID: uuid(d.input.TenantID), ArrivalHandle: d.request.ArrivalHandle,
+	})
+}
+
+// invalidate closes a pending request whose arrival has already left the pending state.
+func (d *legacyAdmissionDecision) invalidate(ctx context.Context) error {
+	updated, err := d.setRequestState(ctx, publicinvites.AdmissionRequestInvalidated)
+	if err != nil {
+		return fmt.Errorf("invalidate terminal public admission request: %w", err)
+	}
+	d.requestResult, d.arrivalResult = mapPublicAdmissionRequest(updated), mapPublicArrival(d.arrival)
+	d.outcomeErr = publicinvites.ErrAdmissionRequestTerminal
+	return nil
+}
+
+// expire closes a request, or an arrival, that ran past its lifetime.
+func (d *legacyAdmissionDecision) expire(ctx context.Context) error {
+	updatedRequest, err := d.setRequestState(ctx, publicinvites.AdmissionRequestExpired)
+	if err != nil {
+		return fmt.Errorf("expire public admission request: %w", err)
+	}
+	updatedArrival, err := d.setArrivalState(ctx, publicinvites.ArrivalUnavailable, "admission_request_expired")
+	if err != nil {
+		return fmt.Errorf("tombstone expired public arrival: %w", err)
+	}
+	d.requestResult, d.arrivalResult = mapPublicAdmissionRequest(updatedRequest), mapPublicArrival(updatedArrival)
+	d.outcomeErr = publicinvites.ErrAdmissionRequestTerminal
+	return nil
+}
+
+func (d *legacyAdmissionDecision) decide(ctx context.Context) error {
+	state := publicinvites.AdmissionRequestApproved
+	if d.input.Decision == publicinvites.DecisionDeny {
+		state = publicinvites.AdmissionRequestDenied
+	}
+	updated, err := d.setRequestState(ctx, state)
+	if err != nil {
+		return fmt.Errorf("decide public admission request: %w", err)
+	}
+	d.requestResult = mapPublicAdmissionRequest(updated)
+	if d.input.Decision == publicinvites.DecisionApprove {
+		// Approval only authorizes the runtime to grant access. The arrival
+		// stays pending until the runtime persists its participant binding.
+		d.arrivalResult = mapPublicArrival(d.arrival)
+		return nil
+	}
+	updatedArrival, err := d.setArrivalState(ctx, publicinvites.ArrivalRejected, "admission_denied")
+	if err != nil {
+		return fmt.Errorf("apply public admission decision: %w", err)
+	}
+	d.arrivalResult = mapPublicArrival(updatedArrival)
+	return nil
 }
