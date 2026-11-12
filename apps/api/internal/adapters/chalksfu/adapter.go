@@ -411,8 +411,10 @@ func (a *Adapter) metadata() map[string]string {
 // own estimate and treats the SDK's layer as a ceiling, and it reports each
 // subscription's delivery state, so the SDK reads that before it repulls. It
 // restarts ICE in place, so the SDK tries that before it replaces the session.
+// A connection nobody has used yet stays valid until the node's connect timeout and then
+// answers 404, which the SDK already recovers from, so the SDK keeps it for its first offer.
 func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
-	capabilities := map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": true}
+	capabilities := map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": true, "keepsIdleSession": true}
 	if a.directSignalingURL != "" {
 		capabilities["directSignalingUrl"] = a.directSignalingURL
 	}

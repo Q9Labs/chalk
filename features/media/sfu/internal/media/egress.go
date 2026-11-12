@@ -22,6 +22,9 @@ type egressTrack struct {
 	kind      webrtc.RTPCodecType
 	transport *transport
 	binding   atomic.Pointer[egressBinding]
+	// video classes this track's streams as video for the node's batched UDP writer; nil when
+	// the node has none, and for an audio track.
+	video interface{ markVideo(ssrc uint32, on bool) }
 }
 
 // egressBinding is what the subscriber negotiated for one outgoing track.
@@ -44,7 +47,22 @@ func newEgressTrack(pub *publication, transport *transport) *egressTrack {
 	if !pub.video() {
 		codec = opusCapability
 	}
-	return &egressTrack{id: pub.name, streamID: pub.session.id, codec: codec, kind: pub.kind, transport: transport}
+	track := &egressTrack{id: pub.name, streamID: pub.session.id, codec: codec, kind: pub.kind, transport: transport}
+	if node := pub.session.node; node != nil && pub.video() {
+		track.video, _ = node.media.(interface{ markVideo(ssrc uint32, on bool) })
+	}
+	return track
+}
+
+// markVideo classes a binding's media and RTX streams as video, or no longer.
+func (e *egressTrack) markVideo(binding *egressBinding, on bool) {
+	if e.video == nil {
+		return
+	}
+	e.video.markVideo(binding.ssrc, on)
+	if binding.rtxSSRC != 0 {
+		e.video.markVideo(binding.rtxSSRC, on)
+	}
 }
 
 // Bind takes the negotiated codec with the track's MIME type, and its RTX and
@@ -68,8 +86,10 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 			}
 		}
 		if previous := e.binding.Swap(binding); previous != nil {
+			e.markVideo(previous, false)
 			e.transport.unbind(previous)
 		}
+		e.markVideo(binding, true)
 		if binding.twccID == 0 && e.kind == webrtc.RTPCodecTypeVideo {
 			e.transport.useReports()
 		}
@@ -92,6 +112,7 @@ func rtxFor(codecs []webrtc.RTPCodecParameters, primary webrtc.PayloadType) (web
 
 func (e *egressTrack) Unbind(webrtc.TrackLocalContext) error {
 	if previous := e.binding.Swap(nil); previous != nil {
+		e.markVideo(previous, false)
 		e.transport.unbind(previous)
 	}
 	return nil

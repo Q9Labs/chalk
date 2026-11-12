@@ -35,6 +35,8 @@ export type SFUMediaCapabilities = {
   readonly unifiedSignaling: boolean;
   /** The SFU parks and resumes the caller's own camera or microphone in place, so a mute keeps the track and moves no SDP. */
   readonly muteInPlace: boolean;
+  /** A connection nobody has used yet stays valid until the SFU reports it gone, so the client does not swap it before its first offer. */
+  readonly keepsIdleSession: boolean;
   /** The https origin of the direct door that serves the signalling calls; the Tunnel serves them when it is absent or fails. */
   readonly directSignalingUrl?: string;
 };

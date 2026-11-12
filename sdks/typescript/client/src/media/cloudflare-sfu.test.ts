@@ -6368,6 +6368,31 @@ describe("visible-tile video subscriptions", () => {
     }
   });
 
+  it("keeps counting a hidden video in the call stats while the Sync projection is lost", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness({ unreportedVideoTileWaitMs: UNREPORTED_TILE_WAIT_MS, bootstrap: { ...bootstrap("m8-hidden-stats"), capabilities: { subscriptionState: true } } });
+    harness.transport.uniqueRemoteMids = true;
+    const camera = versionedPublicationID("m8-hidden-stats", "1", "camera");
+    const publications = [{ participantId: "m8-hidden-stats-person", source: "camera" as const, publicationId: camera }];
+    try {
+      setVideoTileVisibility(camera, null);
+      await harness.client.start(fakeStream(new FakeTrack("microphone", "audio")));
+      harness.transport.snapshot = { incarnation: 1, sequence: 1, publications };
+      harness.client.remotePublicationsChanged(publications.map((publication) => ({ ...publication, enabled: true })));
+      await harness.client.refreshRemotePublications();
+      // A Sync reconnect empties the projection; the SFU roster is unchanged, so only the early-pull pass runs.
+      harness.client.remotePublicationsChanged([], "unavailable");
+      await harness.client.refreshRemotePublications();
+      vi.spyOn(harness.peers[0]!, "getStats").mockImplementation(async () => new Map());
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(harness.client.getSnapshot().callStats.at(-1)?.recv_hidden_videos).toBe(1);
+    } finally {
+      harness.client.stop();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
   it("pulls a tile scrolled into view, keeps it through the debounce, and closes only its video after", async () => {
     vi.useFakeTimers();
     const call = tileCall("m8-scroll", 3);

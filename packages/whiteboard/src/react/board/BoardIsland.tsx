@@ -22,6 +22,8 @@ export type IslandProps = {
   readonly place: IslandPlace;
   readonly onPlace: (place: IslandPlace, announce: boolean) => void;
   readonly compact: boolean;
+  /** An empty phone board shows one launcher in place of the full island. */
+  readonly idle?: boolean;
   readonly primaryToolsFirst?: boolean;
 };
 
@@ -260,6 +262,7 @@ export function BoardIsland(props: IslandProps) {
   const reduced = usePrefersReducedMotion();
   const [drag, setDrag] = useState<{ readonly x: number; readonly y: number; readonly near: IslandPlace } | null>(null);
   const dropRect = useRef<DOMRect | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useLayoutEffect(() => {
     const buttons = [...(island.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
@@ -347,7 +350,11 @@ export function BoardIsland(props: IslandProps) {
           for (const button of event.currentTarget.querySelectorAll<HTMLButtonElement>("button")) button.tabIndex = button === event.target ? 0 : -1;
         }}
       >
-        {compact ? (
+        {compact && props.idle && !expanded ? (
+          <button type="button" className="chalk-board-tool" data-current aria-label="Open drawing tools" aria-expanded={false} onClick={() => setExpanded(true)}>
+            <BoardIcon name={toolEntry(props.tool).glyph} />
+          </button>
+        ) : compact ? (
           <>
             <ToolTray tool={props.tool} onTool={props.onTool} />
             <StrokeChip tool={props.tool} color={props.color} width={props.width} surface={props.surface} theme={props.theme} onColor={props.onColor} onWidth={props.onWidth} side="top" />
