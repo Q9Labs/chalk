@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, workflowGraphRoots, workflowGraphTests } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, workflowGraphNodeTests, workflowGraphPythonTest, workflowGraphRoots } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -99,22 +99,22 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
 });
 
-test("a pull request that edits only a workflow skips the SFU lane and still runs the staging-lease tests that read the workflows", () => {
+test("a pull request that edits only a workflow skips the SFU lane and still runs the whole staging-lease test file", () => {
   const files = [".github/workflows/ci.yml"];
   const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", event: "pull_request" });
   assert.ok(!plan.tasks.find((task) => task.id === "sfu").selected);
   const graph = plan.tasks.find((task) => task.id === "workflow-graph");
   assert.ok(graph.selected);
-  assert.match(graph.command.join(" "), /scripts\/staging-sfu\/test_staging_lock\.py DeployLeaseTests/);
+  assert.match(graph.command.join(" "), /python3 scripts\/staging-sfu\/test_staging_lock\.py$/);
 });
 
 test("a test of the workflow-graph lane reads only paths that lane selects", () => {
   const repositoryPath = /(?:\.github|scripts|features|apps|sdks|packages|infrastructure|docs)\/[\w./-]*\w/gu;
-  for (const file of workflowGraphTests) {
+  for (const file of [...workflowGraphNodeTests, workflowGraphPythonTest]) {
     const outside = [...new Set(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8").match(repositoryPath))].filter((path) => !workflowGraphRoots.some((root) => path.startsWith(root)));
     assert.deepEqual(outside, [], `${file} reads paths that do not select the workflow-graph lane`);
   }
-  for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock"]) {
+  for (const file of [".github/actions/setup-playwright/action.yml", "scripts/staging-sfu/staging-lock", "scripts/staging-sfu/gate-lease", "scripts/prod-proof/cleanup.mjs", "scripts/deploy/deploy-managed-release.mjs"]) {
     assert.ok(selected([file], "pull_request").includes("workflow-graph"), file);
   }
 });

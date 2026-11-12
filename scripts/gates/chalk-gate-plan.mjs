@@ -20,19 +20,12 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
-// The workflow-graph lane selects on these paths, and its tests read only paths under them (chalk-gate-plan.test.mjs checks that).
-export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/staging-sfu"];
-export const workflowGraphTests = [
-  "features/scorecard/promote-graph.test.mjs",
-  "features/scorecard/nightly-graph.test.mjs",
-  "features/scorecard/lease-arguments.test.mjs",
-];
-// The staging-lease tests that read the workflow files. The SFU lane runs the whole file, but a workflow-only change skips that lane.
-const workflowLeaseTests = [
-  "DeployLeaseTests",
-  "LeaseTests.test_cut_outwaits_a_cloudflare_latency_run_that_owns_the_lease_for_its_whole_step",
-  "LeaseTests.test_workflow_cleanup_deletes_own_resources_while_another_lane_holds_lease",
-];
+// The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
+export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs"];
+// scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
+// The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
+export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -437,7 +430,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
-  const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
@@ -447,7 +440,7 @@ export function createGatePlan(files, options = {}) {
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "bash",
       "-c",
-      `set -e; node scripts/test/run.mjs node --test ${workflowGraphTests.join(" ")}; python3 scripts/staging-sfu/test_staging_lock.py ${workflowLeaseTests.join(" ")}`,
+      `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
