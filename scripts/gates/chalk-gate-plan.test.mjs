@@ -122,15 +122,17 @@ test("q9gate's own gate-behavior classification does not widen a pull request th
 
 test("a gate task with no register entry stops the selection, because running every job would fail on the same throw", () => {
   assert.throws(
-    () => selectCiJobs("HEAD", () => {
-      throw new RegisterError('Gate task "new-lane" has no entry in scripts/gates/checks.json.');
-    }),
+    () =>
+      selectCiJobs("HEAD", () => {
+        throw new RegisterError('Gate task "new-lane" has no entry in scripts/gates/checks.json.');
+      }),
     RegisterError,
   );
   assert.throws(
-    () => selectCiJobs("--full", () => {
-      throw new RegisterError("no entry");
-    }),
+    () =>
+      selectCiJobs("--full", () => {
+        throw new RegisterError("no entry");
+      }),
     RegisterError,
   );
 });
