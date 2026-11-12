@@ -12,31 +12,54 @@ import (
 	"time"
 )
 
-// rtpDatagram is an RTP-looking datagram of the given payload type: the version bits, the type,
-// a sequence number in bytes 4 to 7 as datagram() has it, then filler up to size bytes.
-func rtpDatagram(payloadType byte, seq uint32, size int) []byte {
+// The SSRCs of the video and audio streams a test conn sends; newTestBatchConn marks the video ones.
+const (
+	videoSSRC    = 0xaaaa0001
+	videoRTXSSRC = 0xaaaa0002
+	audioSSRC    = 0xbbbb0001
+)
+
+// rtpDatagram is an RTP-looking datagram: the version bits, the payload type, a sequence number in
+// bytes 4 to 7 as datagram() has it, the SSRC in bytes 8 to 11, then filler up to size bytes.
+func rtpDatagram(payloadType byte, ssrc, seq uint32, size int) []byte {
 	b := datagram(0, seq, size)
 	b[0], b[1] = 0x80, payloadType
+	binary.BigEndian.PutUint32(b[8:], ssrc)
 	return b
 }
 
-func TestIsVideoReadsTheRTPPayloadTypeOfAnSRTPPacket(t *testing.T) {
+// Firefox negotiates VP8 as 120 and RTX as 124, which are not the types the node offers, so the
+// class must follow the SSRC the node marked and never the payload type.
+func TestIsVideoReadsTheSSRCOfAnSRTPPacket(t *testing.T) {
+	conn := newTestBatchConn(t, true)
+	conn.markVideo(videoRTXSSRC, true)
 	for name, test := range map[string]struct {
 		packet []byte
 		want   bool
 	}{
-		"VP8":                  {rtpDatagram(vp8PayloadType, 1, 100), true},
-		"VP8 with marker":      {rtpDatagram(vp8PayloadType|0x80, 1, 100), true},
-		"RTX":                  {rtpDatagram(rtxPayloadType, 1, 100), true},
-		"Opus":                 {rtpDatagram(opusPayloadType, 1, 100), false},
-		"RTCP receiver report": {rtpDatagram(201, 1, 100), false},
-		"DTLS":                 {append([]byte{22, 254, 253}, make([]byte, 40)...), false},
-		"STUN":                 {append([]byte{0, 1}, make([]byte, 40)...), false},
-		"too short":            {[]byte{0x80, vp8PayloadType}, false},
+		"VP8":                   {rtpDatagram(vp8PayloadType, videoSSRC, 1, 100), true},
+		"VP8 with marker":       {rtpDatagram(vp8PayloadType|0x80, videoSSRC, 1, 100), true},
+		"VP8 as Firefox has it": {rtpDatagram(120, videoSSRC, 1, 100), true},
+		"RTX as Firefox has it": {rtpDatagram(124, videoRTXSSRC, 1, 100), true},
+		"Opus":                  {rtpDatagram(opusPayloadType, audioSSRC, 1, 100), false},
+		"Opus on a video type":  {rtpDatagram(vp8PayloadType, audioSSRC, 1, 100), false},
+		"RTCP receiver report":  {rtpDatagram(201, videoSSRC, 1, 100), false},
+		"DTLS":                  {append([]byte{22, 254, 253}, make([]byte, 40)...), false},
+		"STUN":                  {append([]byte{0, 1}, make([]byte, 40)...), false},
+		"too short":             {[]byte{0x80, vp8PayloadType}, false},
 	} {
-		if got := isVideo(test.packet); got != test.want {
+		conn.mu.Lock()
+		got := conn.isVideo(test.packet)
+		conn.mu.Unlock()
+		if got != test.want {
 			t.Errorf("%s: isVideo = %v, want %v", name, got, test.want)
 		}
+	}
+	conn.markVideo(videoSSRC, false)
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	if conn.isVideo(rtpDatagram(vp8PayloadType, videoSSRC, 1, 100)) {
+		t.Error("a stream that was unmarked is still video")
 	}
 }
 
@@ -52,7 +75,7 @@ func stallWriter(t *testing.T, conn *batchConn, to netip.AddrPort) (release func
 		}
 		<-gate
 	}
-	if _, err := conn.WriteToAddrPort(rtpDatagram(opusPayloadType, 0, 200), to); err != nil {
+	if _, err := conn.WriteToAddrPort(rtpDatagram(opusPayloadType, audioSSRC, 0, 200), to); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -80,12 +103,12 @@ func listen(peer *net.UDPConn) <-chan []arrival {
 		buf := make([]byte, 2048)
 		for quiet := 5 * time.Second; ; quiet = 300 * time.Millisecond {
 			_ = peer.SetReadDeadline(time.Now().Add(quiet))
-			n, _, err := peer.ReadFromUDPAddrPort(buf)
+			_, _, err := peer.ReadFromUDPAddrPort(buf)
 			if err != nil {
 				out <- got
 				return
 			}
-			got = append(got, arrival{isVideo(buf[:n]), binary.BigEndian.Uint32(buf[4:])})
+			got = append(got, arrival{binary.BigEndian.Uint32(buf[8:]) == videoSSRC, binary.BigEndian.Uint32(buf[4:])})
 		}
 	}()
 	return out
@@ -132,13 +155,13 @@ func TestStalledSocketNeverBlocksAForwarderAndKeepsAudio(t *testing.T) {
 			defer tick.Stop()
 			for frame := 1; frame <= audioFrames; frame++ {
 				<-tick.C
-				write(rtpDatagram(opusPayloadType, uint32(frame), 200), addrs[i])
+				write(rtpDatagram(opusPayloadType, audioSSRC, uint32(frame), 200), addrs[i])
 			}
 		})
 	}
 	forwarders.Go(func() {
 		for seq := range floodVideo {
-			write(rtpDatagram(vp8PayloadType, uint32(seq), 1100), addrs[seq%receivers])
+			write(rtpDatagram(vp8PayloadType, videoSSRC, uint32(seq), 1100), addrs[seq%receivers])
 		}
 	})
 	forwarders.Wait()
@@ -197,7 +220,7 @@ func TestFullAudioRingDropsItsOldestAndCountsIt(t *testing.T) {
 	release := stallWriter(t, conn, addr)
 	const extra = 10
 	for seq := 1; seq <= audioRing+extra; seq++ {
-		if _, err := conn.WriteToAddrPort(rtpDatagram(opusPayloadType, uint32(seq), 200), addr); err != nil {
+		if _, err := conn.WriteToAddrPort(rtpDatagram(opusPayloadType, audioSSRC, uint32(seq), 200), addr); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -208,5 +231,40 @@ func TestFullAudioRingDropsItsOldestAndCountsIt(t *testing.T) {
 	got := <-arrivals
 	if len(got) != 1+audioRing || got[1].seq != extra+1 || got[len(got)-1].seq != audioRing+extra {
 		t.Fatalf("%d datagrams arrived from seq %d to %d, want the newest %d", len(got), got[1].seq, got[len(got)-1].seq, audioRing)
+	}
+}
+
+// plan sorts a flush by peer, so audio and video must leave in flushes of their own: one peer's
+// video, queued before another peer's audio, must not leave first. One wildcard socket receives
+// for both addresses, so the order it reads is the order the node sent.
+func TestAudioLeavesBeforeAnotherPeersVideo(t *testing.T) {
+	conn := newTestBatchConn(t, true)
+	sink, err := net.ListenUDP("udp4", &net.UDPAddr{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sink.Close() })
+	port := uint16(sink.LocalAddr().(*net.UDPAddr).Port)
+	low := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), port)
+	high := netip.AddrPortFrom(netip.MustParseAddr("127.0.0.2"), port)
+	release := stallWriter(t, conn, low)
+	if _, err := conn.WriteToAddrPort(rtpDatagram(vp8PayloadType, videoSSRC, 1, 200), low); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.WriteToAddrPort(rtpDatagram(opusPayloadType, audioSSRC, 2, 200), high); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	var order []uint32
+	buf := make([]byte, 2048)
+	for range 3 {
+		_ = sink.SetReadDeadline(time.Now().Add(5 * time.Second))
+		if _, _, err := sink.ReadFromUDPAddrPort(buf); err != nil {
+			t.Fatal(err)
+		}
+		order = append(order, binary.BigEndian.Uint32(buf[4:]))
+	}
+	if want := []uint32{0, 2, 1}; !slices.Equal(order, want) {
+		t.Fatalf("datagrams arrived in order %v, want %v: the first peer's video left before the second peer's audio", order, want)
 	}
 }

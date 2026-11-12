@@ -4,6 +4,7 @@ package media
 
 import (
 	"cmp"
+	"encoding/binary"
 	"math/bits"
 	"net"
 	"net/netip"
@@ -109,14 +110,29 @@ func newSendQueue() *sendQueue {
 
 func (q *sendQueue) len() int { return q.audio.count + q.video.count }
 
-// isVideo reports whether b is an RTP packet of a video payload type: VP8, its RTX repairs or
-// probe padding. The RTP header is not encrypted, so the class is readable on an SRTP packet.
-func isVideo(b []byte) bool {
-	if len(b) < 12 || b[0]>>6 != 2 {
+// markVideo adds or removes an SSRC of a video stream the node sends: VP8, its RTX repairs and
+// probe padding. The class is by SSRC and not by payload type, because a browser's offer picks the
+// payload types (Firefox negotiates VP8 as 120 and RTX as 124), so the node cannot know them.
+func (c *batchConn) markVideo(ssrc uint32, on bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if on {
+		c.video[ssrc] = struct{}{}
+	} else {
+		delete(c.video, ssrc)
+	}
+}
+
+// isVideo reports whether b is an RTP packet of a marked video SSRC. The RTP header is not
+// encrypted, so the SSRC is readable on an SRTP packet. A type below 96 is not a dynamic RTP type;
+// it keeps an RTCP packet (types 200 to 207 read as 72 to 79) from being read as RTP. The caller
+// holds c.mu.
+func (c *batchConn) isVideo(b []byte) bool {
+	if len(b) < 12 || b[0]>>6 != 2 || b[1]&0x7f < 96 {
 		return false
 	}
-	payloadType := b[1] & 0x7f
-	return payloadType == vp8PayloadType || payloadType == rtxPayloadType
+	_, video := c.video[binary.BigEndian.Uint32(b[8:])]
+	return video
 }
 
 // batchConn is an IPv4 UDP socket with batched reads and writes. It implements
@@ -126,9 +142,10 @@ type batchConn struct {
 	*net.UDPConn
 	raw syscall.RawConn
 
-	// mu guards pending and closed. It is never held across a system call.
+	// mu guards pending, video and closed. It is never held across a system call.
 	mu      sync.Mutex
 	pending *sendQueue // filled by callers
+	video   map[uint32]struct{}
 	closed  bool
 	wake    chan struct{}
 	done    chan struct{}
@@ -173,7 +190,7 @@ func newMediaConn(conn *net.UDPConn) net.PacketConn {
 	if err != nil {
 		return conn
 	}
-	c := &batchConn{UDPConn: conn, raw: raw, pending: newSendQueue(), sending: newSendQueue(),
+	c := &batchConn{UDPConn: conn, raw: raw, pending: newSendQueue(), sending: newSendQueue(), video: map[uint32]struct{}{},
 		entries: make([]*queued, 0, batchRing), wake: make(chan struct{}, 1), done: make(chan struct{})}
 	c.gso = supportsSegmentation(raw)
 	for i := range c.rxHdr {
@@ -263,7 +280,6 @@ func (c *batchConn) WriteToAddrPort(b []byte, addr netip.AddrPort) (int, error) 
 	if len(b) > datagramMax || !addr.Addr().Is4() && !addr.Addr().Is4In6() {
 		return c.UDPConn.WriteToUDPAddrPort(b, addr)
 	}
-	video := isVideo(b)
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -271,7 +287,7 @@ func (c *batchConn) WriteToAddrPort(b []byte, addr netip.AddrPort) (int, error) 
 	}
 	queue := &c.pending.audio
 	dropCounter := &c.droppedAudio
-	if video {
+	if c.isVideo(b) {
 		queue, dropCounter = &c.pending.video, &c.droppedVideo
 	}
 	entry, dropped := queue.claim()
@@ -339,14 +355,15 @@ func (c *batchConn) sendQueued() bool {
 	if c.stalled != nil {
 		c.stalled()
 	}
-	// Audio-class datagrams go first, each ring oldest first.
-	c.entries = c.entries[:0]
+	// Audio-class datagrams go first, each ring oldest first. They leave in a flush of their own:
+	// plan sorts a flush by peer, so one flush would send a peer's video before another peer's audio.
 	for _, queue := range []*ring{&c.sending.audio, &c.sending.video} {
+		c.entries = c.entries[:0]
 		for i := range queue.count {
 			c.entries = append(c.entries, queue.at(i))
 		}
+		c.flush(c.entries)
 	}
-	c.flush(c.entries)
 	return true
 }
 
