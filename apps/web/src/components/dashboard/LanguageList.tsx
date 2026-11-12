@@ -22,6 +22,7 @@ type ListProps = {
 export function LanguageList({ query, setQuery, sections, rows, active, setActive, value, choose, onKeyDown, search, listId, statusId }: ListProps) {
   let at = -1;
   return (
+    <>
   <div className="lp-search">
     <Icon name="search" size={18} />
     <input

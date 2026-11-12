@@ -5,7 +5,7 @@ import { keptRecording, videoState, workingRecording } from "../../lib/dashboard
 
 /** How a call page keeps itself current: one status read per tick, and one metadata read per ten seconds. */
 
-export const PENDING_TRANSCRIPTS: ReadonlySet<string> = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
+const PENDING_TRANSCRIPTS: ReadonlySet<string> = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
 
 const STATUS_MS = { knocks: 3000, quiet: 5000 } as const;
 const METADATA_EVERY_MS = 10_000;
