@@ -2178,7 +2178,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (!current() || connection.signalingState !== "stable") return;
         this.#observeReceiveProgress(connection, report, current);
         this.#adaptViewerLayers(connection, report, viewerLayers, current);
-        this.#callStats.observe(report, this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : undefined);
+        this.#callStats.observe(report, { ...(this.#readsSubscriptions() ? { pausedVideos: this.#delivery.pausedForNetwork } : {}), stalledVideos: this.#videoDecode.stalledVideos });
         this.#publishCallStats();
         const sender = this.#cameraSimulcastSender(state);
         if (!sender) cameraPolicy.reset();

@@ -2102,6 +2102,27 @@ create table sync_media_pauses (
     check (octet_length(publication_id) between 1 and 256)
 );
 
+-- One row per pause; resumed_at stays null until the Participant is resumed, so "paused and never resumed" is a query.
+-- sync_media_pauses holds only the pauses in force now.
+create table sync_media_pause_history (
+    id bigint generated always as identity primary key,
+    tenant_id uuid not null,
+    space_id uuid not null,
+    episode_id uuid not null,
+    participant_id uuid not null,
+    source text not null check (source in ('microphone', 'camera', 'screen')),
+    publication_id text not null,
+    paused_at timestamptz not null default now(),
+    resumed_at timestamptz,
+    check (resumed_at is null or resumed_at >= paused_at),
+    foreign key (tenant_id, space_id, episode_id)
+        references sync_episode_control(tenant_id, space_id, episode_id)
+        on delete cascade
+);
+create unique index sync_media_pause_history_open
+    on sync_media_pause_history (tenant_id, episode_id, participant_id, source)
+    where resumed_at is null;
+
 -- A host stop (mute, camera stop, screen stop) kept until a newer host stop for the same participant and source replaces it.
 -- Sync projects it as the off reason "host" so a client that missed the stop event can still see it.
 create table sync_media_stops (

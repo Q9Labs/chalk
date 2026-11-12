@@ -75,6 +75,13 @@ func run() error {
 			certificates <- collectCertificateExpiry(context.Background(), sfuProbesFromEnv(), os.Getenv("CHALK_ALERT_DIRECT_DOOR_URL"), time.Now())
 		}()
 	}
+	// Call verdicts read Axiom and the database on their own clock for the same reason: a slow query
+	// cannot delay or drop the state rows above.
+	var verdicts chan []snapshot
+	if (mode == "" || mode == "--check") && os.Getenv("CHALK_ALERT_AXIOM_QUERY_TOKEN") != "" {
+		verdicts = make(chan []snapshot, 1)
+		go func() { verdicts <- collectCallVerdictsFromEnv(context.Background(), http.DefaultClient) }()
+	}
 	switch mode {
 	case "--test", "--clear-test":
 		value := int64(1)
@@ -90,6 +97,9 @@ func run() error {
 	if certificates != nil {
 		snapshots = append(snapshots, <-certificates...)
 	}
+	if verdicts != nil {
+		snapshots = append(snapshots, <-verdicts...)
+	}
 	for i := range snapshots {
 		formatMessage(&snapshots[i])
 		snapshots[i].Engineers = "For engineers: " + snapshots[i].Rule + "; open the affected Axiom dataset and run | search <episode-id> using the affected Episode ID."
@@ -101,6 +111,9 @@ func run() error {
 		}
 		if snapshots[i].Rule == "sfu-readiness" {
 			snapshots[i].Engineers = "For engineers: sfu-readiness; open /readyz on the node through the SFU deploy tunnel and read its media telemetry journal lines."
+		}
+		if episodeID, ok := strings.CutPrefix(snapshots[i].Rule, callVerdictRulePrefix); ok {
+			snapshots[i].Engineers = "For engineers: call-verdict; run pnpm diagnose:call " + episodeID + " for the timeline across client, API, Sync and SFU, and what evidence is missing."
 		}
 		if snapshots[i].Time == "" {
 			snapshots[i].Time = time.Now().UTC().Format(time.RFC3339Nano)
@@ -155,7 +168,12 @@ func message(rule string) (headline, impact, next string) {
 }
 
 func formatMessage(item *snapshot) {
-	item.Headline, item.Summary, item.Next = message(item.Rule)
+	if strings.HasPrefix(item.Rule, callVerdictRulePrefix) {
+		// The Summary already holds the verdict line, which names the Participant, what they lived through, when and why.
+		item.Headline, item.Next = "A call went badly", "An engineer must read the timeline for this Episode and decide whether the Participant needs contact."
+	} else {
+		item.Headline, item.Summary, item.Next = message(item.Rule)
+	}
 	if item.Rule == "sync-readiness" || item.Rule == "sfu-readiness" || (item.Rule == "certificate-expiry" && item.Value > 0) {
 		item.Summary += " Latest readiness reason: " + item.Reason + "."
 	}

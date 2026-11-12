@@ -35,6 +35,7 @@ func TestConnectionReportLogNamesTheCredentialProvider(t *testing.T) {
 				Trigger           string `json:"trigger"`
 				Level             string `json:"level"`
 				ProviderSessionID string `json:"provider_session_id"`
+				ConnectionID      string `json:"connection_id"`
 			}
 			for _, raw := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
 				var candidate struct {
@@ -45,6 +46,9 @@ func TestConnectionReportLogNamesTheCredentialProvider(t *testing.T) {
 						t.Fatalf("decode log line %s: %v", raw, err)
 					}
 				}
+			}
+			if line.ConnectionID != "connection" {
+				t.Fatalf("connection_id = %q, want the key the own SFU logs for the connection", line.ConnectionID)
 			}
 			if line.ProviderSessionID != "connection" {
 				t.Fatalf("provider_session_id = %q, want the media connection a call_stats row carries", line.ProviderSessionID)

@@ -41,7 +41,7 @@ func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(h
 			}
 			ctx := accessgrants.WithSubject(r.Context(), subject)
 			// The credential names the Episode, Participant and plane before any handler can fail, so the failure log and the request spans join to an Episode.
-			observability.SetRequestMedia(ctx, subject.EpisodeID.String(), subject.ParticipantID.String(), subject.Provider)
+			observability.SetRequestMedia(ctx, subject.EpisodeID.String(), subject.ParticipantID.String(), subject.Provider, subject.ConnectionID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

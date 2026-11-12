@@ -300,8 +300,38 @@ defmodule ChalkSync.ExternalOperationConsumer do
       )
 
     report_result(operation.name, result, started_at)
+    record_revoke(episode, operation, result)
     result
   end
+
+  @revoke_operations [
+    :mute_participant,
+    :stop_participant_camera,
+    :stop_participant_screen_share,
+    :remove_participant,
+    :role_transition_source_stop
+  ]
+
+  # A revoke that never confirms leaves the Participant publishing, so each outcome is an event.
+  defp record_revoke(episode, %{name: name} = operation, result)
+       when name in @revoke_operations do
+    case Map.get(operation, :target_participant_id) do
+      participant_id when is_binary(participant_id) ->
+        Observability.participant_event(episode, participant_id, "sync.media.revoke", %{
+          operation: Atom.to_string(name),
+          outcome: outcome_name(result)
+        })
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp record_revoke(_episode, _operation, _result), do: :ok
+
+  defp outcome_name(result) when is_atom(result), do: Atom.to_string(result)
+  defp outcome_name({outcome, _detail}) when is_atom(outcome), do: Atom.to_string(outcome)
+  defp outcome_name(_result), do: "unknown"
 
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
        when ExternalOperation.is_local_name(name),

@@ -12,13 +12,22 @@ The rules are the `.apl` queries, `monitors.json`, `state.sql` and the threshold
 - Rules that read the API log (`turn-credentials.apl`, `recovery-refused.apl`, `deadline-scheduler.apl`) have alert text that names no Tenant, node or address. Axiom refuses to save a monitor naming a field its dataset has never received, so `deadline-scheduler.apl` reads `consecutive_failures` and `phase` through `column_ifexists` with defaults that never alert. A `control_busy` skip waits on a publication fence that Sync normally releases in seconds, so it alerts only after sixty passes. Own-SFU placement outcomes are a metric only, with no rule, because no log line records them.
 - All SFU thresholds beyond the readiness shape live in `THRESHOLDS` in `provision.py`; the APL files read placeholders, and `provision.py` refuses a query with an unresolved one.
 
+## Call verdicts
+
+When `CHALK_ALERT_AXIOM_QUERY_TOKEN` is set in `/etc/chalk-alerts/collector.env`, the collector also judges each Episode that ended 30 to 90 seconds ago (at most 10 a minute) and writes one `call-verdict <episode id>` row, value 1, only for a bad one. The first monitor's generic branch already alerts on that row, so the alert goes to Discord and Oncall with the verdict line and the command `pnpm diagnose:call <episode id>`. No new service and no new monitor.
+
+- It reads rows by id: every row of the Axiom log dataset that names the Episode, then the SFU node events of the connections those rows name. The time range only bounds the scan.
+- The rules and thresholds are `call-verdict.json`, which `pnpm diagnose:call` reads too. Both test against `scripts/diagnose-call/fixtures/cases.json`, so a changed rule fails in both places until both agree.
+- `CHALK_ALERT_AXIOM_ORG_ID` and `CHALK_ALERT_QUERY_DATASET` (default: `CHALK_ALERT_LOG_DATASET`) are optional. The query token needs read access to the log dataset only; the ingest token cannot query. The goroutine has a 12-second budget and a failure prints a short message to the journal, so the other rows never wait on it.
+- The flag is as early as about 30 seconds after the Episode end and no later than about 90 seconds plus one collector run (one minute) plus one monitor evaluation. A dataset that has not yet received node events (`attributes.connection_id` unknown) gives a verdict from the API rows alone, with the cause "unknown".
+
 ## Read-only state collector
 
 `collector.go` is a standalone alert-only executable, not an API change. Build it from `apps/api` to reuse the pinned pgx, with Go 1.26.10, targeting the host (`aarch64` is Go's `arm64`):
 
 ```sh
-GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/collector_test.go
-GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go
+GOTOOLCHAIN=go1.26.10 go test ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go ../../infrastructure/observability/production-alerts/collector_test.go ../../infrastructure/observability/production-alerts/call_verdict_test.go
+GOTOOLCHAIN=go1.26.10 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o collector ../../infrastructure/observability/production-alerts/collector.go ../../infrastructure/observability/production-alerts/call_verdict.go
 ```
 
 It uses one connection, a read-only transaction and a five-second SQL timeout. It emits per-Tenant counts (zeros included, so latest-value evaluation clears an old count immediately) plus empty-Tenant heartbeat rows and global rows for Sync readiness, SFU retirement debt and, when enabled, SFU readiness and certificate expiry. A rejected or partial ingest fails the service. The freshness monitor detects missing snapshots within five minutes and counts six rules; it does not count the SFU rows. The SFU readiness row exists only on hosts that enable the probe, so counting it would page every host without an SFU. The debt row comes from the same database read as the others, so a stopped collector is already caught. Only snapshots newer than five minutes drive state alerts.

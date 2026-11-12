@@ -48,6 +48,13 @@ export class VideoDecodeStallDetector {
     return stalled;
   }
 
+  /** How many videos are stalled now: reported and not yet decoding again. */
+  get stalledVideos(): number {
+    let stalled = 0;
+    for (const progress of this.#progress.values()) if (progress.reported) stalled++;
+    return stalled;
+  }
+
   clear(): void {
     this.#progress.clear();
     this.#sampledAt = undefined;

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -162,6 +163,49 @@ func TestTrailNamesALostSourceLease(t *testing.T) {
 		t.Fatalf("lease lines = %v, %v", opened, lost)
 	}
 	requireIDs(t, lost[0], protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: "alice"})
+}
+
+func TestTrailNamesALeaseThatRanOutAndTheSubscriptionItPaused(t *testing.T) {
+	trail := &trailLog{}
+	node := newLoggedTestNode(t, func(cfg *config.Config) { cfg.SourceLeaseTTL = 50 * time.Millisecond }, trail)
+	alice := node.newTestSession(t, testScope("alice", 1))
+	bob := node.newTestSession(t, testScope("bob", 3))
+	apply(t, node, control("alice", "microphone", protocol.SourceGrant, 1))
+	publish(t, alice, "mic", 1)
+	if _, err := bob.AddTracks(context.Background(), pullRequest(bob, alice, "mic-0")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(80 * time.Millisecond)
+	for range 3 {
+		node.countLeaseLapses(monotonic())
+	}
+	lost := trail.events("sfu.source.lease_lost")
+	if len(lost) != 1 || lost[0]["cause"] != "ttl_lapsed" || lost[0]["source"] != "microphone" {
+		t.Fatalf("lease_lost = %v, want one ttl_lapsed line for the microphone", lost)
+	}
+	requireIDs(t, lost[0], protocol.Scope{TenantID: alice.scope.TenantID, EpisodeID: alice.scope.EpisodeID, ParticipantID: alice.scope.ParticipantID})
+
+	var sub *subscription
+	for _, s := range bob.subscribed {
+		sub = s
+	}
+	sub.traceUnauthorized(true)
+	sub.traceUnauthorized(true)
+	var paused []map[string]string
+	for _, line := range trail.events("sfu.subscription.paused") {
+		if line["reason"] == protocol.PauseSourceUnauthorized {
+			paused = append(paused, line)
+		}
+	}
+	if len(paused) != 1 {
+		t.Fatalf("paused = %v, want one source_unauthorized pause", paused)
+	}
+	requireIDs(t, paused[0], bob.scope)
+	sub.traceUnauthorized(false)
+	resumed := trail.events("sfu.subscription.resumed")
+	if len(resumed) != 1 || resumed[0]["was"] != protocol.PauseSourceUnauthorized {
+		t.Fatalf("resumed = %v, want one resume from source_unauthorized", resumed)
+	}
 }
 
 // A line never holds SDP, an address, a candidate or a name: the trail is safe to store beside the API's logs.

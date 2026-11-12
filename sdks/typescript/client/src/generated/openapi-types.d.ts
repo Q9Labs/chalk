@@ -1405,18 +1405,27 @@ export interface components {
     AuditLogId: string;
     CallStatsRequest: {
       samples: {
+        available_incoming_kbps?: number | null;
+        available_outgoing_kbps?: number | null;
         /** @enum {string} */
         connection_type: "udp" | "tcp" | "turn" | "unknown";
         elapsed_ms: number;
         freeze_count?: number | null;
         freeze_ms?: number | null;
+        jitter_buffer_delay_ms?: number | null;
         /** @enum {string} */
         local_candidate_type?: "host" | "srflx" | "prflx" | "relay";
+        /** @enum {string} */
+        quality_limitation?: "cpu" | "bandwidth" | "other";
         recv_bitrate_kbps?: number | null;
+        recv_frames_dropped?: number | null;
         recv_height?: number | null;
         recv_jitter_ms?: number | null;
         recv_loss_pct?: number | null;
+        recv_nack_count?: number | null;
         recv_paused_videos?: number | null;
+        recv_pli_count?: number | null;
+        relay_offered?: boolean | null;
         /** @enum {string} */
         relay_protocol?: "udp" | "tcp" | "tls";
         /** @enum {string} */
@@ -1427,6 +1436,8 @@ export interface components {
         /** @enum {string} */
         send_layer?: "h" | "m" | "l";
         send_loss_pct?: number | null;
+        send_nack_count?: number | null;
+        send_pli_count?: number | null;
         window_ms: number;
       }[];
       /** @enum {integer} */

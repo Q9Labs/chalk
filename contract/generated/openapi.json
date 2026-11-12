@@ -14230,6 +14230,16 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "available_incoming_kbps": {
+                  "maximum": 100000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "available_outgoing_kbps": {
+                  "maximum": 100000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
                 "connection_type": {
                   "enum": ["udp", "tcp", "turn", "unknown"],
                   "type": "string"
@@ -14249,12 +14259,26 @@
                   "minimum": 0,
                   "type": ["integer", "null"]
                 },
+                "jitter_buffer_delay_ms": {
+                  "maximum": 60000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
                 "local_candidate_type": {
                   "enum": ["host", "srflx", "prflx", "relay"],
                   "type": "string"
                 },
+                "quality_limitation": {
+                  "enum": ["cpu", "bandwidth", "other"],
+                  "type": "string"
+                },
                 "recv_bitrate_kbps": {
                   "maximum": 100000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "recv_frames_dropped": {
+                  "maximum": 1000000,
                   "minimum": 0,
                   "type": ["integer", "null"]
                 },
@@ -14273,10 +14297,23 @@
                   "minimum": 0,
                   "type": ["number", "null"]
                 },
+                "recv_nack_count": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
                 "recv_paused_videos": {
                   "maximum": 64,
                   "minimum": 0,
                   "type": ["integer", "null"]
+                },
+                "recv_pli_count": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "relay_offered": {
+                  "type": ["boolean", "null"]
                 },
                 "relay_protocol": {
                   "enum": ["udp", "tcp", "tls"],
@@ -14309,6 +14346,16 @@
                   "maximum": 100,
                   "minimum": 0,
                   "type": ["number", "null"]
+                },
+                "send_nack_count": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
+                },
+                "send_pli_count": {
+                  "maximum": 1000000,
+                  "minimum": 0,
+                  "type": ["integer", "null"]
                 },
                 "window_ms": {
                   "maximum": 60000,

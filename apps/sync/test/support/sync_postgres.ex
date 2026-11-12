@@ -193,6 +193,32 @@ defmodule ChalkSync.SyncPostgres do
     }
   end
 
+  @doc "The pause history rows of one Participant and source, oldest first."
+  def pause_history(connection, %EpisodeKey{} = episode, participant_id, source) do
+    %{rows: rows} =
+      Postgrex.query!(
+        connection,
+        """
+        select publication_id, resumed_at is not null
+        from sync_media_pause_history
+        where tenant_id = $1 and space_id = $2 and episode_id = $3
+          and participant_id = $4 and source = $5
+        order by id
+        """,
+        [
+          uuid(episode.tenant_id),
+          uuid(episode.space_id),
+          uuid(episode.episode_id),
+          uuid(participant_id),
+          source
+        ]
+      )
+
+    Enum.map(rows, fn [publication_id, resumed?] ->
+      %{publication_id: publication_id, resumed?: resumed?}
+    end)
+  end
+
   def cleanup(connection, %EpisodeKey{} = episode) do
     tenant_id = uuid(episode.tenant_id)
 
@@ -226,6 +252,7 @@ defmodule ChalkSync.SyncPostgres do
       delete(transaction, "sync_publication_fences", tenant_id)
       delete(transaction, "sync_publication_grant_reservations", tenant_id)
       delete(transaction, "sync_media_stops", tenant_id)
+      delete(transaction, "sync_media_pause_history", tenant_id)
       delete(transaction, "sync_media_pauses", tenant_id)
       delete(transaction, "sync_screen_share_leases", tenant_id)
       delete(transaction, "sync_recordings", tenant_id)

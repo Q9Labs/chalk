@@ -242,7 +242,7 @@ func logConnectionReport(ctx context.Context, subject accessgrants.Subject, repo
 	observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
 		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
 		"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-		"provider", subject.Provider, "provider_session_id", subject.ConnectionID,
+		"provider", subject.Provider, "connection_id", subject.ConnectionID, "provider_session_id", subject.ConnectionID,
 		"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
 	return nil
 }

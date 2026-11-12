@@ -61,6 +61,30 @@ type callStatsSample struct {
 	// RecvPausedVideos counts remote videos the SFU had paused for network at the
 	// end of the window. Only an SDK on a plane that reports subscription state sends it.
 	RecvPausedVideos *int64 `json:"recv_paused_videos,omitempty"`
+	// The fields below explain a bad window: how deep the jitter buffer ran, how often the
+	// receiver asked for repair, what the encoder was held back by, what the path could carry,
+	// and whether a relay was on offer at all.
+	JitterBufferDelayMS   *int64 `json:"jitter_buffer_delay_ms,omitempty"`
+	SendNackCount         *int64 `json:"send_nack_count,omitempty"`
+	SendPliCount          *int64 `json:"send_pli_count,omitempty"`
+	RecvNackCount         *int64 `json:"recv_nack_count,omitempty"`
+	RecvPliCount          *int64 `json:"recv_pli_count,omitempty"`
+	RecvFramesDropped     *int64 `json:"recv_frames_dropped,omitempty"`
+	AvailableIncomingKbps *int64 `json:"available_incoming_kbps,omitempty"`
+	AvailableOutgoingKbps *int64 `json:"available_outgoing_kbps,omitempty"`
+	QualityLimitation     string `json:"quality_limitation,omitempty"`
+	RelayOffered          *bool  `json:"relay_offered,omitempty"`
+}
+
+// callStatsIntFields are the numeric fields a sample may carry, by name.
+func (s callStatsSample) intFields() map[string]*int64 {
+	return map[string]*int64{
+		"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps,
+		"recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos,
+		"jitter_buffer_delay_ms": s.JitterBufferDelayMS, "send_nack_count": s.SendNackCount, "send_pli_count": s.SendPliCount,
+		"recv_nack_count": s.RecvNackCount, "recv_pli_count": s.RecvPliCount, "recv_frames_dropped": s.RecvFramesDropped,
+		"available_incoming_kbps": s.AvailableIncomingKbps, "available_outgoing_kbps": s.AvailableOutgoingKbps,
+	}
 }
 
 // These are also the OpenAPI enums, so no free text can enter the log through a
@@ -75,6 +99,8 @@ func CallStatsFieldEnum(field string) []string {
 		return []string{"udp", "tcp", "tls"}
 	case "send_layer":
 		return []string{"h", "m", "l"}
+	case "quality_limitation":
+		return []string{"cpu", "bandwidth", "other"}
 	default:
 		return nil
 	}
@@ -87,8 +113,12 @@ func CallStatsMaximum(field string) int64 {
 		return 100
 	case "send_bitrate_kbps", "recv_bitrate_kbps":
 		return 100000
-	case "rtt_ms", "send_jitter_ms", "recv_jitter_ms":
+	case "rtt_ms", "send_jitter_ms", "recv_jitter_ms", "jitter_buffer_delay_ms":
 		return 60000
+	case "send_nack_count", "send_pli_count", "recv_nack_count", "recv_pli_count", "recv_frames_dropped":
+		return 1000000
+	case "available_incoming_kbps", "available_outgoing_kbps":
+		return 100000
 	case "recv_height":
 		return 4320
 	case "freeze_count":
@@ -138,12 +168,12 @@ func validateCallStatsSample(sample callStatsSample) string {
 	if sample.WindowMS < CallStatsMinWindowMS || sample.WindowMS > CallStatsMaxWindowMS {
 		return "window_range"
 	}
-	for field, value := range map[string]string{"connection_type": sample.ConnectionType, "local_candidate_type": sample.LocalCandidateType, "remote_candidate_type": sample.RemoteCandidateType, "relay_protocol": sample.RelayProtocol, "send_layer": sample.SendLayer} {
+	for field, value := range map[string]string{"connection_type": sample.ConnectionType, "local_candidate_type": sample.LocalCandidateType, "remote_candidate_type": sample.RemoteCandidateType, "relay_protocol": sample.RelayProtocol, "send_layer": sample.SendLayer, "quality_limitation": sample.QualityLimitation} {
 		if (value != "" || field == "connection_type") && !slices.Contains(CallStatsFieldEnum(field), value) {
 			return field + "_label"
 		}
 	}
-	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos} {
+	for field, value := range sample.intFields() {
 		if value != nil && (*value < 0 || *value > CallStatsMaximum(field)) {
 			return field + "_range"
 		}
@@ -244,12 +274,12 @@ func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequ
 			if subject.TenantID != request.TenantID {
 				return struct{}{}, apiErrorForbidden
 			}
-			// provider and provider_session_id join a summary to the media plane's own
-			// logs for the same connection, which the API's SFU adapters log under these keys.
+			// connection_id is the key the own SFU logs for the connection and provider_session_id the key
+			// the API's SFU adapters log, so a summary joins to the plane's own logs for the same connection.
 			logger := observability.RequestLogger(ctx).With(request.Origin...).With(
 				"event", "sdk.call_stats",
 				"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-				"provider", subject.Provider, "provider_session_id", subject.ConnectionID,
+				"provider", subject.Provider, "connection_id", subject.ConnectionID, "provider_session_id", subject.ConnectionID,
 				"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))))
 			for _, sample := range request.Stats.Samples {
 				logger.InfoContext(ctx, "SDK call stats", sample.logAttributes()...)
@@ -263,16 +293,19 @@ func callStatsEndpoint(verifier ParticipantMediaVerifier) Endpoint[callStatsRequ
 }
 
 func (s callStatsSample) logAttributes() []any {
-	attributes := []any{"elapsed_ms", s.ElapsedMS, "window_ms", s.WindowMS, "connection_type", s.ConnectionType}
-	for key, value := range map[string]string{"local_candidate_type": s.LocalCandidateType, "remote_candidate_type": s.RemoteCandidateType, "relay_protocol": s.RelayProtocol, "send_layer": s.SendLayer} {
+	attributes := []any{"event", "sdk.call_stats", "elapsed_ms", s.ElapsedMS, "window_ms", s.WindowMS, "connection_type", s.ConnectionType}
+	for key, value := range map[string]string{"local_candidate_type": s.LocalCandidateType, "remote_candidate_type": s.RemoteCandidateType, "relay_protocol": s.RelayProtocol, "send_layer": s.SendLayer, "quality_limitation": s.QualityLimitation} {
 		if value != "" {
 			attributes = append(attributes, key, value)
 		}
 	}
-	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos} {
+	for key, value := range s.intFields() {
 		if value != nil {
 			attributes = append(attributes, key, *value)
 		}
+	}
+	if s.RelayOffered != nil {
+		attributes = append(attributes, "relay_offered", *s.RelayOffered)
 	}
 	for key, value := range map[string]*float64{"send_loss_pct": s.SendLossPct, "recv_loss_pct": s.RecvLossPct} {
 		if value != nil {

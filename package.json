@@ -74,6 +74,7 @@
     "clean": "turbo clean && rm -rf node_modules",
     "generate:tracker": "node scripts/generate-tracker.mjs",
     "check:tracker": "node scripts/generate-tracker.mjs --check",
+    "diagnose:call": "node scripts/diagnose-call/index.mjs",
     "prod:proof": "node scripts/prod-proof/index.mjs",
     "prod:canary": "node scripts/prod-proof/sfu-canary.mjs",
     "prod:fleet": "node scripts/prod-proof/fleet.mjs",

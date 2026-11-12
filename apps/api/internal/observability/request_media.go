@@ -15,6 +15,9 @@ const (
 	EpisodeIDKey       = "episode.id"
 	ParticipantHashKey = "participant.id_hash"
 	MediaPlaneKey      = "chalk.media_plane.provider"
+	// ConnectionIDKey is the media connection the credential is bound to. The own SFU logs the same
+	// id as `connection_id`, so a request, an SDK row and a node event for one connection share it.
+	ConnectionIDKey = "chalk.media.connection_id"
 )
 
 type requestMediaKey struct{}
@@ -24,6 +27,7 @@ type requestMedia struct {
 	episodeID       string
 	participantHash string
 	plane           string
+	connectionID    string
 }
 
 // requestMediaHolder is created by RequestMiddleware and filled after the credential is
@@ -36,11 +40,12 @@ func ParticipantIDHash(participantID string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(participantID)))
 }
 
-// SetRequestMedia records the Episode, the hashed Participant and the media plane a request
-// acts for, so its logs and spans join to an Episode. It does nothing outside a request.
-func SetRequestMedia(ctx context.Context, episodeID, participantID, plane string) {
+// SetRequestMedia records the Episode, the hashed Participant, the media plane and the media
+// connection a request acts for, so its logs and spans join to an Episode and to the plane's own
+// events for that connection. It does nothing outside a request.
+func SetRequestMedia(ctx context.Context, episodeID, participantID, plane, connectionID string) {
 	if holder, ok := ctx.Value(requestMediaKey{}).(*requestMediaHolder); ok {
-		holder.media.Store(&requestMedia{episodeID: episodeID, participantHash: ParticipantIDHash(participantID), plane: plane})
+		holder.media.Store(&requestMedia{episodeID: episodeID, participantHash: ParticipantIDHash(participantID), plane: plane, connectionID: connectionID})
 	}
 }
 
@@ -57,7 +62,7 @@ func requestMediaAttrs(ctx context.Context) []any {
 	if media == nil {
 		return nil
 	}
-	return []any{"episode_id", media.episodeID, "participant_id_hash", media.participantHash, "provider", media.plane}
+	return []any{"episode_id", media.episodeID, "participant_id_hash", media.participantHash, "provider", media.plane, "connection_id", media.connectionID}
 }
 
 func requestMediaSpanAttributes(ctx context.Context) []attribute.KeyValue {
@@ -65,5 +70,5 @@ func requestMediaSpanAttributes(ctx context.Context) []attribute.KeyValue {
 	if media == nil {
 		return nil
 	}
-	return []attribute.KeyValue{attribute.String(EpisodeIDKey, media.episodeID), attribute.String(ParticipantHashKey, media.participantHash), attribute.String(MediaPlaneKey, media.plane)}
+	return []attribute.KeyValue{attribute.String(EpisodeIDKey, media.episodeID), attribute.String(ParticipantHashKey, media.participantHash), attribute.String(MediaPlaneKey, media.plane), attribute.String(ConnectionIDKey, media.connectionID)}
 }

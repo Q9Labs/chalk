@@ -202,6 +202,38 @@ defmodule ChalkSync.Observability do
     })
   end
 
+  @doc """
+  Emits a short span for one Participant's lifecycle fact: a socket going up or down, a source
+  granted, paused, resumed or revoked, a screen lease failing to renew. It carries the Episode and
+  the hashed Participant, the same keys the socket spans and the API's logs use, and enums and
+  counts only, never message content.
+  """
+  @spec participant_event(map(), String.t(), String.t(), map()) :: context()
+  def participant_event(
+        %{tenant_id: tenant_id, episode_id: episode_id},
+        participant_id,
+        name,
+        attributes
+      )
+      when is_binary(participant_id) and is_binary(name) and is_map(attributes) do
+    linked_phase(
+      nil,
+      name,
+      attributes
+      |> Map.reject(fn {_key, value} -> is_nil(value) end)
+      |> Map.merge(%{
+        tenant_id: tenant_id,
+        episode_id: episode_id,
+        participant_id_hash: participant_hash(participant_id)
+      })
+    )
+  end
+
+  @doc "The form in which a Participant ID may appear in telemetry."
+  @spec participant_hash(String.t()) :: String.t()
+  def participant_hash(participant_id) when is_binary(participant_id),
+    do: :crypto.hash(:sha256, participant_id) |> Base.encode16(case: :lower)
+
   @doc "Emits a short span for work that crossed an OTP process boundary while preserving the explicit upstream trace context."
   @spec linked_phase(context() | nil, String.t(), map()) :: context()
   def linked_phase(context, name, attributes \\ %{}) do

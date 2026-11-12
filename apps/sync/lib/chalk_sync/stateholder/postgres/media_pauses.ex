@@ -16,9 +16,16 @@ defmodule ChalkSync.Stateholder.Postgres.MediaPauses do
         SQL.upsert(),
         authority ++ [Atom.to_string(source), publication_id]
       )
+
+      Postgrex.query!(
+        connection,
+        SQL.open_history(),
+        Scope.participant(identity) ++ [Atom.to_string(source), publication_id]
+      )
     else
       params = Scope.participant(identity) ++ [Atom.to_string(source)]
       Postgrex.query!(connection, SQL.clear(), params)
+      Postgrex.query!(connection, SQL.close_history(), params)
     end
 
     :ok

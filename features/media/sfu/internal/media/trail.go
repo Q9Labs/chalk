@@ -203,6 +203,20 @@ func (s *Session) traceSubscriptionPause(sub *subscription, was, now string) {
 	s.trail(slog.LevelInfo, event, attrs...)
 }
 
+// traceUnauthorized logs the pause a source without a live lease puts a subscription under. The pause
+// is derived when the state is read, so nothing else records its start or its end. Only the control loop calls it.
+func (s *subscription) traceUnauthorized(unauthorized bool) {
+	if unauthorized == s.unauthorizedLogged {
+		return
+	}
+	s.unauthorizedLogged = unauthorized
+	if unauthorized {
+		s.owner.traceSubscriptionPause(s, "", protocol.PauseSourceUnauthorized)
+		return
+	}
+	s.owner.traceSubscriptionPause(s, protocol.PauseSourceUnauthorized, "")
+}
+
 func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
 	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
 		return
@@ -212,7 +226,18 @@ func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
 		rid, layer = picked.rid, layerLabel(picked.rid)
 	}
 	// The publisher chooses its rid, so only the journal keeps it; the export carries the label.
-	s.trail(slog.LevelInfo, "sfu.subscription.layer", append(s.subscriptionAttrs(sub), "rid", rid, "layer", layer)...)
+	// ceiling is what the viewer asked for and server_limit what the node holds it to, so a receiver
+	// on a low layer shows whether it asked for it or the transport or the Episode plan put it there.
+	s.trail(slog.LevelInfo, "sfu.subscription.layer", append(s.subscriptionAttrs(sub), "rid", rid, "layer", layer,
+		"ceiling", limitLabel(sub.request.ceiling), "server_limit", limitLabel(sub.limit.rid))...)
+}
+
+// limitLabel names the layer a ceiling or a server limit allows, or "none" when it sets no bound.
+func limitLabel(rid string) string {
+	if rid == "" {
+		return "none"
+	}
+	return layerLabel(rid)
 }
 
 // layerLabel names a simulcast layer by the fixed set the node knows ("h" and "l" are the

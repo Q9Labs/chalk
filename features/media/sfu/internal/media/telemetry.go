@@ -185,6 +185,8 @@ func (n *Node) countLeaseLapses(now int64) {
 		if window.until != 0 && now >= window.until && authority.lapsed < window.opens {
 			authority.lapsed = window.opens
 			n.totals.counts.LeaseLapses++
+			n.trail(slog.LevelWarn, "sfu.source.lease_lost", protocol.Scope{TenantID: authority.key.tenant, EpisodeID: authority.key.episode, ParticipantID: authority.key.participant},
+				"source", authority.key.source, "cause", "ttl_lapsed", "revision", authority.revision)
 		}
 	}
 }

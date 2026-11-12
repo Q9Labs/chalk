@@ -34,11 +34,13 @@ type subscription struct {
 	pub         *publication
 	transport   *transport // the subscriber session's
 	pauseLogged bool       // the control loop has logged this subscription's congestion pause
-	transceiver *webrtc.RTPTransceiver
-	sender      *webrtc.RTPSender
-	track       *egressTrack
-	mid         string
-	closed      atomic.Bool
+	// unauthorizedLogged is set while the control loop has logged the pause its source's lapsed or revoked lease causes.
+	unauthorizedLogged bool
+	transceiver        *webrtc.RTPTransceiver
+	sender             *webrtc.RTPSender
+	track              *egressTrack
+	mid                string
+	closed             atomic.Bool
 	// owner is the session that pulled the track. lease is what a capture owner holds for it
 	// against the node budget, nil for a Participant; detach returns it.
 	owner   *Session

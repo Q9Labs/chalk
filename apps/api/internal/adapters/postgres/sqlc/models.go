@@ -1373,6 +1373,18 @@ type SyncMediaPause struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
+type SyncMediaPauseHistory struct {
+	ID            int64              `json:"id"`
+	TenantID      pgtype.UUID        `json:"tenant_id"`
+	SpaceID       pgtype.UUID        `json:"space_id"`
+	EpisodeID     pgtype.UUID        `json:"episode_id"`
+	ParticipantID pgtype.UUID        `json:"participant_id"`
+	Source        string             `json:"source"`
+	PublicationID string             `json:"publication_id"`
+	PausedAt      pgtype.Timestamptz `json:"paused_at"`
+	ResumedAt     pgtype.Timestamptz `json:"resumed_at"`
+}
+
 type SyncMediaStop struct {
 	TenantID              pgtype.UUID        `json:"tenant_id"`
 	SpaceID               pgtype.UUID        `json:"space_id"`

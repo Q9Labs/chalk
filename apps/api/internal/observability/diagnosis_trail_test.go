@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,20 @@ const (
 	testTenantID  = "0198a1b2-c3d4-4e5f-8a9b-0c1d2e3f4a5b"
 	testJourneyID = "0198a1b2-c3d4-4e5f-8a9b-0c1d2e3f4a5c"
 )
+
+var (
+	spanOnce sync.Once
+	spans    = tracetest.NewInMemoryExporter()
+)
+
+// spanExporter installs the test tracer provider once and returns its exporter, emptied. The package's
+// tracers are package variables that bind to the first provider the global delegate receives, so a
+// provider per test would leave later tests without their journey spans.
+func spanExporter() *tracetest.InMemoryExporter {
+	spanOnce.Do(func() { otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSyncer(spans))) })
+	spans.Reset()
+	return spans
+}
 
 func decodeLogLines(t *testing.T, out *bytes.Buffer) []map[string]any {
 	t.Helper()
@@ -46,11 +61,7 @@ func spanAttributes(span tracetest.SpanStub) map[string]string {
 }
 
 func TestFailedRequestLogNamesJourneyRouteTenantAndErrorCode(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	exporter := spanExporter()
 
 	var out bytes.Buffer
 	logger := slog.New(correlationHandler{next: slog.NewJSONHandler(&out, nil)})
@@ -104,11 +115,7 @@ func TestFailedRequestLogNamesJourneyRouteTenantAndErrorCode(t *testing.T) {
 }
 
 func TestSuccessfulAndUnmatchedRequestsCarryNoErrorCodeOrRoute(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	exporter := spanExporter()
 
 	var out bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&out, nil))
@@ -165,17 +172,13 @@ func TestHTTPFailureLogKeepsUpstreamStatusAndCodeBehindAnotherPublicStatus(t *te
 }
 
 func TestRequestMediaIdentityReachesTheRequestLogFailureLogSpansAndReplacementLog(t *testing.T) {
-	exporter := tracetest.NewInMemoryExporter()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
-	previous := otel.GetTracerProvider()
-	otel.SetTracerProvider(provider)
-	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	exporter := spanExporter()
 
 	var out bytes.Buffer
 	logger := slog.New(correlationHandler{next: slog.NewJSONHandler(&out, nil)})
 	router := chi.NewRouter()
 	router.Post("/v1/media/sfu/tracks", func(w http.ResponseWriter, r *http.Request) {
-		SetRequestMedia(r.Context(), "episode-1", "participant-1", "chalk_sfu")
+		SetRequestMedia(r.Context(), "episode-1", "participant-1", "chalk_sfu", "connection-1")
 		LogMediaConnectionReplacement(r.Context(), "access_refresh")
 		LogMediaTrackClose(r.Context(), "user_mute", 2, false, true)
 		LogMediaTrackClose(r.Context(), "free text with secrets", 1, true, false)
@@ -199,7 +202,7 @@ func TestRequestMediaIdentityReachesTheRequestLogFailureLogSpansAndReplacementLo
 		if event == "" {
 			event, _ = line["msg"].(string)
 		}
-		if line["episode_id"] != "episode-1" || line["participant_id_hash"] != hash || line["provider"] != "chalk_sfu" {
+		if line["episode_id"] != "episode-1" || line["participant_id_hash"] != hash || line["provider"] != "chalk_sfu" || line["connection_id"] != "connection-1" {
 			t.Errorf("%s line lacks the media identity: %v", event, line)
 			continue
 		}
@@ -221,7 +224,7 @@ func TestRequestMediaIdentityReachesTheRequestLogFailureLogSpansAndReplacementLo
 			continue
 		}
 		tagged++
-		if attributes[EpisodeIDKey] != "episode-1" || attributes[ParticipantHashKey] != hash || attributes[MediaPlaneKey] != "chalk_sfu" {
+		if attributes[EpisodeIDKey] != "episode-1" || attributes[ParticipantHashKey] != hash || attributes[MediaPlaneKey] != "chalk_sfu" || attributes[ConnectionIDKey] != "connection-1" {
 			t.Errorf("span %s attributes = %v", span.Name, attributes)
 		}
 	}

@@ -208,6 +208,9 @@ func (n *Node) allocate() {
 		for _, subscription := range episode.subscriptions {
 			if !subscription.pub.authority.allows(now, now) {
 				stats.sourceUnauthorized++
+				subscription.traceUnauthorized(true)
+			} else {
+				subscription.traceUnauthorized(false)
 			}
 			link := subscription.alloc.limit()
 			if !subscription.pub.video() {

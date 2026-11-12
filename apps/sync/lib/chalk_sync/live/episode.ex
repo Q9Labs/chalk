@@ -6,6 +6,7 @@ defmodule ChalkSync.Live.Episode do
   alias ChalkSync.Live.MediaPlaneCall
   alias ChalkSync.Live.Projection
   alias ChalkSync.Live.ScreenShareLease
+  alias ChalkSync.Observability
   alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
@@ -82,6 +83,11 @@ defmodule ChalkSync.Live.Episode do
          },
          {:ok, next, _discarded_frames} <- refresh_media(next, []),
          {:ok, next, snapshots} <- replace_live_projections(next) do
+      # A second live socket for one Participant is a rejoin that overlaps the old socket or a second device.
+      participant_event(next, authority.participant_id, "sync.participant.socket_up", %{
+        live_sockets: live_sockets(next, authority.participant_id)
+      })
+
       {:ok, next, snapshots, snapshots}
     else
       {:retryable, reason} -> {:error, reason}
@@ -103,14 +109,30 @@ defmodule ChalkSync.Live.Episode do
             socket
           )
 
-        %{
+        next = %{
           state
           | connections: connections,
             requests: requests,
             connection_qualities: Map.delete(state.connection_qualities, socket)
         }
+
+        # No live sockets left means the Participant is absent now. A lost socket is presence, not a leave.
+        participant_event(next, authority.participant_id, "sync.participant.socket_down", %{
+          live_sockets: live_sockets(next, authority.participant_id)
+        })
+
+        next
     end
   end
+
+  defp live_sockets(state, participant_id),
+    do:
+      Enum.count(state.connections, fn {_socket, authority} ->
+        authority.participant_id == participant_id
+      end)
+
+  defp participant_event(state, participant_id, name, attributes),
+    do: Observability.participant_event(state.episode, participant_id, name, attributes)
 
   @doc """
   Records how well one live socket's own link carries the call. The other guests see it in the
@@ -138,6 +160,12 @@ defmodule ChalkSync.Live.Episode do
 
   @spec live_target(t(), Identity.t(), map()) :: {t(), map()}
   def live_target(%__MODULE__{} = state, %Identity{} = identity, target) do
+    {next, result} = decide_live_target(state, identity, target)
+    record_live_target(state, identity, target, result)
+    {next, result}
+  end
+
+  defp decide_live_target(state, identity, target) do
     with {:ok, authority} <- actor_authority(state, identity),
          source = target_source(target.name),
          :ok <- authorize(authority, target_capability(source)) do
@@ -145,6 +173,33 @@ defmodule ChalkSync.Live.Episode do
     else
       {:retryable, reason} -> {state, live_result(target, :retryable_failure, reason)}
       {:error, reason} -> {state, live_result(target, :terminal_failure, reason)}
+    end
+  end
+
+  # One event per source change, so a pause with no resume, or a grant that failed, shows in the traces.
+  defp record_live_target(state, identity, target, result) do
+    source = target_source(target.name)
+
+    was_paused? =
+      Map.has_key?(state.media_pauses, {identity.participant_id, Atom.to_string(source)})
+
+    settled? = result["outcome"] in ["confirmed", "satisfied"]
+
+    attributes = %{
+      source: Atom.to_string(source),
+      outcome: result["outcome"],
+      error_code: result["error_code"]
+    }
+
+    cond do
+      not target.enabled ->
+        participant_event(state, identity.participant_id, "sync.media.pause", attributes)
+
+      settled? and was_paused? ->
+        participant_event(state, identity.participant_id, "sync.media.resume", attributes)
+
+      true ->
+        participant_event(state, identity.participant_id, "sync.media.grant", attributes)
     end
   end
 
@@ -718,10 +773,19 @@ defmodule ChalkSync.Live.Episode do
         rotate_screen_lease(state, participant_id, lease, options)
 
       {:error, reason} ->
+        participant_event(state, participant_id, "sync.screen_lease.renew_failed", %{
+          error_code: Atom.to_string(reason)
+        })
+
         {:error, reason}
     end
   catch
-    :exit, _reason -> {:error, :dependency_unavailable}
+    :exit, _reason ->
+      participant_event(state, participant_id, "sync.screen_lease.renew_failed", %{
+        error_code: "dependency_unavailable"
+      })
+
+      {:error, :dependency_unavailable}
   end
 
   defp rotate_screen_lease(state, participant_id, lease, options) do
