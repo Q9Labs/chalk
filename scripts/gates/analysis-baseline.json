@@ -1,1 +1,747 @@
-{}
+{
+  "complexity": {
+    "apps/api/cmd/main.go run": 128,
+    "apps/api/internal/recordingdecode/video.go decodeVP8Source": 109,
+    "apps/api/internal/config/config.go Load": 68,
+    "apps/api/internal/recorderworker/capture_attempt.go (*PionCaptureAttempt).Run": 67,
+    "apps/api/internal/publicinvites/service.go (Runtime).Arrive": 65,
+    "apps/api/internal/adapters/postgres/tenant_purge.go (TenantPurgeRepository).apply": 62,
+    "apps/api/internal/capturesignaling/service.go (*Service).Execute": 57,
+    "apps/api/cmd/tenant-purge/main.go run": 53,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).advanceReadiness": 52,
+    "apps/api/internal/providerbridge/sfu_executor.go (SFUExecutor).execute": 52,
+    "apps/api/internal/httpapi/access_grants.go issueAccessGrantEndpoint": 51,
+    "apps/api/internal/adapters/postgres/tenant_purge_short.go (TenantPurgeRepository).shortChange": 51,
+    "apps/api/internal/adapters/postgres/recording_lifecycle.go (RecordingLifecycleRepository).publish": 51,
+    "apps/api/internal/utilities/json.go SecretFieldName": 49,
+    "apps/api/internal/recordingpresentation/validation.go validateEvent": 48,
+    "apps/api/internal/recordingpipeline/authority.go NewRecorderJobAuthority": 48,
+    "apps/api/internal/recordingdecode/audio.go decodeOpusSource": 46,
+    "apps/api/cmd/codegen/main.go applyFieldConstraints": 46,
+    "apps/api/internal/recordingpipeline/authority.go DecodeRecorderJobEnvelope": 44,
+    "apps/api/internal/adapters/postgres/recording_capture_signaling.go (RecordingCaptureSignalingRepository).ClaimCommand": 44,
+    "apps/api/internal/adapters/postgres/episode_public_join.go (EpisodeLifecycleRepository).JoinPublic": 44,
+    "apps/api/internal/adapters/postgres/recording_pipeline.go (RecordingPipelineRepository).Claim": 43,
+    "apps/api/internal/recordingrender/service.go validateStoredInput": 42,
+    "apps/api/internal/httpapi/connection_reports.go decodeConnectionReport": 42,
+    "apps/api/internal/recordingdecode/video.go decodeH264Source": 41,
+    "apps/api/internal/recordingbundle/canonical.go normalizeBundle": 41,
+    "apps/api/internal/mediapublications/receive_health.go (*receiveHealth).reconcile": 41,
+    "apps/api/internal/recordingdecode/writer.go Write": 40,
+    "apps/api/internal/recorderfleet/types.go (Journal).Validate": 40,
+    "apps/api/internal/captureplane/conformance/harness.go Run": 39,
+    "apps/api/internal/recordingbundle/binary.go decodeBinary": 38,
+    "apps/api/internal/recorderworker/capture_attempt.go (*captureBundleWriter).reconcileTracks": 38,
+    "apps/api/internal/recordingdecode/writer.go ingestBundles": 37,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go captureUnavailablePullResult": 37,
+    "apps/api/internal/recordingdecode/vp8_usable.go usableVP8Segments": 36,
+    "apps/api/cmd/recording-backfill/main.go run": 36,
+    "apps/api/internal/recordingpresentation/builder.go scheduleWhiteboardTail": 35,
+    "apps/api/internal/recordingdecode/vp8_selection.go chooseVP8Pictures": 35,
+    "apps/api/internal/adapters/postgres/webhooks.go (WebhookRepository).Patch": 35,
+    "apps/api/cmd/tenant-purge/short.go runShort": 35,
+    "apps/api/internal/recordingdecode/output.go validateIndex": 34,
+    "apps/api/internal/mediapublications/liveness.go (Service).ConfirmRemoteTrackFailures": 34,
+    "apps/api/internal/adapters/postgres/public_invites.go (PublicInviteRepository).UpdateArrivalState": 34,
+    "apps/api/internal/transcripts/service_artifact_validation.go prepareRequestInput": 33,
+    "apps/api/internal/recordingrender/validation.go (CommitInput).Validate": 33,
+    "apps/api/internal/adapters/postgres/transcripts.go (TranscriptRepository).Request": 33,
+    "apps/api/internal/adapters/postgres/space_webhooks.go spaceChangedFields": 33,
+    "apps/api/internal/adapters/postgres/public_invites.go (PublicInviteRepository).decideLegacyAdmissionRequest": 33,
+    "apps/api/cmd/recorder-fleet-controller/config.go (rawCommandConfig).build": 33,
+    "apps/api/internal/spaces/service.go prepareUpdateSpaceInput": 32,
+    "apps/api/internal/adapters/postgres/tenant_purge_catalog.go (purgeCatalog).predicates": 32,
+    "apps/api/internal/recordingdecode/writer.go validateRequest": 31,
+    "apps/api/internal/captureplan/validation.go validatePlanInput": 31,
+    "apps/api/internal/adapters/postgres/recording_presentation_completion.go mapRecordingPresentationCompletionSource": 31,
+    "apps/api/internal/adapters/postgres/public_episode_admission.go (PublicInviteRepository).DecideAdmissionRequest": 31,
+    "apps/api/internal/transcripts/render_admission.go prepareSourceChunk": 30,
+    "apps/api/internal/recorderworker/render_encode.go validateRecordingMedia": 30,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).Reconcile": 30,
+    "apps/api/internal/adapters/postgres/recording_pipeline.go (RecordingPipelineRepository).Reserve": 30,
+    "apps/api/internal/adapters/postgres/episode_lifecycle_create.go (EpisodeLifecycleRepository).AdmitParticipant": 30,
+    "apps/api/internal/transcripts/service_artifact_validation.go prepareResultInput": 29,
+    "apps/api/internal/recorderworker/tracks.go BuildSpeakerTurnManifest": 29,
+    "apps/api/internal/recorderworker/render_compose.go (NodeComposeProducer).Compose": 29,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).Run": 29,
+    "apps/api/internal/publicinvites/service.go (Runtime).CreatePublicSpace": 29,
+    "apps/api/internal/adapters/recorderfleetcontrol/client.go (*Client).doJSON": 29,
+    "apps/api/internal/adapters/recorderbootprobe/provider.go (evidenceTransport).RoundTrip": 29,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go (Adapter).CloseTracks": 29,
+    "apps/api/internal/recordingrender/validation.go (TranscriptionSource).Validate": 28,
+    "apps/api/internal/recordingpresentation/validation.go (Snapshot).validate": 28,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).persistFile": 28,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).reconcileJournalInventory": 28,
+    "apps/api/internal/recordingpresentation/builder.go applyWhiteboardFact": 27,
+    "apps/api/internal/recorderworker/readiness.go (*ReadinessReporter).Run": 27,
+    "apps/api/internal/adapters/postgres/episode_admission_expiry.go enqueueDueAdmissionRequests": 27,
+    "apps/api/cmd/tenant-purge/short.go shortBackupSink": 27,
+    "apps/api/cmd/codegen/main.go (*generator).fieldSchema": 27,
+    "apps/api/internal/recordingpresentation/validation.go (Profile).validate": 26,
+    "apps/api/internal/recordingpresentation/builder.go schedulePlanTail": 26,
+    "apps/api/internal/recordingdecode/vp8_selection.go vp8Candidates": 26,
+    "apps/api/internal/recorderworker/transcript_source.go validateTranscriptionManifestChunk": 26,
+    "apps/api/internal/recorderworker/capture_daemon.go (*CaptureDaemon).Run": 26,
+    "apps/api/internal/recorderfleetissuer/store.go OpenStore": 26,
+    "apps/api/internal/adapters/postgres/tenant_purge_short.go shortObjectQueryAfterSnapshot": 26,
+    "apps/api/internal/adapters/postgres/tenant_backfill.go (TenantPurgeRepository).ApplyBackfill": 26,
+    "apps/api/internal/adapters/postgres/recording_render.go (RecordingRenderRepository).Commit": 26,
+    "apps/api/internal/adapters/postgres/recording_completion_recovery.go (RecordingPipelineRepository).RequestCompletionRecovery": 26,
+    "apps/api/internal/adapters/digitalocean/recorder_fleet.go NewRecorderFleet": 26,
+    "apps/api/internal/recordingpresentation/validation.go (Timeline).Validate": 25,
+    "apps/api/internal/recordingpresentation/builder.go buildPresentation": 25,
+    "apps/api/internal/recordingobjects/service.go (Service).Commit": 25,
+    "apps/api/internal/recordingobjects/service.go (Service).Finalize": 25,
+    "apps/api/internal/recorderworker/render_authority_client.go decodeResolvedRenderInput": 25,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go (RecordingCapturePlanRepository).RetireGone": 25,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go (Adapter).CloseCaptureConnection": 25,
+    "apps/api/cmd/tenant-purge/short.go carryShortBeforeImages": 25,
+    "apps/api/internal/recordingdecode/spool_merge.go appendFragmentRun": 24,
+    "apps/api/internal/recordernodebootstrap/attestation.go readImageManifest": 24,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).advanceDrain": 24,
+    "apps/api/internal/provideroperations/types.go validateEffectFields": 24,
+    "apps/api/internal/provideroperations/types.go OperationFromReceipt": 24,
+    "apps/api/internal/config/config.go loadPublicInviteConfig": 24,
+    "apps/api/internal/adapters/postgres/webhook_operations.go (WebhookRepository).Test": 24,
+    "apps/api/internal/adapters/postgres/transcription_request_tx.go admitTranscriptionTx": 24,
+    "apps/api/internal/adapters/postgres/recording_presentation_commit.go validatePreparedRecordingPresentation": 24,
+    "apps/api/internal/adapters/postgres/public_episode_admission.go (PublicInviteRepository).CreateAdmissionRequest": 24,
+    "apps/api/internal/adapters/postgres/episode_control.go (EpisodeLifecycleRepository).EnqueueDueEpisodeDeadlines": 24,
+    "apps/api/cmd/migrate/main.go parseOptions": 24,
+    "apps/api/cmd/codegen/main.go (*generator).schemaFromType": 24,
+    "apps/api/internal/transcripts/document.go (persistedDocument).validate": 23,
+    "apps/api/internal/tenants/cors_origins.go CORSOrigin": 23,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).stageAssets": 23,
+    "apps/api/internal/recorderworker/capture_attempt.go startCaptureReaderAt": 23,
+    "apps/api/internal/recordercapture/coordinator.go (*Coordinator).settleNegotiation": 23,
+    "apps/api/internal/publicinvites/service.go (Runtime).resolvePendingAdmission": 23,
+    "apps/api/internal/publicinvites/service.go (Service).CreateArrival": 23,
+    "apps/api/internal/publicinvites/code.go ParseInviteCode": 23,
+    "apps/api/internal/mediapublications/receive_health.go (Service).ObserveListenerPull": 23,
+    "apps/api/internal/mcpauth/cimd.go (Service).metadataClient": 23,
+    "apps/api/internal/adapters/postgres/webhook_operations.go (WebhookRepository).Redeliver": 23,
+    "apps/api/internal/adapters/postgres/recording_render.go (RecordingRenderRepository).CommitTranscriptionPreparation": 23,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go (RecordingCapturePlanRepository).reconcile": 23,
+    "apps/api/internal/adapters/discordreports/adapter.go (*Adapter).Send": 23,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go captureProviderError": 23,
+    "apps/api/internal/webhooks/delivery_client.go (*DeliveryClient).Deliver": 22,
+    "apps/api/internal/tenantpurge/objects.go (ObjectManifest).Validate": 22,
+    "apps/api/internal/recorderworker/layout.go SelectLayout": 22,
+    "apps/api/internal/recordernodebootstrap/config.go loadConfig": 22,
+    "apps/api/internal/recorderfleetissuer/service.go New": 22,
+    "apps/api/internal/recordercapture/authority.go NewAttemptAuthorityAt": 22,
+    "apps/api/internal/publicinvites/token.go (Verifier).Verify": 22,
+    "apps/api/internal/mediapublications/service.go (Service).Latest": 22,
+    "apps/api/internal/mediapublications/service.go (Service).RecordPublicationAvailability": 22,
+    "apps/api/internal/mcpauth/redirect.go (Config).validRedirectURI": 22,
+    "apps/api/internal/httpapi/episode_lifecycle.go episodeLifecycleEndpointAPIError": 22,
+    "apps/api/internal/config/config.go loadSyncTokenConfig": 22,
+    "apps/api/internal/adapters/postgres/transcription_admission.go sourceChunkMatches": 22,
+    "apps/api/internal/adapters/postgres/transcript_results.go (TranscriptRepository).AcceptResult": 22,
+    "apps/api/internal/adapters/postgres/tenant_purge_short.go shortEraseSQL": 22,
+    "apps/api/internal/adapters/postgres/recording_capture_signaling.go validateRecordingCaptureSignalingAuthority": 22,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go (Adapter).InspectCaptureConnection": 22,
+    "apps/api/internal/spaces/service.go (Service).CreateSpace": 21,
+    "apps/api/internal/recordingpresentation/builder.go reconcileInitialParticipants": 21,
+    "apps/api/internal/recordingpresentation/builder.go applyControlFact": 21,
+    "apps/api/internal/recordingpipeline/validation.go ValidateBundleInput": 21,
+    "apps/api/internal/recordingdecode/video.go mergeIVF": 21,
+    "apps/api/internal/recorderworker/render_request.go (FrameRenderRequest).Validate": 21,
+    "apps/api/internal/recorderworker/render_authority_client.go (*ControlPlaneClient).DownloadRenderObject": 21,
+    "apps/api/internal/recorderworker/render.go (MediaFacts).validate": 21,
+    "apps/api/internal/recorderworker/protocol.go (Job).Validate": 21,
+    "apps/api/internal/recorderworker/controlplane_client.go decodeJob": 21,
+    "apps/api/internal/recorderworker/capture_daemon.go NewCaptureDaemon": 21,
+    "apps/api/internal/recorderworker/capture_attempt.go (*PionCaptureAttempt).bindTracksWhileWatchingPlans": 21,
+    "apps/api/internal/provideroperations/types.go Canonicalize": 21,
+    "apps/api/internal/mediaplane/binding.go (Binding).Validate": 21,
+    "apps/api/internal/capturesignaling/validation.go normalizeInput": 21,
+    "apps/api/internal/capturesignaling/projection.go ValidatePreparedCommand": 21,
+    "apps/api/internal/adapters/recorderfleetjournal/journal.go (*Store).loadUnlocked": 21,
+    "apps/api/internal/accessgrants/verifier.go (Verifier).verify": 21,
+    "apps/api/internal/webhooks/service.go (Service).Patch": 20,
+    "apps/api/internal/webhooks/events.go EncodeSpaceEvent": 20,
+    "apps/api/internal/transcripts/finalizer.go (Service).CompleteFinalizer": 20,
+    "apps/api/internal/recordingpresentation/builder.go validateCompletionSource": 20,
+    "apps/api/internal/recordingdecode/vp8_selection.go accountVP8Selection": 20,
+    "apps/api/internal/recorderworker/render_authority_client.go decodeRenderCommit": 20,
+    "apps/api/internal/recorderworker/protocol.go (WorkerEvent).Validate": 20,
+    "apps/api/internal/recorderworker/capture_attempt.go (*captureBundleWriter).persist": 20,
+    "apps/api/internal/recorderworker/capture_attempt.go (*captureBundleWriter).ensureAssembler": 20,
+    "apps/api/internal/recorderfleet/types.go (Config).Validate": 20,
+    "apps/api/internal/recordercapture/coordinator.go (*Coordinator).reconcileLocked": 20,
+    "apps/api/internal/publicinvites/service.go (Runtime).decideAdmissionRequest": 20,
+    "apps/api/internal/mediaplane/signaling.go requireTracksRequest": 20,
+    "apps/api/internal/mcpauth/cimd.go validMetadataURL": 20,
+    "apps/api/internal/httpapi/transcription_worker_auth.go (HMACWorkloadAuthorizer).AuthorizeWorkload": 20,
+    "apps/api/internal/httpapi/sfu_signaling.go confirmFailedRemoteTracks": 20,
+    "apps/api/internal/httpapi/sfu_signaling.go pullOrPushTracks": 20,
+    "apps/api/internal/httpapi/public_invites.go publicInviteEndpointAPIError": 20,
+    "apps/api/internal/episodes/validation.go prepareAdmissionInput": 20,
+    "apps/api/internal/adapters/postgres/transcription_finalizer.go (TranscriptRepository).CompleteFinalizer": 20,
+    "apps/api/internal/adapters/postgres/transcription_admission.go commitRecordingTranscriptionAdmission": 20,
+    "apps/api/internal/adapters/postgres/tenant_purge_short.go shortPredicates": 20,
+    "apps/api/internal/adapters/postgres/tenant_purge_catalog.go loadPurgeCatalog": 20,
+    "apps/api/internal/adapters/postgres/provider_operations.go (ProviderOperationRepository).appendObservation": 20,
+    "apps/api/internal/adapters/postgres/episode_lifecycle_create.go (EpisodeLifecycleRepository).CreateEpisode": 20,
+    "apps/api/internal/adapters/mediaplaneproviders/registry.go (Registry).resolveProviderConfig": 20,
+    "apps/api/internal/adapters/mediaplaneproviders/registry.go (Registry).ResolveEpisode": 20,
+    "apps/api/internal/adapters/mediaplaneproviders/binding.go (Registry).ResolveBinding": 20,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go (Adapter).requestStatus": 20,
+    "apps/api/cmd/recorder-fleet-issuer/run.go run": 20,
+    "apps/api/cmd/recorder-fleet-issuer/config.go loadConfig": 20,
+    "apps/api/internal/webhooks/events.go validateArtifactTransition": 19,
+    "apps/api/internal/transcripts/text.go FormatText": 19,
+    "apps/api/internal/tenants/service.go prepareArtifactPolicyUpdate": 19,
+    "apps/api/internal/tenantpurge/seeds.go CarryDeferredSeeds": 19,
+    "apps/api/internal/recordingpresentation/validation.go (SharedContent).validate": 19,
+    "apps/api/internal/recordingdecode/summary.go summarizeTrack": 19,
+    "apps/api/internal/recordingbundle/encryption_binary.go decryptBinary": 19,
+    "apps/api/internal/recordingbundle/encryption.go decryptLegacy": 19,
+    "apps/api/internal/recordingbundle/assembler.go (*Assembler).AddTrackEvent": 19,
+    "apps/api/internal/recordingbundle/assembler.go validateAssemblerConfig": 19,
+    "apps/api/internal/recorderworker/recording_authority_client.go (*ControlPlaneClient).UploadRecordingObject": 19,
+    "apps/api/internal/recorderworker/readiness.go (*ControlPlaneClient).ReportReadiness": 19,
+    "apps/api/internal/recorderworker/protocol.go (ObjectIntent).validate": 19,
+    "apps/api/internal/recorderfleetissuer/service.go (*Service).Bootstrap": 19,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).drainCandidate": 19,
+    "apps/api/internal/provideroperations/types.go CanonicalizeObservation": 19,
+    "apps/api/internal/mediaplane/signaling.go requireUpdateTracksRequest": 19,
+    "apps/api/internal/httpapi/webhook_errors.go webhookAPIError": 19,
+    "apps/api/internal/httpapi/rate_limit.go checkRateLimit": 19,
+    "apps/api/internal/httpapi/episode_lifecycle.go admitParticipantEndpoint": 19,
+    "apps/api/internal/captureplane/validation.go (Negotiation).Validate": 19,
+    "apps/api/internal/adapters/postgres/tenant_purge_write_drain.go snapshotPurgeWriteDrain": 19,
+    "apps/api/internal/adapters/digitalocean/recorder_fleet.go (*RecorderFleet).InspectNode": 19,
+    "apps/api/cmd/codegen/main.go fieldEnum": 19,
+    "apps/api/internal/workerresources/sample.go (Sample).Valid": 18,
+    "apps/api/internal/recordingrender/validation.go validatePurposeFacts": 18,
+    "apps/api/internal/recordingpresentation/freezer.go (Freezer).verifyObject": 18,
+    "apps/api/internal/recordingpresentation/freezer.go (Freezer).Prepare": 18,
+    "apps/api/internal/recordingpresentation/codec.go decodeEvent": 18,
+    "apps/api/internal/recordingdecode/vp8_selection.go readVP8Pictures": 18,
+    "apps/api/internal/recordingdecode/declared_video_loss.go declaredVideoLoss": 18,
+    "apps/api/internal/recordingbundle/canonical.go decodeLegacy": 18,
+    "apps/api/internal/recordingbundle/assembler.go (*Assembler).AddPacket": 18,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).runTranscription": 18,
+    "apps/api/internal/recorderworker/capture_daemon.go (*CaptureDaemon).completeCapture": 18,
+    "apps/api/internal/recordernodebootstrap/config.go (Config).Validate": 18,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).classifyInventory": 18,
+    "apps/api/internal/recordercapture/coordinator.go (*Coordinator).validatePulledTracks": 18,
+    "apps/api/internal/recordercapture/coordinator.go (*Coordinator).Bootstrap": 18,
+    "apps/api/internal/httpapi/connection_reports.go ConnectionReportFieldEnum": 18,
+    "apps/api/internal/adapters/recorderfleetissuer/client.go (*Client).doJSON": 18,
+    "apps/api/internal/adapters/postgres/transcript_delete.go deleteTranscriptTx": 18,
+    "apps/api/internal/adapters/postgres/tenant_purge_short.go (TenantPurgeRepository).CleanupObjectsShort": 18,
+    "apps/api/internal/adapters/postgres/tenant_backfill.go snapshotBackfill": 18,
+    "apps/api/internal/adapters/digitalocean/recorder_fleet.go (*RecorderFleet).EnsureNode": 18,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_plane.go (Adapter).PullCaptureTracks": 18,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go normalizedProviderCode": 18,
+    "apps/api/cmd/recorder-render/run.go runWorker": 18,
+    "apps/api/cmd/recorder-render/main.go run": 18,
+    "apps/api/internal/recordingrender/service.go (Service).CommitRenderObject": 17,
+    "apps/api/internal/recordingpresentation/validation.go (ChatMessage).validate": 17,
+    "apps/api/internal/recordingpresentation/builder.go controlParticipantsAtRevision": 17,
+    "apps/api/internal/recordingobjects/types.go (AllocateInput).Validate": 17,
+    "apps/api/internal/recordingbundle/model.go (Manifest).validate": 17,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).persistTranscription": 17,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).validateResolvedInput": 17,
+    "apps/api/internal/recorderworker/capture_daemon.go (*CaptureDaemon).runClaim": 17,
+    "apps/api/internal/recordernodebootstrap/config.go readEnvironmentFile": 17,
+    "apps/api/internal/recordernodebootstrap/client.go ValidateBootstrapResponse": 17,
+    "apps/api/internal/recorderfleetissuer/service.go (*Service).verifyInventory": 17,
+    "apps/api/internal/recorderfleet/reconciler.go (*Reconciler).partitionNodes": 17,
+    "apps/api/internal/mediapublications/receive_health.go (*receiveHealth).updatePublications": 17,
+    "apps/api/internal/mcpauth/service.go (Service).Authorize": 17,
+    "apps/api/internal/httpapi/transcription_worker_claim.go workerClaimHandler": 17,
+    "apps/api/internal/httpapi/recordings.go recordingServiceAPIError": 17,
+    "apps/api/internal/httpapi/recorder_worker.go recorderWorkerFailHandler": 17,
+    "apps/api/internal/httpapi/mcp_webhooks.go bindMCPWebhookTools": 17,
+    "apps/api/internal/httpapi/call_stats.go validateCallStatsSample": 17,
+    "apps/api/internal/episodes/public_join.go preparePublicJoinInput": 17,
+    "apps/api/internal/config/config.go validatePublicInviteWebOrigin": 17,
+    "apps/api/internal/config/config.go validSPIFFETrustDomain": 17,
+    "apps/api/internal/chatattachments/telemetry.go requestResult": 17,
+    "apps/api/internal/chatattachments/service.go (Service).Finalize": 17,
+    "apps/api/internal/captureplan/service.go (Service).Wait": 17,
+    "apps/api/internal/adapters/postgres/webhooks.go (WebhookRepository).Create": 17,
+    "apps/api/internal/adapters/postgres/webhook_producer.go fanoutWebhookEvent": 17,
+    "apps/api/internal/adapters/postgres/webhook_dispatcher.go (WebhookDispatchRepository).RecoverExpired": 17,
+    "apps/api/internal/adapters/postgres/transcription_finalizer.go (TranscriptRepository).ClaimFinalizer": 17,
+    "apps/api/internal/adapters/postgres/tenant_purge.go reusePurgeEraseHelpers": 17,
+    "apps/api/internal/adapters/postgres/recording_render.go (RecordingRenderRepository).ResolveInput": 17,
+    "apps/api/internal/adapters/postgres/recording_capture_signaling.go (RecordingCaptureSignalingRepository).PrepareCommand": 17,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go validateCapturePlanEnvelope": 17,
+    "apps/api/internal/adapters/postgres/public_invites.go (PublicInviteRepository).CreateArrival": 17,
+    "apps/api/internal/adapters/pion/peer.go (*Peer).CreateLocalOffer": 17,
+    "apps/api/internal/adapters/cloudflare/sfu/session_alias.go (*sessionRegistry).claim": 17,
+    "apps/api/internal/adapters/cloudflare/sfu/capture_response_observability.go captureResponseSnapshot": 17,
+    "apps/api/internal/adapters/chalksfu/adapter.go (*Adapter).call": 17,
+    "apps/api/cmd/tenant-purge/main.go cleanup": 17,
+    "apps/api/internal/spaces/service.go prepareCreateSpaceInput": 16,
+    "apps/api/internal/recordingrender/validation.go (Authority).Validate": 16,
+    "apps/api/internal/recordingrender/service.go (Service).ResolveRenderInput": 16,
+    "apps/api/internal/recordingpresentation/builder.go validateCapturePlanStream": 16,
+    "apps/api/internal/recordingobjects/service.go (Service).Reserve": 16,
+    "apps/api/internal/recordingdecode/spool_merge.go mergeRunChunk": 16,
+    "apps/api/internal/recordingdecode/output.go validateRelativeOutput": 16,
+    "apps/api/internal/recordingbundle/canonical.go walkJSONValue": 16,
+    "apps/api/internal/recorderworker/render_attempt.go renderAuthorityFromClaim": 16,
+    "apps/api/internal/recorderworker/render_attempt.go (*ProductionRenderAttempt).RenewLease": 16,
+    "apps/api/internal/recorderfleet/types.go (ReleaseSpec).validate": 16,
+    "apps/api/internal/recorderfleet/types.go (Demand).Validate": 16,
+    "apps/api/internal/publicinvites/service.go (Runtime).ArrivalStatus": 16,
+    "apps/api/internal/providerbridge/service.go (Service).apply": 16,
+    "apps/api/internal/mediapublications/reconciliation.go (*remoteTrackAbsenceEvidence).observe": 16,
+    "apps/api/internal/httpapi/transcription_text.go transcriptTextDisposition": 16,
+    "apps/api/internal/httpapi/transcription_artifacts.go transcriptArtifactAPIError": 16,
+    "apps/api/internal/httpapi/sfu_signaling.go signalSFUCloseTracks": 16,
+    "apps/api/internal/httpapi/recordings.go createRecordingDownloadURLEndpoint": 16,
+    "apps/api/internal/httpapi/recorder_worker.go recorderWorkerCapturePlanWaitInput": 16,
+    "apps/api/internal/httpapi/call_stats.go clientFamilies": 16,
+    "apps/api/internal/episodes/validation.go validateConfigSnapshot": 16,
+    "apps/api/internal/episodes/initial_control.go NewInitialControlState": 16,
+    "apps/api/internal/config/config.go loadChalkSFUConfig": 16,
+    "apps/api/internal/artifactpolicy/document.go (Document).Validate": 16,
+    "apps/api/internal/adapters/postgres/webhook_dispatcher.go (WebhookDispatchRepository).Complete": 16,
+    "apps/api/internal/adapters/postgres/transcript_jobs.go (TranscriptRepository).Claim": 16,
+    "apps/api/internal/adapters/postgres/tenant_purge_objects.go checkRetainedObjectReferences": 16,
+    "apps/api/internal/adapters/postgres/space_webhooks.go (SpaceRepository).createSpaceWithWebhook": 16,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go capturePlanTracks": 16,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go buildRecordingCapturePlan": 16,
+    "apps/api/internal/adapters/postgres/public_invites.go publicAdmissionProvenanceValid": 16,
+    "apps/api/internal/adapters/postgres/episode_public_join.go (EpisodeLifecycleRepository).ensurePublicLiveEpisode": 16,
+    "apps/api/internal/adapters/digitalocean/recorder_fleet.go (*RecorderFleet).DeleteNode": 16,
+    "apps/api/internal/adapters/digitalocean/recorder_fleet.go (*RecorderFleet).ListNodes": 16,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go sfuStatusError": 16,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go (addTracksResponse).partialRemoteTrackResponse": 16,
+    "apps/api/internal/adapters/cloudflare/sfu/adapter.go (*addTracksResponse).providerError": 16,
+    "apps/api/internal/adapters/chalksfu/fleet.go (*Fleet).Place": 16,
+    "apps/api/cmd/recording-bundle/main.go run": 16,
+    "apps/api/cmd/media-settings/main.go run": 16,
+    "features/mcp/api/server.go Bind": 23,
+    "features/mcp/api/server.go NewHandler": 17,
+    "features/media/sfu/internal/media/reserve.go (*Node).ReserveEpisode": 31,
+    "features/media/sfu/internal/media/session.go (*Session).UpdateTracks": 26,
+    "features/media/sfu/internal/media/guard.go (*guard).tick": 25,
+    "features/media/sfu/internal/media/session.go classifyTracks": 23,
+    "features/media/sfu/internal/media/estimator.go (*bandwidthEstimator).onFeedback": 22,
+    "features/media/sfu/internal/media/node.go (*Node).register": 20,
+    "features/media/sfu/internal/media/allocator.go allocate": 20,
+    "features/media/sfu/internal/media/episode.go (*Node).allocate": 19,
+    "features/media/sfu/internal/media/session.go (*Session).push": 17,
+    "features/media/sfu/internal/media/authority.go (*Node).applySourceControls": 17,
+    "features/media/sfu/internal/media/vp8.go parseVP8": 16,
+    "sdks/typescript/react/src/components/call-limbo/CallLimbo.tsx": [
+      41
+    ],
+    "sdks/typescript/react/src/components/atomic/ReactionBubble.tsx": [
+      30
+    ],
+    "sdks/typescript/react/src/components/atomic/VolumeSlider.tsx": [
+      21
+    ],
+    "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx": [
+      68
+    ],
+    "sdks/typescript/react/src/components/space-header/SpaceHeader.tsx": [
+      37
+    ],
+    "sdks/typescript/react/src/components/space-header/useCallShortcuts.ts": [
+      38
+    ],
+    "sdks/typescript/react/src/components/space-header/CallDetails.tsx": [
+      27
+    ],
+    "sdks/typescript/react/src/components/space-header/call-network.ts": [
+      25
+    ],
+    "sdks/typescript/react/src/components/participants-panel/ParticipantsPanel.tsx": [
+      28,
+      27
+    ],
+    "sdks/typescript/react/src/components/participants-panel/participant-options-menu.tsx": [
+      38
+    ],
+    "sdks/typescript/react/src/components/participants-panel/participant-row.tsx": [
+      37
+    ],
+    "apps/web/tests/dashboard-ui/refresh-checks.mjs": [
+      24
+    ],
+    "sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts": [
+      21
+    ],
+    "sdks/typescript/react/src/components/control-bar/control-bar-button.tsx": [
+      33
+    ],
+    "apps/web/tests/dashboard-ui/recording-checks.mjs": [
+      36
+    ],
+    "apps/web/tests/dashboard-ui/developer-checks.mjs": [
+      25
+    ],
+    "sdks/typescript/react/src/components/control-bar/ControlBar.tsx": [
+      63
+    ],
+    "apps/web/tests/dashboard-ui/connect-checks.mjs": [
+      34
+    ],
+    "sdks/typescript/react/src/components/device-popover/DevicePopover.tsx": [
+      63
+    ],
+    "apps/web/tests/dashboard-ui/fixture-server.mjs": [
+      119,
+      56,
+      24
+    ],
+    "apps/web/src/lib/dashboard/tracking.ts": [
+      25,
+      23
+    ],
+    "sdks/typescript/react/src/components/space-view/SpaceView.tsx": [
+      100
+    ],
+    "sdks/typescript/react/src/components/toast-stack/call-events.tsx": [
+      42
+    ],
+    "sdks/typescript/react/src/components/stage/stage-layout.ts": [
+      32
+    ],
+    "sdks/typescript/react/src/components/stage/SpaceStage.tsx": [
+      24
+    ],
+    "sdks/typescript/react/src/components/stage/Stage.tsx": [
+      23
+    ],
+    "apps/web/src/call-states/fixtures.ts": [
+      25
+    ],
+    "sdks/typescript/react/src/components/chalk/StatusSurface.tsx": [
+      33
+    ],
+    "sdks/typescript/react/src/components/chalk/Chalk.tsx": [
+      35
+    ],
+    "sdks/typescript/react/src/components/composite/ScreenShareView.tsx": [
+      45
+    ],
+    "sdks/typescript/react/src/components/composite/ChatPanel.tsx": [
+      34
+    ],
+    "sdks/typescript/react/src/components/composite/ReactionPicker.tsx": [
+      41
+    ],
+    "sdks/typescript/react/src/components/composite/MessageBubble.tsx": [
+      52
+    ],
+    "sdks/typescript/client/src/sync/v1-client.ts": [
+      39,
+      22
+    ],
+    "apps/web/src/components/space/SpacePage.tsx": [
+      28,
+      25
+    ],
+    "apps/web/src/components/space/pre-join/PreJoin.tsx": [
+      24
+    ],
+    "sdks/typescript/client/src/sync/v1-reducer.ts": [
+      22
+    ],
+    "apps/web/src/components/dashboard/SessionViewer.tsx": [
+      37
+    ],
+    "apps/web/src/components/dashboard/SessionsPage.tsx": [
+      34
+    ],
+    "apps/web/src/components/dashboard/LanguagePicker.tsx": [
+      24
+    ],
+    "sdks/typescript/client/src/whiteboard/v1-client.ts": [
+      29
+    ],
+    "apps/web/src/components/dashboard/DeveloperPage.tsx": [
+      27
+    ],
+    "apps/web/src/components/dashboard/RecordingsPage.tsx": [
+      39
+    ],
+    "apps/web/src/components/dashboard/CallPage.tsx": [
+      50
+    ],
+    "apps/web/src/components/landing/CallPreview.tsx": [
+      25
+    ],
+    "apps/web/src/components/landing/Dither.tsx": [
+      27
+    ],
+    "apps/web/server/application.ts": [
+      31,
+      24
+    ],
+    "apps/web/server/engine.ts": [
+      35
+    ],
+    "apps/web/server/developer.ts": [
+      21
+    ],
+    "sdks/typescript/client/src/media/cloudflare-sfu.test.ts": [
+      22
+    ],
+    "apps/web/scripts/call-performance-metrics.mjs": [
+      23
+    ],
+    "apps/web/scripts/call-leak-check.mjs": [
+      25,
+      21
+    ],
+    "apps/web/scripts/check-call-performance.mjs": [
+      33
+    ],
+    "apps/web/scripts/call-heap-summary.mjs": [
+      21
+    ],
+    "apps/transcription-dispatcher/src/provider-utils.ts": [
+      21
+    ],
+    "apps/transcription-dispatcher/src/config.ts": [
+      28
+    ],
+    "apps/transcription-dispatcher/src/dispatcher.ts": [
+      27
+    ],
+    "apps/transcription-dispatcher/src/providers.ts": [
+      24
+    ],
+    "apps/transcription-dispatcher/src/urls.ts": [
+      40,
+      36,
+      24,
+      23
+    ],
+    "apps/transcription-dispatcher/src/control-api.ts": [
+      45
+    ],
+    "apps/transcription-dispatcher/src/secrets.ts": [
+      28
+    ],
+    "apps/transcription-dispatcher/src/finalizer-merge.ts": [
+      38,
+      35,
+      29
+    ],
+    "packages/whiteboard/src/collab/engine.ts": [
+      25
+    ],
+    "packages/whiteboard/src/react/board/Board.tsx": [
+      43,
+      28,
+      21
+    ],
+    "packages/whiteboard/src/react/board/BoardCursors.tsx": [
+      28
+    ],
+    "packages/whiteboard/src/react/board/BoardMenu.tsx": [
+      23
+    ],
+    "packages/whiteboard/src/embedded/controller.ts": [
+      44,
+      38
+    ],
+    "features/scorecard/staging-latency.mjs": [
+      32
+    ],
+    "scripts/recorder/analyze-media.mjs": [
+      54
+    ],
+    "features/scorecard/diagnostics.mjs": [
+      24
+    ],
+    "features/scorecard/contention.mjs": [
+      62
+    ],
+    "features/scorecard/schema.mjs": [
+      42,
+      24
+    ],
+    "features/scorecard/staging-logs.mjs": [
+      37
+    ],
+    "features/scorecard/staging-metrics.mjs": [
+      56
+    ],
+    "features/scorecard/scorecard.mjs": [
+      23
+    ],
+    "tools/contract-fixture-proof/src/emitters/effect-schemas.mjs": [
+      23,
+      22
+    ],
+    "scripts/dev/cli.mjs": [
+      53
+    ],
+    "tools/contract-fixture-proof/src/emitters/sync-contract.mjs": [
+      59
+    ],
+    "tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs": [
+      79
+    ],
+    "scripts/dev/receive-partial-report.mjs": [
+      37
+    ],
+    "scripts/dev/config.mjs": [
+      31,
+      24
+    ],
+    "scripts/dev/supervisor.mjs": [
+      26,
+      24
+    ],
+    "scripts/dev/media-smoke-core.mjs": [
+      33
+    ],
+    "scripts/dev/chalk-resources.mjs": [
+      22
+    ],
+    "scripts/deploy/deploy-web-release.mjs": [
+      21
+    ],
+    "sdks/typescript/react-native/src/toasts/notices.ts": [
+      36
+    ],
+    "scripts/web-proof/join-startup.mjs": [
+      26
+    ],
+    "sdks/typescript/react-native/src/frame/CallFrame.tsx": [
+      27
+    ],
+    "scripts/prod-proof/own-sfu-spaces-run.test.mjs": [
+      21
+    ],
+    "sdks/typescript/react-native/src/primitives/IconButton.tsx": [
+      25
+    ],
+    "sdks/typescript/react-native/src/callkit/resolve-space-callkit-options.ts": [
+      22
+    ],
+    "scripts/prod-proof/long-call-criteria.mjs": [
+      32
+    ],
+    "sdks/typescript/react/src/test-support/preview-client.ts": [
+      34
+    ],
+    "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts": [
+      35
+    ],
+    "sdks/typescript/react/src/selectors/space-selectors.ts": [
+      30
+    ],
+    "sdks/typescript/react/src/internal/sound-cues.ts": [
+      25
+    ],
+    "scripts/design-tokens/codemod.mjs": [
+      32
+    ],
+    "infrastructure/listener-audio-alert/listener-audio-check.mjs": [
+      25
+    ],
+    "scripts/gates/chalk-gate-plan.mjs": [
+      113
+    ],
+    "scripts/gates/zod-exception.mjs": [
+      41
+    ],
+    "scripts/gates/references.mjs": [
+      24
+    ],
+    "scripts/gates/feature-map.mjs": [
+      33
+    ],
+    "sdks/typescript/client/src/generated/sync.ts": [
+      48,
+      36,
+      27,
+      24
+    ],
+    "sdks/typescript/client/src/generated/whiteboard-v1.ts": [
+      78,
+      44
+    ]
+  },
+  "dead-code": {
+    "apps/api/internal/adapters/pion/peer.go NewPeerConnection": true,
+    "apps/api/internal/adapters/postgres/public_invites.go NewPublicInvitesRepositoryWithPool": true,
+    "apps/api/internal/adapters/postgres/public_invites.go NewPublicInvitesRepository": true,
+    "apps/api/internal/adapters/postgres/recording_capture_plans.go NewRecordingCapturePlanRepositoryWithPool": true,
+    "apps/api/internal/adapters/postgres/recording_capture_signaling.go NewRecordingCaptureSignalingRepositoryWithPool": true,
+    "apps/api/internal/adapters/postgres/recording_pipeline.go NewRecordingPipelineRepositoryWithTransactor": true,
+    "apps/api/internal/adapters/recorderfleetcontrol/client.go ParseDurationSeconds": true,
+    "apps/api/internal/adapters/recorderfleetissuer/client.go NewWithHTTPClient": true,
+    "apps/api/internal/adapters/redis/rate_limiter.go NewRateLimiterWithClient": true,
+    "apps/api/internal/apitest/route_matrix.go RouteMatrix": true,
+    "apps/api/internal/artifactpolicy/policy.go SeedSpacePolicy": true,
+    "apps/api/internal/episodes/deadline_scheduler.go DeadlineScheduler.Health": true,
+    "apps/api/internal/observability/diagnostics.go Diagnostics.RecorderMetrics": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordAdmission": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordJobClaim": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordTransition": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordLeaseRecovery": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordTerminalFailure": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordDeadlineMiss": true,
+    "apps/api/internal/observability/recorder.go RecorderMetrics.RecordJobDuration": true,
+    "apps/api/internal/problemreports/outcomes.go Outcomes": true,
+    "apps/api/internal/provideroperations/types.go Fingerprint": true,
+    "apps/api/internal/provideroperations/types.go FingerprintHex": true,
+    "apps/api/internal/recordernodebootstrap/client.go Client.Bootstrap": true,
+    "apps/api/internal/recorderworker/bundles.go ValidateBundleFencing": true,
+    "apps/api/internal/recorderworker/bundles.go ValidateBundleContinuity": true,
+    "apps/api/internal/recorderworker/bundles.go AttributeCaptureGap": true,
+    "apps/api/internal/recorderworker/bundles.go BundleTime": true,
+    "apps/api/internal/recorderworker/capture_attempt.go NewCaptureAttemptFactory": true,
+    "apps/api/internal/recorderworker/controlplane_client.go NewControlPlaneClientWithUploader": true,
+    "apps/api/internal/recorderworker/controlplane_client.go NewClient": true,
+    "apps/api/internal/recorderworker/layout.go LayoutPolicy.validate": true,
+    "apps/api/internal/recorderworker/layout.go BuildStageTimeline": true,
+    "apps/api/internal/recorderworker/layout.go SelectLayout": true,
+    "apps/api/internal/recorderworker/layout.go ActiveSpeakerSelector.Observe": true,
+    "apps/api/internal/recorderworker/protocol.go WorkerEvent.MarshalJSON": true,
+    "apps/api/internal/recorderworker/protocol.go WorkerEvent.Validate": true,
+    "apps/api/internal/recorderworker/protocol.go CloudflareCaptureProvider.Capture": true,
+    "apps/api/internal/recorderworker/protocol.go PionCaptureProvider.Capture": true,
+    "apps/api/internal/recorderworker/protocol.go GPURenderProvider.Render": true,
+    "apps/api/internal/recorderworker/render.go PackEDF": true,
+    "apps/api/internal/recorderworker/render.go packJobs": true,
+    "apps/api/internal/recorderworker/render.go VerifyMedia": true,
+    "apps/api/internal/recorderworker/runtime.go NewRuntime": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.Heartbeat": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.Progress": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.Complete": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.Fail": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.emitTerminal": true,
+    "apps/api/internal/recorderworker/runtime.go Runtime.emit": true,
+    "apps/api/internal/recorderworker/tracks.go ValidateTrackEpochs": true,
+    "apps/api/internal/recorderworker/tracks.go SpeechInterval.valid": true,
+    "apps/api/internal/recorderworker/tracks.go BuildSpeakerTurnManifest": true,
+    "apps/api/internal/recorderworker/tracks.go BuildAudioChunkPlan": true,
+    "apps/api/internal/recordingbundle/canonical.go ContentChecksum": true,
+    "apps/api/internal/recordingbundle/encryption.go ObjectChecksumBase64": true,
+    "apps/api/internal/recordingobjects/types.go SameCommit": true,
+    "apps/api/internal/recordingobjects/types.go checksumBytes": true,
+    "apps/api/internal/recordingobjects/types.go decodeChecksum": true,
+    "apps/api/internal/recordingpipeline/state.go CanTransition": true,
+    "apps/api/internal/recordingpipeline/state.go ValidateTransition": true,
+    "apps/api/internal/recordingpipeline/state.go DesiredCaptureNodes": true,
+    "apps/api/internal/recordingpipeline/state.go CanAdmit": true,
+    "apps/api/internal/recordingpipeline/state.go RetryAvailableAt": true,
+    "apps/api/internal/recordingpipeline/state.go ceilDiv": true,
+    "apps/api/internal/transcripts/service.go NewArtifactService": true,
+    "apps/api/internal/webhooks/events.go EncodeParticipantEvent": true,
+    "apps/api/internal/webhooks/protector.go DecodeEncryptionKey": true,
+    "features/media/sfu/internal/media/scope.go kindOf": true,
+    "features/media/sfu/internal/media/subscription.go subscription.release": true,
+    "features/media/sfu/tests/netem_test.go link.shape": true,
+    "features/media/sfu/tests/netem_test.go link.dropped": true
+  },
+  "duplication": 71
+}
