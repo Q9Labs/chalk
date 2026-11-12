@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { RecordingsPage } from "../components/dashboard/RecordingsPage";
-import { parseRecordingsSearch } from "../lib/dashboard/search";
+import { parseLegacyListSearch } from "../lib/dashboard/search";
 
-export const Route = createFileRoute("/dashboard/_app/recordings")({ validateSearch: parseRecordingsSearch, component: RecordingsRoute });
-
-function RecordingsRoute() {
-  return <RecordingsPage search={Route.useSearch()} />;
-}
+/** The old recordings list: a link filtered to one call opens that call, where its sessions, recordings and transcripts live. Others open Home. */
+export const Route = createFileRoute("/dashboard/_app/recordings")({
+  validateSearch: parseLegacyListSearch,
+  beforeLoad: ({ search }) => {
+    if (search.spaceId) throw redirect({ to: "/dashboard/call/$spaceId", params: { spaceId: search.spaceId }, replace: true });
+    throw redirect({ to: "/dashboard", replace: true });
+  },
+});

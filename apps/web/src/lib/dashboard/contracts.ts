@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import type { VideoGroup, VideoState } from "./recording";
-import { recordingStatuses, sessionShows } from "./search";
 
 const id = z.uuid();
 export const spaceNameMaxCodePoints = ChalkCodePointLimits["CreateSpaceRequest.name"];
@@ -36,6 +35,8 @@ export const pastQuery = z.strictObject({ spaceId: id, episodeId: id, cursor: z.
 const instant = z.iso.datetime({ offset: true });
 const listFilters = { cursor: z.string().max(1024).optional(), q: z.string().trim().max(200).optional(), from: instant.optional(), to: instant.optional(), spaceId: id.optional() };
 /** Past sessions across every call. `show` narrows to what a session kept. */
+const sessionShows = ["all", "recording", "transcript", "none"] as const;
+const recordingStatuses = ["ready", "processing", "prepare", "failed", "expired"] as const;
 export const sessionsQuery = z.strictObject({ ...listFilters, show: z.enum(sessionShows).optional() });
 /** Recorded sessions across every call. `status` is the state of the video. */
 export const recordingsQuery = z.strictObject({ ...listFilters, status: z.enum(recordingStatuses).optional() });

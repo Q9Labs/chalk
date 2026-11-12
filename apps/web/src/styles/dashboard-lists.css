@@ -48,7 +48,7 @@
 .site .dash .bdg.mu {
   background: none;
   padding: 0;
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .bdg svg.site-icon {
@@ -98,7 +98,7 @@
 
 .site .dash .thumb.dim {
   background: var(--chalk-hover);
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .thumb svg.site-icon {
@@ -195,7 +195,7 @@
 }
 
 .site .dash .lfld input::placeholder {
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .lfld .ib {
@@ -472,7 +472,7 @@
 }
 
 .site .dash .slist .chev {
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .slist .pp {
@@ -711,7 +711,7 @@
   /* token-ratchet-ignore: the 5px side margin lines the divider up with the text inside the icon buttons */
   margin: 0 5px;
   border-radius: 50%;
-  background: var(--faint-text);
+  background: var(--faint-mark);
   flex: none;
 }
 

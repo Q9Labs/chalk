@@ -309,9 +309,9 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
         <>
           <div className="list">
             <div className="slist ses one">
-              <SessionsHead one />
+              <SessionsHead />
               {past.map((episode) => (
-                <SessionRow key={episode.id} one row={{ spaceId, callName: call.name, episodeId: episode.id, startedAt: episode.startedAt, endedAt: episode.endedAt, people: episode.participantCount, ...kept(episode.recordings, metadata.current.unavailable) }} />
+                <SessionRow key={episode.id} row={{ spaceId, episodeId: episode.id, startedAt: episode.startedAt, endedAt: episode.endedAt, people: episode.participantCount, ...kept(episode.recordings, metadata.current.unavailable) }} />
               ))}
             </div>
           </div>

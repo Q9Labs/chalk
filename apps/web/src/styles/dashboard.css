@@ -11,13 +11,13 @@
   --provider-apple-light-hover: #1c1c1e;
 }
 
-/* Tints and the faint text step, derived from the call's own colors so both themes follow. */
+/* Tints and the faint mark for dots and rules (never text, which stays at 4.5:1), derived from the call's own colors so both themes follow. */
 .site .dash {
   --tint-accent: color-mix(in srgb, var(--chalk-accent) 12%, transparent);
   --tint-positive: color-mix(in srgb, var(--chalk-positive) 12%, transparent);
   --tint-warning: color-mix(in srgb, var(--chalk-warning) 12%, transparent);
   --tint-danger: color-mix(in srgb, var(--chalk-danger) 12%, transparent);
-  --faint-text: color-mix(in srgb, var(--chalk-muted-text) 62%, var(--chalk-canvas));
+  --faint-mark: color-mix(in srgb, var(--chalk-muted-text) 62%, var(--chalk-canvas));
   --ring-line: 0 0 0 1px var(--chalk-line-strong);
   --ring-line-inset: inset 0 0 0 1px var(--chalk-line-strong);
 }
@@ -1131,22 +1131,26 @@
 
 .site .dash .ttabs {
   display: flex;
-  gap: var(--space-0-5);
+  align-items: center;
+  gap: var(--space-1);
 }
 
+/* One weight for every tab, so the current tab only gains a fill and the row never shifts. */
 .site .dash .ttabs a {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
-  height: 32px;
+  gap: var(--space-2);
+  height: 36px;
   padding: 0 var(--space-3);
   border-radius: var(--corner-pill);
-  font-size: var(--type-body-sm);
+  font-size: var(--type-body);
   font-weight: 500;
   color: var(--chalk-soft-text);
 }
 
 .site .dash .ttabs a svg.site-icon {
+  display: block;
+  flex: none;
   color: var(--chalk-muted-text);
 }
 
@@ -1158,7 +1162,6 @@
 .site .dash .ttabs a[aria-current="page"] {
   color: var(--chalk-text);
   background: var(--chalk-hover);
-  font-weight: 600;
 }
 
 .site .dash .ttabs a[aria-current="page"] svg.site-icon {
@@ -1369,9 +1372,28 @@
   min-width: 120px;
 }
 
+/* The people on a call sit beside its time, so every title starts at the same edge with no gap before it. */
 .site .dash .fcol {
-  width: 100px;
   display: flex;
+  justify-content: flex-end;
+}
+
+/* The overflow count joins the stack as one more face. */
+.site .dash .fcol .faces .more {
+  display: grid;
+  place-items: center;
+  min-width: var(--space-8);
+  height: var(--space-8);
+  margin-left: calc(var(--space-2) * -1);
+  padding: 0 var(--space-1-5);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-raised);
+  box-shadow: var(--elevation-halo-canvas);
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .row:hover .fcol .faces .more {
+  box-shadow: var(--elevation-halo-raised);
 }
 
 .site .dash .live {
@@ -1390,14 +1412,73 @@
 
 .site .dash .hact {
   display: flex;
+  align-items: flex-start;
   gap: var(--space-2-5);
-  flex-wrap: wrap;
 }
 
+/* Join with a link: a quiet field after the one primary action. Join appears once there is something to join. */
+.site .dash .hjoin {
+  position: relative;
+  width: 280px;
+}
+
+.site .dash .hjoin-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-0-5) 0 var(--space-3);
+  border: 1px solid var(--edge);
+  border-radius: var(--corner-pill);
+  background: var(--chalk-raised);
+  color: var(--chalk-muted-text);
+  cursor: text;
+}
+
+.site .dash .hjoin-box:focus-within {
+  border-color: var(--chalk-text);
+}
+
+.site .dash .hjoin-box.bad {
+  border-color: var(--chalk-danger-text);
+}
+
+.site .dash .hjoin-box svg.site-icon {
+  flex: none;
+}
+
+.site .dash .hjoin-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--chalk-text);
+  font: inherit;
+  font-size: var(--type-body-sm);
+}
+
+.site .dash .hjoin-box input::placeholder {
+  color: var(--chalk-muted-text);
+}
+
+.site .dash .hjoin .err {
+  margin-top: var(--space-1-5);
+}
+
+/* A join error grows the actions downward, so the title and actions hold their top line. */
 .site .dash .secth.hhead {
   margin-top: 0;
   margin-bottom: var(--space-6);
   flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.site .dash .secth.hhead h1 {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
 }
 
 .site .dash .hfail {
@@ -2349,8 +2430,16 @@
     gap: var(--space-2-5);
   }
 
+  .site .dash .ttabs {
+    gap: 0;
+  }
+
+  /* Icon-only tabs on a phone are full 44px targets. */
   .site .dash .ttabs a {
-    padding: 0 var(--space-2-5);
+    height: 44px;
+    min-width: 44px;
+    justify-content: center;
+    padding: 0 var(--space-3);
   }
 
   .site .dash .ttabs a:not([aria-current="page"]) span {
@@ -2384,18 +2473,22 @@
   }
 
   .site .dash .fcol {
-    width: 76px;
     flex: none;
   }
 
-  .site .dash .secth.hhead,
-  .site .dash .hact {
+  .site .dash .secth.hhead {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .site .dash .hact .btn {
-    width: 100%;
+  .site .dash .hact {
+    flex-wrap: wrap;
+  }
+
+  .site .dash .hjoin {
+    flex: 1;
+    min-width: 0;
+    width: auto;
   }
 
   .site .dash .linkrow {
@@ -2498,20 +2591,6 @@
 }
 
 /* The transcript language picker: a field or chip that opens a searchable list. */
-
-.site .dash .hbox {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: end;
-}
-
-.site .dash .hlang {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--type-body-sm);
-  color: var(--chalk-muted-text);
-}
 
 .site .dash .lp {
   position: relative;
@@ -2813,10 +2892,6 @@
 }
 
 @media (max-width: 640px) {
-  .site .dash .hbox {
-    justify-items: stretch;
-  }
-
   .site .dash .lp-field {
     max-width: none;
   }
@@ -2866,5 +2941,36 @@
   .site .dash .lp-pop.sheet .lp-list {
     flex: 1;
     max-height: none;
+  }
+}
+
+/* A setting a link jumped to: a soft wash fades in under it, holds, and fades out. Opacity only, so it never moves. */
+
+.site .dash .jumped {
+  position: relative;
+  isolation: isolate;
+  outline: none;
+}
+
+.site .dash .jumped::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--space-1) * -1) calc(var(--space-2) * -1);
+  z-index: -1;
+  border-radius: var(--corner-xl);
+  background: var(--chalk-hover);
+  box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
+  opacity: 0;
+  pointer-events: none;
+  animation: dash-jumped 1600ms ease-out;
+}
+
+@keyframes dash-jumped {
+  12%,
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }

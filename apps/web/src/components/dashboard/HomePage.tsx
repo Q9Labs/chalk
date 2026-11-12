@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { HOME_STATUS_ROWS, spaceNameMaxCodePoints, type CallDTO, type HomeCallDTO, type HomeDTO, type HomeStatusDTO, type LiveDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { displayLink, lastActive } from "../../lib/dashboard/format";
-import { Avatar, Faces } from "../site/Avatar";
+import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./AppShell";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
@@ -104,23 +104,19 @@ export function HomePage() {
   useEffect(() => {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
-  const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "join" } | { kind: "rename"; call: HomeCallDTO }>(null);
+  const [dialog, setDialog] = useState<null | { kind: "ready"; call: CallDTO; link: string } | { kind: "rename"; call: HomeCallDTO }>(null);
   const [starting, setStarting] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();
   const startKey = useRef(intentKey());
-  const [language, setLanguage] = useState<NewCallLanguage>(readNewCallLanguage);
-  const startButton = useRef<HTMLButtonElement>(null);
 
   async function startCall() {
     if (starting) return;
     setStarting(true);
     try {
       // No name: the server names it, and the person can rename it from the row.
-      const { call } = await act("home", createCallAction(startKey.current, language));
+      const { call } = await act("home", createCallAction(startKey.current, readNewCallLanguage()));
       startKey.current = intentKey();
-      // The empty-state opener disappears when the first row is added.
-      startButton.current?.focus();
       const row: Row = { ...call, inviteUrl: null, lastActiveAt: null, recentPeople: [], live: null };
       update((home) => ({ ...home, rows: capped([row, ...home.rows]) }));
       const link = await inviteLink(row);
@@ -131,14 +127,6 @@ export function HomePage() {
     } finally {
       setStarting(false);
     }
-  }
-
-  function chooseLanguage(next: NewCallLanguage) {
-    setLanguage(next);
-    saveNewCallLanguage(next);
-    if (next && next !== "auto") rememberLanguage(next);
-    // The same key with another language would be a conflicting retry.
-    startKey.current = intentKey();
   }
 
   async function archive(call: Row) {
@@ -168,21 +156,12 @@ export function HomePage() {
     <div className="wrap">
       <div className="secth hhead">
         <h1>Recent calls</h1>
-        <div className="hbox">
-          <div className="hact">
-            <button ref={startButton} type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-              <Icon name="plus" />
-              Start a call
-            </button>
-            <button type="button" className="btn sec" onClick={() => setDialog({ kind: "join" })}>
-              <Icon name="link" />
-              Join with a link
-            </button>
-          </div>
-          <div className="hlang">
-            <span id="new-call-language-label">Transcript for new calls</span>
-            <LanguagePicker id="new-call-language" labelledBy="new-call-language-label" variant="chip" allowDefault value={language} disabled={starting} onChange={chooseLanguage} />
-          </div>
+        <div className="hact">
+          <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
+            <Icon name="plus" />
+            Start a call
+          </button>
+          <JoinLinkField />
         </div>
       </div>
       {state.kind === "loading" ? (
@@ -197,10 +176,6 @@ export function HomePage() {
             </span>
             <b>No calls yet</b>
             <p>Start a call to get a link you can share and use again. Your calls show here.</p>
-            <button type="button" className="btn pri" aria-busy={starting || undefined} onClick={() => void startCall()}>
-              <Icon name="plus" />
-              Start a call
-            </button>
           </div>
         </div>
       ) : (
@@ -231,8 +206,15 @@ export function HomePage() {
           ) : null}
         </>
       )}
-      {dialog?.kind === "ready" ? <CallReadyDialog link={dialog.link} onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })} onClose={() => setDialog(null)} /> : null}
-      {dialog?.kind === "join" ? <JoinLinkDialog onClose={() => setDialog(null)} /> : null}
+      {dialog?.kind === "ready" ? (
+        <CallReadyDialog
+          call={dialog.call}
+          link={dialog.link}
+          onLanguage={(call) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === call.id ? merge(item, call) : item)) }))}
+          onJoin={() => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: dialog.call.id } })}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
       {dialog?.kind === "rename" ? <RenameDialog call={dialog.call} page="home" onClose={() => setDialog(null)} onRenamed={(renamed) => update((home) => ({ ...home, rows: home.rows.map((item) => (item.id === renamed.id ? merge(item, renamed) : item)) }))} /> : null}
     </div>
   );
@@ -255,11 +237,15 @@ function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallD
   return (
     <div className="row">
       <Link className="ra" to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} aria-label={label} />
-      <span className="fcol np">{faces.length ? <Faces names={faces} size={28} max={phone ? 2 : 3} /> : <Avatar name={call.name} size={28} />}</span>
       <span className="rt np">
         <b>{call.name}</b>
         {phone ? <span>{status}</span> : call.inviteUrl ? <span className="mono">{displayLink(call.inviteUrl)}</span> : null}
       </span>
+      {faces.length ? (
+        <span className="fcol np">
+          <Faces names={faces} size={28} max={phone ? 2 : 3} />
+        </span>
+      ) : null}
       {phone ? null : <span className="rm np">{status}</span>}
       <span className="ract">
         {live ? (
@@ -329,7 +315,27 @@ function CopyMenuItem({ call, onDone }: { readonly call: HomeCallDTO; readonly o
   );
 }
 
-function CallReadyDialog({ link, onJoin, onClose }: { readonly link: string; readonly onJoin: () => void; readonly onClose: () => void }) {
+function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
+  const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());
+  const [saving, setSaving] = useState(false);
+  const toast = useToast();
+  // The choice applies to this call and becomes the start for the next one, so it lives where a call is made.
+  async function chooseLanguage(next: NewCallLanguage) {
+    const before = language;
+    setLanguage(next);
+    setSaving(true);
+    try {
+      const { call: saved } = await act("home", { action: "set-transcript-language", spaceId: call.id, transcriptLanguage: next });
+      saveNewCallLanguage(next);
+      if (next && next !== "auto") rememberLanguage(next);
+      onLanguage(saved);
+    } catch (error) {
+      setLanguage(before);
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <Dialog
       title="Your call is ready"
@@ -351,6 +357,15 @@ function CallReadyDialog({ link, onJoin, onClose }: { readonly link: string; rea
       <p className="help" style={{ marginTop: "var(--space-3)" }}>
         People ask to join, and you let them in. Change this on the call’s page.
       </p>
+      <div className="field" style={{ marginTop: "var(--space-5)" }}>
+        <span className="lbl" id="ready-language-label">
+          Transcript language
+        </span>
+        <LanguagePicker id="ready-language" labelledBy="ready-language-label" describedBy="ready-language-help" allowDefault value={language} loading={saving} loadingLabel="Saving…" onChange={(next) => void chooseLanguage(next)} />
+        <p className="help" id="ready-language-help">
+          Your next calls start with this choice too.
+        </p>
+      </div>
     </Dialog>
   );
 }
@@ -371,44 +386,26 @@ function parseCallLink(value: string): string | null {
   }
 }
 
-function JoinLinkDialog({ onClose }: { readonly onClose: () => void }) {
+/** Joining by link is the second way into a call, so it is a quiet field beside Start a call: paste, then Enter or Join. */
+function JoinLinkField() {
   const [value, setValue] = useState("");
   const [bad, setBad] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   return (
-    <Dialog
-      title="Join with a link"
-      onClose={onClose}
-      onSubmit={() => {
+    <form
+      className="hjoin"
+      onSubmit={(event) => {
+        event.preventDefault();
         const link = parseCallLink(value);
-        if (!link) {
-          setBad(true);
-          input.current?.focus();
-          return;
-        }
-        window.location.assign(link);
+        if (link) window.location.assign(link);
+        else setBad(true);
       }}
-      actions={
-        <>
-          <button type="button" className="btn gh" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="btn pri">
-            Join
-          </button>
-        </>
-      }
     >
-      <div className="field" style={{ marginTop: "var(--space-4)" }}>
-        <label className="lbl" htmlFor="join-link">
-          Call link
-        </label>
+      <label className={bad ? "hjoin-box bad" : "hjoin-box"}>
+        <Icon name="link" />
         <input
-          ref={input}
-          id="join-link"
-          className={bad ? "inp bad" : "inp"}
           value={value}
-          placeholder="chalkmeet.com/…"
+          placeholder="Paste a call link to join"
+          aria-label="Call link to join"
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
@@ -419,14 +416,19 @@ function JoinLinkDialog({ onClose }: { readonly onClose: () => void }) {
             setBad(false);
           }}
         />
-        {bad ? (
-          <p className="err" id="join-link-error">
-            <Icon name="alert" />
-            That isn’t a Chalk link. A call link looks like chalkmeet.com/q9-team.
-          </p>
+        {value.trim() ? (
+          <button type="submit" className="btn sm sec">
+            Join
+          </button>
         ) : null}
-      </div>
-    </Dialog>
+      </label>
+      {bad ? (
+        <p className="err" id="join-link-error" role="alert">
+          <Icon name="alert" />
+          That isn’t a Chalk link. A call link looks like chalkmeet.com/q9-team.
+        </p>
+      ) : null}
+    </form>
   );
 }
 
