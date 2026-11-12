@@ -72,13 +72,23 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     };
   }, [position]);
 
-  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Close the mounted reaction tray on Escape; remove the document listener on cleanup.
+  // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Close the mounted reaction tray on Escape or on a press anywhere else (the dock, header and panels sit above the backdrop, which keeps its click so a press on the stage doesn't fall through); remove the document listeners on cleanup.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    // The reactions button toggles the tray itself, so a press on it is left to its own click.
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || listRef.current?.contains(target) || target.closest(".chalk-shell-reactions-button, [data-reactions-backdrop]")) return;
+      onClose();
+    };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
   }, [onClose]);
 
   const handleSelect = useCallback(
@@ -111,7 +121,7 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
   return (
     <>
       <ShellStyles />
-      <div className="fixed inset-0 z-20" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-20" data-reactions-backdrop onClick={onClose} aria-hidden="true" />
       {
         <div ref={listRef} className={cn(trayClassName, "chalk-shell-reactions", more && "chalk-shell-reactions-expanded")} role="toolbar" aria-label="Reactions" onKeyDown={handleKeyDown}>
           {onToggleHandRaise ? (
