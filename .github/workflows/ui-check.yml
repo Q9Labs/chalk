@@ -141,7 +141,9 @@ jobs:
           mkdir -p "${target}"
           cp -r ui-check-report/diff ui-check-report/head "${target}/" 2>/dev/null || true
           git -C "${dest}" add -A
-          git -C "${dest}" -c user.name="chalk-ui-check" -c user.email="noreply@github.com" commit -m "UI check evidence for pull request ${PR}" --allow-empty
+          git -C "${dest}" config user.name "chalk-ui-check"
+          git -C "${dest}" config user.email "noreply@github.com"
+          git -C "${dest}" commit -m "UI check evidence for pull request ${PR}" --allow-empty
           # Pull requests run at the same time and share this branch, so a rejected push is retried on the new tip.
           for attempt in 1 2 3 4 5; do
             git -C "${dest}" push origin ui-check-evidence && exit 0

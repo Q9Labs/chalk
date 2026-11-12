@@ -38,7 +38,7 @@ Add a journey in `journeys.mjs`. A step is `{ click: name | [names], via?: name,
 The workflow runs from the pull request's own branch, so anyone who can push a branch to this repository can edit it and read any repository secret, this one included. That is how GitHub's `pull_request` event works for every secret, and this check does not widen it. What the check does to keep the token away from anyone else:
 
 - Forks get no secret, and the CLI is not installed for them.
-- Only `review.mjs` hands the token to a process, and only to the `claude` child. That child runs in a new folder outside the checkout with an empty home, so it finds no `CLAUDE.md`, settings, hook or skill of the pull request, and it can only read the images placed there.
+- `review.mjs` gives the token to the `claude` child only; the walk and the Vite builds of this step also see it in their environment, which is the trust-model limit above. The child runs in a new folder outside the checkout with an empty home, so it does not load a `CLAUDE.md`, settings, hook or skill of the pull request. Its tools are limited to Read, and the images it is asked about are the only files placed in its folder.
 - The `report` job, which can write, runs no code from the branch.
 
 If the owner wants a boundary against people who can push branches, the fix lives in repository settings, not in this code: store the token as a secret of an Environment that needs a reviewer's approval, and add `environment:` to the review step's job.
