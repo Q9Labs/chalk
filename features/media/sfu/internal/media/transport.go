@@ -523,8 +523,18 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 	t.feedback = now
 	t.counters.Feedback++
 	t.settleProbe(now)
+	t.settleLoss(now)
 	t.refill(now)
 	t.setRates(now)
+}
+
+// settleLoss lets a probe go at once when heavy loss has just ended. The probes that failed
+// during the loss doubled the backoff to its longest, but they said nothing about the path
+// it is now, and a paused tile resumes only on a probe's proof.
+func (t *transport) settleLoss(now int64) {
+	if t.estimator.lossEnded() {
+		t.backoff, t.probeNext = probeBackoffMin, min(t.probeNext, now)
+	}
 }
 
 // useReports makes the receiver's reports the estimate, because it sends no transport-wide feedback.
