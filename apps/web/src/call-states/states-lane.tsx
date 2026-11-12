@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Chalk, CallLimbo, CallReady, ToastStack, type ChalkProps } from "@q9labsai/chalk-react";
-import { SpaceClientError, type ClientFailure, type SpaceSnapshot } from "@q9labsai/chalk-client";
+import { SpaceClientError, type ClientFailure } from "@q9labsai/chalk-client";
 import { ChalkProvider } from "../../../../sdks/typescript/react/src/bindings/context";
 import { useSoundCues } from "../../../../sdks/typescript/react/src/internal/useSoundCues";
 import { useCallLink } from "../../../../sdks/typescript/react/src/components/call-limbo/useCallLink";
-import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
-import { callEventToasts, mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
+import { mediaFailureToast } from "../../../../sdks/typescript/react/src/components/toast-stack/call-events";
 import { ConnectionStatus } from "../../../../sdks/typescript/react/src/components/connection-status/ConnectionStatus";
 import { PEOPLE, SPACE_NAME, createCallStateClient, liveSnapshot } from "./fixtures";
+import { ToastFixture, toastForFixture } from "./toast-fixtures";
 import type { CallState } from "./states";
 
 type Terminal = ChalkProps["terminalState"] | "left" | "episode-ended" | "failed";
@@ -95,76 +95,6 @@ function StatesCall({
         </div>
       ) : null}
     </div>
-  );
-}
-function toastForFixture(id: string) {
-  if (id === "camera" || id === "share-blocked") return mediaFailureToast({ code: "media.permission_denied", message: "Blocked", recoverable: true }, id === "camera" ? "camera" : "screen") ?? { message: "" };
-  if (id === "muted")
-    return {
-      message: (
-        <>
-          <b style={{ fontWeight: 600 }}>Nora</b> muted you. Unmute when you’re ready.
-        </>
-      ),
-      icon: <Avatar name="Nora" size="xs" style={{ width: 28, height: 28 }} animated={false} />,
-    };
-  const previous = liveSnapshot({ others: id === "joined" ? [] : PEOPLE.slice(0, 1) });
-  if (id === "host") {
-    const before = { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, role: "host", displayName: "Nora" })) } };
-    const next = { ...previous, self: { ...previous.self, role: "host" }, participants: { ...previous.participants, roster: previous.participants.roster.filter((p) => p.participantId === previous.self.participantId) } };
-    const toast = callEventToasts(before, next)[0];
-    if (!toast) throw new Error("No host transfer event");
-    return toast;
-  }
-  if (id === "device") {
-    const old = { deviceId: "airpods", label: "AirPods Pro" };
-    const selected = { deviceId: "built-in", label: "MacBook Air Microphone" };
-    const before = { ...previous, media: { ...previous.media, selection: { ...previous.media.selection, microphone: old.deviceId }, devices: { ...previous.media.devices, microphones: [old, selected] } } };
-    const next = { ...before, media: { ...before.media, selection: { ...before.media.selection, microphone: selected.deviceId }, devices: { ...before.media.devices, microphones: [selected] } } };
-    const toast = callEventToasts(before, next)[0];
-    if (!toast) throw new Error("No device disconnect event");
-    return toast;
-  }
-  const populated = liveSnapshot({ others: PEOPLE.slice(0, 1) });
-  const next: SpaceSnapshot =
-    id === "hand"
-      ? { ...previous, participants: { ...previous.participants, roster: previous.participants.roster.map((p) => (p.participantId === previous.self.participantId ? p : { ...p, handRaised: true })) } }
-      : id === "recording-failed"
-        ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "failed" satisfies "failed", failureCode: "recording_capture_unsupported" } } }
-        : id === "recording"
-          ? { ...previous, recording: { ...previous.recording, current: { recordingId: "fixture", status: "recording" satisfies "recording", failureCode: null } } }
-          : populated;
-  const toast = callEventToasts(previous, next)[0];
-  if (!toast) throw new Error(`No production event for ${id}`);
-  return toast;
-}
-function ToastFixture({ message, icon, action, error = false, light = false }: { readonly message: ReactNode; readonly icon?: ReactNode; readonly action?: { readonly label: string; readonly onClick: () => void }; readonly error?: boolean; readonly light?: boolean }) {
-  const [visible, setVisible] = useState(true);
-  return (
-    <main data-chalk data-chalk-theme={light ? "light" : "dark"} className="chalk-root relative h-dvh bg-[var(--chalk-canvas)]" style={{ fontSize: "var(--type-body)", lineHeight: 1.4 }}>
-      {visible ? (
-        <ToastStack
-          toasts={[
-            {
-              id: "fixture",
-              message:
-                error && typeof message === "string" && message.includes(". ") ? (
-                  <>
-                    <b style={{ fontWeight: 600 }}>{message.slice(0, message.indexOf(". ") + 1)}</b> {message.slice(message.indexOf(". ") + 2)}
-                  </>
-                ) : (
-                  message
-                ),
-              icon,
-              type: error ? "error" : "info",
-              duration: Infinity,
-              action,
-            },
-          ]}
-          onDismiss={() => setVisible(false)}
-        />
-      ) : null}
-    </main>
   );
 }
 function CallLinkFixture() {
