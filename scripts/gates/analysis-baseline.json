@@ -1,6 +1,6 @@
 {
   "complexity": {
-    "apps/api/cmd/main.go run": 128,
+    "apps/api/cmd/main.go run": 132,
     "apps/api/internal/recordingdecode/video.go decodeVP8Source": 109,
     "apps/api/internal/config/config.go Load": 68,
     "apps/api/internal/recorderworker/capture_attempt.go (*PionCaptureAttempt).Run": 67,
@@ -21,7 +21,7 @@
     "apps/api/internal/recordingpipeline/authority.go DecodeRecorderJobEnvelope": 44,
     "apps/api/internal/adapters/postgres/recording_capture_signaling.go (RecordingCaptureSignalingRepository).ClaimCommand": 44,
     "apps/api/internal/adapters/postgres/episode_public_join.go (EpisodeLifecycleRepository).JoinPublic": 44,
-    "apps/api/internal/adapters/postgres/recording_pipeline.go (RecordingPipelineRepository).Claim": 43,
+    "apps/api/internal/adapters/postgres/recording_pipeline.go (RecordingPipelineRepository).Claim": 45,
     "apps/api/internal/recordingrender/service.go validateStoredInput": 42,
     "apps/api/internal/httpapi/connection_reports.go decodeConnectionReport": 42,
     "apps/api/internal/recordingdecode/video.go decodeH264Source": 41,
@@ -48,7 +48,7 @@
     "apps/api/internal/adapters/postgres/transcripts.go (TranscriptRepository).Request": 33,
     "apps/api/internal/adapters/postgres/space_webhooks.go spaceChangedFields": 33,
     "apps/api/internal/adapters/postgres/public_invites.go (PublicInviteRepository).decideLegacyAdmissionRequest": 33,
-    "apps/api/cmd/recorder-fleet-controller/config.go (rawCommandConfig).build": 33,
+    "apps/api/cmd/recorder-fleet-controller/config.go (rawCommandConfig).build": 34,
     "apps/api/internal/spaces/service.go prepareUpdateSpaceInput": 32,
     "apps/api/internal/adapters/postgres/tenant_purge_catalog.go (purgeCatalog).predicates": 32,
     "apps/api/internal/recordingdecode/writer.go validateRequest": 31,
@@ -301,7 +301,7 @@
     "apps/api/internal/httpapi/call_stats.go clientFamilies": 16,
     "apps/api/internal/episodes/validation.go validateConfigSnapshot": 16,
     "apps/api/internal/episodes/initial_control.go NewInitialControlState": 16,
-    "apps/api/internal/config/config.go loadChalkSFUConfig": 16,
+    "apps/api/internal/config/config.go loadChalkSFUConfig": 17,
     "apps/api/internal/artifactpolicy/document.go (Document).Validate": 16,
     "apps/api/internal/adapters/postgres/webhook_dispatcher.go (WebhookDispatchRepository).Complete": 16,
     "apps/api/internal/adapters/postgres/transcript_jobs.go (TranscriptRepository).Claim": 16,
@@ -556,7 +556,7 @@
       54
     ],
     "features/scorecard/diagnostics.mjs": [
-      24
+      28
     ],
     "features/scorecard/contention.mjs": [
       62
@@ -647,7 +647,7 @@
       25
     ],
     "scripts/gates/chalk-gate-plan.mjs": [
-      113
+      114
     ],
     "scripts/gates/zod-exception.mjs": [
       41
@@ -667,7 +667,8 @@
     "sdks/typescript/client/src/generated/whiteboard-v1.ts": [
       78,
       44
-    ]
+    ],
+    "features/media/sfu/internal/media/subscription.go (*subscription).handleFeedback": 16
   },
   "dead-code": {
     "apps/api/internal/adapters/pion/peer.go NewPeerConnection": true,
@@ -741,7 +742,8 @@
     "features/media/sfu/internal/media/scope.go kindOf": true,
     "features/media/sfu/internal/media/subscription.go subscription.release": true,
     "features/media/sfu/tests/netem_test.go link.shape": true,
-    "features/media/sfu/tests/netem_test.go link.dropped": true
+    "features/media/sfu/tests/netem_test.go link.dropped": true,
+    "features/media/sfu/tests/constrained_link_test.go firstSample": true
   },
   "duplication": 71
 }
