@@ -64,38 +64,10 @@ func (c *DeliveryClient) Deliver(ctx context.Context, input DeliveryRequest) (De
 		return DeliveryResponse{}, DeliveryError{Code: "unsafe_url", Retryable: false}
 	}
 	destination, _ := url.Parse(parsed)
-	addresses, err := c.resolver.LookupNetIP(ctx, "ip", destination.Hostname())
-	if err != nil || len(addresses) == 0 {
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return DeliveryResponse{}, DeliveryError{Code: "timeout", Retryable: true}
-		}
-		return DeliveryResponse{}, DeliveryError{Code: "dns_failed", Retryable: true}
+	address, err := c.resolvePublicAddress(ctx, destination.Hostname())
+	if err != nil {
+		return DeliveryResponse{}, err
 	}
-	publicCount := 0
-	for _, address := range addresses {
-		if !utilities.PublicAddress(address) {
-			class := "blocked_address"
-			if publicCount > 0 || len(addresses) > 1 {
-				class = "mixed_dns_answer"
-			}
-			RecordSSRFRejection(ctx, class)
-			return DeliveryResponse{}, DeliveryError{Code: "ssrf_blocked", Retryable: false}
-		}
-		publicCount++
-	}
-	address := addresses[0]
-	transport := &http.Transport{
-		Proxy:           nil,
-		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: destination.Hostname(), RootCAs: c.rootCAs},
-		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			return c.dialContext(ctx, network, net.JoinHostPort(address.String(), "443"))
-		},
-		DisableKeepAlives:      true,
-		ForceAttemptHTTP2:      false,
-		ResponseHeaderTimeout:  c.timeout,
-		MaxResponseHeaderBytes: 64 << 10,
-	}
-	client := &http.Client{Transport: transport, Timeout: c.timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, parsed, bytes.NewReader(input.Body))
 	if err != nil {
 		return DeliveryResponse{}, DeliveryError{Code: "request_invalid", Retryable: false}
@@ -107,20 +79,64 @@ func (c *DeliveryClient) Deliver(ctx context.Context, input DeliveryRequest) (De
 	request.Header.Set("webhook-signature", input.Signature)
 	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(request.Header))
 	startedAt := time.Now()
-	response, err := client.Do(request)
+	response, err := c.pinnedClient(address, destination.Hostname()).Do(request)
 	if err != nil {
 		return DeliveryResponse{Latency: time.Since(startedAt)}, classifyDeliveryError(ctx, err)
 	}
 	defer response.Body.Close()
+	return readDeliveryResponse(response, startedAt)
+}
+
+// resolvePublicAddress resolves host and returns its first address. It refuses
+// a host with any address that is not public, so a mixed DNS answer cannot
+// smuggle in an internal one.
+func (c *DeliveryClient) resolvePublicAddress(ctx context.Context, host string) (netip.Addr, error) {
+	addresses, err := c.resolver.LookupNetIP(ctx, "ip", host)
+	if err != nil || len(addresses) == 0 {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return netip.Addr{}, DeliveryError{Code: "timeout", Retryable: true}
+		}
+		return netip.Addr{}, DeliveryError{Code: "dns_failed", Retryable: true}
+	}
+	for _, address := range addresses {
+		if utilities.PublicAddress(address) {
+			continue
+		}
+		class := "blocked_address"
+		if len(addresses) > 1 {
+			class = "mixed_dns_answer"
+		}
+		RecordSSRFRejection(ctx, class)
+		return netip.Addr{}, DeliveryError{Code: "ssrf_blocked", Retryable: false}
+	}
+	return addresses[0], nil
+}
+
+// pinnedClient dials only the address that passed the public check.
+func (c *DeliveryClient) pinnedClient(address netip.Addr, host string) *http.Client {
+	transport := &http.Transport{
+		Proxy:           nil,
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: host, RootCAs: c.rootCAs},
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return c.dialContext(ctx, network, net.JoinHostPort(address.String(), "443"))
+		},
+		DisableKeepAlives:      true,
+		ForceAttemptHTTP2:      false,
+		ResponseHeaderTimeout:  c.timeout,
+		MaxResponseHeaderBytes: 64 << 10,
+	}
+	return &http.Client{Transport: transport, Timeout: c.timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+}
+
+func readDeliveryResponse(response *http.Response, startedAt time.Time) (DeliveryResponse, error) {
 	read, readErr := io.Copy(io.Discard, io.LimitReader(response.Body, MaxResponseBytes+1))
 	latency := time.Since(startedAt)
-	if readErr != nil {
+	switch {
+	case readErr != nil:
 		return DeliveryResponse{Latency: latency}, DeliveryError{Code: "network_failed", Retryable: true}
-	}
-	if read > MaxResponseBytes {
+	case read > MaxResponseBytes:
 		return DeliveryResponse{Latency: latency}, DeliveryError{Code: "response_too_large", Retryable: false}
-	}
-	if response.StatusCode < 100 || response.StatusCode > 599 {
+	case response.StatusCode < 100 || response.StatusCode > 599:
 		return DeliveryResponse{Latency: latency}, DeliveryError{Code: "invalid_http_status", Retryable: false}
 	}
 	result := DeliveryResponse{Status: response.StatusCode, Latency: latency}

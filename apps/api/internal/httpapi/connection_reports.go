@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
@@ -133,69 +132,8 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
 		return report, connectionReportDecodeError(r, err, "trailing_json")
 	}
-	if report.Version != 1 {
-		return report, rejectConnectionReport(r, "version")
-	}
-	if !slices.Contains(ConnectionReportFieldEnum("trigger"), report.Trigger) {
-		return report, rejectConnectionReport(r, "trigger")
-	}
-	if len(report.Events) == 0 || len(report.Events) > ConnectionReportEventLimit {
-		return report, rejectConnectionReport(r, "event_count")
-	}
-	var previous int64
-	for _, event := range report.Events {
-		if !slices.Contains(ConnectionReportFieldEnum("event"), event.Event) {
-			return report, rejectConnectionReport(r, "event_label")
-		}
-		if event.ElapsedMS < 0 || event.ElapsedMS > ConnectionReportMaxMilliseconds {
-			return report, rejectConnectionReport(r, "elapsed_range")
-		}
-		if event.ElapsedMS < previous {
-			return report, rejectConnectionReport(r, "event_order")
-		}
-		previous = event.ElapsedMS
-		if event.UploadFailure != "" && event.Event != "chat_upload_failed" {
-			return report, rejectConnectionReport(r, "upload_failure_event")
-		}
-		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "play_result": event.PlayResult, "upload_failure": event.UploadFailure} {
-			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
-				return report, rejectConnectionReport(r, field+"_label")
-			}
-		}
-		if counts := event.ReceiveCounts; counts != nil {
-			if event.Event != "audio_receive_summary" {
-				return report, rejectConnectionReport(r, "receive_counts_event")
-			}
-			for _, value := range []*int64{counts.Announced, counts.PullRequested, counts.PullFailed, counts.PullSucceeded, counts.TrackReceived, counts.BytesFlowing, counts.ElementBound, counts.Playing, counts.ProjectionOff} {
-				if value != nil && (*value < 0 || *value > ConnectionReportMaxReceiveCount) {
-					return report, rejectConnectionReport(r, "receive_counts_range")
-				}
-			}
-		}
-		if event.ReceiversStopped != nil || event.BundleTagHeld != nil {
-			if event.Event != "receivers_closed" {
-				return report, rejectConnectionReport(r, "receivers_closed_event")
-			}
-			if event.ReceiversStopped != nil && (*event.ReceiversStopped < 0 || *event.ReceiversStopped > ConnectionReportMaxReceiveCount) {
-				return report, rejectConnectionReport(r, "receivers_stopped_range")
-			}
-		}
-		for field, value := range map[string]string{"state": event.State, "step": event.Step, "outcome": event.Outcome, "code": event.Code, "phase": event.Phase, "media_error_kind": event.MediaErrorKind, "media_error_step": event.MediaErrorStep, "granted_audio": event.GrantedAudio, "granted_video": event.GrantedVideo, "source": event.Source, "publication_state": event.PublicationState, "projection_state": event.ProjectionState} {
-			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
-				return report, rejectConnectionReport(r, field+"_label")
-			}
-		}
-		for field, value := range map[string]*int64{"attempt": event.Attempt, "duration_ms": event.DurationMS, "heartbeat_gap_ms": event.HeartbeatGapMS} {
-			if value != nil && (*value < 0 || *value > ConnectionReportMaxMilliseconds) {
-				return report, rejectConnectionReport(r, field+"_range")
-			}
-		}
-		if event.CloseCode != nil && (*event.CloseCode < 1000 || *event.CloseCode > 4999) {
-			return report, rejectConnectionReport(r, "close_code_range")
-		}
-		if event.HTTPStatus != nil && (*event.HTTPStatus < 400 || *event.HTTPStatus > 599) {
-			return report, rejectConnectionReport(r, "http_status_range")
-		}
+	if reason := connectionReportRejection(report); reason != "" {
+		return report, rejectConnectionReport(r, reason)
 	}
 	return report, nil
 }

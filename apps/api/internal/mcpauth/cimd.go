@@ -92,43 +92,55 @@ func (s Service) metadataClient(ctx context.Context, clientID string) (Client, *
 	if json.Unmarshal(raw, &doc) != nil {
 		return invalid("is not a JSON object")
 	}
+	if description := s.metadataProblem(doc, clientID); description != "" {
+		return invalid(description)
+	}
+	client := Client{ClientID: clientID, Name: strings.TrimSpace(doc.ClientName), RedirectURIs: slices.Clone(doc.RedirectURIs)}
+	return s.ensureStoredClient(ctx, client)
+}
+
+// metadataProblem names the first rule the document breaks, or returns "".
+func (s Service) metadataProblem(doc clientMetadata, clientID string) string {
 	name := strings.TrimSpace(doc.ClientName)
 	switch {
 	case doc.ClientID != clientID:
-		return invalid("client_id does not match its URL")
+		return "client_id does not match its URL"
 	case doc.ClientSecret != nil || !doc.canAuthenticateAsPublicClient():
-		return invalid("the client must support token_endpoint_auth_method=none: Chalk only issues tokens to public clients")
+		return "the client must support token_endpoint_auth_method=none: Chalk only issues tokens to public clients"
 	case len(doc.GrantTypes) > 0 && !slices.Contains(doc.GrantTypes, "authorization_code"):
-		return invalid("grant_types must include authorization_code")
+		return "grant_types must include authorization_code"
 	case len(doc.ResponseTypes) > 0 && !slices.Contains(doc.ResponseTypes, "code"):
-		return invalid("response_types must include code")
+		return "response_types must include code"
 	case name == "" || utf8.RuneCountInString(name) > maxClientNameRunes || !utf8.ValidString(name):
-		return invalid("client_name is required and must be at most 100 characters")
+		return "client_name is required and must be at most 100 characters"
 	case len(doc.RedirectURIs) == 0 || len(doc.RedirectURIs) > maxRedirectURIs:
-		return invalid("redirect_uris must list between 1 and 5 URIs")
+		return "redirect_uris must list between 1 and 5 URIs"
+	case slices.ContainsFunc(doc.RedirectURIs, func(uri string) bool { return !s.config.validRedirectURI(uri) }):
+		return "a redirect URI is not allowed for this server"
 	}
-	for _, uri := range doc.RedirectURIs {
-		if !s.config.validRedirectURI(uri) {
-			return invalid("a redirect URI is not allowed for this server")
-		}
+	return ""
+}
+
+func (s Service) ensureStoredClient(ctx context.Context, client Client) (Client, *Error) {
+	temporary := func() (Client, *Error) {
+		return Client{}, oauthError(500, "server_error", "temporary failure")
 	}
-	client := Client{ClientID: clientID, Name: name, RedirectURIs: slices.Clone(doc.RedirectURIs)}
-	stored, err := s.repository.GetClient(ctx, clientID)
+	stored, err := s.repository.GetClient(ctx, client.ClientID)
 	if err == nil {
 		client.ID = stored.ID
 		return client, nil
 	}
 	if !errors.Is(err, ErrClientNotFound) {
-		return Client{}, oauthError(500, "server_error", "temporary failure")
+		return temporary()
 	}
 	if client.ID, err = utilities.NewID(); err != nil {
-		return Client{}, oauthError(500, "server_error", "temporary failure")
+		return temporary()
 	}
 	if err := s.repository.CreateClient(ctx, client); err != nil {
 		// A concurrent /authorize may have created the row first.
-		stored, lookup := s.repository.GetClient(ctx, clientID)
+		stored, lookup := s.repository.GetClient(ctx, client.ClientID)
 		if lookup != nil {
-			return Client{}, oauthError(500, "server_error", "temporary failure")
+			return temporary()
 		}
 		client.ID = stored.ID
 	}
@@ -139,23 +151,23 @@ func (s Service) metadataClient(ctx context.Context, clientID string) (Client, *
 // credentials, query, fragment or dot segments, and the default port.
 func validMetadataURL(raw string) error {
 	if len(raw) > maxClientIDLength || strings.ContainsAny(raw, "\\ \t\r\n") {
-		return errors.New("unusable client_id")
+		return errUnusableClientID
 	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.Port() != "" {
-		return errors.New("unusable client_id")
+		return errUnusableClientID
 	}
 	host := strings.TrimSuffix(u.Hostname(), ".")
 	if host == "" || net.ParseIP(host) != nil || strings.Contains(host, "*") || u.Path == "" || u.Path == "/" {
-		return errors.New("unusable client_id")
+		return errUnusableClientID
 	}
-	for _, segment := range strings.Split(u.Path, "/") {
-		if segment == "." || segment == ".." {
-			return errors.New("unusable client_id")
-		}
+	if slices.ContainsFunc(strings.Split(u.Path, "/"), func(segment string) bool { return segment == "." || segment == ".." }) {
+		return errUnusableClientID
 	}
 	return nil
 }
+
+var errUnusableClientID = errors.New("unusable client_id")
 
 type publicResolver interface {
 	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)

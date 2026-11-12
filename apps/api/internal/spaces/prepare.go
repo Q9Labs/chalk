@@ -13,7 +13,23 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if input.TenantID.IsZero() {
 		return ErrInvalidTenantID
 	}
+	if err := prepareCreateIdentity(input); err != nil {
+		return err
+	}
+	if err := prepareCreateDocuments(input); err != nil {
+		return err
+	}
+	if err := prepareCreatePolicies(input); err != nil {
+		return err
+	}
+	applySpaceDefaults(input)
+	if err := validateEpisodeDurations(input.DefaultEpisodeDurationSeconds, input.MaximumEpisodeDurationSeconds); err != nil {
+		return err
+	}
+	return validateLingerWindow(input.LingerWindowSeconds)
+}
 
+func prepareCreateIdentity(input *CreateSpaceInput) error {
 	name, err := utilities.RequiredString(input.Name)
 	if err != nil || utf8.RuneCountInString(input.Name) > MaxNameCodePoints {
 		return ErrInvalidSpaceName
@@ -35,19 +51,22 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 		return ErrInvalidMediaPlane
 	}
 	input.MediaPlane = string(provider)
+	return nil
+}
 
-	input.Metadata, err = utilities.JSON(input.Metadata)
-	if err != nil {
+func prepareCreateDocuments(input *CreateSpaceInput) error {
+	var err error
+	if input.Metadata, err = utilities.JSON(input.Metadata); err != nil {
 		return ErrInvalidSpaceField
 	}
-	input.RecurringPolicy, err = utilities.JSON(input.RecurringPolicy)
-	if err != nil {
+	if input.RecurringPolicy, err = utilities.JSON(input.RecurringPolicy); err != nil {
 		return ErrInvalidSpaceField
 	}
 	input.AdmissionPolicy, err = prepareAdmissionPolicy(input.AdmissionPolicy)
-	if err != nil {
-		return err
-	}
+	return err
+}
+
+func prepareCreatePolicies(input *CreateSpaceInput) error {
 	if !input.RecordingPolicySet {
 		// Keep omission placeholders stable for idempotent request fingerprints.
 		// The repository passes NULL so database defaults decide new-row policy.
@@ -62,28 +81,34 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if err := input.TranscriptionPolicy.Validate(); err != nil {
 		return ErrInvalidTranscriptionPolicy
 	}
-	applySpaceDefaults(input)
-	if err := validateEpisodeDurations(input.DefaultEpisodeDurationSeconds, input.MaximumEpisodeDurationSeconds); err != nil {
-		return err
-	}
-	if err := validateLingerWindow(input.LingerWindowSeconds); err != nil {
-		return err
-	}
 	return nil
 }
 
 func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
-	var err error
+	if err := prepareUpdateIdentity(input); err != nil {
+		return err
+	}
+	if err := prepareUpdateDocuments(input); err != nil {
+		return err
+	}
+	if err := prepareUpdatePolicies(input); err != nil {
+		return err
+	}
+	if err := prepareUpdateDurations(input); err != nil {
+		return err
+	}
+	return validateOptionalLingerWindow(input.LingerWindowSeconds)
+}
 
+func prepareUpdateIdentity(input *UpdateSpaceInput) error {
 	if input.Name.Set && input.Name.Value != nil && utf8.RuneCountInString(*input.Name.Value) > MaxNameCodePoints {
 		return ErrInvalidSpaceName
 	}
-	input.Name, err = requiredOptionalString(input.Name, ErrInvalidSpaceName)
-	if err != nil {
+	var err error
+	if input.Name, err = requiredOptionalString(input.Name, ErrInvalidSpaceName); err != nil {
 		return err
 	}
-	input.Slug, err = requiredOptionalString(input.Slug, ErrInvalidSpaceSlug)
-	if err != nil {
+	if input.Slug, err = requiredOptionalString(input.Slug, ErrInvalidSpaceSlug); err != nil {
 		return err
 	}
 	if input.MediaPlane.Set && input.MediaPlane.Value != nil {
@@ -94,60 +119,66 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 		value := string(provider)
 		input.MediaPlane.Value = &value
 	}
-	input.Metadata, err = utilities.OptionalNullableJSON(input.Metadata)
-	if err != nil {
+	return nil
+}
+
+func prepareUpdateDocuments(input *UpdateSpaceInput) error {
+	var err error
+	if input.Metadata, err = utilities.OptionalNullableJSON(input.Metadata); err != nil {
 		return ErrInvalidSpaceField
 	}
-	input.RecurringPolicy, err = utilities.OptionalNullableJSON(input.RecurringPolicy)
-	if err != nil {
+	if input.RecurringPolicy, err = utilities.OptionalNullableJSON(input.RecurringPolicy); err != nil {
 		return ErrInvalidSpaceField
 	}
-	if input.AdmissionPolicy.Set {
-		if input.AdmissionPolicy.Value == nil {
-			return ErrInvalidAdmissionPolicy
-		}
-		input.AdmissionPolicy.Value, err = prepareAdmissionPolicy(input.AdmissionPolicy.Value)
-		if err != nil {
-			return err
-		}
+	if !input.AdmissionPolicy.Set {
+		return nil
 	}
-	if input.RecordingPolicy.Set {
-		if input.RecordingPolicy.Value == nil {
-			return ErrInvalidRecordingPolicy
-		}
-		if err := input.RecordingPolicy.Value.Validate(); err != nil {
-			return ErrInvalidRecordingPolicy
-		}
+	if input.AdmissionPolicy.Value == nil {
+		return ErrInvalidAdmissionPolicy
 	}
-	if input.TranscriptionPolicy.Set {
-		if input.TranscriptionPolicy.Value == nil {
-			return ErrInvalidTranscriptionPolicy
-		}
-		if err := input.TranscriptionPolicy.Value.Validate(); err != nil {
-			return ErrInvalidTranscriptionPolicy
-		}
-	}
-	if err := validateOptionalDuration(input.DefaultEpisodeDurationSeconds, ErrInvalidEpisodeDuration); err != nil {
+	input.AdmissionPolicy.Value, err = prepareAdmissionPolicy(input.AdmissionPolicy.Value)
+	return err
+}
+
+func prepareUpdatePolicies(input *UpdateSpaceInput) error {
+	recording := input.RecordingPolicy
+	if err := validateSetPolicy(recording.Set, recording.Value == nil, func() error { return recording.Value.Validate() }, ErrInvalidRecordingPolicy); err != nil {
 		return err
 	}
-	if err := validateOptionalDuration(input.MaximumEpisodeDurationSeconds, ErrInvalidEpisodeCeiling); err != nil {
+	transcription := input.TranscriptionPolicy
+	return validateSetPolicy(transcription.Set, transcription.Value == nil, func() error { return transcription.Value.Validate() }, ErrInvalidTranscriptionPolicy)
+}
+
+// validateSetPolicy rejects a policy the request sets to null or to an invalid
+// value. A policy the request leaves out is not checked.
+func validateSetPolicy(set, null bool, validate func() error, invalid error) error {
+	if !set {
+		return nil
+	}
+	if null || validate() != nil {
+		return invalid
+	}
+	return nil
+}
+
+func prepareUpdateDurations(input *UpdateSpaceInput) error {
+	defaultDuration, maximumDuration := input.DefaultEpisodeDurationSeconds, input.MaximumEpisodeDurationSeconds
+	if err := validateOptionalDuration(defaultDuration, ErrInvalidEpisodeDuration); err != nil {
 		return err
 	}
-	if input.DefaultEpisodeDurationSeconds.Set && input.DefaultEpisodeDurationSeconds.Value == nil {
+	if err := validateOptionalDuration(maximumDuration, ErrInvalidEpisodeCeiling); err != nil {
+		return err
+	}
+	if defaultDuration.Set && defaultDuration.Value == nil {
 		return ErrInvalidEpisodeDuration
 	}
-	if input.MaximumEpisodeDurationSeconds.Set && input.MaximumEpisodeDurationSeconds.Value == nil {
+	if maximumDuration.Set && maximumDuration.Value == nil {
 		return ErrInvalidEpisodeCeiling
 	}
-	if input.DefaultEpisodeDurationSeconds.Set && input.MaximumEpisodeDurationSeconds.Set &&
-		input.DefaultEpisodeDurationSeconds.Value != nil && input.MaximumEpisodeDurationSeconds.Value != nil &&
-		*input.DefaultEpisodeDurationSeconds.Value > *input.MaximumEpisodeDurationSeconds.Value {
+	if defaultDuration.Value != nil && maximumDuration.Value != nil && defaultDuration.Set && maximumDuration.Set &&
+		*defaultDuration.Value > *maximumDuration.Value {
 		return ErrInvalidEpisodeCeiling
 	}
-	if err := validateOptionalLingerWindow(input.LingerWindowSeconds); err != nil {
-		return err
-	}
-
 	return nil
 }
 

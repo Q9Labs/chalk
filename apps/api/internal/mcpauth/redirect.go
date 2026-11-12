@@ -25,12 +25,18 @@ func (c Config) validRedirectURI(raw string) bool {
 	if err != nil || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || u.Opaque != "" || u.Port() != "" && u.Scheme == "https" {
 		return false
 	}
-	if u.Scheme == "http" {
+	switch u.Scheme {
+	case "http":
 		return isLoopbackHost(u.Hostname()) && u.Path != "" && !strings.Contains(u.Path, "..") && !strings.Contains(u.Path, "//")
-	}
-	if u.Scheme != "https" {
+	case "https":
+		return hostedConnectorRedirect(u, raw)
+	default:
 		return false
 	}
+}
+
+// hostedConnectorRedirect is true for the callback URIs of the hosted connectors Chalk knows.
+func hostedConnectorRedirect(u *url.URL, raw string) bool {
 	switch u.Host {
 	case "claude.ai", "claude.com":
 		return u.Path == "/api/mcp/auth_callback"

@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,40 +13,7 @@ import (
 )
 
 func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse, providerErr error) {
-	requested := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(request.Body.Tracks))
-	for _, track := range request.Body.Tracks {
-		if track.Location == "remote" {
-			requested[mediapublications.RemoteTrackIdentity{
-				ConnectionID: strings.TrimSpace(track.SessionID),
-				TrackName:    strings.TrimSpace(track.TrackName),
-			}] = struct{}{}
-		}
-	}
-	if len(requested) == 0 {
-		return
-	}
-	failed := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(response.TrackErrors))
-	for _, trackErr := range response.TrackErrors {
-		if !trackErr.PublicationMissing {
-			continue
-		}
-		identity := mediapublications.RemoteTrackIdentity{
-			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
-			TrackName:    strings.TrimSpace(trackErr.TrackName),
-		}
-		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
-			failed[identity] = struct{}{}
-		}
-	}
-	for _, trackErr := range mediaplane.MissingRemoteTracks(providerErr) {
-		identity := mediapublications.RemoteTrackIdentity{
-			ConnectionID: strings.TrimSpace(trackErr.ConnectionID),
-			TrackName:    strings.TrimSpace(trackErr.TrackName),
-		}
-		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
-			failed[identity] = struct{}{}
-		}
-	}
+	failed := failedRemoteTracks(request.Body.Tracks, response, providerErr)
 	if len(failed) == 0 {
 		return
 	}
@@ -52,11 +21,56 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 	if !ok {
 		return
 	}
-	failedTracks := make([]mediapublications.RemoteTrackIdentity, 0, len(failed))
-	for identity := range failed {
-		failedTracks = append(failedTracks, identity)
+	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
+		TenantID:              request.TenantID,
+		EpisodeID:             request.EpisodeID,
+		ListenerParticipantID: request.ParticipantID,
+		ListenerConnectionID:  request.Body.ConnectionID,
+		Failed:                failed,
+	}, publisherSessionReader(service)); err != nil {
+		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
+			"event", "media_publication.failure_confirmation_failed",
+			"error", err,
+		)
 	}
-	reader := func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
+}
+
+func remoteTrackIdentity(connectionID, trackName string) mediapublications.RemoteTrackIdentity {
+	return mediapublications.RemoteTrackIdentity{ConnectionID: strings.TrimSpace(connectionID), TrackName: strings.TrimSpace(trackName)}
+}
+
+// failedRemoteTracks lists the remote tracks the request asked for that the
+// provider reported as missing, in the response or in its error.
+func failedRemoteTracks(tracks []mediaplane.Track, response mediaplane.TracksResponse, providerErr error) []mediapublications.RemoteTrackIdentity {
+	requested := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(tracks))
+	for _, track := range tracks {
+		if track.Location == "remote" {
+			requested[remoteTrackIdentity(track.SessionID, track.TrackName)] = struct{}{}
+		}
+	}
+	failed := make(map[mediapublications.RemoteTrackIdentity]struct{}, len(response.TrackErrors))
+	markFailed := func(connectionID, trackName string) {
+		identity := remoteTrackIdentity(connectionID, trackName)
+		if _, askedFor := requested[identity]; askedFor && identity.ConnectionID != "" && identity.TrackName != "" {
+			failed[identity] = struct{}{}
+		}
+	}
+	for _, trackErr := range response.TrackErrors {
+		if trackErr.PublicationMissing {
+			markFailed(trackErr.ConnectionID, trackErr.TrackName)
+		}
+	}
+	for _, trackErr := range mediaplane.MissingRemoteTracks(providerErr) {
+		markFailed(trackErr.ConnectionID, trackErr.TrackName)
+	}
+	return slices.Collect(maps.Keys(failed))
+}
+
+// publisherSessionReader reads a publisher's live local tracks from the media plane.
+func publisherSessionReader(service *mediaplane.Service) func(context.Context, string) (mediapublications.PublisherSession, error) {
+	return func(ctx context.Context, connectionID string) (mediapublications.PublisherSession, error) {
 		state, err := service.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: connectionID, Scope: sfuScope(ctx), Peer: true})
 		if err != nil {
 			return mediapublications.PublisherSession{}, err
@@ -70,20 +84,6 @@ func confirmFailedRemoteTracks(ctx context.Context, service *mediaplane.Service,
 			}
 		}
 		return session, nil
-	}
-	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-	defer cancel()
-	if _, err := confirmer.ConfirmRemoteTrackFailures(confirmCtx, mediapublications.RemoteTrackFailureInput{
-		TenantID:              request.TenantID,
-		EpisodeID:             request.EpisodeID,
-		ListenerParticipantID: request.ParticipantID,
-		ListenerConnectionID:  request.Body.ConnectionID,
-		Failed:                failedTracks,
-	}, reader); err != nil {
-		slog.WarnContext(confirmCtx, "failed to confirm unavailable remote media tracks",
-			"event", "media_publication.failure_confirmation_failed",
-			"error", err,
-		)
 	}
 }
 

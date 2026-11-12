@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -121,35 +122,11 @@ type transcriptObject struct {
 	UpdatedAt   string           `json:"updated_at"`
 }
 
+var allowedSpaceChanges = map[string]struct{}{"admission_policy": {}, "default_episode_duration_seconds": {}, "linger_window_seconds": {}, "maximum_episode_duration_seconds": {}, "media_plane": {}, "metadata": {}, "name": {}, "recurring_policy": {}, "slug": {}, "transcript_language": {}}
+
 func EncodeSpaceEvent(metadata EventMetadata, snapshot SpaceSnapshot, changedFields []string) ([]byte, [32]byte, error) {
-	if !metadata.Name.isOneOf(EventSpaceCreated, EventSpaceUpdated, EventSpaceArchived, EventSpaceRestored) {
-		return nil, [32]byte{}, ErrInvalidEventType
-	}
-	if metadata.Name == EventSpaceUpdated && len(changedFields) == 0 {
-		return nil, [32]byte{}, errors.New("space.updated requires changed_fields")
-	}
-	if metadata.Name != EventSpaceUpdated && len(changedFields) != 0 {
-		return nil, [32]byte{}, errors.New("changed_fields only applies to space.updated")
-	}
-	if metadata.Name == EventSpaceArchived && snapshot.ArchivedAt == nil {
-		return nil, [32]byte{}, errors.New("space.archived requires archived_at")
-	}
-	if metadata.Name == EventSpaceRestored && snapshot.ArchivedAt != nil {
-		return nil, [32]byte{}, errors.New("space.restored requires a live space")
-	}
-	if !validUUIDv4(snapshot.ID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero() {
-		return nil, [32]byte{}, errors.New("invalid space snapshot")
-	}
-	allowedChanges := map[string]struct{}{"admission_policy": {}, "default_episode_duration_seconds": {}, "linger_window_seconds": {}, "maximum_episode_duration_seconds": {}, "media_plane": {}, "metadata": {}, "name": {}, "recurring_policy": {}, "slug": {}, "transcript_language": {}}
-	seenChanges := make(map[string]struct{}, len(changedFields))
-	for _, field := range changedFields {
-		if _, ok := allowedChanges[field]; !ok {
-			return nil, [32]byte{}, errors.New("invalid space changed_fields")
-		}
-		if _, duplicate := seenChanges[field]; duplicate {
-			return nil, [32]byte{}, errors.New("duplicate space changed_fields")
-		}
-		seenChanges[field] = struct{}{}
+	if err := validateSpaceEvent(metadata.Name, snapshot, changedFields); err != nil {
+		return nil, [32]byte{}, err
 	}
 	sortedChanges := append([]string(nil), changedFields...)
 	sort.Strings(sortedChanges)
@@ -245,21 +222,19 @@ func validateArtifactTransition(eventName EventName, status string, startedAt, c
 	if !strings.HasSuffix(string(eventName), "."+status) || zeroTime(startedAt) || nonNilZeroTime(completedAt) || nonNilZeroTime(failedAt) {
 		return errors.New("artifact event status does not match transition")
 	}
+	var consistent bool
 	switch status {
 	case "started":
-		if completedAt != nil || failedAt != nil || failure != nil {
-			return errors.New("invalid started artifact snapshot")
-		}
+		consistent = completedAt == nil && failedAt == nil && failure == nil
 	case "completed":
-		if zeroTime(completedAt) || failedAt != nil || failure != nil {
-			return errors.New("invalid completed artifact snapshot")
-		}
+		consistent = !zeroTime(completedAt) && failedAt == nil && failure == nil
 	case "failed":
-		if zeroTime(failedAt) || completedAt != nil || failure == nil || len(failure.Code) < 1 || len(failure.Code) > 96 {
-			return errors.New("invalid failed artifact snapshot")
-		}
+		consistent = !zeroTime(failedAt) && completedAt == nil && failure != nil && len(failure.Code) >= 1 && len(failure.Code) <= 96
 	default:
 		return errors.New("invalid artifact status")
+	}
+	if !consistent {
+		return fmt.Errorf("invalid %s artifact snapshot", status)
 	}
 	return nil
 }
@@ -295,4 +270,32 @@ func optionalTimestamp(value *time.Time) *string {
 	}
 	formatted := timestamp(*value)
 	return &formatted
+}
+
+func validateSpaceEvent(name EventName, snapshot SpaceSnapshot, changedFields []string) error {
+	switch {
+	case !name.isOneOf(EventSpaceCreated, EventSpaceUpdated, EventSpaceArchived, EventSpaceRestored):
+		return ErrInvalidEventType
+	case name == EventSpaceUpdated && len(changedFields) == 0:
+		return errors.New("space.updated requires changed_fields")
+	case name != EventSpaceUpdated && len(changedFields) != 0:
+		return errors.New("changed_fields only applies to space.updated")
+	case name == EventSpaceArchived && snapshot.ArchivedAt == nil:
+		return errors.New("space.archived requires archived_at")
+	case name == EventSpaceRestored && snapshot.ArchivedAt != nil:
+		return errors.New("space.restored requires a live space")
+	case !validUUIDv4(snapshot.ID) || snapshot.CreatedAt.IsZero() || snapshot.UpdatedAt.IsZero():
+		return errors.New("invalid space snapshot")
+	}
+	seen := make(map[string]struct{}, len(changedFields))
+	for _, field := range changedFields {
+		if _, ok := allowedSpaceChanges[field]; !ok {
+			return errors.New("invalid space changed_fields")
+		}
+		if _, duplicate := seen[field]; duplicate {
+			return errors.New("duplicate space changed_fields")
+		}
+		seen[field] = struct{}{}
+	}
+	return nil
 }

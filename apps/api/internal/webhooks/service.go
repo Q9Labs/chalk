@@ -48,7 +48,7 @@ func (s Service) List(ctx context.Context, tenantID utilities.ID, page paginatio
 	return s.repository.List(ctx, tenantID, page)
 }
 
-func (s Service) Patch(ctx context.Context, tenantID, endpointID utilities.ID, input PatchInput) (result Endpoint, resultErr error) {
+func (s Service) Patch(ctx context.Context, tenantID, endpointID utilities.ID, input PatchInput) (Endpoint, error) {
 	if tenantID.IsZero() {
 		return Endpoint{}, ErrInvalidTenantID
 	}
@@ -61,38 +61,45 @@ func (s Service) Patch(ctx context.Context, tenantID, endpointID utilities.ID, i
 	if !idempotencyKeyPattern.MatchString(input.IdempotencyKey) {
 		return Endpoint{}, ErrIdempotencyKeyRequired
 	}
-	if input.Name == nil && input.URL == nil && input.Enabled == nil && input.APIVersion == nil && input.EventTypes == nil {
-		return Endpoint{}, ErrInvalidPatch
+	normalizedURL, redactedURL, err := normalizePatch(&input)
+	if err != nil {
+		return Endpoint{}, err
 	}
-	if input.Name != nil && (len([]rune(strings.TrimSpace(*input.Name))) < 1 || len([]rune(strings.TrimSpace(*input.Name))) > 100) {
-		return Endpoint{}, ErrInvalidName
+	return s.repository.Patch(ctx, tenantID, endpointID, input, normalizedURL, redactedURL)
+}
+
+// normalizePatch validates the fields a patch sets and rewrites them in place to
+// their canonical form. It returns the normalized and the redacted URL when the patch sets one.
+func normalizePatch(input *PatchInput) (normalizedURL, redactedURL string, err error) {
+	if input.Name == nil && input.URL == nil && input.Enabled == nil && input.APIVersion == nil && input.EventTypes == nil {
+		return "", "", ErrInvalidPatch
 	}
 	if input.Name != nil {
 		trimmed := strings.TrimSpace(*input.Name)
+		if length := len([]rune(trimmed)); length < 1 || length > 100 {
+			return "", "", ErrInvalidName
+		}
 		*input.Name = trimmed
 	}
-	var normalizedURL string
-	var redactedURL string
 	if input.URL != nil {
 		parsed, redacted, err := ValidateEndpointURL(*input.URL)
 		if err != nil {
-			return Endpoint{}, err
+			return "", "", err
 		}
 		*input.URL = parsed
-		redactedURL = redacted
-		normalizedURL = parsed
+		normalizedURL, redactedURL = parsed, redacted
 	}
 	if input.APIVersion != nil && *input.APIVersion != APIVersion {
-		return Endpoint{}, ErrInvalidAPIVersion
+		return "", "", ErrInvalidAPIVersion
 	}
 	if input.EventTypes != nil {
 		eventTypes, err := validateEventTypes(*input.EventTypes)
 		if err != nil {
-			return Endpoint{}, err
+			return "", "", err
 		}
 		*input.EventTypes = eventTypes
 	}
-	return s.repository.Patch(ctx, tenantID, endpointID, input, normalizedURL, redactedURL)
+	return normalizedURL, redactedURL, nil
 }
 
 func (s Service) Delete(ctx context.Context, tenantID, endpointID utilities.ID, revision int, key string) (resultErr error) {

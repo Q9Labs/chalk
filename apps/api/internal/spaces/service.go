@@ -80,19 +80,9 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	input.ID = id
 	input.MediaPlaneSetting = nil
 	explicitPlane := input.MediaPlaneSet || input.MediaPlane != ""
-	newSpacePlane := false
-	if !explicitPlane {
-		plane, isNewSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
-		if err != nil {
-			return Space{}, err
-		}
-		input.MediaPlane, newSpacePlane = string(plane), isNewSpacePlane
-	}
-	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
-		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
-	}
-	if newSpacePlane && !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
-		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
+	newSpacePlane, err := s.applyNewSpaceDefaults(ctx, &input, explicitPlane)
+	if err != nil {
+		return Space{}, err
 	}
 	if _, err := rand.Read(input.PublicInviteHandle[:]); err != nil {
 		return Space{}, err
@@ -100,44 +90,73 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	if err := prepareCreateSpaceInput(&input); err != nil {
 		return Space{}, err
 	}
-	// The request names a plane only when the caller may; a Space that names none
-	// inherits, except that the configured new-Space plane is the Space's own choice.
+	if err := s.bindMediaPlane(&input, explicitPlane, newSpacePlane); err != nil {
+		return Space{}, err
+	}
+	if input.RequestKey == "" {
+		return s.repository.CreateSpace(ctx, input)
+	}
+	return s.createIdempotent(ctx, input)
+}
+
+// applyNewSpaceDefaults picks the plane and artifact policies of a Space whose
+// request names no plane. It reports whether the plane is the configured new-Space plane.
+func (s Service) applyNewSpaceDefaults(ctx context.Context, input *CreateSpaceInput, explicitPlane bool) (bool, error) {
+	if explicitPlane {
+		return false, nil
+	}
+	plane, newSpacePlane, err := s.planeForNewSpace(ctx, input.TenantID)
+	if err != nil {
+		return false, err
+	}
+	input.MediaPlane = string(plane)
+	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
+		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
+	}
+	if newSpacePlane && !input.TranscriptionPolicySet && s.newSpace.TranscriptionPolicy != "" {
+		input.TranscriptionPolicy, input.TranscriptionPolicySet = s.newSpace.TranscriptionPolicy, true
+	}
+	return newSpacePlane, nil
+}
+
+// bindMediaPlane records the plane only when the Space owns the choice. The request
+// names a plane only when the caller may; a Space that names none inherits, except
+// that the configured new-Space plane is the Space's own choice.
+func (s Service) bindMediaPlane(input *CreateSpaceInput, explicitPlane, newSpacePlane bool) error {
 	provider := MediaPlaneProvider(input.MediaPlane)
 	switch {
-	case explicitPlane:
-		if !input.MediaPlaneFromConfig {
-			if err := s.planes.publicWriteAllowed(provider); err != nil {
-				return Space{}, err
-			}
-			if provider == MediaPlaneProviderChalkSFU {
-				// A public write naming the own SFU inherits; see PublicWriteAllowed.
-				input.MediaPlane = s.planes.legacyPlane(nil)
-				break
-			}
+	case explicitPlane && !input.MediaPlaneFromConfig:
+		if err := s.planes.publicWriteAllowed(provider); err != nil {
+			return err
+		}
+		if provider == MediaPlaneProviderChalkSFU {
+			// A public write naming the own SFU inherits; see PublicWriteAllowed.
+			input.MediaPlane = s.planes.legacyPlane(nil)
+			return nil
 		}
 		input.MediaPlaneSetting = &provider
-	case newSpacePlane:
+	case explicitPlane || newSpacePlane:
 		input.MediaPlaneSetting = &provider
 	default:
 		input.MediaPlane = s.planes.legacyPlane(nil)
 	}
-	if input.RequestKey != "" {
-		if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
-			return Space{}, ErrInvalidRequestKey
-		}
-		fingerprint, err := createFingerprint(input)
-		if err != nil {
-			return Space{}, err
-		}
-		input.RequestFingerprint = fingerprint
-		idempotent, ok := s.repository.(IdempotentRepository)
-		if !ok {
-			return Space{}, errors.New("space idempotency repository unavailable")
-		}
-		return idempotent.CreateSpaceIdempotent(ctx, input)
-	}
+	return nil
+}
 
-	return s.repository.CreateSpace(ctx, input)
+func (s Service) createIdempotent(ctx context.Context, input CreateSpaceInput) (Space, error) {
+	if !spaceRequestKeyPattern.MatchString(input.RequestKey) {
+		return Space{}, ErrInvalidRequestKey
+	}
+	fingerprint, err := createFingerprint(input)
+	if err != nil {
+		return Space{}, err
+	}
+	input.RequestFingerprint = fingerprint
+	idempotent, ok := s.repository.(IdempotentRepository)
+	if !ok {
+		return Space{}, errors.New("space idempotency repository unavailable")
+	}
+	return idempotent.CreateSpaceIdempotent(ctx, input)
 }
 
 func (s Service) GetSpace(ctx context.Context, tenantID utilities.ID, spaceID utilities.ID) (Space, error) {

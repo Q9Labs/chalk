@@ -92,17 +92,7 @@ func listEnabledPublications(ctx context.Context, publications mediapublications
 
 func pullOrPushTracks(ctx context.Context, request sfuTracksEndpointRequest, subject accessgrants.Subject, service *mediaplane.Service, publications mediapublications.Registry) (mediaplane.TracksResponse, error) {
 	episode := mediapublications.ReceiveHealthEpisode{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID}
-	var capture mediapublications.ListenerPullCapture
-	for _, track := range request.Body.Tracks {
-		if track.Location == "remote" {
-			if observer, ok := publications.(interface {
-				CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
-			}); ok {
-				capture = observer.CaptureListenerPull(episode)
-			}
-			break
-		}
-	}
+	capture := captureListenerPull(publications, episode, request.Body.Tracks)
 	response, err := service.AddTracks(ctx, mediaplane.TracksRequest{
 		ConnectionID:       request.Body.ConnectionID,
 		Scope:              sfuScope(ctx),
@@ -120,52 +110,89 @@ func pullOrPushTracks(ctx context.Context, request sfuTracksEndpointRequest, sub
 	}
 	confirmFailedRemoteTracks(ctx, service, publications, request, response, err)
 	if err != nil {
-		observation, observed := remoteTrackObservationForFailure(request, err)
-		if observed {
-			if observer, available := remoteTrackObserver(publications); available {
-				if observationErr := observer.ObserveRemoteTracks(ctx, observation); observationErr != nil {
-					return mediaplane.TracksResponse{}, errors.Join(err, observationErr)
-				}
-				logRemoteTrackResponse(ctx, response, observation, true)
-				return partialSFUTracksResponse(request, response, err)
-			}
-			return mediaplane.TracksResponse{}, err
-		}
-		if mediaplane.IsPartialRemoteTrackResponse(err) {
-			observation, observed := remoteTrackPartialObservation(request, response)
-			if observed {
-				logRemoteTrackResponse(ctx, response, observation, true)
-			}
-			return partialSFUTracksResponse(request, response, err)
-		}
+		return observeFailedTracks(ctx, publications, request, response, err)
+	}
+	if err := observeRemoteTracks(ctx, publications, request, response); err != nil {
 		return mediaplane.TracksResponse{}, err
 	}
-	if observation, observed := remoteTrackObservation(request, nil); observed {
-		observer, available := remoteTrackObserver(publications)
-		if available {
-			if err := observer.ObserveRemoteTracks(ctx, observation); err != nil {
-				return mediaplane.TracksResponse{}, err
-			}
-			logRemoteTrackResponse(ctx, response, observation, false)
-		}
+	return recordLocalTracks(ctx, publications, request, subject, response)
+}
+
+// captureListenerPull snapshots the listener's receive health before a request
+// that pulls remote tracks, for registries that can observe it.
+func captureListenerPull(publications mediapublications.Registry, episode mediapublications.ReceiveHealthEpisode, tracks []mediaplane.Track) mediapublications.ListenerPullCapture {
+	if !slices.ContainsFunc(tracks, func(track mediaplane.Track) bool { return track.Location == "remote" }) {
+		return mediapublications.ListenerPullCapture{}
 	}
+	observer, ok := publications.(interface {
+		CaptureListenerPull(mediapublications.ReceiveHealthEpisode) mediapublications.ListenerPullCapture
+	})
+	if !ok {
+		return mediapublications.ListenerPullCapture{}
+	}
+	return observer.CaptureListenerPull(episode)
+}
+
+// observeFailedTracks handles a failed AddTracks call. A partial remote result
+// still reaches the caller; any other failure is returned as it is.
+func observeFailedTracks(ctx context.Context, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse, err error) (mediaplane.TracksResponse, error) {
+	if observation, observed := remoteTrackObservationForFailure(request, err); observed {
+		observer, available := remoteTrackObserver(publications)
+		if !available {
+			return mediaplane.TracksResponse{}, err
+		}
+		if observationErr := observer.ObserveRemoteTracks(ctx, observation); observationErr != nil {
+			return mediaplane.TracksResponse{}, errors.Join(err, observationErr)
+		}
+		logRemoteTrackResponse(ctx, response, observation, true)
+		return partialSFUTracksResponse(request, response, err)
+	}
+	if !mediaplane.IsPartialRemoteTrackResponse(err) {
+		return mediaplane.TracksResponse{}, err
+	}
+	if observation, observed := remoteTrackPartialObservation(request, response); observed {
+		logRemoteTrackResponse(ctx, response, observation, true)
+	}
+	return partialSFUTracksResponse(request, response, err)
+}
+
+func observeRemoteTracks(ctx context.Context, publications mediapublications.Registry, request sfuTracksEndpointRequest, response mediaplane.TracksResponse) error {
+	observation, observed := remoteTrackObservation(request, nil)
+	if !observed {
+		return nil
+	}
+	observer, available := remoteTrackObserver(publications)
+	if !available {
+		return nil
+	}
+	if err := observer.ObserveRemoteTracks(ctx, observation); err != nil {
+		return err
+	}
+	logRemoteTrackResponse(ctx, response, observation, false)
+	return nil
+}
+
+// recordLocalTracks registers the tracks this connection publishes and attaches
+// their references to the response.
+func recordLocalTracks(ctx context.Context, publications mediapublications.Registry, request sfuTracksEndpointRequest, subject accessgrants.Subject, response mediaplane.TracksResponse) (mediaplane.TracksResponse, error) {
 	published := make([]mediapublications.PublishedTrack, 0, len(request.Body.Tracks))
 	for _, track := range request.Body.Tracks {
 		if track.Location == "local" {
 			published = append(published, mediapublications.PublishedTrack{Source: track.Source, MID: track.Mid, TrackName: track.TrackName})
 		}
 	}
-	if len(published) > 0 {
-		if publications == nil {
-			return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
-		}
-		references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
-		if err != nil {
-			return mediaplane.TracksResponse{}, err
-		}
-		if err := attachPublishedReferences(&response, references); err != nil {
-			return mediaplane.TracksResponse{}, err
-		}
+	if len(published) == 0 {
+		return response, nil
+	}
+	if publications == nil {
+		return mediaplane.TracksResponse{}, mediapublications.ErrUnavailable
+	}
+	references, err := publications.RecordPublishedTracks(ctx, mediapublications.RecordInput{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID, Tracks: published})
+	if err != nil {
+		return mediaplane.TracksResponse{}, err
+	}
+	if err := attachPublishedReferences(&response, references); err != nil {
+		return mediaplane.TracksResponse{}, err
 	}
 	return response, nil
 }

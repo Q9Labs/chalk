@@ -54,40 +54,16 @@ func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *
 	if len(a.config.Secret) == 0 || a.config.Nonces == nil || request == nil || role == "" {
 		return errors.New("workload authorization unavailable")
 	}
-	timestamp, err := strconv.ParseInt(request.Header.Get(workloadTimestampHeader), 10, 64)
+	timestamp, nonce, err := a.checkClaims(request, role)
 	if err != nil {
-		return errors.New("invalid workload timestamp")
+		return err
 	}
-	now := a.config.Clock()
-	observed := time.Unix(timestamp, 0)
-	if observed.Before(now.Add(-a.config.Window)) || observed.After(now.Add(a.config.Window)) {
-		return errors.New("expired workload signature")
-	}
-	nonce := request.Header.Get(workloadNonceHeader)
-	if len(nonce) < 16 || len(nonce) > 128 {
-		return errors.New("invalid workload nonce")
-	}
-	if request.Header.Get(workloadEnvironmentHeader) != a.config.Environment || request.Header.Get(workloadReleaseHeader) != a.config.ReleaseID || request.Header.Get(workloadRoleHeader) != role || request.Header.Get(workloadAudienceHeader) != a.config.Audience {
-		return errors.New("workload audience mismatch")
-	}
-	body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
+	bodySHA, err := readVerifiedBody(request)
 	if err != nil {
-		return errors.New("read workload body")
+		return err
 	}
-	request.Body.Close()
-	request.Body = io.NopCloser(bytes.NewReader(body))
-	bodyDigest := sha256.Sum256(body)
-	bodySHA := hex.EncodeToString(bodyDigest[:])
-	if !strings.EqualFold(strings.TrimSpace(request.Header.Get(workloadBodySHAHeader)), bodySHA) {
-		return errors.New("workload body checksum mismatch")
-	}
-	canonical := strings.Join([]string{strings.ToUpper(request.Method), request.URL.EscapedPath(), bodySHA, strconv.FormatInt(timestamp, 10), nonce, a.config.Environment, a.config.ReleaseID, role, request.Header.Get(workloadJourneyHeader), request.Header.Get(workloadTraceparentHeader), request.Header.Get(workloadTracestateHeader), a.config.Audience}, "\n")
-	mac := hmac.New(sha256.New, a.config.Secret)
-	_, _ = mac.Write([]byte(canonical))
-	expected := mac.Sum(nil)
-	supplied, err := decodeAuthorization(request.Header.Get(workloadAuthorizationHeader))
-	if err != nil || !hmac.Equal(expected, supplied) {
-		return errors.New("invalid workload signature")
+	if err := a.verifySignature(request, role, timestamp, nonce, bodySHA); err != nil {
+		return err
 	}
 	consumed, err := a.config.Nonces.Consume(ctx, nonce, a.config.Window)
 	if err != nil {
@@ -95,6 +71,55 @@ func (a HMACWorkloadAuthorizer) AuthorizeWorkload(ctx context.Context, request *
 	}
 	if !consumed {
 		return errors.New("workload nonce replay")
+	}
+	return nil
+}
+
+// checkClaims checks the timestamp window, the nonce length and the audience headers.
+func (a HMACWorkloadAuthorizer) checkClaims(request *http.Request, role string) (timestamp int64, nonce string, err error) {
+	timestamp, err = strconv.ParseInt(request.Header.Get(workloadTimestampHeader), 10, 64)
+	if err != nil {
+		return 0, "", errors.New("invalid workload timestamp")
+	}
+	now := a.config.Clock()
+	observed := time.Unix(timestamp, 0)
+	if observed.Before(now.Add(-a.config.Window)) || observed.After(now.Add(a.config.Window)) {
+		return 0, "", errors.New("expired workload signature")
+	}
+	nonce = request.Header.Get(workloadNonceHeader)
+	if len(nonce) < 16 || len(nonce) > 128 {
+		return 0, "", errors.New("invalid workload nonce")
+	}
+	if request.Header.Get(workloadEnvironmentHeader) != a.config.Environment || request.Header.Get(workloadReleaseHeader) != a.config.ReleaseID || request.Header.Get(workloadRoleHeader) != role || request.Header.Get(workloadAudienceHeader) != a.config.Audience {
+		return 0, "", errors.New("workload audience mismatch")
+	}
+	return timestamp, nonce, nil
+}
+
+// readVerifiedBody reads the request body, puts it back for the handler, and
+// returns its SHA-256 once it matches the checksum header.
+func readVerifiedBody(request *http.Request) (string, error) {
+	body, err := io.ReadAll(io.LimitReader(request.Body, 1<<20))
+	if err != nil {
+		return "", errors.New("read workload body")
+	}
+	request.Body.Close()
+	request.Body = io.NopCloser(bytes.NewReader(body))
+	bodyDigest := sha256.Sum256(body)
+	bodySHA := hex.EncodeToString(bodyDigest[:])
+	if !strings.EqualFold(strings.TrimSpace(request.Header.Get(workloadBodySHAHeader)), bodySHA) {
+		return "", errors.New("workload body checksum mismatch")
+	}
+	return bodySHA, nil
+}
+
+func (a HMACWorkloadAuthorizer) verifySignature(request *http.Request, role string, timestamp int64, nonce, bodySHA string) error {
+	canonical := strings.Join([]string{strings.ToUpper(request.Method), request.URL.EscapedPath(), bodySHA, strconv.FormatInt(timestamp, 10), nonce, a.config.Environment, a.config.ReleaseID, role, request.Header.Get(workloadJourneyHeader), request.Header.Get(workloadTraceparentHeader), request.Header.Get(workloadTracestateHeader), a.config.Audience}, "\n")
+	mac := hmac.New(sha256.New, a.config.Secret)
+	_, _ = mac.Write([]byte(canonical))
+	supplied, err := decodeAuthorization(request.Header.Get(workloadAuthorizationHeader))
+	if err != nil || !hmac.Equal(mac.Sum(nil), supplied) {
+		return errors.New("invalid workload signature")
 	}
 	return nil
 }
