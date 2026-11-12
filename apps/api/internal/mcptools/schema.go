@@ -59,7 +59,6 @@ func requestKey(p map[string]*Schema) map[string]*Schema {
 	p["request_key"] = &Schema{Type: "string", Description: "Caller-supplied idempotency key, preserved unchanged on retries.", MinLength: 16, MaxLength: 128, Pattern: `^[A-Za-z0-9_-]+$`}
 	return p
 }
-func bodySchema(p map[string]*Schema, required ...string) *Schema { return object(p, required...) }
 func spaceSettings(create bool) *Schema {
 	p := fields("name", "slug", "media_plane", "recording_policy", "transcription_policy")
 	for _, k := range []string{"metadata", "recurring_policy", "admission_policy"} {

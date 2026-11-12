@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/mcptools"
@@ -30,13 +29,13 @@ type mcpQuota struct {
 // NewMCPHandler binds the same typed application handlers used by /v1. No route
 // dispatch, HTTP decoding, internal HTTP requests, or raw service bypass occurs.
 func NewMCPHandler(options Options) http.Handler {
-	server := mcptools.NewServer()
-	bindMCPTenantTools(server, options)
-	bindMCPSpaceTools(server, options)
-	bindMCPEpisodeTools(server, options)
-	bindMCPArtifactTools(server, options)
-	bindMCPWebhookTools(server, options)
-	transport := mcptools.NewHandler(server, options.CORS.AllowedOrigins, mcpStepUp(options.OAuth))
+	registry := mcptools.NewRegistry()
+	bindMCPTenantTools(registry, options)
+	bindMCPSpaceTools(registry, options)
+	bindMCPEpisodeTools(registry, options)
+	bindMCPArtifactTools(registry, options)
+	bindMCPWebhookTools(registry, options)
+	transport := registry.Handler(options.CORS.AllowedOrigins, mcpStepUp(options.OAuth))
 	authenticated := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok := authentication.PrincipalFromContext(r.Context())
 		actor, valid := mcpActor(principal)
@@ -44,17 +43,7 @@ func NewMCPHandler(options Options) http.Handler {
 			writeMCPUnauthenticated(w, options.OAuth)
 			return
 		}
-		scopes := make([]string, 0, len(principal.Scopes))
-		for _, s := range principal.Scopes {
-			scopes = append(scopes, string(s))
-		}
-		if principal.Kind == authentication.PrincipalAPIKey && principal.HasScope(authentication.ScopeTenantsRead) {
-			scopes = append(scopes, mcptools.TenantSettingsScope)
-		}
-		if principal.Kind == authentication.PrincipalAPIKey && principal.HasScope(authentication.ScopeEpisodesWrite) {
-			scopes = append(scopes, mcptools.CallCredentialsScope)
-		}
-		ctx := mcptools.WithPrincipal(r.Context(), mcptools.Principal{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: scopes})
+		ctx := mcptools.WithConnection(r.Context(), mcptools.Connection{ProfileID: principal.TenantID.String(), TenantID: principal.TenantID.String(), ActorID: actor, Scopes: principal.Scopes, Derived: authentication.DerivedScopes(principal)})
 		quota := mcpQuota{key: rateLimitKey(r, options.RateLimit.ClientIP), options: options.RateLimit}
 		ctx = context.WithValue(ctx, mcpQuotaKey{}, quota)
 		ctx = context.WithValue(ctx, writeBudgetContextKey{}, func() error { return quota.allow(ctx, authenticatedWriteRateLimit) })
@@ -122,7 +111,7 @@ func acceptMCPOAuthToken(service MCPOAuthService) func(http.Handler) http.Handle
 // API-key connections and calls no bundle can allow get the tool's own refusal:
 // there is nothing to step up to, and the tool error names the missing scope.
 func mcpStepUp(service MCPOAuthService) mcptools.ScopeRefusal {
-	return func(w http.ResponseWriter, r *http.Request, tool, scope string) bool {
+	return func(w http.ResponseWriter, r *http.Request, tool string, scope authentication.Scope) bool {
 		principal, _ := authentication.PrincipalFromContext(r.Context())
 		bundle := mcpauth.SmallestBundleGranting(scope)
 		if service == nil || principal.Kind != authentication.PrincipalOAuth || bundle == "" {
@@ -175,7 +164,7 @@ type mcpRequest struct {
 
 func newMCPRequest(ctx context.Context) *mcpRequest {
 	b := &mcpRequest{ctx: ctx}
-	b.tenant = b.id(mcptools.Connection(ctx).TenantID)
+	b.tenant = b.id(mcptools.ConnectionFrom(ctx).TenantID)
 	return b
 }
 func (b *mcpRequest) id(raw string) utilities.ID {
@@ -252,7 +241,7 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	if err != nil {
 		outcome = endpoint.apiError(err).Code
 	}
-	slog.InfoContext(ctx, "MCP application operation completed", "event", "mcp.operation.completed", "operation", endpoint.contract.OperationID, "tenant_id", b.tenant.String(), "actor_id", mcptools.Connection(ctx).ActorID, "outcome", outcome)
+	slog.InfoContext(ctx, "MCP application operation completed", "event", "mcp.operation.completed", "operation", endpoint.contract.OperationID, "tenant_id", b.tenant.String(), "actor_id", mcptools.ConnectionFrom(ctx).ActorID, "outcome", outcome)
 	if err != nil {
 		apiErr := endpoint.apiError(err)
 		span.SetStatus(codes.Error, apiErr.Code)
@@ -268,8 +257,8 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	return data, nil
 }
 func mcpError(err APIError) error { return mcptools.Error{Code: err.Code, Message: err.Message} }
-func bindMCPEndpoint[Input, Request, Response any](server *mcp.Server, definition mcptools.Definition, endpoint Endpoint[Request, Response], request func(*mcpRequest, Input) Request) {
-	mcptools.Bind(server, definition, func(ctx context.Context, input Input) (json.RawMessage, error) {
+func bindMCPEndpoint[Input, Request, Response any](registry *mcptools.Registry, definition mcptools.Tool, endpoint Endpoint[Request, Response], request func(*mcpRequest, Input) Request) {
+	mcptools.Bind(registry, definition, func(ctx context.Context, input Input) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		return mcpInvoke(b, endpoint, request(b, input))
 	})
