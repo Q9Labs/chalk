@@ -1,3 +1,4 @@
+import type { DrawPolicy } from "../collab/draw-policy";
 import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
 import {
@@ -88,7 +89,7 @@ export class ChalkEmbeddedWhiteboardRendererBridge {
     return this.#request<void>("request_snapshot", {});
   }
 
-  setDrawPolicy(policy: import("../react/board/board-draw-policy").WhoCanDraw["policy"]): Promise<void> {
+  setDrawPolicy(policy: DrawPolicy): Promise<void> {
     return this.#request("set_draw_policy", { policy });
   }
 

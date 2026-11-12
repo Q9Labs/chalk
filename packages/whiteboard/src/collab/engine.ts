@@ -8,7 +8,7 @@ import { CANONICAL_INK, withInk } from "./ink";
 import { compareElementOrder } from "./order";
 import { WhiteboardPresence } from "./presence";
 import { filterSyncableElements, remoteImageFileIds, retainStoredImages } from "./syncable";
-import type { AppState, BinaryFiles, ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
+import type { ExcalidrawElement, ExcalidrawImperativeAPI, OrderedExcalidrawElement } from "./types";
 import { fromWireElement, toFittedWireElement, type WhiteboardCommit, type WhiteboardWireElement } from "./wire";
 
 const SUBMISSION_RETRY_DELAY_MS = 1_000;
@@ -211,7 +211,7 @@ export class ExcalidrawCollabEngine {
     this.unsubPointerUp?.();
   }
 
-  handleChange(_elements: readonly OrderedExcalidrawElement[], _appState: AppState, _files: BinaryFiles): void {
+  handleChange(): void {
     if (this.disposed) return;
 
     this.applyDeferredRemoteElements();

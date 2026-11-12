@@ -1,5 +1,5 @@
 import { EXCALIDRAW_VERSION, RENDERER_BUILD_ID } from "../pins";
-import type { WhoCanDraw } from "../react/board/board-draw-policy";
+import type { DrawPerson, DrawPolicy } from "../collab/draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
 import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
@@ -33,7 +33,7 @@ export type ChalkEmbeddedBoardContext = {
   readonly sceneStatus: string;
   readonly connectionStatus: string;
   readonly viewsAvailable: boolean;
-  readonly whoCanDraw?: Pick<WhoCanDraw, "policy" | "people">;
+  readonly whoCanDraw?: { readonly policy: DrawPolicy; readonly people: readonly DrawPerson[] };
   readonly colors: {
     readonly canvas: string;
     readonly surface: string;
@@ -141,7 +141,7 @@ export type ChalkEmbeddedWhiteboardRendererMessage =
   | { readonly type: "view"; readonly payload: WhiteboardView & { readonly requestId: string } }
   | { readonly type: "notice"; readonly payload: ChalkEmbeddedBoardNotice | null }
   | { readonly type: "follow"; readonly payload: { readonly participantId: string | null } }
-  | { readonly type: "set_draw_policy"; readonly payload: { readonly requestId: string; readonly policy: WhoCanDraw["policy"] } }
+  | { readonly type: "set_draw_policy"; readonly payload: { readonly requestId: string; readonly policy: DrawPolicy } }
   | { readonly type: "set_draw_permission"; readonly payload: { readonly requestId: string; readonly participantId: string; readonly canDraw: boolean } }
   | { readonly type: "close_board"; readonly payload: {} }
   | { readonly type: "camera"; readonly payload: { readonly scrollX: number; readonly scrollY: number; readonly zoom: number } }
