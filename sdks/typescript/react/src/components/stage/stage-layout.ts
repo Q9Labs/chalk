@@ -210,12 +210,12 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
     const height = options.content || phone ? box.height : width / aspect;
     return { frames: [{ id: primaryId, role: "primary", page: 0, x: (box.width - width) / 2, y: (box.height - height) / 2, width, height }], pageCount: 1, perPage: 0, overflowCount: stripIds.length };
   }
-  // The second face floats at the bottom right, clear of the top-right menu on the big tile.
+  // The second face floats at the top right, 12px inside the big tile, so the bottom stays clear for notices; the big tile's menu moves to its top left on a phone.
   if (phone && stripIds.length === 1 && !options.content) {
     return {
       frames: [
         { id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box },
-        { id: stripIds[0] ?? "", role: "strip", page: 0, x: box.width - 108, y: box.height - 140, width: 96, height: 128 },
+        { id: stripIds[0] ?? "", role: "strip", page: 0, x: box.width - 108, y: 12, width: 96, height: 128 },
       ],
       pageCount: 1,
       perPage: 1,
