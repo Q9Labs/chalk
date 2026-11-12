@@ -11,8 +11,6 @@ import { chalkReleaseVersion, releasePackages } from "./lib/release-packages.mjs
 import { repositoryRoot } from "./lib/repository.mjs";
 
 const registry = "https://registry.npmjs.org/";
-const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
-const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
 const githubRepository = "Q9Labs/chalk";
 const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs"]);
 
@@ -369,7 +367,7 @@ function sha256(filePath) {
 
 function validateArchive(archivePath) {
   runCommand("pnpm", ["exec", "publint", "run", archivePath], { label: `publint ${path.basename(archivePath)}` });
-  runCommand("pnpm", ["exec", "attw", archivePath, "--ignore-rules", ...attwIgnoreRules, "--exclude-entrypoints", ...attwExcludedEntrypoints], { label: `attw ${path.basename(archivePath)}` });
+  runCommand("pnpm", ["exec", "attw", archivePath, "--config-path", path.join(repositoryRoot, ".attw.json")], { label: `attw ${path.basename(archivePath)}` });
 }
 
 function ensureBuiltOutput(releasePackage) {
