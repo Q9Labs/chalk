@@ -210,7 +210,7 @@ func rejectConnectionReport(r *http.Request, reason string) error {
 	ctx := r.Context()
 	logger := observability.RequestLogger(ctx)
 	if subject, ok := accessgrants.SubjectFromContext(ctx); ok {
-		logger = logger.With("participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))))
+		logger = logger.With("participant_id_hash", observability.ParticipantIDHash(subject.ParticipantID.String()))
 	}
 	logger.WarnContext(ctx, "Rejected SDK connection report", "event", "sdk.connection_report.rejected",
 		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(), "reason", reason)

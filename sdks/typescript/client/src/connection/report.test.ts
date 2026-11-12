@@ -77,6 +77,40 @@ describe("automatic connection reports", () => {
     expect(JSON.stringify(test.sent)).not.toMatch(/private|participantId|publicationId|trackId/);
     reporter.dispose();
   });
+  it("reports a client that plays no audio under its own trigger, with the element state", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "audio_receive_unbound", source: "microphone", receive_state: "bytes_flowing", element: "none", duration_ms: 12000 });
+    await settled();
+    expect(test.sent[0]?.trigger).toBe("audio_receive_unbound");
+    expect(test.sent[0]?.events[0]).toMatchObject({ event: "audio_receive_unbound", receive_state: "bytes_flowing", element: "none" });
+    reporter.dispose();
+  });
+  it("sends a video stall under its own trigger", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "video_receive_stalled", source: "camera", duration_ms: 8000 });
+    await settled();
+    expect(test.sent[0]?.trigger).toBe("video_receive_stalled");
+    expect(test.sent[0]?.events[0]).toMatchObject({ event: "video_receive_stalled", source: "camera", duration_ms: 8000 });
+    reporter.dispose();
+  });
+  it("sends time to ICE and time to first audio once, on the next summary and no other", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "ice_connected", duration_ms: 800 });
+    reporter.recordTransport({ event: "first_audio_bytes", source: "microphone", duration_ms: 3000 });
+    await settled();
+    expect(test.sent).toHaveLength(0);
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 1 } });
+    await settled();
+    expect(test.sent[0]?.events.map((event) => event.event)).toEqual(["ice_connected", "first_audio_bytes", "audio_receive_summary"]);
+    test.advance(300000);
+    reporter.recordTransport({ event: "audio_receive_summary", receive_counts: { playing: 2 } });
+    await settled();
+    expect(test.sent[1]?.events.map((event) => event.event)).toEqual(["audio_receive_summary"]);
+    reporter.dispose();
+  });
   it("retains only the latest summary and bounds fixed-key counts with independent five-minute spacing", async () => {
     const test = fixture();
     const reporter = test.create();

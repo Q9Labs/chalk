@@ -3,11 +3,17 @@ package chalksfu
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -44,5 +50,41 @@ func TestClassifyKeepsTheSFUStatusAndCode(t *testing.T) {
 	upstream, ok := mediaplane.UpstreamOf(err)
 	if !ok || upstream.UpstreamStatus() != http.StatusForbidden || upstream.UpstreamCode() != "media_token.subject_mismatch" {
 		t.Errorf("upstream = %v, %v", upstream, ok)
+	}
+}
+
+// A trace of a call shows which plane served it: the adapter opens a span per SFU call that names the
+// plane and the operation, and a refused call marks it failed without the SFU's error text.
+func TestCallOpensASpanNamingThePlaneAndOperation(t *testing.T) {
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":"media_token.subject_mismatch","message":"secret detail"}}`))
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL)
+	adapter := &Adapter{base: base, client: server.Client()}
+	if err := adapter.call(context.Background(), "/v1/sessions", map[string]string{}, &map[string]any{}); err == nil {
+		t.Fatal("a refused call returned no error")
+	}
+
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || spans[0].Name != "mediaplane.chalk_sfu.sessions" {
+		t.Fatalf("spans = %v", spans)
+	}
+	attributes := map[string]string{}
+	for _, kv := range spans[0].Attributes {
+		attributes[string(kv.Key)] = kv.Value.String()
+	}
+	if attributes["chalk.media_plane.provider"] != "chalk_sfu" || attributes["http.response.status_code"] != "403" {
+		t.Errorf("attributes = %v", attributes)
+	}
+	if spans[0].Status.Code != codes.Error || strings.Contains(spans[0].Status.Description+fmt.Sprint(spans[0].Events), "secret detail") {
+		t.Errorf("status = %+v, events = %v", spans[0].Status, spans[0].Events)
 	}
 }
