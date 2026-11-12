@@ -13,7 +13,7 @@ ContainerName=chalk-api
 Network=chalk-runtime.network
 PodmanArgs=--network-alias=chalk-api
 EnvironmentFile=/run/chalk/env/api.env
-EnvironmentFile=-/run/chalk/boot.env
+EnvironmentFile=/run/chalk/boot.env
 Secret=chalk-api-provider-server-cert,type=mount,target=/run/chalk/provider-bridge/server.crt,uid=65532,gid=65532,mode=0400
 Secret=chalk-api-provider-server-key,type=mount,target=/run/chalk/provider-bridge/server.key,uid=65532,gid=65532,mode=0400
 Secret=chalk-api-provider-client-ca,type=mount,target=/run/chalk/provider-bridge/client-ca.crt,uid=65532,gid=65532,mode=0400

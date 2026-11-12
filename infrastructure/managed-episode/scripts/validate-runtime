@@ -445,6 +445,18 @@ if [[ -n "${rendered_root}" ]]; then
     grep -Eq '^Image=[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet image is not immutable: ${file}"
     ! grep -q '__' "${rendered_root}/quadlet/${file}" || fail "rendered Quadlet contains a placeholder: ${file}"
   done
+  # A host stop runs these four one after another, so the user manager must wait for all of their stop budgets.
+  stop_budget=15
+  for file in chalk-cloudflared chalk-sync chalk-api chalk-redis; do
+    unit_stop="$(sed -n 's/^TimeoutStopSec=\([0-9][0-9]*\)$/\1/p' "${rendered_root}/quadlet/${file}.container")"
+    [[ -n "${unit_stop}" ]] || fail "rendered Quadlet has no TimeoutStopSec: ${file}"
+    stop_budget=$((stop_budget + unit_stop))
+  done
+  manager_stop="$(sed -n 's/^TimeoutStopSec=\([0-9][0-9]*\)$/\1/p' "${rendered_root}/systemd/chalk-user-manager-grace.conf")"
+  [[ -n "${manager_stop}" ]] || fail "user manager grace drop-in has no TimeoutStopSec"
+  ((manager_stop >= stop_budget)) || fail "user manager TimeoutStopSec ${manager_stop} is below the ordered stop budget ${stop_budget}"
+  # Quadlet has no optional "-" prefix: it would resolve the path next to the unit file.
+  ! grep -Eq '^EnvironmentFile=-' "${rendered_root}"/quadlet/*.container || fail "rendered Quadlet uses an EnvironmentFile with a '-' prefix"
   migration_target="$(jq -er '.database_compatibility.minimum_migration | numbers' "${manifest}")" || fail "manifest migration target is invalid"
   [[ "${migration_target}" =~ ^[0-9]{14}$ ]] || fail "manifest migration target is invalid"
   migration_unit="${rendered_root}/quadlet/chalk-api-migrate.container"

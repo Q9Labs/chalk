@@ -119,6 +119,9 @@ for key in sorted(have.keys() - want):
         ufw("delete", *existing.split())
         print("host firewall: removed", existing)
 PY
+# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
+# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
+ufw allow 50000/tcp > /dev/null
 RECONCILE
 [[ "$mode" == --firewall-only ]] && exit 0
 
@@ -239,12 +242,6 @@ if $capture_on; then
   capture_image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-recorder-capture:${revision}")"
   loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$capture_image_id")"
   [[ "$loaded" == "$revision" ]] || { echo "node image ${capture_image_id} is revision ${loaded}, want ${revision}" >&2; exit 1; }
-  for pair in worker-cert:capture-worker.crt worker-key:capture-worker.key server-ca:bridge-ca.crt; do
-    name="chalk-capture-${pair%%:*}"
-    replace=()
-    as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
-    as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
-  done
   # capture.conf holds NODE_ID (this node's ID in CHALK_SFU_NODES), CONTROL_PLANE_URL, SERVER_NAME and
   # optionally SLOTS; no secrets. Every deploy issues the node's worker identity afresh, so it never
   # lapses, and refuses to install one that is not this node's, from the capture CA, with 14 days left.
@@ -252,6 +249,12 @@ if $capture_on; then
   [[ -n "$node_id" ]] || { echo "${dir}/capture.conf needs NODE_ID=" >&2; exit 1; }
   "${deploy_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
   "${deploy_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
+  for pair in worker-cert:capture-worker.crt worker-key:capture-worker.key server-ca:bridge-ca.crt; do
+    name="chalk-capture-${pair%%:*}"
+    replace=()
+    as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
+    as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
+  done
   control_plane_url="$(sed -n 's/^CONTROL_PLANE_URL=//p' "${dir}/capture.conf")"
   server_name="$(sed -n 's/^SERVER_NAME=//p' "${dir}/capture.conf")"
   slots="$(sed -n 's/^SLOTS=//p' "${dir}/capture.conf")"

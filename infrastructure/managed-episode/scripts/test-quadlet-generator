@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Render the runtime and run its Quadlet units through the generator of the Podman the hosts run (Ubuntu 24.04: 4.9).
+# The generator exits 0 for a unit it misreads, so the check reads the commands it generates.
+set -euo pipefail
+
+managed_root="$(cd "$(dirname "$0")/.." && pwd)"
+quadlet=/usr/libexec/podman/quadlet
+fail() { echo "FAIL $*" >&2; exit 1; }
+
+[[ "$(podman --version)" == 'podman version 4.9.'* ]] || fail "expected Podman 4.9"
+[[ -x "$quadlet" ]] || fail "Podman has no Quadlet generator at ${quadlet}"
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
+digest="sha256:$(printf 'a%.0s' {1..64})"
+jq -n --arg d "$digest" '{images:{api:("ghcr.io/example/api@"+$d),sync:("ghcr.io/example/sync@"+$d),redis:("docker.io/library/redis@"+$d),cloudflared:("docker.io/cloudflare/cloudflared@"+$d)},database_compatibility:{minimum_migration:20260101000000}}' >"${work}/manifest.json"
+"${managed_root}/scripts/render-runtime" "${work}/manifest.json" "${work}/rendered" production >/dev/null
+
+QUADLET_UNIT_DIRS="${work}/rendered/quadlet" "$quadlet" -dryrun -user >"${work}/generated" 2>"${work}/stderr" || { cat "${work}/stderr" >&2; fail "the Quadlet generator rejected the rendered units"; }
+! grep -qi 'error' "${work}/stderr" || { cat "${work}/stderr" >&2; fail "the Quadlet generator reported an error"; }
+
+for unit in "${work}"/rendered/quadlet/*.container; do
+  service="$(basename "$unit" .container).service"
+  grep -Fxq -- "---${service}---" "${work}/generated" || fail "the generator produced no ${service}"
+done
+# A relative path, or one with a stray prefix such as the "-" of systemd's optional files, lands beside the unit file.
+paths="$(grep -o -- '--env-file [^ ]*' "${work}/generated" | cut -d' ' -f2)"
+[[ -n "$paths" ]] || fail "the generated commands have no --env-file"
+while read -r path; do
+  [[ "$path" == /run/chalk/* ]] || fail "the generator resolved an environment file to ${path}"
+done <<<"$paths"
+echo "PASS Quadlet generator accepts the rendered units (${quadlet}, $(podman --version))"

@@ -14,7 +14,8 @@ import { AddWebsiteDialog, CreateKeyDialog, EndpointDialog, RemoveWebsiteDialog,
 import { KeysPanel } from "./DeveloperKeys";
 import { SitesPanel } from "./DeveloperSites";
 import { isFailing, WebhooksPanel } from "./DeveloperWebhooks";
-import { ErrorPanel, Sk, SkeletonRows, useToast } from "./kit";
+import { ErrorPanel, Sk, useToast } from "./kit";
+import { useJumpTarget } from "./jump";
 import { Page, Stat } from "./Page";
 
 type Open =
@@ -44,20 +45,9 @@ export function DeveloperPage() {
   const [fresh, setFresh] = useState<FreshSecret | null>(null);
   const toast = useToast();
   const close = () => setOpen(null);
+  useJumpTarget(state.kind === "ready");
 
-  if (state.kind === "loading")
-    return (
-      <Shell>
-        {[3, 2, 2].map((count, index) => (
-          <div key={index} className="card">
-            <div className="ph">
-              <Sk width={["120px", "150px", "180px"][index] ?? "120px"} height={18} />
-            </div>
-            <SkeletonRows count={count} />
-          </div>
-        ))}
-      </Shell>
-    );
+  if (state.kind === "loading") return <DeveloperSkeleton />;
   if (state.kind === "error")
     return (
       <Shell>
@@ -92,7 +82,7 @@ export function DeveloperPage() {
   }
 
   return (
-    <Shell nav={<SectionNav keys={keys.length} soon={soon.length > 0} websites={origins.length + 1} failing={failing.length > 0} />}>
+    <Shell nav={<SectionNav soon={soon.length > 0} failing={failing.length > 0} />}>
       <Summary keys={keys} used={listed} moreKeys={data.nextKeyCursor !== null} soon={soon} websites={origins.length + 1} webhooks={data.webhooks} moreWebhooks={data.nextWebhookCursor !== null} failing={failing.length} />
       {keys.length === 0 && data.nextKeyCursor ? <LiveKeySearch cursor={data.nextKeyCursor} onPage={(page) => update((value) => ({ ...value, keys: [...value.keys, ...page.keys], nextKeyCursor: page.nextKeyCursor }))} /> : null}
       <ConnectPanel tenantId={data.tenantId} keys={keys} fresh={fresh} onCreateKey={() => setOpen({ kind: "create-key" })} />
@@ -233,7 +223,7 @@ function useActiveSection(ids: readonly string[]) {
 
 const SECTION_IDS = SECTIONS.map((section) => section.id);
 
-function SectionNav({ keys, soon, websites, failing }: { readonly keys: number; readonly soon: boolean; readonly websites: number; readonly failing: boolean }) {
+function SectionNav({ soon, failing }: { readonly soon: boolean; readonly failing: boolean }) {
   const [active, setActive] = useActiveSection(SECTION_IDS);
   return (
     <nav className="side" aria-label="On this page">
@@ -252,14 +242,60 @@ function SectionNav({ keys, soon, websites, failing }: { readonly keys: number; 
           <Icon name={section.icon} size={16} />
           {section.label}
           {section.id === "keys" && soon ? <span className="pip" title="A key expires soon" /> : null}
-          {section.id === "keys" && !soon && keys ? <span className="ct">{keys}</span> : null}
-          {section.id === "websites" ? <span className="ct">{websites}</span> : null}
           {section.id === "webhooks" && failing ? <span className="pip bad" title="An endpoint is failing" /> : null}
         </a>
       ))}
     </nav>
   );
 }
+
+/** The page as it will look: the real nav, headings and labels, with only the values still to come drawn as bars. */
+function DeveloperSkeleton() {
+  return (
+    <Shell nav={<SectionNav soon={false} failing={false} />}>
+      <div aria-busy="true" aria-label="Loading" className="dstack">
+        <div className="card stats">
+          {STAT_LABELS.map(([icon, label]) => (
+            <Stat key={label} icon={icon} label={label} value={<Sk width="48px" height={24} />}>
+              <Sk width="96px" height={12} />
+            </Stat>
+          ))}
+        </div>
+        {PANELS.map((panel) => (
+          <section key={panel.title} className="panel card">
+            <div className="ph">
+              <Icon name={panel.icon} size={18} />
+              <div>
+                <h2>{panel.title}</h2>
+                {panel.sub ? <div className="sub">{panel.sub}</div> : null}
+              </div>
+            </div>
+            <div className="skbody">
+              {Array.from({ length: panel.rows }, (_, index) => (
+                <div key={index} className="skline">
+                  <Sk width={index % 2 ? "38%" : "52%"} height={12} />
+                  <Sk width="72px" height={12} />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </Shell>
+  );
+}
+
+const STAT_LABELS: readonly (readonly [IconName, string])[] = [
+  ["key", "Active API keys"],
+  ["clock", "Last key use"],
+  ["globe", "Allowed websites"],
+  ["hook", "Webhook endpoints"],
+];
+
+const PANELS: readonly { readonly icon: IconName; readonly title: string; readonly sub: string; readonly rows: number }[] = [
+  { icon: "link", title: "Connect your app", sub: "Two values and a server. Browsers never get a key; they get an AccessGrant.", rows: 3 },
+  { icon: "key", title: "API keys", sub: "", rows: 3 },
+];
 
 /** Four numbers the page really has: it never invents usage the API doesn't return. */
 function Summary({
