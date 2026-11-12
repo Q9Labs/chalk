@@ -47,9 +47,10 @@ func TestChalkSFUPlatformDefaultNeedsTheSFUAndKeepsCloudflare(t *testing.T) {
 		sfu        ChalkSFUConfig
 		wantErr    string
 	}{
-		{"own SFU default runs with Cloudflare as fallback", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ""},
+		{"own SFU default runs with Cloudflare as fallback", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
+		{"own SFU default needs capture for recording", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
 		{"own SFU default needs the SFU enabled", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
-		{"own SFU default needs the Cloudflare fallback", spaces.MediaPlaneProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true}, CloudflareRealtimeAppID},
+		{"own SFU default needs the Cloudflare fallback", spaces.MediaPlaneProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
 		{"Cloudflare default keeps working", spaces.MediaPlaneProviderCloudflareSFU, cloudflare, ChalkSFUConfig{}, ""},
 		{"no default needs nothing", "", CloudflareRealtimeConfig{}, ChalkSFUConfig{}, ""},
 	}

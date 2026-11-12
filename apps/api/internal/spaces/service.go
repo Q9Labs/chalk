@@ -314,9 +314,6 @@ func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (p
 			return s.newSpace.MediaPlane, true, nil
 		}
 	}
-	if s.planes.Platform != "" && s.planes.Platform != MediaPlaneProviderCloudflareSFU {
-		return "", false, ErrInvalidMediaPlane
-	}
 	return s.planes.Platform, false, nil
 }
 

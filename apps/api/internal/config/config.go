@@ -906,6 +906,11 @@ func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, process
 	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.Enabled {
 		return fmt.Errorf("%s=%s requires %s=true", DefaultMediaPlane, provider, ChalkSFUEnabled)
 	}
+	// A Space can turn recording or transcription on at any time, and an Episode on the own SFU
+	// has no capture path without this flag, so every inheriting Space would lose them.
+	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.CaptureEnabled {
+		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of an own-SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
+	}
 	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
 		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
 	}

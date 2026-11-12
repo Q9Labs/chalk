@@ -14,9 +14,10 @@ Write each step's undo before the step. Start the next step only when the one be
 
 This step is not applied by this document. `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` makes the own SFU the plane of every Space and Tenant that stores no plane of its own. A Space that stores `cf_sfu` stays on Cloudflare.
 
-1. Keep `CHALK_SFU_ENABLED=true` and the Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`): Cloudflare is the fallback and the kill-switch target.
+1. Keep `CHALK_SFU_ENABLED=true`, set `CHALK_SFU_CAPTURE_ENABLED=true` (the API refuses to start with the own SFU as the default and capture off, because recording and transcription of an own-SFU Episode need capture, and a Space can turn them on at any time), and keep the Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`): Cloudflare is the fallback and the kill-switch target.
 2. Save the previous lines, set `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` and `CHALK_SFU_ALLOWED_SPACES=*`, and restart once. Leave `CHALK_SFU_CLIENT_SUNSET` unset, so old SDKs keep working on Cloudflare.
-3. Read `/healthz`, then `media-settings get --tenant <tenant> --space <space>` on a throwaway Space: it must report `chalk_sfu`.
+3. Confirm the transcription dispatcher has `CODESWITCH_PROVIDER=mai` and its OpenRouter token before moving Spaces that use automatic transcription: without it an Auto-language job fails as retryable and the transcript never arrives.
+4. Read `/healthz`, then `media-settings get --tenant <tenant> --space <space>` on a throwaway Space: it must report `chalk_sfu`.
 
 The web SDK declares `chalk_sfu` since 5.5.0, and the mobile app since the build tagged `mobile-v3.0.6-b40`. A client that declares nothing gets a working Cloudflare call while a Cloudflare application is configured. Setting `CHALK_SFU_CLIENT_SUNSET` turns that fallback into 409 `media.client_unsupported` after the date, so leave it unset until the old builds are gone.
 
