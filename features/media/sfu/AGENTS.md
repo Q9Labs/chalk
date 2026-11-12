@@ -1,6 +1,6 @@
 # SFU
 
-Chalk's own media forwarder, a second provider beside Cloudflare Realtime. Read the SFU design and milestone documents (pull request #796) before changing behavior; the design owns the contract and the budgets.
+Chalk's own media forwarder, a second provider beside Cloudflare Realtime. Read the [SFU design plan](../../../docs/plans/sfu-design.md) before changing behavior, and verify it against code: it is a plan and may be stale.
 
 - Never import `apps/api/internal`. The wire types live in the public `protocol/` package and follow the Cloudflare adapter's track and SDP shapes.
 - Every operation is scoped to Tenant, Episode, Participant and generation. A session outside the caller's scope reads as gone, never as forbidden.

@@ -55,7 +55,8 @@ change to both.
 
 1. Apply the OpenTofu root with a stable public IPv4 address (for example an Elastic IP), because the nightly host is a spot
    instance whose address must survive stop and start.
-2. Install the proxy on the host with `direct-sync-proxy install` and confirm
+2. Install the proxy on the host as root with
+   `CHALK_DIRECT_SYNC_HOST=<hostname> direct-sync-proxy install` and confirm
    `direct-sync-proxy status` shows a valid certificate. Do this before the flag:
    a flag with no proxy makes every first attempt wait 2.5 seconds.
 3. Set `CHALK_API_DIRECT_URL` (an https origin, no path) in the API environment
@@ -76,7 +77,7 @@ Production keeps running on the Tunnel until someone does all of this, each step
 needing the owner's go-ahead because DNS and the production security group
 change:
 
-1. Apply the OpenTofu root for production and install the proxy.
+1. Widen the `environment` validation in `infrastructure/managed-episode/direct-sync/opentofu/variables.tf` (it accepts only `nightly`) in a reviewed change, apply the root for production and install the proxy.
 2. Check from outside the VPC that 443 answers, a Sync upgrade and an SFU
    preflight succeed, and every other path returns 404.
 3. Pass a nightly trial first: at least 30 joins per arm from at least 2 Pakistani

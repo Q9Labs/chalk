@@ -50,7 +50,7 @@ the full lifetime of the client. Forward the request unchanged to your backend,
 then pass it as the final `participants.issueAccess` argument alongside the
 server-only state from `getAccessRefreshState`. Chalk selects media replacement
 when recovery needs it and retains healthy media for ordinary refresh and Sync
-recovery. The quickstart shows the endpoint call; no conditional is needed.
+recovery. No conditional is needed.
 
 HTTP 408, 425, 429, and 5xx responses, network failures, and provider timeouts are `access.unavailable` (recoverable). Scheduled refresh retries these failures while retaining the current grant. Other non-OK responses (including 401 and 403) and malformed grants are `access.invalid`. Initial join does not automatically retry unavailable Access: show the failure and let the person check their network and try again. Return the `Response` unchanged so Chalk can classify its status; throwing a generic error for every non-OK response loses that distinction.
 

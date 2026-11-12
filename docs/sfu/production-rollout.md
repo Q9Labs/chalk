@@ -12,7 +12,7 @@ Write each step's undo before the step. Start the next step only when the one be
 
 ## How a changed value reaches the running API
 
-The private API environment lives in AWS SSM. The deploy controller re-fetches it at every deploy and writes the file the API container loads. The API reads that file only at start, so a change reaches it in one of two ways: a deploy, or a host edit plus a restart. The next deploy overwrites the host file from SSM, so both must hold the same value. Never print the file: change one line and print only a count, and save the old line privately first so the undo can tell "absent" from "empty".
+The private API environment lives in AWS SSM. The deploy controller re-fetches it at every deploy and writes the file the API container loads. The API reads that file only at start, so a change reaches it in one of two ways: a deploy, or a host edit plus a restart. The next deploy overwrites the host file from SSM, so both must hold the same value. Never print the file: change one line and print only a count, and save the old line privately first so the undo can tell "absent" from "empty". To undo, restore that line in SSM and on the host, restart the API, and confirm `/readyz` is healthy.
 
 Apply the allowlist to the running API by host edit and restart before dispatching Promote. Promote's first job runs against the release still in production, and that release lets the public API move a Space to `chalk_sfu` only when the running API already lists it. The deploy's own re-fetch comes after that check.
 
