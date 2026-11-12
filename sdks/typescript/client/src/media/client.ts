@@ -2087,6 +2087,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
   }
+  // The SFU answers 404 or 410 once it has dropped this session, and ICE cannot bring a dropped session back. Replace now,
+  // instead of waiting for the browser to give up on the path and for the ICE restart on the dead session to fail.
+  #replaceGoneConnection(): void {
+    const generation = this.#generation;
+    if (this.#replacementAttemptedGeneration === generation) return;
+    void this.#replaceMediaConnectionForRecovery(generation, "remote_signaling_failure")
+      .then(() => this.#republishPreparedTracksAfterRecovery(generation))
+      .catch((error: unknown) => {
+        if (generation === this.#generation && !this.#stopped) this.#reportError(error);
+      });
+  }
   #readsSubscriptions(): boolean {
     return this.#capabilities().subscriptionState && this.#transport?.listSubscriptions !== undefined;
   }
@@ -2109,8 +2120,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         for (const publicationId of this.#delivery.applied(startedAt, states)) this.#receiveProgress.restarted(publicationId);
         this.#publishSnapshot();
       },
-      () => {
-        if (current()) this.#delivery.failed(startedAt, performance.now());
+      (error) => {
+        if (!current()) return;
+        this.#delivery.failed(startedAt, performance.now());
+        if (error instanceof CloudflareSFUError && (error.options.status === 404 || error.options.status === 410)) this.#replaceGoneConnection();
       },
     );
   }
