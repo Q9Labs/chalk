@@ -217,6 +217,9 @@ class DeployBranchesTest(unittest.TestCase):
         env_file = installed['.config/chalk-sfu/sfu.env']
         self.assertEqual(env_file.count(f'={EIGHT_MIB}'), 2, env_file)
         self.assertIn(f'net.core.wmem_max = {EIGHT_MIB}', self.read('ssh-calls'))
+        self.assertIn(f"SFU_TCP_ADDR=:{TABLE['ports']['media']}", env_file)
+        self.assertNotIn('__', env_file)
+        self.assertIn(f"{TABLE['ports']['control']} {TABLE['ports']['media']}", self.read('ssh-calls'))
         self.assertEqual('SFU_PACKET_BUDGET=1000' in env_file, environment == 'bench')
         capture_env = installed['.config/chalk-sfu/capture.env']
         self.assertIn('CHALK_RECORDER_CAPTURE_SLOTS=3', capture_env)

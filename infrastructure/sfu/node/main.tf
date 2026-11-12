@@ -62,7 +62,7 @@ resource "digitalocean_firewall" "node" {
   # A peer whose network blocks UDP reaches the node on the same port over TCP (SFU_TCP_ADDR).
   inbound_rule {
     protocol         = "tcp"
-    port_range       = tostring(var.media_port)
+    port_range       = tostring(local.media_port)
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 

@@ -85,7 +85,7 @@ done
 # another way (host bits set, a /32) is not taken for a new source and its
 # existing rule removed. New rules go in before stale ones come out, so this SSH
 # session stays allowed.
-remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port}" <<'RECONCILE'
+remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
 set -euo pipefail
 python3 - "$1" "$2" <<'PY'
 import base64, ipaddress, re, subprocess, sys
@@ -120,7 +120,7 @@ for key in sorted(have.keys() - want):
 PY
 # Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
 # made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
-ufw allow 50000/tcp > /dev/null
+ufw allow "$3"/tcp > /dev/null
 RECONCILE
 [[ "$mode" == --firewall-only ]] && exit 0
 
@@ -188,7 +188,7 @@ if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
   exit 2
 fi
 {
-  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
+  sed -e "s|__ANNOUNCE_IP__|${host}|" -e "s|__MEDIA_PORT__|${media_port}|" -e "s|__CLIENT_IDENTITY__|${identity}|" \
     -e "s|__UDP_BUFFER__|${udp_buffer}|" -e "s|__NODE_SIZE__|${node_size}|" -e "s|__GOMEMLIMIT__|${gomemlimit}|" \
     -e "s|__ENVIRONMENT__|${sfu_environment}|" -e "s|__REVISION__|${revision}|" -e "s|__OTLP_ENDPOINT__|${otlp_endpoint}|" \
     "${node_dir}/sfu.env.in"
