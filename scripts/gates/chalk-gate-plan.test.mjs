@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan, shareProvenGroups } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, shareProvenGroups } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -131,4 +131,10 @@ test("nothing is shared when master changed the Gate itself, or the plan failed"
 
 test("the checks group always runs", () => {
   assert.ok(shareProvenGroups(queueJobs, proof, noDrift).rootGroups.includes("checks"));
+});
+
+test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {
+  const context = { scope: "branch", classification: { fullRequired: true } };
+  assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
+  assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
 });
