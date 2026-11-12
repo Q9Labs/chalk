@@ -212,7 +212,7 @@ jobs:
 
       # Browser tests, the call bundle budget (in the build group) and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "dashboard-engine", "dashboard-refresh", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
+        if: contains(fromJSON('["browser-tests", "dashboard-refresh", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:
