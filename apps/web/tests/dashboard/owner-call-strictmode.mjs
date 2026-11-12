@@ -21,7 +21,7 @@ const prefix = `
 import React, {useMemo, useEffect, useState, useRef, useSyncExternalStore} from ${JSON.stringify(require.resolve("react"))};
 import {createSpaceClientForPlatform as createReal} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/space-client.ts"))};
 import {readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeReloadRejoin} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"))};
-import {z} from ${JSON.stringify(require.resolve("zod"))};
+import {Schema} from ${JSON.stringify(require.resolve("effect"))};
 export const clients=[], admissions=[], failures=[], joins=[];
 export {ownerAccess};
 export let liveEpisodeId='episode-test';
