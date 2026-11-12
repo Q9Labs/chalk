@@ -7,7 +7,12 @@ export function CallMenuStyles() {
   );
 }
 
-const CALL_MENU_CSS = `.chalk-shell-sep {height:1px;background:var(--chalk-line-strong);margin:var(--space-1) var(--space-3);}
+const CALL_MENU_CSS = `/* Every row shares one icon column and one label edge: the shared kit's row padding must not win over the menu's. */
+.chalk-details .chalk-details-row {gap:var(--space-3);padding:0 var(--space-3);}
+.chalk-details-invite-url {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chalk-details-invite-copy {flex:none;color:var(--chalk-muted-text);transition:color .15s ease-out;}
+.chalk-details-invite:hover .chalk-details-invite-copy {color:var(--chalk-text);}
+.chalk-shell-sep {height:1px;background:var(--chalk-line-strong);margin:var(--space-1) var(--space-3);}
 .chalk-details-recording .chalk-shell-detail-lead i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
 .chalk-details-recording .chalk-shell-detail-label {display:flex;align-items:baseline;gap:var(--space-2);font-weight:600;}
 .chalk-details-recording time {color:var(--chalk-muted-text);font-size:var(--type-body-sm);font-weight:500;font-variant-numeric:tabular-nums;}
@@ -16,11 +21,6 @@ const CALL_MENU_CSS = `.chalk-shell-sep {height:1px;background:var(--chalk-line-
 .chalk-shell-detail-value[data-tone="good"] {color:var(--chalk-positive);}
 .chalk-shell-detail-value[data-tone="warn"] {color:var(--chalk-warning);}
 .chalk-shell-detail-value[data-tone="bad"] {color:var(--chalk-danger-text);}
-.chalk-invite-link-slug {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
-.chalk-invite-link[data-variant="menu"] .chalk-invite-link-label {flex:none;}
-.chalk-invite-link[data-variant="menu"] .chalk-invite-link-slug {flex:1;text-align:end;}
-.chalk-invite-link[data-variant="menu"] .chalk-invite-link-end {font-size:var(--type-body-sm);}
-.chalk-invite-link[data-variant="menu"][data-copied="true"] .chalk-invite-link-label {flex:1;}
 .chalk-shell-qr-card {margin:var(--space-1) 0;padding:var(--space-2) var(--space-4);display:grid;place-items:center;}
 .chalk-shell-qr-card[hidden] {display:none;}
 .chalk-shell-detail-action[data-ringed] {outline:1px solid var(--chalk-line-strong);outline-offset:-1px;}
