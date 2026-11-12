@@ -92,13 +92,13 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   };
   const [reportOpen, setReportOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
-  const openReport =
-    props.onReportProblem && !props.reportUnavailableReason
-      ? () => {
-          if (props.onOpenReportProblem) props.onOpenReportProblem();
-          else setReportOpen(true);
-        }
-      : undefined;
+  // "Report a problem" stays reachable when a report cannot be sent; the dialog says why and keeps the draft.
+  const openReport = props.onReportProblem
+    ? () => {
+        if (props.onOpenReportProblem) props.onOpenReportProblem();
+        else setReportOpen(true);
+      }
+    : undefined;
   const suppliedClient = props.client;
   const getAccessRef = useRef(props.getAccess);
   getAccessRef.current = props.getAccess;
@@ -137,7 +137,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
                 onClose={() => setReportOpen(false)}
                 onReportProblem={props.onReportProblem}
                 unavailableReason={props.reportUnavailableReason}
-                diagnostics={`Call: ${props.spaceName ?? props.space ?? "Call"}\nStatus: ${client.getSnapshot().connection.status}`}
+                diagnostics={reportDiagnostics(props.spaceName ?? props.space ?? "Call", client.getSnapshot().connection)}
                 focusScope={container}
               />
             </>
@@ -385,4 +385,9 @@ function useClientEvents(client: SpaceClient, callbacks: SpaceEventCallbacks): v
   useEffect(() => client.on("screenShareStopped", (event) => callbacks.onScreenShareStopped?.(event)), [callbacks.onScreenShareStopped, client]);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Forward client errors to the current host callback; unsubscribe on replacement.
   useEffect(() => client.on("error", (event) => callbacks.onError?.(event)), [callbacks.onError, client]);
+}
+
+/** The facts a report carries about the call, including the error code the end screen no longer prints. */
+function reportDiagnostics(callName: string, connection: { readonly status: string; readonly lastError?: { readonly code: string } | null }): string {
+  return [`Call: ${callName}`, `Status: ${connection.status}`, connection.lastError ? `Error: ${connection.lastError.code}` : null].filter(Boolean).join("\n");
 }

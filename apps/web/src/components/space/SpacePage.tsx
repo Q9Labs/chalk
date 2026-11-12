@@ -9,7 +9,7 @@ import { reloadAfterChunkLoadFailure } from "../../lib/chunkReload";
 import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
-import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
+import { reportUnavailableReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 const displayNameStorageKey = "chalk.display-name";
 const devicesOff = { microphone: false, camera: false };
 const neutralSpaceError = "This Space is unavailable. Please check the invite link and try again.";
@@ -377,13 +377,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
             errorCode={terminal.failure?.code}
             sync={terminal.failure?.sync}
             theme={{ colorScheme: mode }}
-            onReportProblem={
-              reportsAvailable && terminal.reportProblem && !reportExpired
-                ? () => {
-                    setReportOpen(true);
-                  }
-                : undefined
-            }
+            onReportProblem={terminal.reportProblem ? () => setReportOpen(true) : undefined}
             rejoinDisabled={preparing}
             onRejoin={() => {
               start(entranceSettings ?? defaultJoinOptions);
@@ -416,8 +410,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           reloadMarker={spaceAccess.prepared.reloadMarker}
           reportCredential={spaceAccess.prepared.reportCredential}
           reportCredentialExpiresAt={spaceAccess.prepared.reportCredentialExpiresAt}
-          reportsAvailable={reportsAvailable}
-          reportUnavailableReason={reportExpired ? reportCredentialExpiredReason : undefined}
+          reportUnavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
           onOpenReportProblem={(send, diagnostics) => {
             setReportDialog({ send, diagnostics });
             setReportOpen(true);
@@ -477,7 +470,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       {renderSurface()}
       {sendReport && callSurface ? (
         <callSurface.ReportProblemDialog
-          unavailableReason={reportExpired ? reportCredentialExpiredReason : !reportsAvailable ? "Reporting is temporarily unavailable. Your draft is kept here." : undefined}
+          unavailableReason={reportUnavailableReason(reportsAvailable, reportExpired)}
           diagnostics={terminal ? `Connection: ${terminal.phase}\nLast error: ${terminal.failure?.code ?? "none"}` : (reportDialog?.diagnostics ?? "")}
           focusScope={reportFocusScope}
           open={reportOpen}
