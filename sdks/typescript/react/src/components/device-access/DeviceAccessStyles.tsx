@@ -7,26 +7,22 @@ export function DeviceAccessStyles() {
 }
 
 const DEVICE_ACCESS_CSS = `
-.chalk-shell-split[data-blocked],
-.chalk-shell-split[data-blocked][data-off="true"] {
-  outline: 1px solid var(--chalk-danger);
-  outline-offset: -1px;
-}
+/* A blocked device wears the dock's one warning badge; the slashed icon already says it is off, so the pill gets no red ring. */
 .chalk-shell-split[data-blocked] .chalk-shell-main {
   color: var(--chalk-danger-text);
 }
 .chalk-access-badge {
   position: absolute;
-  top: -2px;
-  inset-inline-start: 34px;
-  width: 14px;
-  height: 14px;
+  top: -3px;
+  inset-inline-start: 30px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--chalk-danger);
-  color: var(--chalk-on-overlay);
-  font-size: var(--type-micro);
+  background: var(--chalk-warning);
+  color: var(--chalk-accent-text);
+  font-size: var(--type-caption);
   font-weight: 700;
-  line-height: 14px;
+  line-height: 16px;
   text-align: center;
   box-shadow: var(--elevation-halo-canvas);
   pointer-events: none;
@@ -132,7 +128,7 @@ const DEVICE_ACCESS_CSS = `
   color: var(--chalk-muted-text);
 }
 .chalk-access-bar .icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--chalk-text); flex: none; }
-.chalk-access-bar .icon[data-hit] { outline: 2px solid var(--chalk-accent); }
+.chalk-access-bar .icon[data-hit] { outline: 2px solid var(--chalk-text); }
 .chalk-access-bar .icon[data-off] { color: var(--chalk-danger-text); }
 .chalk-access-bar .icon svg { width: 14px; height: 14px; }
 .chalk-access-bar .grow, .chalk-access-menu .grow { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -161,8 +157,8 @@ const DEVICE_ACCESS_CSS = `
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--chalk-accent);
-  color: var(--chalk-accent-text);
+  background: var(--chalk-pressed);
+  color: var(--chalk-text);
   font-size: var(--type-micro);
   font-weight: 700;
   display: grid;
@@ -170,7 +166,7 @@ const DEVICE_ACCESS_CSS = `
   flex: none;
 }
 .chalk-access-menubar { display: flex; align-items: center; gap: var(--space-3); font-size: var(--type-caption); padding: 0 var(--space-2); color: var(--chalk-muted-text); }
-.chalk-access-menubar b { color: var(--chalk-text); font-weight: 700; border-radius: var(--corner-sm); padding: 0 var(--space-1); outline: 2px solid var(--chalk-accent); }
+.chalk-access-menubar b { color: var(--chalk-text); font-weight: 700; border-radius: var(--corner-sm); padding: 0 var(--space-1); outline: 2px solid var(--chalk-text); }
 .chalk-access-menubar .chalk-access-step { margin-inline-start: auto; }
 .chalk-access-dim { position: fixed; inset: 0; z-index: 30; background: var(--chalk-canvas); opacity: 0.45; pointer-events: none; }
 .chalk-access-coach {
