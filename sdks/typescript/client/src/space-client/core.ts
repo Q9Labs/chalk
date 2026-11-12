@@ -5,6 +5,7 @@ import { ConnectionLifecycleService, makeConnectionLifecycleLayer, type Connecti
 import { ConnectionPlatformService, makeConnectionPlatformLayer, type ConnectionAccessReason, type ConnectionAccessRequest, type ConnectionDependencies } from "../connection/dependencies";
 import type { ConnectionDiagnostic } from "../connection/diagnostics";
 import { createDefaultConnectionDependencies } from "../connection/production";
+import { callEvents } from "./call-events";
 import { makeControllerEffects, type ControllerEffects } from "./controller-effects";
 import { normalizeClientError, SpaceClientError } from "./errors";
 import { MediaDeviceSelection } from "./media-device-selection";
@@ -92,7 +93,7 @@ export class SpaceClientCore {
   readonly #store: SpaceStore;
   readonly #handlers: {
     [TEvent in ClientEventName]: Set<ClientEventHandler<TEvent>>;
-  } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set() };
+  } = { participantJoined: new Set(), participantLeft: new Set(), episodeEnded: new Set(), screenShareStarted: new Set(), screenShareStopped: new Set(), error: new Set(), callEvent: new Set() };
   #disposed = false;
   #episodeEnded = false;
   #previous: SpaceSnapshot;
@@ -178,6 +179,12 @@ export class SpaceClientCore {
     this.#emitParticipantChanges(previous, next);
     this.#emitScreenShareChanges(previous, next);
     this.#emitErrorChange(previous, next);
+    this.#emitCallEvents(previous, next);
+  }
+  #emitCallEvents(previous: SpaceSnapshot, next: SpaceSnapshot): void {
+    const micTurnedOff = previous.media.local.microphone.state !== next.media.local.microphone.state;
+    const ownMicrophoneOff = micTurnedOff && this.controllers.media.consumeOwnMicrophoneOff();
+    for (const event of callEvents(previous, next, ownMicrophoneOff)) this.#emit("callEvent", { event });
   }
   #emitParticipantChanges(previous: SpaceSnapshot, next: SpaceSnapshot): void {
     const before = new Map(previous.participants.roster.map((participant) => [participant.participantId, participant]));
