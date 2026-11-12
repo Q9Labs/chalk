@@ -86,7 +86,7 @@ leases() { [[ "$(ready_value "$1" .sourceLeases)" == "$2" ]]; }
 ready_is() { ready "$1"; jq -e "$2" <<<"$body"; }
 
 # redeploy runs the production deploy for one bench node, with its packet budget.
-redeploy() { SFU_PACKET_BUDGET="$(budget_of "$1")" "${sfu_root}/deploy/deploy" bench "$(address_of "$1")" "${@:2}"; }
+redeploy() { SFU_PACKET_BUDGET="$(budget_of "$1")" "${node_dir}/deploy" bench "$(address_of "$1")" "${@:2}"; }
 
 # snapshot prints one line per node: the SFU's own counters from /readyz and the host's from /proc.
 snapshot() {

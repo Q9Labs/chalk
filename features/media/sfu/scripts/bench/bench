@@ -46,6 +46,7 @@ nodes=(
 
 bench_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 sfu_root="$(cd "${bench_dir}/../.." && pwd)"
+node_dir="$(cd "${sfu_root}/../../../infrastructure/sfu" && pwd)"
 export CHALK_SFU_PRIVATE_DIR="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}"
 export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
 dir="${CHALK_SFU_PRIVATE_DIR}/bench"
@@ -125,7 +126,7 @@ host_cidr() {
   echo "${address}/32"
 }
 
-# render_cloud_init renders ../../infra/cloud-init.yaml.tftpl the way OpenTofu does, for the two
+# render_cloud_init renders infrastructure/sfu/node/cloud-init.yaml.tftpl the way OpenTofu does, for the two
 # loops it has: one rule line per address in control_addresses and ssh_addresses.
 render_cloud_init() {
   awk -v control="$1" -v ssh="$2" -v media_port="$media_port" '
@@ -136,7 +137,7 @@ render_cloud_init() {
       looping = 0; next
     }
     { gsub(/\$\{media_port\}/, media_port); if (looping) body = body $0 "\n"; else print }
-  ' "${sfu_root}/infra/cloud-init.yaml.tftpl"
+  ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
 read_ready() {
@@ -191,9 +192,9 @@ up() {
   chmod 700 "$dir"
 
   echo "==> issuing a throwaway CA, server and client identity"
-  "${sfu_root}/deploy/certs" bench ca
-  "${sfu_root}/deploy/certs" bench server
-  "${sfu_root}/deploy/certs" bench operator >/dev/null
+  "${node_dir}/certs" bench ca
+  "${node_dir}/certs" bench server
+  "${node_dir}/certs" bench operator >/dev/null
 
   echo "==> creating Droplets in ${region}"
   render_cloud_init "$control_addresses" "$ssh_addresses" >"${dir}/cloud-init.yaml"
@@ -223,7 +224,7 @@ up() {
     read -r role id slug budget <<<"$spec"
     address="$(jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/${role}.json")"
     echo "==> deploying the ${role} (${slug}, packet budget ${budget})"
-    SFU_PACKET_BUDGET="$budget" "${sfu_root}/deploy/deploy" bench "$address" | sed "s/^/[${role}] /"
+    SFU_PACKET_BUDGET="$budget" "${node_dir}/deploy" bench "$address" | sed "s/^/[${role}] /"
     prefix=""
     if [[ "$role" == standby ]]; then prefix="standby:"; fi
     nodes_value+="${nodes_value:+,}${prefix}${id}=https://${address}:${control_port}"

@@ -40,7 +40,7 @@ case "$environment" in
 esac
 
 deploy_dir="$(cd "$(dirname "$0")" && pwd)"
-sfu_root="$(dirname "$deploy_dir")"
+sfu_root="$(cd "${deploy_dir}/../../features/media/sfu" && pwd)"
 dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
 drain_timeout="${SFU_DRAIN_TIMEOUT:-3600}"
 identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
