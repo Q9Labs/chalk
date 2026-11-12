@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -96,6 +96,12 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(selected(["features/scorecard/budgets.mjs"], "pull_request").includes("workflow-graph"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "workflow-graph").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
+});
+
+test("the SFU lane runs in its own group, so an SFU change does not lengthen the checks group", () => {
+  assert.ok(jobs(["features/media/sfu/server/main.go"], "pull_request").rootGroups.includes("sfu"));
+  assert.ok(!jobs(["apps/web/src/main.tsx"], "pull_request").rootGroups.includes("sfu"));
+  assert.equal(laneGroup("sfu"), "sfu");
 });
 
 test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {
