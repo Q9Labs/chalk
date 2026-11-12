@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -30,28 +30,50 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
   for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
 });
 
-// The gate of the cut is the own SFU (chalk_sfu): the proof job holds the cut, the latency job holds only Promote.
-test("Cut nightly gates on a chalk_sfu proof, and only Promote waits on the latency run", () => {
-  const { proof: gate, latency, "web-e2e": web, record, scorecard } = nightly.jobs;
+// The gate of the cut is the own SFU (chalk_sfu): the proof job holds the cut, and the staging latency workflow holds only Promote.
+test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => {
+  const { proof: gate, "web-e2e": web, record, scorecard } = nightly.jobs;
+  assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
-  assert.equal(latency.with.media_plane, "chalk_sfu");
-  assert.equal(latency.with.latency_only, true);
-  assert.ok(needsOf(latency).includes("proof"));
   assert.equal(web.with.media_plane, "chalk_sfu");
   assert.equal(web.permissions.contents, "write", "the staging lease is a Git ref");
-  for (const name of ["proof", "latency", "web-e2e", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
-  assert.ok(needsOf(scorecard).includes("latency"));
+  for (const name of ["proof", "web-e2e", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
+  assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);
+  const evaluate = scorecard.steps.find((item) => item.id === "evaluate").run;
+  assert.match(evaluate, /evaluate\.mjs --latency-deferred /, "the cut's cards hold no latency run");
   const env = record.steps.find((item) => item.env?.PROOF_RESULT).env;
   assert.match(env.PROOF_RESULT, /needs\.proof\.result == 'success' && needs\.proof\.outputs\.result/);
   assert.match(env.PROOF_FAILURE, /needs\.proof\.outputs\.failure/);
-  assert.match(env.OWN_SFU_RESULT, /needs\.latency\.outputs\.result == 'passed' && needs\.proof\.outputs\.result == 'passed'/);
+  assert.equal(env.OWN_SFU_RESULT, "${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$DEPLOY_RESULT" = success && test "\$PROOF_RESULT" = passed && test "\$WEB_E2E_RESULT" = passed/);
+});
+
+test("the staging latency workflow measures the newest held nightly and records its verdict for Promote", () => {
+  const latencyWorkflow = workflow("staging-sfu-latency.yml");
+  assert.ok(latencyWorkflow.on.schedule?.length === 1, "daily schedule");
+  assert.ok("workflow_dispatch" in latencyWorkflow.on);
+  assert.deepEqual(latencyWorkflow.on.workflow_run, { workflows: ["Cut nightly"], types: ["completed"] }, "a finished cut starts its latency run");
+  const { target, latency, record } = latencyWorkflow.jobs;
+  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
+  assert.deepEqual(needsOf(latency), ["target"]);
+  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
+  assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
+  assert.equal(latency.with.media_plane, "chalk_sfu");
+  assert.equal(latency.with.latency_only, true);
+  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
+  assert.match(target.steps.at(-1).run, /release\.py latency_target/);
+  assert.deepEqual(needsOf(record), ["target", "latency"]);
+  assert.equal(record.permissions.deployments, "write");
+  assert.match(record.steps.at(-1).run, /release\.py record_latency/);
+  const evaluate = record.steps.find((item) => item.id === "evaluate").run;
+  assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
+  assert.equal(latencyWorkflow.concurrency.group, "chalk-staging-sfu-latency-run", "a caller cannot share the callee's group");
 });
 
 test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {
@@ -180,18 +202,24 @@ test("a failed Cloudflare measurement under the lease still fails its step", () 
 });
 
 // Runs the real "Prove a real call" script in a scratch tree: the lease wrapper stub runs the workload, and the proof command exits with the code given for each failing proof.
-function runProofStep({ nightly: isNightly, plane, proofs, failing = {} }) {
+function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseStatus = 0 }) {
   const dir = mkdtempSync(join(tmpdir(), "proof-step-"));
   try {
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
     mkdirSync(join(dir, "bin"));
     const lease = join(dir, "scripts/staging-sfu/gate-lease");
     const pnpm = join(dir, "bin/pnpm");
-    writeFileSync(lease, `#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\nexec "$@"\n`);
+    writeFileSync(lease, `#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\n${leaseStatus === 0 ? 'exec "$@"' : `exit ${leaseStatus}`}\n`);
+    copyFileSync(resolve(root, "scripts/staging-sfu/run-proofs"), join(dir, "scripts/staging-sfu/run-proofs"));
+    chmodSync(join(dir, "scripts/staging-sfu/run-proofs"), 0o755);
     const cases = Object.entries(failing)
       .map(([name, code]) => `${name}) exit ${code} ;;`)
       .join(" ");
-    writeFileSync(pnpm, `#!/usr/bin/env bash\necho "$2" >> ran\ncase "$2" in ${cases} esac\n`);
+    // call-artifacts marks its start; camera-share fails unless that mark appears while it runs, which proves the two overlap.
+    writeFileSync(
+      pnpm,
+      `#!/usr/bin/env bash\necho "$2" >> ran\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
+    );
     for (const file of [lease, pnpm]) chmodSync(file, 0o755);
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", proofStep.run], {
       cwd: dir,
@@ -202,6 +230,7 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {} }) {
         PROOFS: proofs,
         CHALK_PROOF_MEDIA_PLANE: plane,
         STAGING_SFU_PROOF: String(isNightly),
+        NEED_OVERLAP: isNightly ? "1" : "",
         RUN_PREFIX: "abc",
         GITHUB_OUTPUT: join(dir, "output"),
         GITHUB_STEP_SUMMARY: join(dir, "summary"),
@@ -224,7 +253,7 @@ const nightlyProofs = "camera-share call-artifacts long-call";
 test("the nightly proofs all run when one fails, and the step lists every result", () => {
   const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, failing: { "call-artifacts": 1 } });
   assert.equal(run.status, 1);
-  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual([...run.ran].sort(), ["call-artifacts", "camera-share", "long-call"]);
   assert.equal(run.results, "camera-share=passed call-artifacts=failed long-call=passed");
   assert.match(run.stdout, /::error title=Proofs failed::call-artifacts/);
 });
@@ -235,11 +264,18 @@ test("the nightly step passes only when every proof passes", () => {
   assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
 });
 
-test("a lease failure (exit 75) stops the nightly proofs and marks the rest not-run", () => {
-  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, failing: { "camera-share": 75 } });
+test("call-artifacts runs beside the proofs that share a Space, which keep their order", () => {
+  // camera-share exits 9 unless call-artifacts started while it was running.
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
+  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
+  assert.ok(run.ran.indexOf("camera-share") < run.ran.indexOf("long-call"));
+});
+
+test("a lease failure (exit 75) runs no nightly proof and marks every one not-run", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, leaseStatus: 75 });
   assert.equal(run.status, 1);
-  assert.deepEqual(run.ran, ["camera-share"]);
-  assert.equal(run.results, "camera-share=failed call-artifacts=not-run long-call=not-run");
+  assert.deepEqual(run.ran, []);
+  assert.equal(run.results, "camera-share=not-run call-artifacts=not-run long-call=not-run");
 });
 
 test("a run that is not the nightly gate stops at the first failed proof", () => {

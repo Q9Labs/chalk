@@ -163,7 +163,7 @@ func run() error {
 	apiKeyService := apikeys.NewService(apiKeyRepository, apikeys.Config{Telemetry: launchTelemetry})
 	tenantRepository := postgres.NewTenantRepository(operationQueries)
 	planePolicy := spaces.PlanePolicy{Platform: cfg.DefaultMediaPlane, Allowed: cfg.ChalkSFU.AllowedSpaces, NewSpace: cfg.NewSpace.MediaPlane, NewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused}
-	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(string(planePolicy.PublicWritePlane()), spaces.KnownMediaPlaneProvider)
+	tenantService := tenants.NewService(tenantRepository).WithMediaPlanes(func(plane string) bool { return planePolicy.PublicWriteAllowed(spaces.MediaPlaneProvider(plane)) }, spaces.KnownMediaPlaneProvider)
 	publicInviteConfig, err := resolvePublicInviteConfig(context.Background(), cfg, tenantService)
 	if err != nil {
 		return fmt.Errorf("configure public invite defaults: %w", err)
@@ -182,7 +182,8 @@ func run() error {
 	}
 
 	spaceRepository := postgres.NewSpaceRepository(operationQueries, pool)
-	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithPlanePolicy(planePolicy).WithNewSpaceDefaults(cfg.NewSpace, tenantRepository)
+	killSwitch := postgres.NewKillSwitch(pool)
+	spaceService := spaces.NewServiceWithDefaultProvider(spaceRepository, cfg.DefaultMediaPlane).WithPlanePolicy(planePolicy).WithNewSpaceDefaults(cfg.NewSpace, tenantRepository).WithNewEpisodeSwitch(killSwitch)
 	var chalkSFU *chalksfu.Fleet
 	if cfg.ChalkSFU.Enabled {
 		chalkSFU, err = chalksfu.NewFleet(cfg.ChalkSFU, logger)
@@ -192,7 +193,7 @@ func run() error {
 	}
 	ownCapture := chalkSFU != nil && cfg.ChalkSFU.CaptureEnabled
 	mediaPlaneTelemetry := observability.NewMediaPlaneResolutionTelemetry(logger)
-	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces, ChalkSFUNewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused, ChalkSFUClientSunset: cfg.ChalkSFU.ClientSunset})
+	episodeMediaBindingResolver := mediaplaneprovideradapter.NewRegistry(mediaplaneprovideradapter.Config{ProcessConfig: cfg.CloudflareRealtime, DefaultProvider: cfg.DefaultMediaPlane, Telemetry: mediaPlaneTelemetry, ChalkSFU: chalkSFU, ChalkSFUSpaces: cfg.ChalkSFU.AllowedSpaces, ChalkSFUNewEpisodesPaused: cfg.ChalkSFU.NewEpisodesPaused, NewEpisodeSwitch: killSwitch, ChalkSFUClientSunset: cfg.ChalkSFU.ClientSunset})
 	episodeRepository := postgres.NewEpisodeLifecycleRepositoryWithMediaBinding(pool, episodeMediaBindingResolver).WithTenantLimits(cfg.TenantLimits)
 	episodeService := episodes.NewService(episodeRepository)
 	var syncTokenService httpapi.SyncTokenIssuer
@@ -258,7 +259,7 @@ func run() error {
 	recordingCapturePlanRepository := postgres.NewRecordingCapturePlanRepositoryWithTransactor(pool, diagnostics.Queries)
 	recordingCapturePlanService := captureplan.NewService(recordingCapturePlanRepository)
 	var managedSFU sfuadapter.Adapter
-	if cfg.DefaultMediaPlane == spaces.MediaPlaneProviderCloudflareSFU || cfg.ProviderBridge.Enabled {
+	if cfg.DefaultMediaPlane != "" || cfg.ProviderBridge.Enabled {
 		managedSFU, err = sfuadapter.NewAdapter(cfg.CloudflareRealtime)
 		if err != nil {
 			return fmt.Errorf("configure Cloudflare SFU adapter: %w", err)

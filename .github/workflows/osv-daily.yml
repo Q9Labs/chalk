@@ -1,4 +1,7 @@
-name: Daily OSV
+name: Daily vulnerability scan
+
+# New advisories land against packages nobody changed, so pull requests compare with their base and only this scan fails
+# on them. It scans without a baseline: OSV-Scanner for every lockfile and govulncheck for the API module.
 
 on:
   schedule:
@@ -42,19 +45,33 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Scan every OSV finding
         id: osv
+        continue-on-error: true
         run: bash scripts/gates/osv-scanner.sh
+      - name: Scan every Go vulnerability in the API module
+        id: govulncheck
+        continue-on-error: true
+        working-directory: apps/api
+        run: bash ../../scripts/gates/govulncheck.sh
       - name: Open or update the standing security issue
-        if: failure() && steps.osv.outcome == 'failure'
+        if: steps.osv.outcome == 'failure' || steps.govulncheck.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
+          OSV_OUTCOME: ${{ steps.osv.outcome }}
+          GOVULNCHECK_OUTCOME: ${{ steps.govulncheck.outcome }}
         run: |
           label=security-osv-daily
+          failed=()
+          [[ "$OSV_OUTCOME" != failure ]] || failed+=(OSV-Scanner)
+          [[ "$GOVULNCHECK_OUTCOME" != failure ]] || failed+=(govulncheck)
           gh label create "$label" --repo "$GITHUB_REPOSITORY" --color D93F0B --force
           issue="$(gh issue list --repo "$GITHUB_REPOSITORY" --label "$label" --state all --limit 1 --json number --jq '.[0].number // empty')"
-          body="Daily full OSV scan failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. This scan has no baseline; review every finding in the scan output."
+          body="Daily vulnerability scan failed in ${failed[*]}: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. This scan has no baseline; review every finding in the scan output."
           if [[ -z "$issue" ]]; then
             gh issue create --repo "$GITHUB_REPOSITORY" --label "$label" --title 'Daily OSV findings' --body "$body"
           else
             gh issue reopen "$issue" --repo "$GITHUB_REPOSITORY"
             gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "$body"
           fi
+      - name: Fail the run when a scan found something
+        if: steps.osv.outcome == 'failure' || steps.govulncheck.outcome == 'failure'
+        run: exit 1

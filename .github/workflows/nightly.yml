@@ -80,29 +80,12 @@ jobs:
     with:
       environment: nightly
       # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
-      proofs: camera-share call-artifacts long-call
+      proofs: camera-share call-artifacts long-call chat-upload
       media_plane: chalk_sfu
       # Only the first cut of a UTC day pays for a Transcript (the plan decides); every cut still records and checks the call.
       transcribe: ${{ needs.plan.outputs.transcribe == 'true' }}
       release_sha: ${{ needs.plan.outputs.target_sha }}
       scorecard_label: proof
-    secrets: inherit
-  latency:
-    # Promote requires this result, but it does not change whether the nightly cut is held.
-    # It runs after the gate, also when the gate failed, so one run shows both results.
-    # The proof cleans up its Spaces and Episodes in every outcome.
-    permissions:
-      contents: write # Shared staging-SFU Git-ref lease.
-    needs: [plan, release, proof]
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
-    uses: ./.github/workflows/real-call-proof.yml
-    with:
-      environment: nightly
-      media_plane: chalk_sfu
-      latency: true
-      latency_only: true
-      release_sha: ${{ needs.plan.outputs.target_sha }}
-      scorecard_label: chalk_sfu
     secrets: inherit
   web-e2e:
     needs: [release, proof]
@@ -114,7 +97,7 @@ jobs:
       media_plane: chalk_sfu
     secrets: inherit
   record:
-    needs: [plan, release, proof, latency, web-e2e, scorecard]
+    needs: [plan, release, proof, web-e2e, scorecard]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     steps:
@@ -133,8 +116,8 @@ jobs:
           PROOF_FAILURE: ${{ needs.proof.outputs.failure }}
           PROOF_RESULTS: ${{ needs.proof.outputs.results }}
           WEB_E2E_RESULT: ${{ needs.web-e2e.result == 'success' && needs.web-e2e.outputs.result || 'failed' }}
-          # Promote reads the proof and the latency run together: a failed latency measurement intentionally blocks promotion, never the cut.
-          OWN_SFU_RESULT: ${{ needs.latency.result == 'skipped' && 'skipped' || needs.latency.result == 'success' && needs.latency.outputs.result == 'passed' && needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
+          # Staging latency runs in staging-sfu-latency.yml; Promote reads its verdict for this SHA next to this one.
+          OWN_SFU_RESULT: ${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}
           SCORECARD_RESULT: ${{ needs.scorecard.outputs.result }}
         run: |
           python3 scripts/releases/release.py record
@@ -162,7 +145,7 @@ jobs:
         run: python3 scripts/releases/publish_github_release.py
   scorecard:
     # Slow or failed runs matter most to the trend, so this job runs whether or not the cut was released.
-    needs: [plan, proof, latency]
+    needs: [plan, proof]
     if: always() && needs.plan.outputs.should_cut == 'true'
     runs-on: ubuntu-24.04
     outputs:
@@ -189,11 +172,12 @@ jobs:
           TARGET_SHA: ${{ needs.plan.outputs.target_sha }}
         run: |
           mapfile -t cards < <(find artifacts/nightly -name "scorecard-*.json")
-          node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
+          node features/scorecard/evaluate.mjs --latency-deferred "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
       - name: Score the nightly run and add it to the history
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          SCORECARD_KEEP_ISSUE: "true"
         run: |
           cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
           if [ -z "$cards" ]; then

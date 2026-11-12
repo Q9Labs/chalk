@@ -37,3 +37,27 @@ func TestLoadPlanePolicyReadsTheKillSwitch(t *testing.T) {
 		}
 	}
 }
+
+func TestChalkSFUPlatformDefaultNeedsTheSFUAndKeepsCloudflare(t *testing.T) {
+	cloudflare := CloudflareRealtimeConfig{RealtimeAppID: "app", RealtimeAppSecret: "secret", RequestTimeout: 1}
+	cases := []struct {
+		name       string
+		provider   spaces.MediaPlaneProvider
+		cloudflare CloudflareRealtimeConfig
+		sfu        ChalkSFUConfig
+		wantErr    string
+	}{
+		{"own SFU default runs with Cloudflare as fallback", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, ""},
+		{"own SFU default needs capture for recording", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{Enabled: true}, ChalkSFUCaptureEnabled},
+		{"own SFU default needs the SFU enabled", spaces.MediaPlaneProviderChalkSFU, cloudflare, ChalkSFUConfig{}, ChalkSFUEnabled},
+		{"own SFU default needs the Cloudflare fallback", spaces.MediaPlaneProviderChalkSFU, CloudflareRealtimeConfig{RequestTimeout: 1}, ChalkSFUConfig{Enabled: true, CaptureEnabled: true}, CloudflareRealtimeAppID},
+		{"Cloudflare default keeps working", spaces.MediaPlaneProviderCloudflareSFU, cloudflare, ChalkSFUConfig{}, ""},
+		{"no default needs nothing", "", CloudflareRealtimeConfig{}, ChalkSFUConfig{}, ""},
+	}
+	for _, c := range cases {
+		err := validateMediaPlaneProcessConfig(c.provider, c.cloudflare, c.sfu)
+		if c.wantErr == "" && err != nil || c.wantErr != "" && (err == nil || !strings.Contains(err.Error(), c.wantErr)) {
+			t.Errorf("%s: err = %v, want %q", c.name, err, c.wantErr)
+		}
+	}
+}

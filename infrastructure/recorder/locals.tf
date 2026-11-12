@@ -66,11 +66,6 @@ check "production_bucket_adoption_contract" {
 
 check "whiteboard_cors_contract" {
   assert {
-    condition     = !var.enable_apply || length(var.whiteboard_allowed_origins) > 0
-    error_message = "recorder apply requires at least one exact whiteboard browser origin for R2 CORS."
-  }
-
-  assert {
     condition     = contains(local.whiteboard_cors_allowed_headers, "x-amz-meta-chalk-attachment-id")
     error_message = "R2 CORS must allow the signed chat attachment identity metadata header."
   }

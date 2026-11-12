@@ -10,15 +10,16 @@ pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
 CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts
 pnpm prod:proof offreason                    # Node only: no browser, media or ffmpeg
+pnpm prod:proof chat-upload                  # Node only: a chat upload from an origin on no list, through the storage bucket's CORS rule
 ```
 
 Run from the repository root. You need `op` (local configuration only), FFmpeg (`ffmpeg`, `ffprobe`), ImageMagick (`magick`), and macOS `say` or Linux `espeak` for generated voices. Playwright and esbuild come from the client SDK workspace.
 
-## Shared state and why proofs serialise
+## Shared state and when proofs overlap
 
 - **One live Episode per Space.** A proof Space is reused across runs. Before it creates an Episode in a reused Space, every proof ends a live Episode whose `proof_run_id` names another run (the staging lease serialises proof runs, so that Episode is one a finished run's cleanup left). An Episode with no `proof_run_id` is never ended. If Create Episode still answers 409 `episode.capacity_exceeded`, the proof retries for 90 seconds, then fails with `proof-space-busy`.
 - **The Capture pool is small and shared**, so one stale Capture job can block every Recording. Proofs that record read `GET /v1/tenants/{tenant_id}/recording-capture-pool` while waiting for Capture readiness; `call-artifacts` also reads it before creating its Space. When every slot is held and none is this proof's, it fails at once with `capture-slot-held`, and the private evidence names the job, Recording, Episode, claim time and lease expiry (slots of other Tenants are counted without identifiers). A pool scaled to zero counts as free only while no job holds a slot.
-- Proofs for one environment must not overlap, including manual runs. Hosted runs are serialised by workflow concurrency (`queue: max`); take the staging lease (`scripts/staging-sfu/staging-lock`) for manual runs against staging.
+- Proofs for one environment must not overlap, including manual runs. The one exception is inside the nightly chalk_sfu run, which holds the staging lease once and runs `call-artifacts` (its own Space) beside `camera-share` and `long-call` (one shared Space, so one after the other); `scripts/staging-sfu/run-proofs` does this. Hosted runs are serialised by workflow concurrency (`queue: max`); take the staging lease (`scripts/staging-sfu/staging-lock`) for manual runs against staging.
 
 ## Configuration and ownership
 

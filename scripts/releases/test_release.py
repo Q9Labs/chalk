@@ -98,9 +98,14 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'previous_production', return_value=self.previous))
         self.enterContext(patch.object(release, 'ancestor'))
 
-    def github(self, item):
+    def github(self, item, latency='passed', scorecard='passed'):
         api = Mock(spec=GitHub)
+        record = [] if latency is None else [dict(id=9, payload=dict(
+            channel='nightly-latency', target_sha=item['payload']['target_sha'], result=latency, scorecard_result=scorecard,
+            scorecard_gated_metrics=['chalk_sfu.action.join.first_audio_ms'] if scorecard == 'gated-breach' else [],
+            scorecard_missing_items=['chalk_sfu.action.leave_ms'] if scorecard == 'missing' else []))]
         api.deployments.return_value = [item]
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: record if task == 'nightly-latency' else api.deployments.return_value
         api.request.side_effect = lambda route: ([dict(state=item['latest_status'])]
                                                  if '/statuses?' in route else item)
         return api
@@ -138,6 +143,67 @@ class OwnSfuPromotionTests(unittest.TestCase):
                             action()
                         else:
                             self.assert_blocked(action, result)
+
+    def test_promote_needs_a_passing_staging_latency_verdict_for_the_selected_sha(self):
+        self.assert_blocked(lambda: release.select(self.github(held(), latency=None), None), 'latency-missing')
+        self.assert_blocked(lambda: release.select(self.github(held(), latency='failed'), None), 'failed')
+        release.select(self.github(held()), None)
+
+    def test_a_failed_proof_keeps_its_own_result_whatever_the_latency_says(self):
+        self.assert_blocked(lambda: release.select(self.github(held('failed')), None), 'failed')
+        self.assert_blocked(lambda: release.select(self.github(held(None), latency=None), None), None)
+
+    def test_the_latency_scorecard_verdict_blocks_promotion_next_to_the_cut_verdict(self):
+        for scorecard in ('gated-breach', 'missing'):
+            with self.subTest(scorecard=scorecard), self.assertRaises(ValueError) as error:
+                release.select(self.github(held(), scorecard=scorecard), None)
+            self.assertIn(f'scorecard_result={scorecard}', str(error.exception))
+
+    def test_the_newest_latency_verdict_is_looked_up_for_the_selected_sha(self):
+        api = self.github(held())
+        release.select(api, None)
+        api.deployments.assert_any_call('nightly', 'nightly-latency', sha=SHA)
+
+    def test_latency_target_is_the_newest_held_cut_only_while_staging_runs_it(self):
+        item = held()
+        api = Mock(spec=GitHub)
+        marker = [dict(sha=SHA)]
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [item] if task == 'nightly-cut' else marker
+        self.assertEqual(release.deployed_held_cut(api), SHA)
+        marker[0] = dict(sha=OTHER_SHA)
+        with self.assertRaises(ValueError):
+            release.deployed_held_cut(api)
+        release.latency_target(api, None)
+        self.assertIn('sha=\n', self.output.read_text())
+
+    def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
+        scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
+        api = Mock(spec=GitHub)
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [held()] if task == 'nightly-cut' else [dict(sha=SHA)]
+        api.record_latency.return_value = 5
+        environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
+        with patch.dict(os.environ, environment):
+            release.record_latency(api, None)
+            saved = api.record_latency.call_args.args
+            self.assertEqual(saved[0], SHA)
+            self.assertEqual((saved[1]['result'], saved[1]['run_id'], saved[1]['channel']), ('passed', '77', 'nightly-latency'))
+            os.environ['LATENCY_RESULT'] = 'failed'
+            release.record_latency(api, None)
+            self.assertEqual(api.record_latency.call_args.args[1]['result'], 'failed')
+            os.environ['SCORECARD_RESULT'] = json.dumps(dict(scorecard, run_id='78'))
+            with self.assertRaises(ValueError):
+                release.record_latency(api, None)
+            os.environ['SCORECARD_RESULT'] = ''
+            release.record_latency(api, None)
+            self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
+
+    def test_record_latency_refuses_a_sha_staging_no_longer_runs(self):
+        api = Mock(spec=GitHub)
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [held(sha=OTHER_SHA)] if task == 'nightly-cut' else [dict(sha=OTHER_SHA)]
+        with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
+            with self.assertRaises(ValueError):
+                release.record_latency(api, None)
+        api.record_latency.assert_not_called()
 
     def test_select_never_uses_a_passed_proof_from_another_sha(self):
         item = held('passed', OTHER_SHA)
@@ -354,6 +420,19 @@ class OwnSfuPromotionTests(unittest.TestCase):
                                 env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
         self.assertEqual(result.returncode, 1, result.stderr)
         return json.loads(result.stdout)
+
+    def test_the_cut_scores_its_own_cards_without_the_latency_kit_run(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
+        fixture['metrics'] = [dict(fixture['metrics'][0], p50=1, p95=1)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'proof.json'
+            path.write_text(json.dumps(fixture))
+            command = ['node', 'features/scorecard/evaluate.mjs']
+            run = lambda *flags: subprocess.run([*command, *flags, SHA, RUN, str(path)], cwd=release.ROOT, capture_output=True,
+                                                text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+            self.assertEqual(json.loads(run().stdout)['result'], 'missing')
+            deferred = run('--latency-deferred')
+            self.assertEqual((deferred.returncode, json.loads(deferred.stdout)['result']), (0, 'passed'), deferred.stderr)
 
     def test_missing_own_card_cannot_be_replaced_by_cf_card(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())

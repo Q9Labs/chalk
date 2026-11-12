@@ -46,7 +46,7 @@ The API reaches a node with its provider-bridge certificate, reissued by `deploy
 
 The first rule that names a plane wins:
 
-1. `CHALK_SFU_NEW_EPISODES=off` sends every new Episode to Cloudflare. It is the kill switch and defaults to `on`. Live Episodes keep their node.
+1. The kill switch sends every new Episode to Cloudflare, and live Episodes keep their node. It is stored in the database, so `media-settings new-episodes --state off --operator <name> --reason <text>` takes effect on the next new Episode with no API restart, and `--state on` puts it back. Every flip writes an audit row (who, why, before, after). Without `--state` the command shows the live value. `CHALK_SFU_NEW_EPISODES=off` is a deploy-time floor under it: while the variable says off, the switch is off whatever the database says.
 2. The Space's own setting (`media_plane_setting`), if it has one.
 3. The Tenant's `default_media_plane`, when it names a known plane. Before operators owned it any caller could write it unchecked, so a value counts only if it parses, and `chalk_sfu` counts only if an operator wrote it (`tenants.default_media_plane_approved`). The migration left every existing row unapproved; `media-settings backfill --dry-run` reports how many Tenants hold an unapproved `chalk_sfu` or an unknown value, and `set --tenant` clears or re-sets them.
 4. `CHALK_DEFAULT_MEDIA_PLANE`.
@@ -69,7 +69,7 @@ Leave out `--space` to act on the Tenant's default. Each change prints one JSON 
 
 ### Send one Space back to Cloudflare, and return it
 
-The Space setting is the kill switch for one Space. It moves the Space's next Episodes to Cloudflare (`cf_sfu`) and back with no deploy and no API reload. To stop every new Episode instead, set `CHALK_SFU_NEW_EPISODES=off` in the private API settings and reload the API; use the Space setting first.
+The Space setting is the kill switch for one Space. It moves the Space's next Episodes to Cloudflare (`cf_sfu`) and back with no deploy and no API reload. To stop every new Episode instead, run `media-settings new-episodes --state off --operator <name> --reason <text>`; it needs no reload. Use the Space setting first.
 
 **Who runs it.** A Chalk operator holding the API's database and plane settings, because `media-settings` is the only way to set `chalk_sfu` and the API has no operator principal. A Tenant owner with the Tenant API key can do the one-way half with `PATCH /v1/tenants/{tenant_id}/spaces/{space_id}` and `{"media_plane":"cf_sfu"}`, but the return always goes through an operator.
 
@@ -87,7 +87,7 @@ An SDK that does not declare `chalk_sfu` in `X-Chalk-Media-Providers` is Cloudfl
 
 ## Run the canary
 
-Move internal Spaces one at a time: add the Space ID to `CHALK_SFU_ALLOWED_SPACES`, redeploy the API, then run `media-settings set --plane chalk_sfu` for that Space. To roll a Space back run it with `--plane inherit` (or `cf_sfu`); live Episodes finish on the node and new Episodes use Cloudflare. To stop every new own-SFU Episode at once, set `CHALK_SFU_NEW_EPISODES=off` and restart the API; removing the variable puts everything back.
+Move internal Spaces one at a time: add the Space ID to `CHALK_SFU_ALLOWED_SPACES`, redeploy the API, then run `media-settings set --plane chalk_sfu` for that Space. To roll a Space back run it with `--plane inherit` (or `cf_sfu`); live Episodes finish on the node and new Episodes use Cloudflare. To stop every new own-SFU Episode at once, run `media-settings new-episodes --state off --operator <name> --reason <text>`; no setting needs to change, and `--state on` puts everything back.
 
 `pnpm prod:canary` joins two real SDK clients per trial, measures time to render audio and video, blocks UDP to the media provider, proves video stopped, restores it and measures recovery, once with the first client's microphone on and once muted. Playwright's offline mode does not stop established WebRTC media, so you supply the commands that block and restore the path. Run it once per provider from the same machine so the reports compare, using that provider's media address:
 

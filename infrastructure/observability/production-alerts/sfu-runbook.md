@@ -139,7 +139,7 @@ Production log rows that a drill injects must carry `attributes.alert_drill=true
 | `admission_udp_buffer_errors`                                              | The kernel drops UDP packets: socket buffers are too small or full         | `grep Udp /proc/net/snmp` on the node (`RcvbufErrors` rising) |
 | `packet_budget`                                                            | Reserved packets are at least 90% of the node's packet budget              | Count of live Episodes on the node                            |
 
-**Fix.** The packet and admission reasons clear on their own when load falls. If they stay, restart the service during a quiet minute; if the host itself is overloaded, move future classes to a second node (add it to `CHALK_SFU_NODES`) or lower `CHALK_SFU_NEW_EPISODES`, and see the kill-switch section below.
+**Fix.** The packet and admission reasons clear on their own when load falls. If they stay, restart the service during a quiet minute; if the host itself is overloaded, move future classes to a second node (add it to `CHALK_SFU_NODES`) or stop new Episodes with the kill switch, and see the kill-switch section below.
 
 ### Join failures on `chalk_sfu`
 
@@ -199,4 +199,4 @@ On staging, hold the staging lease: `scripts/staging-sfu/staging-lock --holder <
 
 ## Kill switch
 
-Sending one Space back to Cloudflare, and returning it, is in [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`CHALK_SFU_NEW_EPISODES=off`) is the second step and needs an API reload.
+Sending one Space back to Cloudflare, and returning it, is in [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`media-settings new-episodes --state off --operator <name> --reason <text>`) is the second step and needs no API reload.

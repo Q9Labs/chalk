@@ -1,11 +1,10 @@
 name: CodeQL
 
-# Pull requests analyse only the languages whose files changed. Master pushes and the weekly run analyse every
-# language, so anything a pull request skips is analysed once it merges.
+# Pull requests analyse only the languages whose files changed. The weekly run analyses every language, so anything a
+# pull request skips is analysed within a week of merging. Master pushes do not run it: the pull request already
+# analysed the same code.
 on:
   pull_request:
-  push:
-    branches: [master]
   schedule:
     - cron: "27 4 * * 1"
   workflow_dispatch:
@@ -13,10 +12,10 @@ on:
 permissions:
   contents: read
 
-# A pull request's new push cancels its older run, and a master push cancels the older master scan, because the newest
-# commit's scan covers everything the older one did. Scheduled and manual runs get their own group.
+# A pull request's new push cancels its older run, because the newest commit's scan covers everything the older one
+# did. Scheduled and manual runs get their own group.
 concurrency:
-  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'push' && 'master' || github.run_id }}
+  group: codeql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:

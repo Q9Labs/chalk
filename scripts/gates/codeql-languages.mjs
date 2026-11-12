@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Prints the CodeQL languages a pull request needs as a JSON array: `codeql-languages.mjs <base-ref>`.
-// `--full` prints every language, which master pushes and the weekly run use.
+// `--full` prints every language, which the weekly run uses.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

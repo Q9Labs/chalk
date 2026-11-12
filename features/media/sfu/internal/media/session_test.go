@@ -34,6 +34,12 @@ var testMemory = config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128
 
 func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 	t.Helper()
+	return newLoggedTestNode(t, mutate, slog.NewTextHandler(io.Discard, nil))
+}
+
+// newLoggedTestNode is newTestNode with the node's log going to handler.
+func newLoggedTestNode(t *testing.T, mutate func(*config.Config), handler slog.Handler) *Node {
+	t.Helper()
 	cfg := config.Config{
 		UDPAddr:                    "127.0.0.1:0",
 		UDPBatch:                   true,
@@ -68,7 +74,7 @@ func newTestNode(t *testing.T, mutate func(*config.Config)) *Node {
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	node, err := NewNode(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	node, err := NewNode(cfg, slog.New(handler))
 	if err != nil {
 		t.Fatal(err)
 	}
