@@ -10,11 +10,11 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-export const MODEL = process.env.UI_CHECK_MODEL ?? "claude-opus-5-5";
-export const EFFORT = "high";
-export const MAX_SCREENS = 10;
+const MODEL = process.env.UI_CHECK_MODEL ?? "claude-opus-5-5";
+const EFFORT = "high";
+const MAX_SCREENS = 10;
 /** Screens whose changed pixels are under this fraction are font or antialiasing noise, not worth a model call. */
-export const MIN_CHANGED_FRACTION = 0.0005;
+const MIN_CHANGED_FRACTION = 0.0005;
 const TIMEOUT_MS = 8 * 60_000;
 
 const SYSTEM = `You review screenshots of a video-call web app for visible breakage. Each image shows BEFORE on the left and AFTER on the right; red boxes mark pixels that changed. Judge only the AFTER picture, and only what the change touched.
@@ -59,11 +59,30 @@ export async function reviewScreens({ comparisons, dir, token }) {
     .slice(0, MAX_SCREENS);
   if (candidates.length === 0) return { status: "nothing-to-review", findings: [], reviewed: 0 };
   if (!token) return { status: "skipped-no-token", findings: [], reviewed: 0 };
-  const prompt = [
-    "Read each of these images with the Read tool, then return the JSON.",
-    ...candidates.map((item) => `- ${item.frame}.review.jpg is screen ${item.frame}: ${item.label}, ${item.size}, ${item.scheme} theme.`),
-  ].join("\n");
-  const args = ["-p", prompt, "--model", MODEL, "--effort", EFFORT, "--output-format", "json", "--system-prompt", SYSTEM, "--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk", "--setting-sources", "", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"];
+  const prompt = ["Read each of these images with the Read tool, then return the JSON.", ...candidates.map((item) => `- ${item.frame}.review.jpg is screen ${item.frame}: ${item.label}, ${item.size}, ${item.scheme} theme.`)].join("\n");
+  const args = [
+    "-p",
+    prompt,
+    "--model",
+    MODEL,
+    "--effort",
+    EFFORT,
+    "--output-format",
+    "json",
+    "--system-prompt",
+    SYSTEM,
+    "--tools",
+    "Read",
+    "--allowedTools",
+    "Read",
+    "--permission-mode",
+    "dontAsk",
+    "--setting-sources",
+    "",
+    "--disable-slash-commands",
+    "--strict-mcp-config",
+    "--no-session-persistence",
+  ];
   // The CLI runs in a fresh folder outside the checkout, with only the images in it and an empty home, so it finds no CLAUDE.md,
   // settings or other file of the pull request to follow or read.
   const work = mkdtempSync(join(tmpdir(), "ui-check-review-"));

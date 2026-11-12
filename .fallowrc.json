@@ -173,6 +173,7 @@
     "ignore": [
       "features/scorecard/**",
       "scripts/prod-proof/**",
+      "scripts/ui-check/**",
       "**/dist/**",
       "**/*.test.ts",
       "scripts/gates/**",

@@ -4,7 +4,7 @@
 
 /** @typedef {{ check: string, key: string, detail: string }} Finding */
 
-export const CHECKS = ["blank", "page-scroll", "viewport-overflow", "child-clipped", "frame-unfilled", "text-clipped", "control-overlap", "control-covered", "tap-target"];
+const CHECKS = ["blank", "page-scroll", "viewport-overflow", "child-clipped", "frame-unfilled", "text-clipped", "control-overlap", "control-covered", "tap-target"];
 
 /** Smallest touch or pointer target in CSS pixels, from WCAG 2.2 success criterion 2.5.8. */
 export const MIN_TARGET = 24;

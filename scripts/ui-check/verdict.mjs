@@ -27,6 +27,6 @@ export function newFindings(headFrames, baseFrames) {
 }
 
 /** Findings that master has and the branch fixed, for the comment's good news. */
-export function fixedFindings(headFrames, baseFrames) {
+function fixedFindings(headFrames, baseFrames) {
   return newFindings(baseFrames, headFrames).length;
 }

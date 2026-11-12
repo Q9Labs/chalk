@@ -1,5 +1,5 @@
 // The one sticky pull request comment. The marker lets the workflow find and update it on every push.
-export const MARKER = "<!-- chalk-ui-check -->";
+const MARKER = "<!-- chalk-ui-check -->";
 
 const CHECK_NAMES = {
   blank: "blank screen",

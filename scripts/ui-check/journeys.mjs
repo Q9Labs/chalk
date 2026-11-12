@@ -50,6 +50,13 @@ export const JOURNEYS = [
   { id: "reconnecting", label: "Reconnecting", state: "conn-reconnecting", steps: [] },
   { id: "notices", label: "Device notices over the board", state: "board-notices-dark", ready: ".chalk-toast", steps: [] },
   { id: "notices-join", label: "People joining with long names", state: "board-notices-light&kind=join", ready: ".chalk-toast", steps: [] },
-  { id: "embedded", label: "Short call with a long name embedded in a wide host page", state: "board-notices-dark&notices=1&embed=300x320&name=Year%2011%20chemistry%20revision%20for%20the%20whole%20of%2011B%20with%20Ms%20Rahman%2C%20Mr%20Okafor%2C%20the%20lab%20technicians%20and%20every%20parent%20who%20asked%20to%20listen%20in", sizes: ["desktop"], ready: ".chalk-header", steps: [] },
+  {
+    id: "embedded",
+    label: "Short call with a long name embedded in a wide host page",
+    state: "board-notices-dark&notices=1&embed=300x320&name=Year%2011%20chemistry%20revision%20for%20the%20whole%20of%2011B%20with%20Ms%20Rahman%2C%20Mr%20Okafor%2C%20the%20lab%20technicians%20and%20every%20parent%20who%20asked%20to%20listen%20in",
+    sizes: ["desktop"],
+    ready: ".chalk-header",
+    steps: [],
+  },
   { id: "leave", label: "Leave", state: "duo", steps: [{ click: "Leave call" }] },
 ];
