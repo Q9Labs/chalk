@@ -182,6 +182,7 @@ export function truthIssues(samples) {
 }
 
 // SDK release guests have no React UI. Play the SDK's gated received tracks. Callers send this function to the page as source text, so every helper lives inside it.
+// fallow-ignore-next-line complexity -- the browser runs this body from source text, so it cannot be split into module helpers; the web proofs exercise it, which the CRAP estimate cannot see.
 export async function playProofMedia() {
   // Binds the sink the way AudioOutput does, or the SDK sees bytes with no element and cannot tell this guest from a listener who hears nothing.
   function bindAudioSink(track, element) {

@@ -48,13 +48,13 @@ export function dormantReplacementCall() {
 }
 
 /** The node paused the viewer's video at 100 s and resumed that same subscription at 110 s, so the pause is over by the time the silence ends. */
-export function resumedPauseCall() {
+function resumedPauseCall() {
   const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
   return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.resumed", "viewer", "conn-view-2", subscription)];
 }
 
 /** The node paused the viewer's video at 100 s and detached that subscription at 110 s without resuming it, so the pause is over by the time the silence ends. */
-export function stoppedPauseCall() {
+function stoppedPauseCall() {
   const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
   return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.stopped", "viewer", "conn-view-2", subscription)];
 }
