@@ -1,5 +1,5 @@
 "use client";
-import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
@@ -385,7 +385,15 @@ export function SpaceView({
               timeLeft: countdown.seconds,
               isRecording: recording.current?.status === "recording",
               recordingSeconds,
-              onStopRecording: feature("recording") && canManageRecording ? () => void runCommand(() => client.recording.stop()) : undefined,
+              onStopRecording:
+                feature("recording") && canManageRecording
+                  ? () =>
+                      void runCommand(() =>
+                        client.recording.stop().catch((cause: unknown) => {
+                          throw recordingFailure(cause, "stop");
+                        }),
+                      )
+                  : undefined,
               layout: headerLayout,
               onLayoutChange: updateLayout,
               notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
