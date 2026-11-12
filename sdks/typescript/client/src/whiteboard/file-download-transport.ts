@@ -1,6 +1,6 @@
 import { ChalkWhiteboardV1Error, type ChalkWhiteboardV1Failure, type ChalkWhiteboardV1FileTransport } from "./types";
 import { withRequestContext } from "../session";
-import { apiUrls } from "../urls";
+import * as apiUrls from "../api-urls";
 
 export type ChalkWhiteboardV1FileDownloadTransportOptions = {
   readonly baseUrl: string;

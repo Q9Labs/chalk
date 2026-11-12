@@ -6,13 +6,6 @@ export const WHITEBOARD_PATH = "/v1/whiteboard";
 export const MEDIA_PROVIDERS_HEADER = "X-Chalk-Media-Providers";
 export const MEDIA_PROVIDERS = "cloudflare_sfu,chalk_sfu";
 
-export type ParticipantRouteSubject = {
-  readonly tenantId: string;
-  readonly spaceId: string;
-  readonly episodeId: string;
-  readonly participantId: string;
-};
-
 export function trimTrailingSlashes(value: string): string {
   let end = value.length;
   while (end > 0 && value[end - 1] === "/") end -= 1;
@@ -51,24 +44,3 @@ export function whiteboardUrl(syncUrl: string): string {
 export function directSyncUrl(origin: URL): string {
   return `wss://${origin.host}${SYNC_PATH}`;
 }
-
-const segment = encodeURIComponent;
-
-function participantUrl(base: string, subject: ParticipantRouteSubject): string {
-  return `${trimTrailingSlashes(base)}/v1/tenants/${segment(subject.tenantId)}/spaces/${segment(subject.spaceId)}/episodes/${segment(subject.episodeId)}/participants/${segment(subject.participantId)}`;
-}
-
-/** The API routes the SDK calls by hand, because the generated client does not carry their bearer or streaming needs. */
-export const apiUrls = {
-  mediaSignalling: (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/media/sfu`,
-  episodeStatus: (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/episode-status`,
-  cancelJoin: (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/cancel-join`,
-  connectionReports: (base: string, tenantId: string) => `${trimTrailingSlashes(base)}/v1/tenants/${segment(tenantId)}/connection-reports`,
-  problemReports: (base: string, tenantId: string) => `${trimTrailingSlashes(base)}/v1/tenants/${segment(tenantId)}/problem-reports`,
-  problemReportAvailability: (base: string, tenantId: string) => `${trimTrailingSlashes(base)}/v1/tenants/${segment(tenantId)}/problem-reports/availability`,
-  callStats: (base: string, tenantId: string) => `${trimTrailingSlashes(base)}/v1/tenants/${segment(tenantId)}/call-stats`,
-  chatUploads: (base: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/uploads`,
-  chatUploadFinalize: (base: string, uploadId: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/uploads/${segment(uploadId)}/finalize`,
-  chatAttachmentDownload: (base: string, attachmentId: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/${segment(attachmentId)}/download`,
-  whiteboardFileDownload: (base: string, fileId: string) => `${trimTrailingSlashes(base)}/v1/whiteboard/files/${segment(fileId)}/download`,
-} as const;

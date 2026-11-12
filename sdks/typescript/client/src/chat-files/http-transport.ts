@@ -1,7 +1,7 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../collaboration/types";
 import { CHAT_FILE_REACHABILITY_MESSAGE, ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
 import { withRequestContext } from "../session";
-import { apiUrls } from "../urls";
+import * as apiUrls from "../api-urls";
 
 export type ChalkChatFileHttpTransportOptions = {
   readonly baseUrl: string;

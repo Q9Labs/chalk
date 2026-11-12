@@ -9,7 +9,8 @@ import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 import { mediaBootstrap } from "../access/media-bootstrap";
 import { directOrigin, type DirectPathMode } from "../direct-path";
-import { apiUrls, directSyncUrl, whiteboardUrl } from "../urls";
+import * as apiUrls from "../api-urls";
+import { directSyncUrl, whiteboardUrl } from "../urls";
 const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {

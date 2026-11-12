@@ -9,7 +9,8 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
-import { apiUrls, DEFAULT_API_BASE_URL } from "../urls";
+import * as apiUrls from "../api-urls";
+import { DEFAULT_API_BASE_URL } from "../urls";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;

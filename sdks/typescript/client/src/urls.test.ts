@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { directOrigin } from "./direct-path";
-import { apiUrls, defaultSyncUrl, directSyncUrl, normalizeBaseUrl, whiteboardUrl } from "./urls";
+import * as apiUrls from "./api-urls";
+import { defaultSyncUrl, directSyncUrl, normalizeBaseUrl, whiteboardUrl } from "./urls";
 
 describe("default Sync address", () => {
   it.each([
