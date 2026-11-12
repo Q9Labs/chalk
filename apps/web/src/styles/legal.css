@@ -1,80 +1,73 @@
-.legal-page {
-  min-height: 100vh;
-  background: var(--paper);
-}
+/* Privacy and Terms sit inside the site root (`.site`, a `[data-chalk]` scope), so every color is a call token and follows the saved theme. */
 
-.legal-header {
-  display: flex;
-  width: min(100%, 1060px);
-  align-items: center;
-  justify-content: space-between;
+.legal-main {
+  width: min(100%, 720px);
   margin: 0 auto;
-  padding: var(--space-6) clamp(var(--space-6), 4vw, var(--space-14));
-}
-
-.legal-brand img {
-  width: 92px;
+  padding: var(--space-16) var(--space-6) var(--space-22);
 }
 
 .legal-nav {
   display: flex;
-  gap: var(--space-5);
-  color: var(--ink-2);
-  font-size: var(--type-body-sm);
-  font-weight: 650;
+  gap: var(--space-1);
+  margin-bottom: var(--space-10);
 }
 
 .legal-nav a {
-  padding-block: var(--space-1);
-  text-decoration: underline;
-  text-decoration-color: transparent;
-  text-underline-offset: 4px;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--corner-pill);
+  color: var(--chalk-muted-text);
+  font-size: var(--type-body-sm);
+  font-weight: 600;
+  transition:
+    background-color var(--chalk-motion-press),
+    color var(--chalk-motion-press);
 }
 
-.legal-nav a:hover,
-.legal-nav a:focus-visible,
-.legal-nav a.is-active {
-  color: var(--ink);
-  text-decoration-color: currentColor;
+.legal-nav a:hover {
+  background: var(--chalk-raised);
+  color: var(--chalk-text);
 }
 
-.legal-main {
-  padding: clamp(var(--space-12), 8vw, var(--space-22)) var(--space-6) var(--space-22);
-}
-
-.legal-document {
-  width: min(100%, 720px);
-  margin: 0 auto;
+.legal-nav a[aria-current="page"] {
+  background: var(--chalk-hover);
+  color: var(--chalk-text);
 }
 
 .legal-document h1 {
-  max-width: 12ch;
-  font-size: clamp(var(--type-display), 7vw, var(--type-hero));
-  line-height: 0.98;
+  font-size: var(--type-display);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  text-wrap: balance;
 }
 
 .legal-document h2 {
   margin-top: var(--space-12);
-  font-size: clamp(var(--type-title), 3vw, var(--type-display-sm));
-  line-height: 1.08;
+  font-size: var(--type-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
 .legal-document p,
 .legal-document li {
-  color: var(--ink-2);
+  color: var(--chalk-soft-text);
   font-size: var(--type-lead);
-  line-height: 1.7;
+  line-height: 1.65;
+  text-wrap: pretty;
 }
 
 .legal-document h1 + .legal-effective-date {
-  margin-top: var(--space-4);
-  color: var(--ink-3);
-  font: var(--type-caption) var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  margin-top: var(--space-3);
+  color: var(--chalk-muted-text);
+  font-size: var(--type-body);
 }
 
 .legal-document h1 + .legal-effective-date + p,
+.legal-document h1 + .legal-effective-date + .legal-notice,
 .legal-document h2 + p,
 .legal-document h2 + ul {
   margin-top: var(--space-6);
@@ -84,16 +77,50 @@
   margin-top: var(--space-4);
 }
 
+/* The change notice is a callout card, set apart from the policy that follows it. */
+.legal-notice {
+  margin-bottom: var(--space-10);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--chalk-line);
+  border-radius: var(--corner-2xl);
+  background: var(--chalk-surface);
+}
+
+.site[data-chalk-theme="light"] .legal-notice {
+  border-color: transparent;
+  box-shadow: var(--raise);
+}
+
+.legal-document .legal-notice h2 {
+  margin-top: 0;
+  font-size: var(--type-body-lg);
+  letter-spacing: normal;
+}
+
+.legal-document .legal-notice h2 + p {
+  margin-top: var(--space-2);
+}
+
+.legal-document .legal-notice p {
+  font-size: var(--type-body);
+  line-height: 1.55;
+}
+
 .legal-document strong {
-  color: var(--ink);
-  font-weight: 700;
+  color: var(--chalk-text);
+  font-weight: 600;
 }
 
 .legal-document a {
-  color: var(--ink);
+  color: var(--chalk-text);
   text-decoration: underline;
+  text-decoration-color: var(--edge);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+.legal-document a:hover {
+  text-decoration-color: currentColor;
 }
 
 .legal-document ul {
@@ -101,50 +128,62 @@
   gap: var(--space-3);
   margin: var(--space-6) 0 0;
   padding-left: var(--space-6);
+  list-style: disc;
 }
 
 .legal-document table {
   width: 100%;
   margin-top: var(--space-6);
   border-collapse: collapse;
-  font-size: var(--type-body-lg);
+  font-size: var(--type-body);
   text-align: left;
 }
 
 .legal-document th,
 .legal-document td {
-  padding: var(--space-3) var(--space-3);
-  border-bottom: 1px solid var(--line);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--chalk-line-strong);
   vertical-align: top;
 }
 
 .legal-document th {
-  color: var(--ink);
+  color: var(--chalk-muted-text);
   font-size: var(--type-caption);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .legal-document td {
-  color: var(--ink-2);
+  color: var(--chalk-soft-text);
 }
 
 .legal-document code {
-  color: var(--ink);
-  font-family: var(--font-mono);
+  color: var(--chalk-text);
+  font-family: var(--chalk-font-mono);
   /* token-ratchet-ignore: inline code scales with the surrounding prose, so it stays in em */
-  font-size: 0.83em;
+  font-size: 0.86em;
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 640px) {
   .legal-main {
-    padding-top: var(--space-10);
+    padding: var(--space-8) var(--space-5) var(--space-16);
   }
 
-  .legal-document p,
-  .legal-document li {
-    font-size: var(--type-lead);
+  .legal-nav {
+    margin-bottom: var(--space-8);
+  }
+
+  .legal-document h1 {
+    font-size: var(--type-display-sm);
+  }
+
+  .legal-document h2 {
+    margin-top: var(--space-10);
+    font-size: var(--type-title-sm);
+  }
+
+  .legal-notice {
+    padding: var(--space-4) var(--space-5);
   }
 
   .legal-document table {
