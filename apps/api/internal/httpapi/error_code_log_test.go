@@ -25,10 +25,11 @@ func TestFailedEndpointRequestLogCarriesErrorCodeThroughWriterWrappers(t *testin
 			next.ServeHTTP(&reportOutcomeWriter{ResponseWriter: w}, r)
 		})
 	}
-	Get("/v1/refuse/{id}", "/v1/refuse/{id}", "refuse",
+	endpoint := Get("/v1/refuse/{id}", "refuse",
 		func(*http.Request) (struct{}, error) { return struct{}{}, nil },
 		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, apiErrorUnauthenticated },
-	).Middleware(wrap).Mount(router, RateLimitOptions{})
+	).Middleware(wrap)
+	router.Route(apiPrefix, func(r chi.Router) { endpoint.Mount(r, RateLimitOptions{}) })
 
 	handler := observability.RequestMiddleware(logger)(router)
 	response := httptest.NewRecorder()

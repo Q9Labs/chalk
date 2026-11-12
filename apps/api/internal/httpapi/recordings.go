@@ -2,12 +2,10 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"mime"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -133,12 +131,6 @@ type requestRecordingExportEndpointRequest struct {
 	RecordingID utilities.ID
 }
 
-func mountRecordingRoutes(r chi.Router, service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range recordingEndpoints(service, exports, downloads, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func recordingEndpoints(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		listRecordingsEndpoint(service, exports, authorizer),
@@ -149,13 +141,7 @@ func recordingEndpoints(service RecordingService, exports RecordingExportService
 }
 
 func requestRecordingExportEndpoint(service RecordingService, exports RecordingExportService, authorizer TenantAuthorizer) Endpoint[requestRecordingExportEndpointRequest, requestRecordingExportResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/export", "/tenants/{tenant_id}/recordings/{recording_id}/export", "requestRecordingExport", decodeRequestRecordingExportEndpointRequest, func(ctx context.Context, request requestRecordingExportEndpointRequest) (requestRecordingExportResponse, error) {
-		if service == nil || exports == nil {
-			return requestRecordingExportResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return requestRecordingExportResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/export", "requestRecordingExport", decodeRequestRecordingExportEndpointRequest, func(ctx context.Context, request requestRecordingExportEndpointRequest) (requestRecordingExportResponse, error) {
 		recording, err := service.Get(ctx, request.TenantID, request.RecordingID)
 		if err != nil {
 			return requestRecordingExportResponse{}, err
@@ -175,7 +161,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		}
 		response := newRecordingResponse(recording, state)
 		return requestRecordingExportResponse{Recording: response, Export: response.Export}, nil
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
+	}).Needs(service, exports).Permission(authorizer, readRecordingsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).ErrorRules(recordingRules)
 }
 
 func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecordingExportEndpointRequest, error) {
@@ -190,35 +176,23 @@ func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecord
 }
 
 func listRecordingsEndpoint(service RecordingService, artifacts RecordingExportService, authorizer TenantAuthorizer) Endpoint[listRecordingsRequest, recordingListResponse] {
-	return Get("/v1/tenants/{tenant_id}/recordings", "/tenants/{tenant_id}/recordings", "listRecordings", decodeListRecordingsRequest, func(ctx context.Context, request listRecordingsRequest) (recordingListResponse, error) {
-		if service == nil || artifacts == nil {
-			return recordingListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return recordingListResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/recordings", "listRecordings", decodeListRecordingsRequest, func(ctx context.Context, request listRecordingsRequest) (recordingListResponse, error) {
 
 		list, err := service.List(ctx, request.TenantID, request.SpaceID, request.EpisodeID, request.Page)
 		if err != nil {
 			return recordingListResponse{}, err
 		}
 		return newRecordingListResponse(ctx, list, artifacts)
-	}).
+	}).Needs(service, artifacts).Permission(authorizer, readRecordingsPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(append([]APIParameterContract{tenantIDParameter(), spaceIDQueryParameter(), episodeIDQueryParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "RecordingList", recordingListResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
-		MapErrors(recordingEndpointAPIError)
+		ErrorRules(recordingRules)
 }
 
 func getRecordingEndpoint(service RecordingService, artifacts RecordingExportService, authorizer TenantAuthorizer) Endpoint[getRecordingRequest, recordingResponse] {
-	return Get("/v1/tenants/{tenant_id}/recordings/{recording_id}", "/tenants/{tenant_id}/recordings/{recording_id}", "getRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (recordingResponse, error) {
-		if service == nil || artifacts == nil {
-			return recordingResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return recordingResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/recordings/{recording_id}", "getRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (recordingResponse, error) {
 
 		recording, err := service.Get(ctx, request.TenantID, request.RecordingID)
 		if err != nil {
@@ -229,22 +203,16 @@ func getRecordingEndpoint(service RecordingService, artifacts RecordingExportSer
 			return recordingResponse{}, err
 		}
 		return newRecordingResponse(recording, state), nil
-	}).
+	}).Needs(service, artifacts).Permission(authorizer, readRecordingsPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		Responds(http.StatusOK, "Recording", recordingResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound)...).
-		MapErrors(recordingEndpointAPIError)
+		ErrorRules(recordingRules)
 }
 
 func createRecordingDownloadURLEndpoint(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return recordingDownloadURLResponse{}, err
-		}
-		if service == nil || exports == nil || downloads == nil {
-			return recordingDownloadURLResponse{}, apiErrorServiceUnavailable
-		}
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
 		if request.Body.ExpiresInSeconds <= 0 || request.Body.ExpiresInSeconds > int(maximumArtifactDownloadURLLifetime/time.Second) {
 			return recordingDownloadURLResponse{}, apiErrorInvalidURLExpiration
 		}
@@ -287,14 +255,14 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 			ExpiresAt:    utilities.FormatTimestamp(url.ExpiresAt),
 			SignedHeader: cloneSignedHeaders(url),
 		}, nil
-	}).
+	}).Permission(authorizer, readRecordingsPermission).Needs(service, exports, downloads).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		RequestBody("CreateRecordingDownloadURLRequest", createRecordingDownloadURLRequest{}).
 		Responds(http.StatusOK, "RecordingDownloadURL", recordingDownloadURLResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidURLExpiration, apiErrorRecordingArtifactNotFound, apiErrorRateLimited)...).
-		MapErrors(recordingDownloadEndpointAPIError)
+		ErrorRules(recordingRules, objectStorageRules)
 }
 
 func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error) {
@@ -359,77 +327,29 @@ func recordingReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func recordingEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := recordingServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
+var recordingRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, recordings.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidRecordingID, recordings.ErrInvalidRecordingID),
+	ruleFor(apiErrorInvalidSpaceID, recordings.ErrInvalidSpaceID),
+	ruleFor(apiErrorInvalidEpisodeID, recordings.ErrInvalidEpisodeID),
+	ruleFor(apiErrorInvalidRecordingStatus, recordings.ErrInvalidRecordingStatus),
+	ruleFor(apiErrorInvalidStorageProvider, recordings.ErrInvalidStorageProvider),
+	ruleFor(apiErrorInvalidStorageKey, recordings.ErrInvalidStorageKey),
+	ruleFor(apiErrorInvalidRecordingField, recordings.ErrInvalidRecordingField),
+	ruleFor(apiErrorEpisodeNotFound, recordings.ErrEpisodeNotFound),
+	ruleFor(apiErrorRecordingNotFound, recordings.ErrRecordingNotFound),
+	ruleFor(apiErrorInvalidTenantID, recordingpipeline.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidRecordingID, recordingpipeline.ErrInvalidRecordingID),
+	ruleFor(apiErrorRecordingNotFound, recordingpipeline.ErrPipelineNotFound),
+	ruleFor(apiErrorRecordingNotReady, recordingpipeline.ErrExportUnavailable),
+	ruleFor(apiErrorRecordingExportRetryLimit, recordingpipeline.ErrExportRetryLimit),
 }
 
-func recordingDownloadEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := recordingServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := objectStorageAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func recordingServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, recordings.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, recordings.ErrInvalidRecordingID):
-		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordings.ErrInvalidSpaceID):
-		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, recordings.ErrInvalidEpisodeID):
-		return apiErrorInvalidEpisodeID, true
-	case errors.Is(err, recordings.ErrInvalidRecordingStatus):
-		return apiErrorInvalidRecordingStatus, true
-	case errors.Is(err, recordings.ErrInvalidStorageProvider):
-		return apiErrorInvalidStorageProvider, true
-	case errors.Is(err, recordings.ErrInvalidStorageKey):
-		return apiErrorInvalidStorageKey, true
-	case errors.Is(err, recordings.ErrInvalidRecordingField):
-		return apiErrorInvalidRecordingField, true
-	case errors.Is(err, recordings.ErrEpisodeNotFound):
-		return apiErrorEpisodeNotFound, true
-	case errors.Is(err, recordings.ErrRecordingNotFound):
-		return apiErrorRecordingNotFound, true
-	case errors.Is(err, recordingpipeline.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, recordingpipeline.ErrInvalidRecordingID):
-		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordingpipeline.ErrPipelineNotFound):
-		return apiErrorRecordingNotFound, true
-	case errors.Is(err, recordingpipeline.ErrExportUnavailable):
-		return apiErrorRecordingNotReady, true
-	case errors.Is(err, recordingpipeline.ErrExportRetryLimit):
-		return apiErrorRecordingExportRetryLimit, true
-	default:
-		return APIError{}, false
-	}
-}
-
-func objectStorageAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, objectstorage.ErrInvalidObjectKey):
-		return apiErrorInvalidStorageKey, true
-	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
-		return apiErrorInvalidURLExpiration, true
-	case errors.Is(err, objectstorage.ErrStoreUnavailable):
-		return apiErrorServiceUnavailable, true
-	case errors.Is(err, objectstorage.ErrObjectNotFound):
-		return apiErrorRecordingArtifactNotFound, true
-	default:
-		return APIError{}, false
-	}
+var objectStorageRules = errorRules{
+	ruleFor(apiErrorInvalidStorageKey, objectstorage.ErrInvalidObjectKey),
+	ruleFor(apiErrorInvalidURLExpiration, objectstorage.ErrInvalidURLExpiration),
+	ruleFor(apiErrorServiceUnavailable, objectstorage.ErrStoreUnavailable),
+	ruleFor(apiErrorRecordingArtifactNotFound, objectstorage.ErrObjectNotFound),
 }
 
 func newRecordingListResponse(ctx context.Context, list recordings.RecordingList, artifacts RecordingExportService) (recordingListResponse, error) {
