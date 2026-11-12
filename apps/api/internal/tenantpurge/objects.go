@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/recordingobjectkey"
 )
 
 type StorageObject struct {
@@ -43,7 +44,7 @@ func (m ObjectManifest) Validate(scope Scope) error {
 		}
 		seen[object.Key] = true
 		if object.OwnerTenantID != "" {
-			if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, "tenants/"+object.OwnerTenantID+"/") {
+			if !approved[object.OwnerTenantID] || !strings.HasPrefix(object.Key, recordingobjectkey.TenantPrefix(object.OwnerTenantID)) {
 				return errors.New("object owner outside explicit erase scope")
 			}
 			continue
