@@ -105,7 +105,8 @@ export function installLatencyTrace() {
     if (!pair) for (const row of report.values()) if (row.type === "candidate-pair" && row.nominated && row.state === "succeeded") pair = row;
     if (!pair) return null;
     const relayProtocol = typeof pair.localCandidateId === "string" ? report.get(pair.localCandidateId)?.relayProtocol : undefined;
-    return { local: candidateType(report, pair.localCandidateId), remote: candidateType(report, pair.remoteCandidateId), relayProtocol: RELAY_PROTOCOLS.includes(relayProtocol) ? relayProtocol : null, requestsSent: counter(pair.requestsSent), responsesReceived: counter(pair.responsesReceived) };
+    const protocol = typeof pair.localCandidateId === "string" ? report.get(pair.localCandidateId)?.protocol : undefined;
+    return { local: candidateType(report, pair.localCandidateId), protocol: protocol === "udp" || protocol === "tcp" ? protocol : null, remote: candidateType(report, pair.remoteCandidateId), relayProtocol: RELAY_PROTOCOLS.includes(relayProtocol) ? relayProtocol : null, requestsSent: counter(pair.requestsSent), responsesReceived: counter(pair.responsesReceived) };
   }
 
   const READ_TIMEOUT_MS = 2000;

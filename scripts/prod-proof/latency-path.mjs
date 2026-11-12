@@ -24,6 +24,29 @@ export const chromiumArgsFor = (/** @type {IcePath} */ path) => (path.startsWith
 export const joinExpected = (/** @type {IcePath} */ path) => path !== "blocked-no-relay";
 
 /**
+ * pathMismatch compares the path a cycle asked for with the pair the browser selected, which is the only evidence of how the media
+ * travelled: the configuration alone proves nothing (the direct path keeps the TURN servers, so it can end up on the relay).
+ * It returns why the reading does not show the path, or null when it does. A missing reading is a mismatch.
+ * @param {IcePath} path
+ * @param {{ local_type: string | null, remote_type: string | null, protocol: string | null, relay_protocol: string | null } | null | undefined} ice
+ * @returns {string | null}
+ */
+export function pathMismatch(path, ice) {
+  if (!ice) return `${path}: no selected ICE pair was read, so the path is unconfirmed`;
+  const seen = `${ice.local_type ?? "?"}/${ice.remote_type ?? "?"} ${ice.local_type === "relay" ? `relay ${ice.relay_protocol ?? "?"}` : (ice.protocol ?? "?")}`;
+  const relay = ice.local_type === "relay";
+  const wanted = {
+    direct: !relay && ice.local_type !== null && ice.protocol === "udp",
+    "relay-udp": relay && ice.relay_protocol === "udp",
+    "relay-tcp": relay && ice.relay_protocol === "tcp",
+    "relay-tls": relay && ice.relay_protocol === "tls",
+    "blocked-no-relay": !relay && ice.local_type !== null && ice.protocol === "tcp",
+    "blocked-relay-tls": relay && ice.relay_protocol === "tls",
+  }[path];
+  return wanted ? null : `${path}: the selected pair is ${seen}`;
+}
+
+/**
  * installIcePath runs in a guest page as an init script, installed after every other RTCPeerConnection wrapper so it
  * rewrites the configuration first. It keeps only the ICE servers the path allows and, for relay paths, forces relay candidates.
  * @param {IcePath} path
