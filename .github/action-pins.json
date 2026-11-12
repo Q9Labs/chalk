@@ -1,0 +1,16 @@
+{
+  "1password/install-cli-action": { "sha": "9a0c9dd934086b7ab1d90115d455bda1c53c2bdb", "tag": "v2.0.2" },
+  "actions/cache": { "sha": "0057852bfaa89a56745cba8c7296529d2fc39830", "tag": "v4.3.0" },
+  "actions/checkout": { "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1", "tag": "v7.0.1" },
+  "actions/download-artifact": { "sha": "d3f86a106a0bac45b974a628896c90dbdf5c8093", "tag": "v4.3.0" },
+  "actions/setup-go": { "sha": "40f1582b2485089dde7abd97c1529aa768e1baff", "tag": "v5.6.0" },
+  "actions/setup-java": { "sha": "b6effb05e454b25005698d916606bdc6ffcbf961", "tag": "v5.7.0" },
+  "actions/setup-node": { "sha": "249970729cb0ef3589644e2896645e5dc5ba9c38", "tag": "v6.5.0" },
+  "actions/upload-artifact": { "sha": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "tag": "v7.0.1" },
+  "aws-actions/configure-aws-credentials": { "sha": "7474bc4690e29a8392af63c5b98e7449536d5c3a", "tag": "v4.3.1" },
+  "docker/setup-buildx-action": { "sha": "8d2750c68a42422c14e847fe6c8ac0403b4cbd6f", "tag": "v3.12.0" },
+  "erlef/setup-beam": { "sha": "54075bcc5e249e4758d363f27d099f55d843f124", "tag": "v1.24.1" },
+  "github/codeql-action": { "sha": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370", "tag": "v4.39.1" },
+  "gradle/actions": { "sha": "9c971963bec38e04b3d30dcc455b5382be2fdbfb", "tag": "v6.3.0" },
+  "pnpm/action-setup": { "sha": "b906affcce14559ad1aafd4ab0e942779e9f58b1", "tag": "v4.3.0" }
+}

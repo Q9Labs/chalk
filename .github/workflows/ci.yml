@@ -176,7 +176,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require the target's latest master Gate run to pass
         env:
           GH_TOKEN: ${{ github.token }}
@@ -199,20 +199,20 @@ jobs:
       recorder_control: ${{ steps.plan.outputs.recorder_control }}
     steps:
       - name: Checkout exact release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
       - name: Set up Go for recorder dependency planning
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
       - name: Download stable release manifest
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id == ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.stable_manifest_run_id }}
@@ -222,7 +222,7 @@ jobs:
 
       - name: Download exact build baseline artifact
         if: inputs.stable_manifest_run_id != '' && inputs.stable_manifest_artifact_id != ''
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.stable_manifest_run_id }}
@@ -303,7 +303,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Upload release plan
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: managed-release-plan-${{ steps.plan.outputs.release_id }}
           path: ${{ runner.temp }}/managed-release-plan
@@ -329,13 +329,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
 
       - name: Set up Go for release contracts
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
@@ -366,12 +366,12 @@ jobs:
       RELEASE_ID: ${{ needs.plan-managed.outputs.release_id }}
     steps:
       - name: Checkout exact release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: arn:aws:iam::688819141892:role/chalk-ci-image-publish
           aws-region: ap-southeast-1
@@ -388,7 +388,7 @@ jobs:
         run: aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build and push immutable image
         id: build
@@ -472,7 +472,7 @@ jobs:
           done
 
       - name: Upload immutable image reference
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: managed-image-${{ matrix.component }}-${{ env.RELEASE_ID }}
           path: |
@@ -493,26 +493,24 @@ jobs:
       CHALK_MEDIA_ARTIFACT_BUCKET: ${{ vars.CHALK_MEDIA_ARTIFACT_BUCKET }}
       CHALK_TRANSCRIPTION_CORPUS_DIGEST: ${{ vars.CHALK_TRANSCRIPTION_CORPUS_DIGEST }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
           fetch-depth: 0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: ./.github/actions/setup-js
         with:
-          version: 12.8.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .tool-versions
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+          cache: "false"
+          install: "false"
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
           role-duration-seconds: 3600
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media-plan
@@ -527,7 +525,7 @@ jobs:
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py build_archives --role capture "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
       - name: Refresh credentials before the render build
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
@@ -539,7 +537,7 @@ jobs:
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py build_archives --role render "${args[@]}" --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
       - name: Refresh credentials before dispatcher publication
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
@@ -568,7 +566,7 @@ jobs:
           baseline="$RUNNER_TEMP/media-plan/stable-media.json"
           if [[ -f "$baseline" ]]; then args+=(--baseline "$baseline"); fi
           python3 scripts/releases/media.py publish_zip "${args[@]}" --release-id '${{ needs.plan-managed.outputs.release_id }}' --directory "$RUNNER_TEMP/media-build" --output "$RUNNER_TEMP/media.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media.json
@@ -590,12 +588,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout exact release
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
 
       - name: Download release plan
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: managed-release-plan-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/managed-release-plan
@@ -603,7 +601,7 @@ jobs:
 
       - name: Download built image references
         if: needs.plan-managed.outputs.build_set != '[]'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: managed-image-*-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/managed-images
@@ -611,7 +609,7 @@ jobs:
 
       - name: Download immutable media members
         if: needs.build-media.result == 'success'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: media-members-${{ needs.plan-managed.outputs.release_id }}
           path: ${{ runner.temp }}/media-members
@@ -674,7 +672,7 @@ jobs:
 
       - name: Upload release manifest
         id: manifest-upload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-manifest-${{ needs.plan-managed.outputs.release_id }}
           path: infrastructure/managed-episode/generated/${{ needs.plan-managed.outputs.release_id }}*.json
@@ -703,20 +701,20 @@ jobs:
     steps:
       - name: Checkout deployment tooling from workflow revision
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false # staging-lock sends GH_TOKEN itself; a persisted header makes two and GitHub rejects the request
 
       - name: Setup Node
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
 
       - name: Download exact release manifest
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           merge-multiple: true
           artifact-ids: ${{ needs.prepare-release.outputs.manifest_artifact_id }}
@@ -775,7 +773,7 @@ jobs:
 
       - name: Configure managed deployment credentials
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
@@ -793,7 +791,7 @@ jobs:
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         uses: ./.github/actions/setup-doctl
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: inputs.managed_environment == 'nightly'
         with:
           go-version-file: apps/api/go.mod
@@ -922,7 +920,7 @@ jobs:
 
       - name: Retain managed deployment proof
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: managed-deployment-${{ needs.prepare-release.outputs.release_id }}
           path: ${{ runner.temp }}/managed-deployment.json
@@ -931,7 +929,7 @@ jobs:
 
       - name: Retain signed media boot receipts
         if: always() && inputs.managed_environment == 'nightly'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: media-qualification-${{ needs.prepare-release.outputs.release_id }}
           path: ${{ runner.temp }}/media-qualification/*-receipt.json
@@ -948,28 +946,22 @@ jobs:
       matrix:
         target: ${{ fromJSON(inputs.managed_environment == 'nightly' && '["nightly","production"]' || '["production"]') }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Checkout requested web source independently of release tooling
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.target_sha }}
           path: build-source
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: ./.github/actions/setup-js
         with:
-          version: 12.8.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-        working-directory: build-source
+          working-directory: build-source
       - name: Build selected public endpoints
         env:
           WEB_TARGET: ${{ matrix.target }}
           # Nightly only; the production artifact never receives a direct Sync URL from this job.
           CHALK_WEB_SYNC_DIRECT_URL: ${{ matrix.target == 'nightly' && vars.CHALK_NIGHTLY_SYNC_DIRECT_URL || '' }}
         run: python3 scripts/releases/web.py build --target "$WEB_TARGET" --sha "$TARGET_SHA" --source-root "$GITHUB_WORKSPACE/build-source"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: web-${{ matrix.target }}-${{ github.run_attempt }}
           path: web-output/web-${{ matrix.target }}.tar.gz
@@ -983,7 +975,7 @@ jobs:
     outputs:
       web: ${{ steps.refs.outputs.web }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: refs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1008,7 +1000,7 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         with:
           fetch-depth: 0
@@ -1029,7 +1021,7 @@ jobs:
           args=()
           if [[ "$REUSE" == true ]]; then args+=(--reuse); fi
           python3 scripts/releases/release.py prepare "${args[@]}"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         id: upload
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.manifest_run_id != '')
         with:
@@ -1059,22 +1051,13 @@ jobs:
       CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY: "true"
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
       - name: Select the explicit production Pages destination
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.managed_environment == 'production')
         run: |
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
-        with:
-          version: 12.8.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && (inputs.pages_rollback_id == '')
       - name: Record the current nightly write before any web mutation
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.managed_environment == 'nightly'

@@ -47,12 +47,12 @@ jobs:
       full: ${{ steps.select.outputs.full }}
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
 
@@ -77,20 +77,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-js
       - name: Install browser runtime
         uses: ./.github/actions/setup-playwright
         with:
@@ -99,7 +89,7 @@ jobs:
         run: node scripts/web-proof/join-startup.mjs '${{ runner.temp }}/join-startup-proof'
       - name: Save join startup proof
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: join-startup-proof
           path: |
@@ -139,32 +129,23 @@ jobs:
       VITEST_MAX_WORKERS: "4"
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
+      - uses: ./.github/actions/setup-js
 
       # Go runs the generated-output and contract checks.
       - name: Set up Go
         if: matrix.group == 'checks' || matrix.group == 'sfu' || startsWith(matrix.group, 'dashboard-')
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Set up Erlang and Elixir for the dashboard engine proof
         if: startsWith(matrix.group, 'dashboard-')
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           version-file: .tool-versions
           version-type: strict
@@ -188,16 +169,13 @@ jobs:
 
       - name: Restore Go caches
         if: matrix.group == 'checks' || matrix.group == 'sfu' || startsWith(matrix.group, 'dashboard-')
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
           key: go-root-checks-${{ runner.os }}-${{ hashFiles('apps/api/go.sum', 'apps/api/**/*.go') }}
           restore-keys: go-root-checks-${{ runner.os }}-
-
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
 
       # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
       - name: Set up OpenTofu
@@ -208,7 +186,7 @@ jobs:
       # a queue group. A cache miss falls back to the download, which scripts/recorder/tofu-init.sh retries.
       - name: Restore OpenTofu providers
         if: matrix.group == 'checks'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.terraform.d/plugin-cache
           key: tofu-providers-${{ runner.os }}-${{ hashFiles('infrastructure/recorder/.terraform.lock.hcl') }}
@@ -236,7 +214,7 @@ jobs:
       # Metro reuses transforms of unchanged modules, so the mobile export takes seconds instead of a minute.
       - name: Restore Metro cache
         if: matrix.group == 'build'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /tmp/metro-cache
           key: metro-${{ runner.os }}-${{ github.sha }}
@@ -271,7 +249,7 @@ jobs:
 
       - name: Save the scorecard
         if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'sfu') }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scorecard-${{ matrix.group == 'build' && 'web' || 'sfu' }}
           path: artifacts/scorecard-*.json
@@ -279,7 +257,7 @@ jobs:
 
       - name: Save leak shard report
         if: always() && startsWith(matrix.group, 'call-leaks-')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.group }}
           path: artifacts/${{ matrix.group }}.json
@@ -293,16 +271,16 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: .tool-versions
 
       - name: Download leak shard reports
         if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: call-leaks-*
           path: artifacts
@@ -346,30 +324,21 @@ jobs:
       GOFLAGS: -buildvcs=false -count=1
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The vulnerability check compares a pull request with its merge base.
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
+      - uses: ./.github/actions/setup-js
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Restore Go caches
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -379,14 +348,10 @@ jobs:
 
       # The migration proofs run mix deps.get in apps/sync.
       - name: Set up Erlang and Elixir
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           version-file: .tool-versions
           version-type: strict
-
-      # The lifecycle smoke test is a Node script.
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
 
       # The gate starts its own PostgreSQL container through scripts/gates/with-postgres.sh.
       - name: Run the API gate
@@ -409,28 +374,19 @@ jobs:
       VITEST_MAX_WORKERS: "4"
     steps:
       - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
-        with:
-          version: 12.8.1
-
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version-file: .tool-versions
-          cache: pnpm
+      - uses: ./.github/actions/setup-js
 
       # Go applies the API migrations to the gate database.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Restore Go caches
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/go-build
@@ -439,17 +395,14 @@ jobs:
           restore-keys: go-sync-${{ runner.os }}-
 
       - name: Set up Erlang and Elixir
-        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
+        uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           version-file: .tool-versions
           version-type: strict
 
-      - name: Install JavaScript dependencies
-        run: pnpm install --frozen-lockfile
-
       # cache-warm.yml saves this on master; a queue group's own save would be unreadable by anything else.
       - name: Restore Mix dependencies
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             apps/sync/deps
