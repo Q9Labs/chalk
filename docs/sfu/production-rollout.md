@@ -11,14 +11,37 @@ The production switch is one deploy that sets these lines, then one restart:
 1. `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` makes the own SFU the plane of every Space and Tenant that stores no plane of its own, and `CHALK_SFU_ALLOWED_SPACES=*` lets every Space use it. A Space that stores `cf_sfu` stays on Cloudflare until `media-settings set --plane chalk_sfu` or `inherit` moves it.
 2. `CHALK_SFU_ENABLED=true` and `CHALK_SFU_CAPTURE_ENABLED=true`. The API refuses to start with the own SFU as the default and capture off, because recording and transcription of an own-SFU Episode need capture, and a Space can turn them on at any time.
 3. `CHALK_SFU_CLOUDFLARE_OVERFLOW=false`.
-4. The Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`) stay, because the kill switch target and Episodes already bound to Cloudflare need them.
-5. The transcription dispatcher has `CODESWITCH_PROVIDER=mai` and its OpenRouter token, because without them an Auto-language job fails as retryable and the transcript never arrives.
+4. `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=chalk_sfu`. A Space created with no plane, and every public-invite Space, stores its plane when it is created, so without these lines new Spaces keep landing on Cloudflare whatever the default says.
+5. The Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`) stay, because the kill switch target and Episodes already bound to Cloudflare need them.
+6. The transcription dispatcher has `CODESWITCH_PROVIDER=mai` and its OpenRouter token, because without them an Auto-language job fails as retryable and the transcript never arrives.
 
 Start only when `/readyz` shows zero sessions, allocations and cleanup debt, so no real class is live. Then read `/healthz`, and `media-settings get --tenant <tenant> --space <space>` on a throwaway Space: it must report `chalk_sfu`. Run the own-SFU proofs and the kill-switch drill alone on the node.
 
 The web SDK declares `chalk_sfu` since 5.5.0, and the mobile app since the build tagged `mobile-v3.0.6-b40`. A client that declares nothing still gets a Cloudflare call while the Cloudflare application is configured, and that is the one Cloudflare use besides the undo. `CHALK_SFU_CLIENT_SUNSET` turns it into 409 `media.client_unsupported` after the date, so set it once the old builds are gone.
 
 Write each change's undo before making it. Tenant IDs, Space IDs, node addresses and variable values stay in private operator notes, never in Git.
+
+## The production flip
+
+Order matters, because the release that ran in production before the kill switch cannot start with `chalk_sfu` as the default.
+
+1. Deploy the release that carries the kill switch table (the migration only adds tables). Change no setting in that deploy. Confirm `media-settings new-episodes` reads `on`.
+2. Check that no call is live: a deploy restarts the API and drops every socket. Save the current lines of the list above privately, change them in the private API environment, and deploy once. The deploy re-fetches the environment and restarts the API.
+3. Confirm it worked, in this order:
+   - `/readyz` is healthy and the node reports no cleanup debt.
+   - `media-settings get` on a throwaway Space reports `chalk_sfu`.
+   - One new Episode from a current client binds to the own SFU: its `sdk.call_stats` provider is `chalk_sfu`, and the API log has no request to Cloudflare's SFU API for it.
+   - A recorded Episode finalizes its Recording.
+   - A Space created with no plane, and a public invite, both report `chalk_sfu`.
+4. Run the kill-switch drill once: `new-episodes --state off`, create an Episode (it binds to Cloudflare with no restart), then `--state on` and create another (own SFU again).
+
+Undo, fastest first:
+
+1. `media-settings new-episodes --state off --operator <name> --reason <text>`. New Episodes go to Cloudflare at once, and live ones finish where they are.
+2. Restore the saved lines, with `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu`, and deploy. Do this before any binary rollback: the previous release refuses `chalk_sfu` as the default, so a rollback with the new settings in place leaves the API unable to start.
+3. Only then roll the binary back.
+
+**Known risk: one node.** Each environment has one own-SFU node until the spare exists. With overflow off, a full or down node refuses new Episodes with a retryable `503 media.unavailable` (the web client says "Calls are unavailable right now. Try again in a few minutes."), and a live Episode on a lost node recovers to another own-SFU node only if one has room. Until the spare is in place, the kill switch is the only way to keep new calls working through a node outage, so someone must be able to flip it.
 
 ## How a changed value reaches the running API
 
