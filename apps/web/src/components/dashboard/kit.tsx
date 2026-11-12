@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { errorMessage } from "../../lib/dashboard/client";
 import { trapDialogFocus } from "../../lib/dialog-focus";
+import { useMediaQuery } from "../../lib/use-media-query";
 import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
 
@@ -9,15 +10,7 @@ const PHONE = "(max-width: 640px)";
 
 /** True on a phone-width screen, where rows and dialogs change shape, not only size. */
 export function usePhone(): boolean {
-  return useSyncExternalStore(
-    (change) => {
-      const query = window.matchMedia(PHONE);
-      query.addEventListener("change", change);
-      return () => query.removeEventListener("change", change);
-    },
-    () => window.matchMedia(PHONE).matches,
-    () => false,
-  );
+  return useMediaQuery(PHONE);
 }
 
 /* ---------- popover menus: arrow keys move, Esc closes and returns focus ---------- */

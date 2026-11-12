@@ -1,25 +1,14 @@
 import { usePreJoinDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { Loading01Icon } from "@q9labsai/chalk-react/utils";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useMediaQuery } from "../../../lib/use-media-query";
 import { AccessCard, type AccessReason } from "./AccessCard";
 import { DeviceRows, DevicesSheetRow } from "./DeviceRows";
 import { BottomSheet, SAFE_BOTTOM } from "./Overlay";
 import { PreviewTile } from "./PreviewTile";
 
-const STACKED = "(max-width: 1023px)";
-
 /** One column on phones and tablets, two columns when the preview and the form fit side by side. */
-function useStacked(): boolean {
-  return useSyncExternalStore(
-    (change) => {
-      const query = globalThis.matchMedia?.(STACKED);
-      query?.addEventListener("change", change);
-      return () => query?.removeEventListener("change", change);
-    },
-    () => globalThis.matchMedia?.(STACKED).matches ?? false,
-    () => false,
-  );
-}
+const STACKED = "(max-width: 1023px)";
 
 /** Only exceptions get words: with everything on, the line stays empty. */
 function joinNote({ microphone, camera }: PreJoinJoinOptions): ReactNode {
@@ -56,7 +45,7 @@ export type PreJoinProps = {
 /** The step before the call: see yourself, hear yourself, press Join. */
 export function PreJoin({ spaceName, displayName, onDisplayNameChange, joining, onJoin }: PreJoinProps) {
   const devices = usePreJoinDevices();
-  const stacked = useStacked();
+  const stacked = useMediaQuery(STACKED);
   const [dismissed, setDismissed] = useState(false);
   const { access } = devices;
   const reason: AccessReason | null = dismissed || joining ? null : access === "blocked" ? "blocked" : access === "ask" || access === "requesting" ? "ask" : null;
