@@ -18,7 +18,7 @@ fi
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks_command=(gitleaks)
 elif command -v go >/dev/null 2>&1; then
-  gitleaks_command=(go run github.com/zricethezav/gitleaks/v8@v8.30.1)
+  gitleaks_command=(go run "github.com/zricethezav/gitleaks/v8@v$("$(dirname "$0")/../lib/tool-version.sh" gitleaks)")
 else
   echo "Gitleaks is required. Install gitleaks or Go, then rerun the npm tarball scan." >&2
   exit 127

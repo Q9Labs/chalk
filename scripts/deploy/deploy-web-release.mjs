@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { pnpmVersion } from "../lib/repository.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(scriptDirectory, "../..");
@@ -12,7 +13,7 @@ export const verifierPath = join(repositoryRoot, "scripts/deploy/verify-web-depl
 
 export const RELEASE_TOOL_VERSIONS = Object.freeze({
   minimumNodeMajor: 22,
-  pnpm: "12.8.1",
+  pnpm: pnpmVersion,
   wrangler: "4.107.0",
 });
 
