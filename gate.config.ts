@@ -3,6 +3,7 @@ import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, lan
 
 const taskIds = [
   "self-test",
+  "workflow-graph",
   "hygiene",
   "secrets",
   "generated",

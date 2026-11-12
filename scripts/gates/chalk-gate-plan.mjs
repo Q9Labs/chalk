@@ -17,6 +17,10 @@ const gateDefinitionPaths = new Set(["package.json", "pnpm-workspace.yaml"]);
 const gateDefinitionNames = new Set([".dependency-cruiser.cjs", "gate.config.ts", "lefthook.yml", "turbo.json"]);
 const gateDefinitionDirectories = [".github/workflows/", "scripts/gates/"];
 const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-baseline.json"]);
+// A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
+// proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
+const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
+const workflowGraphRoots = [".github/workflows", "features/scorecard"];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -71,6 +75,11 @@ function isDocumentation(file) {
   return file.startsWith("scratchpad/") || [".md", ".mdx", ".txt"].includes(path.extname(file));
 }
 
+// A test file cannot change what the call page ships or what the dashboard engine drives.
+function isTestFile(file) {
+  return /\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file) || /_test\.(?:go|exs?)$/u.test(file) || /(?:^|\/)apps\/sync\/test\//u.test(file);
+}
+
 function isExistingFile(file, root = repositoryRoot) {
   return existsSync(path.join(root, file));
 }
@@ -79,8 +88,12 @@ function startsWithAny(file, prefixes) {
   return prefixes.some((prefix) => file === prefix || file.startsWith(`${prefix}/`));
 }
 
-function isGateDefinition(file) {
+// narrow is true only for a pull request. The merge queue and local runs keep the wider rules, so a commit that lands has
+// passed everything the Gate ran before this narrowing existed.
+function isGateDefinition(file, narrow) {
   if (gateDataFiles.has(file)) return false;
+  if (narrow && isDocumentation(file)) return false;
+  if (narrow && file.startsWith(".github/workflows/")) return gateWorkflowFiles.has(file);
   return gateDefinitionPaths.has(file) || gateDefinitionNames.has(path.posix.basename(file)) || gateDefinitionDirectories.some((directory) => file.startsWith(directory) || file.includes(`/${directory}`));
 }
 
@@ -92,8 +105,10 @@ function isSyncReliabilityInput(file) {
   );
 }
 
-function isKnownPath(file, workspaces) {
-  if (isGateDefinition(file)) return true;
+function isKnownPath(file, workspaces, narrow) {
+  if (isGateDefinition(file, narrow)) return true;
+  // No lane reads these, so a full gate would run the same lanes as the always-on ones.
+  if (narrow && (startsWithAny(file, ["infrastructure/observability"]) || file === "e2e.config.ts")) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
   if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
@@ -292,8 +307,12 @@ export function createGatePlan(files, options = {}) {
   validateWorkspaceCollection(workspaces);
   const explicitFull = options.full === true;
   const target = normalizeTarget(options.target);
-  const gateDefinition = normalizedFiles.find(isGateDefinition);
-  const unknownPath = normalizedFiles.find((file) => !isKnownPath(file, workspaces));
+  // Selection is narrower on a pull request than in the merge queue. For any change beyond documentation the queue also runs the
+  // dashboard engine and the call lanes, so what a pull request skipped is proven before master receives it.
+  const narrow = options.event === "pull_request";
+  const mergeGroup = options.event === "merge_group";
+  const gateDefinition = normalizedFiles.find((file) => isGateDefinition(file, narrow));
+  const unknownPath = normalizedFiles.find((file) => !isKnownPath(file, workspaces, narrow));
   const full = explicitFull || Boolean(gateDefinition) || Boolean(unknownPath);
   const fullReason = explicitFull ? "--full requested" : gateDefinition ? `${gateDefinition} changes gate behavior` : unknownPath ? `${unknownPath} is not classified` : null;
   if (target && explicitFull) {
@@ -347,14 +366,18 @@ export function createGatePlan(files, options = {}) {
   const browserTestWorkspaces = selectedWorkspaces.filter((workspace) => browserTestWorkspaceNames.has(workspace.name));
   const workspaceConcurrency = `--workspace-concurrency=${options.workspaceConcurrency ?? 1}`;
   // The API's chalksfu conformance tests build and run the SFU from features/media/sfu.
-  const api = full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", ...deploymentRoots]));
-  const dashboardEngine = api || selectedWorkspaces.some((workspace) => workspace.name === "web");
+  const isApiInput = (file) => startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", ...deploymentRoots]);
+  const api = full || nonDocumentationFiles.some(isApiInput);
+  const queue = mergeGroup && nonDocumentationFiles.length > 0;
+  const shippedFiles = narrow ? nonDocumentationFiles.filter((file) => !isTestFile(file)) : nonDocumentationFiles;
+  const dashboardEngine = queue || (narrow ? full || shippedFiles.some(isApiInput) || affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") : api || selectedWorkspaces.some((workspace) => workspace.name === "web"));
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   // What the call-states page imports (traced from apps/web/src/call-states/main.tsx through vite.aliases.ts) plus the harness that drives it.
   const callUi =
+    queue ||
     dependencyChange ||
-    nonDocumentationFiles.some((file) =>
+    shippedFiles.some((file) =>
       startsWithAny(file, [
         "apps/web/src/call-states",
         "apps/web/src/components/space",
@@ -397,11 +420,20 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
+  const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs"]),
+    task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
+      "node",
+      "scripts/test/run.mjs",
+      "node",
+      "--test",
+      "features/scorecard/promote-graph.test.mjs",
+      "features/scorecard/nightly-graph.test.mjs",
+    ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
@@ -507,6 +539,7 @@ export function gatePlanOptions(context, environment = process.env) {
     scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
     base: context.base ?? environment.GATE_BASE_REF ?? "origin/master",
     target: resolveGateTarget(environment.GATE_TARGET, context.target),
+    event: environment.GATE_EVENT,
     services: environment.GATE_SERVICES === "external" ? "external" : "local",
     snapshot: snapshotForScope(context.scope),
     workspaceConcurrency: workspaceConcurrencyFrom(environment.GATE_WORKSPACE_CONCURRENCY),
@@ -566,7 +599,7 @@ function changedFiles(base) {
 function selectCiJobs(base) {
   if (base === "--full") return { ...ciJobs([], { full: true }), full: true };
   try {
-    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" } }), full: false };
+    return { ...ciJobs(changedFiles(base), { base, snapshot: { mode: "ref", ref: "HEAD" }, event: process.env.GATE_EVENT }), full: false };
   } catch (error) {
     console.error(`::warning title=Gate job selection failed::Running every gate job in full. Selection against ${base} failed: ${(error instanceof Error ? error.message : String(error)).split("\n")[0]}`);
     return { ...ciJobs([], { full: true }), full: true };
