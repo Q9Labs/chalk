@@ -2,7 +2,7 @@
 # The capture worker that runs beside the SFU. Build with named contexts, because the API module
 # lives outside features/media/sfu:
 #   docker buildx build --file Dockerfile.capture \
-#     --build-context api=apps/api --build-context mcpapi=features/mcp/api features/media/sfu/deploy
+#     --build-context api=apps/api --build-context mcpapi=features/mcp/api infrastructure/sfu
 
 ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:ee3901c61e423732605a51f1b8157c849ec01194ea0a274213b5202b2c11e7bf
 

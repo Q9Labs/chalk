@@ -242,11 +242,9 @@ if $capture_on; then
   [[ -n "$control_plane_url" && -n "$server_name" ]] || { echo "${dir}/capture.conf needs CONTROL_PLANE_URL= and SERVER_NAME=" >&2; exit 1; }
   # The worker gets a share the SFU was not admitted against: a quarter of the vCPUs and of the
   # memory. The measured per-recording cost in the PR keeps well inside it.
-  if ((memory_kib > 1536 * 1024)); then
-    capture_memory=384m capture_gomemlimit=320MiB capture_cpus=0.5
-  else
-    capture_memory=192m capture_gomemlimit=160MiB capture_cpus=0.25
-  fi
+  capture_memory="$(node_table --arg size "$node_size" '.sizes[$size].capture.memory')"
+  capture_gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].capture.goMemLimit')"
+  capture_cpus="$(node_table --arg size "$node_size" '.sizes[$size].capture.cpus')"
   sed -e "s|__ENVIRONMENT__|${spiffe_environment}|" -e "s|__CONTROL_PLANE_URL__|${control_plane_url}|" -e "s|__SERVER_NAME__|${server_name}|" \
     -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${deploy_dir}/capture.env.in" |
     as_sfu sh -c "'umask 077 && cat > .config/chalk-sfu/capture.env'"
