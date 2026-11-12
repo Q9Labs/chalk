@@ -21,8 +21,8 @@ function SourceIcon({ source }: { readonly source: ScreenShareSurface }) {
         </>
       ) : (
         <>
-          <path d="M3 20V7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v10z" />
-          <path d="M3 11h18" />
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M3 9h18M10 4v5" />
         </>
       )}
     </svg>
