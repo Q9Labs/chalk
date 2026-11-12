@@ -1,4 +1,3 @@
-import "./scripts/sync-public-assets";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import mdx from "@mdx-js/rollup";
 import rehypeShiki, { type RehypeShikiOptions } from "@shikijs/rehype";
@@ -11,6 +10,7 @@ import { defineConfig } from "vite";
 import pkg from "./package.json";
 import { sourceAliases } from "./vite.aliases";
 import { selfHostedExcalidraw } from "./scripts/self-hosted-excalidraw";
+import { syncPublicAssetsPlugin } from "./scripts/sync-public-assets";
 
 const configuredWebPort = process.env.CHALK_DEV_WEB_PORT?.trim();
 const localWebPort = configuredWebPort ? Number(configuredWebPort) : 3070;
@@ -84,6 +84,7 @@ const config = defineConfig({
     tsconfigPaths: true,
   },
   plugins: [
+    syncPublicAssetsPlugin(),
     selfHostedExcalidraw(),
     tailwindcss(),
     tanstackStart({
