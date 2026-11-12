@@ -7,6 +7,8 @@ export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
 export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = EXCALIDRAW_VERSION;
 export const CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID = RENDERER_BUILD_ID;
 export const CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES = 32 * 1024 * 1024;
+/** How many message ids each side of the bridge remembers to drop duplicates. */
+export const CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS = 2_048;
 
 export type ChalkEmbeddedWhiteboardTheme = "light" | "dark";
 export type ChalkEmbeddedWhiteboardViewport = {
