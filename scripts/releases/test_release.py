@@ -168,13 +168,13 @@ class OwnSfuPromotionTests(unittest.TestCase):
         """A GitHub whose newest nightly write is run RUN, release 'release', at `sha`, and whose newest cut record (any
         proof result) is `cut`."""
         api = Mock(spec=GitHub)
-        write = dict(sha=sha, payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))
+        write = dict(id=10, sha=sha, payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))
         api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
             [write] if task == 'nightly-write' else [] if cut is None else [cut])
         return api
 
-    def cut(self, sha=OTHER_SHA, **changes):
-        return dict(payload={**held(None)['payload'], 'deploy_result': 'success', 'target_sha': sha, **changes})
+    def cut(self, sha=OTHER_SHA, id=11, **changes):
+        return dict(id=id, payload={**held(None)['payload'], 'deploy_result': 'success', 'target_sha': sha, **changes})
 
     def test_latency_target_is_the_cut_staging_runs_even_when_that_cut_failed_its_proofs(self):
         release.latency_target(self.staging(self.cut(proof_result='failed')), None)
@@ -182,7 +182,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
 
     def test_latency_target_is_empty_when_the_newest_write_never_finished_deploying(self):
         cuts = (None, self.cut(deploy_result='failure'), self.cut(run_id='122'),
-                self.cut(applied_release_id='an-earlier-attempt-of-this-run'), self.cut(SHA))
+                self.cut(applied_release_id='an-earlier-attempt-of-this-run'), self.cut(SHA),
+                self.cut(id=9))
         for cut in cuts:
             with self.subTest(cut=cut):
                 self.output.write_text('')
