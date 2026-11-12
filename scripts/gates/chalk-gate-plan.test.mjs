@@ -133,6 +133,15 @@ test("the checks group always runs", () => {
   assert.ok(shareProvenGroups(queueJobs, proof, noDrift).rootGroups.includes("checks"));
 });
 
+test("the register check runs when a check input changes, and the formal Sync check runs when its model inputs change", () => {
+  assert.ok(selected([".github/workflows/nightly.yml"], "pull_request").includes("register"));
+  assert.ok(selected(["perf/budgets.json"], "pull_request").includes("register"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("register"));
+  assert.ok(selected(["tools/formal/sync-entry-leave/run.sh"], "pull_request").includes("formal-sync"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("formal-sync"));
+  assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "formal-sync").selected);
+});
+
 test("the SFU lane runs in its own group, so an SFU change does not lengthen the checks group", () => {
   assert.ok(jobs(["features/media/sfu/server/main.go"], "pull_request").rootGroups.includes("sfu"));
   assert.ok(!jobs(["apps/web/src/main.tsx"], "pull_request").rootGroups.includes("sfu"));

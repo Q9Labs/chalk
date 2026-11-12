@@ -3,7 +3,7 @@
 # append them to the history branch, and keep one "scorecard regression" issue open while a gated metric is over its budget.
 # Usage: nightly.sh <scorecard.json>...   (run from the repository root; needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY)
 # With SCORECARD_KEEP_ISSUE=true it never closes the regression issue: the cut's cards hold no latency run, so only the latency workflow's full card may clear it.
-# With SCORECARD_WARN_ONLY=true it only compares and appends to the history: it never opens, edits or closes the regression issue, and a history push that stays rejected after three tries exits 0.
+# With SCORECARD_WARN_ONLY=true it compares and appends to the history and never opens, edits or closes the regression issue, but it still exits 1 while a gated metric is over its budget, so the calling job turns red. A history push that stays rejected after three tries exits 0.
 set -euo pipefail
 
 scorecard="node features/scorecard/scorecard.mjs"
@@ -61,7 +61,7 @@ for attempt in 1 2 3; do
 done
 
 if [[ "${SCORECARD_WARN_ONLY:-}" == true ]]; then
-  exit 0
+  exit "${regressions}"
 fi
 
 number="$(gh issue list --repo "${GITHUB_REPOSITORY}" --label scorecard-regression --state open --json number --jq '.[0].number // empty')"

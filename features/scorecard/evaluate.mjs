@@ -27,7 +27,9 @@ for (const path of paths) {
   }
   if (card.metrics.length === 0) throw new Error(`${path}: scorecard has no metrics`);
   planes.add(card.mediaPlane);
-  if (card.mediaPlane === "chalk_sfu") for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
+  // Only the own-SFU plane holds the cut. The Cloudflare plane gates in its own history job.
+  if (card.mediaPlane !== "chalk_sfu") continue;
+  for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
   for (const row of diffMetrics([], card.metrics, planeBudgets(budgets, card.mediaPlane)).failures) metrics.add(`${card.mediaPlane}.${row.id}`);
 }
 // Every deployed nightly cut runs the own-SFU proof; a Cloudflare card cannot replace its measurements.
