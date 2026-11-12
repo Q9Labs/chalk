@@ -421,6 +421,7 @@
       "name": "release-and-deploy",
       "summary": "Builds, gates, publishes, and deploys Chalk services and packages.",
       "paths": [
+        ".github/workflows/auto-promote.yml",
         ".github/workflows/boot-smoke.yml",
         ".github/workflows/cache-warm.yml",
         ".github/workflows/ci.yml",
