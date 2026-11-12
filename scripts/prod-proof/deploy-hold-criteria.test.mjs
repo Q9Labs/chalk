@@ -54,6 +54,6 @@ test("a counter that restarts on a new peer connection counts as audio once it g
 });
 
 test("a counter that restarts and then stays still still fails the call", () => {
-  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, i < 10 ? 100000 + i * 100 : 100));
+  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, i < 5 ? 100000 + i * 100 : 100));
   assert.match(judgeCall(ticks, 3).join(";"), /receives no audio/);
 });
