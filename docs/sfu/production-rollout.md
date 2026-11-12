@@ -11,7 +11,7 @@ The production switch is one deploy that sets these lines, then one restart:
 1. `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` makes the own SFU the plane of every Space and Tenant that stores no plane of its own, and `CHALK_SFU_ALLOWED_SPACES=*` lets every Space use it. A Space that stores `cf_sfu` stays on Cloudflare until `media-settings set --plane chalk_sfu` or `inherit` moves it.
 2. `CHALK_SFU_ENABLED=true` and `CHALK_SFU_CAPTURE_ENABLED=true`. The API refuses to start with the own SFU as the default and capture off, because recording and transcription of an own-SFU Episode need capture, and a Space can turn them on at any time.
 3. `CHALK_SFU_CLOUDFLARE_OVERFLOW=false`.
-4. `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=chalk_sfu`. A Space created with no plane, and every public-invite Space, stores its plane when it is created, so without these lines new Spaces keep landing on Cloudflare whatever the default says.
+4. `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu` and `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE=chalk_sfu`. A Space created with no plane, and every public-invite Space, stores its plane when it is created. An unset `CHALK_NEW_SPACE_MEDIA_PLANE` follows the default, but a line that still says `cf_sfu` keeps new Spaces landing on Cloudflare whatever the default says, and the public-invite line is always set, so change both.
 5. The Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`) stay, because the kill switch target and Episodes already bound to Cloudflare need them.
 6. The transcription dispatcher has `CODESWITCH_PROVIDER=mai` and its OpenRouter token, because without them an Auto-language job fails as retryable and the transcript never arrives.
 
@@ -33,7 +33,8 @@ Order matters, because the release that ran in production before the kill switch
    - One new Episode from a current client binds to the own SFU: its `sdk.call_stats` provider is `chalk_sfu`, and the API log has no request to Cloudflare's SFU API for it.
    - A recorded Episode finalizes its Recording.
    - A Space created with no plane, and a public invite, both report `chalk_sfu`.
-4. Run the kill-switch drill once: `new-episodes --state off`, create an Episode (it binds to Cloudflare with no restart), then `--state on` and create another (own SFU again).
+   - Overflow is off: `POST /v1/drain` on every node, then create a fresh Episode from a current client. It must be refused with a retryable `503 media.unavailable`, and the API log must have no request to Cloudflare's SFU API for it. Then `POST /v1/undrain` on every node and confirm `/readyz` reports `draining: false`. The checks above pass with overflow on too, because a healthy node never reaches the overflow branch.
+4. Run the kill-switch drill once: `media-settings new-episodes --state off --operator <name> --reason <text>`, create an Episode (it binds to Cloudflare with no restart), then `media-settings new-episodes --state on --operator <name> --reason <text>` and create another (own SFU again). Both flags are required, and the command changes nothing without them.
 
 Undo, fastest first:
 
