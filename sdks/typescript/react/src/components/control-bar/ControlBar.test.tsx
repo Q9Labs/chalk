@@ -2,7 +2,9 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { SpaceClientError } from "@q9labsai/chalk-client";
 import { ControlBarSurface } from "./ControlBar";
+import { commandFailureMessage } from "./command-failure";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -20,4 +22,10 @@ it("keeps Record in the dock and shows it pressed while recording", () => {
   act(() => stop?.click());
   expect(onToggleRecording).toHaveBeenCalledOnce();
   act(() => root.unmount());
+});
+
+it("never shows a raw server reason as the notice", () => {
+  const rejected = (message: string) => new SpaceClientError({ code: "command.rejected", recoverable: false, message });
+  expect(commandFailureMessage(rejected("external_operation_failed"))).toBe("That didn’t work. Try again in a moment.");
+  expect(commandFailureMessage(rejected("Recording is not allowed for this Participant"))).toBe("Recording is not allowed for this Participant");
 });
