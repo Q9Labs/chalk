@@ -177,6 +177,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #syncOffRepolls = 0;
   #pollTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   #sdpTail: Promise<void> = Promise.resolve();
+  #sdpPending = 0;
   // The current connection's in-place ICE restart. One that failed leaves only session replacement.
   #iceRestart: IceRestart | null = null;
   // The SDK call that started the pending local offer. Null once an answer or a rollback ends it.
@@ -2082,8 +2083,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // The SFU answers 404 or 410 once it has dropped this session, and ICE cannot bring a dropped session back. Replace now,
   // instead of waiting for the browser to give up on the path and for the ICE restart on the dead session to fail.
-  // It queues behind any publish in flight, whose own failure replaces the connection; then there is nothing left to replace.
+  // An SDP operation in flight talks to the same dropped session and replaces the connection itself when it fails, and a read
+  // that finds the session still gone repeats within seconds. Replacing under it would clear the state that operation reads.
   #replaceGoneConnection(): void {
+    if (this.#sdpPending > 0) return;
     const generation = this.#generation;
     const connection = this.#connection;
     void this.#serializeSDP(async () => {
@@ -2165,6 +2168,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   #serializeSDP<T>(operation: () => Promise<T>, retirement = false): Promise<T> {
     const generation = this.#generation;
+    this.#sdpPending += 1;
     let expired = false;
     let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
     const timeout = new CloudflareSFUError("Cloudflare SFU negotiation timed out. Try again.", "negotiation_timeout");
@@ -2187,6 +2191,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         throw error;
       })
       .finally(() => {
+        this.#sdpPending -= 1;
         if (timer !== undefined) globalThis.clearTimeout(timer);
       });
     this.#sdpTail = result.then(
