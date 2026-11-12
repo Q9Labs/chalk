@@ -6,6 +6,7 @@ import { load } from "js-yaml";
 
 const root = resolve(import.meta.dirname, "../..");
 const promote = load(readFileSync(resolve(root, ".github/workflows/promote.yml"), "utf8"));
+const release = load(readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8"));
 const needsOf = (job) => [job.needs ?? []].flat();
 
 test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
@@ -29,4 +30,13 @@ test("Promote's production proof and its rerun run on chalk_sfu, and none runs o
 
 test("a failed own-SFU proof still rolls the release back", () => {
   for (const name of ["rollback", "rollback-npm"]) assert.match(promote.jobs[name].if, /needs\.proof\.outputs\.result != 'passed'/);
+});
+
+test("a Release job with an environment that runs after a failed dependency still needs the master ref", () => {
+  for (const [name, job] of Object.entries(release.jobs)) {
+    if (!job.environment || !String(job.if ?? "").includes("always()")) continue;
+    const guarded = job.if.includes("github.ref == 'refs/heads/master'") || job.if.includes("needs.prepare-release.result == 'success'");
+    assert.ok(guarded, `${name} runs under always() with an environment but no master-ref or prepare-release condition`);
+  }
+  assert.match(release.jobs["deploy-web"].if, /github\.ref == 'refs\/heads\/master'/);
 });
