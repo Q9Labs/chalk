@@ -439,6 +439,7 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "features/scorecard/promote-graph.test.mjs",
       "features/scorecard/nightly-graph.test.mjs",
+      "features/scorecard/lease-arguments.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
