@@ -20,7 +20,12 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       previous_repository = Application.get_env(:chalk_sync, :whiteboard_v1_repository)
       connections = SyncPostgres.start_connections(@database_url)
       Application.put_env(:chalk_sync, :database_connections, SyncPostgres.selector(connections))
-      Application.delete_env(:chalk_sync, :whiteboard_v1_repository)
+
+      Application.put_env(
+        :chalk_sync,
+        :whiteboard_v1_repository,
+        ChalkSync.WhiteboardV1.PostgresRepository
+      )
 
       on_exit(fn ->
         restore_env(:database_connections, previous_connections)

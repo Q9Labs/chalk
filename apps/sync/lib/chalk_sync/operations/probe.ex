@@ -11,7 +11,6 @@ defmodule ChalkSync.Operations.Probe do
   alias ChalkSync.ProviderBridge.Client, as: ProviderBridgeClient
   alias ChalkSync.ProviderBridge.Config, as: ProviderBridgeConfig
   alias ChalkSync.Retention.Scheduler, as: RetentionScheduler
-  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
   @query_timeout_ms 1_000
@@ -91,7 +90,7 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp database_observations do
-    connection = Database.connection(readiness_episode())
+    connection = Database.connection_for(:readiness)
 
     with {:ok,
           %{
@@ -554,10 +553,6 @@ defmodule ChalkSync.Operations.Probe do
       )
     )
     |> Map.reject(fn {_key, value} -> is_nil(value) end)
-  end
-
-  defp readiness_episode do
-    %EpisodeKey{tenant_id: "readiness", space_id: "readiness", episode_id: "readiness"}
   end
 
   defp role_query do

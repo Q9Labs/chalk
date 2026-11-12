@@ -28,14 +28,23 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   def record_lifecycle_failure(%EpisodeKey{} = episode, lifecycle_intent_id, reason)
       when is_binary(lifecycle_intent_id) and is_atom(reason) do
+    Database.guard(
+      fn -> write_lifecycle_failure(episode, lifecycle_intent_id, reason) end,
+      {:retryable, :dependency_unavailable}
+    )
+  end
+
+  defp write_lifecycle_failure(episode, lifecycle_intent_id, reason) do
     case UUID.dump(lifecycle_intent_id) do
       {:ok, _uuid} ->
-        case Postgrex.query(
-               Database.connection(episode),
-               SQL.record_lifecycle_failure(),
-               Scope.lifecycle_intent(episode, lifecycle_intent_id) ++ [Atom.to_string(reason)],
-               timeout: 1_000
-             ) do
+        episode
+        |> Database.connection()
+        |> Postgrex.query(
+          SQL.record_lifecycle_failure(),
+          Scope.lifecycle_intent(episode, lifecycle_intent_id) ++ [Atom.to_string(reason)],
+          timeout: 1_000
+        )
+        |> case do
           {:ok, _result} -> :ok
           {:error, _reason} -> {:retryable, :dependency_unavailable}
         end
@@ -43,21 +52,11 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
       :error ->
         :ok
     end
-  rescue
-    _exception -> {:retryable, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
   def pending_lifecycle_intents(limit) when is_integer(limit) and limit in 1..64 do
-    episode = %EpisodeKey{
-      tenant_id: "background",
-      space_id: "background",
-      episode_id: "background"
-    }
-
     case Postgrex.query(
-           Database.connection(episode),
+           Database.connection_for(:background),
            SQL.discover_pending_lifecycle_intents(),
            [limit],
            timeout: 2_000
@@ -665,7 +664,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
 
   def resolve_uncertain(episode, lifecycle_intent_id, %{entry_generation: generation} = identity)
       when is_integer(generation) and generation > 0 do
-    connection = Database.connection(episode, 1)
+    connection = Database.alternate_connection(episode)
     params = Scope.participant(identity) ++ [identity.participant_generation, generation]
 
     case Postgrex.query(connection, SQL.read_entry_confirmation(), params, timeout: 1_000) do
@@ -677,7 +676,7 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
   end
 
   def resolve_uncertain(episode, lifecycle_intent_id, _identity) do
-    connection = Database.connection(episode, 1)
+    connection = Database.alternate_connection(episode)
     params = Scope.lifecycle_intent(episode, lifecycle_intent_id)
 
     case Postgrex.query(connection, SQL.read_lifecycle_intent_outcome(), params, timeout: 1_000) do

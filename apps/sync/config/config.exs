@@ -21,6 +21,7 @@ config :chalk_sync,
   token_audience: nil,
   token_issuer: nil,
   token_public_keys: %{},
+  whiteboard_v1_repository: ChalkSync.WhiteboardV1.PostgresRepository,
   observability: [enabled: false, runtime_health_interval_ms: 30_000]
 
 config :opentelemetry, traces_exporter: :none

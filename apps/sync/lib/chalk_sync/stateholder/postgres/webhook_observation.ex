@@ -40,30 +40,31 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
         external_operation_id,
         %{result: :applied, delivery: :original}
       ) do
-    case ExternalOperationClaims.read_operation(episode, external_operation_id) do
-      {:ok, %{name: name} = operation}
-      when name in [
-             :remove_participant,
-             :participant_leave,
-             :end_episode,
-             :tenant_end_episode,
-             :maximum_duration_expired
-           ] ->
-        event_name = external_webhook_event_name(name)
+    Database.guard(
+      fn ->
+        case ExternalOperationClaims.read_operation(episode, external_operation_id) do
+          {:ok, %{name: name} = operation}
+          when name in [
+                 :remove_participant,
+                 :participant_leave,
+                 :end_episode,
+                 :tenant_end_episode,
+                 :maximum_duration_expired
+               ] ->
+            event_name = external_webhook_event_name(name)
 
-        observe_webhook_production(
-          episode,
-          "sync_external:#{operation.external_operation_id}:#{event_name}",
-          "external_operation"
-        )
+            observe_webhook_production(
+              episode,
+              "sync_external:#{operation.external_operation_id}:#{event_name}",
+              "external_operation"
+            )
 
-      _ ->
-        :ok
-    end
-  rescue
-    _exception -> :ok
-  catch
-    :exit, _reason -> :ok
+          _ ->
+            :ok
+        end
+      end,
+      :ok
+    )
   end
 
   def external_operation(_episode, _external_operation_id, _decision), do: :ok
@@ -86,27 +87,28 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
   def lifecycle(_episode, _lifecycle_intent_id, _decision), do: :ok
 
   defp observe_webhook_production(episode, transition_key, transition) do
-    departure_prefix =
-      if String.ends_with?(transition_key, ":episode.ended"),
-        do: "episode_end:#{episode.episode_id}:participant:",
-        else: ""
+    Database.guard(
+      fn ->
+        departure_prefix =
+          if String.ends_with?(transition_key, ":episode.ended"),
+            do: "episode_end:#{episode.episode_id}:participant:",
+            else: ""
 
-    case Postgrex.query(
-           Database.connection(episode, 1),
-           WebhookSQL.production_summary(),
-           [Scope.uuid(episode.tenant_id), transition_key, departure_prefix],
-           timeout: 1_000
-         ) do
-      {:ok, %{rows: rows}} ->
-        Enum.each(rows, &emit_webhook_observation(&1, transition))
+        case Postgrex.query(
+               Database.alternate_connection(episode),
+               WebhookSQL.production_summary(),
+               [Scope.uuid(episode.tenant_id), transition_key, departure_prefix],
+               timeout: 1_000
+             ) do
+          {:ok, %{rows: rows}} ->
+            Enum.each(rows, &emit_webhook_observation(&1, transition))
 
-      _ ->
-        :ok
-    end
-  rescue
-    _exception -> :ok
-  catch
-    :exit, _reason -> :ok
+          _ ->
+            :ok
+        end
+      end,
+      :ok
+    )
   end
 
   defp emit_webhook_observation(

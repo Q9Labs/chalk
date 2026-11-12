@@ -3,15 +3,6 @@ defmodule ChalkSync.WhiteboardV1.SQL do
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
 
-  def transaction_settings do
-    """
-    select
-      set_config('lock_timeout', '750ms', true),
-      set_config('statement_timeout', '2s', true),
-      set_config('synchronous_commit', 'on', true)
-    """
-  end
-
   # The one effective drawing rule. A host is a participant whose role has
   # manageWhiteboard. A per-person row is the host's choice for that person:
   # under everyone it overrides the role default, under picked a true row is
