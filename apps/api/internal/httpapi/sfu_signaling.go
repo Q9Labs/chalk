@@ -46,9 +46,9 @@ type sfuCloseTracksRequest struct {
 }
 
 type sfuCloseTrackRequest struct {
-	Mid           string `json:"mid"`
+	Mid           string                       `json:"mid"`
 	Source        mediaplane.PublicationSource `json:"source"`
-	PublicationID string `json:"publication_id"`
+	PublicationID string                       `json:"publication_id"`
 }
 
 type sfuTracksEndpointRequest struct {

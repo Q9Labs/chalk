@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -77,7 +78,7 @@ func CallStatsFieldEnum(field string) []string {
 	case "relay_protocol":
 		return []string{"udp", "tcp", "tls"}
 	case "send_layer":
-		return []string{"h", "m", "l"}
+		return []string{captureplane.TrackLayerHigh.RID(), captureplane.TrackLayerMedium.RID(), captureplane.TrackLayerLow.RID()}
 	default:
 		return nil
 	}

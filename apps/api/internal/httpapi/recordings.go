@@ -384,20 +384,6 @@ func recordingServiceAPIError(err error) (APIError, bool) {
 		return apiErrorInvalidTenantID, true
 	case errors.Is(err, recordings.ErrInvalidRecordingID):
 		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordings.ErrInvalidSpaceID):
-		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, recordings.ErrInvalidEpisodeID):
-		return apiErrorInvalidEpisodeID, true
-	case errors.Is(err, recordings.ErrInvalidRecordingStatus):
-		return apiErrorInvalidRecordingStatus, true
-	case errors.Is(err, recordings.ErrInvalidStorageProvider):
-		return apiErrorInvalidStorageProvider, true
-	case errors.Is(err, recordings.ErrInvalidStorageKey):
-		return apiErrorInvalidStorageKey, true
-	case errors.Is(err, recordings.ErrInvalidRecordingField):
-		return apiErrorInvalidRecordingField, true
-	case errors.Is(err, recordings.ErrEpisodeNotFound):
-		return apiErrorEpisodeNotFound, true
 	case errors.Is(err, recordings.ErrRecordingNotFound):
 		return apiErrorRecordingNotFound, true
 	case errors.Is(err, recordingpipeline.ErrInvalidTenantID):

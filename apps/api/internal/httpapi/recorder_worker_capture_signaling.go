@@ -10,6 +10,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
@@ -20,113 +21,33 @@ type RecorderCaptureSignalingService interface {
 	Execute(context.Context, capturesignaling.ExecuteRequest) (capturesignaling.Execution, error)
 }
 
-type recorderCaptureSignalingAuthorityBody struct {
-	SignalingHandle   string `json:"signaling_handle"`
-	TenantID          string `json:"tenant_id"`
-	SpaceID           string `json:"space_id"`
-	EpisodeID         string `json:"episode_id"`
-	RecordingID       string `json:"recording_id"`
-	JobID             string `json:"job_id"`
-	AttemptCount      int    `json:"attempt_count"`
-	FencingGeneration int64  `json:"fencing_generation"`
-	CaptureEpoch      int64  `json:"capture_epoch"`
-	EnvelopeDigest    string `json:"envelope_digest"`
-	LeaseToken        string `json:"lease_token"`
-	LeaseExpiresAt    string `json:"lease_expires_at"`
-	PlanRevision      int64  `json:"plan_revision"`
-	IdempotencyKey    string `json:"idempotency_key"`
-}
-
-type recorderCaptureCreateBody struct {
-	recorderCaptureSignalingAuthorityBody
-}
-
-type recorderCapturePullBody struct {
-	recorderCaptureSignalingAuthorityBody
-	Connection       string                     `json:"connection"`
-	Tracks           []recorderCaptureTrackBody `json:"tracks"`
-	LocalDescription *captureplane.Description  `json:"local_description,omitempty"`
-}
-
-type recorderCaptureRenegotiateBody struct {
-	recorderCaptureSignalingAuthorityBody
-	Connection    string                   `json:"connection"`
-	NegotiationID string                   `json:"negotiation_id"`
-	Description   captureplane.Description `json:"description"`
-}
-
-type recorderCaptureInspectBody struct {
-	recorderCaptureSignalingAuthorityBody
-	Connection string                           `json:"connection"`
-	Tracks     []recorderCapturePulledTrackBody `json:"tracks,omitempty"`
-}
-
-type recorderCaptureCloseTracksBody struct {
-	recorderCaptureSignalingAuthorityBody
-	Connection string                           `json:"connection"`
-	Tracks     []recorderCapturePulledTrackBody `json:"tracks"`
-}
-
-type recorderCaptureCloseConnectionBody struct {
-	recorderCaptureSignalingAuthorityBody
-	Connection string                           `json:"connection"`
-	Tracks     []recorderCapturePulledTrackBody `json:"tracks,omitempty"`
-	Force      bool                             `json:"force"`
-}
-
-type recorderCaptureTrackBody struct {
-	OwnerReference        string `json:"owner_reference"`
-	TrackReference        string `json:"track_reference"`
-	ParticipantID         string `json:"participant_id"`
-	ParticipantGeneration int64  `json:"participant_generation"`
-	Source                string `json:"source"`
-	Kind                  string `json:"kind"`
-	RequestedLayer        string `json:"requested_layer"`
-}
-
-type recorderCapturePulledTrackBody struct {
-	OwnerReference        string `json:"owner_reference"`
-	TrackReference        string `json:"track_reference"`
-	ParticipantID         string `json:"participant_id"`
-	ParticipantGeneration int64  `json:"participant_generation"`
-	Source                string `json:"source"`
-	Kind                  string `json:"kind"`
-	RequestedLayer        string `json:"requested_layer"`
-	MID                   string `json:"mid"`
-}
-
-type recorderCaptureSignalingResponse struct {
-	Replayed bool                           `json:"replayed"`
-	Result   capturesignaling.CommandResult `json:"result"`
-}
-
 func mountRecorderCaptureSignalingRoutes(router interface {
 	Post(string, http.HandlerFunc)
 }, service RecorderCaptureSignalingService) {
 	if service == nil {
 		return
 	}
-	router.Post("/capture/create", recorderCaptureCreateHandler(service))
-	router.Post("/capture/pull", recorderCapturePullHandler(service))
-	router.Post("/capture/renegotiate", recorderCaptureRenegotiateHandler(service))
-	router.Post("/capture/inspect", recorderCaptureInspectHandler(service))
-	router.Post("/capture/close-tracks", recorderCaptureCloseTracksHandler(service))
-	router.Post("/capture/close-connection", recorderCaptureCloseConnectionHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureCreate), recorderCaptureCreateHandler(service))
+	router.Post(string(recorderprotocol.RouteCapturePull), recorderCapturePullHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureRenegotiate), recorderCaptureRenegotiateHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureInspect), recorderCaptureInspectHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureCloseTracks), recorderCaptureCloseTracksHandler(service))
+	router.Post(string(recorderprotocol.RouteCaptureCloseConnection), recorderCaptureCloseConnectionHandler(service))
 }
 
 func recorderCaptureCreateHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCaptureCreateBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CaptureCreateRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationCreateCaptureConnection, capturesignaling.CommandInput{CreateCaptureConnection: &captureplane.CreateCaptureConnectionInput{}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationCreateCaptureConnection, capturesignaling.CommandInput{CreateCaptureConnection: &captureplane.CreateCaptureConnectionInput{}})
 	})
 }
 
 func recorderCapturePullHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCapturePullBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CapturePullRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
@@ -135,13 +56,13 @@ func recorderCapturePullHandler(service RecorderCaptureSignalingService) http.Ha
 		if err != nil || tracksErr != nil {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationPullCaptureTracks, capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{Connection: connection, Tracks: tracks, LocalDescription: body.LocalDescription}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationPullCaptureTracks, capturesignaling.CommandInput{PullCaptureTracks: &captureplane.PullCaptureTracksInput{Connection: connection, Tracks: tracks, LocalDescription: body.LocalDescription}})
 	})
 }
 
 func recorderCaptureRenegotiateHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCaptureRenegotiateBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CaptureRenegotiateRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
@@ -150,13 +71,13 @@ func recorderCaptureRenegotiateHandler(service RecorderCaptureSignalingService) 
 		if err != nil || negotiationErr != nil {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationRenegotiateCaptureConnection, capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{Connection: connection, NegotiationID: negotiationID, Description: body.Description}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationRenegotiateCaptureConnection, capturesignaling.CommandInput{RenegotiateCaptureConnection: &captureplane.RenegotiateCaptureConnectionInput{Connection: connection, NegotiationID: negotiationID, Description: body.Description}})
 	})
 }
 
 func recorderCaptureInspectHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCaptureInspectBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CaptureInspectRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
@@ -168,13 +89,13 @@ func recorderCaptureInspectHandler(service RecorderCaptureSignalingService) http
 		if tracksErr != nil {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationInspectCaptureConnection, capturesignaling.CommandInput{InspectCaptureConnection: &captureplane.InspectCaptureConnectionInput{Connection: connection, Tracks: tracks}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationInspectCaptureConnection, capturesignaling.CommandInput{InspectCaptureConnection: &captureplane.InspectCaptureConnectionInput{Connection: connection, Tracks: tracks}})
 	})
 }
 
 func recorderCaptureCloseTracksHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCaptureCloseTracksBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CaptureCloseTracksRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
@@ -183,13 +104,13 @@ func recorderCaptureCloseTracksHandler(service RecorderCaptureSignalingService) 
 		if err != nil || tracksErr != nil {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationCloseCaptureTracks, capturesignaling.CommandInput{CloseCaptureTracks: &captureplane.CloseCaptureTracksInput{Connection: connection, Tracks: tracks}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationCloseCaptureTracks, capturesignaling.CommandInput{CloseCaptureTracks: &captureplane.CloseCaptureTracksInput{Connection: connection, Tracks: tracks}})
 	})
 }
 
 func recorderCaptureCloseConnectionHandler(service RecorderCaptureSignalingService) http.HandlerFunc {
 	return recorderCaptureSignalingHandler(service, func(w http.ResponseWriter, request *http.Request, identity workeridentity.Identity) (capturesignaling.Command, bool) {
-		body, ok := decodeRecorderCaptureSignalingBody[recorderCaptureCloseConnectionBody](w, request)
+		body, ok := decodeRecorderCaptureSignalingBody[recorderprotocol.CaptureCloseConnectionRequest](w, request)
 		if !ok {
 			return capturesignaling.Command{}, false
 		}
@@ -201,7 +122,7 @@ func recorderCaptureCloseConnectionHandler(service RecorderCaptureSignalingServi
 		if tracksErr != nil {
 			return capturesignaling.Command{}, false
 		}
-		return recorderCaptureSignalingCommand(identity, body.recorderCaptureSignalingAuthorityBody, captureplane.OperationCloseCaptureConnection, capturesignaling.CommandInput{CloseCaptureConnection: &captureplane.CloseCaptureConnectionInput{Connection: connection, Tracks: tracks, Force: body.Force}})
+		return recorderCaptureSignalingCommand(identity, body.CaptureAuthority, captureplane.OperationCloseCaptureConnection, capturesignaling.CommandInput{CloseCaptureConnection: &captureplane.CloseCaptureConnectionInput{Connection: connection, Tracks: tracks, Force: body.Force}})
 	})
 }
 
@@ -215,7 +136,7 @@ func recorderCaptureSignalingHandler(
 			return
 		}
 		if identity.Role != workeridentity.RoleCapture {
-			writeError(w, http.StatusForbidden, "worker.forbidden", "Only capture workers may exchange capture signaling")
+			writeError(w, http.StatusForbidden, recorderprotocol.CodeWorkerForbidden, "Only capture workers may exchange capture signaling")
 			return
 		}
 		value, ok := command(w, request, identity)
@@ -231,13 +152,13 @@ func recorderCaptureSignalingHandler(
 			writeRecorderCaptureSignalingError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, recorderCaptureSignalingResponse{Replayed: execution.Replayed, Result: execution.Result})
+		writeJSON(w, http.StatusOK, recorderprotocol.CaptureSignalingResponse{Replayed: execution.Replayed, Result: execution.Result})
 	}
 }
 
 func recorderCaptureSignalingCommand(
 	identity workeridentity.Identity,
-	body recorderCaptureSignalingAuthorityBody,
+	body recorderprotocol.CaptureAuthority,
 	operation captureplane.OperationKind,
 	input capturesignaling.CommandInput,
 ) (capturesignaling.Command, bool) {
@@ -271,7 +192,7 @@ func recorderCaptureSignalingCommand(
 	return command, canonicalErr == nil
 }
 
-func recorderCaptureTracks(values []recorderCaptureTrackBody) ([]captureplane.CaptureTrack, error) {
+func recorderCaptureTracks(values []recorderprotocol.CaptureTrack) ([]captureplane.CaptureTrack, error) {
 	tracks := make([]captureplane.CaptureTrack, 0, len(values))
 	for _, value := range values {
 		owner, err := captureplane.NewProviderReference(value.OwnerReference)
@@ -289,7 +210,7 @@ func recorderCaptureTracks(values []recorderCaptureTrackBody) ([]captureplane.Ca
 	return tracks, nil
 }
 
-func recorderCapturePulledTracks(values []recorderCapturePulledTrackBody) ([]captureplane.PulledCaptureTrack, error) {
+func recorderCapturePulledTracks(values []recorderprotocol.CapturePulledTrack) ([]captureplane.PulledCaptureTrack, error) {
 	tracks := make([]captureplane.PulledCaptureTrack, 0, len(values))
 	for _, value := range values {
 		owner, err := captureplane.NewProviderReference(value.OwnerReference)
@@ -332,7 +253,7 @@ func writeRecorderCaptureSignalingError(w http.ResponseWriter, err error) {
 	case errors.Is(err, capturesignaling.ErrAmbiguousOutcome):
 		writeError(w, http.StatusConflict, "recording.capture_outcome_ambiguous", "Capture signaling outcome is ambiguous")
 	case errors.Is(err, capturesignaling.ErrMediaStopped):
-		writeError(w, http.StatusConflict, "recording.capture_media_stopped", "Capture media stopped or reached its deadline")
+		writeError(w, http.StatusConflict, recorderprotocol.CodeCaptureMediaStopped, "Capture media stopped or reached its deadline")
 	case errors.Is(err, capturesignaling.ErrConflict), errors.Is(err, capturesignaling.ErrStaleAuthority),
 		errors.Is(err, capturesignaling.ErrStaleLease), errors.Is(err, capturesignaling.ErrStaleCaptureEpoch),
 		errors.Is(err, capturesignaling.ErrStalePlanRevision), errors.Is(err, capturesignaling.ErrStaleConnection),
