@@ -410,6 +410,7 @@ export function createGatePlan(files, options = {}) {
         "apps/web/call-states.html",
         "perf/budgets.json",
         "features/scorecard/budgets.mjs",
+        "features/scorecard/call-budgets.mjs",
         "apps/web/vite.aliases.ts",
         "apps/web/vite.call-states.config.ts",
         "apps/web/vite.call-performance.config.ts",

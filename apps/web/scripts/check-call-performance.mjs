@@ -13,7 +13,8 @@ import { checkLeaks, LEAK_JOURNEYS, leakShard } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
 import { validateBudgets, validateScenarioBudgets, summarize, measuredPercentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 import { scenarios } from "./call-performance-scenarios.mjs";
-import { loadCallBudgets, readBudgets } from "../../../features/scorecard/budgets.mjs";
+import { readBudgets } from "../../../features/scorecard/budgets.mjs";
+import { loadCallBudgets } from "../../../features/scorecard/call-budgets.mjs";
 
 const runStarted = performance.now();
 const { values } = parseArgs({

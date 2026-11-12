@@ -128,7 +128,6 @@ function scorecardProblems(value) {
 
 /**
  * @param {any} series
- * @param {any} metrics
  * @param {(problem: string) => void} fail
  */
 function seriesProblems(series, fail) {

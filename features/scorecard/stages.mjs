@@ -44,8 +44,8 @@ const turnOn = (id, title, metrics, source) => ({
   ],
 });
 
+// turnOff is a stage group for a remote track turning off. The receiver sends no tracks/close or renegotiate then: only the sender closes on the SFU (sfu_close).
 /** @param {string} id @param {string} title @param {string} metrics */
-// The receiver sends no tracks/close or renegotiate when a remote track turns off: only the sender closes on the SFU (sfu_close).
 const turnOff = (id, title, metrics) => ({
   id,
   title,
