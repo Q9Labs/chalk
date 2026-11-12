@@ -147,8 +147,9 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
-/* A call notice reads in two lines at most: it is as wide as the call allows (560px at most) and wraps evenly. On a phone, a notice with an action puts the pill under its sentence, so the sentence keeps the width. An open sheet owns the phone screen, so notices wait under it. */
+/* A call notice reads in two lines at most: it is as wide as the call allows (560px at most) and wraps evenly. On a phone, notices sit above the tiles' name tags, and a notice with an action puts the pill under its sentence, so the sentence keeps the width. An open sheet owns the phone screen, so notices wait under it. */
 const PHONE_CSS = `
+  [data-chalk] .chalk-toasts {--chalk-toast-lift:146px;}
   .chalk-toasts .chalk-toast:has(> .chalk-pill-button) {display:grid;grid-template-columns:auto minmax(0, 1fr) auto;align-items:start;row-gap:var(--space-1);padding-block:var(--space-2);}
   .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > [data-part="toast-icon"] {grid-row:1;grid-column:1;}
   .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > [data-part="toast-message"] {grid-row:1;grid-column:2;align-self:center;}

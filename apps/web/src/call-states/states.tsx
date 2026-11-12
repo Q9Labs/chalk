@@ -15,6 +15,7 @@ import { PERFORMANCE_STATES } from "./performance";
 import { SpaceClientError, type SpaceSnapshot } from "@q9labsai/chalk-client";
 import { CallLimbo, Chalk, ToastStack } from "@q9labsai/chalk-react";
 import { useState, type ReactNode } from "react";
+import { Avatar } from "../../../../sdks/typescript/react/src/components/atomic/Avatar";
 import { HOST, PEOPLE, SELF_NAME, SPACE_NAME, chatMessages, createCallStateClient, liveSnapshot, type CallStateClient, type Person } from "./fixtures";
 
 /** A step the capture script performs after the state mounts, by accessible role and name. */
@@ -73,7 +74,21 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Foundation toast announcement",
     render: () => (
       <main data-chalk className="h-dvh">
-        <ToastStack toasts={[{ id: "join", message: "Nora joined" }]} onDismiss={() => undefined} />
+        <ToastStack
+          toasts={[
+            {
+              id: "join",
+              icon: <Avatar name="Nora Patel" size="xs" style={{ width: 28, height: 28 }} generated animated={false} />,
+              message: (
+                <>
+                  <b style={{ fontWeight: 600 }}>Nora Patel</b> joined
+                </>
+              ),
+              duration: 60_000,
+            },
+          ]}
+          onDismiss={() => undefined}
+        />
       </main>
     ),
   },
