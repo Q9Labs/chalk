@@ -70,7 +70,7 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 			AdmissionReason: media.RefusedCPUSteal, StealKnown: true, StealPercent: 30, BusyPercent: 40,
 			QueueDelayP95: 20 * time.Millisecond, SchedulerLatencyP99: time.Millisecond,
 		},
-		UDPReceiveErrors: 7, UDPSendErrors: 3, UDPErrorsKnown: true,
+		UDPReceiveErrors: 7, UDPSendErrors: 3, UDPErrorsKnown: true, UDPDroppedAudio: 2, UDPDroppedVideo: 9,
 		CongestionPaused: 2, PlannerPaused: 1, CappedCameras: 1, PausedCameras: 1,
 		In:  []media.Flow{{Kind: "audio", PacketsPerSecond: 50, BitsPerSecond: 40000, Packets: 500, Bytes: 50000}},
 		Out: []media.Flow{{Kind: "repair", PacketsPerSecond: 5, BitsPerSecond: 6000, Packets: 11, Bytes: 13000}},
@@ -113,6 +113,13 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 		if flows[key] != value {
 			t.Errorf("%s = %v, want %v", key, flows[key], value)
 		}
+	}
+	dropped := map[string]float64{}
+	for _, p := range points["chalk.sfu.udp.send_dropped"] {
+		dropped[p.attrs[keyReason]] = p.value
+	}
+	if len(dropped) != 2 || dropped["audio_ring_full"] != 2 || dropped["video_ring_full"] != 9 {
+		t.Errorf("send drops %v, want audio_ring_full 2 and video_ring_full 9", dropped)
 	}
 	refusals := map[string]float64{}
 	for _, p := range points["chalk.sfu.refusals"] {

@@ -38,14 +38,17 @@ import (
 const (
 	// batchRecv is the datagrams one recvmmsg returns at most.
 	batchRecv = 32
-	// batchRing is the datagrams queued for the writer. A caller that finds the
-	// queue full waits, so a slow socket pushes back on forwarders and no
-	// datagram overtakes an earlier one. The one writer's sendmmsg sometimes
-	// stalls for 5 to 25 ms, mostly when the host steals its vCPU. Every
-	// forwarder on the node stops for that long once the queue is full, which
-	// 256 datagrams were (5 ms at 50,000 packets/s). 2048 hold a 25 ms stall at
-	// 80,000 packets/s, which is as much as a 2 vCPU node carries.
-	batchRing = 2048
+	// videoRing and audioRing are the datagrams queued for the writer, per class. The one
+	// writer's sendmmsg sometimes stalls for 5 to 25 ms, mostly when the host steals its vCPU,
+	// and 2048 video datagrams hold a 25 ms stall at 80,000 packets/s, which is as much as a
+	// 2 vCPU node carries. A caller never waits for space: a full ring overwrites its oldest
+	// datagram and counts it, so a stalled socket costs old video and never stops a forwarder.
+	// Audio, RTCP and the connection's own STUN and DTLS have a ring of their own, so a video
+	// backlog never displaces them, and they leave first.
+	videoRing = 2048
+	audioRing = 1024
+	// batchRing is the datagrams both rings hold, which sizes the writer's send arrays.
+	batchRing = videoRing + audioRing
 	// gsoSegments is the kernel's limit of segments in one UDP_SEGMENT datagram.
 	gsoSegments = 64
 	// gsoPayloadMax keeps a train under the 65507 bytes a UDP datagram can carry; a larger one
@@ -64,7 +67,57 @@ type queued struct {
 	buf  [datagramMax]byte
 }
 
-type sendQueue [batchRing]queued
+// ring is a fixed queue of datagrams that drops its oldest when full.
+type ring struct {
+	slots       []queued
+	head, count int
+}
+
+func newRing(size int) ring { return ring{slots: make([]queued, size)} }
+
+func (r *ring) at(i int) *queued {
+	i += r.head
+	if i >= len(r.slots) {
+		i -= len(r.slots)
+	}
+	return &r.slots[i]
+}
+
+// claim returns the slot for the next datagram. When the ring is full it takes the oldest
+// datagram's slot and reports that one as dropped.
+func (r *ring) claim() (slot *queued, dropped bool) {
+	if r.count == len(r.slots) {
+		r.head++
+		if r.head == len(r.slots) {
+			r.head = 0
+		}
+		r.count--
+		dropped = true
+	}
+	slot = r.at(r.count)
+	r.count++
+	return slot, dropped
+}
+
+// sendQueue is what the callers fill and the writer takes: audio-class datagrams (everything
+// that is not video) and video datagrams.
+type sendQueue struct{ audio, video ring }
+
+func newSendQueue() *sendQueue {
+	return &sendQueue{audio: newRing(audioRing), video: newRing(videoRing)}
+}
+
+func (q *sendQueue) len() int { return q.audio.count + q.video.count }
+
+// isVideo reports whether b is an RTP packet of a video payload type: VP8, its RTX repairs or
+// probe padding. The RTP header is not encrypted, so the class is readable on an SRTP packet.
+func isVideo(b []byte) bool {
+	if len(b) < 12 || b[0]>>6 != 2 {
+		return false
+	}
+	payloadType := b[1] & 0x7f
+	return payloadType == vp8PayloadType || payloadType == rtxPayloadType
+}
 
 // batchConn is an IPv4 UDP socket with batched reads and writes. It implements
 // net.PacketConn and Pion's AddrPortReaderWriter. Reads are for one goroutine,
@@ -73,12 +126,9 @@ type batchConn struct {
 	*net.UDPConn
 	raw syscall.RawConn
 
-	// mu guards pending, count and closed. It is never held across a system call: callers
-	// that find the queue full wait on space, which releases it.
+	// mu guards pending and closed. It is never held across a system call.
 	mu      sync.Mutex
-	space   *sync.Cond // broadcast when the writer takes the queue, and on Close
 	pending *sendQueue // filled by callers
-	count   int
 	closed  bool
 	wake    chan struct{}
 	done    chan struct{}
@@ -86,6 +136,9 @@ type batchConn struct {
 	// Owned by the writer goroutine, the only one that sends from the queue.
 	sending *sendQueue
 	gso     bool
+	// stalled holds the writer before it sends what it took, so a test can stall the socket.
+	stalled func()
+	entries []*queued
 	order   []int32
 	iov     [batchRing]unix.Iovec
 	names   [batchRing]unix.RawSockaddrInet4
@@ -96,6 +149,8 @@ type batchConn struct {
 	refused atomic.Int64
 	// Datagrams larger than a read buffer, which the kernel cut short. They are dropped.
 	truncated atomic.Int64
+	// Datagrams overwritten in a full ring because the writer could not keep up, by class.
+	droppedAudio, droppedVideo atomic.Int64
 
 	// Owned by the reading goroutine.
 	rxHdr   [batchRecv]unix.Mmsghdr
@@ -118,9 +173,8 @@ func newMediaConn(conn *net.UDPConn) net.PacketConn {
 	if err != nil {
 		return conn
 	}
-	c := &batchConn{UDPConn: conn, raw: raw, pending: new(sendQueue), sending: new(sendQueue),
-		wake: make(chan struct{}, 1), done: make(chan struct{})}
-	c.space = sync.NewCond(&c.mu)
+	c := &batchConn{UDPConn: conn, raw: raw, pending: newSendQueue(), sending: newSendQueue(),
+		entries: make([]*queued, 0, batchRing), wake: make(chan struct{}, 1), done: make(chan struct{})}
 	c.gso = supportsSegmentation(raw)
 	for i := range c.rxHdr {
 		c.rxIov[i] = unix.Iovec{Base: &c.rxBufs[i][0]}
@@ -166,9 +220,10 @@ func (c *batchConn) ReadFromAddrPort(b []byte) (int, netip.AddrPort, error) {
 	}
 }
 
-// counters reports the datagrams the kernel refused to send and the ones cut short on receipt.
-func (c *batchConn) counters() (refused, truncated uint64) {
-	return uint64(c.refused.Load()), uint64(c.truncated.Load())
+// counters reports the datagrams the kernel refused to send, the ones cut short on receipt, and
+// the audio-class and video datagrams dropped from a full send ring.
+func (c *batchConn) counters() (refused, truncated, droppedAudio, droppedVideo uint64) {
+	return uint64(c.refused.Load()), uint64(c.truncated.Load()), uint64(c.droppedAudio.Load()), uint64(c.droppedVideo.Load())
 }
 
 func (c *batchConn) ReadFrom(b []byte) (int, net.Addr, error) {
@@ -202,24 +257,30 @@ func (c *batchConn) receive() error {
 	return nil
 }
 
-// WriteToAddrPort queues a copy of b: Pion reuses b once this returns.
+// WriteToAddrPort queues a copy of b: Pion reuses b once this returns. It never waits for the
+// socket: when the ring of b's class is full, the ring's oldest datagram is dropped for it.
 func (c *batchConn) WriteToAddrPort(b []byte, addr netip.AddrPort) (int, error) {
 	if len(b) > datagramMax || !addr.Addr().Is4() && !addr.Addr().Is4In6() {
 		return c.UDPConn.WriteToUDPAddrPort(b, addr)
 	}
+	video := isVideo(b)
 	c.mu.Lock()
-	for c.count == batchRing && !c.closed {
-		c.space.Wait()
-	}
 	if c.closed {
 		c.mu.Unlock()
 		return 0, net.ErrClosed
 	}
-	entry := &c.pending[c.count]
+	queue := &c.pending.audio
+	dropCounter := &c.droppedAudio
+	if video {
+		queue, dropCounter = &c.pending.video, &c.droppedVideo
+	}
+	entry, dropped := queue.claim()
 	entry.addr, entry.n = netip.AddrPortFrom(addr.Addr().Unmap(), addr.Port()), copy(entry.buf[:], b)
-	c.count++
-	first := c.count == 1
+	first := c.pending.len() == 1
 	c.mu.Unlock()
+	if dropped {
+		dropCounter.Add(1)
+	}
 	if first {
 		select {
 		case c.wake <- struct{}{}:
@@ -243,7 +304,6 @@ func (c *batchConn) Close() error {
 	if !c.closed {
 		c.closed = true
 		close(c.done)
-		c.space.Broadcast()
 	}
 	c.mu.Unlock()
 	return c.UDPConn.Close()
@@ -268,16 +328,25 @@ func (c *batchConn) write() {
 // other queue meanwhile. It reports whether there was anything to send.
 func (c *batchConn) sendQueued() bool {
 	c.mu.Lock()
-	n := c.count
-	if n == 0 || c.closed {
+	if c.pending.len() == 0 || c.closed {
 		c.mu.Unlock()
 		return false
 	}
 	c.pending, c.sending = c.sending, c.pending
-	c.count = 0
-	c.space.Broadcast()
+	c.pending.audio.head, c.pending.audio.count = 0, 0
+	c.pending.video.head, c.pending.video.count = 0, 0
 	c.mu.Unlock()
-	c.flush(c.sending[:n])
+	if c.stalled != nil {
+		c.stalled()
+	}
+	// Audio-class datagrams go first, each ring oldest first.
+	c.entries = c.entries[:0]
+	for _, queue := range []*ring{&c.sending.audio, &c.sending.video} {
+		for i := range queue.count {
+			c.entries = append(c.entries, queue.at(i))
+		}
+	}
+	c.flush(c.entries)
 	return true
 }
 
@@ -290,7 +359,7 @@ func setSegmentSize(control *[unix.SizeofCmsghdr + 8]byte, size int) {
 }
 
 // flush sends the entries, each peer's datagrams in the order they were queued.
-func (c *batchConn) flush(entries []queued) {
+func (c *batchConn) flush(entries []*queued) {
 	messages := c.plan(entries)
 	for sent := 0; sent < messages; {
 		n, errno := c.sendmmsg(c.out[sent:messages])
@@ -319,7 +388,7 @@ func (c *batchConn) sendEach(message *unix.Mmsghdr) {
 
 // plan fills c.out with one message per run of same-size datagrams to one peer,
 // or one per datagram when segmentation is off, and returns the message count.
-func (c *batchConn) plan(entries []queued) int {
+func (c *batchConn) plan(entries []*queued) int {
 	c.order = c.order[:0]
 	for i := range entries {
 		c.order = append(c.order, int32(i))
@@ -336,12 +405,12 @@ func (c *batchConn) plan(entries []queued) int {
 	}
 	messages := 0
 	for i := 0; i < len(c.order); {
-		first := &entries[c.order[i]]
+		first := entries[c.order[i]]
 		run := 1
 		if c.gso {
 			// The kernel splits a train into equal segments plus a shorter last one.
 			for i+run < len(c.order) && run < gsoSegments && (run+1)*first.n <= gsoPayloadMax {
-				next := &entries[c.order[i+run]]
+				next := entries[c.order[i+run]]
 				if next.addr != first.addr || next.n > first.n || entries[c.order[i+run-1]].n != first.n {
 					break
 				}
