@@ -1,11 +1,13 @@
 name: CodeQL
 
-# A merge group analyses only the languages whose files changed since the master commit it builds on. The weekly run
-# analyses every language, so anything a merge group skips is analysed within a week. Pull requests and master pushes do
-# not run it: the merge group analyses the same code that lands. It is not a required check, so an alert never blocks a
-# merge. Run it by hand on a branch with `workflow_dispatch`.
+# A push to master analyses only the languages whose files changed in it, so alerts land on the default branch, where code
+# scanning tracks them. The weekly run analyses every language, so anything a push skips is analysed within a week. Pull
+# requests and merge groups do not run it: the push analyses the same code that landed, a merge-queue ref is deleted after
+# its group, and alerts on it would not show on master. It is not a required check, so an alert never blocks a merge.
+# Run it by hand on a branch with `workflow_dispatch`.
 on:
-  merge_group:
+  push:
+    branches: [master]
   schedule:
     - cron: "27 4 * * 1"
   workflow_dispatch:
@@ -30,10 +32,10 @@ jobs:
       - name: Select languages
         id: select
         env:
-          GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [[ "${{ github.event_name }}" == "merge_group" ]]; then
-            node scripts/gates/codeql-languages.mjs "${GROUP_BASE_SHA}" >> "${GITHUB_OUTPUT}"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            node scripts/gates/codeql-languages.mjs "${PUSH_BEFORE_SHA}" >> "${GITHUB_OUTPUT}"
           else
             node scripts/gates/codeql-languages.mjs --full >> "${GITHUB_OUTPUT}"
           fi

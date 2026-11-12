@@ -16,6 +16,7 @@ on:
       - .agents/skills/verify-chalk/**
       - .tool-versions
       - .github/workflows/boot-smoke.yml
+      - "!**/*.md"
   workflow_dispatch:
 
 permissions:

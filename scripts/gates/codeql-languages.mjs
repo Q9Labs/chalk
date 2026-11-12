@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Prints the CodeQL languages a merge group needs as a JSON array: `codeql-languages.mjs <base-sha>`.
+// Prints the CodeQL languages a push to master needs as a JSON array: `codeql-languages.mjs <before-sha>`.
 // `--full` prints every language, which the weekly run uses.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
