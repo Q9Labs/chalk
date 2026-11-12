@@ -12,6 +12,8 @@ Ada has three past calls: Product planning with a transcript and a short synthet
 
 The middleware is installed programmatically by `scripts/local-dev.mjs`, never by `vite.config.ts` or a deploy-time flag. The production Pages entrypoint still rejects fixture identity, and the production-bundle check rejects fixture code in deployed output.
 
+On the Orb machine, run `node apps/web/tests/dashboard/local-dev-browser.mjs <public-origin> <evidence-directory>` to verify sign-in, Home, Call, session transcript and playback, Developer, Sessions, Recordings, and the empty owner.
+
 ## Build
 
 `build:dashboard-functions` runs `wrangler pages functions build --outdir dist/client/_worker.js`. Do not use `--outfile`: it writes a multipart upload envelope, not JavaScript, and `wrangler pages deploy` cannot compile it. Pages deployment and the web Release archive consume the same validated `_worker.js/` directory. The dashboard suite scans every module in it for fixture identity code.
