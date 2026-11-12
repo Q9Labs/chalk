@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -105,4 +105,10 @@ test("the register check runs when a check input changes, and the formal Sync ch
   assert.ok(selected(["tools/formal/sync-entry-leave/run.sh"], "pull_request").includes("formal-sync"));
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("formal-sync"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "formal-sync").selected);
+});
+
+test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {
+  const context = { scope: "branch", classification: { fullRequired: true } };
+  assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
+  assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
 });
