@@ -8,9 +8,13 @@ name: Gate
 # Manual runs and the weekly run run every job and lane in full. A push to master runs Cache warm-up, which saves the
 # caches that pull requests and queue groups start from. Daily vulnerability scans run in Daily vulnerability scan.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
+# A draft pull request runs no job: a draft cannot merge, so the required checks have nothing to report on it. Marking it
+# ready starts the Gate (ready_for_review), and so does every later push. Select gate jobs is the only job that decides
+# this; every job below stands down when it was skipped.
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
   schedule:
     # Drift between lanes and master surfaces here weekly. New advisories against packages nobody changed fail the
@@ -36,6 +40,7 @@ env:
 jobs:
   changes:
     name: Select gate jobs
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:
@@ -73,7 +78,7 @@ jobs:
   root-lanes:
     name: Root ${{ matrix.group }}
     needs: changes
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-24.04
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
@@ -251,7 +256,7 @@ jobs:
   root:
     name: Root gate
     needs: [changes, root-lanes]
-    if: always()
+    if: ${{ always() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
@@ -299,7 +304,7 @@ jobs:
   api:
     name: API gate
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -359,7 +364,7 @@ jobs:
   sync-parts:
     name: Sync ${{ matrix.part }}
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -434,8 +439,8 @@ jobs:
   # The required context. A part the planner did not select is skipped, which counts as passed.
   sync:
     name: Sync gate
-    needs: sync-parts
-    if: always()
+    needs: [changes, sync-parts]
+    if: ${{ always() && needs.changes.result != 'skipped' }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
