@@ -1,1 +1,1 @@
-{"holder": "nightly-deploy", "purpose": "managed-deploy", "run_id": "43177161191", "acquired_at": "2026-11-12T07:44:27.259Z", "expires_at": "2026-11-12T07:47:08.336Z", "token": "4f1aec6f136e44beaa356b66e6a32406"}
+{"holder": "claude-lane", "purpose": "deploy-rid-fix", "run_id": "trail-ridfix", "acquired_at": "2026-11-12T07:55:04.312Z", "expires_at": "2026-11-12T07:58:04.312Z", "token": "e6565c7eaa6a4154aa70791339185a9f"}
