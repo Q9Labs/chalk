@@ -13,7 +13,19 @@ export function createPublicInviteClient(): ChalkPublicClient {
   const arrive = async () => arrival;
   const status = async () => arrival;
   const leave = async () => undefined;
-  return { prepareSpaceEntrance: async () => undefined, arrive, arriveBySpacePublicInvite: arrive, create: unexpected, createPublicSpace: unexpected, getSpacePublicInviteArrival: status, status, leave, leaveSpacePublicInviteArrival: leave, refresh: unexpected, refreshSpacePublicInviteAccess: unexpected };
+  return {
+    prepareSpaceEntrance: async () => undefined,
+    arrive,
+    arriveBySpacePublicInvite: arrive,
+    create: unexpected,
+    createPublicSpace: unexpected,
+    getSpacePublicInviteArrival: status,
+    status,
+    leave,
+    leaveSpacePublicInviteArrival: leave,
+    refresh: unexpected,
+    refreshSpacePublicInviteAccess: unexpected,
+  };
 }
 export function admitPublicSpace(): PublicSpaceAdmission {
   const reportExpiresAt = Date.now() + 300_000;

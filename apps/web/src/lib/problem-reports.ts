@@ -36,9 +36,12 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
     let activeProbe: AbortController | undefined;
     const retry = () => {
       failures += 1;
-      timer = setTimeout(() => {
-        void probe();
-      }, backoffMs(failures, 1000, 60_000));
+      timer = setTimeout(
+        () => {
+          void probe();
+        },
+        backoffMs(failures, 1000, 60_000),
+      );
     };
     const probe = async () => {
       clearTimeout(timer);
