@@ -27,6 +27,18 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 **Caches.** Only `.github/workflows/cache-warm.yml`, on pushes to `master`, saves the Go build caches, so pull requests and queue groups start from master's caches and do not evict each other's. The API job sets `-count=1` because a cached Go test result would not see a migration or database change.
 
+## Checks register
+
+`checks.json` is the one list of every check Chalk runs: each Gate lane, each workflow job, the commit hook command and each scorecard budget group. `gate.config.ts` builds its custom lanes from the Gate entries, and the planner throws for a task with no entry, so a lane cannot exist without one. Each entry states the failure it exists to catch in one sentence, its owner (`owner`, a feature or area name, never a person), where it runs (`runs`), what it blocks (`blocks`), its median minutes, and its record in the CI timing audit sample (`caught`, `noise`, `never-failed` or `unmeasured`) with the numbers behind it.
+
+`blocks` takes one of six values. `merge` is a required context or a lane inside one. `release` stops a cut or Promote. `commit` is the hook. `alert` opens an issue or pages someone, for a monitor that no change causes. `action` is work that is not a check, such as a build, a deploy or a cache warm. `advisory` is red on a pull request but is not a required context, and it needs a `reason` that says why it stays and why it cannot block. A check that blocks nothing and has no reason is deleted.
+
+`node scripts/gates/check-register.mjs` runs as the `register` lane and fails when a workflow job, a Gate lane, a `lefthook.yml` command or a budget group has no entry, when an entry names something that no longer exists, when an entry is malformed, or when a budget has `gate: false`. To add a check, add its entry in the same change. To remove one, delete both.
+
+Four workflows stay advisory because only a change to the repository ruleset can make them block, and that needs the repository owner: `mobile-ci` (the unsigned native builds need macOS and a long runner), `codeql` (findings go to the Security tab), `sdk-web-consumer-e2e` (Firefox and WebKit packed-consumer runs, beyond the Chromium run in the Gate) and `release-contracts` (the only pull request cover for the release workflow inputs).
+
+**Scorecard budgets.** Every budget in `perf/budgets.json` gates. `web.route`, `web.laptop` and `web.phone` fail the pull request in the Gate. `chalk_sfu.action` holds the nightly cut on a breach, and `proof.leave_median_ms` stops Promote after a rerun. `cf_sfu.action` fails only the Cloudflare `latency` job (so that night records no history card) and opens no issue, because the Cloudflare plane is not on the release path. A metric that nothing produces has no budget, and a budget cannot be set to warn.
+
 ## Scope and selection
 
 `pnpm gate:explain <path>` asks q9gate why a path selects lanes. `pnpm gate -- --base <ref>` compares `<ref>...HEAD`; `--files <path>` (repeatable) or `GATE_FILES` gives an explicit list, and those worktree files are also scanned for secrets. `--lane <id>` runs one lane. Gate-definition or unknown files fail closed to the full plan; q9gate counts every path as source, so Chalk's planner alone decides which paths are unknown.
