@@ -114,13 +114,8 @@
 .legal-document a {
   color: var(--chalk-text);
   text-decoration: underline;
-  text-decoration-color: var(--edge);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
-}
-
-.legal-document a:hover {
-  text-decoration-color: currentColor;
 }
 
 .legal-document ul {
