@@ -3,11 +3,11 @@ import { z } from "zod";
 import type { Episode } from "@q9labsai/chalk-client/effect";
 import { DateTimeStringSchema, EpisodeIdSchema, SpaceIdSchema, RecordingIdSchema, TranscriptIdSchema, type ListSpacePublicAdmissionRequestsResponse } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, listedRecording, live, run } from "./engine";
+import { attendance, listedRecording, live, run, transcriptPageSize } from "./engine";
 import { callDTO, episodeDTO, transcriptDTO } from "./dto";
 import { homeMutation } from "./home";
 import { DashboardError } from "./http";
-import { knockDecisionAction, knockDecisionState, type ActionResult, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
+import { CALL_MAX_SECONDS, knockDecisionAction, knockDecisionState, type ActionResult, type CallAction, type CallPageDTO, type CallStatusDTO, type CallMetadataQuery, type CallMetadataDTO } from "../src/lib/dashboard/contracts";
 function mapKnocks(requests: ListSpacePublicAdmissionRequestsResponse["requests"]): CallPageDTO["knocks"] {
   return requests
     .filter((k) => k.state === "pending" && Date.parse(k.expires_at) > Date.now())
@@ -21,7 +21,7 @@ export async function callMetadata(engine: Engine, input: CallMetadataQuery): Pr
   if (input.kind === "recording") {
     const recording = await run(engine.api.recordings.getRecording({ params: { tenant_id: engine.tenantId, recording_id: Schema.decodeUnknownSync(RecordingIdSchema)(input.id) } }));
     if (recording.space_id !== input.spaceId) throw new DashboardError(404, "recording_not_found");
-    return { kind: "recording", recording: await listedRecording(engine, recording, input.view) };
+    return { kind: "recording", recording: await listedRecording(engine, recording, transcriptPageSize(input.view ?? "call")) };
   }
   const transcript = await run(engine.api.transcripts.getTranscript({ params: { tenant_id: engine.tenantId, transcript_id: Schema.decodeUnknownSync(TranscriptIdSchema)(input.id) } }));
   if (transcript.space_id !== input.spaceId) throw new DashboardError(404, "transcript_not_found");
@@ -52,7 +52,7 @@ export async function callPage(engine: Engine, spaceId: string, cursor?: string)
         return {
           ...episodeDTO(episode),
           participantCount: people.participants.length,
-          recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording))),
+          recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, transcriptPageSize("call")))),
           recordingsNextCursor: recordings.pagination.next_cursor,
         };
       }),
@@ -92,5 +92,5 @@ export async function callMutation(engine: Engine, action: Exclude<CallAction, {
 const deadlineConfig = z.object({ maximum_episode_duration_seconds: z.number().int().positive() });
 export function episodeDeadlineCeiling(episode: Episode): string {
   const config = deadlineConfig.parse(episode.config_snapshot);
-  return new Date(Date.parse(episode.created_at) + Math.min(config.maximum_episode_duration_seconds, 86400) * 1000).toISOString();
+  return new Date(Date.parse(episode.created_at) + Math.min(config.maximum_episode_duration_seconds, CALL_MAX_SECONDS) * 1000).toISOString();
 }

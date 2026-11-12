@@ -1,8 +1,9 @@
 import { Schema } from "effect";
 import { SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { live, run } from "./engine";
+import { live, liveDTO, run } from "./engine";
 import { callDTO } from "./dto";
+import { CALL_DEFAULT_SECONDS, CALL_LINGER_SECONDS, CALL_MAX_SECONDS, DEFAULT_CALL_NAME } from "../src/lib/dashboard/contracts";
 import type { ActionResult, HomeAction, HomeDTO, HomeStatusDTO, HomeStatusQuery, LiveDTO } from "../src/lib/dashboard/contracts";
 type Activity = { live: LiveDTO; call: HomeStatusDTO["calls"][number] };
 /** What a Home row shows for each Space: one tenant read for up to 300 Spaces. */
@@ -10,7 +11,7 @@ async function activity(engine: Engine, spaceIds: readonly string[]): Promise<Ac
   if (!spaceIds.length) return [];
   const result = await run(engine.api.spaces.listSpaceActivity({ params: { tenant_id: engine.tenantId }, query: { space_ids: spaceIds.join(",") } }));
   return result.spaces.map((row) => ({
-    live: { spaceId: row.space_id, episode: row.live_episode && { id: row.live_episode.episode_id, count: row.live_episode.participant_count, participants: row.live_episode.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) } },
+    live: liveDTO(row.space_id, row.live_episode),
     call: { id: row.space_id, archived: row.archived, lastActiveAt: row.latest_episode ? (row.latest_episode.ended_at ?? row.latest_episode.started_at) : null, recentPeople: row.recent_participants.map((p) => ({ id: p.participant_id, name: p.display_name })) },
   }));
 }
@@ -55,12 +56,12 @@ export async function homeMutation(engine: Engine, action: HomeAction): Promise<
         headers: { "Idempotency-Key": action.idempotencyKey },
         payload: {
           ...(action.transcriptLanguage ? { transcript_language: action.transcriptLanguage } : {}),
-          name: action.name ?? "New call",
+          name: action.name ?? DEFAULT_CALL_NAME,
           slug: `call-${action.idempotencyKey}`,
           admission_policy: { mode: action.admission === "anyone" ? "open" : "knock" },
-          default_episode_duration_seconds: 3600,
-          maximum_episode_duration_seconds: 86400,
-          linger_window_seconds: 60,
+          default_episode_duration_seconds: CALL_DEFAULT_SECONDS,
+          maximum_episode_duration_seconds: CALL_MAX_SECONDS,
+          linger_window_seconds: CALL_LINGER_SECONDS,
         },
       }),
     );
