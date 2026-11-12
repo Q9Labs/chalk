@@ -9,11 +9,11 @@ One Chalk Episode allows one screen share at a time. A lease row in `sync_screen
 
 `tools/formal/screen-share-lease/ScreenShareLease.tla` models those steps for two people and checks three rules in every order they can happen in. It also states two rules the real code breaks today (see Findings).
 
-| Rule                    | Plain sentence                                                                                                                                | Harm when it breaks                                                                                                              |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `NoTakeoverWhileLive`   | A lease that is still live is never taken by another owner.                                                                                   | Two people share at once, or the person who shares loses the lease while they still run.                                         |
-| `LeaseNeedsAuthority`   | A lease is acquired or renewed only for the participant generation that is authorised at that moment.                                         | A person who left, or an old tab, keeps a screen-share lease alive and blocks the next sharer.                                   |
-| `NewestObservationWins` | `Live.Episode`'s projection of the media plane is the newest observation it ever applied: an older cursor never overwrites a newer one.       | A late snapshot makes the call show a share that ended, or hides one that runs, and the lease follows the wrong picture.         |
+| Rule                    | Plain sentence                                                                                                                          | Harm when it breaks                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `NoTakeoverWhileLive`   | A lease that is still live is never taken by another owner.                                                                             | Two people share at once, or the person who shares loses the lease while they still run.                                 |
+| `LeaseNeedsAuthority`   | A lease is acquired or renewed only for the participant generation that is authorised at that moment.                                   | A person who left, or an old tab, keeps a screen-share lease alive and blocks the next sharer.                           |
+| `NewestObservationWins` | `Live.Episode`'s projection of the media plane is the newest observation it ever applied: an older cursor never overwrites a newer one. | A late snapshot makes the call show a share that ended, or hides one that runs, and the lease follows the wrong picture. |
 
 ## Findings
 

@@ -46,9 +46,7 @@ const labels = {
 export const step = (action, from, to) => {
   if (action === "EnableScreen") {
     if (from.pub.length < to.pub.length) return "the app starts sharing";
-    return to.db.held
-      ? "the share is refused and the lease release fails, so the lease stays"
-      : "the share is refused and the lease is released";
+    return to.db.held ? "the share is refused and the lease release fails, so the lease stays" : "the share is refused and the lease is released";
   }
   if (action === "Observe") return "the media plane reports a change";
   return labels[action] ?? action;
