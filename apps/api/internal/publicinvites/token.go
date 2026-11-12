@@ -176,32 +176,36 @@ func (v Verifier) Verify(raw string) (Token, error) {
 		return Token{}, ErrInvalidToken
 	}
 	signature, ok := decodeBase64URLSegment(segments[3])
-	if !ok || len(signature) != ed25519.SignatureSize {
+	if !ok || len(signature) != ed25519.SignatureSize || !ed25519.Verify(key, []byte(strings.Join(segments[:3], ".")), signature) {
 		return Token{}, ErrInvalidToken
 	}
-	message := strings.Join(segments[:3], ".")
-	if !ed25519.Verify(key, []byte(message), signature) {
-		return Token{}, ErrInvalidToken
-	}
-
-	var decoded payload
-	decoder := json.NewDecoder(bytes.NewReader(payloadBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&decoded); err != nil {
-		return Token{}, ErrInvalidPayload
-	}
-	var trailing struct{}
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return Token{}, ErrInvalidPayload
-	}
-	if decoded.Version != TokenVersion || decoded.Audience != TokenAudience || decoded.Generation == 0 || decoded.Handle == "" {
-		return Token{}, ErrInvalidPayload
+	decoded, err := decodePayload(payloadBytes)
+	if err != nil {
+		return Token{}, err
 	}
 	handle, ok := decodeBase64URLSegment(decoded.Handle)
 	if !ok || len(handle) != HandleBytes {
 		return Token{}, ErrInvalidPayload
 	}
 	return Token{KeyID: keyID, Handle: handle, Generation: decoded.Generation}, nil
+}
+
+// decodePayload parses a signed payload strictly: no unknown fields, no trailing data.
+func decodePayload(payloadBytes []byte) (payload, error) {
+	var decoded payload
+	decoder := json.NewDecoder(bytes.NewReader(payloadBytes))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
+		return payload{}, ErrInvalidPayload
+	}
+	var trailing struct{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return payload{}, ErrInvalidPayload
+	}
+	if decoded.Version != TokenVersion || decoded.Audience != TokenAudience || decoded.Generation == 0 || decoded.Handle == "" {
+		return payload{}, ErrInvalidPayload
+	}
+	return decoded, nil
 }
 
 func validateKeyring(keyring Keyring) error {

@@ -49,45 +49,59 @@ func InviteCode(handle []byte) string {
 }
 
 func ParseInviteCode(raw string) (string, bool) {
+	value, ok := inviteCodeText(raw)
+	if !ok {
+		return "", false
+	}
+	if words, ok := inviteWordCode(value); ok {
+		return words, true
+	}
+	return inviteLetterCode(value)
+}
+
+// inviteCodeText lowercases the input and, for a Chalk invite link, returns the link's path.
+func inviteCodeText(raw string) (string, bool) {
 	value := strings.ToLower(strings.TrimSpace(raw))
 	if strings.HasPrefix(value, "chalkmeet.com/") || strings.HasPrefix(value, "chalk.q9labs.ai/") {
 		value = "https://" + value
 	}
-	if strings.Contains(value, "://") {
-		link, err := url.Parse(value)
-		if err != nil || link.Scheme != "https" || (link.Host != "chalkmeet.com" && link.Host != "chalk.q9labs.ai") || link.User != nil || link.RawQuery != "" || link.Fragment != "" {
-			return "", false
-		}
-		value = strings.TrimPrefix(link.Path, "/")
-	}
-	words := strings.FieldsFunc(value, func(r rune) bool { return r == '-' || r == '.' || unicode.IsSpace(r) })
-	if len(words) == InviteWordCount {
-		valid := true
-		for _, word := range words {
-			valid = valid && inviteWordSet[word]
-		}
-		if valid {
-			return strings.Join(words, "-"), true
-		}
-	}
-	switch len(value) {
-	case 10:
-		if !lowercaseLetters(value) {
-			return "", false
-		}
+	if !strings.Contains(value, "://") {
 		return value, true
-	case 12:
-		if value[3] != '-' || value[8] != '-' {
-			return "", false
-		}
-		code := value[:3] + value[4:8] + value[9:]
-		if !lowercaseLetters(code) {
-			return "", false
-		}
-		return code, true
-	default:
+	}
+	link, err := url.Parse(value)
+	if err != nil || link.Scheme != "https" || (link.Host != "chalkmeet.com" && link.Host != "chalk.q9labs.ai") || link.User != nil || link.RawQuery != "" || link.Fragment != "" {
 		return "", false
 	}
+	return strings.TrimPrefix(link.Path, "/"), true
+}
+
+// inviteWordCode accepts a code written as InviteWordCount known words.
+func inviteWordCode(value string) (string, bool) {
+	words := strings.FieldsFunc(value, func(r rune) bool { return r == '-' || r == '.' || unicode.IsSpace(r) })
+	if len(words) != InviteWordCount {
+		return "", false
+	}
+	for _, word := range words {
+		if !inviteWordSet[word] {
+			return "", false
+		}
+	}
+	return strings.Join(words, "-"), true
+}
+
+// inviteLetterCode accepts ten lowercase letters, or the same letters grouped 3-4-3.
+func inviteLetterCode(value string) (string, bool) {
+	code := value
+	switch {
+	case len(value) == 12 && value[3] == '-' && value[8] == '-':
+		code = value[:3] + value[4:8] + value[9:]
+	case len(value) != 10:
+		return "", false
+	}
+	if !lowercaseLetters(code) {
+		return "", false
+	}
+	return code, true
 }
 
 func FormatInviteCode(code string) string {
