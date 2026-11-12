@@ -55,6 +55,9 @@ const (
 // closeWait bounds how long Close waits for the node's goroutines.
 const closeWait = 5 * time.Second
 
+// iceTCPReadBuffer is the datagram queue each ICE-TCP connection may hold unread.
+const iceTCPReadBuffer = 32
+
 // Node is one SFU process. All its peers share one UDP socket.
 type Node struct {
 	cfg         config.Config
@@ -64,6 +67,7 @@ type Node struct {
 	conn        *net.UDPConn
 	media       net.PacketConn // conn, or the batching wrapper around it
 	mux         io.Closer
+	tcpMux      io.Closer // nil when the node has no TCP listener
 	guard       *guard
 	pressure    hostPressure  // the control loop's
 	done        chan struct{} // closed by Close; stops the node's control loop
@@ -146,8 +150,21 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		media = newMediaConn(conn)
 	}
 	mux := webrtc.NewICEUDPMux(nil, media)
-	peers, err := newPeerFactory(cfg, mux)
+	var tcpMux ice.TCPMux
+	if cfg.TCPAddr != "" {
+		listener, err := net.Listen("tcp4", cfg.TCPAddr)
+		if err != nil {
+			_ = mux.Close()
+			_ = conn.Close()
+			return nil, fmt.Errorf("listen on TCP %q: %w", cfg.TCPAddr, err)
+		}
+		tcpMux = webrtc.NewICETCPMux(nil, listener, iceTCPReadBuffer)
+	}
+	peers, err := newPeerFactory(cfg, mux, tcpMux)
 	if err != nil {
+		if tcpMux != nil {
+			_ = tcpMux.Close()
+		}
 		_ = mux.Close()
 		_ = conn.Close()
 		return nil, err
@@ -160,6 +177,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		conn:          conn,
 		media:         media,
 		mux:           mux,
+		tcpMux:        tcpMux,
 		guard:         newGuard(cfg.Guard, log),
 		receiveBuffer: receiveBuffer,
 		sendBuffer:    sendBuffer,
@@ -212,7 +230,7 @@ func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, erro
 
 // newPeerFactory negotiates only the codecs the node forwards: Opus and VP8.
 // Feedback is limited to the keyframe requests the node relays to the publisher.
-func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
+func newPeerFactory(cfg config.Config, mux ice.UDPMux, tcpMux ice.TCPMux) (*peerFactory, error) {
 	engine := &webrtc.MediaEngine{}
 	opus := webrtc.RTPCodecParameters{RTPCodecCapability: opusCapability, PayloadType: opusPayloadType}
 	vp8 := webrtc.RTPCodecParameters{RTPCodecCapability: vp8Capability, PayloadType: vp8PayloadType}
@@ -266,7 +284,12 @@ func newPeerFactory(cfg config.Config, mux ice.UDPMux) (*peerFactory, error) {
 	settings := webrtc.SettingEngine{}
 	settings.SetICEUDPMux(mux)
 	settings.SetLite(true)
-	settings.SetNetworkTypes([]webrtc.NetworkType{webrtc.NetworkTypeUDP4})
+	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4}
+	if tcpMux != nil {
+		settings.SetICETCPMux(tcpMux)
+		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4)
+	}
+	settings.SetNetworkTypes(networkTypes)
 	settings.SetIncludeLoopbackCandidate(cfg.IncludeLoopback)
 	settings.SetICETimeouts(5*time.Second, 15*time.Second, 2*time.Second)
 	if len(cfg.AnnounceIPs) > 0 {
@@ -734,6 +757,9 @@ func (n *Node) Close() {
 	case <-waited:
 	case <-time.After(closeWait):
 		n.log.Error("media readers still running after close", "wait", closeWait)
+	}
+	if n.tcpMux != nil {
+		_ = n.tcpMux.Close()
 	}
 	_ = n.mux.Close()
 	_ = n.conn.Close()
