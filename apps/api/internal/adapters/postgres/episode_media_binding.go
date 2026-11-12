@@ -6,6 +6,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -24,7 +25,13 @@ func (r EpisodeLifecycleRepository) resolveEpisodeMediaBinding(ctx context.Conte
 		DefaultMediaPlaneApproved: policy.DefaultMediaPlaneApproved,
 		MediaPlaneProviderConfig:  json.RawMessage(policy.MediaPlaneProviderConfig),
 	}
-	binding, err := r.mediaBindingResolver.ResolveBinding(ctx, tenant, mapSpace(space), clients)
+	// The switch is read in this transaction, under a share lock like the Tenant policy: a flip
+	// waits for Episodes being created, and every Episode created after it commits sees it.
+	paused, err := queries.LockMediaPlaneKillSwitchForEpisode(ctx)
+	if err != nil {
+		return nil, err
+	}
+	binding, err := r.mediaBindingResolver.ResolveBinding(spaces.WithNewEpisodesPaused(ctx, paused), tenant, mapSpace(space), clients)
 	if err != nil {
 		return nil, err
 	}

@@ -30,7 +30,7 @@ func (r *writingRepository) UpdateTenant(_ context.Context, _ utilities.ID, inpu
 func text(s string) *string { return &s }
 
 func gatedService(repository TenantRepository) Service {
-	return NewService(repository).WithMediaPlanes("cf_sfu", func(plane string) bool { return plane == "cf_sfu" || plane == "chalk_sfu" })
+	return NewService(repository).WithMediaPlanes(func(plane string) bool { return plane == "cf_sfu" }, func(plane string) bool { return plane == "cf_sfu" || plane == "chalk_sfu" })
 }
 
 func tenantID(t *testing.T) utilities.ID {

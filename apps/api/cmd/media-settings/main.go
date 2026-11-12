@@ -6,6 +6,12 @@
 //	media-settings get --tenant ID [--space ID]
 //	media-settings set --tenant ID [--space ID] --plane cf_sfu|chalk_sfu|inherit
 //	media-settings backfill [--dry-run]
+//	media-settings new-episodes [--state on|off --operator NAME --reason TEXT]
+//
+// new-episodes is the kill switch of the own SFU, stored in the database so a flip needs
+// no API restart. off sends every new Episode to Cloudflare; Episodes already on the own
+// SFU keep running there. With --state it flips the switch and writes an audit row (who,
+// why, before, after) in the same transaction; without it, it reads the switch.
 //
 // Run it with the same settings the API runs with: it reads CHALK_DATABASE_URL,
 // CHALK_DEFAULT_MEDIA_PLANE, CHALK_SFU_ALLOWED_SPACES and CHALK_SFU_NEW_EPISODES.
@@ -20,6 +26,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -41,7 +48,7 @@ func main() {
 	}
 }
 
-const usage = "usage: media-settings get|set|backfill ... (see the file comment)"
+const usage = "usage: media-settings get|set|backfill|new-episodes ... (see the file comment)"
 
 func run(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
@@ -53,6 +60,9 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	spaceFlag := flags.String("space", "", "Space ID; omit to act on the Tenant")
 	planeFlag := flags.String("plane", "", "cf_sfu, chalk_sfu, or inherit to clear (set only)")
 	dryRun := flags.Bool("dry-run", false, "list the changes without writing them (backfill only)")
+	stateFlag := flags.String("state", "", "on or off (new-episodes only); omit to read")
+	operatorFlag := flags.String("operator", "", "who flips the switch (new-episodes --state only)")
+	reasonFlag := flags.String("reason", "", "why (new-episodes --state only)")
 	limit := flags.Duration("timeout", time.Minute, "whole-command deadline, at most 10 minutes")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -60,7 +70,16 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if flags.NArg() != 0 || *limit <= 0 || *limit > 10*time.Minute {
 		return errors.New("--timeout must be in (0, 10m] and no positional arguments are allowed")
 	}
-	parsed, err := parseRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun)
+	var parsed request
+	var err error
+	switch {
+	case command == "new-episodes":
+		parsed, err = parseSwitchRequest(*tenantFlag, *spaceFlag, *planeFlag, *dryRun, *stateFlag, *operatorFlag, *reasonFlag)
+	case *stateFlag != "" || *operatorFlag != "" || *reasonFlag != "":
+		err = errors.New("--state, --operator and --reason apply to new-episodes only")
+	default:
+		parsed, err = parseRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun)
+	}
 	if err != nil {
 		return err
 	}
@@ -94,6 +113,35 @@ type request struct {
 	space   utilities.ID
 	plane   *spaces.MediaPlaneProvider
 	dryRun  bool
+	// flip is set for new-episodes --state: paused is the value to write.
+	flip     bool
+	paused   bool
+	operator string
+	reason   string
+}
+
+func parseSwitchRequest(tenant, space, plane string, dryRun bool, state, operator, reason string) (request, error) {
+	if tenant != "" || space != "" || plane != "" || dryRun {
+		return request{}, errors.New("new-episodes takes only --state, --operator and --reason")
+	}
+	r := request{command: "new-episodes"}
+	switch state {
+	case "":
+		if operator != "" || reason != "" {
+			return request{}, errors.New("--operator and --reason apply to --state")
+		}
+		return r, nil
+	case "on":
+	case "off":
+		r.paused = true
+	default:
+		return request{}, errors.New("--state must be on or off")
+	}
+	if strings.TrimSpace(operator) == "" || strings.TrimSpace(reason) == "" {
+		return request{}, errors.New("flipping the switch needs --operator and --reason")
+	}
+	r.flip, r.operator, r.reason = true, strings.TrimSpace(operator), strings.TrimSpace(reason)
+	return r, nil
 }
 
 func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool) (request, error) {
@@ -142,12 +190,13 @@ func parseRequest(command, tenantText, spaceText, planeText string, dryRun bool)
 }
 
 type settings struct {
-	pool     *pgxpool.Pool
-	policy   spaces.PlanePolicy
-	tenants  tenants.Service
-	spaces   spaces.Repository
-	operator spaces.PlaneOperator
-	log      *slog.Logger
+	pool       *pgxpool.Pool
+	policy     spaces.PlanePolicy
+	tenants    tenants.Service
+	killSwitch postgres.KillSwitch
+	spaces     spaces.Repository
+	operator   spaces.PlaneOperator
+	log        *slog.Logger
 }
 
 func newSettings(pool *pgxpool.Pool, policy spaces.PlanePolicy, out io.Writer) settings {
@@ -155,7 +204,7 @@ func newSettings(pool *pgxpool.Pool, policy spaces.PlanePolicy, out io.Writer) s
 	tenantService := tenants.NewService(postgres.NewTenantRepository(queries))
 	spaceRepository := postgres.NewSpaceRepository(queries, pool)
 	return settings{
-		pool: pool, policy: policy, tenants: tenantService, spaces: spaceRepository,
+		pool: pool, policy: policy, tenants: tenantService, spaces: spaceRepository, killSwitch: postgres.NewKillSwitch(pool),
 		operator: spaces.NewPlaneOperator(spaceRepository, postgres.NewTenantOperator(pool), policy).WithAdopter(spaceRepository),
 		log:      slog.New(slog.NewJSONHandler(out, nil)),
 	}
@@ -167,6 +216,8 @@ func (s settings) execute(ctx context.Context, r request) error {
 		return s.get(ctx, r)
 	case "set":
 		return s.set(ctx, r)
+	case "new-episodes":
+		return s.newEpisodes(ctx, r)
 	default:
 		return s.backfill(ctx, r.dryRun)
 	}
@@ -192,24 +243,54 @@ func (s settings) get(ctx context.Context, r request) error {
 	if err != nil {
 		return fmt.Errorf("read Tenant: %w", err)
 	}
+	live, err := s.killSwitch.NewEpisodesPaused(ctx)
+	if err != nil {
+		return err
+	}
+	policy := s.policy.Paused(live)
 	attributes := []any{"scope", "tenant", "tenant_id", r.tenant.String(), "tenant_default", valueOrInherit(tenant.DefaultMediaPlane),
-		"platform_default", string(s.policy.Platform), "kill_switch_on", s.policy.NewEpisodesPaused}
+		"platform_default", string(s.policy.Platform), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
 	if !r.space.IsZero() {
 		space, err := s.spaces.GetSpace(ctx, r.tenant, r.space)
 		if err != nil {
 			return fmt.Errorf("read Space: %w", err)
 		}
-		effective, err := s.policy.Effective(tenant, space)
+		effective, err := policy.Effective(tenant, space)
 		if err != nil {
 			return fmt.Errorf("resolve the effective plane: %w", err)
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
 			"space_setting", valueOrInherit(planeText(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
 			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", string(s.policy.Platform),
-			"kill_switch_on", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", string(effective)}
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", string(effective)}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil
+}
+
+func (s settings) newEpisodes(ctx context.Context, r request) error {
+	if !r.flip {
+		live, err := s.killSwitch.NewEpisodesPaused(ctx)
+		if err != nil {
+			return err
+		}
+		s.log.Info("media plane kill switch", "new_episodes", onOff(!live), "floor_new_episodes", onOff(!s.policy.NewEpisodesPaused))
+		return nil
+	}
+	before, err := s.killSwitch.SetNewEpisodesPaused(ctx, r.paused, r.operator, r.reason)
+	if err != nil {
+		return err
+	}
+	s.log.Info("media plane kill switch changed", "event", "media_plane.kill_switch_changed", "operator", r.operator, "reason", r.reason,
+		"before", onOff(!before), "after", onOff(!r.paused))
+	return nil
+}
+
+func onOff(on bool) string {
+	if on {
+		return "on"
+	}
+	return "off"
 }
 
 func (s settings) set(ctx context.Context, r request) error {

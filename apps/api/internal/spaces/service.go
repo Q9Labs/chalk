@@ -150,6 +150,7 @@ type Service struct {
 	repository Repository
 	newSpace   NewSpaceDefaults
 	tenants    TenantReader
+	killSwitch NewEpisodeSwitch
 	planes     PlanePolicy
 }
 
@@ -284,6 +285,12 @@ func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
 	return s
 }
 
+// WithNewEpisodeSwitch lets the effective plane follow the live kill switch.
+func (s Service) WithNewEpisodeSwitch(killSwitch NewEpisodeSwitch) Service {
+	s.killSwitch = killSwitch
+	return s
+}
+
 // WithNewSpaceDefaults sets what a Create Space request gets for the fields it
 // omits. It changes new Spaces only: Spaces and Tenants that store no plane keep
 // resolving to the deployment default. The Tenant reader decides per Tenant
@@ -306,9 +313,6 @@ func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (p
 		if tenantServesNewSpacePlane(tenant) {
 			return s.newSpace.MediaPlane, true, nil
 		}
-	}
-	if s.planes.Platform != "" && s.planes.Platform != MediaPlaneProviderCloudflareSFU {
-		return "", false, ErrInvalidMediaPlane
 	}
 	return s.planes.Platform, false, nil
 }

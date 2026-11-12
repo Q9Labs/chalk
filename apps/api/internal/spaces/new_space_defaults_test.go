@@ -124,8 +124,18 @@ func TestNewSpacePlaneDefaultNeedsTheTenant(t *testing.T) {
 	if _, err := create(t, service, func(*CreateSpaceInput) {}); !errors.Is(err, lookupFailed) {
 		t.Errorf("got %v, want the Tenant lookup error", err)
 	}
-	service = NewServiceWithDefaultProvider(nil, MediaPlaneProviderChalkSFU)
-	if _, err := create(t, service, func(*CreateSpaceInput) {}); !errors.Is(err, ErrInvalidMediaPlane) {
-		t.Errorf("own SFU as the deployment default: got %v, want ErrInvalidMediaPlane", err)
+}
+
+// Under the own SFU as the deployment default, a request that names no plane creates a
+// Space that inherits: no setting of its own, and Cloudflare in the legacy column, which both
+// releases can serve. Create Space must not refuse it.
+func TestCreateSpaceWithNoPlaneInheritsTheOwnSFUDefault(t *testing.T) {
+	service := NewServiceWithDefaultProvider(nil, MediaPlaneProviderChalkSFU)
+	got, err := create(t, service, func(*CreateSpaceInput) {})
+	if err != nil {
+		t.Fatalf("create under the own SFU default: %v", err)
+	}
+	if got.MediaPlaneSetting != nil || got.MediaPlane != string(MediaPlaneProviderCloudflareSFU) {
+		t.Errorf("stored setting %v, legacy plane %q, want no setting and %q", got.MediaPlaneSetting, got.MediaPlane, MediaPlaneProviderCloudflareSFU)
 	}
 }
