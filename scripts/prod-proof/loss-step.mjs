@@ -31,7 +31,8 @@ function at(samples, time) {
  *    in one stretch;
  *  - back_to_high_s: seconds from the end of the loss until the frame width returned to its pre-loss value and stayed there for
  *    STEADY_S seconds, 0 when it never left, null when it did not return;
- *  - audio_longest_gap_ms: the longest stretch without an audio packet, at the sampler's 100 ms resolution.
+ *  - audio_longest_gap_ms: the longest stretch without an audio packet, at the sampler's 100 ms resolution;
+ *  - per_second: every second as text (time from the start of the loss, kbit/s, decoded frames, frame width), to read a run by eye.
  * @param {LossSample[]} samples
  * @param {{ faultStart: number, faultEnd: number, watchEnd: number }} window
  */
@@ -73,5 +74,6 @@ export function lossStepOf(samples, { faultStart, faultEnd, watchEnd }) {
     longest_zero_fps_s: longestZero,
     back_to_high_s: backToHigh,
     audio_longest_gap_ms: flowGap(samples, "fa", faultStart - 1000, watchEnd).gap_ms,
+    per_second: seconds.map((second) => `${(second.start - faultStart) / 1000}s ${second.kbps}k ${second.frames}f ${second.width}w`),
   };
 }
