@@ -5,6 +5,7 @@ import { once } from "node:events";
 import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { resolveDevConfig } from "./config.mjs";
@@ -129,7 +130,6 @@ function browserInstrumentation({ frequency }) {
   };
 }
 
-const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const save = async () => writeFile(`${output}/matrix.json`, JSON.stringify(report, null, 2));
 try {
   console.log("Starting isolated, pinned server stack.");

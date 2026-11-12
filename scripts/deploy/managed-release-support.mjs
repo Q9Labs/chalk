@@ -6,6 +6,3 @@ export function parseJson(value, context) {
   }
 }
 
-export function errorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}

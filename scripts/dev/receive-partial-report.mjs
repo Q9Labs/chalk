@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { median } from "../lib/stats.mjs";
 
 const directory = resolve(process.argv[2] || "artifacts/receive-partial");
 const report = JSON.parse(await readFile(`${directory}/matrix.json`, "utf8"));
@@ -59,7 +60,7 @@ const summaries = report.versions.map((run) => {
       }
   }
   const latencies = unmutes.flatMap((unmute) => (unmute.seconds === null ? [] : [unmute.seconds])).sort((a, b) => a - b);
-  const median = latencies.length ? (latencies.length % 2 ? latencies[(latencies.length - 1) / 2] : (latencies[latencies.length / 2 - 1] + latencies[latencies.length / 2]) / 2) : null;
+  const medianLatency = latencies.length ? median(latencies) : null;
   const statusCounts = {};
   for (const event of run.network) {
     const operation = event.path.endsWith("/tracks") ? (event.operation?.includes("local") ? "publish" : "pull") : event.path.endsWith("/close") ? "close" : "other";
@@ -129,7 +130,7 @@ const summaries = report.versions.map((run) => {
     commandErrors,
     pairs,
     lostPairSeconds: pairs.reduce((sum, pair) => sum + pair.lostSeconds, 0),
-    medianUnmuteSeconds: median,
+    medianUnmuteSeconds: medianLatency,
     maxUnmuteSeconds: latencies.at(-1) ?? null,
     neverAudible: unmutes.filter((unmute) => unmute.seconds === null && !unmute.pending).length,
     pendingUnmuteObservations: unmutes.filter((unmute) => unmute.pending).length,

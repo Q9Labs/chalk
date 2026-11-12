@@ -3,7 +3,7 @@
 import { open, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { fileSHA256 } from "./file-sha256.mjs";
+import { sha256File } from "../lib/hash.mjs";
 import { parseOptionValue } from "./parse-option-value.mjs";
 import { runBoundedCommand } from "./run-bounded-command.mjs";
 
@@ -266,7 +266,7 @@ async function inspect(options) {
     passed: failed.length === 0,
     input: {
       bytes: inputStat.size,
-      sha256: await fileSHA256(input),
+      sha256: await sha256File(input),
     },
     format: {
       bit_rate: Number(facts.format?.bit_rate) || null,

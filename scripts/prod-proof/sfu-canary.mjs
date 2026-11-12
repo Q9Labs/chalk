@@ -26,6 +26,7 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { check, command, createRun, errorEvidence, loadConfig, mediaPlane, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
@@ -54,7 +55,6 @@ const stallProbeMs = 1500;
 const faultDown = process.env.CHALK_CANARY_FAULT_DOWN;
 const faultUp = process.env.CHALK_CANARY_FAULT_UP;
 const faultStatus = process.env.CHALK_CANARY_FAULT_STATUS;
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const shell = (script) => command("sh", ["-c", script]);
 
 async function rendersWithin(pages, startedAt, limitMs, label) {

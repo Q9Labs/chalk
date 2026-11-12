@@ -19,6 +19,7 @@ import { createRequire } from "node:module";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { resolveDevConfig } from "./config.mjs";
@@ -71,7 +72,6 @@ const localFetch = async (input, init) => {
 };
 const runtime = createChalkSupervisor(config, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
 const report = { started: new Date().toISOString(), scenario, sdkRevision, serverRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim(), timeline: [], assertions: [], passed: false };
-const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const t0 = Date.now();
 const note = (event, detail = {}) => {
   report.timeline.push({ t: Math.round((Date.now() - t0) / 100) / 10, event, ...detail });

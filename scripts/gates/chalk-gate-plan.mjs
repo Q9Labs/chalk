@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { gitLines } from "../lib/git.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
@@ -40,13 +41,6 @@ export class GatePlanningError extends Error {
     this.details = details;
     this.suggestion = suggestion;
   }
-}
-
-function gitLines(args, cwd = repositoryRoot, environment = process.env) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", env: environment })
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 function normalizeFiles(files) {
@@ -118,9 +112,9 @@ function isKnownPath(file, workspaces, narrow) {
 function workspaceManifestPaths(root, snapshot = { mode: "worktree" }, environment = process.env) {
   let manifests;
   if (snapshot.mode === "ref") {
-    manifests = gitLines(["ls-tree", "-r", "--name-only", snapshot.ref], root, environment);
+    manifests = gitLines(["ls-tree", "-r", "--name-only", snapshot.ref], { cwd: root, env: environment });
   } else {
-    manifests = gitLines(snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"], root, environment);
+    manifests = gitLines(snapshot.mode === "index" ? ["ls-files", "--cached"] : ["ls-files"], { cwd: root, env: environment });
   }
   return manifests.filter((manifest) => {
     const directory = path.posix.dirname(manifest);

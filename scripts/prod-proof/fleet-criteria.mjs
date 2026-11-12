@@ -1,6 +1,6 @@
 // Pass and fail rules for the canary fleet, apart from the browsers and the API that feed them.
 // The thresholds are the production canary check in scripts/prod-proof/README.md.
-import { percentile } from "./sfu-canary-criteria.mjs";
+import { percentile } from "../../features/scorecard/stats.mjs";
 
 export const joinLimitMs = 10_000;
 export const recoveryLimitMs = 15_000;
@@ -63,7 +63,7 @@ export function callHours(call) {
 }
 
 const times = (values) => values.filter((value) => value !== undefined);
-const stat = (values) => ({ trials: values.length, p50Ms: percentile(values, 0.5), p95Ms: percentile(values, 0.95), maxMs: values.length ? Math.max(...values) : null });
+const stat = (values) => ({ trials: values.length, p50Ms: percentile(values, 0.5) ?? null, p95Ms: percentile(values, 0.95) ?? null, maxMs: values.length ? Math.max(...values) : null });
 
 /** One summary over the calls of one or several fleet runs; the lead merges the machines' runs with it. */
 export function summarizeFleet(calls) {

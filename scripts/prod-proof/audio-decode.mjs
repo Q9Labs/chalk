@@ -8,6 +8,7 @@
 //
 // This file holds the pure rules (tested with a fake analyser in audio-decode.test.mjs) and the page probe they feed.
 // The bytes-advancing check stays where it is; callers add this one as a further condition.
+import { median } from "../lib/stats.mjs";
 import { check } from "./runtime.mjs";
 
 export const toneHz = (guest) => 440 * (guest + 1); // The frequency fixture.mjs publishes for a guest.
@@ -32,7 +33,6 @@ export function spectrumReading(spectrum, { hz, sampleRate }) {
   const empty = -140;
   const db = Array.from(spectrum, (value) => (Number.isFinite(value) ? Math.max(value, empty) : empty));
   const binOf = (frequency) => Math.round((frequency * 2 * db.length) / sampleRate);
-  const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
   const band = db.slice(binOf(100), binOf(4000) + 1);
   const bandDb = band.length ? Math.max(...band) : empty;
   if (hz == null) return { bin: -1, toneDb: null, floorDb: median(db), marginDb: null, bandDb };

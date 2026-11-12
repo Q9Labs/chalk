@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
+import { gitLines } from "./lib/git.mjs";
+import { sha256 } from "./lib/hash.mjs";
 import { chalkReleaseVersion, releasePackages } from "./lib/release-packages.mjs";
 import { repositoryRoot } from "./lib/repository.mjs";
 
@@ -125,13 +126,6 @@ export function parseArguments(argumentsList) {
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(path.join(repositoryRoot, relativePath), "utf8"));
-}
-
-function gitLines(argumentsList) {
-  return execFileSync("git", argumentsList, { cwd: repositoryRoot, encoding: "utf8" })
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 function isInside(parent, child) {
@@ -361,9 +355,6 @@ function packageArchive(artifactDirectory, releasePackage) {
   return archives[0];
 }
 
-function sha256(filePath) {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
 
 function validateArchive(archivePath) {
   runCommand("pnpm", ["exec", "publint", "run", archivePath], { label: `publint ${path.basename(archivePath)}` });
@@ -385,7 +376,7 @@ function writeArtifactManifest(artifactDirectory, order, archives) {
       version: releasePackage.version,
       directory: releasePackage.directory,
       archive: path.basename(archives.get(releasePackage.name)),
-      sha256: sha256(archives.get(releasePackage.name)),
+      sha256: sha256(readFileSync(archives.get(releasePackage.name))),
     })),
   };
   const manifestPath = path.join(artifactDirectory, "manifest.json");
