@@ -391,6 +391,7 @@
         "docs/observability.md",
         "infrastructure/cloudflare-egress-alert",
         "infrastructure/listener-audio-alert",
+        "infrastructure/oncall-alert.mjs",
         "infrastructure/observability",
         "infrastructure/uptime-worker",
         "sdks/typescript/client/src/transport-diagnostics.ts"
