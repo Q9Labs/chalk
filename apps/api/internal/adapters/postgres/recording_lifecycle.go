@@ -3,7 +3,6 @@ package postgres
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,10 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/recordinglifecycle"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -228,103 +225,6 @@ func (r RecordingLifecycleRepository) publish(ctx context.Context, authority rec
 	return publication, nil
 }
 
-type lifecycleIDSet struct {
-	tenantID    pgtype.UUID
-	spaceID     pgtype.UUID
-	episodeID   pgtype.UUID
-	recordingID pgtype.UUID
-	jobID       pgtype.UUID
-}
-
-func lifecycleIDs(authority recordinglifecycle.Authority) (lifecycleIDSet, error) {
-	values := []struct {
-		name  string
-		value string
-		set   *pgtype.UUID
-	}{
-		{name: "tenant_id", value: authority.TenantID, set: new(pgtype.UUID)},
-		{name: "space_id", value: authority.SpaceID, set: new(pgtype.UUID)},
-		{name: "episode_id", value: authority.EpisodeID, set: new(pgtype.UUID)},
-		{name: "recording_id", value: authority.RecordingID, set: new(pgtype.UUID)},
-		{name: "job_id", value: authority.JobID, set: new(pgtype.UUID)},
-	}
-	for _, item := range values {
-		parsed, err := utilities.ParseID(item.value)
-		if err != nil {
-			return lifecycleIDSet{}, fmt.Errorf("%w: %s", recordinglifecycle.ErrInvalidRequest, item.name)
-		}
-		*item.set = uuid(parsed)
-	}
-	return lifecycleIDSet{tenantID: *values[0].set, spaceID: *values[1].set, episodeID: *values[2].set, recordingID: *values[3].set, jobID: *values[4].set}, nil
-}
-
-func lifecycleOperationID(row sqlc.LockRecordingCaptureLifecycleAuthorityRow, operationName string) (string, error) {
-	if operationName == recordingCaptureReadyOperation {
-		if !row.StartExternalOperationID.Valid {
-			return "", recordinglifecycle.ErrAuthorityMismatch
-		}
-		return utilities.IDFromBytes(row.StartExternalOperationID.Bytes).String(), nil
-	}
-	if !row.StopExternalOperationID.Valid {
-		return "", recordinglifecycle.ErrAuthorityMismatch
-	}
-	return utilities.IDFromBytes(row.StopExternalOperationID.Bytes).String(), nil
-}
-
-func lifecycleStatusAllowsNewOperation(recordingStatus, operationName string) bool {
-	if operationName == recordingCaptureReadyOperation {
-		return recordingStatus == "starting"
-	}
-	return recordingStatus == "stopping"
-}
-
-type readyPayload struct {
-	RecordingID      string `json:"recordingId"`
-	StartOperationID string `json:"startOperationId"`
-	CaptureEpoch     int64  `json:"captureEpoch"`
-}
-
-type stoppedPayload struct {
-	RecordingID     string `json:"recordingId"`
-	StopOperationID string `json:"stopOperationId"`
-	CaptureEpoch    int64  `json:"captureEpoch"`
-}
-
-type deadlineStoppedPayload struct {
-	RecordingID      string `json:"recordingId"`
-	DeadlineAtMillis int64  `json:"deadlineAtMs"`
-	CaptureEpoch     int64  `json:"captureEpoch"`
-}
-
-func lifecyclePayload(operationName, recordingID, operationID string, captureEpoch int64) ([]byte, error) {
-	var payload any
-	if operationName == recordingCaptureReadyOperation {
-		payload = readyPayload{RecordingID: recordingID, StartOperationID: operationID, CaptureEpoch: captureEpoch}
-	} else {
-		payload = stoppedPayload{RecordingID: recordingID, StopOperationID: operationID, CaptureEpoch: captureEpoch}
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("marshal recording capture lifecycle payload: %w", err)
-	}
-	return encoded, nil
-}
-
-func lifecycleRequestFingerprint(payload []byte, occurredAt time.Time, noPublisher bool) [sha256.Size]byte {
-	digest := sha256.New()
-	_, _ = digest.Write(payload)
-	_, _ = digest.Write([]byte{0})
-	_, _ = digest.Write([]byte(occurredAt.UTC().Format(time.RFC3339Nano)))
-	if noPublisher {
-		_, _ = digest.Write([]byte{1})
-	} else {
-		_, _ = digest.Write([]byte{0})
-	}
-	var result [sha256.Size]byte
-	copy(result[:], digest.Sum(nil))
-	return result
-}
-
 func (r RecordingLifecycleRepository) replay(ctx context.Context, queries recordingLifecycleQuerier, ids lifecycleIDSet, operationName, requestKey string, captureEpoch int64, occurredAt time.Time, noPublisher bool) (recordinglifecycle.Publication, bool, error) {
 	operation, err := queries.LockRecordingCaptureLifecycleOperation(ctx, sqlc.LockRecordingCaptureLifecycleOperationParams{TenantID: ids.tenantID, SpaceID: ids.spaceID, EpisodeID: ids.episodeID, OperationName: operationName, RequestKey: requestKey})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -357,77 +257,6 @@ func (r RecordingLifecycleRepository) replay(ctx context.Context, queries record
 	return publication, err == nil, err
 }
 
-func mapRecordingLifecyclePublication(operation sqlc.SyncExternalOperation) (recordinglifecycle.Publication, error) {
-	if !operation.ExternalOperationID.Valid {
-		return recordinglifecycle.Publication{}, recordinglifecycle.ErrOperationConflict
-	}
-	return recordinglifecycle.Publication{
-		ExternalOperationID: utilities.IDFromBytes(operation.ExternalOperationID.Bytes).String(),
-		OperationName:       operation.OperationName,
-		RequestKey:          operation.RequestKey,
-		RequestFingerprint:  append([]byte(nil), operation.RequestFingerprint...),
-		Payload:             append([]byte(nil), operation.Payload...),
-	}, nil
-}
-
 func recordingLifecycleRepositoryError(operation string, err error) error {
 	return fmt.Errorf("%w: %s: %w", recordinglifecycle.ErrRepositoryUnavailable, operation, err)
-}
-
-type recordingLifecycleJourney struct {
-	ID            utilities.ID
-	ParentEventID utilities.ID
-}
-
-func recordingLifecycleJourneyFromContext(ctx context.Context) (recordingLifecycleJourney, error) {
-	if journeyID, ok := observability.JourneyIDFromContext(ctx); ok {
-		parentEventID, err := utilities.NewID()
-		if err != nil {
-			return recordingLifecycleJourney{}, fmt.Errorf("generate recording capture lifecycle journey event id: %w", err)
-		}
-		return recordingLifecycleJourney{ID: journeyID, ParentEventID: parentEventID}, nil
-	}
-	journeyID, err := utilities.NewID()
-	if err != nil {
-		return recordingLifecycleJourney{}, fmt.Errorf("generate recording capture lifecycle journey id: %w", err)
-	}
-	parentEventID, err := utilities.NewID()
-	if err != nil {
-		return recordingLifecycleJourney{}, fmt.Errorf("generate recording capture lifecycle journey event id: %w", err)
-	}
-	return recordingLifecycleJourney{ID: journeyID, ParentEventID: parentEventID}, nil
-}
-
-type recordingLifecycleJourneyAttributes struct {
-	OperationName  string    `json:"operation_name"`
-	CaptureAttempt int       `json:"capture_attempt"`
-	ObservedAt     time.Time `json:"observed_at"`
-	NoPublisher    *bool     `json:"no_publisher,omitempty"`
-}
-
-func persistRecordingLifecycleJourneyRoot(ctx context.Context, transaction pgx.Tx, journey recordingLifecycleJourney, operationName string, attempt int, observedAt time.Time, noPublisher bool) error {
-	attributes := recordingLifecycleJourneyAttributes{OperationName: operationName, CaptureAttempt: attempt, ObservedAt: observedAt.UTC()}
-	if operationName == recordingCaptureReadyOperation {
-		attributes.NoPublisher = &noPublisher
-	}
-	encoded, err := json.Marshal(attributes)
-	if err != nil {
-		return fmt.Errorf("marshal recording capture lifecycle journey attributes: %w", err)
-	}
-	traceID, spanID, _, _ := lifecycleTraceContext(ctx)
-	_, err = transaction.Exec(ctx, `insert into observability_journey_events(event_id, journey_id, sequence, occurred_at, name, phase, state, origin_kind, first_observed_layer, upstream_visibility, trace_id, span_id, attributes) values($1, $2, 0, now(), $3, 'capture_callback', 'accepted', 'worker', 'api', 'visible', $4, $5, $6)`, uuid(journey.ParentEventID), uuid(journey.ID), operationName, optionalText(traceID), optionalText(spanID), encoded)
-	if err != nil {
-		return recordingLifecycleRepositoryError("persist journey root", err)
-	}
-	return nil
-}
-
-func lifecycleTraceContext(ctx context.Context) (string, string, string, string) {
-	span := trace.SpanContextFromContext(ctx)
-	if !span.IsValid() {
-		return "", "", "", ""
-	}
-	traceID, spanID := span.TraceID().String(), span.SpanID().String()
-	traceparent := fmt.Sprintf("00-%s-%s-%02x", traceID, spanID, byte(span.TraceFlags()))
-	return traceID, spanID, traceparent, span.TraceState().String()
 }
