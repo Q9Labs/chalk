@@ -47,7 +47,7 @@ function seconds(value: number): string {
  * Seconds of video decoded only to reach segment starts: each segment's input
  * seek decodes forward from the nearest earlier keyframe. Keyframes are sorted.
  */
-export function seekDecodeSeconds(keyframes: readonly number[], starts: readonly number[]): number {
+function seekDecodeSeconds(keyframes: readonly number[], starts: readonly number[]): number {
   let total = 0;
   for (const start of starts) {
     let previous = 0;
@@ -172,7 +172,7 @@ function placementFit(placement: VideoPlacement, dynamicCover: boolean): string 
   return dynamicCover ? scale : `${scale},crop=${width}:${height}`;
 }
 
-export function segmentFilter(
+function segmentFilter(
   placements: readonly VideoPlacement[],
   output: ComposeOutput,
   firstFrameHolds: ReadonlyMap<string, number> = new Map(),

@@ -24,7 +24,7 @@ export interface ComposeRequestV1 {
   readonly durationMs: number;
 }
 
-export function parseComposeRequestV1(value: unknown): ComposeRequestV1 {
+function parseComposeRequestV1(value: unknown): ComposeRequestV1 {
   const request = objectValue(value, "compose request request");
   exactKeys(request, ["schema_version", "recording_id", "episode_id", "workspace_directory", "presentation_path", "presentation_sha256", "asset_directory", "decoded_media_path", "decoded_media_sha256", "width", "height", "fps", "duration_ms"], "compose request request");
   literalField(request, "schema_version", COMPOSE_REQUEST_VERSION, "compose request schema_version is invalid");
