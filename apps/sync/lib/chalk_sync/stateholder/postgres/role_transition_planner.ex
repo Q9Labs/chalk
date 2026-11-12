@@ -119,7 +119,7 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner do
 
     exercised_sources =
       lost_sources
-      |> Enum.filter(&observed_enabled?(publications, affected.id, &1))
+      |> Enum.filter(&observed_open?(publications, affected.id, &1))
       |> Kernel.++(
         Enum.flat_map(reservations, fn reservation ->
           if reservation.source in lost_sources, do: [reservation.source], else: []
@@ -161,10 +161,14 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner do
     end)
   end
 
-  defp observed_enabled?(publications, participant_id, source) do
+  # A source is open while the registry still holds its publication id. A microphone muted in
+  # place is registered with enabled == false but keeps its node track and source lease, so
+  # unmuting forwards at once; only a closed publication has an empty id and no lease.
+  defp observed_open?(publications, participant_id, source) do
     Enum.any?(publications, fn publication ->
       Map.get(publication, :participant_id) == participant_id and
-        Map.get(publication, :source) == source and Map.get(publication, :enabled) == true
+        Map.get(publication, :source) == source and
+        not is_nil(Map.get(publication, :publication_id))
     end)
   end
 
