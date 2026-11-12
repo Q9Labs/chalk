@@ -56,7 +56,7 @@ export const PEOPLE_STATES: readonly CallState[] = (["dark", "light"] as const).
     return {
       id: `people-${variant.id}-${scheme}`,
       title: `${variant.title} (${scheme})`,
-      actions: panel ? [{ click: "Participants" }] : undefined,
+      actions: panel ? [{ click: "People" }] : undefined,
       render: () => <PeopleState scheme={scheme} others={variant.others} host={"host" in variant ? variant.host : true} knocks={"knocks" in variant ? variant.knocks : 0} />,
     };
   }),

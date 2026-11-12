@@ -215,7 +215,7 @@ export const CALL_STATES: readonly CallState[] = [
   {
     id: "participants",
     title: "Participants panel",
-    actions: [{ click: "Participants" }],
+    actions: [{ click: "People" }],
     render: () => (
       <Live
         snapshot={liveSnapshot({
