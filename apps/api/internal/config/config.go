@@ -86,6 +86,8 @@ const (
 
 	ChalkSFUEnabled             = "CHALK_SFU_ENABLED"
 	ChalkSFUCaptureEnabled      = "CHALK_SFU_CAPTURE_ENABLED"
+	ChalkSFUColocatedCapture    = "CHALK_SFU_COLOCATED_CAPTURE"
+	ChalkSFUColocatedGraceSecs  = "CHALK_SFU_COLOCATED_CAPTURE_GRACE_SECONDS"
 	ChalkSFUNodes               = "CHALK_SFU_NODES"
 	ChalkSFUApplicationID       = "CHALK_SFU_APPLICATION_ID"
 	ChalkSFUServerName          = "CHALK_SFU_SERVER_NAME"
@@ -146,6 +148,9 @@ const (
 	DefaultLogLevel                           = "info"
 	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
 	DefaultChalkSFUTimeoutMS                  = int64(6000)
+	// DefaultChalkSFUColocatedGraceSeconds is how long a capture waits for the healthy worker
+	// beside its SFU node before an on-demand fleet worker may take it.
+	DefaultChalkSFUColocatedGraceSeconds = int32(20)
 	// DefaultChalkSFUStandbyBudget is the packets/s a standby admits for new
 	// Episodes: half the primary's 32,000, because a standby is a smaller node.
 	DefaultChalkSFUStandbyBudget = 16000
@@ -236,6 +241,10 @@ type ChalkSFUConfig struct {
 	// off by default and needs Enabled. Starting a recording on the own SFU stays refused until
 	// the milestone's last step removes that check.
 	CaptureEnabled bool
+	// ColocatedCaptureGrace turns on the capture worker that runs beside each node. Zero is off,
+	// and then every capture goes to the on-demand fleet. A capture waits this long for the
+	// healthy worker of its node, then the fleet may take it. It needs CaptureEnabled.
+	ColocatedCaptureGrace time.Duration
 	// ApplicationID names the SFU pool and goes into each Episode binding, so it
 	// stays the same when hosts or certificates rotate.
 	ApplicationID string
@@ -816,20 +825,25 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 	if err != nil {
 		return ChalkSFUConfig{}, err
 	}
+	colocatedGrace, err := loadColocatedCaptureGrace()
+	if err != nil {
+		return ChalkSFUConfig{}, err
+	}
 	config := ChalkSFUConfig{
-		Enabled:            true,
-		NewEpisodesPaused:  newEpisodesPaused,
-		UnifiedSignaling:   unifiedSignaling,
-		DirectSignalingURL: directURL,
-		CaptureEnabled:     envBool(ChalkSFUCaptureEnabled),
-		CloudflareOverflow: overflow,
-		ApplicationID:      strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
-		ServerName:         strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
-		CAFile:             strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
-		ClientCertFile:     strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
-		ClientKeyFile:      strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
-		STUNURLs:           envList(ChalkSFUSTUNURLs),
-		RequestTimeout:     timeout,
+		ColocatedCaptureGrace: colocatedGrace,
+		Enabled:               true,
+		NewEpisodesPaused:     newEpisodesPaused,
+		UnifiedSignaling:      unifiedSignaling,
+		DirectSignalingURL:    directURL,
+		CaptureEnabled:        envBool(ChalkSFUCaptureEnabled),
+		CloudflareOverflow:    overflow,
+		ApplicationID:         strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
+		ServerName:            strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
+		CAFile:                strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
+		ClientCertFile:        strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
+		ClientKeyFile:         strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
+		STUNURLs:              envList(ChalkSFUSTUNURLs),
+		RequestTimeout:        timeout,
 	}
 	required := []struct{ name, value string }{
 		{ChalkSFUApplicationID, config.ApplicationID},
@@ -859,6 +873,23 @@ func loadChalkSFUConfig() (ChalkSFUConfig, error) {
 		}
 	}
 	return config, nil
+}
+
+func loadColocatedCaptureGrace() (time.Duration, error) {
+	if !envBool(ChalkSFUColocatedCapture) {
+		return 0, nil
+	}
+	if !envBool(ChalkSFUCaptureEnabled) {
+		return 0, fmt.Errorf("%s needs %s=true", ChalkSFUColocatedCapture, ChalkSFUCaptureEnabled)
+	}
+	seconds, err := envInt32(ChalkSFUColocatedGraceSecs, DefaultChalkSFUColocatedGraceSeconds)
+	if err != nil {
+		return 0, err
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("%s must be greater than zero", ChalkSFUColocatedGraceSecs)
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 // parseChalkSFUNodes reads "id=https://host:port" and "standby:id=https://host:port"

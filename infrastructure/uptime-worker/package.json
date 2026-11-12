@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc-rs --noEmit",
+    "test": "node --test src/probe.test.ts",
     "deploy": "wrangler deploy --keep-vars",
     "deploy:dry-run": "wrangler deploy --dry-run"
   },

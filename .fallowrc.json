@@ -60,6 +60,7 @@
     "features/media/sfu/tests/browser/chromium-check.mjs",
     "features/media/sfu/tests/browser/capture-offer.mjs",
     "scripts/gates/doclint.mjs",
+    "scripts/gates/mock-calls.mjs",
     "scripts/gates/osv-snapshot.mjs",
     "scripts/integration-smoke/run.mjs",
     "scripts/recorder/analyze-media.mjs",
