@@ -1,0 +1,121 @@
+name: Rollback rehearsal
+# Weekly, on nightly: deploy the newest passed cut, roll back to the one before it with the Release job production uses, and roll forward again.
+# The rollback on 23 Oct failed because the older release's controller could not read the pointer the newer one wrote. This run fails when that happens again.
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+  id-token: write
+concurrency:
+  group: chalk-environment-nightly
+  cancel-in-progress: false
+  queue: max
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      current: ${{ steps.plan.outputs.current }}
+      previous: ${{ steps.plan.outputs.previous }}
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Pick the two newest passed nightly cuts
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/rehearsal.py plan
+  deploy-current:
+    needs: plan
+    permissions:
+      contents: write # The nightly deploy holds the staging-SFU lease.
+      actions: read
+      deployments: write
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.plan.outputs.current).target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: nightly
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.plan.outputs.current).run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.current).manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.plan.outputs.current).manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.plan.outputs.current).release_id }}
+      media_sha256: ${{ fromJSON(needs.plan.outputs.current).media_sha256 }}
+    secrets: inherit
+  roll-back:
+    needs: [plan, deploy-current]
+    permissions:
+      contents: write
+      actions: read
+      deployments: write
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.plan.outputs.previous).target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: nightly
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.plan.outputs.previous).run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.previous).manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.plan.outputs.previous).manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.plan.outputs.previous).release_id }}
+      media_sha256: ${{ fromJSON(needs.plan.outputs.previous).media_sha256 }}
+    secrets: inherit
+  roll-forward:
+    # Runs after a failed rollback too, so nightly never stays on the older release.
+    needs: [plan, roll-back]
+    if: always() && needs.plan.result == 'success'
+    permissions:
+      contents: write
+      actions: read
+      deployments: write
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.plan.outputs.current).target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: nightly
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.plan.outputs.current).run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.current).manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.plan.outputs.current).manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.plan.outputs.current).release_id }}
+      media_sha256: ${{ fromJSON(needs.plan.outputs.current).media_sha256 }}
+    secrets: inherit
+  result:
+    needs: [plan, deploy-current, roll-back, roll-forward]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Require each leg to have applied its own source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ needs.plan.outputs.current }}
+          PREVIOUS: ${{ needs.plan.outputs.previous }}
+          BASELINE: ${{ toJSON(needs.deploy-current.outputs) }}
+          ROLLBACK: ${{ toJSON(needs.roll-back.outputs) }}
+          FORWARD: ${{ toJSON(needs.roll-forward.outputs) }}
+        run: python3 scripts/releases/rehearsal.py verdict
+      - name: Page Oncall when the weekly rehearsal fails
+        if: failure() && github.event_name == 'schedule'
+        env:
+          ONCALL_WEBHOOK_URL: ${{ secrets.ONCALL_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          jq -n --arg detail "Weekly rollback rehearsal failed on nightly: the previous release may not restore. $RUN_URL" \
+            '{source: "oncall-poller", incidents: [{app: "chalk", kind: "new", key: "rollback-rehearsal", detail: $detail}]}' \
+            | curl --fail --silent --show-error -H 'Content-Type: application/json' --data @- "$ONCALL_WEBHOOK_URL"

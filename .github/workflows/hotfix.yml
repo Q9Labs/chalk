@@ -1,0 +1,183 @@
+name: Hotfix
+run-name: Hotfix ${{ inputs.environment }} ${{ inputs.sha }}
+# Restore service first: ship one master commit to production without waiting for a nightly cut or Promote.
+# It builds on the release now running, keeps that release as the rollback baseline, proves a real call, and rolls back when the call fails.
+# It skips the nightly record, latency and long-call proofs, the scorecard and npm publish. See docs/operators/incident.md.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character commit SHA on master whose push Gate passed
+        required: true
+        type: string
+      environment:
+        description: production for an incident; nightly only to rehearse this workflow
+        type: choice
+        options: [production, nightly]
+        default: production
+      force_smoke_failure:
+        description: Rehearsal on nightly only. Skip the call and treat it as failed, so the automatic rollback runs
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+  deployments: write
+  id-token: write
+concurrency:
+  group: chalk-environment-${{ inputs.environment }}
+  cancel-in-progress: false
+  queue: max
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      baseline: ${{ steps.plan.outputs.baseline }}
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Require a master commit with a green push Gate and name the rollback baseline
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOTFIX_SHA: ${{ inputs.sha }}
+          HOTFIX_ENVIRONMENT: ${{ inputs.environment }}
+          FORCE_SMOKE_FAILURE: ${{ inputs.force_smoke_failure }}
+        run: python3 scripts/releases/hotfix.py plan
+  retain:
+    # What Promote's approve job retains before the first change: the live Pages deployment, and the live media pins of a legacy baseline.
+    needs: plan
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.environment }}
+    outputs:
+      pages_deployment_id: ${{ steps.pages.outputs.pages_deployment_id }}
+      rollback_media: ${{ steps.media.outputs.members }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.environment == 'production' && '5281943bd26d5bdcf4c3915606cd6bfb' || vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Select the explicit production Pages destination
+        if: inputs.environment == 'production'
+        run: |
+          node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
+      - name: Retain the live media pins when the baseline has none
+        id: media
+        env:
+          CHALK_MANAGED_RECORDER_CONFIG_PARAMETER: ${{ vars.CHALK_MANAGED_RECORDER_CONFIG_PARAMETER || format('/chalk/{0}/release/recorder.json', inputs.environment) }}
+          MANAGED_ENVIRONMENT: ${{ inputs.environment }}
+          BASELINE_MEDIA_SHA256: ${{ fromJSON(needs.plan.outputs.baseline).media_sha256 }}
+        run: |
+          if [[ -z "$BASELINE_MEDIA_SHA256" ]]; then
+            python3 scripts/releases/media.py retain_runtime --environment "$MANAGED_ENVIRONMENT" --output previous-media.json
+            echo "members=$(jq -c . previous-media.json)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save the live Pages deployment before any upload
+        id: pages
+        run: python3 scripts/releases/web.py current
+  release:
+    needs: [plan, retain]
+    permissions:
+      contents: write # The nightly deploy holds the staging-SFU lease; production does not use it.
+      actions: read
+      deployments: write
+      id-token: write
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ inputs.sha }}
+      managed_environment: ${{ inputs.environment }}
+      release_managed: true
+      deploy_managed: true
+      deploy_web: true
+      orchestrated: true
+      stable_manifest_run_id: ${{ fromJSON(needs.plan.outputs.baseline).run_id }}
+      stable_manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.baseline).manifest_artifact_id }}
+      # Production keeps the recorder control of its baseline. A nightly rehearsal skips the media build, as production does.
+      enable_recorder_control: false
+    secrets: inherit
+  smoke:
+    # A forced failure skips the call: the rehearsal then proves the rollback leg alone.
+    needs: [plan, release]
+    if: ${{ !inputs.force_smoke_failure }}
+    permissions:
+      contents: write # Nightly proofs hold the shared staging-SFU lease.
+    uses: ./.github/workflows/real-call-proof.yml
+    with:
+      environment: ${{ inputs.environment }}
+      proofs: camera-share
+      media_plane: chalk_sfu
+      transcribe: false
+      release_sha: ${{ inputs.sha }}
+      scorecard_label: hotfix
+    secrets: inherit
+  rollback:
+    # The same Release job Promote uses, on the baseline. It runs once the hotfix reached the host and the real call did not pass.
+    permissions:
+      contents: write
+      actions: read
+      deployments: write
+      id-token: write
+    needs: [plan, retain, release, smoke]
+    if: >-
+      always() && needs.retain.result == 'success' && needs.release.outputs.applied_release_id != '' &&
+      (inputs.force_smoke_failure || needs.release.result != 'success' || needs.smoke.result != 'success' || needs.smoke.outputs.result != 'passed')
+    uses: ./.github/workflows/ci.yml
+    with:
+      target_sha: ${{ fromJSON(needs.plan.outputs.baseline).target_sha }}
+      release_managed: false
+      deploy_managed: true
+      managed_environment: ${{ inputs.environment }}
+      deploy_web: true
+      orchestrated: true
+      manifest_run_id: ${{ fromJSON(needs.plan.outputs.baseline).run_id }}
+      manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.baseline).manifest_artifact_id }}
+      manifest_sha256: ${{ fromJSON(needs.plan.outputs.baseline).manifest_sha256 }}
+      reuse_release_id: ${{ fromJSON(needs.plan.outputs.baseline).release_id }}
+      media_sha256: ${{ fromJSON(needs.plan.outputs.baseline).media_sha256 }}
+      rollback_media: ${{ needs.retain.outputs.rollback_media }}
+      pages_rollback_id: ${{ needs.retain.outputs.pages_deployment_id }}
+    secrets: inherit
+  result:
+    needs: [plan, retain, release, smoke, rollback]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Say whether the hotfix is live, rolled back, or needs a hand
+        if: needs.plan.result == 'success' && needs.retain.result == 'success' && needs.release.result != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOTFIX_SHA: ${{ inputs.sha }}
+          HOTFIX_ENVIRONMENT: ${{ inputs.environment }}
+          BASELINE: ${{ needs.plan.outputs.baseline }}
+          RELEASE_RESULT: ${{ needs.release.result }}
+          APPLIED_RELEASE: ${{ needs.release.outputs.applied_release_id }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
+          SMOKE_OUTCOME: ${{ needs.smoke.outputs.result }}
+          ROLLBACK_RESULT: ${{ needs.rollback.result }}
+          ROLLBACK: ${{ toJSON(needs.rollback.outputs) }}
+          ROLLBACK_MEDIA: ${{ needs.retain.outputs.rollback_media }}
+          PAGES_ID: ${{ needs.retain.outputs.pages_deployment_id }}
+        run: python3 scripts/releases/hotfix.py verdict
+      - name: Refused before the release started stays red
+        if: needs.plan.result != 'success' || needs.retain.result != 'success' || needs.release.result == 'skipped'
+        run: exit 1
+      - name: Record the minutes of each stage
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/hotfix.py timings
