@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { useConnection, useOffline, useSpaceClient } from "../../bindings/hooks";
+import { useOffline, useSpaceClient } from "../../bindings/hooks";
 import { ConnectionStatus } from "./ConnectionStatus";
 import type { ConnectionPhase } from "./use-connection-phase";
 
@@ -10,10 +10,9 @@ export interface LiveConnectionStatusProps {
   readonly onReportProblem?: () => void;
 }
 
-/** Joins the call's connection to the card: queued chat, whether the device is online, and the code a failure carries. */
+/** Joins the call's connection to the card: queued chat and whether the device is online. The failure code goes to the report, not the card. */
 export function LiveConnectionStatus({ phase, onRejoin, onLeave, onReportProblem }: LiveConnectionStatusProps) {
   const client = useSpaceClient();
-  const connection = useConnection();
   const offline = useOffline();
   const online = useSyncExternalStore(subscribeToOnline, readOnline, () => true);
 
