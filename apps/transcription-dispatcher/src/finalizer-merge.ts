@@ -1,10 +1,11 @@
-import { parseTranscriptLanguageMode, transcriptLanguageValue } from "@chalk/transcript-language";
+import { transcriptLanguageValue } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
+import { MAX_FINAL_CUES, validateChunkDocument } from "./finalizer-chunk-validation.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
-import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult } from "./types.js";
+import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument } from "./types.js";
 
-const MAX_FINAL_CUES = 100_000;
 const MAX_TEXT_CHARS = 50_000;
+const AUTO_LANGUAGE = { mode: "auto" } as const;
 
 export interface ChunkDocument {
   assignment: FinalizeChunkAssignment;
@@ -19,6 +20,24 @@ interface MergeOptions {
   maxTextChars?: number;
 }
 
+type ChunkCue = NormalizedCue & { readonly chunkId: string };
+
+/** What the chunks add up to. Each field says what it holds when a chunk is silent about it. */
+interface Totals {
+  providers: Set<NormalizedTranscriptDocument["provider"]>;
+  models: Set<string>;
+  versionContracts: Set<string>;
+  languages: Set<string>;
+  measuredAudioMs: number;
+  observedDurationMs: number | undefined;
+  reportedCostUsd: number;
+  everyChunkReportsCost: boolean;
+  segmentCount: number;
+  wordCount: number;
+  confidenceTotal: number;
+  confidenceWeight: number;
+}
+
 /**
  * Merge accepted chunk documents without trusting their order or metadata.
  * Different source tracks may share a timeline. Their intersecting cues are
@@ -26,252 +45,134 @@ interface MergeOptions {
  */
 export function mergeTranscriptDocuments(options: MergeOptions): NormalizedTranscriptDocument {
   if (options.chunks.length === 0 || options.chunks.length > MAX_FINALIZER_CHUNKS) throw new AssignmentError("finalize chunk count is invalid");
-  const chunkIDs = new Set<string>();
-  for (const result of options.chunks) {
-    if (chunkIDs.has(result.assignment.chunkId)) throw new AssignmentError("finalize chunk IDs are duplicated");
-    chunkIDs.add(result.assignment.chunkId);
-  }
-  const ordered = [...options.chunks].sort((left, right) => left.assignment.episodeStartMs - right.assignment.episodeStartMs || left.assignment.episodeEndMs - right.assignment.episodeEndMs || left.assignment.chunkId.localeCompare(right.assignment.chunkId));
-  const providers = new Set<ProviderResult["provider"]>();
-  const models = new Set<string>();
-  const versionContracts = new Set<string>();
-  const maxTextChars = options.maxTextChars ?? MAX_TEXT_CHARS;
-  const episodeId = options.episodeId;
-  const languages = new Set<string>();
-  let measuredAudioMs = 0;
-  let providerObservedDurationMs = 0;
-  let hasProviderObservedDuration = false;
-  let providerReportedCostUsd = 0;
-  let allChunksReportCost = true;
-  const cues: Array<NormalizedCue & { readonly chunkId: string }> = [];
-  const quality = {
-    segmentCount: 0,
-    wordCount: 0,
-    confidenceWeightedTotal: 0,
-    confidenceWeight: 0,
-    hasConfidence: false,
-  };
-
+  const chunkIds = new Set(options.chunks.map((result) => result.assignment.chunkId));
+  if (chunkIds.size !== options.chunks.length) throw new AssignmentError("finalize chunk IDs are duplicated");
+  const ordered = [...options.chunks].sort(compareChunks);
+  const transcriptLanguage = ordered[0]?.document.transcriptLanguage ?? AUTO_LANGUAGE;
+  const totals = emptyTotals();
+  const cues: ChunkCue[] = [];
   for (const result of ordered) {
-    const document = validateChunkDocument(result.document, result.assignment, episodeId, MAX_FINAL_CUES, maxTextChars);
+    const document = validateChunkDocument(result.document, result.assignment, options.episodeId, options.maxTextChars ?? MAX_TEXT_CHARS);
     if (document.provider === "mixed") throw new AssignmentError("finalize chunk provider summary is invalid");
-    if (transcriptLanguageValue(document.transcriptLanguage ?? { mode: "auto" }) !== transcriptLanguageValue(ordered[0]?.document.transcriptLanguage ?? { mode: "auto" })) throw new AssignmentError("finalize transcript language modes differ");
-    providers.add(document.provider);
-    models.add(document.model);
-    versionContracts.add(document.versionContract);
-    if (document.language !== undefined) languages.add(document.language);
-    measuredAudioMs = boundedSum(measuredAudioMs, document.measuredAudioMs, "finalize measured duration");
-    if (document.providerReportedCostUsd === undefined) allChunksReportCost = false;
-    else providerReportedCostUsd += document.providerReportedCostUsd;
-    if (document.providerObservedDurationMs !== undefined) {
-      hasProviderObservedDuration = true;
-      providerObservedDurationMs = boundedSum(providerObservedDurationMs, document.providerObservedDurationMs, "finalize provider duration");
-    }
-    if (document.quality) {
-      quality.segmentCount = boundedSum(quality.segmentCount, document.quality.segmentCount, "finalize segment count");
-      quality.wordCount = boundedSum(quality.wordCount, document.quality.wordCount, "finalize word count");
-      if (document.quality.meanConfidence !== undefined) {
-        const weight = document.quality.segmentCount > 0 ? document.quality.segmentCount : 1;
-        quality.confidenceWeightedTotal += document.quality.meanConfidence * weight;
-        quality.confidenceWeight += weight;
-        quality.hasConfidence = true;
-      }
-    }
+    if (transcriptLanguageValue(document.transcriptLanguage ?? AUTO_LANGUAGE) !== transcriptLanguageValue(transcriptLanguage)) throw new AssignmentError("finalize transcript language modes differ");
+    addDocument(totals, document);
     for (const cue of document.cues) cues.push({ ...cue, chunkId: result.assignment.chunkId });
   }
-  if (providers.size === 0 || models.size === 0 || versionContracts.size === 0) throw new AssignmentError("finalize metadata is incomplete");
   if (cues.length > MAX_FINAL_CUES) throw new AssignmentError("finalize cue bound exceeded");
   cues.sort(compareCues);
   markCrossChunkOverlaps(cues);
-  const outputQuality =
-    quality.segmentCount > 0 || quality.wordCount > 0 || quality.hasConfidence
-      ? {
-          segmentCount: quality.segmentCount,
-          wordCount: quality.wordCount,
-          ...(quality.hasConfidence && quality.confidenceWeight > 0 ? { meanConfidence: quality.confidenceWeightedTotal / quality.confidenceWeight } : {}),
-        }
-      : undefined;
-  const language = languages.size === 1 ? [...languages][0] : undefined;
+  return finalDocument(options, transcriptLanguage, totals, cues);
+}
+
+function emptyTotals(): Totals {
   return {
-    schemaVersion: "transcript.v1",
-    transcriptLanguage: ordered[0]?.document.transcriptLanguage ?? { mode: "auto" },
-    jobId: options.jobId,
-    episodeId,
-    cues: cues.map(({ chunkId: _chunkId, ...cue }) => cue),
-    ...(language === undefined ? {} : { language }),
-    provider: providers.size === 1 ? ([...providers][0] as ProviderResult["provider"]) : "mixed",
-    model: models.size === 1 ? ([...models][0] as string) : "mixed",
-    versionContract: versionContracts.size === 1 ? ([...versionContracts][0] as string) : "mixed",
-    attempt: options.attempt,
-    measuredAudioMs,
-    ...(hasProviderObservedDuration ? { providerObservedDurationMs } : {}),
-    ...(allChunksReportCost ? { providerReportedCostUsd } : {}),
-    ...(outputQuality === undefined ? {} : { quality: outputQuality }),
+    providers: new Set(),
+    models: new Set(),
+    versionContracts: new Set(),
+    languages: new Set(),
+    measuredAudioMs: 0,
+    observedDurationMs: undefined,
+    reportedCostUsd: 0,
+    everyChunkReportsCost: true,
+    segmentCount: 0,
+    wordCount: 0,
+    confidenceTotal: 0,
+    confidenceWeight: 0,
   };
 }
 
-interface OverlapCandidate {
+function addDocument(totals: Totals, document: NormalizedTranscriptDocument): void {
+  totals.providers.add(document.provider);
+  totals.models.add(document.model);
+  totals.versionContracts.add(document.versionContract);
+  if (document.language !== undefined) totals.languages.add(document.language);
+  totals.measuredAudioMs = boundedSum(totals.measuredAudioMs, document.measuredAudioMs, "finalize measured duration");
+  if (document.providerObservedDurationMs !== undefined) totals.observedDurationMs = boundedSum(totals.observedDurationMs ?? 0, document.providerObservedDurationMs, "finalize provider duration");
+  if (document.providerReportedCostUsd === undefined) totals.everyChunkReportsCost = false;
+  else totals.reportedCostUsd += document.providerReportedCostUsd;
+  const quality = document.quality;
+  if (!quality) return;
+  totals.segmentCount = boundedSum(totals.segmentCount, quality.segmentCount, "finalize segment count");
+  totals.wordCount = boundedSum(totals.wordCount, quality.wordCount, "finalize word count");
+  if (quality.meanConfidence === undefined) return;
+  const weight = Math.max(quality.segmentCount, 1);
+  totals.confidenceTotal += quality.meanConfidence * weight;
+  totals.confidenceWeight += weight;
+}
+
+function finalDocument(options: MergeOptions, transcriptLanguage: NonNullable<NormalizedTranscriptDocument["transcriptLanguage"]>, totals: Totals, cues: readonly ChunkCue[]): NormalizedTranscriptDocument {
+  const hasQuality = totals.segmentCount > 0 || totals.wordCount > 0 || totals.confidenceWeight > 0;
+  const language = onlyValue(totals.languages);
+  return {
+    schemaVersion: "transcript.v1",
+    transcriptLanguage,
+    jobId: options.jobId,
+    episodeId: options.episodeId,
+    cues: cues.map(({ chunkId: _chunkId, ...cue }) => cue),
+    ...(language === undefined ? {} : { language }),
+    provider: onlyValue(totals.providers) ?? "mixed",
+    model: onlyValue(totals.models) ?? "mixed",
+    versionContract: onlyValue(totals.versionContracts) ?? "mixed",
+    attempt: options.attempt,
+    measuredAudioMs: totals.measuredAudioMs,
+    ...(totals.observedDurationMs === undefined ? {} : { providerObservedDurationMs: totals.observedDurationMs }),
+    ...(totals.everyChunkReportsCost ? { providerReportedCostUsd: totals.reportedCostUsd } : {}),
+    ...(hasQuality
+      ? {
+          quality: {
+            segmentCount: totals.segmentCount,
+            wordCount: totals.wordCount,
+            ...(totals.confidenceWeight > 0 ? { meanConfidence: totals.confidenceTotal / totals.confidenceWeight } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function onlyValue<T>(values: ReadonlySet<T>): T | undefined {
+  return values.size === 1 ? [...values][0] : undefined;
+}
+
+interface Reach {
   chunkId: string;
   endMs: number;
 }
 
-interface OverlapSummary {
-  first?: OverlapCandidate;
-  second?: OverlapCandidate;
-}
-
-function markCrossChunkOverlaps(cues: Array<NormalizedCue & { readonly chunkId: string }>): void {
-  if (cues.length < 2) return;
-  const starts = [...new Set(cues.map((cue) => cue.startMs))].sort((left, right) => left - right);
-  const leafSummaries = new Map<number, OverlapSummary>();
+/**
+ * A cue overlaps when a cue from another chunk starts before it ends and ends
+ * after it starts. The cues are sorted by start, so "everything that starts
+ * before this cue ends" is a prefix. Each prefix needs only the two chunks that
+ * reach furthest: one of them is foreign to any cue.
+ */
+function markCrossChunkOverlaps(cues: ChunkCue[]): void {
+  const reachByPrefix: Reach[][] = [];
+  let furthest: Reach[] = [];
   for (const cue of cues) {
-    const existing = leafSummaries.get(cue.startMs);
-    leafSummaries.set(cue.startMs, mergeOverlapSummaries(existing, { first: { chunkId: cue.chunkId, endMs: cue.endMs } }));
+    furthest = extendReach(furthest, cue.chunkId, cue.endMs);
+    reachByPrefix.push(furthest);
   }
-  const treeSize = nextPowerOfTwo(starts.length);
-  const tree: Array<OverlapSummary | undefined> = Array.from({ length: treeSize * 2 });
-  for (let index = 0; index < starts.length; index += 1) tree[treeSize + index] = leafSummaries.get(starts[index] as number);
-  for (let index = treeSize - 1; index > 0; index -= 1) tree[index] = mergeOverlapSummaries(tree[index * 2], tree[index * 2 + 1]);
-
   for (const cue of cues) {
-    const count = lowerBound(starts, cue.endMs);
-    if (count === 0) continue;
-    const summary = queryOverlapPrefix(tree, treeSize, count);
-    const foreign = summary.first?.chunkId === cue.chunkId ? summary.second : summary.first;
+    const prefixLength = countStartingBefore(cues, cue.endMs);
+    const foreign = reachByPrefix[prefixLength - 1]?.find((reach) => reach.chunkId !== cue.chunkId);
     if (foreign && foreign.endMs > cue.startMs) cue.overlap = true;
   }
 }
 
-function mergeOverlapSummaries(left?: OverlapSummary, right?: OverlapSummary): OverlapSummary {
-  const candidates: OverlapCandidate[] = [];
-  for (const candidate of [left?.first, left?.second, right?.first, right?.second]) {
-    if (!candidate) continue;
-    const existing = candidates.find((entry) => entry.chunkId === candidate.chunkId);
-    if (existing) {
-      if (candidate.endMs > existing.endMs) existing.endMs = candidate.endMs;
-    } else {
-      candidates.push({ ...candidate });
-    }
-  }
-  candidates.sort((candidate, other) => other.endMs - candidate.endMs || candidate.chunkId.localeCompare(other.chunkId));
-  return {
-    ...(candidates[0] === undefined ? {} : { first: candidates[0] }),
-    ...(candidates[1] === undefined ? {} : { second: candidates[1] }),
-  };
+function extendReach(furthest: readonly Reach[], chunkId: string, endMs: number): Reach[] {
+  const previousEnd = furthest.find((reach) => reach.chunkId === chunkId)?.endMs ?? endMs;
+  const others = furthest.filter((reach) => reach.chunkId !== chunkId);
+  return [...others, { chunkId, endMs: Math.max(previousEnd, endMs) }].sort((left, right) => right.endMs - left.endMs).slice(0, 2);
 }
 
-function queryOverlapPrefix(tree: Array<OverlapSummary | undefined>, treeSize: number, count: number): OverlapSummary {
-  let left = treeSize;
-  let right = treeSize + count;
-  let result: OverlapSummary | undefined;
-  while (left < right) {
-    if (left % 2 === 1) result = mergeOverlapSummaries(result, tree[left++]);
-    if (right % 2 === 1) result = mergeOverlapSummaries(result, tree[--right]);
-    left = Math.floor(left / 2);
-    right = Math.floor(right / 2);
-  }
-  return result ?? {};
-}
-
-function lowerBound(values: readonly number[], target: number): number {
+function countStartingBefore(sortedCues: readonly ChunkCue[], endMs: number): number {
   let low = 0;
-  let high = values.length;
+  let high = sortedCues.length;
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
-    if ((values[middle] as number) < target) low = middle + 1;
+    if ((sortedCues[middle] as ChunkCue).startMs < endMs) low = middle + 1;
     else high = middle;
   }
   return low;
-}
-
-function nextPowerOfTwo(value: number): number {
-  let result = 1;
-  while (result < value) result *= 2;
-  return result;
-}
-
-function validateChunkDocument(value: NormalizedTranscriptDocument, chunk: FinalizeChunkAssignment, expectedEpisodeId: string, maxCues: number, maxTextChars: number): NormalizedTranscriptDocument {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AssignmentError("finalize chunk document is invalid");
-  if (value.transcriptLanguage !== undefined) parseTranscriptLanguageMode(value.transcriptLanguage);
-  if (value.schemaVersion !== "transcript.v1") throw new AssignmentError("finalize schema drift");
-  boundedText(value.jobId, "finalize source job ID");
-  if (typeof value.episodeId !== "string" || value.episodeId.length === 0 || value.episodeId !== expectedEpisodeId) throw new AssignmentError("finalize identity metadata conflicts");
-  if (value.provider !== "deepinfra" && value.provider !== "cloudflare" && value.provider !== "openrouter") throw new AssignmentError("finalize provider is invalid");
-  boundedText(value.model, "finalize model");
-  boundedText(value.versionContract, "finalize version contract");
-  if (!Number.isInteger(value.attempt) || value.attempt < 0) throw new AssignmentError("finalize attempt is invalid");
-  if (!Number.isInteger(value.measuredAudioMs) || value.measuredAudioMs < 0 || value.measuredAudioMs > chunk.episodeEndMs - chunk.episodeStartMs) throw new AssignmentError("finalize measured duration is invalid");
-  if (value.providerObservedDurationMs !== undefined && (!Number.isSafeInteger(value.providerObservedDurationMs) || value.providerObservedDurationMs < 0 || value.providerObservedDurationMs > chunk.episodeEndMs - chunk.episodeStartMs))
-    throw new AssignmentError("finalize provider duration is invalid");
-  if (value.billedAudioSeconds !== undefined) throw new AssignmentError("finalize billing claim is not authoritative");
-  if (value.providerReportedCostUsd !== undefined && (!Number.isFinite(value.providerReportedCostUsd) || value.providerReportedCostUsd < 0 || value.providerReportedCostUsd > 1_000)) throw new AssignmentError("finalize reported cost is invalid");
-  if (value.language !== undefined) boundedText(value.language, "finalize language", 64);
-  if (!Array.isArray(value.cues) || value.cues.length > maxCues) throw new AssignmentError("finalize cues are invalid");
-  const cues = value.cues.filter((cue) => {
-    if (!cue || typeof cue !== "object" || Array.isArray(cue)) return true;
-    return typeof cue.text !== "string" || cue.text.trim().length > 0;
-  });
-  for (const cue of cues) {
-    validateCue(cue, chunk, maxTextChars);
-    if (cue.provider !== value.provider || cue.model !== value.model || cue.versionContract !== value.versionContract) throw new AssignmentError("finalize cue metadata conflicts");
-  }
-  if (value.quality !== undefined) validateQuality(value.quality);
-  return cues.length === value.cues.length ? value : { ...value, cues };
-}
-
-function validateCue(cue: NormalizedCue, chunk: FinalizeChunkAssignment, maxTextChars: number): void {
-  if (
-    !cue ||
-    typeof cue !== "object" ||
-    Array.isArray(cue) ||
-    !Number.isSafeInteger(cue.startMs) ||
-    !Number.isSafeInteger(cue.endMs) ||
-    !Number.isSafeInteger(chunk.episodeStartMs) ||
-    !Number.isSafeInteger(chunk.episodeEndMs) ||
-    cue.startMs < chunk.episodeStartMs ||
-    cue.endMs > chunk.episodeEndMs ||
-    cue.endMs <= cue.startMs
-  )
-    throw new AssignmentError("finalize cue bounds are invalid");
-  if (typeof cue.text !== "string" || cue.text.length === 0 || cue.text.length > maxTextChars) throw new AssignmentError("finalize cue text is invalid");
-  if (cue.trackClass !== "microphone") throw new AssignmentError("finalize cue track class is invalid");
-  validateIdentity(cue.identity);
-  boundedText(cue.displayNameSnapshot, "finalize display name", 256);
-  if (typeof cue.overlap !== "boolean") throw new AssignmentError("finalize cue overlap is invalid");
-  if (cue.provider !== "deepinfra" && cue.provider !== "cloudflare" && cue.provider !== "openrouter") throw new AssignmentError("finalize cue provider is invalid");
-  boundedText(cue.model, "finalize cue model");
-  boundedText(cue.versionContract, "finalize cue version contract");
-  if (!Number.isInteger(cue.attempt) || cue.attempt < 0) throw new AssignmentError("finalize cue attempt is invalid");
-  if (cue.quality !== undefined) {
-    if (!cue.quality || typeof cue.quality !== "object" || Array.isArray(cue.quality)) throw new AssignmentError("finalize cue quality is invalid");
-    if (cue.quality.confidence !== undefined && (typeof cue.quality.confidence !== "number" || cue.quality.confidence < 0 || cue.quality.confidence > 1)) throw new AssignmentError("finalize cue confidence is invalid");
-  }
-}
-
-function validateIdentity(value: ManifestIdentity): void {
-  if (!value || typeof value !== "object" || Array.isArray(value) || value.kind !== "participant") throw new AssignmentError("finalize cue identity is invalid");
-  if (
-    typeof value.participantRef !== "string" ||
-    value.participantRef.length === 0 ||
-    !Number.isSafeInteger(value.participantGeneration) ||
-    value.participantGeneration < 1 ||
-    typeof value.trackId !== "string" ||
-    value.trackId.length === 0 ||
-    typeof value.trackEpoch !== "string" ||
-    value.trackEpoch.length === 0
-  )
-    throw new AssignmentError("finalize participant identity is incomplete");
-}
-
-function validateQuality(value: unknown): void {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new AssignmentError("finalize quality is invalid");
-  const quality = value as NonNullable<NormalizedTranscriptDocument["quality"]>;
-  if (!Number.isInteger(quality.segmentCount) || quality.segmentCount < 0 || !Number.isInteger(quality.wordCount) || quality.wordCount < 0) throw new AssignmentError("finalize quality counts are invalid");
-  if (quality.meanConfidence !== undefined && (typeof quality.meanConfidence !== "number" || quality.meanConfidence < 0 || quality.meanConfidence > 1)) throw new AssignmentError("finalize quality confidence is invalid");
-}
-
-function boundedText(value: unknown, label: string, max = 512): asserts value is string {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new AssignmentError(`${label} is invalid`);
 }
 
 function boundedSum(left: number, right: number, label: string): number {
@@ -279,10 +180,12 @@ function boundedSum(left: number, right: number, label: string): number {
   return left + right;
 }
 
-function compareCues(left: NormalizedCue & { readonly chunkId: string }, right: NormalizedCue & { readonly chunkId: string }): number {
-  return (
-    left.startMs - right.startMs || left.endMs - right.endMs || identityKey(left.identity).localeCompare(identityKey(right.identity)) || left.trackClass.localeCompare(right.trackClass) || left.text.localeCompare(right.text) || left.chunkId.localeCompare(right.chunkId) || left.attempt - right.attempt
-  );
+function compareChunks(left: ChunkDocument, right: ChunkDocument): number {
+  return left.assignment.episodeStartMs - right.assignment.episodeStartMs || left.assignment.episodeEndMs - right.assignment.episodeEndMs || left.assignment.chunkId.localeCompare(right.assignment.chunkId);
+}
+
+function compareCues(left: ChunkCue, right: ChunkCue): number {
+  return left.startMs - right.startMs || left.endMs - right.endMs || identityKey(left.identity).localeCompare(identityKey(right.identity)) || left.trackClass.localeCompare(right.trackClass) || left.text.localeCompare(right.text) || left.chunkId.localeCompare(right.chunkId) || left.attempt - right.attempt;
 }
 
 function identityKey(value: ManifestIdentity): string {

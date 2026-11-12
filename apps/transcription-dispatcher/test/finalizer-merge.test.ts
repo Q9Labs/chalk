@@ -126,7 +126,7 @@ describe("mergeTranscriptDocuments", () => {
         const cues: NormalizedCue[] = [];
         for (let count = next(6); count > 0; count -= 1) {
           const startMs = next(900);
-          const endMs = startMs + 1 + next(150);
+          const endMs = Math.min(startMs + 1 + next(150), 1_000);
           const text = `${id}-${cues.length}`;
           cues.push(cue({ startMs, endMs, text }));
           all.push({ chunkId: id, startMs, endMs, text });
