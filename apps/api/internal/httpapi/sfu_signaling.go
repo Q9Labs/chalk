@@ -236,10 +236,9 @@ func listPublications(ctx context.Context, publications mediapublications.Regist
 		if publication.PublicationID == "" {
 			continue
 		}
-		_, held := snapshot.Held[publication.PublicationID]
-		// Only a microphone stays listed while held: a listener keeps its receiver, so the unmute needs no pull. A quiet
-		// video would read as a stall to a listener, so a held camera leaves the list as it always did.
-		if publication.Enabled || (held && publication.Source == "microphone") {
+		// Only a microphone is ever held: a listener keeps its receiver, so the unmute needs no pull. A quiet video would
+		// read as a stall to a listener, so a muted camera leaves the list as it always did.
+		if publication.Enabled || publication.Held {
 			list.Publications = append(list.Publications, mediaplane.ListedPublication{ParticipantID: publication.ParticipantID.String(), Source: publication.Source, PublicationID: publication.PublicationID, Paused: !publication.Enabled})
 		}
 	}

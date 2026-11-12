@@ -344,15 +344,32 @@ func (r *reconciliationRepositoryStub) AppendPublicationObservation(ctx context.
 	return provideroperations.Observation{}, ErrInvalidPublication
 }
 
-func TestLatestReportsAPublicationMutedInPlaceAsHeldWhileItsOwnerIsStillThere(t *testing.T) {
+func TestRetiringAMutedMicrophoneAdvancesTheCursorOnceAndStopsHoldingIt(t *testing.T) {
 	for _, reason := range []string{"present", "left", "generation", "connection", "closed"} {
 		t.Run(reason, func(t *testing.T) {
 			repository := &reconciliationRepositoryStub{}
 			service := NewService(repository)
-			tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
-			publicationID := repository.appended.Publications[0].PublicationID
-			if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: "camera", PublicationID: publicationID, Enabled: false}); err != nil {
-				t.Fatalf("hold: %v", err)
+			tenantID := reconciliationTestID(t, "11111111-1111-4111-8111-111111111111")
+			episodeID := reconciliationTestID(t, "22222222-2222-4222-8222-222222222222")
+			participantID := reconciliationTestID(t, "33333333-3333-4333-8333-333333333333")
+			// The microphone is the only publication, so that its retirement is the only change that can advance the cursor.
+			if _, err := service.RecordPublishedTracks(context.Background(), RecordInput{
+				TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "publisher-connection",
+				Tracks: []PublishedTrack{{Source: "microphone", MID: "mic-mid", TrackName: "mic-track"}},
+			}); err != nil {
+				t.Fatalf("publish microphone: %v", err)
+			}
+			microphone := repository.appended.Publications[0]
+			mute := func(source, publicationID string) {
+				t.Helper()
+				if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: source, PublicationID: publicationID, Enabled: false}); err != nil {
+					t.Fatalf("mute %s: %v", source, err)
+				}
+			}
+			mute("microphone", microphone.PublicationID)
+			held, err := service.Latest(context.Background(), tenantID, episodeID)
+			if err != nil {
+				t.Fatal(err)
 			}
 			switch reason {
 			case "left":
@@ -362,18 +379,63 @@ func TestLatestReportsAPublicationMutedInPlaceAsHeldWhileItsOwnerIsStillThere(t 
 			case "connection":
 				repository.participants = []PublicationParticipant{{ID: participantID, Generation: 1, ConnectionID: "replacement"}}
 			case "closed":
-				if err := service.RecordClosedPublication(context.Background(), CloseInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "publisher-connection", MID: "camera-mid", Source: "camera", PublicationID: publicationID}); err != nil {
+				if err := service.RecordClosedPublication(context.Background(), CloseInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "publisher-connection", MID: "mic-mid", Source: "microphone", PublicationID: microphone.PublicationID}); err != nil {
 					t.Fatalf("close: %v", err)
 				}
 			}
-			snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
+			after, err := service.Latest(context.Background(), tenantID, episodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, held := snapshot.Held[publicationID]
-			if held != (reason == "present") {
-				t.Fatalf("held = %t for %q, snapshot %#v", held, reason, snapshot)
+			again, err := service.Latest(context.Background(), tenantID, episodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			listed := func(snapshot Snapshot) (listed bool) {
+				for _, publication := range snapshot.Publications {
+					if publication.Source == "microphone" && publication.PublicationID != "" && (publication.Enabled || publication.Held) {
+						listed = true
+					}
+				}
+				return listed
+			}
+			if !listed(held) {
+				t.Fatalf("a muted microphone with its owner present must be listed: %#v", held)
+			}
+			retired := reason != "present"
+			if listed(after) == retired {
+				t.Fatalf("listed = %t for %q, snapshot %#v", listed(after), reason, after)
+			}
+			if retired != (after.Sequence > held.Sequence) && reason != "closed" {
+				t.Fatalf("the list changed for %q but the cursor went %d to %d: a listener would see two lists at one cursor", reason, held.Sequence, after.Sequence)
+			}
+			if again.Sequence != after.Sequence {
+				t.Fatalf("a second read must not advance the cursor again: %d then %d", after.Sequence, again.Sequence)
+			}
+			if reason != "present" && reason != "closed" {
+				for _, publication := range after.Publications {
+					if publication.Source == "microphone" && publication.PublicationID != microphone.PublicationID {
+						t.Fatalf("retiring must keep the cleanup reference %q, got %#v", microphone.PublicationID, publication)
+					}
+				}
 			}
 		})
+	}
+}
+
+func TestMutingACameraInPlaceNeverHoldsIt(t *testing.T) {
+	repository := &reconciliationRepositoryStub{}
+	service := NewService(repository)
+	tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
+	publicationID := repository.appended.Publications[0].PublicationID
+	if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: "camera", PublicationID: publicationID, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Publications[0].Held {
+		t.Fatalf("a muted camera must leave the list: %#v", snapshot)
 	}
 }
