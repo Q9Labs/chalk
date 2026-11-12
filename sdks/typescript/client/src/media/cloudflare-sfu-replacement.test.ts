@@ -50,7 +50,8 @@ it("does not ask for a replacement after a restart adopted a binding while the r
   // The replacement is requested a few microtasks after a signaling failure. Restart at every step of that window.
   let restartedInWindow = 0;
   for (let hops = 0; hops < 40; hops++) {
-    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    let replacements = 0;
+    const replaceMediaConnection = async () => bootstrap(`replacement-${replacements++}`);
     await withTimedHarness(
       async (h) => {
         await h.client.start(fakeStream());
@@ -66,14 +67,14 @@ it("does not ask for a replacement after a restart adopted a binding while the r
 
         const pulling = h.client.refreshRemotePublications().catch(() => undefined);
         for (let hop = 0; hop < hops; hop++) await Promise.resolve();
-        const callsBeforeRestart = replaceMediaConnection.mock.calls.length;
+        const callsBeforeRestart = replacements;
         const restarting = h.client.restart(bootstrap("restarted")).catch(() => undefined);
         await vi.advanceTimersByTimeAsync(0);
         await Promise.all([pulling, restarting]);
         await vi.advanceTimersByTimeAsync(0);
 
         if (callsBeforeRestart === 0) restartedInWindow++;
-        expect(replaceMediaConnection).toHaveBeenCalledTimes(callsBeforeRestart);
+        expect(replacements).toBe(callsBeforeRestart);
       },
       { replaceMediaConnection },
     );
