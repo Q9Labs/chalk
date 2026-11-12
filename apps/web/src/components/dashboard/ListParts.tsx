@@ -55,7 +55,7 @@ export function SessionRow({ row }: { readonly row: RowModel }) {
       <div className="dsk">
         <BadgeView badge={recording} />
       </div>
-      <div className="dsk tc">
+      <div className="dsk">
         <BadgeView badge={transcript} />
       </div>
       <div className="mob mt num">

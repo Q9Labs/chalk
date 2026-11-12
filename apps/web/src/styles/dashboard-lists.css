@@ -940,6 +940,18 @@
   gap: var(--space-2);
 }
 
+/* On a phone a session's actions take their own line under the title, so the date keeps the full width. */
+@media (max-width: 720px) {
+  .site .dash .dev .pagehead:has(> .end) {
+    flex-wrap: wrap;
+  }
+
+  .site .dash .dev .pagehead > .end {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+}
+
 .site .dash .dev .dsplit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;

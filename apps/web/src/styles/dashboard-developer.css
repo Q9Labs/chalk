@@ -1576,3 +1576,26 @@
   inset: var(--space-1);
   border-radius: var(--corner-lg);
 }
+
+/* The session skeleton's recording and transcript cards hold a video-shaped block, as the loaded cards do. */
+.site .dash .dev .skpanel {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.site .dash .dev .skpanel .sk {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--corner-xl);
+}
+
+/* With a second line under the title, the icon sits on the title's line instead of between the two. */
+.site .dash .dev .ph:has(.sub) {
+  align-items: flex-start;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.site .dash .dev .ph:has(.sub) > svg.site-icon {
+  margin-top: 1px;
+}

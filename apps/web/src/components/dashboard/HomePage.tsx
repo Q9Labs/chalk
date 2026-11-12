@@ -355,7 +355,10 @@ function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly
         <CopyAction text={link} pill />
       </div>
       <p className="help" style={{ marginTop: "var(--space-3)" }}>
-        People ask to join, and you let them in. Change this on the call’s page.
+        People ask to join, and you let them in.{" "}
+        <Link to="/dashboard/call/$spaceId" params={{ spaceId: call.id }} hash="access">
+          Change who can join
+        </Link>
       </p>
       <div className="field" style={{ marginTop: "var(--space-5)" }}>
         <span className="lbl" id="ready-language-label">

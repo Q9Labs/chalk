@@ -1,4 +1,3 @@
-import { TranscriptLanguageSettings } from "./TranscriptLanguageSettings";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -13,6 +12,9 @@ import { useLoad } from "./AppShell";
 import { RenameDialog } from "./HomePage";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
+import { useJumpTarget } from "./jump";
+import { LanguagePicker } from "./LanguagePicker";
+import { rememberLanguage, type NewCallLanguage } from "./transcript-languages";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
@@ -157,6 +159,8 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const toast = useToast();
   const navigate = useNavigate();
   const intents = useIntentKeys();
+  const [savingLanguage, setSavingLanguage] = useState(false);
+  useJumpTarget(state.kind === "ready");
   const back = (
     <Link className="back" to="/dashboard">
       <Icon name="left" />
@@ -179,14 +183,34 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
   const current = episodes.find((episode) => episode.status === "active");
   const past = episodes.filter((episode) => episode !== current);
 
+  // Settings apply on the spot and roll back if the server refuses, so a choice never waits on the network.
   async function setAdmission(admission: Admission) {
-    if (admission === call.admission) return;
+    const before = call.admission;
+    if (admission === before) return;
+    update((data) => ({ ...data, call: { ...data.call, admission } }));
     try {
       const { call: changed } = await act("call", { action: "set-admission", spaceId, admission });
       update((data) => ({ ...data, call: changed }));
-      toast(admission === "anyone" ? "Anyone with the link can join now" : "People now ask to join");
     } catch (error) {
+      update((data) => ({ ...data, call: { ...data.call, admission: before } }));
       toast(errorMessage(error), { icon: "alert" });
+    }
+  }
+
+  async function setLanguage(transcriptLanguage: NewCallLanguage) {
+    const before = call.transcriptLanguage ?? null;
+    if (transcriptLanguage === before) return;
+    update((data) => ({ ...data, call: { ...data.call, transcriptLanguage } }));
+    setSavingLanguage(true);
+    try {
+      const { call: changed } = await act("call", { action: "set-transcript-language", spaceId, transcriptLanguage });
+      update((data) => ({ ...data, call: changed }));
+      if (transcriptLanguage && transcriptLanguage !== "auto") rememberLanguage(transcriptLanguage);
+    } catch (error) {
+      update((data) => ({ ...data, call: { ...data.call, transcriptLanguage: before } }));
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setSavingLanguage(false);
     }
   }
 
@@ -279,22 +303,21 @@ export function CallPage({ spaceId }: { readonly spaceId: string }) {
           </div>
           <p className="help">This link never changes. Share it once and use it every time.</p>
         </div>
-        <div>
+        <div id="access">
           <h2 id="who-can-join">Who can join</h2>
           <Seg labelledBy="who-can-join" options={ADMISSION} value={call.admission} onChange={(value) => void setAdmission(value)} />
-          <p className="help">{call.admission === "anyone" ? "People with the link join right away." : "People ask to join, and someone in the call lets them in."}</p>
+          <p className="help swap" key={call.admission}>
+            {call.admission === "anyone" ? "People with the link join right away." : "People ask to join, and someone in the call lets them in."}
+          </p>
+        </div>
+        <div id="transcript-language">
+          <h2 id="transcript-language-label">Transcript language</h2>
+          <LanguagePicker id="transcript-language-picker" labelledBy="transcript-language-label" describedBy="transcript-language-help" allowDefault value={call.transcriptLanguage ?? null} loading={savingLanguage} loadingLabel="Saving…" onChange={(value) => void setLanguage(value)} />
+          <p className="help" id="transcript-language-help">
+            Applies to new transcripts for this call.
+          </p>
         </div>
       </div>
-      <section style={{ marginBottom: "var(--space-8)" }} aria-label="Transcripts">
-        <TranscriptLanguageSettings
-          value={call.transcriptLanguage ?? null}
-          inherit
-          onSave={async (value) => {
-            const result = await act("call", { action: "set-transcript-language", spaceId: call.id, transcriptLanguage: value });
-            update((current) => ({ ...current, call: result.call }));
-          }}
-        />
-      </section>
       <div className="secth">
         <h2>Past sessions</h2>
       </div>
@@ -372,6 +395,11 @@ function CallSkeleton({ back }: { readonly back: ReactNode }) {
           <Sk width="40%" height={14} />
           <div style={{ height: 12 }} />
           <Sk width="70%" height={40} radius="8px" />
+        </div>
+        <div>
+          <Sk width="50%" height={14} />
+          <div style={{ height: 12 }} />
+          <Sk width="100%" height={40} radius="8px" />
         </div>
       </div>
       <div className="secth">

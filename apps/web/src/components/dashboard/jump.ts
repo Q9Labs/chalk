@@ -15,6 +15,8 @@ export function useJumpTarget(ready: boolean) {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     target.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    // The mark shows where focus went, so the target needs no focus ring of its own.
+    target.dataset.jump = "";
     target.focus({ preventScroll: true });
     target.classList.remove("jumped");
     // Reading the layout restarts the mark when the same link is followed twice.
