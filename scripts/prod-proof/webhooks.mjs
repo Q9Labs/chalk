@@ -3,12 +3,28 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, saveOwnership, ProofError } from "./runtime.mjs";
 import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
-export async function proofServer(run) {
+// Every proof serves its guests from the one proof_origin the Tenant allows, so a proof that starts while another holds the
+// port waits for it. A wait that ends is a named reason, not an unknown error.
+async function listenWhenFree(server, port, waitMs, pollMs) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    server.listen(port, "127.0.0.1");
+    try {
+      await once(server, "listening");
+      return;
+    } catch (error) {
+      if (error.code !== "EADDRINUSE") throw error;
+      if (Date.now() + pollMs > deadline) throw new ProofError("proof-origin-busy", `Port ${port} of proof_origin stayed in use for ${waitMs / 1000} seconds`);
+      await delay(pollMs);
+    }
+  }
+}
+export async function proofServer(run, { waitMs = 20 * 60_000, pollMs = 1000 } = {}) {
   const origin = new URL(run.config.proof_origin);
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
   const pages = { "/": "<!doctype html><title>Chalk production proof</title>" };
@@ -20,8 +36,7 @@ export async function proofServer(run) {
     }
     response.writeHead(200, { "Content-Type": "text/html" }).end(pages[path]);
   });
-  server.listen(Number(origin.port), "127.0.0.1");
-  await once(server, "listening");
+  await listenWhenFree(server, Number(origin.port), waitMs, pollMs);
   run.resources.push({
     kind: "proof-http-server",
     force: () => {

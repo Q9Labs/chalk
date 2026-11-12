@@ -219,7 +219,7 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
     // call-artifacts marks its start; camera-share fails unless that mark appears while it runs, which proves the two overlap.
     writeFileSync(
       pnpm,
-      `#!/usr/bin/env bash\necho "$2" >> ran\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
+      `#!/usr/bin/env bash\necho "$2" >> ran\necho "::add-mask::chalk_sk_fakekey.fakesecret"\necho "using chalk_sk_fakekey.fakesecret for $2"\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
     );
     for (const file of [lease, pnpm]) chmodSync(file, 0o755);
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", proofStep.run], {
@@ -270,6 +270,15 @@ test("call-artifacts runs beside the proofs that share a Space, which keep their
   const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
   assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
   assert.ok(run.ran.indexOf("camera-share") < run.ran.indexOf("long-call"));
+});
+
+test("a proof API key reaches the log only in an unlabelled ::add-mask:: line", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
+  const lines = run.stdout.split("\n");
+  const keyLines = lines.filter((line) => line.includes("chalk_sk_fakekey"));
+  assert.ok(keyLines.length >= 3);
+  assert.ok(keyLines.every((line) => line === "::add-mask::chalk_sk_fakekey.fakesecret"), keyLines.join("\n"));
+  assert.ok(lines.includes("[camera-share] using chalk_sk_*** for camera-share"));
 });
 
 test("a lease failure (exit 75) runs no nightly proof and marks every one not-run", () => {

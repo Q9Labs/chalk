@@ -24,11 +24,12 @@ prove() {
   echo "$status" > "${status_dir}/${proof}"
 }
 
-# Output is labelled by proof, because two proofs print at the same time.
+# Output is labelled by proof, because two proofs print at the same time. The runner honours a workflow command only at the
+# start of a line, so ::add-mask:: lines pass through unlabelled, and any other line has a proof API key replaced.
 lane() {
   local proof
   for proof in "$@"; do
-    prove "$proof" | sed -u "s/^/[${proof}] /"
+    prove "$proof" | sed -u -e '/^::add-mask::/b' -e 's/chalk_sk_[A-Za-z0-9._-]*/chalk_sk_***/g' -e "s/^/[${proof}] /"
   done
 }
 
