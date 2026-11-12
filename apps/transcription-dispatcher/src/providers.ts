@@ -1,7 +1,7 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
 import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
-import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
-import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
+import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-utils.js";
+import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 import { nativeDeepInfraBody, observedDeepInfraCost, observedDeepInfraIdentity, observedDeepInfraVersion } from "./deepinfra-response.js";
 
 interface DeepInfraOptions {
@@ -33,7 +33,7 @@ function requestIdentity(row: ProviderResult, expectedModel: string): void {
 async function parseError(response: Response, policy: ProviderPolicy, provider: "deepinfra" | "cloudflare"): Promise<ProviderError> {
   let code: string | undefined;
   try {
-    code = errorCodeFromBody(parseJson(await readBoundedBody(response, Math.min(policy.maxResponseBytes, 64 * 1024))));
+    code = errorCodeFromBody(parseJson(await readProviderBody(response, Math.min(policy.maxResponseBytes, 64 * 1024))));
   } catch {
     // The bounded body is diagnostic only; status is the authoritative class.
   }

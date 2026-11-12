@@ -2,7 +2,8 @@ import { transcriptLanguageValue } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
 import { MAX_FINAL_CUES, validateChunkDocument } from "./finalizer-chunk-validation.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
-import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument } from "./types.js";
+import type { FinalizeChunkAssignment, ManifestIdentity } from "./assignment-types.js";
+import type { NormalizedCue, NormalizedTranscriptDocument } from "./transcript-types.js";
 
 const MAX_TEXT_CHARS = 50_000;
 const AUTO_LANGUAGE = { mode: "auto" } as const;

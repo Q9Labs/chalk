@@ -1,6 +1,8 @@
 import type { TranscriptLanguageMode } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
-import type { ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult, SpeakerTurn, SpeakerTurnManifest, TrackClass } from "./types.js";
+import type { ManifestIdentity, SpeakerTurn, SpeakerTurnManifest, TrackClass } from "./assignment-types.js";
+import type { ProviderResult } from "./provider-types.js";
+import type { NormalizedCue, NormalizedTranscriptDocument } from "./transcript-types.js";
 
 type CueTurn = Pick<SpeakerTurn, "identity" | "trackClass"> & Partial<Pick<SpeakerTurn, "displayNameSnapshot" | "overlap">>;
 

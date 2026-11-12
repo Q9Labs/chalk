@@ -1,246 +1,11 @@
 import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
-import type { TranscriptLanguageMode } from "@chalk/transcript-language";
+import type { ClaimResponse, CleanupAssignment, FinalizeClaimResponse } from "./assignment-types.js";
+import type { ProviderPolicy, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 
 export interface JourneyContext {
   journeyId: string;
   traceparent?: string;
   tracestate?: string;
-}
-
-export interface ProviderSegment {
-  startSeconds: number;
-  endSeconds: number;
-  text: string;
-  confidence?: number;
-  useSegmentText?: true;
-}
-
-export interface ProviderWord {
-  startSeconds: number;
-  endSeconds: number;
-  word: string;
-  confidence?: number;
-}
-
-export interface ProviderResult {
-  text: string;
-  language?: string;
-  durationMs?: number;
-  providerReportedCostUsd?: number;
-  segments: ProviderSegment[];
-  words?: ProviderWord[];
-  provider: "deepinfra" | "cloudflare" | "openrouter";
-  model: string;
-  versionContract: string;
-  executionIdentity?: string;
-  providerIdentity?: {
-    requestId?: string;
-    model?: string;
-    modelVersion?: string;
-  };
-  quality?: {
-    meanConfidence?: number;
-    segmentCount: number;
-    wordCount: number;
-  };
-}
-
-export type TranscriptProviderSummary = ProviderResult["provider"] | "mixed";
-
-export interface ProviderTimingRepair {
-  fieldPath: string;
-  startSeconds: number;
-  endSeconds: number;
-  previousEndSeconds?: number;
-}
-
-export interface ProviderRequest {
-  transcriptLanguage?: TranscriptLanguageMode;
-  audio: Uint8Array;
-  contentType: string;
-  chunkId: string;
-  signal?: AbortSignal;
-  onTimingRepair?: (repair: ProviderTimingRepair) => void;
-}
-
-export interface TranscriptionProvider {
-  readonly name: "deepinfra" | "cloudflare" | "openrouter";
-  transcribe(request: ProviderRequest): Promise<ProviderResult>;
-}
-
-export type TrackClass = "microphone";
-
-export interface ManifestIdentity {
-  kind: "participant";
-  participantRef: string;
-  participantGeneration: number;
-  trackId: string;
-  trackEpoch: string;
-}
-
-export interface SpeakerTurn {
-  startMs: number;
-  endMs: number;
-  identity: ManifestIdentity;
-  trackClass: TrackClass;
-  displayNameSnapshot: string;
-  overlap: boolean;
-}
-
-export interface SpeakerTurnManifest {
-  schemaVersion: "recording-transcription-source.v1";
-  tenantId: string;
-  recordingId: string;
-  episodeId: string;
-  captureEpoch: number;
-  durationMs: number;
-  timebase: "recording_relative_ms";
-  presentationSha256: string;
-  turns: SpeakerTurn[];
-}
-
-export interface ChunkAssignment {
-  chunkId: string;
-  inputObjectKey: string;
-  inputUrl: string;
-  inputUrlExpiresAt: string;
-  inputContentType: string;
-  inputSizeBytes: number;
-  inputSha256: string;
-  episodeStartMs: number;
-  episodeEndMs: number;
-  sourceStartMs: number;
-  sourceEndMs: number;
-  chunkIndex: number;
-  generation: number;
-  allocationId: string;
-  objectVersion: string;
-  objectEtag: string;
-  sourceIdentity: ManifestIdentity;
-  sourceTrackClass: TrackClass;
-  displayNameSnapshot: string;
-  overlap: boolean;
-}
-
-export interface ManifestAssignment {
-  inputUrl: string;
-  expiresAt: string;
-  contentType: "application/json";
-  sizeBytes: number;
-  sha256: string;
-}
-
-export interface TranscriptionAssignment {
-  transcriptLanguage?: TranscriptLanguageMode;
-  jobId: string;
-  tenantId: string;
-  episodeId: string;
-  recordingId: string;
-  presentationSha256: string;
-  sourceExpiresAt: string;
-  attempt: number;
-  leaseToken: string;
-  leaseExpiresAt: string;
-  chunk: ChunkAssignment;
-  manifest: ManifestAssignment;
-  outputPutUrl: string;
-  outputPutUrlExpiresAt: string;
-  outputContentType: "application/json";
-}
-
-export interface CleanupAssignment {
-  jobId: string;
-  attempt: number;
-  leaseToken: string;
-  leaseExpiresAt: string;
-  deleteUrl: string;
-  deleteUrlExpiresAt: string;
-}
-
-/** A private, bounded GET authority for one normalized transcript chunk result. */
-export interface FinalizeChunkAssignment {
-  chunkId: string;
-  inputUrl: string;
-  inputUrlExpiresAt: string;
-  inputContentType: "application/json";
-  inputSizeBytes: number;
-  inputSha256: string;
-  episodeStartMs: number;
-  episodeEndMs: number;
-}
-
-/** Fenced work to compose accepted chunk results into one final transcript. */
-export interface FinalizeAssignment {
-  jobId: string;
-  transcriptId: string;
-  episodeId: string;
-  attempt: number;
-  leaseToken: string;
-  leaseExpiresAt: string;
-  chunks: FinalizeChunkAssignment[];
-  outputPutUrl: string;
-  outputPutUrlExpiresAt: string;
-  outputContentType: "application/json";
-}
-
-export interface ClaimResponse {
-  assignments: TranscriptionAssignment[];
-}
-
-export interface FinalizeClaimResponse {
-  assignments: FinalizeAssignment[];
-}
-
-export interface NormalizedCue {
-  startMs: number;
-  endMs: number;
-  identity: ManifestIdentity;
-  trackClass: TrackClass;
-  displayNameSnapshot?: string;
-  text: string;
-  overlap: boolean;
-  provider: ProviderResult["provider"];
-  model: string;
-  versionContract: string;
-  attempt: number;
-  quality?: {
-    confidence?: number;
-  };
-}
-
-export interface NormalizedTranscriptDocument {
-  transcriptLanguage?: TranscriptLanguageMode;
-  schemaVersion: "transcript.v1";
-  jobId: string;
-  episodeId: string;
-  cues: NormalizedCue[];
-  language?: string;
-  provider: TranscriptProviderSummary;
-  model: string;
-  versionContract: string;
-  providerIdentity?: ProviderResult["providerIdentity"];
-  executionIdentity?: string;
-  attempt: number;
-  measuredAudioMs: number;
-  providerObservedDurationMs?: number;
-  billedAudioSeconds?: number;
-  providerReportedCostUsd?: number;
-  quality?: ProviderResult["quality"];
-}
-
-export interface ProviderPolicy {
-  timeoutMs: number;
-  maxAudioBytes: number;
-  maxAudioSeconds: number;
-  maxResponseBytes: number;
-  maxTextChars: number;
-  maxSegments: number;
-  maxWords: number;
-  maxRetries: number;
-  retryBaseDelayMs: number;
-  retryMaxDelayMs: number;
-  circuitFailureThreshold: number;
-  circuitCooldownMs: number;
 }
 
 export interface ReleaseConfig {
@@ -276,10 +41,20 @@ export interface ReleaseConfig {
   provider: ProviderPolicy;
 }
 
-export interface CompletionInput {
+/** A claimed job attempt. The control plane fences every request that carries one. */
+export interface Lease {
   jobId: string;
   attempt: number;
   leaseToken: string;
+}
+
+/** Journey context and cancellation that go with every control request. */
+export interface ControlCall {
+  context: JourneyContext;
+  signal?: AbortSignal;
+}
+
+export interface CompletionInput extends Lease {
   checksumSha256: string;
   sizeBytes: number;
   contentType: "application/json";
@@ -295,10 +70,7 @@ export interface CompletionInput {
   quality?: ProviderResult["quality"];
 }
 
-export interface FinalizeCompletionInput {
-  jobId: string;
-  attempt: number;
-  leaseToken: string;
+export interface FinalizeCompletionInput extends Lease {
   checksumSha256: string;
   sizeBytes: number;
   contentType: "application/json";
@@ -311,26 +83,23 @@ export interface FinalizeCompletionInput {
   quality?: ProviderResult["quality"];
 }
 
-export interface RetryInput {
-  jobId: string;
-  attempt: number;
-  leaseToken: string;
+export interface RetryInput extends Lease {
   errorCode: string;
   retryAt?: string;
   terminal?: boolean;
 }
 
 export interface ControlApi {
-  claim(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<ClaimResponse>;
-  heartbeat(input: { assignment: Pick<TranscriptionAssignment, "jobId" | "attempt" | "leaseToken">; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  retry(input: RetryInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  complete(input: CompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  claimFinalize(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<FinalizeClaimResponse>;
-  completeFinalize(input: FinalizeCompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  retryFinalize(input: { jobId: string; attempt: number; leaseToken: string; errorCode: string; retryAt?: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  claimCleanup(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }>;
-  completeCleanup(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  claim(input: { limit: number } & ControlCall): Promise<ClaimResponse>;
+  heartbeat(input: { assignment: Lease } & ControlCall): Promise<void>;
+  retry(input: RetryInput & ControlCall): Promise<void>;
+  complete(input: CompletionInput & ControlCall): Promise<void>;
+  claimFinalize(input: { limit: number } & ControlCall): Promise<FinalizeClaimResponse>;
+  completeFinalize(input: FinalizeCompletionInput & ControlCall): Promise<void>;
+  retryFinalize(input: RetryInput & ControlCall): Promise<void>;
+  claimCleanup(input: { limit: number } & ControlCall): Promise<{ assignments: CleanupAssignment[] }>;
+  completeCleanup(input: { assignment: CleanupAssignment } & ControlCall): Promise<void>;
+  retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean } & ControlCall): Promise<void>;
 }
 
 export interface DispatcherContext {

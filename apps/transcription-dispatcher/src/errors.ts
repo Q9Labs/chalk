@@ -70,6 +70,16 @@ export class ControlApiError extends Error {
   }
 }
 
+/** The control plane refused a completion or retry because the lease moved on or the work finished already. */
+export function isLateCompletion(error: unknown): boolean {
+  return error instanceof ControlApiError && error.status === 409;
+}
+
+/** Control plane and storage answers that a later attempt can fix. */
+export function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
 export function providerFailureKind(error: unknown): ProviderFailureKind {
   if (error instanceof ProviderError) return error.kind;
   if (error instanceof AssignmentError) return error.retryable ? "retryable" : "nonretryable";

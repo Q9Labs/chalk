@@ -1,7 +1,7 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
-import { classifyProviderStatus, openRouterReason, parseJson, parseProviderResponse, parseProviderResult, readBoundedBody } from "./provider-utils.js";
+import { classifyProviderStatus, openRouterReason, parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-utils.js";
 import { prepareSpeechAudio } from "./speech-audio.js";
-import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
+import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 
 const MODEL = "microsoft/mai-transcribe-2";
 const VERSION = "openrouter-mai-2-urdu.v1";
@@ -94,7 +94,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
       },
       signal,
     );
-    const body = parseJson(await readBoundedBody(response, this.options.policy.maxResponseBytes));
+    const body = parseJson(await readProviderBody(response, this.options.policy.maxResponseBytes));
     const output = conversionTokens(body);
     if (output.length !== tokens.length || output.some((text) => !text.trim() || !/^[\p{Script=Arabic}\p{M}\p{N}\p{P}\s]+$/u.test(text) || /\p{Script=Devanagari}/u.test(text))) throw providerSchemaError("Urdu script conversion was invalid", "choices", "one Urdu token per input token", undefined);
     const lookup = new Map(tokens.map((token, index) => [token, output[index] ?? ""]));

@@ -1,6 +1,8 @@
 import { parseTranscriptLanguageMode } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
-import type { FinalizeChunkAssignment, ManifestIdentity, NormalizedCue, NormalizedTranscriptDocument, ProviderResult } from "./types.js";
+import type { FinalizeChunkAssignment, ManifestIdentity } from "./assignment-types.js";
+import type { ProviderResult } from "./provider-types.js";
+import type { NormalizedCue, NormalizedTranscriptDocument } from "./transcript-types.js";
 
 export const MAX_FINAL_CUES = 100_000;
 const MAX_REPORTED_COST_USD = 1_000;

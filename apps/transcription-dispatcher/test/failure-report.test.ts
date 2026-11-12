@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reportAssignmentFailure } from "../src/dispatcher.js";
+import { reportAssignmentFailure } from "../src/transcriber.js";
 import { AssignmentError, ProviderError } from "../src/errors.js";
 import { classifyProviderStatus, openRouterReason } from "../src/provider-utils.js";
 import type { DispatcherLogger, RetryInput } from "../src/types.js";

@@ -1,6 +1,6 @@
 import { parseTranscriptLanguage } from "@chalk/transcript-language";
 import { AssignmentError } from "./errors.js";
-import type { ChunkAssignment, CleanupAssignment, FinalizeAssignment, FinalizeChunkAssignment, TranscriptionAssignment } from "./types.js";
+import type { ChunkAssignment, CleanupAssignment, FinalizeAssignment, FinalizeChunkAssignment, TranscriptionAssignment } from "./assignment-types.js";
 import { MAX_FINALIZER_CHUNKS } from "./finalizer-limits.js";
 import { row, text, optionalText, nonnegative, integer, positiveInteger, checksum, expiringUrl, isoTimestamp, isoDate } from "./wire-fields.js";
 

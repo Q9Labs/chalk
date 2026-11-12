@@ -1,5 +1,5 @@
 import { AssignmentError } from "./errors.js";
-import type { SpeakerTurnManifest, TranscriptionAssignment } from "./types.js";
+import type { SpeakerTurnManifest, TranscriptionAssignment } from "./assignment-types.js";
 import { exactRow, text, optionalText, nonnegative, integer, positiveInteger, checksum } from "./wire-fields.js";
 
 export function validateSpeakerTurnManifest(value: unknown, assignment: TranscriptionAssignment): SpeakerTurnManifest {

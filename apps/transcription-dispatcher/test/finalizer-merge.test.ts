@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeTranscriptDocuments, type ChunkDocument } from "../src/finalizer-merge.js";
-import type { NormalizedCue, NormalizedTranscriptDocument } from "../src/types.js";
+import type { NormalizedCue, NormalizedTranscriptDocument } from "../src/transcript-types.js";
 
 function cue(overrides: Partial<NormalizedCue> = {}): NormalizedCue {
   return {

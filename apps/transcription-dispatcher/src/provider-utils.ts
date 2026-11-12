@@ -1,11 +1,12 @@
+import { BodyTooLargeError, readBoundedBody } from "./bounded-body.js";
 import { ProviderError, providerSchemaError, providerSchemaFields } from "./errors.js";
-import type { ProviderRequest, ProviderResult, ProviderSegment, ProviderWord } from "./types.js";
+import type { ProviderRequest, ProviderResult, ProviderSegment, ProviderWord } from "./provider-types.js";
 
 export async function parseProviderResponse(response: Response, maxBytes: number, parse: (body: unknown) => ProviderResult): Promise<ProviderResult> {
   let size = 0;
   let body: unknown;
   try {
-    const bytes = await readBoundedBody(response, maxBytes);
+    const bytes = await readProviderBody(response, maxBytes);
     size = bytes.byteLength;
     body = parseJson(bytes);
     return parse(body);
@@ -33,35 +34,13 @@ function requestIds(body: unknown): unknown[] {
   return ["request_id" in body ? body.request_id : undefined, "requestId" in body ? body.requestId : undefined];
 }
 
-export async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const declared = response.headers.get("content-length");
-  if (declared && Number(declared) > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", Number(declared), Number(declared));
-  if (!response.body) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", bytes.byteLength, bytes.byteLength);
-    return bytes;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+export async function readProviderBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   try {
-    while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      total += next.value.byteLength;
-      if (total > maxBytes) throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", total, total);
-      chunks.push(next.value);
-    }
-  } finally {
-    reader.releaseLock();
+    return await readBoundedBody(response, maxBytes);
+  } catch (error) {
+    if (!(error instanceof BodyTooLargeError)) throw error;
+    throw providerSchemaError("provider response exceeded bound", "$", "bounded response bytes", error.observedBytes, error.observedBytes);
   }
-  const output = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }
 
 export function parseJson(bytes: Uint8Array): unknown {
@@ -243,7 +222,7 @@ export function isReasonWord(value: string): boolean {
 
 export async function openRouterReason(response: Response): Promise<string | undefined> {
   try {
-    const body: unknown = parseJson(await readBoundedBody(response, 4096));
+    const body: unknown = parseJson(await readProviderBody(response, 4096));
     if (!body || typeof body !== "object" || !("error" in body) || !body.error || typeof body.error !== "object" || !("metadata" in body.error)) return undefined;
     const metadata = body.error.metadata;
     if (!metadata || typeof metadata !== "object" || !("reason" in metadata)) return undefined;

@@ -1,5 +1,5 @@
 import { ProviderError, providerFailureKind } from "./errors.js";
-import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./types.js";
+import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 
 export class InvocationCircuit {
   private failures = 0;

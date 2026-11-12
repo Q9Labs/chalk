@@ -1,7 +1,8 @@
 import { ConfigError } from "./errors.js";
 import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { DispatcherSecrets, SecretParameterNames } from "./secrets.js";
-import type { ProviderPolicy, ReleaseConfig } from "./types.js";
+import type { ProviderPolicy } from "./provider-types.js";
+import type { ReleaseConfig } from "./types.js";
 
 export function required(value: string | undefined, key: string): string {
   if (!value) throw new ConfigError(`missing required configuration: ${key}`);
