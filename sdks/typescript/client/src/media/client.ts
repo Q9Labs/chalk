@@ -421,7 +421,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   // A publisher that still believes it is sending must publish again, so
   // listeners get a new publication ID instead of retrying a dead one.
   #republishUnlistedLocalPublications(authoritative: CloudflareSFUPublicationSnapshot): void {
-    const unlisted = [...this.#localTracks.values()].filter((state) => state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId && publication.paused !== true));
+    const unlisted = [...this.#localTracks.values()].filter((state) => state.enabled && state.desiredEnabled && state.providerPublicationId !== null && !authoritative.publications.some((publication) => publication.publicationId === state.providerPublicationId));
     for (const state of unlisted) this.#beginLocalRecovery(state, state.providerPublicationId, true);
   }
   #beginLocalRecovery(state: LocalTrackState, deadPublicationId: string | null, relist: boolean): void {
