@@ -129,6 +129,8 @@ func run() error {
 	launchTelemetry := observability.NewLaunchTelemetry(logger)
 	logger.Info("api starting",
 		"event", "api.starting",
+		"previous_boot_end", previousBootEnd(os.Getenv("CHALK_PREVIOUS_BOOT_END")),
+		"host_boot_id", os.Getenv("CHALK_HOST_BOOT_ID"),
 		"address", cfg.API.Address,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
@@ -1042,4 +1044,15 @@ func applyCapabilityProfile(options *httpapi.Options, capabilities config.Capabi
 	options.CleanupDeleteAuthority = nil
 	options.FinalizerWorker = nil
 	options.FinalizerAuthority = nil
+}
+
+// previousBootEnd is how the host says its previous boot ended. Anything else, including a
+// host without the restore service, reads as unknown so the field stays a small enum.
+func previousBootEnd(value string) string {
+	switch value {
+	case "clean", "killed":
+		return value
+	default:
+		return "unknown"
+	}
 }
