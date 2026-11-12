@@ -416,6 +416,7 @@ jobs:
             --provenance=mode=max \
             --build-context "$source_context" \
             --build-context mcp_source=features/mcp/api \
+            --build-context protocol_source=features/media/sfu/protocol \
             --cache-from "type=gha,scope=chalk-${COMPONENT}" \
             --cache-to "type=gha,scope=chalk-${COMPONENT},mode=max" \
             --file "$dockerfile" \
@@ -436,6 +437,8 @@ jobs:
               --platform linux/arm64 --provenance=mode=max \
               --build-context api_source=apps/api \
               --build-context mcp_source=features/mcp/api \
+              --build-context protocol_source=features/media/sfu/protocol \
+            --build-context protocol_source=features/media/sfu/protocol \
               --cache-from type=gha,scope=chalk-recorder-control \
               --cache-to type=gha,scope=chalk-recorder-control,mode=max \
               --file infrastructure/managed-episode/images/recorder-control.Dockerfile \

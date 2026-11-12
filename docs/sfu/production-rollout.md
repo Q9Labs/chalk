@@ -30,7 +30,7 @@ Add the capture flag only if the staging `call-artifacts` proof passed with the 
 
 ## The node ships before any SDK that raises the offer size
 
-The node accepts offers up to 256 KiB (`maxSDPBytes`) and its request limit defaults to 384 KiB (`SFU_MAX_REQUEST_BYTES`; a node that sets it must stay at or above 384 KiB). Older SDKs keep offers under 64 KiB, so they work against either node. An SDK that lets an offer pass 64 KiB gets a 400 from a node with the old cap. So:
+The node accepts offers up to 256 KiB (`protocol.MaxSDPBytes`) and its request limit defaults to 384 KiB (`SFU_MAX_REQUEST_BYTES`; a node that sets it must stay at or above 384 KiB). Older SDKs keep offers under 64 KiB, so they work against either node. An SDK that lets an offer pass 64 KiB gets a 400 from a node with the old cap. So:
 
 - The node ships first. `deploy-web` needs `deploy-managed` in CI, so a web cut cannot go out before the node. Do not publish a web-only cut by another path.
 - Publish such an SDK to npm and cut mobile builds only after Promote's proof is green.

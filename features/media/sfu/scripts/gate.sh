@@ -38,6 +38,7 @@ printf '\n==> Markdown format check\n'
 
 printf '\n==> Module tidy check\n'
 go mod tidy -diff
+(cd protocol && go mod tidy -diff)
 
 printf '\n==> go vet\n'
 go vet ./...

@@ -1,7 +1,7 @@
 // Package protocol defines the versioned wire types of the SFU control API.
 //
-// The API adapter in another module translates between these types and its own
-// media-plane ports. The track and SDP shapes copy the Cloudflare adapter's, so
+// The SFU and the API adapter import this module, so neither keeps a copy. The adapter
+// translates between these types and its own media-plane ports. The track and SDP shapes copy the Cloudflare adapter's, so
 // the SDK-facing envelope stays the same for both providers.
 package protocol
 

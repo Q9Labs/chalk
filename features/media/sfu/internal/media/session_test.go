@@ -264,7 +264,7 @@ func TestOfferIsBoundedBeforePionSeesIt(t *testing.T) {
 	})
 
 	t.Run("oversized SDP", func(t *testing.T) {
-		huge := &protocol.SessionDescription{Type: "offer", SDP: "v=0\r\n" + strings.Repeat("a=padding:x\r\n", maxSDPBytes/10)}
+		huge := &protocol.SessionDescription{Type: "offer", SDP: "v=0\r\n" + strings.Repeat("a=padding:x\r\n", protocol.MaxSDPBytes/10)}
 		_, err := session.AddTracks(context.Background(), protocol.TracksRequest{OperationID: op(),
 			Scope: session.scope, SessionDescription: huge, Tracks: localTracks("mic", []string{"0"}, "microphone"),
 		})

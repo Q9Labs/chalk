@@ -276,8 +276,8 @@ func (n *Node) newerSession(key episodeKey, generation int64) bool {
 
 // validateReserve checks the request's shape and returns its hold time.
 func (n *Node) validateReserve(request protocol.ReserveEpisodeRequest) (time.Duration, error) {
-	if !identifierPattern.MatchString(request.OperationID) {
-		return 0, fmt.Errorf("%w: operationId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest)
+	if err := checkIdentifier("operationId", request.OperationID); err != nil {
+		return 0, err
 	}
 	if err := ValidateScope(protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: request.Generation}); err != nil {
 		return 0, err

@@ -71,8 +71,8 @@ func digestOf(request any) ([sha256.Size]byte, error) {
 // once runs a session mutation at most once per operation ID. The caller holds s.opMu.
 func once[T any](s *Session, operationID string, request any, run func() (T, error)) (T, error) {
 	var zero T
-	if !identifierPattern.MatchString(operationID) {
-		return zero, fmt.Errorf("%w: operationId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest)
+	if err := checkIdentifier("operationId", operationID); err != nil {
+		return zero, err
 	}
 	if s.isClosed() {
 		return zero, ErrSessionGone

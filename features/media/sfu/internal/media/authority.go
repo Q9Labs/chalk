@@ -172,9 +172,10 @@ func validateSourceControls(request protocol.SourceControlRequest) error {
 		return fmt.Errorf("%w: a request carries 1 to %d controls", ErrInvalidRequest, protocol.MaxSourceControls)
 	}
 	for index, control := range request.Controls {
+		if err := checkIdentifier(fmt.Sprintf("controls[%d].participantId", index), control.ParticipantID); err != nil {
+			return err
+		}
 		switch {
-		case !identifierPattern.MatchString(control.ParticipantID):
-			return fmt.Errorf("%w: controls[%d].participantId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest, index)
 		case !validSource(control.Source):
 			return fmt.Errorf("%w: controls[%d].source must be microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
 		case control.Action != protocol.SourceGrant && control.Action != protocol.SourceRevoke:
