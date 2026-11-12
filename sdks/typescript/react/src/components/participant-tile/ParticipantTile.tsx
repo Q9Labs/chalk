@@ -1,5 +1,5 @@
 import { Facehash } from "@q9labsai/facehash/react";
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 import { usePrefersReducedMotion, useMediaQuery } from "../../internal/useMediaQuery";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
@@ -7,7 +7,7 @@ import { cn } from "../../utils/cn";
 import { getParticipantColor, getParticipantAvatarRecipe, type ParticipantGradientPreference } from "../../utils/colorGenerator";
 import { StageIcon } from "../stage/StageIcon";
 import { Avatar } from "../atomic/Avatar";
-import { TileOptions } from "./TileOptions";
+import { TileOptions, TileOptionsSheet, type TileAction } from "./TileOptions";
 import { TileShell } from "./TileShell";
 import { useVideoTileVisibility } from "./useVideoTileVisibility";
 import { useVideoTrack } from "./useVideoTrack";
@@ -123,6 +123,10 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
   const followLabel = following ? "Stop following" : "Follow";
   const signalLevel = participant.connectionQuality === 1 || participant.connectionQuality === 2 ? participant.connectionQuality : null;
   const reconnecting = useTrueFor(participant.isReconnecting === true, RECONNECT_NOTICE_MS);
+  const actions: readonly TileAction[] = [...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])];
+  // On a phone a tap on the tile opens its options, so no tile carries its own "..." button.
+  const tapForOptions = phone && actions.length > 0;
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   return (
     <TileShell
@@ -134,7 +138,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
       lift={!primary}
       speaking={mediaVisible && participant.isSpeaking && !participant.isMuted}
       audioLevel={participant.audioLevel}
-      onClick={onClick}
+      onClick={tapForOptions ? () => setOptionsOpen(true) : onClick}
       onDoubleClick={onDoubleClick}
       className={cn(aspectRatioClasses[aspectRatio], className)}
       style={style}
@@ -148,9 +152,10 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
               Video paused for network
             </span>
           ) : null}
-          {onClick || onFollow ? (
-            <span data-part="tile-menu" className={cn("absolute top-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100", primary && phone ? "left-2" : "right-2")}>
-              <TileOptions name={participant.displayName} actions={[...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])]} />
+          {tapForOptions ? <TileOptionsSheet name={participant.displayName} actions={actions} open={optionsOpen} onOpenChange={setOptionsOpen} /> : null}
+          {actions.length && !tapForOptions ? (
+            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 focus-within:opacity-100">
+              <TileOptions name={participant.displayName} actions={actions} />
             </span>
           ) : null}
         </>
