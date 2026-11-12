@@ -42,19 +42,27 @@ describe("arriveRetryingEndingEpisode", () => {
   it("retries while the old Episode is ending, then returns the new arrival", async () => {
     vi.useFakeTimers();
     try {
-      const arrive = vi.fn().mockRejectedValueOnce(apiError("episode.not_active")).mockRejectedValueOnce(apiError("episode.not_active")).mockResolvedValue("arrived");
-      const result = arriveRetryingEndingEpisode(arrive);
+      let attempts = 0;
+      const result = arriveRetryingEndingEpisode(async () => {
+        attempts += 1;
+        if (attempts < 3) throw apiError("episode.not_active");
+        return "arrived";
+      });
       await vi.advanceTimersByTimeAsync(1500);
       await expect(result).resolves.toBe("arrived");
-      expect(arrive).toHaveBeenCalledTimes(3);
+      expect(attempts).toBe(3);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it("fails at once on any other error", async () => {
-    const arrive = vi.fn().mockRejectedValue(apiError("episode.capacity_exceeded"));
+    let attempts = 0;
+    const arrive = async () => {
+      attempts += 1;
+      throw apiError("episode.capacity_exceeded");
+    };
     await expect(arriveRetryingEndingEpisode(arrive)).rejects.toEqual(apiError("episode.capacity_exceeded"));
-    expect(arrive).toHaveBeenCalledOnce();
+    expect(attempts).toBe(1);
   });
 });
