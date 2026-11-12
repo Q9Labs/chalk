@@ -5,6 +5,7 @@
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
     "tools/formal/sync-entry-leave/EntryLeave.view.mjs",
+    "tools/formal/client-recovery/ClientRecovery.view.mjs",
     "scripts/dev/multi-device-proof.mjs",
     "scripts/dev/camera-backgrounds-sfu-proof.mjs",
     "apps/web/tests/camera-backgrounds-mobile.mjs",

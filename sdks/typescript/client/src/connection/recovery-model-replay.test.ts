@@ -22,19 +22,28 @@ function fixture(options: { readonly grantLifetimeMs?: number; readonly refresh?
   const startedAt = Date.now();
   const clock = { now: () => startedAt + manual.now(), setTimeout: (callback: () => void, delay: number) => manual.setTimeout(callback, delay), clearTimeout: (handle: unknown) => manual.clearTimeout(handle) };
   const refresh = options.refresh ?? "ok";
-  const restart = vi.fn(async () => {});
+  const calls = { restart: 0, createSync: 0, access: 0 };
+  let whenRestarted = () => {};
+  const restart = async () => {
+    calls.restart += 1;
+    whenRestarted();
+  };
   let syncGone = false;
-  const createSync = vi.fn((...input: Parameters<typeof platform.dependencies.createSyncClient>) => (syncGone ? { ...platform.sync, start: async () => Promise.reject(new Error("Sync is unreachable")) } : platform.dependencies.createSyncClient(...input)));
+  const createSync = (...input: Parameters<typeof platform.dependencies.createSyncClient>) => {
+    calls.createSync += 1;
+    return syncGone ? { ...platform.sync, start: async () => Promise.reject(new Error("Sync is unreachable")) } : platform.dependencies.createSyncClient(...input);
+  };
   const media = platform.dependencies.createMediaClient({ access: parseParsedAccessGrant(opaqueAccessGrant(1)), credential: async () => "unused", onFailure: () => {}, onScreenEnded: () => {} });
   let generation = 1;
-  const access = vi.fn(async (request: ConnectionAccessRequest) => {
+  const access = async (request: ConnectionAccessRequest) => {
+    calls.access += 1;
     if (request.reason !== "join" && refresh === "invalid") throw Object.assign(new Error("Participant access was revoked"), { code: "access.invalid" });
     if (request.reason !== "join" && refresh === "unavailable") throw new Error("The access service is unreachable");
     if (request.replaceMediaConnection) generation += 1;
     const grant = opaqueAccessGrant(1, String(generation), `connection-${generation}`);
     const expires_at = new Date(startedAt + (options.grantLifetimeMs ?? 3600000)).toISOString();
     return parseParsedAccessGrant({ ...grant, sync: { ...grant.sync, expires_at }, media: { ...grant.media, expires_at } });
-  });
+  };
   const mediaPhase = (phase: "live" | "recovering" | "failed") => {
     const snapshot = platform.media.getSnapshot();
     platform.media.emit({ ...snapshot, failure: phase === "failed" ? { code: "peer_connection_failed", recoverable: true } : null, connection: { ...snapshot.connection, phase } });
@@ -74,9 +83,11 @@ function fixture(options: { readonly grantLifetimeMs?: number; readonly refresh?
     );
   return {
     platform,
-    access,
-    restart,
-    createSync,
+    calls,
+    /** Makes the next restarts bring the media back to live, as a working media client does. */
+    restartRecoversMedia: () => {
+      whenRestarted = () => mediaPhase("live");
+    },
     mediaPhase,
     syncPhase,
     advance,
@@ -108,7 +119,7 @@ describe("Leave is never undone by a late recovery (LeaveNotUndone)", () => {
         yield* Fiber.join(leaving);
         yield* wait(test.advance(90000));
         expect(lifecycle.getSnapshot().state).toBe("left");
-        expect(test.restart).not.toHaveBeenCalled();
+        expect(test.calls.restart).toBe(0);
       }),
     );
   });
@@ -117,13 +128,13 @@ describe("Leave is never undone by a late recovery (LeaveNotUndone)", () => {
 describe("A recovery cycle never abandons a pending recovery (NoAbandonedRecovery)", () => {
   it("restarts media that failed while the call was live", async () => {
     const test = fixture();
-    test.restart.mockImplementation(async () => test.mediaPhase("live"));
+    test.restartRecoversMedia();
     await test.run((lifecycle) =>
       Effect.gen(function* () {
         yield* wait(test.advance(1000));
         test.mediaPhase("failed");
         yield* wait(test.advance(3000));
-        expect(test.restart).toHaveBeenCalled();
+        expect(test.calls.restart).toBeGreaterThan(0);
         expect(lifecycle.getSnapshot().state).toBe("live");
       }),
     );
@@ -184,12 +195,12 @@ describe("Leave stops recovery before it reaches for new connections (NoRestartW
         const leaving = yield* Effect.forkChild(lifecycle.leave());
         yield* wait(test.advance(100));
         expect(lifecycle.getSnapshot().state).toBe("leaving");
-        const requestsBefore = test.access.mock.calls.length;
+        const requestsBefore = test.calls.access;
         test.mediaPhase("failed");
         yield* wait(test.advance(10000));
         expect(lifecycle.getSnapshot().state).toBe("leaving");
-        expect(test.restart).not.toHaveBeenCalled();
-        expect(test.access.mock.calls.length).toBe(requestsBefore);
+        expect(test.calls.restart).toBe(0);
+        expect(test.calls.access).toBe(requestsBefore);
         test.ackLeave();
         yield* Fiber.join(leaving);
       }),
@@ -208,12 +219,12 @@ describe("A final Sync frame ends the call at once (EndingIsFinal, RemovalReport
         test.syncPhase("terminal", reason);
         yield* wait(test.advance(100));
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "left", removedByHost: reason === "participant_removed" });
-        const created = test.createSync.mock.calls.length;
-        const restarted = test.restart.mock.calls.length;
+        const created = test.calls.createSync;
+        const restarted = test.calls.restart;
         yield* wait(test.advance(120000));
         expect(lifecycle.getSnapshot().state).toBe("left");
-        expect(test.restart.mock.calls.length).toBe(restarted);
-        expect(test.createSync.mock.calls.length).toBe(created);
+        expect(test.calls.restart).toBe(restarted);
+        expect(test.calls.createSync).toBe(created);
       }),
     );
   });
