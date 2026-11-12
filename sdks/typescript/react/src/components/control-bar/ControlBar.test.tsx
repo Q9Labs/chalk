@@ -10,7 +10,8 @@ afterEach(() => document.body.replaceChildren());
 
 it("keeps Record in the dock and shows it pressed while recording", () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const onToggleRecording = vi.fn();
+  let toggles = 0;
+  const onToggleRecording = () => void toggles++;
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   act(() => root.render(<ControlBarSurface buttons={["record"]} detectDevices={false} onToggleRecording={onToggleRecording} />));
   const dock = document.querySelector("[data-part=dock]");
@@ -20,7 +21,7 @@ it("keeps Record in the dock and shows it pressed while recording", () => {
   const stop = dock?.querySelector<HTMLButtonElement>("[aria-label='Stop recording']");
   expect(stop?.getAttribute("aria-pressed")).toBe("true");
   act(() => stop?.click());
-  expect(onToggleRecording).toHaveBeenCalledOnce();
+  expect(toggles).toBe(1);
   act(() => root.unmount());
 });
 
