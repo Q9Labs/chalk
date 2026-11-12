@@ -207,11 +207,27 @@ func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
 	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
 		return
 	}
-	rid := "none"
-	if layer := sub.pub.layer(target); layer != nil {
-		rid = layer.rid
+	rid, layer := "none", "none"
+	if picked := sub.pub.layer(target); picked != nil {
+		rid, layer = picked.rid, layerLabel(picked.rid)
 	}
-	s.trail(slog.LevelInfo, "sfu.subscription.layer", append(s.subscriptionAttrs(sub), "rid", rid)...)
+	// The publisher chooses its rid, so only the journal keeps it; the export carries the label.
+	s.trail(slog.LevelInfo, "sfu.subscription.layer", append(s.subscriptionAttrs(sub), "rid", rid, "layer", layer)...)
+}
+
+// layerLabel names a simulcast layer by the fixed set the node knows ("h" and "l" are the
+// encodings the SDKs send, an empty rid is a single stream). Any other rid, which only a peer
+// chooses, is "other": the label is the only form of a rid that leaves the node.
+func layerLabel(rid string) string {
+	switch rid {
+	case "":
+		return "single"
+	case "h":
+		return "high"
+	case "l":
+		return "low"
+	}
+	return "other"
 }
 
 func (s *Session) traceSubscriptionStopped(sub *subscription) {

@@ -36,18 +36,7 @@ func TestMalformedSDPStaysOnTheNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node, err := media.NewNode(config.Config{
-		UDPAddr: "127.0.0.1:0", AnnounceIPs: []string{"127.0.0.1"}, IncludeLoopback: true,
-		MaxSessions: 8, MaxPublishedPerSession: 4, MaxSubscriptionsPerSession: 4,
-		MaxEpisodeParticipants: 16, PacketBudget: 1 << 20, EpisodePacketCeiling: 1 << 20,
-		VideoStreamCost: 150, CameraUplinkCost: 150, CamerasPerParticipant: 1, AudioStreamCost: 50, ScreenStreamCost: 210,
-		Memory:             config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10},
-		Guard:              config.Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 5 * time.Second, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second},
-		NegotiationTimeout: 5 * time.Second, ConnectTimeout: 30 * time.Second, ShutdownTimeout: 5 * time.Second, SourceLeaseTTL: time.Hour,
-	}, logger)
-	if err != nil {
-		t.Fatal(err)
-	}
+	node := newExportedNode(t, logger)
 	t.Cleanup(node.Close)
 
 	scope := protocol.Scope{TenantID: "tenant-1", EpisodeID: "episode-1", ParticipantID: "alice", Generation: 1}
@@ -87,4 +76,23 @@ func TestMalformedSDPStaysOnTheNode(t *testing.T) {
 			t.Errorf("the trail lost %q, so the export did not run", want)
 		}
 	}
+}
+
+// newExportedNode builds a node on loopback whose logger exports through the real OTLP path.
+func newExportedNode(t *testing.T, logger *slog.Logger) *media.Node {
+	t.Helper()
+	node, err := media.NewNode(config.Config{
+		UDPAddr: "127.0.0.1:0", AnnounceIPs: []string{"127.0.0.1"}, IncludeLoopback: true,
+		MaxSessions: 8, MaxPublishedPerSession: 4, MaxSubscriptionsPerSession: 4,
+		MaxEpisodeParticipants: 16, PacketBudget: 1 << 20, EpisodePacketCeiling: 1 << 20,
+		VideoStreamCost: 150, CameraUplinkCost: 150, CamerasPerParticipant: 1, AudioStreamCost: 50, ScreenStreamCost: 210,
+		Memory:             config.Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10},
+		Guard:              config.Guard{MaxStealPercent: 3, MaxBusyPercent: 90, MaxSchedulerLatency: 5 * time.Second, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second},
+		NegotiationTimeout: 5 * time.Second, ConnectTimeout: 30 * time.Second, ShutdownTimeout: 5 * time.Second, SourceLeaseTTL: time.Hour,
+	}, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(node.Close)
+	return node
 }

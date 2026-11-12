@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -35,17 +36,28 @@ func NewLogger(ctx context.Context, cfg config.Telemetry, local slog.Handler) (*
 	if err != nil {
 		return nil, nil, fmt.Errorf("create OTLP log exporter: %w", err)
 	}
-	attributes, err := resource.New(ctx, resource.WithAttributes(
+	attributes, err := fixedResource(ctx,
 		semconv.ServiceName("chalk-sfu"),
 		semconv.ServiceVersion(cfg.Version),
 		semconv.DeploymentEnvironmentName(cfg.Environment),
-	))
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create log resource: %w", err)
 	}
 	provider := sdklog.NewLoggerProvider(sdklog.WithResource(attributes), sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
 	remote := otelslog.NewHandler(scope, otelslog.WithLoggerProvider(provider), otelslog.WithVersion(cfg.Version))
 	return slog.New(fanout{local, newExportOnly(remote)}), provider.Shutdown, nil
+}
+
+// fixedResource builds the node's resource from the given attributes and nothing else. The SDK
+// merges OTEL_RESOURCE_ATTRIBUTES into the resource of every provider, which would send whatever
+// that variable holds outside the allowlist, so the variable is cleared before a provider is built.
+// Call it while the node starts, before other goroutines read the environment.
+func fixedResource(ctx context.Context, attrs ...attribute.KeyValue) (*resource.Resource, error) {
+	if err := os.Unsetenv("OTEL_RESOURCE_ATTRIBUTES"); err != nil {
+		return nil, fmt.Errorf("clear OTEL_RESOURCE_ATTRIBUTES: %w", err)
+	}
+	return resource.New(ctx, resource.WithAttributes(attrs...))
 }
 
 func logsURL(endpoint string) string {

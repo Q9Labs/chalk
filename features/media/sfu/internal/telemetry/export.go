@@ -13,15 +13,48 @@ import (
 // `event` attribute names a row, with the row's fields and no others, rewritten to carry the event
 // name as its body. The journal keeps every line unfiltered.
 
+// A source says where an exported field's value comes from. A value a Participant or a peer
+// chooses (an SDP rid, a name, an address, any text) has no source here and cannot be exported:
+// the node maps it to an enum or counts it first, and the raw value stays in the journal.
+type source string
+
+const (
+	// serverAssigned values are made by the node: its incarnation, a transceiver mid.
+	serverAssigned source = "server-assigned"
+	// enum values come from a closed set in the node's code: a state, a cause, a reason.
+	enum source = "enum"
+	// number values are counts, sizes, rates and flags the node measured.
+	number source = "number"
+	// restrictedID values are ids the API issued or the node checked against a fixed pattern
+	// (letters, digits and . _ : -; hex and dashes for trace and journey ids).
+	restrictedID source = "restricted id"
+)
+
+// fieldSources lists every field that may leave the node, and where its value comes from.
+var fieldSources = map[string]source{
+	"event": enum, "tenant_id": restrictedID, "episode_id": restrictedID, "participant_id": restrictedID,
+	"generation": number, "connection_id": restrictedID, "session_kind": enum, "node_incarnation": serverAssigned,
+	"trace_id": restrictedID, "journey_id": restrictedID,
+
+	"allocation": number, "code": enum, "reason": enum, "sessions": number, "cause": enum,
+	"lifetime_ms": number, "publications": number, "subscriptions": number, "state": enum, "path": enum,
+	"source": enum, "media_kind": enum, "publisher_id": restrictedID, "mid": serverAssigned,
+	"was": enum, "layer": enum, "level": enum, "ceiling_packets": number, "revision": number,
+	"connectionId": restrictedID, "estimateBps": number, "provenBps": number, "deliveredShare": number,
+	"probing": number, "hostPressure": number, "ackedBps": number, "lossShare": number, "lossy": number,
+	"trend": enum, "decreaseCause": enum, "decreaseAgoMs": number, "decreaseFromBps": number,
+	"decreaseToBps": number, "decreaseAckedBps": number,
+}
+
 // idFields name who and where an event happened. Every event may carry them.
 var idFields = []string{
 	"event", "tenant_id", "episode_id", "participant_id", "generation",
 	"connection_id", "session_kind", "node_incarnation", "trace_id", "journey_id",
 }
 
-// exportedEvents maps each exportable event to the fields it adds to idFields. A field is a token,
-// an id, a number or a flag, never free text: an error string has no row here. Adding an event
-// or a field is a review decision, and the drift test in the media package fails until it is made.
+// exportedEvents maps each exportable event to the fields it adds to idFields. Every field has a
+// row in fieldSources. An error string has no row, and neither has a rid: the layer events carry
+// `layer`, an enum the node derives from the rid.
 var exportedEvents = map[string][]string{
 	"sfu.session.registered":      {"allocation"},
 	"sfu.session.refused":         {"code"},
@@ -36,11 +69,11 @@ var exportedEvents = map[string][]string{
 	"sfu.subscription.stopped":    {"publisher_id", "source", "media_kind", "mid", "reason"},
 	"sfu.subscription.paused":     {"publisher_id", "source", "media_kind", "mid", "reason"},
 	"sfu.subscription.resumed":    {"publisher_id", "source", "media_kind", "mid", "was"},
-	"sfu.subscription.layer":      {"publisher_id", "source", "media_kind", "mid", "rid"},
+	"sfu.subscription.layer":      {"publisher_id", "source", "media_kind", "mid", "layer"},
 	"sfu.camera.plan":             {"level", "was", "ceiling_packets"},
 	"sfu.source.lease_opened":     {"source", "revision"},
 	"sfu.source.lease_lost":       {"source", "cause", "revision"},
-	"sfu.subscription.congestion": {"connectionId", "mid", "rid", "reason", "estimateBps", "provenBps", "deliveredShare", "probing", "hostPressure", "ackedBps", "lossShare", "lossy", "trend", "decreaseCause", "decreaseAgoMs", "decreaseFromBps", "decreaseToBps", "decreaseAckedBps"},
+	"sfu.subscription.congestion": {"connectionId", "mid", "layer", "reason", "estimateBps", "provenBps", "deliveredShare", "probing", "hostPressure", "ackedBps", "lossShare", "lossy", "trend", "decreaseCause", "decreaseAgoMs", "decreaseFromBps", "decreaseToBps", "decreaseAckedBps"},
 }
 
 // ExportedEvents lists the events that may leave the node, for the test that keeps the table and
@@ -106,7 +139,7 @@ func (h *exportOnly) Handle(ctx context.Context, record slog.Record) error {
 	}
 	exported := slog.NewRecord(record.Time, record.Level, event, record.PC)
 	for _, name := range append(append([]string(nil), idFields...), extra...) {
-		if value, present := values[name]; present && exportable(value) {
+		if value, present := values[name]; present && exportable(fieldSources[name], value) {
 			exported.AddAttrs(slog.Attr{Key: name, Value: value})
 		}
 	}
@@ -132,17 +165,19 @@ func eventName(value slog.Value) (string, bool) {
 	return value.String(), true
 }
 
-// exportable reports whether a value is a bounded token, a finite number or a flag.
-func exportable(value slog.Value) bool {
-	switch value.Kind() {
-	case slog.KindString:
-		return token.MatchString(value.String())
-	case slog.KindInt64, slog.KindUint64, slog.KindBool:
-		return true
-	case slog.KindFloat64:
-		number := value.Float64()
-		return !math.IsNaN(number) && !math.IsInf(number, 0)
-	default:
-		return false
+// exportable reports whether a value fits its field's source: a bounded token for the string
+// sources, a finite number or a flag for a number.
+func exportable(kind source, value slog.Value) bool {
+	switch kind {
+	case enum, serverAssigned, restrictedID:
+		return value.Kind() == slog.KindString && token.MatchString(value.String())
+	case number:
+		switch value.Kind() {
+		case slog.KindInt64, slog.KindUint64, slog.KindBool:
+			return true
+		case slog.KindFloat64:
+			return !math.IsNaN(value.Float64()) && !math.IsInf(value.Float64(), 0)
+		}
 	}
+	return false
 }

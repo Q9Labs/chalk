@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
+	"github.com/q9labs/chalk/features/media/sfu/internal/media"
 )
 
 // exportSink is a log store that keeps every OTLP request body it receives.
@@ -197,5 +198,72 @@ func TestTableMatchesTheEventsTheNodeEmits(t *testing.T) {
 		if !emitted[event] {
 			t.Errorf("exportedEvents has a row for %s, which the node no longer emits", event)
 		}
+	}
+}
+
+// OTEL_RESOURCE_ATTRIBUTES is merged into a provider's resource by the SDK, outside the allowlist.
+// Neither the logs nor the metrics of the node may carry it.
+func TestResourceAttributesFromTheEnvironmentStayOnTheNode(t *testing.T) {
+	const marker = "RESOURCE-ENV-MARKER"
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.secret="+marker+",host.name="+marker)
+
+	logs := newExportSink(t)
+	log, shutdown := newExportLogger(t, logs, slog.NewJSONHandler(io.Discard, nil))
+	log.Info("sfu.peer.state", "event", "sfu.peer.state", "episode_id", "episode-1", "state", "connected")
+	shutdown()
+	if exported := logs.exported(); !strings.Contains(exported, "chalk-sfu") || strings.Contains(exported, marker) {
+		t.Fatalf("log resource must hold the fixed attributes only: has service %t, has marker %t",
+			strings.Contains(exported, "chalk-sfu"), strings.Contains(exported, marker))
+	}
+
+	metrics := newExportSink(t)
+	exporter, err := Start(context.Background(), config.Telemetry{OTLPEndpoint: metrics.server.URL, OTLPInsecure: true, Version: "test", Environment: "test", Interval: 20 * time.Millisecond},
+		"instance-1", func() media.Telemetry { return media.Telemetry{Sessions: 1} }, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := exporter.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if exported := metrics.exported(); !strings.Contains(exported, "chalk-sfu") || strings.Contains(exported, marker) {
+		t.Fatalf("metric resource must hold the fixed attributes only: has service %t, has marker %t",
+			strings.Contains(exported, "chalk-sfu"), strings.Contains(exported, marker))
+	}
+}
+
+// Every exported field declares where its value comes from, and only a value the node makes, a
+// closed enum, a number or a restricted id may leave. A field a peer controls has no source.
+func TestEveryExportedFieldDeclaresASafeSource(t *testing.T) {
+	safe := map[source]bool{serverAssigned: true, enum: true, number: true, restrictedID: true}
+	for _, event := range ExportedEvents() {
+		for _, field := range ExportedFields(event) {
+			kind, declared := fieldSources[field]
+			switch {
+			case !declared:
+				t.Errorf("%s exports %s, which declares no source", event, field)
+			case !safe[kind]:
+				t.Errorf("%s exports %s with source %q, which is not server-assigned, enum, number or restricted id", event, field, kind)
+			}
+		}
+	}
+	for field, kind := range fieldSources {
+		if !safe[kind] {
+			t.Errorf("%s has source %q", field, kind)
+		}
+	}
+	for _, peerChosen := range []string{"rid", "err", "error", "sdp", "name", "address", "remote"} {
+		if _, ok := fieldSources[peerChosen]; ok {
+			t.Errorf("%s is a peer-chosen or free-text field and must not be exportable", peerChosen)
+		}
+	}
+	// A string source rejects what a peer could send through it; a number source rejects text.
+	if exportable(enum, slog.StringValue("203.0.113.9 443")) || exportable(enum, slog.StringValue("")) {
+		t.Error("an enum accepted a value that is not a token")
+	}
+	if exportable(number, slog.StringValue("12")) || exportable(restrictedID, slog.Int64Value(12)) {
+		t.Error("a source accepted the wrong kind of value")
 	}
 }
