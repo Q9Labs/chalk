@@ -40,6 +40,7 @@ type Config struct {
 	// SourceLeaseTTL is how long a granted source forwards without a renewing grant.
 	// The API renews every live grant well inside it, so lost control connectivity
 	// stops forwarding at expiry instead of leaving an orphan publication running.
+	// The default outlasts an API restart or deploy (see defaultSourceLeaseTTL).
 	SourceLeaseTTL time.Duration
 
 	MaxSessions                int
@@ -147,6 +148,12 @@ type Lookup func(key string) (string, bool)
 // (providerbridge.SourceLeaseRenewInterval), so a lease cannot lapse between renewals.
 const minSourceLeaseTTL = 10 * time.Second
 
+// defaultSourceLeaseTTL is the grace the media has when the API cannot renew. In the staging
+// recovery run an API outage of 84 s stopped a call's media for 39 s, because the 15 s lease ran
+// out 15 s in. A stop the node never heard of (the control path was cut at that moment) keeps
+// forwarding for at most this long; a stop the node did hear of takes effect at once.
+const defaultSourceLeaseTTL = time.Minute
+
 func Load(lookup Lookup) (Config, error) {
 	r := reader{lookup: lookup}
 	cfg := Config{
@@ -161,7 +168,7 @@ func Load(lookup Lookup) (Config, error) {
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
 		ClientIdentity:             r.required("SFU_CLIENT_IDENTITY"),
-		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", 15*time.Second, minSourceLeaseTTL, 2*time.Minute),
+		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", defaultSourceLeaseTTL, minSourceLeaseTTL, 2*time.Minute),
 		MaxSessions:                r.integer("SFU_MAX_SESSIONS", 64, 1, 1024),
 		MaxPublishedPerSession:     r.integer("SFU_MAX_PUBLISHED_PER_SESSION", 8, 1, 32),
 		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 0, 1, 512),
