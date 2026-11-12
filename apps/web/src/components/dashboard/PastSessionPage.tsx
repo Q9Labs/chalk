@@ -1,16 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import type { AttendanceDTO } from "../../lib/dashboard/contracts";
 import { errorMessage } from "../../lib/dashboard/client";
 import { clock, duration, longDay } from "../../lib/dashboard/format";
-import { videoGroup, videoState, type VideoState } from "../../lib/dashboard/recording";
+import { completedTranscript, videoGroup, videoState, type VideoState } from "../../lib/dashboard/recording";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { BadgeView } from "./ListParts";
 import { Page, Stat } from "./Page";
 import { DownloadMenu, SessionViewer, type Parts } from "./SessionViewer";
 import { usePastSession, type Ids, type Page as Loaded } from "./session-reads";
+import { DeleteTranscript } from "./DeleteTranscript";
 import { CopyAction, ErrorPanel, Sk } from "./kit";
 import { VIDEO_BADGE } from "../../lib/dashboard/lists";
 
@@ -37,7 +38,7 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
     );
   return (
     <SessionViewer ids={ids} page={state.data} actions={actions}>
-      {(parts) => <Detail ids={ids} page={state.data} parts={parts} crumb={crumb} />}
+      {(parts) => <Detail ids={ids} page={state.data} parts={parts} crumb={crumb} onDeleted={reload} />}
     </SessionViewer>
   );
 }
@@ -127,6 +128,9 @@ const TRANSCRIPT_STAT: Record<Parts["transcript"], { readonly value: string; rea
   none: { value: "None", sub: "Transcription was off" },
 };
 
+/** A ready transcript whose lines can't play the video, because the video isn't ready or the transcript is from another recording. */
+const READ_ONLY_STAT = { value: "Ready", sub: "Ready to read" };
+
 const VIDEO_STAT: Record<"off" | VideoState, { readonly value: string; readonly sub: string }> = {
   off: { value: "Off", sub: "Recording was off" },
   play: { value: "Ready", sub: "Ready to watch" },
@@ -168,7 +172,7 @@ function SessionStats({ startedAt, end, participants, video, transcript }: { rea
   );
 }
 
-function RecordingSplit({ video, media, panel }: { readonly video: VideoState | null; readonly media: ReactNode; readonly panel: ReactNode }) {
+function RecordingSplit({ video, media, panel, onDelete }: { readonly video: VideoState | null; readonly media: ReactNode; readonly panel: ReactNode; readonly onDelete: (() => void) | null }) {
   return (
     <div className="dsplit">
       <section className="card rc" aria-labelledby="recording-title">
@@ -183,6 +187,13 @@ function RecordingSplit({ video, media, panel }: { readonly video: VideoState | 
         <div className="ph">
           <Icon name="file" size={18} />
           <h2 id="transcript-title">Transcript</h2>
+          {onDelete ? (
+            <span className="end">
+              <button type="button" className="ib dg" aria-label="Delete transcript" data-tip onClick={onDelete}>
+                <Icon name="trash" />
+              </button>
+            </span>
+          ) : null}
         </div>
         <div className="fill">{panel}</div>
       </section>
@@ -204,13 +215,14 @@ function NoRecording() {
   );
 }
 
-function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page: Loaded; readonly parts: Parts; readonly crumb: ReactNode }) {
+function Detail({ ids, page, parts, crumb, onDeleted }: { readonly ids: Ids; readonly page: Loaded; readonly parts: Parts; readonly crumb: ReactNode; readonly onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false);
   const { episode, attendance } = page.session;
   const { recording, playable, downloadableTranscript, media, panel } = parts;
   const end = episode.endedAt ?? episode.startedAt;
   const video = recording ? videoState(recording) : null;
   const stat = VIDEO_STAT[video ?? "off"];
-  const words = recording ? TRANSCRIPT_STAT[parts.transcript] : { value: "None", sub: "Needs a recording" };
+  const words = !recording ? { value: "None", sub: "Needs a recording" } : parts.transcript === "ready" && !parts.seekable ? READ_ONLY_STAT : TRANSCRIPT_STAT[parts.transcript];
   return (
     <Page
       icon="calendar"
@@ -225,8 +237,19 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
       }
     >
       <SessionStats startedAt={episode.startedAt} end={end} participants={attendance.participants} video={stat} transcript={words} />
-      {recording ? <RecordingSplit video={video} media={media} panel={panel} /> : <NoRecording />}
+      {recording ? <RecordingSplit video={video} media={media} panel={panel} onDelete={downloadableTranscript ? () => setDeleting(true) : null} /> : <NoRecording />}
       <WhoJoined attendance={attendance} startedAt={episode.startedAt} endedAt={end} />
+      {deleting ? (
+        <DeleteTranscript
+          ids={ids}
+          transcriptIds={page.attempts.flatMap((item) => (item.recording.transcripts ?? []).filter(completedTranscript).map((transcript) => transcript.id))}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            onDeleted();
+          }}
+        />
+      ) : null}
     </Page>
   );
 }

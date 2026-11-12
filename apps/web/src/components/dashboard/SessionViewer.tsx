@@ -19,6 +19,8 @@ export type Parts = {
   readonly playable: boolean;
   readonly downloadableTranscript: TranscriptDTO | null;
   readonly transcript: TranscriptView["kind"];
+  /** The transcript follows the video on screen, so a click on a line plays from it. */
+  readonly seekable: boolean;
   readonly media: ReactNode;
   readonly panel: ReactNode;
 };
@@ -42,7 +44,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
   const downloadableTranscript = transcript.kind === "ready" ? transcript.transcript : null;
-  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null });
+  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, seekable: false, media: null, panel: null });
 
   async function prepareRecording(target: RecordingDTO) {
     if (exporting) return;
@@ -79,7 +81,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
     ) : (
       <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
-  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel });
+  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, seekable: playable && target.id === recording.id, media, panel });
 }
 
 type MediaProps = {
