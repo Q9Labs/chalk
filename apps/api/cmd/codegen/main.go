@@ -389,44 +389,53 @@ func (g *generator) schemaFromType(t reflect.Type, request bool, currentName str
 		return map[string]any{"$ref": "#/components/schemas/" + name}
 	}
 
-	if isTime(t) {
-		return timestampSchema()
+	if schema, ok := wrapperSchema(t); ok {
+		return schema
 	}
-	if isRawJSON(t) || isOptionalJSON(t) {
-		return jsonValueSchema()
-	}
-	if isOptionalString(t) {
-		return map[string]any{"type": []string{"string", "null"}}
-	}
-	if isOptionalStrings(t) {
+	return g.kindSchema(t, request, currentName)
+}
+
+// wrapperSchema covers the Chalk types whose JSON shape differs from their Go kind.
+func wrapperSchema(t reflect.Type) (map[string]any, bool) {
+	switch {
+	case isTime(t):
+		return timestampSchema(), true
+	case isRawJSON(t) || isOptionalJSON(t):
+		return jsonValueSchema(), true
+	case isOptionalString(t):
+		return map[string]any{"type": []string{"string", "null"}}, true
+	case isOptionalStrings(t):
 		return map[string]any{
 			"type":  []string{"array", "null"},
 			"items": map[string]any{"type": "string"},
-		}
+		}, true
+	case isOptionalInt64(t):
+		return map[string]any{"type": []string{"integer", "null"}}, true
+	case isOptionalInt32(t):
+		// The Space service rejects an explicit null for these durations.
+		return map[string]any{"type": "integer"}, true
+	case isOptionalCORSOrigins(t):
+		return corsOriginsSchema(), true
+	case isOptionalTimeRequest(t):
+		return nullableSchema(timestampSchema()), true
 	}
-	if isOptionalInt64(t) {
-		return map[string]any{"type": []string{"integer", "null"}}
-	}
-	// The Space service rejects an explicit null for these durations.
-	if isOptionalInt32(t) {
-		return map[string]any{"type": "integer"}
-	}
-	if isOptionalCORSOrigins(t) {
-		return map[string]any{
-			"type":     "array",
-			"maxItems": tenants.MaxCORSOrigins,
-			"items": map[string]any{
-				"type":      "string",
-				"format":    "uri",
-				"maxLength": tenants.MaxCORSOriginBytes,
-				"pattern":   tenants.CORSOriginPattern,
-			},
-		}
-	}
-	if isOptionalTimeRequest(t) {
-		return nullableSchema(timestampSchema())
-	}
+	return nil, false
+}
 
+func corsOriginsSchema() map[string]any {
+	return map[string]any{
+		"type":     "array",
+		"maxItems": tenants.MaxCORSOrigins,
+		"items": map[string]any{
+			"type":      "string",
+			"format":    "uri",
+			"maxLength": tenants.MaxCORSOriginBytes,
+			"pattern":   tenants.CORSOriginPattern,
+		},
+	}
+}
+
+func (g *generator) kindSchema(t reflect.Type, request bool, currentName string) map[string]any {
 	switch t.Kind() {
 	case reflect.Struct:
 		return g.objectSchema(t, request, currentName)
@@ -507,84 +516,89 @@ func (g *generator) objectSchema(t reflect.Type, request bool, currentName strin
 }
 
 func (g *generator) fieldSchema(schemaName string, fieldName string, field reflect.StructField, request bool) map[string]any {
+	if schema, ok := namedFieldSchema(schemaName, fieldName, field); ok {
+		return schema
+	}
 	fieldType := field.Type
-	if schemaName == "EpisodeAttendance" {
-		switch fieldName {
-		case "external_id":
-			return map[string]any{"type": "string"}
-		case "identity_kind":
-			return map[string]any{"type": "string", "enum": []string{"user", "agent", "guest"}}
-		case "left_reason":
-			return map[string]any{"anyOf": []map[string]any{
-				{"type": "string", "enum": []string{"left", "episode_ended"}},
-				{"type": "null"},
-			}}
-		}
+	var schema map[string]any
+	switch {
+	case isOptionalString(fieldType):
+		schema = stringSchema()
+	case isOptionalStrings(fieldType):
+		schema = map[string]any{"type": "array", "items": stringSchema()}
+	case isOptionalCORSOrigins(fieldType):
+		schema = corsOriginsSchema()
+	default:
+		schema = g.schemaFromType(fieldType, request, schemaName)
 	}
-	if schemaName == "Recording" && fieldName == "source" {
-		return schemaReference("RecordingSource")
+	return applyFieldConstraints(schema, schemaName, fieldName, request)
+}
+
+// namedFieldSchema returns the fixed schema a field gets from its schema, tag or name, before its Go type is read.
+func namedFieldSchema(schemaName string, fieldName string, field reflect.StructField) (map[string]any, bool) {
+	if schema, ok := attendanceFieldSchema(schemaName, fieldName); ok {
+		return schema, true
 	}
-	if schemaName == "Recording" && fieldName == "transcription_preparation" {
-		return schemaReference("RecordingTranscriptionPreparation")
+	if name, ok := recordingFieldSchemaName(schemaName, fieldName); ok {
+		return schemaReference(name), true
 	}
-	if (schemaName == "Recording" || schemaName == "RecordingExportRequestAcceptedResponse") && fieldName == "export" {
-		return schemaReference("RecordingExport")
-	}
-	if schemaName := field.Tag.Get("schema"); schemaName != "" {
-		return schemaReference(schemaName)
+	if tagged := field.Tag.Get("schema"); tagged != "" {
+		return schemaReference(tagged), true
 	}
 	if name, ok := providerConfigSchemaName(fieldName); ok {
-		return schemaReference(name)
+		return schemaReference(name), true
 	}
-	if fieldName == "pagination" {
-		return schemaReference("Pagination")
-	}
-	if fieldName == "trace_id" {
-		return nullableSchema(traceIdentifierSchema(32))
-	}
-	if fieldName == "span_id" {
-		return nullableSchema(traceIdentifierSchema(16))
+	switch fieldName {
+	case "pagination":
+		return schemaReference("Pagination"), true
+	case "trace_id":
+		return nullableSchema(traceIdentifierSchema(32)), true
+	case "span_id":
+		return nullableSchema(traceIdentifierSchema(16)), true
 	}
 	if name, ok := idSchemaName(schemaName, fieldName); ok {
-		return schemaReference(name)
+		return schemaReference(name), true
 	}
-	if isTimestampStringField(fieldName, fieldType) || isTime(fieldType) || isOptionalTimeRequest(fieldType) {
-		return schemaReference("DateTimeString")
+	if isTimestampStringField(fieldName, field.Type) || isTime(field.Type) || isOptionalTimeRequest(field.Type) {
+		return schemaReference("DateTimeString"), true
 	}
 	if fieldName == "email" {
-		return schemaReference("Email")
+		return schemaReference("Email"), true
 	}
 	if fieldName == "website" || strings.HasSuffix(fieldName, "_url") {
-		return schemaReference("URLString")
+		return schemaReference("URLString"), true
 	}
+	return nil, false
+}
 
-	if isOptionalString(fieldType) {
-		schema := stringSchema()
-		return applyFieldConstraints(schema, schemaName, fieldName, request)
+func attendanceFieldSchema(schemaName string, fieldName string) (map[string]any, bool) {
+	if schemaName != "EpisodeAttendance" {
+		return nil, false
 	}
-	if isOptionalStrings(fieldType) {
-		schema := map[string]any{
-			"type":  "array",
-			"items": stringSchema(),
-		}
-		return applyFieldConstraints(schema, schemaName, fieldName, request)
+	switch fieldName {
+	case "external_id":
+		return map[string]any{"type": "string"}, true
+	case "identity_kind":
+		return map[string]any{"type": "string", "enum": []string{"user", "agent", "guest"}}, true
+	case "left_reason":
+		return map[string]any{"anyOf": []map[string]any{
+			{"type": "string", "enum": []string{"left", "episode_ended"}},
+			{"type": "null"},
+		}}, true
 	}
-	if isOptionalCORSOrigins(fieldType) {
-		schema := map[string]any{
-			"type":     "array",
-			"maxItems": tenants.MaxCORSOrigins,
-			"items": map[string]any{
-				"type":      "string",
-				"format":    "uri",
-				"maxLength": tenants.MaxCORSOriginBytes,
-				"pattern":   tenants.CORSOriginPattern,
-			},
-		}
-		return applyFieldConstraints(schema, schemaName, fieldName, request)
-	}
+	return nil, false
+}
 
-	schema := g.schemaFromType(fieldType, request, schemaName)
-	return applyFieldConstraints(schema, schemaName, fieldName, request)
+func recordingFieldSchemaName(schemaName string, fieldName string) (string, bool) {
+	switch {
+	case schemaName == "Recording" && fieldName == "source":
+		return "RecordingSource", true
+	case schemaName == "Recording" && fieldName == "transcription_preparation":
+		return "RecordingTranscriptionPreparation", true
+	case (schemaName == "Recording" || schemaName == "RecordingExportRequestAcceptedResponse") && fieldName == "export":
+		return "RecordingExport", true
+	}
+	return "", false
 }
 
 func recordingArtifactSchemas() map[string]map[string]any {
@@ -635,119 +649,154 @@ func traceIdentifierSchema(length int) map[string]any {
 }
 
 func applyFieldConstraints(schema map[string]any, schemaName string, fieldName string, request bool) map[string]any {
-	if fieldName == "event_types" && schemaTypeIs(schema, "array") {
-		if items, ok := schema["items"].(map[string]any); ok {
-			items["enum"] = webhooks.SubscribableEventTypes()
-		}
-	}
+	constrainEventTypes(schema, fieldName)
 	if enum := fieldEnum(schemaName, fieldName); len(enum) > 0 {
 		schema["enum"] = enum
 	}
-	if isUUIDField(fieldName) && !isOpaqueIDField(schemaName, fieldName) {
-		schema["format"] = "uuid"
-		schema["minLength"] = 36
-		schema["maxLength"] = 36
-	}
-	if schemaName == "ConnectionReportRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{1}
-		case "events":
-			schema["minItems"] = 1
-			schema["maxItems"] = httpapi.ConnectionReportEventLimit
-		case "elapsed_ms", "attempt", "duration_ms", "heartbeat_gap_ms":
-			schema["minimum"] = 0
-			schema["maximum"] = httpapi.ConnectionReportMaxMilliseconds
-		case "close_code":
-			schema["minimum"] = 1000
-			schema["maximum"] = 4999
-		case "http_status":
-			schema["minimum"] = 400
-			schema["maximum"] = 599
-		case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off", "receivers_stopped":
-			schema["minimum"] = 0
-			schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
-		}
-	}
-	if schemaName == "CallStatsRequest" {
-		switch fieldName {
-		case "version":
-			schema["enum"] = []int{1}
-		case "samples":
-			schema["minItems"] = 1
-			schema["maxItems"] = httpapi.CallStatsSampleLimit
-		case "elapsed_ms":
-			schema["minimum"] = 0
-			schema["maximum"] = httpapi.CallStatsMaxElapsedMS
-		case "window_ms":
-			schema["minimum"] = httpapi.CallStatsMinWindowMS
-			schema["maximum"] = httpapi.CallStatsMaxWindowMS
-		default:
-			if maximum := httpapi.CallStatsMaximum(fieldName); maximum > 0 {
-				schema["minimum"] = 0
-				schema["maximum"] = maximum
-			}
-		}
-	}
-	if schemaName == "ProblemReportRequest" {
-		switch fieldName {
-		case "description":
-			schema["maxLength"] = problemreports.MaxDescriptionCodePoints
-			// Match Go strings.TrimSpace, including NEL (not JS \s) and excluding BOM.
-			schema["pattern"] = `[^\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]`
-		case "diagnostics":
-			schema["maxLength"] = problemreports.MaxDiagnosticsCodePoints
-		}
-		schema[lengthUnitExtension] = codePointLengthUnit
+	constrainUUID(schema, schemaName, fieldName)
+	switch schemaName {
+	case "ConnectionReportRequest":
+		constrainConnectionReport(schema, fieldName)
+	case "CallStatsRequest":
+		constrainCallStats(schema, fieldName)
+	case "ProblemReportRequest":
+		constrainProblemReport(schema, fieldName)
+	case "UpdateTenantRequest":
+		constrainTenantUpdate(schema, fieldName)
 	}
 	if request && fieldName == "name" && (schemaName == "CreateSpaceRequest" || schemaName == "UpdateSpaceRequest") {
 		schema["maxLength"] = spaces.MaxNameCodePoints
 		schema[lengthUnitExtension] = codePointLengthUnit
 	}
-	if fieldName == "external_id" {
-		schema["minLength"] = 1
-		schema["maxLength"] = 512
-		schema[lengthUnitExtension] = codePointLengthUnit
-	}
-	if fieldName == "identity_external_id" {
-		schema["minLength"] = 1
-		schema["maxLength"] = 256
-	}
-	if fieldName == "email" {
-		schema["format"] = "email"
-	}
-	if fieldName == "website" || strings.HasSuffix(fieldName, "_url") {
-		schema["format"] = "uri"
-	}
+	constrainByFieldName(schema, fieldName)
 	if request && schemaTypeIs(schema, "string") && !schemaIncludesNull(schema) && len(fieldEnum(schemaName, fieldName)) == 0 && !requestFieldAllowsEmpty(schemaName, fieldName) {
 		schema["minLength"] = 1
 	}
-	if fieldName == "languages" && schemaTypeIs(schema, "array") {
-		// An empty list means the provider detects the language, so neither a
-		// request nor the Transcript it creates may require a minimum length.
-		if items, ok := schema["items"].(map[string]any); ok {
-			items["minLength"] = 1
+	constrainArrayItems(schema, fieldName)
+	return schema
+}
+
+func constrainUUID(schema map[string]any, schemaName string, fieldName string) {
+	if !isUUIDField(fieldName) || isOpaqueIDField(schemaName, fieldName) {
+		return
+	}
+	schema["format"] = "uuid"
+	schema["minLength"] = 36
+	schema["maxLength"] = 36
+}
+
+func constrainEventTypes(schema map[string]any, fieldName string) {
+	if fieldName != "event_types" || !schemaTypeIs(schema, "array") {
+		return
+	}
+	if items, ok := schema["items"].(map[string]any); ok {
+		items["enum"] = webhooks.SubscribableEventTypes()
+	}
+}
+
+func constrainConnectionReport(schema map[string]any, fieldName string) {
+	switch fieldName {
+	case "version":
+		schema["enum"] = []int{1}
+	case "events":
+		schema["minItems"] = 1
+		schema["maxItems"] = httpapi.ConnectionReportEventLimit
+	case "elapsed_ms", "attempt", "duration_ms", "heartbeat_gap_ms":
+		schema["minimum"] = 0
+		schema["maximum"] = httpapi.ConnectionReportMaxMilliseconds
+	case "close_code":
+		schema["minimum"] = 1000
+		schema["maximum"] = 4999
+	case "http_status":
+		schema["minimum"] = 400
+		schema["maximum"] = 599
+	case "announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing", "projection_off", "receivers_stopped":
+		schema["minimum"] = 0
+		schema["maximum"] = httpapi.ConnectionReportMaxReceiveCount
+	}
+}
+
+func constrainCallStats(schema map[string]any, fieldName string) {
+	switch fieldName {
+	case "version":
+		schema["enum"] = []int{1}
+	case "samples":
+		schema["minItems"] = 1
+		schema["maxItems"] = httpapi.CallStatsSampleLimit
+	case "elapsed_ms":
+		schema["minimum"] = 0
+		schema["maximum"] = httpapi.CallStatsMaxElapsedMS
+	case "window_ms":
+		schema["minimum"] = httpapi.CallStatsMinWindowMS
+		schema["maximum"] = httpapi.CallStatsMaxWindowMS
+	default:
+		if maximum := httpapi.CallStatsMaximum(fieldName); maximum > 0 {
+			schema["minimum"] = 0
+			schema["maximum"] = maximum
 		}
 	}
-	if fieldName == "cors_allowed_origins" && schemaTypeIs(schema, "array") {
+}
+
+func constrainProblemReport(schema map[string]any, fieldName string) {
+	switch fieldName {
+	case "description":
+		schema["maxLength"] = problemreports.MaxDescriptionCodePoints
+		// Match Go strings.TrimSpace, including NEL (not JS \s) and excluding BOM.
+		schema["pattern"] = `[^\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]`
+	case "diagnostics":
+		schema["maxLength"] = problemreports.MaxDiagnosticsCodePoints
+	}
+	schema[lengthUnitExtension] = codePointLengthUnit
+}
+
+func constrainTenantUpdate(schema map[string]any, fieldName string) {
+	switch fieldName {
+	case "recording_retention_seconds", "transcript_retention_seconds":
+		schema["minimum"] = 0
+		schema["maximum"] = artifactpolicy.MaximumRetentionSeconds
+	case "transcription_source_window_seconds":
+		schema["minimum"] = 0
+		schema["maximum"] = int64(artifactpolicy.MaximumSourceWindow / time.Second)
+	}
+}
+
+// constrainByFieldName applies the constraints that follow a field's name in every schema.
+func constrainByFieldName(schema map[string]any, fieldName string) {
+	switch {
+	case fieldName == "external_id":
+		schema["minLength"] = 1
+		schema["maxLength"] = 512
+		schema[lengthUnitExtension] = codePointLengthUnit
+	case fieldName == "identity_external_id":
+		schema["minLength"] = 1
+		schema["maxLength"] = 256
+	case fieldName == "email":
+		schema["format"] = "email"
+	case fieldName == "website" || strings.HasSuffix(fieldName, "_url"):
+		schema["format"] = "uri"
+	}
+}
+
+func constrainArrayItems(schema map[string]any, fieldName string) {
+	if !schemaTypeIs(schema, "array") {
+		return
+	}
+	items, hasItems := schema["items"].(map[string]any)
+	switch fieldName {
+	case "languages":
+		// An empty list means the provider detects the language, so neither a
+		// request nor the Transcript it creates may require a minimum length.
+		if hasItems {
+			items["minLength"] = 1
+		}
+	case "cors_allowed_origins":
 		schema["maxItems"] = tenants.MaxCORSOrigins
-		if items, ok := schema["items"].(map[string]any); ok {
+		if hasItems {
 			items["format"] = "uri"
 			items["maxLength"] = tenants.MaxCORSOriginBytes
 			items["pattern"] = tenants.CORSOriginPattern
 		}
 	}
-	if schemaName == "UpdateTenantRequest" {
-		switch fieldName {
-		case "recording_retention_seconds", "transcript_retention_seconds":
-			schema["minimum"] = 0
-			schema["maximum"] = artifactpolicy.MaximumRetentionSeconds
-		case "transcription_source_window_seconds":
-			schema["minimum"] = 0
-			schema["maximum"] = int64(artifactpolicy.MaximumSourceWindow / time.Second)
-		}
-	}
-	return schema
 }
 
 func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
@@ -756,18 +805,16 @@ func requestFieldAllowsEmpty(schemaName string, fieldName string) bool {
 }
 
 func fieldEnum(schemaName string, fieldName string) []string {
-	if schemaName == "ConnectionReportRequest" {
+	switch schemaName {
+	case "ConnectionReportRequest":
 		return httpapi.ConnectionReportFieldEnum(fieldName)
-	}
-	if schemaName == "CallStatsRequest" {
+	case "CallStatsRequest":
 		return httpapi.CallStatsFieldEnum(fieldName)
-	}
-	if schemaName == "CloudflareSFUSignalRequest" {
+	case "CloudflareSFUSignalRequest":
 		if values := httpapi.SFUSignalFieldEnum(fieldName); values != nil {
 			return values
 		}
-	}
-	if schemaName == "SFUSubscriptionsResponse" {
+	case "SFUSubscriptionsResponse":
 		switch fieldName {
 		case "state":
 			return []string{mediaplane.SubscriptionActive, mediaplane.SubscriptionPaused}
@@ -785,28 +832,31 @@ func fieldEnum(schemaName string, fieldName string) []string {
 			return []string{string(episodes.AdmissionPolicy), string(episodes.AdmissionDirect)}
 		}
 	case "role":
+		// Episode participant roles are customer-defined space roles, so only
+		// Membership schemas list values and the rest stay open strings.
 		switch schemaName {
 		case "Membership", "MembershipList", "CreateMembershipRequest", "UpdateMembershipRequest":
 			return []string{"owner", "collaborator", "observer"}
-		default:
-			// Episode participant roles are customer-defined space roles. They
-			// must remain open strings in the generated API contract.
-			return nil
 		}
 	case "storage_provider":
 		return []string{"r2"}
 	case "status":
-		switch schemaName {
-		case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest", "ParticipantEpisodeStatus":
-			return []string{"active", "ending", "ended"}
-		case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
-			return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
-		case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
-			return []string{
-				transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
-				transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
-				transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
-			}
+		return statusEnum(schemaName)
+	}
+	return nil
+}
+
+func statusEnum(schemaName string) []string {
+	switch schemaName {
+	case "Episode", "EpisodeList", "CreateEpisodeRequest", "UpdateEpisodeRequest", "ParticipantEpisodeStatus":
+		return []string{"active", "ending", "ended"}
+	case "Recording", "RecordingList", "CreateRecordingRequest", "UpdateRecordingRequest":
+		return []string{recordings.StatusPending, recordings.StatusProcessing, recordings.StatusCompleted, recordings.StatusFailed}
+	case "Transcript", "TranscriptList", "CreateTranscriptRequest", "UpdateTranscriptRequest":
+		return []string{
+			transcripts.StatusNotRequested, transcripts.StatusPreparing, transcripts.StatusTranscribing, transcripts.StatusVerifying,
+			transcripts.StatusComplete, transcripts.StatusRetryableFailure, transcripts.StatusTerminalFailure, transcripts.StatusDeleted,
+			transcripts.StatusPending, transcripts.StatusProcessing, transcripts.StatusCompleted, transcripts.StatusFailed,
 		}
 	}
 	return nil
