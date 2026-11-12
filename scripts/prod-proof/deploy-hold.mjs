@@ -22,9 +22,11 @@ const exists = (path) => access(path).then(() => true, () => false);
  */
 export async function deployHoldProof(run, receiver) {
   check(startedFile && doneFile, "DEPLOY_HOLD_STARTED_FILE and DEPLOY_HOLD_DONE_FILE are required");
+  check(!(await exists(doneFile)), `${doneFile} exists from an earlier run: remove it before the proof starts`);
   const joined = [];
   for (const [index, plane] of calls.entries()) {
     const space = await createSpace(run, plane);
+    check(!joined.some((call) => call.space.id === space.id), `Calls ${index} and ${index + 1} would share Space ${space.id}: unset the pinned Space variable for ${plane}, or give each plane one call`);
     const { episode, end } = await createEpisode(run, space);
     const guests = await launchGuests(run, space, episode, "", receiver.origin, true, guestsPerCall, { plane });
     joined.push({ index, plane, space, episode, guests, end, ticks: [] });
@@ -46,7 +48,7 @@ export async function deployHoldProof(run, receiver) {
       deployStartedAtMs = t;
       console.log(`DEPLOY_HOLD_STARTED ${t}`);
     }
-    if (deployDoneAtMs === null && (await exists(doneFile))) {
+    if (deployStartedAtMs !== null && deployDoneAtMs === null && (await exists(doneFile))) {
       deployDoneAtMs = t;
       console.log(`DEPLOY_HOLD_DONE ${t}`);
     }

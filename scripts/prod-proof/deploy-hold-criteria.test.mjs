@@ -23,7 +23,7 @@ test("a call survives when every guest stays live and hears the others to the en
 test("a guest that leaves the live status fails the call", () => {
   const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, 100 * (i + 1)));
   ticks.at(-1).guests[1] = sample("reconnecting", { a: 2000, c: 2000 });
-  assert.match(judgeCall(ticks, 3).join(";"), /guest 2 ended in status reconnecting/);
+  assert.match(judgeCall(ticks, 3).join(";"), /guest 2 was reconnecting/);
 });
 
 test("a guest that stops receiving another guest's audio fails the call", () => {
@@ -32,5 +32,17 @@ test("a guest that stops receiving another guest's audio fails the call", () => 
     tick.guests[0] = sample("live", { b: Math.min(i * 100, 400), c: i * 100 });
     return tick;
   });
-  assert.match(judgeCall(frozen, 3).join(";"), /guest 1 receives no audio from b/);
+  assert.match(judgeCall(frozen, 3).join(";"), /guest 1 receives no audio from one of the other guests/);
+});
+
+test("a guest that reconnects in the middle of the hold fails the call even when it recovers", () => {
+  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, 100 * (i + 1)));
+  ticks[5].guests[2] = sample("reconnecting", { a: 600, b: 600 });
+  assert.match(judgeCall(ticks, 3).join(";"), /guest 3 was reconnecting/);
+});
+
+test("an unreachable sample fails the call", () => {
+  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, 100 * (i + 1)));
+  ticks[7].guests[0] = { reachable: false, status: "unreachable", errorCode: null, remotes: [] };
+  assert.match(judgeCall(ticks, 3).join(";"), /guest 1 was unreachable/);
 });
