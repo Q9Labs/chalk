@@ -61,6 +61,19 @@ The first row is an emergency stop for new Episodes, not the normal failover: a 
 
 Commands, rules and the rollback caveats are in the [SFU README](../../infrastructure/sfu/README.md#which-plane-a-new-episode-gets) and the [rollout notes](../sfu/production-rollout.md#undo). To end a live call on the wrong plane, end its Episode through the API.
 
+## Never stop the production node
+
+Stopping the production node ends every live call and every recording on it. Deploys, hotfixes and rollbacks run through SSM and the deployment controller on the running node, so no release step ever stops or reboots the instance. EC2 stop protection (`DisableApiStop`) therefore blocks only a manual stop, and a real deploy runs as before. It does not block a reboot, an OS shutdown or a termination.
+
+The protection is a setting on the instance, not a file in Git. The instance ID is in the private operator notes. Run these with the operator AWS profile:
+
+```sh
+aws ec2 describe-instance-attribute --instance-id <production instance id> --attribute disableApiStop
+aws ec2 modify-instance-attribute --instance-id <production instance id> --disable-api-stop
+```
+
+A stop call now fails with `OperationNotPermitted`. To stop the node on purpose, do it outside an incident and tell the owner first. Undo the protection with `aws ec2 modify-instance-attribute --instance-id <production instance id> --no-disable-api-stop`, stop the node, then turn the protection on again after it starts. An agent that holds the same credentials can still remove the protection, but only with that explicit second call.
+
 ## Postmortem
 
 Write five lines within two working days, and ship the last line.
