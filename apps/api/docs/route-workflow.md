@@ -4,7 +4,7 @@ Follow the neighboring domain's endpoint, service, repository, and tests. Use th
 
 Normal `/v1` routes use a typed `Endpoint[Request, Response]` in the domain's HTTP file; health and unusual protocol routes are exceptions. Declare the wire contract, errors, authentication, and idempotency behavior alongside the endpoint. Rate-limit public authentication routes and authenticated writes. Authorize after parsing route IDs, and wire new services in `cmd/main.go`.
 
-Endpoint declarations feed `PreviewRouteContracts()` in `internal/httpapi/contracts.go`; add new domain endpoint lists there. Reuse the shared parameter, error, and transport helpers so the generated schema describes the wire format. Update the retained route-contract proof when the intentional route inventory changes.
+Add a new endpoint to its group in `v1RouteGroups` (`internal/httpapi/router_composition.go`); the router mounts that list and `PreviewRouteContracts()` reads it, so there is no second inventory to edit. Write the route path once, with its `/v1` prefix. Reuse the shared parameter, error, and transport helpers so the generated schema describes the wire format. Update the retained route-contract proof when the intentional route inventory changes.
 
 For contract changes, run `pnpm run generate:sdk` from the repository root and inspect the generated OpenAPI and SDK changes. Run the API gate (`apps/api/scripts/gate.sh`); the root gate checks generated drift. Verify public capabilities through their SDK entry point too.
 
