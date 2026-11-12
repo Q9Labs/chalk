@@ -8,10 +8,13 @@ import { fileURLToPath } from "node:url";
 
 // Ratchet for assertions on mock calls. Lint cannot judge one: asserting that a callback the test passed in was called
 // is a real output, while asserting that our own wiring called a mock proves nothing a user sees. So the count per
-// package may only go down. `--update` rewrites the baseline after a drop.
+// package may only go down. A drop must be written to the baseline with `--update`, which refuses to raise a count. The
+// check also reads the baseline on the merge base with the pull request's base branch and fails when the committed one is higher.
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const root = resolve(scriptDir, "../..");
-const baselinePath = resolve(scriptDir, "mock-call-baseline.json");
+// MOCK_CALLS_ROOT points the script at another checkout, so its test can run it in a scratch repository.
+const root = resolve(process.env.MOCK_CALLS_ROOT ?? resolve(scriptDir, "../.."));
+const baselineFile = "scripts/gates/mock-call-baseline.json";
+const baselinePath = resolve(root, baselineFile);
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
@@ -50,23 +53,57 @@ function countByPackage() {
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
 }
 
+/** One problem per package whose count is above the baseline. `--update` refuses to write while any exists. */
+function raisedProblems(counts, baseline) {
+  return Object.entries(counts)
+    .filter(([directory, count]) => count > (baseline[directory] ?? 0))
+    .map(([directory, count]) => `${directory}: ${count} assertions on mock calls, baseline ${baseline[directory] ?? 0}. Assert on what a caller or user observes, or fake only the real boundary.`);
+}
+
+/** Problems with `counts` against the committed baseline, and with the committed baseline against the one on the base branch. */
+function ratchetProblems({ counts, baseline, base, baseRef }) {
+  const problems = raisedProblems(counts, baseline);
+  for (const directory of Object.keys({ ...baseline, ...counts })) {
+    const count = counts[directory] ?? 0;
+    const committed = baseline[directory] ?? 0;
+    if (count < committed) problems.push(`${directory}: ${count} assertions on mock calls, baseline ${committed}. Run \`node scripts/gates/mock-calls.mjs --update\` to lower the baseline, so the removed assertions cannot come back.`);
+    if (committed > (base[directory] ?? 0)) problems.push(`${directory}: baseline ${committed} is above ${base[directory] ?? 0} on ${baseRef}. The baseline may only go down.`);
+  }
+  return problems;
+}
+
+/** The baseline as committed on the merge base with `ref`. Throws when it cannot be read, so a shallow clone fails the gate. */
+function readBaseBaseline(ref, cwd = root) {
+  try {
+    const mergeBase = execFileSync("git", ["merge-base", ref, "HEAD"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return JSON.parse(execFileSync("git", ["show", `${mergeBase}:${baselineFile}`], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+  } catch (error) {
+    throw new Error(`Cannot read ${baselineFile} on the merge base with ${ref}, so the ratchet cannot be checked. Fetch the full history and the base branch (git fetch --unshallow origin), or set GATE_BASE_REF. ${error.message}`, { cause: error });
+  }
+}
+
 function run() {
   const counts = countByPackage();
+  const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
   if (process.argv.includes("--update")) {
+    const raised = raisedProblems(counts, baseline);
+    for (const problem of raised) console.error(`${problem} --update only lowers the baseline.`);
+    if (raised.length) {
+      process.exitCode = 1;
+      return;
+    }
     writeFileSync(baselinePath, `${JSON.stringify(counts, null, 2)}\n`);
     console.log(`Wrote ${baselinePath}`);
     return;
   }
-  const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
-  const raised = Object.entries(counts).filter(([directory, count]) => count > (baseline[directory] ?? 0));
-  const lowered = Object.keys({ ...baseline, ...counts }).filter((directory) => (counts[directory] ?? 0) < (baseline[directory] ?? 0));
-  for (const [directory, count] of raised) console.error(`${directory}: ${count} assertions on mock calls, baseline ${baseline[directory] ?? 0}. Assert on what a caller or user observes, or fake only the real boundary.`);
-  if (raised.length) {
+  const baseRef = process.env.GATE_BASE_REF || "origin/master";
+  const problems = ratchetProblems({ counts, baseline, base: readBaseBaseline(baseRef), baseRef });
+  for (const problem of problems) console.error(problem);
+  if (problems.length) {
     process.exitCode = 1;
     return;
   }
-  if (lowered.length) console.log(`Counts fell in ${lowered.join(", ")}. Run \`node scripts/gates/mock-calls.mjs --update\` to lower the baseline.`);
-  console.log("Assertions on mock calls did not grow.");
+  console.log("Assertions on mock calls match the baseline, and the baseline did not rise.");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) run();

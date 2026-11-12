@@ -427,10 +427,22 @@ export function createGatePlan(files, options = {}) {
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
+  // The ratchet counts every JavaScript and TypeScript test file. Edits to scripts/gates select the full gate, so its baseline is covered.
+  const mockCallInputs = full || dependencyChange || nonDocumentationFiles.some((file) => /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", [
+      "node",
+      "scripts/test/run.mjs",
+      "node",
+      "--test",
+      "scripts/test/no-network.test.mjs",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/feature-map.test.mjs",
+      "scripts/gates/ast-grep.test.mjs",
+      "scripts/gates/mock-calls.test.mjs",
+    ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "node",
@@ -464,7 +476,7 @@ export function createGatePlan(files, options = {}) {
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
-    task("mock-calls", "Assertions on mock calls may only shrink", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["node", "scripts/gates/mock-calls.mjs"]),
+    task("mock-calls", "Assertions on mock calls may only shrink", mockCallInputs, mockCallInputs ? "test files or dependency inputs changed" : "test files are unaffected", ["node", "scripts/gates/mock-calls.mjs"], { GATE_BASE_REF: base }),
     task("react-tokens", "React design-token reach", reactTokens, reactTokens ? "React design-token inputs changed" : "React design tokens are unaffected", ["node", "sdks/typescript/react/scripts/check-token-reach.mjs"]),
     task("native-quality", "React Native design tokens and worklets", nativeQuality, nativeQuality ? "React Native inputs changed" : "React Native is unaffected", [
       "bash",
