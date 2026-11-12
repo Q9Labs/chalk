@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
@@ -38,10 +37,6 @@ func NewRecordingCapturePlanRepositoryWithTransactor(
 	decorate func(sqlc.Querier) sqlc.Querier,
 ) RecordingCapturePlanRepository {
 	return RecordingCapturePlanRepository{transactor: transactor, decorate: decorate, now: time.Now}
-}
-
-func NewRecordingCapturePlanRepositoryWithPool(pool *pgxpool.Pool) RecordingCapturePlanRepository {
-	return RecordingCapturePlanRepository{transactor: pool, now: time.Now}
 }
 
 func (r RecordingCapturePlanRepository) Reconcile(ctx context.Context, input captureplan.WaitInput) (captureplan.Plan, error) {

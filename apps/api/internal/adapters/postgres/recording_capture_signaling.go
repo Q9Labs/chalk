@@ -9,7 +9,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
 	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/capturesignaling"
@@ -52,10 +51,6 @@ func NewRecordingCaptureSignalingRepositoryWithTransactor(
 	decorate func(sqlc.Querier) sqlc.Querier,
 ) RecordingCaptureSignalingRepository {
 	return RecordingCaptureSignalingRepository{transactor: transactor, decorate: decorate, now: time.Now}
-}
-
-func NewRecordingCaptureSignalingRepositoryWithPool(pool *pgxpool.Pool) RecordingCaptureSignalingRepository {
-	return RecordingCaptureSignalingRepository{transactor: pool, now: time.Now}
 }
 
 func (r RecordingCaptureSignalingRepository) CheckDispatch(ctx context.Context, command capturesignaling.Command) error {

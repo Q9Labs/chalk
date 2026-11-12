@@ -81,10 +81,6 @@ func NewRecordingPipelineRepository(queries recordingPipelineQuerier) RecordingP
 	return RecordingPipelineRepository{queries: queries, now: time.Now}
 }
 
-func NewRecordingPipelineRepositoryWithTransactor(transactor recordingPipelineTransactor) RecordingPipelineRepository {
-	return RecordingPipelineRepository{transactor: transactor, now: time.Now}
-}
-
 func NewRecordingPipelineRepositoryWithQueriesAndTransactor(queries recordingPipelineQuerier, transactor recordingPipelineTransactor, decorate func(sqlc.Querier) sqlc.Querier) RecordingPipelineRepository {
 	return RecordingPipelineRepository{queries: queries, transactor: transactor, decorate: decorate, now: time.Now}
 }

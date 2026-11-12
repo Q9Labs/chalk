@@ -85,18 +85,6 @@ func (r PublicInviteRepository) WithEpisodeLifecycle(lifecycle EpisodeLifecycleR
 	return r
 }
 
-func NewPublicInvitesRepositoryWithPool(pool *pgxpool.Pool) PublicInviteRepository {
-	return NewPublicInviteRepositoryWithPool(pool)
-}
-
-// PublicInvitesRepository is kept as an alias for callers that use the
-// package name in the type name.
-type PublicInvitesRepository = PublicInviteRepository
-
-func NewPublicInvitesRepository(queries publicInviteQuerier, transactors ...publicInviteTransactor) PublicInviteRepository {
-	return NewPublicInviteRepository(queries, transactors...)
-}
-
 func (r PublicInviteRepository) CreateOrGetInvite(ctx context.Context, invite publicinvites.Invite) (publicinvites.Invite, error) {
 	var result publicinvites.Invite
 	err := r.mutate(ctx, func(queries publicInviteQuerier) error {
