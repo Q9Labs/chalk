@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
-import { decodeCriteria, hearAfterUnmute, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, toneHz, unheardAfterUnmute, unmuteHearMs } from "./audio-decode.mjs";
+import { decodeCriteria, hearAfterUnmute, judgeSilence, judgeSpeech, judgeTone, pairsOf, proveAudioDecoded, proveSilenceFrom, spectrumReading, spectrumReadingSource, toneHz, unheardAfterUnmute, unmuteHearMs } from "./audio-decode.mjs";
 
 const sampleRate = 48_000;
 const { fftSize } = decodeCriteria;
@@ -55,6 +56,14 @@ test("the fixture's tone at the published amplitude is read at its bin, far abov
   assert.equal(reading.bin, Math.round((440 * fftSize) / sampleRate));
   assert.ok(reading.toneDb > -35 && reading.toneDb < -25, `tone at ${reading.toneDb} dB`);
   assert.ok(reading.marginDb > 50, `margin ${reading.marginDb} dB`);
+});
+
+test("the source sent to the page carries every helper: a fresh context reads the same as Node", () => {
+  const pageReading = runInNewContext(spectrumReadingSource, {});
+  const spectrum = Array.from(fakeAnalyser(sine(toneHz(0), 0.15, noise(2, 0.0005))));
+  for (const hz of [toneHz(0), null]) {
+    assert.deepEqual(JSON.parse(JSON.stringify(pageReading(spectrum, { hz, sampleRate }))), spectrumReading(spectrum, { hz, sampleRate }));
+  }
 });
 
 test("tone in: a tone held for a second is heard", () => {

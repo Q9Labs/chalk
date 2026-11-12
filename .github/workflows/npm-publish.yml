@@ -38,6 +38,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/publish-guard"
           cp scripts/releases/scan-npm-tarballs.sh .gitleaks.toml "$RUNNER_TEMP/publish-guard/"
+          echo "GITLEAKS_VERSION=$(scripts/lib/tool-version.sh gitleaks)" >> "$GITHUB_ENV"
 
       - name: Verify publish ref
         if: ${{ !inputs.dry_run }}

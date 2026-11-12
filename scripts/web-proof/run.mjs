@@ -4,7 +4,7 @@ import { mkdir, writeFile, glob, copyFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createRun, loadConfig, save, maskCredentials, mediaPlane, publicFailure, errorEvidence, check, request } from "../prod-proof/runtime.mjs";
-import { createSpace, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
+import { createSpace, onCloudflare, prepareIntegration, trackEpisode } from "../prod-proof/proofs.mjs";
 import { cleanupRun, runLabel } from "../prod-proof/cleanup.mjs";
 import { childEnvironment } from "./environment.mjs";
 import { closeReusedInvite } from "./invite.mjs";
@@ -38,7 +38,7 @@ try {
   await mkdir(".private", { recursive: true, mode: 0o700 });
   await writeFile(".private/web-proof-run-id", runId, { mode: 0o600 });
   await prepareIntegration(run, false);
-  const space = await createSpace(run, mediaPlane);
+  const space = await createSpace(run, mediaPlane, undefined, { explicitPlane: onCloudflare });
   const reused = space.metadata?.proof_run_id !== runId;
   await save(`${directory}/space.json`, space);
   const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: runId } });

@@ -18,7 +18,9 @@ fi
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks_command=(gitleaks)
 elif command -v go >/dev/null 2>&1; then
-  gitleaks_command=(go run "github.com/zricethezav/gitleaks/v8@v$("$(dirname "$0")/../lib/tool-version.sh" gitleaks)")
+  # npm-publish.yml runs a copy of this script away from the repository and passes the pinned version in GITLEAKS_VERSION.
+  gitleaks_version="${GITLEAKS_VERSION:-$("$(dirname "$0")/../lib/tool-version.sh" gitleaks)}"
+  gitleaks_command=(go run "github.com/zricethezav/gitleaks/v8@v${gitleaks_version}")
 else
   echo "Gitleaks is required. Install gitleaks or Go, then rerun the npm tarball scan." >&2
   exit 127
