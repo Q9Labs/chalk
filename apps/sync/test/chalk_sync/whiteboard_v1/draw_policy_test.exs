@@ -7,6 +7,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
   alias ChalkSync.SyncPostgres
   alias ChalkSync.TestProcess
   alias ChalkSync.Transport.SocketWhiteboardV1
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.PostgresRepository
@@ -431,7 +432,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
     })
   end
 
-  defp live_socket(identity, draw_policy_negotiated, can_draw) do
+  defp live_socket(identity, draw_policy?, can_draw) do
     {:ok, initial} = SocketWhiteboardV1.init(%{})
     Process.cancel_timer(initial.hello_timer)
     {:ok, %{scene_id: scene_id, revision: revision}} = PostgresRepository.connect(identity)
@@ -441,7 +442,7 @@ defmodule ChalkSync.WhiteboardV1.DrawPolicyTest do
       | phase: :live,
         connected_at: System.monotonic_time(:millisecond),
         identity: identity,
-        draw_policy_negotiated: draw_policy_negotiated,
+        extensions: %{Extensions.none() | draw_policy: draw_policy?},
         can_draw: can_draw,
         scene_id: scene_id,
         revision: revision
