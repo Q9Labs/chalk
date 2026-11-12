@@ -169,48 +169,6 @@ type ProgressResult struct {
 	ObjectKey string
 }
 
-type recorderWorkerBundleRequest struct {
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	AttemptCount         int     `json:"attempt_count"`
-	LeaseToken           string  `json:"lease_token"`
-	CaptureEpoch         int64   `json:"capture_epoch"`
-	EnvelopeDigest       string  `json:"envelope_digest"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-}
-
-type recorderWorkerBundleResponse struct {
-	ID                   string  `json:"id"`
-	TenantID             string  `json:"tenant_id"`
-	RecordingID          string  `json:"recording_id"`
-	CaptureJobID         string  `json:"capture_job_id"`
-	SequenceNumber       int64   `json:"sequence_number"`
-	FencingGeneration    int64   `json:"fencing_generation"`
-	ObjectKey            string  `json:"object_key"`
-	ContentType          string  `json:"content_type"`
-	Codec                string  `json:"codec"`
-	Layer                *string `json:"layer,omitempty"`
-	ByteSize             int64   `json:"byte_size"`
-	Checksum             string  `json:"checksum"`
-	MonotonicStartMillis int64   `json:"monotonic_start_millis"`
-	MonotonicEndMillis   int64   `json:"monotonic_end_millis"`
-	MediaStartMillis     int64   `json:"media_start_millis"`
-	MediaEndMillis       int64   `json:"media_end_millis"`
-	CreatedAt            string  `json:"created_at"`
-}
-
 func (c *ControlPlaneClient) Claim(ctx context.Context, input recordingpipeline.ClaimInput) (ClaimResult, error) {
 	leaseSeconds, err := durationSeconds(input.LeaseFor)
 	if err != nil || input.ClaimRequestID.IsZero() {
