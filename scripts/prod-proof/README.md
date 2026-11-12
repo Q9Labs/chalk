@@ -1,6 +1,6 @@
 # Real-call proofs
 
-`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans and flags are in `index.mjs`; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:fleet`, `prod:sfu-e2e`, `prod:latency`, `prod:sfu-classes`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
+`pnpm prod:proof [plan...]` runs release proofs against a deployed environment with real headless Chromium guests. The plans, their media planes and flags are in `registry.json` (`pnpm prod:proof --help` lists them), and `index.mjs` holds the code that runs them; the other entry points are the `prod:*` scripts in the root `package.json` (`prod:canary`, `prod:fleet`, `prod:sfu-e2e`, `prod:latency`, `prod:sfu-classes`, `prod:proof:compare-leave`). The dashboard-specific shared-browser owner flow is covered by the `dashboard-engine` Gate lane, not here.
 
 ```sh
 pnpm install --frozen-lockfile

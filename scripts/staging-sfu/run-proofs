@@ -3,9 +3,9 @@
 #
 #   run-proofs <run-prefix> <status-dir> <proof>...
 #
-# A Space holds one live Episode, so proofs on one Space run one after another. call-artifacts has its own Space
-# (the automatic Recording and Transcript one), so it can run beside the others, but each proof serves its guests from a
-# proof_origin that the Tenant allows by port. call-artifacts runs beside the others only when CHALK_PROOF_PROOF_ORIGIN_OWN
+# A Space holds one live Episode, so proofs on one Space run one after another. A proof with its own Space
+# (ownSpace in scripts/prod-proof/registry.json) can run beside the others, but each proof serves its guests from a
+# proof_origin that the Tenant allows by port. It runs beside the others only when CHALK_PROOF_PROOF_ORIGIN_OWN
 # names a second allowed origin for it; otherwise every proof runs one after another on CHALK_PROOF_PROOF_ORIGIN.
 # Each proof's exit status goes to <status-dir>/<proof>, and a failed proof does not stop the rest. Exit 0 means every proof passed.
 set -uo pipefail
@@ -42,7 +42,7 @@ if [ -n "${CHALK_PROOF_PROOF_ORIGIN_OWN:-}" ] && [ "$CHALK_PROOF_PROOF_ORIGIN_OW
   shared=()
   own=()
   for proof in "$@"; do
-    if [ "$proof" = call-artifacts ]; then own+=("$proof"); else shared+=("$proof"); fi
+    if [ "$(node scripts/prod-proof/registry.mjs lane "$proof")" = own ]; then own+=("$proof"); else shared+=("$proof"); fi
   done
   lane "$CHALK_PROOF_PROOF_ORIGIN_OWN" ${own[@]+"${own[@]}"} &
   lane "$origin" ${shared[@]+"${shared[@]}"} &

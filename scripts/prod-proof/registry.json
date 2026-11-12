@@ -1,0 +1,93 @@
+{
+  "all": {
+    "description": "Every release proof on Cloudflare, including a forced camera layer switch.",
+    "planes": ["cf_sfu"],
+    "flags": { "media": true, "cameraShare": true, "webhooks": true },
+    "proofs": ["camera-share", "export", "smoke", "transcript"]
+  },
+  "smoke": {
+    "description": "Export and the webhook smoke on Cloudflare.",
+    "planes": ["cf_sfu"],
+    "flags": { "media": true, "webhooks": true },
+    "proofs": ["export", "smoke"]
+  },
+  "camera-share": {
+    "description": "Camera and screen share between guests.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "flags": { "media": true, "cameraShare": true },
+    "proofs": ["camera-share"]
+  },
+  "recording-rejoin": {
+    "description": "A guest rejoins during a Recording.",
+    "planes": ["cf_sfu"],
+    "flags": { "media": true, "rejoin": true },
+    "proofs": ["export", "recording-rejoin"]
+  },
+  "export": {
+    "description": "Recording, MP4 Export and download.",
+    "planes": ["cf_sfu"],
+    "flags": { "media": true },
+    "proofs": ["export"]
+  },
+  "transcript": {
+    "description": "Recording and Transcript on Cloudflare.",
+    "planes": ["cf_sfu"],
+    "flags": { "media": true, "webhooks": true },
+    "proofs": ["transcript"]
+  },
+  "call-artifacts": {
+    "description": "Three guests with automatic Recording and Transcript, on the media plane CHALK_PROOF_MEDIA_PLANE selects. It has its own Space, so it runs beside the other nightly proofs.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "ownSpace": true,
+    "flags": { "callArtifacts": true },
+    "proofs": ["export", "call-artifacts"]
+  },
+  "long-call": {
+    "description": "Three guests held across media-access refreshes for at least ten minutes, with mic and camera toggles on a schedule. Opt-in: nightly only.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "dryRun": true,
+    "flags": { "longCall": true },
+    "proofs": ["long-call"]
+  },
+  "deploy-hold": {
+    "description": "Three calls of three guests held open while an operator deploys the API host (DEPLOY_HOLD_STARTED_FILE, DEPLOY_HOLD_DONE_FILE). Opt-in: nightly only.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "flags": { "longCall": true },
+    "proofs": ["deploy-hold"]
+  },
+  "toggle-offers": {
+    "description": "Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.",
+    "planes": ["chalk_sfu"],
+    "dryRun": true,
+    "flags": { "longCall": true },
+    "proofs": ["toggle-offers"]
+  },
+  "leave": {
+    "description": "The candidate Leave against the published client on the same host and backend.",
+    "planes": ["cf_sfu"],
+    "proofs": ["leave"]
+  },
+  "leave-own-sfu": {
+    "description": "The current client's Leave on the own SFU: acknowledgement, released capture, removed participant and media.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "proofs": ["leave-own-sfu"]
+  },
+  "own-sfu-spaces": {
+    "description": "Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "flags": { "ensureSpaces": true },
+    "proofs": ["own-sfu-spaces"]
+  },
+  "offreason": {
+    "description": "Sync's media_off_reason extension over the WebSocket protocol.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "browser": false,
+    "proofs": ["offreason"]
+  },
+  "chat-upload": {
+    "description": "A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket.",
+    "planes": ["cf_sfu", "chalk_sfu"],
+    "browser": false,
+    "proofs": ["chat-upload"]
+  }
+}

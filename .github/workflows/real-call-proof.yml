@@ -17,7 +17,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: choice
         options: [cf_sfu, chalk_sfu]
         default: cf_sfu
@@ -56,7 +56,7 @@ on:
         type: string
         default: smoke transcript
       media_plane:
-        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
+        description: Media provider of the proof Space. Cut nightly and Promote run on chalk_sfu, which runs only the proofs that list it in scripts/prod-proof/registry.json. cf_sfu is for manual dispatch; the per-Space switch back to Cloudflare is still the undo
         type: string
         default: cf_sfu
       transcribe:
@@ -233,25 +233,7 @@ jobs:
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
           read -r -a proofs <<< "$PROOFS"
-          if [ "${#proofs[@]}" -eq 0 ]; then
-            echo "PROOF configuration: failed (empty-proof-list)" >&2
-            exit 1
-          fi
-          case "$CHALK_PROOF_MEDIA_PLANE" in
-            cf_sfu|chalk_sfu) ;;
-            *) echo "Unsupported media plane" >&2; exit 1 ;;
-          esac
-          for proof in "${proofs[@]}"; do
-            case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces|chat-upload) ;;
-              *) echo "Unsupported proof command" >&2; exit 1 ;;
-            esac
-            # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ] && [ "$proof" != chat-upload ]; then
-              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu, own-sfu-spaces and chat-upload" >&2
-              exit 1
-            fi
-          done
+          node scripts/prod-proof/registry.mjs check "$CHALK_PROOF_MEDIA_PLANE" "${proofs[@]}"
           mkdir -p .private
           results=()
           failed=()
