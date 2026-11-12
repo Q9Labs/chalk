@@ -384,7 +384,7 @@ test("whiteboard keeps local zoom with desktop teacher and phone follower", asyn
     await Promise.all(pages.map(settleStage));
     await expect.poll(() => a.evaluate(zoomLabel)).toBe("100%");
     // An empty phone board shows no zoom pill; it appears with the first stroke (Board.tsx: `phone && empty`).
-    await expect(b.locator(".chalk-board-zoom")).toHaveCount(0);
+    await expect.poll(() => b.locator(".chalk-board-zoom").count()).toBe(0);
     await followEdgeStrokes(a, b, directory);
     await resizeAndReconnect(a, b, follower);
     await checkManualZoom(a, b);
