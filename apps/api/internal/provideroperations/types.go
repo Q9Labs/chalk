@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -88,7 +89,7 @@ type OperationInput struct {
 	EpisodeID             utilities.ID
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
-	PublicationSource     string
+	PublicationSource     mediaplane.PublicationSource
 	// ControlRevision orders a grant, revoke or removal against the other source
 	// controls of its Episode: one more than the Episode control revision Sync read
 	// when it decided. Zero means Sync sent none.
@@ -125,7 +126,7 @@ type Receipt struct {
 	EpisodeID             utilities.ID
 	ParticipantID         utilities.ID
 	ParticipantGeneration int64
-	PublicationSource     string
+	PublicationSource     mediaplane.PublicationSource
 	RecordingID           utilities.ID
 	Fingerprint           [32]byte
 	Payload               json.RawMessage
@@ -145,7 +146,7 @@ type PrepareResult struct {
 
 type Publication struct {
 	ParticipantID utilities.ID
-	Source        string
+	Source        mediaplane.PublicationSource
 	Enabled       bool
 	PublicationID string
 }
@@ -196,7 +197,7 @@ type canonicalPayload struct {
 	EpisodeID             string                         `json:"episode_id"`
 	ParticipantID         *string                        `json:"participant_id,omitempty"`
 	ParticipantGeneration *int64                         `json:"participant_generation,omitempty"`
-	PublicationSource     *string                        `json:"publication_source,omitempty"`
+	PublicationSource     *mediaplane.PublicationSource  `json:"publication_source,omitempty"`
 	ControlRevision       *int64                         `json:"control_revision,omitempty"`
 	RecordingID           *string                        `json:"recording_id,omitempty"`
 	RecordingReservation  *canonicalRecordingReservation `json:"recording_reservation,omitempty"`
@@ -211,10 +212,10 @@ type canonicalRecordingReservation struct {
 }
 
 type canonicalPublication struct {
-	ParticipantID string  `json:"participant_id"`
-	Source        string  `json:"source"`
-	Enabled       bool    `json:"enabled"`
-	PublicationID *string `json:"publication_id"`
+	ParticipantID string                       `json:"participant_id"`
+	Source        mediaplane.PublicationSource `json:"source"`
+	Enabled       bool                         `json:"enabled"`
+	PublicationID *string                      `json:"publication_id"`
 }
 
 func Canonicalize(input OperationInput) (CanonicalOperation, error) {
@@ -237,8 +238,8 @@ func Canonicalize(input OperationInput) (CanonicalOperation, error) {
 		return CanonicalOperation{}, ErrInvalidParticipantGeneration
 	}
 
-	input.PublicationSource = strings.ToLower(strings.TrimSpace(input.PublicationSource))
-	if input.PublicationSource != "" && !validPublicationSource(input.PublicationSource) {
+	input.PublicationSource = mediaplane.PublicationSource(strings.ToLower(strings.TrimSpace(string(input.PublicationSource))))
+	if input.PublicationSource != "" && !input.PublicationSource.Selectable() {
 		return CanonicalOperation{}, ErrInvalidPublicationSource
 	}
 
@@ -428,15 +429,15 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 		if publication.ParticipantID.IsZero() {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidParticipantID
 		}
-		publication.Source = strings.ToLower(strings.TrimSpace(publication.Source))
-		if !validPublicationSource(publication.Source) && publication.Source != "screen_audio" {
+		publication.Source = mediaplane.PublicationSource(strings.ToLower(strings.TrimSpace(string(publication.Source))))
+		if !publication.Source.Valid() {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationSource
 		}
 		publication.PublicationID = strings.TrimSpace(publication.PublicationID)
 		if len(publication.PublicationID) > 256 || (publication.Enabled && publication.PublicationID == "") {
 			return ObservationInput{}, [32]byte{}, nil, ErrInvalidPublicationID
 		}
-		key := publication.ParticipantID.String() + "\x00" + publication.Source
+		key := publication.ParticipantID.String() + "\x00" + string(publication.Source)
 		if _, exists := seen[key]; exists {
 			return ObservationInput{}, [32]byte{}, nil, ErrObservationConflict
 		}
@@ -533,15 +534,6 @@ func validEffect(value Effect) bool {
 func validOutcome(value Outcome) bool {
 	switch value {
 	case OutcomeConfirmed, OutcomeSatisfied, OutcomeRetryableFailure, OutcomeTerminalFailure, OutcomeAmbiguous:
-		return true
-	default:
-		return false
-	}
-}
-
-func validPublicationSource(value string) bool {
-	switch value {
-	case "microphone", "camera", "screen":
 		return true
 	default:
 		return false

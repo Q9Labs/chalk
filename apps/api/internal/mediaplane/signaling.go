@@ -32,13 +32,13 @@ type Simulcast struct {
 }
 
 type Track struct {
-	Simulcast     *Simulcast `json:"simulcast,omitempty"`
-	Location      string     `json:"location"`
-	Mid           string     `json:"mid,omitempty"`
-	TrackName     string     `json:"trackName"`
-	SessionID     string     `json:"sessionId,omitempty"`
-	Source        string     `json:"source,omitempty"`
-	PublicationID string     `json:"publication_id,omitempty"`
+	Simulcast     *Simulcast        `json:"simulcast,omitempty"`
+	Location      string            `json:"location"`
+	Mid           string            `json:"mid,omitempty"`
+	TrackName     string            `json:"trackName"`
+	SessionID     string            `json:"sessionId,omitempty"`
+	Source        PublicationSource `json:"source,omitempty"`
+	PublicationID string            `json:"publication_id,omitempty"`
 	// Paused, on an update of a remote subscription, stops or resumes its video in
 	// place: the MID and track stay, and no SDP moves. An update that carries only a
 	// simulcast policy also resumes, so a client keeps paused tracks out of layer
@@ -76,9 +76,9 @@ type PublicationList struct {
 }
 
 type ListedPublication struct {
-	ParticipantID string `json:"participant_id"`
-	Source        string `json:"source"`
-	PublicationID string `json:"publication_id"`
+	ParticipantID string            `json:"participant_id"`
+	Source        PublicationSource `json:"source"`
+	PublicationID string            `json:"publication_id"`
 }
 
 type TrackError struct {
@@ -111,9 +111,9 @@ type CloseTracksRequest struct {
 }
 
 type CloseTrack struct {
-	Mid           string `json:"mid"`
-	Source        string `json:"source"`
-	PublicationID string `json:"publication_id"`
+	Mid           string            `json:"mid"`
+	Source        PublicationSource `json:"source"`
+	PublicationID string            `json:"publication_id"`
 }
 
 type CloseTracksResponse struct {
@@ -319,7 +319,7 @@ func requireTracksRequest(input *TracksRequest) error {
 		track.Mid = strings.TrimSpace(track.Mid)
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
-		track.Source = strings.TrimSpace(track.Source)
+		track.Source = track.Source.Trimmed()
 		if err := requireSimulcastPolicy(track.Simulcast); err != nil {
 			return err
 		}
@@ -329,7 +329,7 @@ func requireTracksRequest(input *TracksRequest) error {
 		if track.TrackName == "" || (track.Location != "local" && track.Location != "remote") {
 			return ErrInvalidSignalRequest
 		}
-		if track.Location == "local" && (track.Mid == "" || track.SessionID != "" || !validMediaSource(track.Source)) {
+		if track.Location == "local" && (track.Mid == "" || track.SessionID != "" || !track.Source.Valid()) {
 			return ErrInvalidSignalRequest
 		}
 		if track.Location == "remote" && track.SessionID == "" {
@@ -359,9 +359,9 @@ func requireUpdateTracksRequest(input *UpdateTracksRequest) error {
 		track.Mid = strings.TrimSpace(track.Mid)
 		track.TrackName = strings.TrimSpace(track.TrackName)
 		track.SessionID = strings.TrimSpace(track.SessionID)
-		track.Source = strings.TrimSpace(track.Source)
+		track.Source = track.Source.Trimmed()
 		if track.Location == "local" {
-			if track.Mid == "" || track.TrackName == "" || track.SessionID != "" || !validMediaSource(track.Source) || track.Paused == nil || track.Simulcast != nil {
+			if track.Mid == "" || track.TrackName == "" || track.SessionID != "" || !track.Source.Valid() || track.Paused == nil || track.Simulcast != nil {
 				return ErrInvalidSignalRequest
 			}
 			continue
@@ -391,9 +391,9 @@ func requireCloseTracksRequest(input *CloseTracksRequest, provider Provider) err
 	for index := range input.Tracks {
 		track := &input.Tracks[index]
 		track.Mid = strings.TrimSpace(track.Mid)
-		track.Source = strings.TrimSpace(track.Source)
+		track.Source = track.Source.Trimmed()
 		track.PublicationID = strings.TrimSpace(track.PublicationID)
-		if track.Mid == "" || !validMediaSource(track.Source) || track.PublicationID == "" {
+		if track.Mid == "" || !track.Source.Valid() || track.PublicationID == "" {
 			return ErrInvalidSignalRequest
 		}
 		if _, exists := seen[track.Mid]; exists {
@@ -407,10 +407,6 @@ func requireCloseTracksRequest(input *CloseTracksRequest, provider Provider) err
 	}
 
 	return nil
-}
-
-func validMediaSource(source string) bool {
-	return source == "microphone" || source == "camera" || source == "screen" || source == "screen_audio"
 }
 
 func requireRenegotiateRequest(input *RenegotiateRequest) error {

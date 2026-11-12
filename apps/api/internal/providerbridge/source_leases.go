@@ -26,7 +26,7 @@ type SourceGrant struct {
 	Node          string
 	Generation    int64 // the Episode's binding generation
 	ParticipantID utilities.ID
-	Source        string
+	Source        mediaplane.PublicationSource
 	Revision      int64
 }
 
@@ -103,8 +103,8 @@ func (l SourceLeases) renewEpisode(ctx context.Context, grants []SourceGrant, fa
 	for _, grant := range grants {
 		controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: grant.Source, Action: mediaplane.SourceGrant, Revision: grant.Revision})
 		// Tab audio is published with the screen and follows its grant.
-		if grant.Source == "screen" {
-			controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: "screen_audio", Action: mediaplane.SourceGrant, Revision: grant.Revision})
+		if companion, ok := grant.Source.Companion(); ok {
+			controls = append(controls, mediaplane.SourceControl{ParticipantID: grant.ParticipantID.String(), Source: companion, Action: mediaplane.SourceGrant, Revision: grant.Revision})
 		}
 	}
 	node, err := l.nodes(first.Node, first.Generation)

@@ -102,7 +102,7 @@ const (
 // A grant at the recorded revision renews the source's forwarding lease.
 type SourceControl struct {
 	ParticipantID string
-	Source        string
+	Source        PublicationSource
 	Action        SourceAction
 	Revision      int64
 }

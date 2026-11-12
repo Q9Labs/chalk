@@ -61,7 +61,7 @@ func join(t *testing.T, service mediaplane.Service, scope mediaplane.Scope) (str
 }
 
 // publish pushes one track from a fresh peer and returns the peer, its track and the SFU's answer.
-func publish(t *testing.T, service mediaplane.Service, connection string, scope mediaplane.Scope, name, source string) (*peer, string, mediaplane.TracksResponse) {
+func publish(t *testing.T, service mediaplane.Service, connection string, scope mediaplane.Scope, name string, source mediaplane.PublicationSource) (*peer, string, mediaplane.TracksResponse) {
 	t.Helper()
 	publisher := newPeer(t)
 	track := publisher.addAudio(t, name)
@@ -523,7 +523,7 @@ func TestConformanceSettingFlipsNeverMoveALiveEpisode(t *testing.T) {
 	adapter.Probe(context.Background())
 	process := runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}
 	own, cloudflare := mediaplane.ProviderChalkSFU, mediaplane.ProviderCloudflareSFU
-	ownText, cloudflareText := string(own), string(cloudflare)
+	ownText, cloudflareText := own.SettingName(), cloudflare.SettingName()
 	registry := func(live *mediaplane.Binding, paused bool) mediaplaneproviders.Registry {
 		return mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
 			ProcessConfig: process, DefaultProvider: cloudflare, ChalkSFU: adapter, Rollout: mediaplaneproviders.Rollout{Spaces: everySpace, NewEpisodesPaused: paused},
