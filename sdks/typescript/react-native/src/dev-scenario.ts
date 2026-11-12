@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ReactNode } from "react";
-import type { ArrivalState } from "../status/ChalkArrival";
-import type { CallOutcome } from "../status/StatusPage";
-import type { AudioRoutes } from "../dock/audio-route";
+import type { ArrivalState } from "./status/ChalkArrival";
+import type { CallOutcome } from "./status/StatusPage";
+import type { AudioRoutes } from "./dock/audio-route";
 
 /** UI-only state a development harness forces on the call. Nothing sets it in a real call. */
 export type DevScenario = {

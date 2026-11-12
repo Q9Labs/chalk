@@ -23,7 +23,7 @@ import { ArrivalScreen } from "../status/ChalkArrival";
 import { callScreen } from "../status/call-screen";
 import { useTheme } from "../theme/theme";
 import { useCallEventToasts, type Permission } from "../toasts/CallEventToasts";
-import { useDevScenario } from "./dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import { useDeviceLayout } from "./device-layout";
 import { PortalHost, usePortalCount } from "./portal";
 import { useMeasuredRef } from "./measurement";
