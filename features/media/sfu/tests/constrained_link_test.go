@@ -8,16 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-// timedArrivals records when each RTP packet of a kind reached the viewer, so a test can find the
-// longest stretch with none.
+// timedArrivals records when media reached the viewer, so a test can find the longest stretch with
+// none. Audio counts every packet. Video counts a frame only once all of its packets have arrived
+// and its RTP timestamp is newer than the last frame counted, so a stream of packets that never
+// completes a frame is a freeze. It sees frame boundaries, not whether a decoder could show the
+// frame: the padded fixtures do not decode, and a frame that completes but is undecodable still counts.
 type timedArrivals struct {
-	mu    sync.Mutex
-	times map[webrtc.RTPCodecType][]time.Time
+	mu     sync.Mutex
+	times  map[webrtc.RTPCodecType][]time.Time
+	frames frameAssembler
 }
 
 func timeArrivals(p *peer) *timedArrivals {
@@ -25,16 +30,70 @@ func timeArrivals(p *peer) *timedArrivals {
 	p.pc.OnTrack(func(remote *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
 		go func() {
 			for {
-				if _, _, err := remote.ReadRTP(); err != nil {
+				packet, _, err := remote.ReadRTP()
+				if err != nil {
 					return
 				}
 				a.mu.Lock()
-				a.times[remote.Kind()] = append(a.times[remote.Kind()], time.Now())
+				if remote.Kind() == webrtc.RTPCodecTypeVideo {
+					if a.frames.add(packet) {
+						a.times[webrtc.RTPCodecTypeVideo] = append(a.times[webrtc.RTPCodecTypeVideo], time.Now())
+					}
+				} else {
+					a.times[remote.Kind()] = append(a.times[remote.Kind()], time.Now())
+				}
 				a.mu.Unlock()
 			}
 		}()
 	})
 	return a
+}
+
+// frameAssembler tells when a video frame is complete: its marker packet and every sequence number
+// from its first packet to the marker have arrived.
+type frameAssembler struct {
+	parts    map[uint32]*frameParts
+	lastDone uint32
+	any      bool
+}
+
+type frameParts struct {
+	seqs      map[uint16]struct{}
+	low, high uint16
+	ended     bool
+}
+
+// add takes one packet and reports whether it completed a frame newer than every frame counted before.
+func (f *frameAssembler) add(packet *rtp.Packet) bool {
+	ts := packet.Timestamp
+	if f.any && int32(ts-f.lastDone) <= 0 {
+		return false
+	}
+	if f.parts == nil {
+		f.parts = map[uint32]*frameParts{}
+	}
+	frame := f.parts[ts]
+	if frame == nil {
+		frame = &frameParts{seqs: map[uint16]struct{}{}, low: packet.SequenceNumber}
+		f.parts[ts] = frame
+	}
+	if int16(packet.SequenceNumber-frame.low) < 0 {
+		frame.low = packet.SequenceNumber
+	}
+	if packet.Marker {
+		frame.high, frame.ended = packet.SequenceNumber, true
+	}
+	frame.seqs[packet.SequenceNumber] = struct{}{}
+	if !frame.ended || len(frame.seqs) != int(frame.high-frame.low)+1 {
+		return false
+	}
+	f.lastDone, f.any = ts, true
+	for pending := range f.parts {
+		if int32(pending-ts) <= 0 {
+			delete(f.parts, pending)
+		}
+	}
+	return true
 }
 
 // longestGap is the longest time inside [from, to] with no packet of kind.
@@ -182,14 +241,14 @@ func (c change) String() string { return fmt.Sprintf("%s@%dms", c.state, c.at.Mi
 type phaseReport struct {
 	name                  string
 	audioGap, videoFreeze time.Duration
-	audioSlowest          time.Duration // the longest time the node's audio count stood still
+	audioStandstill       time.Duration // the longest span over which the node's audio count did not move between samples
 	startState, endState  string
 	changes               []change
 }
 
 func (r phaseReport) String() string {
-	return fmt.Sprintf("%-14s audio gap %4dms (node sent none for %4dms), video freeze %4dms, camera %s %v",
-		r.name, r.audioGap.Milliseconds(), r.audioSlowest.Milliseconds(), r.videoFreeze.Milliseconds(), r.startState, r.changes)
+	return fmt.Sprintf("%-14s audio gap %4dms (node's audio count still for %4dms), video freeze %4dms, camera %s %v",
+		r.name, r.audioGap.Milliseconds(), r.audioStandstill.Milliseconds(), r.videoFreeze.Milliseconds(), r.startState, r.changes)
 }
 
 // lastChangeAt is when the camera made its last move during the phase, or 0 when it never moved.
@@ -215,12 +274,11 @@ func (c *constrainedCall) report(name string, from, to time.Time) phaseReport {
 	r := phaseReport{name: name,
 		audioGap:    c.arrivals.longestGap(webrtc.RTPCodecTypeAudio, from, to),
 		videoFreeze: c.arrivals.longestGap(webrtc.RTPCodecTypeVideo, from, to)}
-	state, standing := "", from
-	var audioSent uint64
+	state := ""
 	for _, sample := range c.samples() {
 		if sample.at.Before(from) {
 			r.startState = sample.state()
-			state, audioSent, standing = r.startState, sample.audioSent, from
+			state = r.startState
 			continue
 		}
 		if sample.at.After(to) {
@@ -230,13 +288,32 @@ func (c *constrainedCall) report(name string, from, to time.Time) phaseReport {
 			state = sample.state()
 			r.changes = append(r.changes, change{sample.at.Sub(from), state})
 		}
-		if sample.audioSent != audioSent {
-			r.audioSlowest = max(r.audioSlowest, sample.at.Sub(standing))
-			audioSent, standing = sample.audioSent, sample.at
-		}
 	}
+	r.audioStandstill = audioStandstill(c.samples(), from, to)
 	r.endState = state
 	return r
+}
+
+// audioStandstill is the longest span inside [from, to] over which the node's audio count did not move
+// between inspect samples. The count is only read at samples, so this is a lower bound on the longest
+// time the node sent no audio: a stall that the samples do not span stays unseen, and a slow inspect
+// call cannot make it look longer than it was.
+func audioStandstill(samples []delivery, from, to time.Time) time.Duration {
+	var longest time.Duration
+	var runStart time.Time
+	var count uint64
+	started := false
+	for _, sample := range samples {
+		if sample.at.Before(from) || sample.at.After(to) {
+			continue
+		}
+		if !started || sample.audioSent != count {
+			runStart, count, started = sample.at, sample.audioSent, true
+			continue
+		}
+		longest = max(longest, sample.at.Sub(runStart))
+	}
+	return longest
 }
 
 // The bounds sit well above what a healthy node measured (audio gap under 110ms, video freeze under
@@ -258,16 +335,16 @@ const (
 // requireAudioContinuous says audio kept flowing through a phase in which video may pause.
 func requireAudioContinuous(t *testing.T, r phaseReport) {
 	t.Helper()
-	if r.audioGap > continuousAudioGap || r.audioSlowest > nodeAudioStall {
-		t.Errorf("%s: audio gap %v (node stalled %v); want at most %v and %v", r.name, r.audioGap, r.audioSlowest, continuousAudioGap, nodeAudioStall)
+	if r.audioGap > continuousAudioGap || r.audioStandstill > nodeAudioStall {
+		t.Errorf("%s: audio gap %v (node audio count still %v); want at most %v and %v", r.name, r.audioGap, r.audioStandstill, continuousAudioGap, nodeAudioStall)
 	}
 }
 
 // requireContinuous says media kept flowing through a phase that only slowed or thinned the link.
 func requireContinuous(t *testing.T, r phaseReport) {
 	t.Helper()
-	if r.audioGap > continuousAudioGap || r.audioSlowest > nodeAudioStall || r.videoFreeze > continuousVideoGap {
-		t.Errorf("%s: audio gap %v (node stalled %v), video freeze %v; want at most %v, %v and %v", r.name, r.audioGap, r.audioSlowest, r.videoFreeze, continuousAudioGap, nodeAudioStall, continuousVideoGap)
+	if r.audioGap > continuousAudioGap || r.audioStandstill > nodeAudioStall || r.videoFreeze > continuousVideoGap {
+		t.Errorf("%s: audio gap %v (node audio count still %v), video freeze %v; want at most %v, %v and %v", r.name, r.audioGap, r.audioStandstill, r.videoFreeze, continuousAudioGap, nodeAudioStall, continuousVideoGap)
 	}
 }
 
@@ -301,6 +378,9 @@ func TestConstrainedLinkKeepsAudioAndFollowsTheBandwidth(t *testing.T) {
 	if at := up.firstChange("h"); at < 0 || at > bestLayerBackWithin {
 		t.Errorf("bandwidth up: the camera returned to the high layer at %v; want within %v", at, bestLayerBackWithin)
 	}
+	if up.endState != "h" {
+		t.Errorf("bandwidth up: the camera ended on %q after moving %v; want h on a healthy link", up.endState, up.changes)
+	}
 
 	light := run("2% loss", 5*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0.02, 0) })
 	requireContinuous(t, light)
@@ -316,6 +396,9 @@ func TestConstrainedLinkKeepsAudioAndFollowsTheBandwidth(t *testing.T) {
 
 	after := run("after blackout", bestLayerBackWithin+2*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0, 0) })
 	requireAudioContinuous(t, after)
+	if after.videoFreeze > bestLayerBackWithin {
+		t.Errorf("after blackout: video froze for %v; want at most %v", after.videoFreeze, bestLayerBackWithin)
+	}
 	if backAt := lastChangeAt(after); after.endState != "h" || backAt > bestLayerBackWithin+blackoutSlack {
 		t.Errorf("after blackout: the camera ended on %q after its last move at %v; want h within %v", after.endState, backAt, bestLayerBackWithin+blackoutSlack)
 	}
