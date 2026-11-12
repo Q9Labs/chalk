@@ -11,13 +11,16 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || exec sudo -E env "PATH=$PATH" "$0" "$@"
 
+export PATH="$PATH:/usr/sbin:/sbin"
 ns=c2
 dir=/tmp/recovery-rig
 launcher="$dir/chromium-c2"
 
-nat() { # nat <add|del> <subnet>
-  local flag=-A; [[ "$1" == del ]] && flag=-D
+nat() { # nat <add|del> <subnet>: masquerade the subnet and let it through a default-drop FORWARD chain (Docker sets one)
+  local flag=-A forward=-I; [[ "$1" == del ]] && { flag=-D; forward=-D; }
   iptables -t nat "$flag" POSTROUTING -s "$2" -j MASQUERADE 2> /dev/null || true
+  iptables "$forward" FORWARD -s "$2" -j ACCEPT 2> /dev/null || true
+  iptables "$forward" FORWARD -d "$2" -j ACCEPT 2> /dev/null || true
 }
 
 uplink() { # uplink <n>: host side 10.200.<n>.1, guest side 10.200.<n>.2
@@ -31,8 +34,10 @@ uplink() { # uplink <n>: host side 10.200.<n>.1, guest side 10.200.<n>.2
 case "${1:-}" in
   up)
     ip netns add "$ns"
-    sysctl -qw net.ipv4.ip_forward=1
+    echo 1 > /proc/sys/net/ipv4/ip_forward
     ip netns exec "$ns" ip link set lo up
+    mkdir -p "/etc/netns/$ns"
+    echo "nameserver 1.1.1.1" > "/etc/netns/$ns/resolv.conf"
     uplink 1
     uplink 2
     ip netns exec "$ns" ip link set g1 up
@@ -66,7 +71,7 @@ case "${1:-}" in
       ip link del "h$n" 2> /dev/null || true
       nat del "10.200.$n.0/24"
     done
-    rm -rf "$dir"
+    rm -rf "$dir" "/etc/netns/$ns"
     ;;
   *)
     echo "usage: recovery-rig up|blackout|restore|change|down" >&2
