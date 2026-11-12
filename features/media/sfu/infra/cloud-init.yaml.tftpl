@@ -28,6 +28,7 @@ runcmd:
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow ${media_port}/udp
+  - ufw allow ${media_port}/tcp
 %{ for address in control_addresses ~}
   - ufw allow proto tcp from ${address} to any port 8443
 %{ endfor ~}

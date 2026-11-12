@@ -33,8 +33,17 @@ const (
 	// A minted credential is shared by joins for this long, so every client
 	// still receives at least turnCredentialTTL minus this window.
 	turnCredentialReuse = time.Hour
-	turnMintTimeout     = 2 * time.Second
-	turnMintBackoff     = 30 * time.Second
+	// turnMintTimeout bounds every mint, retry included, so a join never waits longer for relay servers.
+	turnMintTimeout = 2 * time.Second
+	// turnMintRetryDelay separates the two attempts of one mint: a refused or reset connection is
+	// worth one more try inside the same join, a slow answer leaves no time for it.
+	turnMintRetryDelay = 100 * time.Millisecond
+	// A failed mint ends the next joins' wait for 5 seconds, then the next join mints again.
+	turnMintBackoff = 5 * time.Second
+	// turnStaleLife is how old a credential may be and still serve joins when a refresh fails.
+	// It has turnCredentialTTL minus its age left, so a call that starts with it keeps at least
+	// an hour of it.
+	turnStaleLife = turnCredentialTTL - time.Hour
 )
 
 // HTTPClient is the request sender a mint uses.
@@ -57,6 +66,7 @@ type Credentials struct {
 	failedAt time.Time
 	lastErr  error
 	inflight chan struct{}
+	now      func() time.Time
 }
 
 // New returns nil when the key or token is blank.
@@ -65,7 +75,7 @@ func New(keyID, apiToken string) *Credentials {
 	if keyID == "" || apiToken == "" {
 		return nil
 	}
-	return &Credentials{keyID: keyID, apiToken: apiToken}
+	return &Credentials{keyID: keyID, apiToken: apiToken, now: time.Now}
 }
 
 // RelayServers returns Cloudflare TURN for a media plane that is not
@@ -92,16 +102,21 @@ func newTransport() *http.Transport {
 func (t *Credentials) Servers(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	for {
 		t.mu.Lock()
-		now := time.Now()
+		now := t.now()
 		if t.servers != nil && now.Sub(t.mintedAt) < turnCredentialReuse {
 			servers := t.servers
 			t.mu.Unlock()
 			return servers, nil
 		}
 		if !t.failedAt.IsZero() && now.Sub(t.failedAt) < turnMintBackoff {
-			err := t.lastErr
+			servers, err := t.servers, t.lastErr
+			if servers != nil && now.Sub(t.mintedAt) < turnStaleLife {
+				err = nil
+			} else {
+				servers = nil
+			}
 			t.mu.Unlock()
-			return nil, err
+			return servers, err
 		}
 		inflight := t.inflight
 		if inflight == nil {
@@ -119,23 +134,36 @@ func (t *Credentials) Servers(ctx context.Context, client HTTPClient, endpoint s
 }
 
 func (t *Credentials) mintAndStore(ctx context.Context, client HTTPClient, endpoint string, done chan struct{}) {
-	servers, err := t.mint(ctx, client, endpoint)
+	servers, err := t.mintWithRetry(ctx, client, endpoint)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err != nil {
-		t.failedAt, t.lastErr = time.Now(), err
+		t.failedAt, t.lastErr = t.now(), err
 	} else {
-		t.servers, t.mintedAt, t.failedAt, t.lastErr = servers, time.Now(), time.Time{}, nil
+		t.servers, t.mintedAt, t.failedAt, t.lastErr = servers, t.now(), time.Time{}, nil
 	}
 	t.inflight = nil
 	close(done)
 }
 
-func (t *Credentials) mint(ctx context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
-	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, turnMintTimeout)
+// mintWithRetry tries once more after a short pause when the first attempt fails, and gives both
+// attempts one turnMintTimeout together.
+func (t *Credentials) mintWithRetry(parent context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
+	ctx, cancel := context.WithTimeout(parent, turnMintTimeout)
 	defer cancel()
+	servers, err := t.mint(ctx, parent, client, endpoint)
+	if err == nil {
+		return servers, nil
+	}
+	select {
+	case <-time.After(turnMintRetryDelay):
+		return t.mint(ctx, parent, client, endpoint)
+	case <-ctx.Done():
+		return nil, err
+	}
+}
 
+func (t *Credentials) mint(ctx, parent context.Context, client HTTPClient, endpoint string) ([]mediaplane.ICEServer, error) {
 	body, err := json.Marshal(map[string]int64{"ttl": int64(turnCredentialTTL / time.Second)})
 	if err != nil {
 		return nil, err

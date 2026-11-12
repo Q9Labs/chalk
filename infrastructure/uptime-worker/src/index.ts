@@ -57,8 +57,7 @@ export async function runMonitorCycle(env: Env): Promise<{ readonly checked: num
   }
   // The join probe stays off until its Space, key and state binding are configured, so deploying this code changes nothing by itself.
   if (env.PROBE_SPACE_ID) {
-    const message = await runJoinProbe(env, api, sync);
-    if (message) await notify(webhook, message);
+    await runJoinProbe(env, api, sync, (message) => notify(webhook, message));
   }
   return { checked: results.length, failed: failures.length };
 }

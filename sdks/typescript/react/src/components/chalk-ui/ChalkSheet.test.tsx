@@ -114,11 +114,21 @@ it("starts no drag from a row or from the close button", async () => {
 
 it("snaps without a spring when the person prefers reduced motion", async () => {
   vi.stubGlobal("matchMedia", (media: string) => ({ matches: media.includes("prefers-reduced-motion"), media, addEventListener() {}, removeEventListener() {} }));
+  // The sheet gives its own transitions back from a timer, so hold the clock to see the release itself.
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
   const { sheet } = await open();
   await pointer(grabber(), "pointerdown", 0, 0);
   await pointer(grabber(), "pointermove", 40, 500);
-  await pointer(grabber(), "pointerup", 40, 1000);
+  // The sheet gives its own transitions back on the next timer tick, so read it in the release's own tick:
+  // an awaited release lets a loaded machine run that timer first.
+  act(() => {
+    const release = new MouseEvent("pointerup", { bubbles: true, clientY: 40 });
+    Object.defineProperties(release, { pointerId: { value: 1 }, timeStamp: { value: 2000 } });
+    grabber().dispatchEvent(release);
+  });
   expect(sheet.style.transition).toBe("none");
+  act(() => vi.runOnlyPendingTimers());
+  expect(sheet.style.transition).toBe("");
 });
 
 it("has no scrim for the reactions sheet and a scrim for the others", async () => {

@@ -85,6 +85,7 @@ body:has(.chalk-board) :is(.excalidraw-modal-container, .excalidraw-tooltip) {di
 .chalk-board-edge-arrow {stroke-width:2.25; transform:rotate(var(--chalk-board-edge-angle, 0deg));}
 
 .chalk-board :focus-visible {outline:2px solid var(--chalk-focus); outline-offset:2px;}
+.chalk-board .excalidraw:focus-visible {outline:2px solid var(--chalk-focus); outline-offset:-2px;}
 .chalk-board button {font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer;}
 
 .chalk-board-island, .chalk-board-zoom, .chalk-board .chalk-board-menu-button, .chalk-board-chip, .chalk-board-view-only {background:var(--chalk-surface); color:var(--chalk-text); box-shadow:var(--board-shadow);}

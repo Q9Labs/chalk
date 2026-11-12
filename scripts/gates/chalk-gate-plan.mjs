@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { gitLines } from "../lib/git.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
+import { requireRegistered } from "./register.mjs";
 
 export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
 const CALL_LEAK_SHARDS = 3;
@@ -22,6 +23,20 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 const workflowGraphRoots = [".github/workflows", "features/scorecard"];
+// The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
+const formalSyncPaths = [
+  "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/lifecycle.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_planner.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_planner.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_finalizer.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex",
+  "apps/sync/lib/chalk_sync/external_operation_consumer.ex",
+  "apps/sync/lib/chalk_sync/stateholder/postgres.ex",
+  "tools/formal/sync-entry-leave",
+  "tools/formal/tla2tools.sh",
+];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -291,6 +306,7 @@ function workspaceBuildCommand(workspaces) {
 }
 
 function task(id, label, selected, reason, command, env = {}) {
+  requireRegistered(id);
   return { id, label, selected: Boolean(selected && command), reason, command, env };
 }
 
@@ -420,6 +436,8 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
+  const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
@@ -447,6 +465,7 @@ export function createGatePlan(files, options = {}) {
       "features/scorecard/*-graph.test.mjs",
       "features/scorecard/lease-arguments.test.mjs",
     ]),
+    task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
@@ -456,11 +475,7 @@ export function createGatePlan(files, options = {}) {
     task("dead-code", "No new unreachable Go function", full || sourceFiles.some((file) => file.endsWith(".go")), full ? fullReason : "Go source changed", ["node", "scripts/gates/analysis.mjs", "dead-code"]),
     task("duplication", "Clone count does not rise", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "duplication"]),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
-    task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
-      "pnpm",
-      "run",
-      "gate:boundaries",
-    ]),
+    task("formal-sync", "Sync entry and Leave model check", formalSync, formalSync ? "Sync entry or Leave inputs changed" : "Sync entry and Leave are unaffected", ["bash", "tools/formal/sync-entry-leave/run.sh"]),
     task("osv", "Dependency vulnerability scan", dependencyChange, dependencyChange ? "dependency inputs changed" : "no dependency inputs changed", ["bash", "scripts/gates/osv-scanner.sh"]),
     task(
       "services",
@@ -641,7 +656,6 @@ function selectCiJobs(base) {
 
 // Format is always on so documentation-only changes are still checked.
 export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format"]);
-export const gateTaskIds = createGatePlan([], { full: true, workspaces: [] }).tasks.map((planned) => planned.id);
 
 if (import.meta.main) {
   const [flag, base] = process.argv.slice(2);

@@ -442,15 +442,23 @@ def qualify(args):
         require(args.config_parameter == '/chalk/nightly/release/recorder.json', 'nightly address requires canonical SSM config')
         reconcile_nightly_address(provider, config)
     args.directory.mkdir(parents=True, exist_ok=True)
-    for role in ('capture', 'render'):
-        values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])
-        image = media[role]
-        request = dict(schema_version=1, role=role, source_commit=image['source_revision'], release_id=image['release_id'], image_id=int(image['base_snapshot_id']), archive=dict(bucket=os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'], key=image['archive_key'], sha256=image['archive_sha256'], region=args.region), image_digest=image['image_digest'], region=values['CHALK_RECORDER_FLEET_REGION'], size=values['CHALK_RECORDER_FLEET_SIZE'])
-        path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
-        private_json(path, request)
-        subprocess.run([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)], check=True,
-                       env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
-                            'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter})
+    # The two roles boot separate droplets with their own evidence, so they run side by side; both finish (and clean up) even when one fails.
+    checks = []
+    try:
+        for role in ('capture', 'render'):
+            values = env_values(provider.parameter(config['runtime']['parameter_prefix'] + '/recorder/' + role + '.env')['Value'])
+            image = media[role]
+            request = dict(schema_version=1, role=role, source_commit=image['source_revision'], release_id=image['release_id'], image_id=int(image['base_snapshot_id']), archive=dict(bucket=os.environ['CHALK_MEDIA_ARTIFACT_BUCKET'], key=image['archive_key'], sha256=image['archive_sha256'], region=args.region), image_digest=image['image_digest'], region=values['CHALK_RECORDER_FLEET_REGION'], size=values['CHALK_RECORDER_FLEET_SIZE'])
+            path, receipt = args.directory / (role + '-request.json'), args.directory / (role + '-receipt.json')
+            private_json(path, request)
+            checks.append(subprocess.Popen([sys.executable, str(ROOT / 'scripts/recorder/boot-check.py'), '--request', str(path), '--receipt', str(receipt)],
+                           env={**os.environ, 'CHALK_BOOT_CHECK_INSTANCE_ID': config['runtime']['instance_id'], 'CHALK_BOOT_CHECK_USER_ID': str(config['runtime']['user_id']),
+                                'CHALK_BOOT_CHECK_DO_CONTEXT': config['do_context'], 'CHALK_RECORDER_RELEASE_CONFIG_PARAMETER': args.config_parameter}))
+    finally:
+        # A setup error on one role must not orphan the other role's droplet; the original error still propagates.
+        failed = [check for check in checks if check.wait() != 0]
+    if failed:
+        raise subprocess.CalledProcessError(failed[0].returncode, failed[0].args)
 
 
 def main():

@@ -1,6 +1,10 @@
 import { defineGate, lanes } from "@q9labsai/gates";
-import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, gateTaskIds, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
+import { gateTaskIds } from "./scripts/gates/register.mjs";
+import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
 
+// The checks register lists the lanes in run order; a lane without an entry cannot be planned.
+const taskIds = gateTaskIds();
+// Format is always on so documentation-only changes are still checked.
 // Raw color, spacing, radius, font-size and shadow values may only shrink. theme/tokens.ts defines the tokens.
 const designTokenOptions = {
   baselinePath: "scripts/gates/design-tokens-baseline.json",
@@ -37,7 +41,7 @@ function chalkPlan(context: GateContext) {
   return createGatePlan([...context.allChangedFiles], gatePlanOptions(context));
 }
 
-const chalkLanes = gateTaskIds.map((id) =>
+const chalkLanes = taskIds.map((id) =>
   lanes.custom({
     id,
     title: `Chalk ${id}`,

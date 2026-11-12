@@ -38,7 +38,7 @@ jobs:
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: test "$WORKFLOW_REF" = refs/heads/master
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Require a master commit with a green push Gate and name the rollback baseline
@@ -62,14 +62,14 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       PAGES_PROJECT: ${{ vars.CHALK_PAGES_PROJECT }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Select the explicit production Pages destination
         if: inputs.environment == 'production'
         run: |
           node --input-type=module -e 'import { PRODUCTION_PROJECT } from "./scripts/deploy/deploy-web-release.mjs"; console.log("PAGES_PROJECT=" + PRODUCTION_PROJECT)' >> "$GITHUB_ENV"
-      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.CHALK_MANAGED_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.CHALK_MANAGED_AWS_REGION }}
@@ -154,7 +154,7 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Say whether the hotfix is live, rolled back, or needs a hand
