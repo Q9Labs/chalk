@@ -149,6 +149,13 @@ func TestVerdictRowLandsWithinTheFlagBound(t *testing.T) {
 	}
 }
 
+// The bands count from the run's start. A cutoff taken from the database clock at query time would move by the connection delay, which can leave an Episode between two bands.
+func TestEndedEpisodeBandsCountFromTheRunStart(t *testing.T) {
+	if strings.Contains(endedEpisodesSQL, "now()") {
+		t.Fatal("endedEpisodesSQL must count from the run's start ($3), not from now()")
+	}
+}
+
 // A run that starts late must not leave an Episode between two bands, so the band is longer than the timer's longest gap.
 func TestVerdictBandCoversTheTimerGap(t *testing.T) {
 	timer, err := os.ReadFile("chalk-alert-state.timer")

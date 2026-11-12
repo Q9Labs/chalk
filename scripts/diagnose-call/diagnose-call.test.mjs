@@ -67,7 +67,7 @@ test("a node that paused the subscription for congestion is the network, for the
   assert.equal(silence("planner").side, "SFU");
 });
 
-test("a pause counts only while no later resume of the same subscription has ended it", () => {
+test("a pause counts only while no later resume or stop of the same subscription has ended it", () => {
   const event = (seconds, name, mid) => ({
     _time: at(seconds),
     "service.name": "chalk-sfu",
@@ -78,6 +78,7 @@ test("a pause counts only while no later resume of the same subscription has end
   assert.match(cause(event(100, "sfu.subscription.paused", "0")), /paused the subscription/u);
   assert.doesNotMatch(cause(event(100, "sfu.subscription.paused", "0"), event(110, "sfu.subscription.resumed", "0")), /paused the subscription/u);
   assert.match(cause(event(100, "sfu.subscription.paused", "0"), event(110, "sfu.subscription.resumed", "1")), /paused the subscription/u);
+  assert.doesNotMatch(cause(event(100, "sfu.subscription.paused", "0"), event(110, "sfu.subscription.stopped", "0")), /paused the subscription/u);
 });
 
 test("a source that runs past the deadline is listed as missing and the others are still read", async () => {

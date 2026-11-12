@@ -93,10 +93,10 @@ function joinCause(rows, report) {
   return cause("unknown: no failed API request shares the report's journey id and the report names no failed step", "joining", "unknown");
 }
 
-const SUBSCRIPTION_EVENTS = ["sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started"];
+const SUBSCRIPTION_EVENTS = ["sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started", "sfu.subscription.stopped"];
 const SUBSCRIPTION_KEY = ["publisher_id", "source", "media_kind", "mid"];
 
-/** The latest pause that no later resume or start of the same subscription ended by the time the run ended. */
+/** The latest pause that no later resume, start or stop of the same subscription ended by the time the run ended. */
 function openPause(events, run) {
   const last = new Map();
   for (const row of [...events].sort((a, b) => a.time - b.time)) {

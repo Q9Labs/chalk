@@ -493,12 +493,12 @@ func orNotLogged(value string) string {
 	return value
 }
 
-// openPause is the latest pause that no later resume or start of the same subscription ended by the time the run ended.
+// openPause is the latest pause that no later resume, start or stop of the same subscription ended by the time the run ended.
 func openPause(events []*logRow, limit time.Time) *logRow {
 	last := map[string]*logRow{}
 	for _, event := range events {
 		switch event.event {
-		case "sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started":
+		case "sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started", "sfu.subscription.stopped":
 			if !event.time.After(limit) {
 				if previous := last[subscriptionKey(event)]; previous == nil || !event.time.Before(previous.time) {
 					last[subscriptionKey(event)] = event
@@ -707,13 +707,14 @@ type endedEpisode struct {
 }
 
 // endedEpisodesSQL lists Episodes that ended a moment ago and had a Participant, once their last SDK uploads have landed.
+// Both cutoffs count from $3, the time the collector run started, so the delay in connecting to the database never moves a band.
 const endedEpisodesSQL = `select episodes.tenant_id::text, coalesce(tenants.name, ''), episodes.id::text, episodes.ended_at from episodes
 left join tenants on tenants.id = episodes.tenant_id
-where status = 'ended' and episodes.ended_at <= now() - $1::int * interval '1 second' and episodes.ended_at > now() - $2::int * interval '1 second'
+where status = 'ended' and episodes.ended_at <= $3::timestamptz - $1::int * interval '1 second' and episodes.ended_at > $3::timestamptz - $2::int * interval '1 second'
   and exists (select 1 from participants where participants.episode_id = episodes.id)
 order by episodes.ended_at limit 10`
 
-func collectEndedEpisodes(ctx context.Context, databaseURL string, settle, band time.Duration) ([]endedEpisode, error) {
+func collectEndedEpisodes(ctx context.Context, databaseURL string, asOf time.Time, settle, band time.Duration) ([]endedEpisode, error) {
 	config, err := pgx.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, errors.New("invalid database configuration")
@@ -725,7 +726,7 @@ func collectEndedEpisodes(ctx context.Context, databaseURL string, settle, band 
 		return nil, errors.New("ended Episode database connection failed")
 	}
 	defer conn.Close(ctx)
-	rows, err := conn.Query(ctx, endedEpisodesSQL, int(settle.Seconds()), int((settle + band).Seconds()))
+	rows, err := conn.Query(ctx, endedEpisodesSQL, int(settle.Seconds()), int((settle + band).Seconds()), asOf)
 	if err != nil {
 		return nil, errors.New("ended Episode query failed")
 	}
@@ -781,6 +782,7 @@ const callVerdictRulePrefix = "call-verdict "
 // collectCallVerdictsFromEnv judges the Episodes that ended a moment ago. It returns nothing when it cannot read,
 // because a missing verdict must not look like a failing call. The failure goes to stderr without the secret.
 func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snapshot {
+	asOf := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, callVerdictBudget)
 	defer cancel()
 	querier := axiomQuerier{
@@ -791,7 +793,7 @@ func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snap
 		querier.dataset = os.Getenv("CHALK_ALERT_LOG_DATASET")
 	}
 	thresholds := loadVerdictThresholds()
-	episodes, err := collectEndedEpisodes(ctx, os.Getenv("CHALK_DATABASE_URL"), callVerdictSettle, callVerdictBand)
+	episodes, err := collectEndedEpisodes(ctx, os.Getenv("CHALK_DATABASE_URL"), asOf, callVerdictSettle, callVerdictBand)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return nil
@@ -805,8 +807,8 @@ func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snap
 
 // An Episode is judged between callVerdictSettle and callVerdictSettle+callVerdictBand after it ended: the wait lets
 // the last SDK uploads land, and the band is longer than the longest gap between two collector runs (the timer's period
-// plus its accuracy, which chalk-alert-state.timer sets and a test reads), so no Episode falls between two runs. An
-// Episode that ended near the band's start can be judged by two runs; both write the same rule name, which the alert
+// plus its accuracy, which chalk-alert-state.timer sets and a test reads). The band counts from the run's start, not from
+// the query, so no Episode falls between two runs. An Episode that ended near the band's start can be judged by two runs; both write the same rule name, which the alert
 // monitor treats as one alert.
 //
 // The verdict row is therefore written no later than callVerdictSettle + callVerdictBand + callVerdictBudget after the

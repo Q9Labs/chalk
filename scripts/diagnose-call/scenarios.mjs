@@ -53,6 +53,12 @@ export function resumedPauseCall() {
   return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.resumed", "viewer", "conn-view-2", subscription)];
 }
 
+/** The node paused the viewer's video at 100 s and detached that subscription at 110 s without resuming it, so the pause is over by the time the silence ends. */
+export function stoppedPauseCall() {
+  const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
+  return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.stopped", "viewer", "conn-view-2", subscription)];
+}
+
 export function starvedViewerCall() {
   return [
     ...flow("conn-pub"),
@@ -121,4 +127,5 @@ export const scenarios = {
   "congested viewer": congestedViewerCall,
   "receiver never took media": neverReceivedCall,
   "pause ended by a resume": resumedPauseCall,
+  "pause ended by a stop": stoppedPauseCall,
 };
