@@ -590,10 +590,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
    * Runs what an enable can do while Sync still decides it, so the grant does not wait behind that round trip.
    * A parked track (mute in place) is resumed on the SFU at once. The node's source lease authorizes what it
    * forwards: a closed lease forwards nothing, and a role change, a removal and the end of the Episode revoke it.
-   * Until the SDK sees Sync's result, a resumed track may forward under a standing lease; on a refusal the SDK
-   * closes the publication at once. Otherwise this swaps a connection that never carried media for a fresh one,
-   * adds no transceiver and sends no offer. A fresh publish never goes ahead, because a new publication needs the grant.
-   * `setLocalPublicationTarget` redoes whatever this left undone, so a rejection is safe to ignore.
+   * Until Sync's first result, a resumed track may forward under a standing lease; the caller then either runs
+   * `setLocalPublicationTarget` or undoes the resume with `cancelPreparedLocalPublicationTarget`. Otherwise this
+   * swaps a connection that never carried media for a fresh one, adds no transceiver and sends no offer. A fresh
+   * publish never goes ahead, because a new publication needs the grant. `setLocalPublicationTarget` redoes
+   * whatever this left undone, so a rejection is safe to ignore.
    */
   async prepareLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
     if (!target.enabled || this.#locallyPausedSources.has(target.source)) return;
@@ -620,6 +621,22 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (!attemptedBefore && this.#replacementAttemptedGeneration === generation) this.#replacementAttemptedGeneration = null;
       throw error;
     }
+  }
+  /**
+   * Parks again what `prepareLocalPublicationTarget` resumed, through the hold path a user mute takes (the sender is
+   * detached and the SFU track is paused), once any resume in flight has reached the SFU. It does nothing when nothing
+   * was resumed ahead, or when the enable has already taken the publication over: that enable owns its own failure.
+   */
+  async cancelPreparedLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
+    await this.#headStarts.get(target.source);
+    const publication = this.#resumedAhead.get(target.source);
+    if (!publication) return;
+    this.#resumedAhead.delete(target.source);
+    const { state } = publication;
+    if (state.desiredEnabled || publication.lifecycle.kind !== "confirmed") return;
+    state.track.enabled = false;
+    this.#markPublicationRetiring(publication, "user_pause");
+    await this.#retireOwnedPublications(undefined, { sources: [target.source], goneIsComplete: true });
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);

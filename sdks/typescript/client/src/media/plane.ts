@@ -72,10 +72,19 @@ export type ClientMediaPlane = {
    * publication: `setLocalPublicationTarget` stays the only step that publishes, and it redoes whatever
    * this left undone. A rejection is safe to ignore for that reason. A plane that parks a muted track
    * on its server (mute in place) may resume that track here. The server's source lease authorizes what it
-   * forwards, and a role change, a removal and the end of the Episode revoke it. Until the plane sees Sync's
-   * result the track may forward under a standing lease; on a refusal the plane closes the publication at once.
+   * forwards, and a role change, a removal and the end of the Episode revoke it. A listener must never get
+   * audio the authority would refuse, so the track may forward under a standing lease for about one round
+   * trip, until Sync's first result: the caller then runs `cancelPreparedLocalPublicationTarget` unless it
+   * goes on to `setLocalPublicationTarget`.
    */
   readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
+  /**
+   * Undoes what `prepareLocalPublicationTarget` resumed ahead of the grant: the publication is parked again
+   * the way a user mute parks it. The caller runs it when the target will not be executed (a refusal, a
+   * retryable refusal, a timeout, a disconnect). It waits for a resume still in flight, and does nothing when
+   * nothing was resumed ahead or `setLocalPublicationTarget` has taken it over.
+   */
+  readonly cancelPreparedLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;
   readonly pauseLocalCapture?: (source: "microphone" | "camera") => Promise<void>;
   readonly setLocalSourceIntent?: (source: MediaSource, enabled: boolean, cause?: LocalPublicationRetirementCause) => void;

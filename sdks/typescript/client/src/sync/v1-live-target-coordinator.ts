@@ -1,5 +1,5 @@
 import type { SyncV1ClientFrame } from "../generated/sync";
-import type { MediaPlaneResult } from "../media/plane";
+import type { MediaPlaneResult, MediaPlaneTarget } from "../media/plane";
 import { encodeV1ClientFrame } from "./v1-codec";
 import { rejectV1Deferred, resolveV1Deferred, type V1Deferred } from "./v1-deferred";
 import { V1SyncError } from "./v1-error";
@@ -26,6 +26,8 @@ type LiveDeferred = V1Deferred<V1SelfMediaTargetResult> & {
   readonly enabled: boolean;
   serverResult?: SuccessfulLiveTargetResult;
   serverResultSignature?: string;
+  // The plane's head start for this enable, until the enable is executed or its head start is undone.
+  headStart?: { readonly target: MediaPlaneTarget; readonly done: Promise<void> };
 };
 
 type V1LiveTargetOptions = { readonly requestId?: string };
@@ -97,20 +99,34 @@ export class V1LiveTargetCoordinator {
     this.#deadlineTimers.set(operationId, deadlineTimer);
     this.#localMedia[source] = "requesting";
     this.#options.sendIfLive(frame);
-    if (enabled) this.#prepareLocal(operationId, source, participantId);
+    if (enabled) this.#prepareLocal(deferred, participantId);
     this.#options.stateChanged();
     return promise;
   }
 
-  // The frame is already on the wire. Only work that needs no grant starts here (the plane may resume a parked track, which the server forwards under its source lease until a refusal closes it). A new publication waits for the server result in #executeLocal, which settles only when that result and the local step are both done.
-  #prepareLocal(operationId: string, source: V1MediaSource, participantId: string): void {
+  // The frame is already on the wire. Only work that needs no grant starts here. The plane may resume a parked track, which the
+  // node forwards under its source lease at once, so this target owns undoing that head start (#cancelHeadStart) on every
+  // path that does not execute it. A new publication waits for the server result in #executeLocal.
+  #prepareLocal(deferred: LiveDeferred, participantId: string): void {
     const prepare = this.#options.mediaPlane?.prepareLocalPublicationTarget;
     if (!prepare) return;
-    const target = { operationId, participantId, source, enabled: true };
+    const target = { operationId: deferred.frame.operation_id, participantId, source: deferred.source, enabled: true };
     // #executeLocal redoes whatever the head start left undone and reports its failure, so a failed head start needs no handling here.
-    void Promise.resolve()
+    const done = Promise.resolve()
       .then(() => prepare.call(this.#options.mediaPlane, target))
       .catch(() => {});
+    deferred.headStart = { target, done };
+  }
+
+  // Parks again what the head start resumed, after the head start has finished, so the resume can never land after the cancel.
+  // A listener must not hear audio the authority refuses, and the lease forwards it until this runs.
+  #cancelHeadStart(deferred: LiveDeferred): void {
+    const headStart = deferred.headStart;
+    const cancel = this.#options.mediaPlane?.cancelPreparedLocalPublicationTarget;
+    deferred.headStart = undefined;
+    if (!headStart || !cancel) return;
+    // A failed cancel leaves the publication to the caller's own failure cleanup, which closes it.
+    void headStart.done.then(() => cancel.call(this.#options.mediaPlane, headStart.target)).catch(() => {});
   }
 
   receive(frame: V1LiveTargetResult): void {
@@ -132,6 +148,9 @@ export class V1LiveTargetCoordinator {
   }
 
   #applyServerResult(deferred: LiveDeferred, frame: V1LiveTargetResult): void {
+    // The first answer that is not a success ends the head start: a retried frame is grant-gated again, and a final success
+    // resumes through #executeLocal.
+    if (!isSuccessfulLiveTargetResult(frame)) this.#cancelHeadStart(deferred);
     if (frame.outcome === "retryable_failure") {
       this.#retryServer(frame.operation_id, deferred, frame.error_code ?? frame.outcome);
       return;
@@ -162,7 +181,10 @@ export class V1LiveTargetCoordinator {
 
   disconnect(code: string): void {
     this.#clearTimers();
-    for (const deferred of this.#targets.values()) rejectV1Deferred(deferred, new V1SyncError(code, code));
+    for (const deferred of this.#targets.values()) {
+      this.#cancelHeadStart(deferred);
+      rejectV1Deferred(deferred, new V1SyncError(code, code));
+    }
     this.#targets.clear();
   }
 
@@ -241,6 +263,7 @@ export class V1LiveTargetCoordinator {
   }
 
   #fail(operationId: string, deferred: LiveDeferred, error: V1SyncError): void {
+    this.#cancelHeadStart(deferred);
     this.#targets.delete(operationId);
     this.#clearRetryTimer(operationId);
     this.#clearDeadlineTimer(operationId);

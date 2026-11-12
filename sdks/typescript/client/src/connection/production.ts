@@ -158,10 +158,14 @@ type BoundMediaClient = Pick<
   | "clearPreparedLocalTrack"
   | "getSnapshot"
   | "subscribe"
-> & { readonly prepareLocalPublicationTarget: NonNullable<ConnectionMediaClient["prepareLocalPublicationTarget"]> };
+> & {
+  readonly prepareLocalPublicationTarget: NonNullable<ConnectionMediaClient["prepareLocalPublicationTarget"]>;
+  readonly cancelPreparedLocalPublicationTarget: NonNullable<ConnectionMediaClient["cancelPreparedLocalPublicationTarget"]>;
+};
 export function bindConnectionMediaClient(client: BoundMediaClient, restart: ConnectionMediaClient["restart"]): ConnectionMediaClient {
   return {
     prepareLocalPublicationTarget: client.prepareLocalPublicationTarget.bind(client),
+    cancelPreparedLocalPublicationTarget: client.cancelPreparedLocalPublicationTarget.bind(client),
     setLocalPublicationTarget: client.setLocalPublicationTarget.bind(client),
     ...(client.pauseLocalCapture ? { pauseLocalCapture: client.pauseLocalCapture.bind(client) } : {}),
     ...(client.setLocalSourceIntent ? { setLocalSourceIntent: client.setLocalSourceIntent.bind(client) } : {}),

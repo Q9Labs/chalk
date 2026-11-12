@@ -4886,7 +4886,7 @@ function createSwapCall(options: { readonly muteInPlace?: boolean } = {}) {
   const platform = createCoreTestPlatform();
   const track = new FakeTrack("swap-microphone", "audio");
   const answers = { held: false, frames: [] as Extract<SyncV1ClientFrame, { readonly type: "live_target" }>[] };
-  const answer = (outcome: "confirmed" | "terminal_failure", errorCode: string | null) => {
+  const answer = (outcome: "confirmed" | "retryable_failure" | "terminal_failure", errorCode: string | null) => {
     const frame = answers.frames.shift();
     if (!frame) throw new Error("no live-target frame is waiting for a result");
     coordinator.receive({ ...frame, type: "live_target_result", outcome, error_code: errorCode });
@@ -5026,7 +5026,7 @@ async function parkedMicrophoneCall() {
 const syncRefusal = { code: "client.internal_error", message: "capability_denied" };
 const settledWithin = async (promise: Promise<unknown>, milliseconds: number) => Promise.race([promise.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), milliseconds))]);
 
-it("resumes a parked microphone before Sync answers, and a refusal then closes it after the resume", async () => {
+it("resumes a parked microphone before Sync answers, and a refusal then parks it again after the resume", async () => {
   const call = await parkedMicrophoneCall();
   try {
     const { transport } = call.harness;
@@ -5038,10 +5038,10 @@ it("resumes a parked microphone before Sync answers, and a refusal then closes i
 
     call.answer("terminal_failure", "capability_denied");
     expect(await enabling).toMatchObject(syncRefusal);
-    await vi.waitFor(() => expect(transport.log).toContain("close microphone"));
-    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false", "update returned paused=false", "close microphone"]);
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false", "update returned paused=false", "update paused=true", "update returned paused=true"]);
+    expect(transport.closeInputs).toHaveLength(0);
     expect(call.track.enabled).toBe(false);
-    expect(call.publishedMicrophone()).toBe(false);
     expect(call.states).not.toContain("enabled");
     expect(call.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
   } finally {
@@ -5049,7 +5049,7 @@ it("resumes a parked microphone before Sync answers, and a refusal then closes i
   }
 });
 
-it("a refusal that arrives while the resume is still in flight closes the microphone only after the resume returns", async () => {
+it("a refusal that arrives while the resume is still in flight silences the microphone only after the resume returns", async () => {
   const call = await parkedMicrophoneCall();
   const gate = Promise.withResolvers<void>();
   try {
@@ -5060,7 +5060,7 @@ it("a refusal that arrives while the resume is still in flight closes the microp
     call.answer("terminal_failure", "capability_denied");
     expect(await settledWithin(enabling, 50)).toBe(true);
     expect(await enabling).toMatchObject(syncRefusal);
-    expect(transport.log).not.toContain("close microphone");
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false"]);
 
     gate.resolve();
     await vi.waitFor(() => expect(transport.log).toContain("close microphone"));
@@ -5071,6 +5071,162 @@ it("a refusal that arrives while the resume is still in flight closes the microp
   } finally {
     gate.resolve();
     call.dispose();
+  }
+});
+
+// A retryable refusal is not the grant either, so the resumed microphone is parked at the first one and a retried frame is grant-gated again.
+const pausedUpdates = (call: Awaited<ReturnType<typeof parkedMicrophoneCall>>) => call.harness.transport.log.filter((entry) => entry === "update paused=true").length;
+
+it("parks the resumed microphone again at the first retryable refusal, and the final grant resumes it once more", async () => {
+  const call = await parkedMicrophoneCall();
+  try {
+    const { transport } = call.harness;
+    const enabling = call.enable();
+    await vi.waitFor(() => expect(transport.log).toContain("update returned paused=false"));
+    expect(call.track.enabled).toBe(true);
+
+    call.answer("retryable_failure", "busy");
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(call.track.enabled).toBe(false);
+    expect(call.resumes()).toHaveLength(1);
+
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    call.answer("retryable_failure", "busy");
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(pausedUpdates(call)).toBe(2);
+    expect(call.resumes()).toHaveLength(1);
+    expect(call.track.enabled).toBe(false);
+    expect(call.client.getSnapshot().media.local.microphone.state).not.toBe("enabled");
+
+    call.answer("confirmed", null);
+    expect(await enabling).toBe("enabled");
+    expect(call.resumes()).toHaveLength(2);
+    expect(pausedUpdates(call)).toBe(2);
+    expect(transport.closeInputs).toHaveLength(0);
+    expect(call.track.enabled).toBe(true);
+    expect(call.publishedMicrophone()).toBe(true);
+    expect(call.client.getSnapshot().media.local.microphone.state).toBe("enabled");
+  } finally {
+    call.dispose();
+  }
+});
+
+it("keeps the microphone parked then closed when the retries run out", async () => {
+  const call = await parkedMicrophoneCall();
+  const { clock } = call.platform.dependencies;
+  const schedule = clock.setTimeout;
+  let exhaust: (() => void) | undefined;
+  clock.setTimeout = (callback, milliseconds) => {
+    if (milliseconds !== 15_000) return schedule(callback, milliseconds);
+    exhaust = callback;
+    return null;
+  };
+  try {
+    const { transport } = call.harness;
+    const enabling = call.enable();
+    await vi.waitFor(() => expect(transport.log).toContain("update returned paused=false"));
+    call.answer("retryable_failure", "busy");
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    call.answer("retryable_failure", "busy");
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+
+    exhaust?.();
+    expect(await enabling).toMatchObject({ code: "media.timeout" });
+    await vi.waitFor(() => expect(transport.log).toContain("close microphone"));
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false", "update returned paused=false", "update paused=true", "update returned paused=true", "close microphone"]);
+    expect(call.track.enabled).toBe(false);
+    expect(call.publishedMicrophone()).toBe(false);
+  } finally {
+    clock.setTimeout = schedule;
+    call.dispose();
+  }
+});
+
+// A caller that uses the Sync client without a SpaceClient has no failure cleanup of its own, so the target parks the resume itself.
+async function directParkedMicrophone() {
+  const { harness, microphone, target } = await parkedMicrophoneAndCamera(["microphone"]);
+  const frames: Extract<SyncV1ClientFrame, { readonly type: "live_target" }>[] = [];
+  const timers: { readonly milliseconds: number; readonly run: () => void }[] = [];
+  const coordinator = new V1LiveTargetCoordinator({
+    mediaPlane: harness.client,
+    requestIds: { next: () => crypto.randomUUID() },
+    retryDelayMs: undefined,
+    clock: () => ({ now: () => Date.now(), setTimeout: (run, milliseconds) => timers.push({ milliseconds, run }), clearTimeout: () => {} }),
+    participantId: () => "participant-1",
+    isLive: () => true,
+    requestIdInUse: () => false,
+    assertCapacity: () => {},
+    stateChanged: () => {},
+    sendIfLive: (frame) => {
+      if (frame.type === "live_target") frames.push(frame);
+    },
+  });
+  const refuse = (outcome: "terminal_failure" | "retryable_failure") => coordinator.receive({ ...frames[0]!, type: "live_target_result", outcome, error_code: "capability_denied" });
+  return { harness, microphone, target, coordinator, timers, refuse, resumes: () => harness.transport.updateInputs.flatMap((input) => input.tracks).filter((track) => track.location === "local" && track.paused === false) };
+}
+
+it("parks a microphone the head start resumed when a refusal reaches the coordinator directly", async () => {
+  const { harness, microphone, coordinator, refuse, resumes } = await directParkedMicrophone();
+  try {
+    const { transport } = harness;
+    const enabling = coordinator.send("set_microphone_enabled", "microphone", true);
+    const refused = expect(enabling).rejects.toMatchObject({ code: "terminal_failure" });
+    await vi.waitFor(() => expect(transport.log).toContain("update returned paused=false"));
+    expect(microphone.enabled).toBe(true);
+
+    refuse("terminal_failure");
+    await refused;
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(resumes()).toHaveLength(1);
+    expect(microphone.enabled).toBe(false);
+    expect(transport.closeInputs).toHaveLength(0);
+  } finally {
+    coordinator.disconnect("test_cleanup");
+    harness.client.stop();
+  }
+});
+
+it("parks a microphone the head start resumed when the grant never comes, and when the call drops", async () => {
+  for (const ending of ["deadline", "disconnect"] as const) {
+    const { harness, microphone, coordinator, timers, resumes } = await directParkedMicrophone();
+    try {
+      const { transport } = harness;
+      const enabling = coordinator.send("set_microphone_enabled", "microphone", true);
+      const ended = expect(enabling).rejects.toMatchObject({ code: ending === "deadline" ? "retry_exhausted" : "dropped" });
+      await vi.waitFor(() => expect(transport.log).toContain("update returned paused=false"));
+
+      if (ending === "deadline") timers.find((timer) => timer.milliseconds === 15_000)?.run();
+      else coordinator.disconnect("dropped");
+      await ended;
+      await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+      expect(resumes()).toHaveLength(1);
+      expect(microphone.enabled).toBe(false);
+      expect(transport.closeInputs).toHaveLength(0);
+    } finally {
+      coordinator.disconnect("test_cleanup");
+      harness.client.stop();
+    }
+  }
+});
+
+it("parks nothing when the grant came, and a cancel with no head start is a no-op", async () => {
+  const { harness, microphone, target, coordinator, resumes } = await directParkedMicrophone();
+  try {
+    const { client, transport } = harness;
+    await client.cancelPreparedLocalPublicationTarget(target("microphone"));
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true"]);
+
+    await client.prepareLocalPublicationTarget(target("microphone"));
+    await client.setLocalPublicationTarget(target("microphone"));
+    await client.cancelPreparedLocalPublicationTarget(target("microphone"));
+    expect(resumes()).toHaveLength(1);
+    expect(transport.log.filter((entry) => entry === "update paused=true")).toHaveLength(1);
+    expect(microphone.enabled).toBe(true);
+  } finally {
+    coordinator.disconnect("test_cleanup");
+    harness.client.stop();
   }
 });
 
