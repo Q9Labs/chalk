@@ -1,1 +1,1 @@
-{"holder": "sfu-reach-lane", "purpose": "path-direct", "run_id": "sfu-reach-b1-direct", "acquired_at": "2026-11-12T09:52:49.429Z", "expires_at": "2026-11-12T10:00:50.858Z", "token": "a2c3eff23e2a4347a7ef8638d929e0f3"}
+{"holder": "sfu-reach-lane", "purpose": "path-relay-udp", "run_id": "sfu-reach-b1-relay-udp", "acquired_at": "2026-11-12T10:00:58.522Z", "expires_at": "2026-11-12T10:03:58.523Z", "token": "3e5570dc994641f08ac98808007fd8c9"}
