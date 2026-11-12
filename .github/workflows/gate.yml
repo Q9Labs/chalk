@@ -1,18 +1,21 @@
 name: Gate
 
 # Required status checks: "Root gate", "API gate", "Sync gate".
-# A pull request runs only the jobs and lanes its diff selects; a skipped job counts as passed.
-# Merge queue groups run the same selection against the group's base commit, so master only receives commits whose
-# Gate passed as the exact commit that lands. Manual runs and the nightly run run every job and lane in full. A push to
-# master runs Cache warm-up, which saves the caches that pull requests and queue groups start from.
+# A pull request runs only the jobs and lanes its changed inputs select; a skipped job counts as passed.
+# Merge queue groups select against the group's base commit with the wider pre-narrowing rules and run the
+# dashboard engine and the call lanes for every change beyond documentation, so master only receives commits whose Gate
+# passed as the exact commit that lands.
+# Manual runs and the weekly run run every job and lane in full. A push to master runs Cache warm-up, which saves the
+# caches that pull requests and queue groups start from. Daily vulnerability scans run in Daily vulnerability scan.
 # The pre-commit hook runs only the fast lanes; this workflow is the full verification.
 
 on:
   pull_request:
   merge_group:
   schedule:
-    # New advisories against packages nobody changed fail here, not on unrelated pull requests.
-    - cron: "17 1 * * *"
+    # Drift between lanes and master surfaces here weekly. New advisories against packages nobody changed fail the
+    # daily vulnerability scan, not unrelated pull requests.
+    - cron: "17 1 * * 1"
   workflow_dispatch:
     inputs:
       join_startup_proof:
@@ -56,6 +59,7 @@ jobs:
       - name: Select jobs from changed paths
         id: select
         env:
+          GATE_EVENT: ${{ github.event_name }}
           # A merge queue group diffs against the commit it was built on, which may be an earlier group's head.
           DIFF_BASE: ${{ github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
         run: |
@@ -228,6 +232,7 @@ jobs:
       # API and Sync have their own jobs below, so the root gate leaves its service lane out.
       - name: Run the ${{ matrix.group }} lanes
         env:
+          GATE_EVENT: ${{ github.event_name }}
           GATE_LANE_GROUP: ${{ matrix.group }}
           GATE_SERVICES: external
           SFU_TEST_JSON: ${{ github.workspace }}/artifacts/sfu-tests.json

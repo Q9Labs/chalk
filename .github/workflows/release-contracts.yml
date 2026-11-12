@@ -1,6 +1,8 @@
 name: Release contracts
 
-# Include the release tools and the source trees their contract checks inspect.
+# Release CI repeats the plan checks (check-contracts.sh --plan) before every deploy, so a change to the code those checks
+# inspect needs no run here. This run adds what release CI does not: the workflow lint, the dispatcher and recorder image
+# checks, the OpenTofu validation and the Podman cleanup contract. It runs when their inputs change.
 on:
   pull_request:
     paths:
@@ -10,38 +12,20 @@ on:
       - .github/workflows/npm-publish.yml
       - .github/workflows/real-call-proof.yml
       - .github/workflows/web-call-proof.yml
-      - .github/workflows/media-cleanup.yml
       - .github/workflows/release-contracts.yml
       - .github/actions/setup-opentofu/**
       - .github/actions/setup-doctl/**
       - .github/actions/cache-tofu-providers/**
       - scripts/releases/**
       - scripts/deploy/**
-      - scripts/prod-proof/**
-      - scripts/web-proof/**
-      - scripts/recorder/**
       - scripts/transcription-dispatcher/**
       - infrastructure/managed-episode/**
       - infrastructure/recorder/**
       - infrastructure/nightly/**
       - infrastructure/opentofu/modules/aws-transcription-dispatcher/**
       - infrastructure/opentofu/modules/cloudflare-r2-transcription-lifecycle/**
-      - apps/api/**
-      - apps/sync/**
-      - apps/recording-renderer/**
       - apps/transcription-dispatcher/**
-      - packages/**
-      - sdks/typescript/**
       - .tool-versions
-      - tsconfig.json
-      - .npmrc
-      - .pnpmfile.cjs
-      - go.work
-      - go.work.sum
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - package.json
-      - patches/**
   workflow_dispatch:
 
 permissions:
