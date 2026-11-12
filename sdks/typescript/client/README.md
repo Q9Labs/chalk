@@ -17,7 +17,7 @@ pnpm add @q9labsai/chalk-client
 
 ## Create and join a Space
 
-Your backend mints an `AccessGrant` with the server SDK. See the [web quickstart](../../../docs/sdk-web-quickstart.md) for Tenant setup, `createChalkServerClient`, Space creation, Participant admission, and server-only `getAccessRefreshState` for normal access refresh. Pass it through to the
+Your backend mints an `AccessGrant` with the server SDK. Use `createChalkServerClient` for Tenant setup, Space creation, Participant admission, and server-only `getAccessRefreshState` for normal access refresh. Pass it through to the
 client unchanged: it is an opaque signed envelope, so application code does
 not construct or inspect it. `getAccess` may resolve with the fetch `Response`
 that carries the grant or with its decoded JSON; the client validates it and

@@ -63,8 +63,6 @@ gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -
 
 ## Immutable web vendor assets
 
-Vendor files live in R2 buckets `chalk-vendor-assets` and `chalk-vendor-assets-nightly`, without expiration. Uploads use conditional PUTs and never replace or delete an object, so an old web build always finds its files. Each environment has its own bucket-scoped R2 token. The Pages token is never an R2 fallback.
+Vendor files live in the R2 buckets `chalk-vendor-assets` and `chalk-vendor-assets-nightly` with no lifecycle deletion, and uploads never replace or delete an object, so an old web build always finds its files ([runtime assets](../apps/web/docs/runtime-assets.md)). `apps/web/scripts/prepare-vendor-store.ts` uploads the vendor trees and checks the routes before Pages publication. A failed upload or probe stops the release. Keep the independent vendor Worker and its binding through rollback.
 
-`apps/web/scripts/prepare-vendor-store.ts` uploads the vendor trees and checks the routes before Pages publication. A failed upload or probe stops the release. Keep the independent vendor Worker and its binding through rollback.
-
-CI's Cloudflare token only has Pages permission, so CI sets `CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY=true`. It checks the existing Worker routes and fails closed if the Worker is absent. A token with Workers Scripts and Routes permission lets CI deploy the Worker; then remove the setting.
+CI's Cloudflare token only has Pages permission, so CI sets `CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY=true`. It checks the existing Worker routes and fails closed if the Worker is absent. A token that can deploy Workers lets CI deploy the Worker; then remove the setting.

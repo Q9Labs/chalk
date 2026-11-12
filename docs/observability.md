@@ -53,7 +53,7 @@ To compare providers after a cutover step, or when a connection report points at
   by provider
 ```
 
-Check `samples` before you trust a percentile, because each sample covers about ten seconds. Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Check field paths against how the dataset maps `sdk.connection_report`. Nothing pages on this query.
+Check `samples` before you trust a percentile, because each sample covers about ten seconds. Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Nothing pages on this query.
 
 A rising `recv_paused_videos` with low receive bitrate means the own SFU is protecting audio on a slow link. It is not a receive stall.
 
@@ -76,4 +76,4 @@ Process-local diagnostics, such as the listener publication sampler, reset on an
 
 ## Transcription
 
-Transcript requests keep the dispatcher and API transcript lifecycle and its journey carrier. Failures keep bounded `provider_*` retry reasons and never carry transcript text, provider bodies or audio. A silent chunk completes with zero cues and zero cost, not as a provider failure.
+Transcript failures carry a bounded `provider_*` reason (see `apps/transcription-dispatcher/src/errors.ts`) and never transcript text, provider bodies or audio. A silent source completes with no cues and no cost, so it is not a provider failure.

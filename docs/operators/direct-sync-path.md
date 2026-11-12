@@ -58,7 +58,7 @@ The OpenTofu root accepts only `environment = "nightly"`, and `build-web` passes
 the direct URL to the nightly build only. Staging or production need a reviewed
 change to both.
 
-1. Apply the OpenTofu root with an Elastic IP, because the nightly host is a spot
+1. Apply the OpenTofu root with a stable public IPv4 address (for example an Elastic IP), because the nightly host is a spot
    instance whose address must survive stop and start.
 2. Install the proxy on the host with `direct-sync-proxy install` and confirm
    `direct-sync-proxy status` shows a valid certificate. Do this before the flag:

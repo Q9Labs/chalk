@@ -4,7 +4,7 @@ The call must stay responsive on constrained CPUs. The `call-performance` and `c
 
 ## What CI enforces
 
-CI enforces the deterministic parts only: gzip size limits for the call route and call states, and the lifecycle leak counts. It does not enforce timing limits. A shared runner is not a controlled timing environment, and the timing limits were measured on a dedicated 8-vCPU, 16-GiB runner. A timing from any other machine is not a budget result until the budgets are re-measured there.
+CI enforces the deterministic parts only: gzip size limits for the call route and call states, and the lifecycle leak counts. It does not enforce timing limits. A shared runner is not a controlled timing environment, so a timing from it is not a budget result until the budgets are re-measured on a reference runner.
 
 Run direct diagnostics with `--bundle-only` unless you are re-measuring on a reference runner. `--record-baseline` collects data without enforcing limits, so never use it to claim a pass. Run browser work on Instabox, not the laptop; see [gate operations](../scripts/gates/README.md). The pre-commit fast profile does not run browser measurements.
 

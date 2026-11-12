@@ -287,7 +287,7 @@ never the family.
 
 Cloudflare Realtime SFU: the media server that receives each Participant's
 tracks and forwards them to the others. It is Chalk's current MediaPlane
-adapter (`CloudflareMediaPlaneAdapter`), reached through the HTTPS API at
+adapter, reached through the HTTPS API at
 `rtc.live.cloudflare.com`. Say "Cloudflare SFU", not "Cloudflare Realtime".
 
 - **Cloudflare Realtime** is the product family (formerly Cloudflare Calls):

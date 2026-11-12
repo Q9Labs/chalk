@@ -1,3 +1,5 @@
+> **Plan, not authority.** This is one of our plans. It may be stale or wrong, and code, contracts and checks win wherever they disagree. Verify any claim here against code before relying on it.
+
 # Feature architecture
 
 Chalk is organized by feature. A feature is a product capability such as recording, chat or whiteboard, not a screen. Everything that makes a feature work lives in one folder, so an agent finds the feature's code, tests and rules in one place and can see from the folder what it depends on. Deployables don't change: each build collects its sources from the feature folders. Code that hasn't moved keeps the app layout until its feature moves.
@@ -8,7 +10,7 @@ Today `features/` holds `mcp`, `media` (including the own SFU) and `scorecard`. 
 
 - `features/<name>/` holds one capability end to end: Go and Elixir code, SDK code, its screens, infrastructure, migrations, queries and tests. A feature has only the parts it needs, and a deployable that serves one feature lives inside it.
 - `apps/` holds shells: deployables that combine features, plus the entry points, routes and frames they own (landing pages, dashboard frame, docs site frame, app navigation).
-- `foundation/` is for code every feature builds on that has no product meaning. It never uses a domain term from [GLOSSARY.md](../GLOSSARY.md). A package needs two feature users to be there; a package with one user moves into that feature. The folder doesn't exist yet: create it with the first such package.
+- `foundation/` is for code every feature builds on that has no product meaning. It never uses a domain term from [GLOSSARY.md](../../GLOSSARY.md). A package needs two feature users to be there; a package with one user moves into that feature. The folder doesn't exist yet: create it with the first such package.
 - Each feature has an `AGENTS.md` with its purpose and invariants (see `features/mcp/AGENTS.md`).
 
 ## Dependency rules
@@ -36,11 +38,11 @@ Media controls split the decision by direction, so the device and the server nev
 
 A feature owns its tables, and only its own code reads and writes them. Other features get the data through the owning feature's public entry. A table may reference another feature's table only when the feature depends on that one.
 
-Migration order is a property of the whole database, so migrations are ordered globally, not per feature. Removals keep the previous release runnable; see the [database workflow](../apps/api/docs/database-workflow.md).
+Migration order is a property of the whole database, so migrations are ordered globally, not per feature. Removals keep the previous release runnable; see the [database workflow](../../apps/api/docs/database-workflow.md).
 
 ## Contracts and versions
 
-A feature owns the contracts for its wire formats; generators write the bindings (see [contract codegen](contract-codegen.md)). Every contract and migration stays compatible with the previous released version. That is what makes changing both ends of a contract in one commit safe:
+A feature owns the contracts for its wire formats; generators write the bindings (see [contract codegen](../contract-codegen.md)). Every contract and migration stays compatible with the previous released version. That is what makes changing both ends of a contract in one commit safe:
 
 - The API and Sync release from the same commit, and old and new versions run side by side for minutes during a rolling deploy.
 - The web app reports its build version on connect and reloads at the next safe moment, such as the end of a call.
@@ -48,11 +50,11 @@ A feature owns the contracts for its wire formats; generators write the bindings
 
 ## Operations live in code
 
-Anything an agent may need to read or change is defined in this repository: infrastructure, DNS and edge rules, Workers, alerts, environment configuration, feature flags, store listings and CI settings. `infrastructure/` holds one root per environment. Secret values never enter the repository: code declares a secret by name, infrastructure creates it without a value, and the value lives in the secret store. Production identifiers stay out of Git, as [AGENTS.md](../AGENTS.md) requires.
+Anything an agent may need to read or change is defined in this repository: infrastructure, DNS and edge rules, Workers, alerts, environment configuration, feature flags, store listings and CI settings. `infrastructure/` holds one root per environment. Secret values never enter the repository: code declares a secret by name, infrastructure creates it without a value, and the value lives in the secret store. Production identifiers stay out of Git, as [AGENTS.md](../../AGENTS.md) requires.
 
 ## Tracing
 
-Every operation is a trace, and the request ID is the trace ID. A session is one run of a Chalk app on one device and covers dashboard use, API calls before a call and any number of joins, so every problem a user can report falls inside one. A session is never an Episode, even though the dashboard lists ended Episodes as "Past sessions". Session IDs, span attributes and journey IDs are described in [observability](observability.md).
+Every operation is a trace, and the request ID is the trace ID. A session is one run of a Chalk app on one device and covers dashboard use, API calls before a call and any number of joins, so every problem a user can report falls inside one. A session is never an Episode, even though the dashboard lists ended Episodes as "Past sessions". Session IDs, span attributes and journey IDs are described in [observability](../observability.md).
 
 ## Moving a feature
 

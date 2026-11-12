@@ -42,7 +42,6 @@ export function SpacePage() {
 Forward the `getAccess` request unchanged to your authenticated backend. Pass it
 as the final `participants.issueAccess` argument with the server-only state from
 `getAccessRefreshState`; Chalk selects replacement only when recovery needs it.
-See the [web quickstart](../../../docs/sdk-web-quickstart.md) for the endpoint call.
 
 Sound cues are on by default. People already in a call hear a quiet chime when
 a new participant joins, at most once every three seconds. Initial rosters,

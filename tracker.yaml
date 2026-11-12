@@ -508,7 +508,7 @@ wishlist:
       combinations that do not fit the initial capacity budgets.
     theory: theory.md#constraints
     code:
-      - docs/sfu/design.md
+      - docs/plans/sfu-design.md
       - features/media/sfu
       - apps/api/internal/adapters/chalksfu/adapter.go
       - apps/api/internal/mediaplane/service.go

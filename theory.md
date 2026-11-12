@@ -27,7 +27,7 @@ Read the values top down. A less-correct design loses regardless of speed. Among
 
 - **Flexible deployment.** The same product runs in Chalk's managed cloud or on a customer's own app tier. <!-- invariant:product-goals-flexible-deployment -->
 - **Two front doors.** A standalone app and an embeddable SDK are first-class surfaces. <!-- invariant:product-goals-two-front-doors -->
-- **One public web surface.** `@q9labsai/chalk-client` supplies `SpaceClient` and `AccessGrant`; `@q9labsai/chalk-react` supplies `ChalkProvider`, the closed hook set, `Entrance`, and the turnkey `<Chalk />` component. <!-- invariant:product-goals-one-public-web-surface -->
+- **One public web surface.** `@q9labsai/chalk-client` supplies `SpaceClient` and `AccessGrant`; `@q9labsai/chalk-react` supplies `ChalkProvider`, the closed hook set, and the turnkey `<Chalk />` component. <!-- invariant:product-goals-one-public-web-surface -->
 - **Cross-platform parity.** React and React Native expose the same component, prop, hook, event, and vocabulary surface, with differences only at OS or rendering seams. <!-- invariant:product-goals-cross-platform-parity -->
 - **Polyglot contracts.** The language-neutral contract is the source for generated clients and server bindings. TypeScript is the shipped SDK today; more language targets can consume the same contract when they have complete proof. <!-- invariant:product-goals-polyglot-contracts -->
 - **Replaceable media.** A MediaPlane adapter owns provider details while the public model stays Space, Episode, and Participant. <!-- invariant:product-goals-replaceable-media -->
@@ -39,7 +39,7 @@ The clean model carries these behaviors forward: <!-- invariant:product-memory-t
 
 - **Space lifecycle.** Create, read, update, list, and archive a durable Space. A join link names a Space slug, never an Episode. <!-- invariant:product-memory-space-lifecycle -->
 - **Episode lifecycle.** An Episode emerges when a permitted identity joins a Space without a live Episode. It can end explicitly, naturally after the linger window, or at the Space-configured deadline. An ended Episode is immutable. <!-- invariant:product-memory-episode-lifecycle -->
-- **Admission.** Token-asserted external identity, signed Space links, the `Entrance` preparation surface, capacity limits, reconnect grace, and explicit admission outcomes are all part of the join path. <!-- invariant:product-memory-admission -->
+- **Admission.** Token-asserted external identity, signed Space links, the Entrance step before joining, capacity limits, reconnect grace, and explicit admission outcomes are all part of the join path. <!-- invariant:product-memory-admission -->
 - **Participants.** A Participant is a per-Episode seat. User, Agent, and Guest identity kinds can occupy a seat, and the same User on two devices has two Participants. <!-- invariant:product-memory-participants -->
 - **Capabilities.** Chalk checks capabilities. Roles are customer-defined bundles, with `owner`, `collaborator`, and `observer` as the neutral defaults. UI reads capability state instead of guessing from role names. <!-- invariant:product-memory-capabilities -->
 - **Live sync.** Presence, active speaker, media signals, hand raise, reactions, chat, whiteboard updates, snapshots, recovery, and Episode-end signals travel through the SyncEngine. <!-- invariant:product-memory-live-sync -->
@@ -52,7 +52,7 @@ The clean model carries these behaviors forward: <!-- invariant:product-memory-t
 ## Constraints
 
 1. **Customer-operated app tier is a v1 requirement.** A customer can operate the API, SyncEngine, and standard Postgres while media continues through a configured MediaPlane adapter. Redis holds only short-lived state such as rate limits, OAuth state, and replay nonces; it is never a source of durable authority, and the durable core uses no vendor-specific database features. A Cloudflare-free media adapter remains a separate qualification. <!-- invariant:constraints-customer-operated-app-tier-is-a-v1-requirement -->
-2. **Both planes are ports.** `CloudflareMediaPlaneAdapter` and `SyncEngine` are implementations behind stable contracts. Provider specifics stay at adapter boundaries. <!-- invariant:constraints-both-planes-are-ports -->
+2. **Both planes are ports.** The Cloudflare SFU adapter and the `SyncEngine` are implementations behind stable contracts. Provider specifics stay at adapter boundaries. <!-- invariant:constraints-both-planes-are-ports -->
 3. **Core data stays provider-neutral.** Space, Episode, and Participant records hold opaque provider references and provider metadata, never provider-specific identity in the domain model. <!-- invariant:constraints-core-data-stays-provider-neutral -->
 4. **Durable facts live in Postgres.** Ordered control state, receipts, lifecycle intent, and Episode artifacts are durable. Presence, active-speaker hints, cursors, and track telemetry remain coordination signals. <!-- invariant:constraints-durable-facts-live-in-postgres -->
 5. **AccessGrant is opaque.** A customer's server receives the signed envelope and forwards it unchanged. Browser code never mints or inspects grant contents. <!-- invariant:constraints-accessgrant-is-opaque -->
