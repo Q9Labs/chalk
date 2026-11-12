@@ -17,7 +17,7 @@ export function BadgeView({ badge }: { readonly badge: Badge }) {
   );
 }
 
-export const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
+const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
 
 export function SessionsHead() {
   return (

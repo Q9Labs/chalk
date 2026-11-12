@@ -99,7 +99,7 @@ export function usePastSession(ids: Ids) {
 
 /** What a session's frame draws: the video or the reason there is none, the transcript beside it, and what can be downloaded. */
 /** A failure the page can't fix routes to support, with the page's link so they can find the session. */
-export const supportHref = (problem: string) => `mailto:support@chalkmeet.com?subject=${encodeURIComponent(problem)}&body=${encodeURIComponent(`Session: ${window.location.href}`)}`;
+const supportHref = (problem: string) => `mailto:support@chalkmeet.com?subject=${encodeURIComponent(problem)}&body=${encodeURIComponent(`Session: ${window.location.href}`)}`;
 
 export type Parts = {
   readonly recording: RecordingDTO | undefined;

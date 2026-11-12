@@ -1,12 +1,5 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
-import { parseLegacyListSearch } from "../lib/dashboard/search";
+import { legacyListRoute } from "../lib/dashboard/search";
 
-/** The old recordings list: a link filtered to one call opens that call, where its sessions, recordings and transcripts live. Others open Home. */
-export const Route = createFileRoute("/dashboard/_app/recordings")({
-  validateSearch: parseLegacyListSearch,
-  beforeLoad: ({ search }) => {
-    if (search.spaceId) throw redirect({ to: "/dashboard/call/$spaceId", params: { spaceId: search.spaceId }, replace: true });
-    throw redirect({ to: "/dashboard", replace: true });
-  },
-});
+export const Route = createFileRoute("/dashboard/_app/recordings")(legacyListRoute);

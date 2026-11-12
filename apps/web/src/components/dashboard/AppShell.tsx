@@ -22,7 +22,7 @@ function useSignInRedirect(): () => void {
   }, [router]);
 }
 
-export type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
+type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
 
 /** A polling answer applied to the page's latest data, so a write made while the read was in flight is kept and no answer is dropped. */
 export class Change<T> {
