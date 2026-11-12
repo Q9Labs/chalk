@@ -29,5 +29,5 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /out/chalk-sfu /usr/local/bin/chalk-sfu
 
 USER 65532:65532
-EXPOSE 8443/tcp 50000/udp
+EXPOSE 8443/tcp 50000/udp 50000/tcp
 ENTRYPOINT ["/usr/local/bin/chalk-sfu"]

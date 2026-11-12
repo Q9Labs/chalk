@@ -358,9 +358,9 @@ func (p *publication) stop() { p.stopSending(); p.senders.Wait() }
 
 // publishKnownMedia pushes a microphone and a camera track on connection conn and starts
 // sending known RTP on both, as the SDK does.
-func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope) *publication {
+func publishKnownMedia(t *testing.T, svc *service, conn string, scope protocol.Scope, configure ...func(*webrtc.SettingEngine)) *publication {
 	t.Helper()
-	alice := newPeer(t)
+	alice := newPeer(t, configure...)
 	audio, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "mic", scope.ParticipantID)
 	if err != nil {
 		t.Fatal(err)
