@@ -5,7 +5,7 @@ import React, { Suspense, useEffect, useState } from "react";
 import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon, VolumeHighIcon } from "../../utils/icons";
-import { DevicePopover } from "../device-popover/DevicePopover";
+import { DevicePopover, preloadDeviceSheet } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
@@ -127,6 +127,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
         <DockLayout
           layout={props.layout ?? "focus"}
           onLayoutChange={props.onLayoutChange ?? (() => {})}
+          onOpen={preloadDeviceSheet}
           devices={
             <>
               {has("mic") ? (
