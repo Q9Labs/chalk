@@ -31,22 +31,18 @@ export function callEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicr
 function rosterEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const self = next.self.participantId;
   const before = new Map(previous.participants.roster.map((participant) => [participant.participantId, participant]));
-  const after = new Map(next.participants.roster.map((participant) => [participant.participantId, participant]));
-  const events: CallEvent[] = [];
-
-  const departed = [...before.values()].filter((participant) => !after.has(participant.participantId) && participant.participantId !== self);
+  const after = next.participants.roster;
+  const departed = previous.participants.roster.filter((participant) => participant.participantId !== self && !after.some((current) => current.participantId === participant.participantId));
   const becameHost = !previous.self.can("endEpisode") && next.self.can("endEpisode");
   const departedHost = becameHost ? departed.find((participant) => participant.capabilities.includes("endEpisode")) : undefined;
-  if (becameHost) events.push({ kind: "hostChanged", previousHost: departedHost ?? null });
-
-  for (const participant of after.values()) {
-    if (participant.participantId === self) continue;
+  const hostChanged: CallEvent[] = becameHost ? [{ kind: "hostChanged", previousHost: departedHost ?? null }] : [];
+  const others = after.flatMap((participant): CallEvent[] => {
+    if (participant.participantId === self) return [];
     const old = before.get(participant.participantId);
-    if (!old) events.push({ kind: "joined", participant });
-    else events.push(...changedParticipantEvents(old, participant));
-  }
-  for (const participant of departed) if (participant !== departedHost) events.push({ kind: "left", participant });
-  return events;
+    return old ? changedParticipantEvents(old, participant) : [{ kind: "joined", participant }];
+  });
+  const left = departed.filter((participant) => participant !== departedHost).map((participant): CallEvent => ({ kind: "left", participant }));
+  return [...hostChanged, ...others, ...left];
 }
 
 function changedParticipantEvents(old: Participant, participant: Participant): CallEvent[] {
@@ -57,14 +53,19 @@ function changedParticipantEvents(old: Participant, participant: Participant): C
 }
 
 function mutedByHostEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicrophoneOff: boolean): CallEvent[] {
-  if (previous.media.local.microphone.state !== "enabled" || next.media.local.microphone.state !== "disabled" || ownMicrophoneOff) return [];
+  const wentOff = previous.media.local.microphone.state === "enabled" && next.media.local.microphone.state === "disabled";
+  return wentOff && !ownMicrophoneOff ? [{ kind: "mutedByHost", by: soleMuter(next) }] : [];
+}
+
+/** The one participant who could have muted the microphone, or null when there are none or several. */
+function soleMuter(next: SpaceSnapshot): Participant | null {
   const muters = next.participants.roster.filter((participant) => participant.participantId !== next.self.participantId && participant.capabilities.includes("muteOthers"));
-  return [{ kind: "mutedByHost", by: muters.length === 1 ? (muters[0] ?? null) : null }];
+  return muters.length === 1 ? (muters[0] ?? null) : null;
 }
 
 function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const knownRequests = new Set(previous.media.incomingRequests.map((request) => request.requestId));
-  return next.media.incomingRequests.filter((request) => !knownRequests.has(request.requestId)).map((request) => ({ kind: "mediaRequest", request }));
+  return next.media.incomingRequests.filter((request) => !knownRequests.has(request.requestId)).map((request): CallEvent => ({ kind: "mediaRequest", request }));
 }
 
 function recordingEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
