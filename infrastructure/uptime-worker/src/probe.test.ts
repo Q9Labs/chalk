@@ -65,33 +65,62 @@ test("a rejected admission names its stage", async () => {
   }
 });
 
-test("a page whose delivery fails is kept and delivered on the next cycle", async () => {
+const api = new URL("https://api.example");
+const sync = new URL("https://sync.example");
+
+/** A KV that records when each write commits; `control.lateCommitMs` delays the next one. */
+function fakeKv() {
   const store = new Map<string, string>();
   const writeTimes: number[] = [];
-  let lateCommitMs = 0;
+  const control = { lateCommitMs: 0 };
   const kv = {
     get: async (key: string) => (store.has(key) ? JSON.parse(store.get(key) ?? "null") : null),
     put: async (key: string, value: string) => {
-      const late = lateCommitMs;
-      lateCommitMs = 0;
+      const late = control.lateCommitMs;
+      control.lateCommitMs = 0;
       await new Promise((resolve) => setTimeout(resolve, late));
       writeTimes.push(Date.now());
       store.set(key, value);
     },
   } as unknown as KVNamespace;
-  const env = { PROBE_API_KEY: "k", PROBE_TENANT_ID: "t", PROBE_SPACE_ID: "s", PROBE_STATE: kv };
-  const original = globalThis.fetch;
-  globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
-  const sent: string[] = [];
-  const failing = async () => {
-    throw new Error("webhook down");
+  return { kv, store, writeTimes, control, env: { PROBE_API_KEY: "k", PROBE_TENANT_ID: "t", PROBE_SPACE_ID: "s", PROBE_STATE: kv } };
+}
+
+/** Fetch for a join that succeeds or is refused at the first call. */
+function fakeJoin(healthy: boolean): typeof fetch {
+  const socket = {
+    accept: () => undefined,
+    close: () => undefined,
+    send: () => undefined,
+    addEventListener: (type: string, listener: (event: { data: string }) => void) => {
+      if (type === "message") queueMicrotask(() => listener({ data: JSON.stringify({ type: "welcome" }) }));
+    },
   };
+  return (async (input: URL | RequestInfo) => {
+    const path = new URL(input instanceof Request ? input.url : input.toString()).pathname;
+    if (!healthy) return new Response(null, { status: 503 });
+    if (path.endsWith("/episodes")) return Response.json({ id: "ep1" }, { status: 201 });
+    if (path.endsWith("/participants")) return Response.json({ sync_token: "token" }, { status: 201 });
+    if (path.endsWith("/end")) return Response.json({}, { status: 202 });
+    return Object.assign(new Response(null), { webSocket: socket });
+  }) as typeof fetch;
+}
+
+const failing = async () => {
+  throw new Error("webhook down");
+};
+
+test("a page whose delivery fails is kept and delivered on the next cycle", async () => {
+  const { env, writeTimes, control } = fakeKv();
+  const original = globalThis.fetch;
+  globalThis.fetch = fakeJoin(false);
+  const sent: string[] = [];
   try {
-    const cycle = (deliver: (message: string) => Promise<void>) => runJoinProbe(env, new URL("https://api.example"), new URL("https://sync.example"), deliver);
+    const cycle = (deliver: (message: string) => Promise<void>) => runJoinProbe(env, api, sync, deliver);
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 0);
     await assert.rejects(cycle(failing), /webhook down/);
-    lateCommitMs = 300;
+    control.lateCommitMs = 300;
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 1);
     assert.match(sent[0], /create episode/);
@@ -100,6 +129,38 @@ test("a page whose delivery fails is kept and delivered on the next cycle", asyn
     assert.ok(last - before >= 990);
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a recovery follows an outage page that was never delivered", async () => {
+  const { env, store } = fakeKv();
+  store.set("join-probe", JSON.stringify({ status: "down", failures: 4, pending: "outage page" }));
+  const original = globalThis.fetch;
+  globalThis.fetch = fakeJoin(true);
+  const sent: string[] = [];
+  try {
+    await runJoinProbe(env, api, sync, async (message) => void sent.push(message));
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /^outage page\n\nChalk join probe recovered/);
+    assert.deepEqual(JSON.parse(store.get("join-probe") ?? "null"), { status: "up", failures: 0 });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("clearing a delivered page leaves a newer page that another cycle stored meanwhile", async () => {
+  const { env, store } = fakeKv();
+  const original = globalThis.fetch;
+  globalThis.fetch = fakeJoin(false);
+  try {
+    await runJoinProbe(env, api, sync, async () => undefined);
+    await runJoinProbe(env, api, sync, async () => {
+      // A manual run stores its own page while this webhook call is still open.
+      store.set("join-probe", JSON.stringify({ status: "down", failures: 3, pending: "newer page" }));
+    });
+    assert.equal(JSON.parse(store.get("join-probe") ?? "null").pending, "newer page");
   } finally {
     globalThis.fetch = original;
   }

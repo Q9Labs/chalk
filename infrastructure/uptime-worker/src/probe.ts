@@ -132,7 +132,8 @@ export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: 
   const result = await joinProbe(env, api, sync);
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
-  const pending = message ?? previous?.pending;
+  // An undelivered page stays in front of a newer message, so a recovery never replaces the outage page it follows.
+  const pending = [previous?.pending, message].filter((part): part is string => typeof part === "string").join("\n\n");
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
   const wroteAt = Date.now();
   console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");
@@ -140,5 +141,8 @@ export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: 
   await deliver(pending);
   // KV accepts one write per key per second, and a rejected clear would resend the delivered message every cycle.
   await new Promise((resolve) => setTimeout(resolve, Math.max(0, KV_WRITE_SPACING_MS - (Date.now() - wroteAt))));
-  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(next));
+  // Another cycle may have stored a newer state while the webhook was slow. Clear only the message that was delivered, from the state as it is now.
+  const current = await env.PROBE_STATE.get(STATE_KEY, "json");
+  if (!isProbeState(current) || current.pending !== pending) return;
+  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify({ status: current.status, failures: current.failures }));
 }
