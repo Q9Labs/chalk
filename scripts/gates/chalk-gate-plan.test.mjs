@@ -11,6 +11,7 @@ const selected = (files, event) =>
 test("documentation selects only the always-on lane group on every event", () => {
   for (const event of ["pull_request", undefined]) {
     assert.deepEqual(jobs(["docs/observability.md"], event), { api: false, sync: false, rootGroups: ["checks"] });
+    assert.ok(selected(["docs/observability.md"], event).includes("feature-map"));
   }
 });
 

@@ -36,7 +36,7 @@ test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => 
   assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
@@ -209,7 +209,8 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
     mkdirSync(join(dir, "bin"));
     const lease = join(dir, "scripts/staging-sfu/gate-lease");
     const pnpm = join(dir, "bin/pnpm");
-    writeFileSync(lease, `#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\n${leaseStatus === 0 ? 'exec "$@"' : `exit ${leaseStatus}`}\n`);
+    // staging-lock rejects a purpose that is not a plain label, so the stand-in rejects it too.
+    writeFileSync(lease, `#!/usr/bin/env bash\n[[ "$2" =~ ^[A-Za-z0-9_-]{1,100}$ ]] || { echo "staging-lock: error: argument --purpose: use a plain label" >&2; exit 2; }\nwhile [ "$1" != -- ]; do shift; done; shift\n${leaseStatus === 0 ? 'exec "$@"' : `exit ${leaseStatus}`}\n`);
     copyFileSync(resolve(root, "scripts/staging-sfu/run-proofs"), join(dir, "scripts/staging-sfu/run-proofs"));
     chmodSync(join(dir, "scripts/staging-sfu/run-proofs"), 0o755);
     const cases = Object.entries(failing)
@@ -301,7 +302,7 @@ const capMinutes = (step) => {
 const proofStep = proof.jobs.smoke.steps.find((item) => item.name === "Prove a real call");
 const jobCap = Number(/chalk_sfu' && (\d+) \|\|/.exec(proof.jobs.smoke["timeout-minutes"])?.[1]);
 const cutWaits = {
-  "camera-share proof": Number(/STAGING_LEASE_WAIT=(\d+) scripts\/staging-sfu\/gate-lease nightly-proof /.exec(proofStep.run)?.[1]),
+  "camera-share proof": Number(/STAGING_LEASE_WAIT=(\d+) scripts\/staging-sfu\/gate-lease nightly-proof nightly-proofs /.exec(proofStep.run)?.[1]),
   "latency retry": Number(/attempt === 1 \? "0" : "(\d+)"/.exec(readFileSync(resolve(root, "features/scorecard/staging-latency.mjs"), "utf8"))?.[1]),
 };
 

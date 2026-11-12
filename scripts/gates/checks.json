@@ -21,6 +21,16 @@
       "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:feature-map",
+      "owner": "Gate",
+      "catches": "A feature folder or owner appears in the code without an entry in the feature map, or an entry outlives its folder.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
       "id": "gate:workflow-graph",
       "owner": "Release chain",
       "catches": "A workflow or scorecard edit breaks the cut, proof, Promote or scorecard graph that releases depend on.",

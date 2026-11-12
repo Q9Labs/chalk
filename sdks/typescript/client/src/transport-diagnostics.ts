@@ -23,4 +23,5 @@ export type ConnectionReportTransportEvent = Pick<
   | "receive_counts"
   | "receivers_stopped"
   | "bundle_tag_held"
+  | "upload_failure"
 >;

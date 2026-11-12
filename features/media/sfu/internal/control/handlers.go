@@ -134,10 +134,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	default:
 		return errors.Join(media.ErrInvalidRequest, errors.New("unknown session kind"))
 	}
+	trace := traceOf(r)
 	response, err := create(request.OperationID, request.Scope, request.AllocationGeneration)
 	if err != nil {
+		s.traceRefused(request, trace, err)
 		return err
 	}
+	s.traceRegistered(request, trace, response.ConnectionID)
 	writeJSON(w, http.StatusOK, response)
 	return nil
 }
@@ -204,7 +207,7 @@ func (s *Server) removeSession(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	session.Close()
+	session.CloseFor(media.CloseRemoved)
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
@@ -287,7 +290,11 @@ func (s *Server) sessionFor(w http.ResponseWriter, r *http.Request, body any, sc
 	if err := s.decode(w, r, body); err != nil {
 		return nil, err
 	}
-	return s.node.Session(r.PathValue("connectionId"), scope())
+	session, err := s.node.Session(r.PathValue("connectionId"), scope())
+	if err == nil {
+		session.Note(traceOf(r))
+	}
+	return session, err
 }
 
 // decode reads one bounded JSON body and rejects unknown fields and trailing data.

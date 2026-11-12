@@ -122,6 +122,7 @@ func (s *subscription) start() {
 		s.mu.Unlock()
 	}
 	s.pub.addSubscriber(s)
+	s.owner.traceSubscriptionStarted(s)
 	// A session that closed between pull and start already detached it.
 	if s.closed.Load() {
 		s.pub.removeSubscriber(s)
@@ -173,8 +174,12 @@ func (s *subscription) reselect(views []layerView) int {
 		}
 	}
 	if reason != s.reason {
+		s.owner.traceSubscriptionPause(s, s.reason, reason)
 		s.reason = reason
 		s.revision++
+	}
+	if target != s.target {
+		s.owner.traceSubscriptionLayer(s, target)
 	}
 	s.target = target
 	current := s.translator.layer()
@@ -516,6 +521,7 @@ func (s *subscription) detach() bool {
 	}
 	s.interest.Store(0)
 	s.pub.removeSubscriber(s)
+	s.owner.traceSubscriptionStopped(s)
 	if s.lease != nil {
 		s.owner.node.releaseCapture(s.owner, s.lease)
 	}

@@ -71,7 +71,7 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	}
 	n.mu.Unlock()
 	for _, session := range ended {
-		session.Close()
+		session.CloseFor(CloseRetired)
 	}
 	if !recorded {
 		return protocol.RetireEpisodeResponse{}, errRetirementsFull

@@ -825,6 +825,40 @@ it("parks a muted microphone on the SFU and resumes the same publication without
   );
 });
 
+it("toggles the microphone and the camera many times without one close, add or offer", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await publishMicrophone(h);
+      h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
+      const camOn = { ...micOn, operationId: "cam-on", source: "camera" as const };
+      await expect(h.client.setLocalPublicationTarget(camOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      const offers = h.transport.renegotiateInputs.length;
+      const adds = h.transport.addInputs.length;
+      const toggles = 20;
+      for (let toggle = 0; toggle < toggles; toggle++) {
+        await h.client.closeForcedLocalPublication("microphone", "user_pause");
+        await h.client.closeForcedLocalPublication("camera", "user_pause");
+        await h.client.setLocalSourceIntent("microphone", true);
+        await expect(h.client.setLocalPublicationTarget(micOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+        await h.client.setLocalSourceIntent("camera", true);
+        await expect(h.client.setLocalPublicationTarget(camOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      }
+      const paused = h.transport.updateInputs.flatMap((input) => input.tracks.map((track) => track.paused));
+      expect(paused).toEqual(Array.from({ length: toggles }, () => [true, true, false, false]).flat());
+      expect(h.transport.closeInputs).toHaveLength(0);
+      expect(h.transport.addInputs).toHaveLength(adds);
+      expect(h.transport.renegotiateInputs).toHaveLength(offers);
+      expect(
+        h.client
+          .getSnapshot()
+          .localTracks.map((track) => track.source)
+          .sort(),
+      ).toEqual(["camera", "microphone"]);
+    },
+    { bootstrap: muteInPlaceBootstrap },
+  );
+});
+
 it("resumes a parked microphone with a fresh track after the idle release ended the old one", async () => {
   await withTimedHarness(
     async (h) => {

@@ -11,7 +11,7 @@ const designTokenOptions = {
   roots: ["apps/web/src", "packages/ui/src", "sdks/typescript/react/src", "sdks/typescript/react-native/src", "apps/mobile"],
   ignore: ["**/theme/tokens.ts"],
 };
-const alwaysIds = new Set(["self-test", "hygiene", "secrets", "generated", "format"]);
+const alwaysIds = new Set(["self-test", "feature-map", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
   "apps/api",
   "apps/sync",
