@@ -6,7 +6,7 @@
 # A Space holds one live Episode, so proofs on one Space run one after another. call-artifacts has its own Space
 # (the automatic Recording and Transcript one), so it can run beside the others, but each proof serves its guests from a
 # proof_origin that the Tenant allows by port. call-artifacts runs beside the others only when CHALK_PROOF_PROOF_ORIGIN_OWN
-# names a second allowed origin for it; otherwise every proof runs one after another on CHALK_PROOF_PROOF_ORIGIN.
+# names a second allowed origin on another port for it; otherwise every proof runs one after another on CHALK_PROOF_PROOF_ORIGIN.
 # Each proof's exit status goes to <status-dir>/<proof>, and a failed proof does not stop the rest. Exit 0 means every proof passed.
 set -uo pipefail
 
@@ -38,7 +38,7 @@ lane() {
 
 mkdir -p "$status_dir"
 origin=${CHALK_PROOF_PROOF_ORIGIN:?CHALK_PROOF_PROOF_ORIGIN is not set}
-if [ -n "${CHALK_PROOF_PROOF_ORIGIN_OWN:-}" ] && [ "$CHALK_PROOF_PROOF_ORIGIN_OWN" != "$origin" ]; then
+if [ -n "${CHALK_PROOF_PROOF_ORIGIN_OWN:-}" ] && [ "${CHALK_PROOF_PROOF_ORIGIN_OWN##*:}" != "${origin##*:}" ]; then
   shared=()
   own=()
   for proof in "$@"; do
