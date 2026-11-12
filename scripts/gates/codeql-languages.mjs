@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Prints the CodeQL languages a pull request needs as a JSON array: `codeql-languages.mjs <base-ref>`.
+// Prints the CodeQL languages a merge group needs as a JSON array: `codeql-languages.mjs <base-sha>`.
 // `--full` prints every language, which the weekly run uses.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
