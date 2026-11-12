@@ -62,7 +62,7 @@ jobs:
 
       - name: Select release packages
         run: |
-          filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; console.log(releasePackages.map(({ name }) => "--filter " + name).join(" "));')"
+          filters="$(node --input-type=module -e 'import { releasePackages } from "./scripts/lib/release-packages.mjs"; console.log(releasePackages.map(({ name }) => "--filter " + name).join(" "));')"
           echo "RELEASE_FILTERS=$filters" >> "$GITHUB_ENV"
 
       - name: Build packages
@@ -98,7 +98,7 @@ jobs:
               package_filters+=(--filter "$package_name")
             fi
           done < <(
-            node --input-type=module -e 'import { releasePackages } from "./scripts/npm-release.mjs"; for (const { name, version } of releasePackages) console.log(name+"\t"+version);'
+            node --input-type=module -e 'import { releasePackages } from "./scripts/lib/release-packages.mjs"; for (const { name, version } of releasePackages) console.log(name+"\t"+version);'
           )
           if (( ${#package_filters[@]} == 0 )); then
             echo "All release versions are already published."

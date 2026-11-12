@@ -7,45 +7,22 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { chalkReleaseVersion, releasePackages } from "./lib/release-packages.mjs";
+import { repositoryRoot } from "./lib/repository.mjs";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const registry = "https://registry.npmjs.org/";
-const githubRepository = "Q9Labs/chalk";
-const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs"]);
 const attwIgnoreRules = ["cjs-resolves-to-esm", "internal-resolution-error"];
 const attwExcludedEntrypoints = ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"];
-
-// The release set is discovered below; only this version-bump policy is fixed.
-const synchronizedPackageNames = new Set(["@q9labsai/chalk-assets", "@q9labsai/facehash", "@q9labsai/chalk-ui", "@q9labsai/chalk-whiteboard", "@q9labsai/chalk-client", "@q9labsai/chalk-react", "@q9labsai/chalk-react-native"]);
-
-export function deriveReleasePackages(workspaces) {
-  const byName = new Map(workspaces.map((workspace) => [workspace.manifest.name, workspace]));
-  const publicWorkspaces = workspaces.filter(({ manifest }) => manifest.private !== true);
-  for (const { manifest } of publicWorkspaces) {
-    for (const name of Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies })) {
-      if (byName.get(name)?.manifest.private === true) {
-        throw new Error(`${manifest.name} has a runtime dependency on private workspace ${name}`);
-      }
-    }
-  }
-  return publicWorkspaces.map(({ directory, manifest }) => ({ directory, name: manifest.name, version: manifest.version, independent: !synchronizedPackageNames.has(manifest.name) }));
-}
-
-const workspaces = JSON.parse(execFileSync("pnpm", ["--recursive", "list", "--depth", "-1", "--json"], { cwd: repositoryRoot, encoding: "utf8" })).map((workspace) => ({
-  directory: path.relative(repositoryRoot, workspace.path),
-  manifest: JSON.parse(readFileSync(path.join(workspace.path, "package.json"), "utf8")),
-}));
-export const releasePackages = Object.freeze(deriveReleasePackages(workspaces));
+const githubRepository = "Q9Labs/chalk";
+const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs"]);
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));
-export const chalkReleaseVersion = releasePackages.find(({ name }) => name === "@q9labsai/chalk-assets").version;
 
 export function usage() {
   return `Usage:
   pnpm run package:release                 Build, validate, and pack only (default)
   pnpm run package:release -- --publish   Build, validate, and publish after confirmation
-  pnpm run package:release -- --bump 4.2.0 Rewrite versions, workspace ranges, and the lockfile
+  pnpm run package:release -- --bump 4.2.0 Rewrite versions and the lockfile
 
 Options:
   --dry-run              Keep the default no-publish mode explicit; with --bump, list the files without writing
@@ -185,13 +162,8 @@ function dependencySections(packageManifest) {
   return ["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"].flatMap((section) => Object.entries(packageManifest[section] ?? {}));
 }
 
-export function workspaceRangeMatches(range, expectedVersion) {
-  const value = String(range);
-  if (!value.startsWith("workspace:")) return false;
-  const requested = value.slice("workspace:".length).trim();
-  if (["", "*", "^", "~"].includes(requested)) return true;
-  const version = requested.replace(/^[<>=~^ ]+/, "").split(/[ ,]/, 1)[0];
-  return version === expectedVersion;
+export function isPlainWorkspaceRange(range) {
+  return ["workspace:^", "workspace:~", "workspace:*"].includes(String(range));
 }
 
 function localDependencies(packageManifest, allowedPackages = packageByName) {
@@ -273,9 +245,8 @@ function publishConfigErrors(packageManifest) {
 }
 
 function workspaceDependencyError({ name, range }) {
-  const expectedVersion = packageByName.get(name).version;
-  if (workspaceRangeMatches(range, expectedVersion)) return null;
-  return `workspace dependency ${name} uses ${range}, expected a range for ${expectedVersion}`;
+  if (isPlainWorkspaceRange(range)) return null;
+  return `workspace dependency ${name} uses ${range}, expected workspace:^ so a release edits no dependent`;
 }
 
 function workspaceDependencyErrors(packageManifest) {
@@ -569,25 +540,10 @@ async function dispatchRelease() {
 
 const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
-function replaceAllText(text, from, to) {
-  return text.split(from).join(to);
-}
-
-export function bumpWorkspaceRange(range, fromVersion, toVersion) {
-  if (!workspaceRangeMatches(range, fromVersion) || !String(range).includes(fromVersion)) return range;
-  return replaceAllText(String(range), fromVersion, toVersion);
-}
-
 function bumpManifestText(text, fromVersion, toVersion) {
   const packageManifest = JSON.parse(text);
-  let next = text;
   const synchronized = releasePackages.some(({ name, independent }) => name === packageManifest.name && !independent);
-  if (synchronized) next = next.replace(`"version": "${fromVersion}"`, `"version": "${toVersion}"`);
-  for (const { name, range } of localDependencies(packageManifest).filter(({ name }) => synchronizedPackageNames.has(name))) {
-    const bumped = bumpWorkspaceRange(range, fromVersion, toVersion);
-    if (bumped !== range) next = replaceAllText(next, `"${name}": "${range}"`, `"${name}": "${bumped}"`);
-  }
-  return next;
+  return synchronized ? text.replace(`"version": "${fromVersion}"`, `"version": "${toVersion}"`) : text;
 }
 
 // Takes a map of relative path to file text for every workspace package.json.
@@ -638,8 +594,7 @@ export async function main(argumentsList = process.argv.slice(2)) {
   await dispatchRelease();
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : null;
-if (invokedPath === import.meta.url) {
+if (import.meta.main) {
   main().catch((error) => {
     console.error(`npm release failed: ${error.message}`);
     process.exitCode = 1;
