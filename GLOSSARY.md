@@ -5,15 +5,11 @@ sync wire, SDKs, infrastructure, and observability. Keep those names consistent
 in code. Vendored standard terms (WebRTC "track", CallKit, Cloudflare SFU
 vocabulary) stay foreign and are translated at adapter seams.
 
-Vocabulary decisions and their rationale are in git history:
-`git show 3f6d94f9:scratchpad/history/2026-W32.md`.
-
 Space and Episode are the names used in the model and API contracts. In the
 dashboard, a **call** is presented as a reusable link backed by a Space;
 **Past sessions** lists that Space's ended Episodes. A call can also mean the
 live activity in ordinary conversation, so use the context. These are
 user-facing words for the same concepts, not additional domain resources.
-There is no CI word ban or banned-term baseline.
 
 ## The model
 
@@ -44,9 +40,8 @@ dashboard context is unambiguous.
 
 **Tenant access** is a Dashboard Account's assignment to a Tenant, including its
 control-plane Role. It is not Space membership and never makes the Account a
-Space Member or Episode Participant. The existing `memberships` persistence and
-route names are implementation vocabulary; customer-facing contracts use
-Tenant access.
+Space Member or Episode Participant. The `memberships` persistence and route names are
+implementation vocabulary; customer-facing contracts use Tenant access.
 
 ### Space
 
@@ -163,28 +158,12 @@ synonym for an MP4 file, a browser player, or a particular processing job. A
 **Recording presentation** is the frozen description of what that Recording
 shows over time: source visibility, layout, shared content, and required assets.
 
-The terms below distinguish work and media representations. They do not
-introduce new public commands, artifact types, or readiness states, and do not
-promise that a proposed playback mode is implemented.
+These terms separate the stages of Recording work:
 
-| Term                  | Meaning                                                                                                                                                                                                                                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Media source**      | One published source belonging to a Participant, such as microphone audio, camera video, or screen-share video. A Participant can publish several sources or none. Record which source and timing each transport stream belongs to rather than treating a transport identifier as Participant identity.           |
-| **Track**             | A standard media/transport term for one audio or video stream, not a Participant. Three Participants publishing a microphone and camera each produce three audio tracks and three video tracks before any screen sharing. Transport replacement or additional encodings need not create a new domain Participant. |
-| **Source media**      | The captured audio/video used to produce a Recording's outputs, together with the timing and gap information needed to interpret it. Captured media is normally already codec-compressed. It is distinct from a finished composite file.                                                                          |
-| **Capture**           | Receiving and durably storing authorized source media and the inputs needed to reproduce the Recording presentation. Capture does not imply visual composition or creation of a finished file.                                                                                                                    |
-| **Preparation**       | Reconstructing usable, correctly timed source media from captured inputs. This can include packet assembly, container packaging, gap handling, and required codec normalization. It does not imply composing the sources into one picture.                                                                        |
-| **Audio preparation** | Preparing correctly timed microphone audio for Transcription without producing video frames or an MP4. It can still require downloading and decrypting capture bundles containing several media sources. It is distinct from speech recognition.                                                                  |
-| **Composition**       | Arranging video sources and visual layers into one output picture according to the Recording presentation. Combining compressed files in a container is not visual composition.                                                                                                                                   |
-| **Audio mixing**      | Combining audio sources into an output audio stream. It is separate from visual composition.                                                                                                                                                                                                                      |
-| **Rendering**         | Producing output visual frames from the Recording presentation, including the required composition. The existing **render job** is a broader execution unit that also performs preparation, encoding, verification, and upload; its elapsed time is not rendering time alone.                                     |
-| **Encoding**          | Compressing video frames or audio samples using a codec. **Transcoding** decodes already encoded media and encodes it again. These operations are distinct from container packaging.                                                                                                                              |
-| **Muxing**            | Packaging encoded audio/video streams and their timing into a container. **Remuxing** changes that packaging without re-encoding the media where compatibility permits. Neither operation creates a combined visual layout.                                                                                       |
-| **Codec**             | The scheme used to encode/decode media, such as H.264 or VP8 for video and AAC or Opus for audio. Codec choice is distinct from container choice.                                                                                                                                                                 |
-| **MP4**               | A standard media container. A typical Recording export contains one composed video stream and one mixed audio stream in it. MP4 is not a codec, quality level, compositor, or processing-time guarantee.                                                                                                          |
-| **Export**            | Producing a portable file from a Recording. Depending on the output, this can require preparation, rendering, audio mixing, encoding, and muxing. An existing file can be downloaded again without repeating that work. Export is not a second artifact identity.                                                 |
-| **Playback**          | Decoding and presenting recorded media to a viewer. Ordinary file playback consumes a finished media file. **Multi-source playback** synchronizes separate source media and presentation events on the viewer's device; it is a distinct product capability, not another name for an MP4 download.                |
-| **Seeking**           | Moving playback to a chosen time. Ordinary media-container/player seeking is distinct from implementing synchronized seeking across multiple sources and presentation events.                                                                                                                                     |
+- **Capture** receives and stores authorized source media and the inputs needed to reproduce the Recording presentation. It does not compose video or create a finished file.
+- **Preparation** reconstructs usable, correctly timed source media from captured inputs. **Audio preparation** does this for Transcription without producing video frames or an MP4.
+- **Rendering** produces output frames from the Recording presentation. The **render job** is the broader execution unit that also prepares, encodes, verifies and uploads, so its elapsed time is not rendering time alone.
+- **Export** produces a portable file (an MP4) from a Recording. An existing file is downloaded again without repeating the work, and Export is not a second artifact identity.
 
 Use explicit milestone names in design discussions: **capture complete**,
 **preparation complete**, and **export ready**. Do not say "recording ready" to
@@ -192,47 +171,10 @@ mean different milestones interchangeably, or invent corresponding API states
 without a separate contract change. Use **recorded duration** for source length
 and **processing time** for elapsed work; never present one as the other.
 
-### Spinoff
-
-A new Space derived from a live or ending Episode, seeded with invited
-Participants from it. The word for branching off: mid-Episode or at the
-end, a Participant with the capability spins off and continues with a
-chosen subset in a fresh Space.
-
-- Identity: a full Space in its own right — its own slug, config, members,
-  and content. Derivation is provenance, not a lifecycle tie; the source
-  Episode ends or continues on its own terms.
-- Behavior: spinning off never ends the source Episode for those who stay.
-  Invited Participants present in the source Episode are asked in place;
-  absent Members are Buzzed.
-- Not: a breakout, a huddle, a branch (git owns that word), or a parallel
-  Episode — a Spinoff is a separate Space, honoring one live Episode per
-  Space.
-- Reserved neighbor: **Aside** is held for a possible future in-Episode
-  private lane. An Aside would stay inside the Episode; a Spinoff leaves
-  it.
-
-### Buzz
-
-A real-time summons that rings a Member's devices and deep-links them
-into a Space: what a phone product would call ringing someone.
-
-- Delivery: native call surfaces where available (CallKit, Telecom),
-  push otherwise, email as the durable fallback. Vendored call-stack
-  vocabulary (CallKit, ConnectionService) stays foreign at adapter
-  seams.
-- Semantics: a Buzz is an invitation, not an obligation — accepted,
-  declined, or expired. Accepting joins the Space; join still targets
-  the Space, never an Episode.
-- Relations: a Spinoff Buzzes invited Members who are not in the source
-  Episode.
-- Not: a call, a ring, a page, or a notification (a Buzz may travel as
-  one, but the concept is the summons).
-
 ### `<Chalk />`
 
 The turnkey UI component: the complete embedded experience dropped into a
-customer's app. Replaces VideoConference. It is a full name, not a prefix;
+customer's app. It is a full name, not a prefix;
 its interior tree is platform-named (SpaceView, Stage, panels)
 with no `Chalk*` symbols.
 
@@ -260,24 +202,6 @@ participant identity, expirations. Customers
 never construct or inspect it; the client's `getAccess` callback returns
 it and Connection manages its refresh.
 
-### React bindings
-
-`@q9labsai/chalk-react` and `@q9labsai/chalk-react-native` expose an
-**identical public surface**: same component names, props, hooks,
-events, vocabulary. Both bind to the one SpaceSnapshot store, so parity
-is structural. Divergence is allowed in exactly two documented places —
-implementation seams (CallKit/OS permissions; CSS custom properties on
-web vs mapped style values on RN, same token names) and a small platform
-delta inside `features` where a capability genuinely doesn't exist —
-and is never a shape difference.
-
-The public hooks are a closed set: `useSpaceClient()` (the client, for
-commands); one hook per snapshot slice — `useConnection()`, `useSelf()`,
-`useParticipants()`, `useMedia()`, `useChat()`, `useReactions()`,
-`useWhiteboard()`; and `useCan(capability)` as sugar over the self
-slice's `can()`. No `Chalk` prefix (the package is the namespace), and
-no other public hooks: anything a component needs comes from these.
-
 ## Vendor terms
 
 Vendor names stay foreign and live at adapter seams. Name the exact product,
@@ -286,8 +210,8 @@ never the family.
 ### Cloudflare SFU
 
 Cloudflare Realtime SFU: the media server that receives each Participant's
-tracks and forwards them to the others. It is Chalk's current MediaPlane
-adapter, reached through the HTTPS API at
+tracks and forwards them to the others. It is one of Chalk's MediaPlane
+adapters (Chalk's own SFU is the other), reached through the HTTPS API at
 `rtc.live.cloudflare.com`. Say "Cloudflare SFU", not "Cloudflare Realtime".
 
 - **Cloudflare Realtime** is the product family (formerly Cloudflare Calls):
@@ -300,11 +224,6 @@ adapter, reached through the HTTPS API at
   built on top of the SFU. Chalk does not use it.
 - The `CHALK_CLOUDFLARE_REALTIME_*` environment variables hold Cloudflare SFU
   app credentials despite the family name.
-
-## Episode control stream
-
-The control stream is per Episode. It starts fresh for each Episode and
-continues across a blip-rejoin within the linger window.
 
 ## Laws
 
@@ -334,15 +253,11 @@ Every name is a domain root crossed with a layer shape:
 | DB table     | plural snake_case                              | `episodes`, `space_members`   |
 | UI component | shape suffix states the form                   | `ChatPanel`, `SettingsDialog` |
 
-- Command verbs are a closed set: `join`/`leave`, `set`, `enable`/`disable`,
-  `select`, `start`/`stop`, `send`, `admit`/`deny`, `remove`, `end`. No
-  `toggle`, `handle`, `process`, or `do` in public commands.
 - UI shape suffixes: Screen, View, Panel, Dialog, Sheet, Popover, Menu,
   Overlay, Banner, Toast, Picker, Selector, Indicator, Preview. The suffix
   states the shape; the prefix states the subject.
 - No `Chalk` prefix on symbols anywhere: the package is the namespace.
   Case-by-case exception only for Go/Elixir internals with real collisions.
-- The sync protocol is v1, and `state_schema_version` is 1.
 
 ## Legacy domain names
 
@@ -351,9 +266,6 @@ Every name is a domain root crossed with a layer shape:
 | bot, assistant, AI        | Banned as domain nouns; the identity kind is Agent |
 | attendee, peer, actor     | Banned roster nouns; the word is Participant       |
 | signal (for availability) | Banned; the word is Presence                       |
-| VideoConference           | Replaced by `<Chalk />`                            |
-| breakout, huddle          | Banned; the branch-off concept is a Spinoff        |
-| ring (as a summons)       | Banned as a domain word; the summons is a Buzz     |
 
 These mappings describe domain concepts, not forbidden words in user-facing
 copy. Product-layer features may carry their own names.

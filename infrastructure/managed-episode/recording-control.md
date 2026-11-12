@@ -34,8 +34,7 @@ presentation contract; the managed API version must not overwrite them.
 - Fleet controllers use host networking to reach the local API TLS listener;
   their configured server name must match its certificate. The API's issuer URL
   must be reachable from its rootless network with the configured TLS server name.
-- The versioned SSM inventory adds three environment files and thirteen private
-  secret files. Environment values are never sourced as shell. Mounted keys are
+- The versioned SSM inventory adds the `recorder-*` environment and secret files (see `contracts/runtime-inputs.json`). Environment values are never sourced as shell. Mounted keys are
   readable only by container UID 65532. The worker CA signing key is mounted only
   in the issuer. Provider credentials are scoped by process and environment.
 - Separate named Podman volumes hold capture/render journals and issuer state.
@@ -43,9 +42,7 @@ presentation contract; the managed API version must not overwrite them.
   state file one process owner. Restart releases the lock, not the state. Do not
   delete volumes or run a second controller against separate copies of a journal.
 
-Candidate limits are 128 MiB / 0.25 CPU for each fleet process and 256 MiB /
-0.5 CPU for the issuer. These are bounds, not measured headroom guarantees.
-No production build, benchmark, browser load or media encoding belongs here.
+No production build, benchmark, browser load or media encoding belongs on the backend host.
 
 ## Restore, rollback and verification
 
@@ -59,7 +56,6 @@ disable the feature and use forward-compatible application rollback instead.
 Local checks:
 
 ```bash
-bash infrastructure/managed-episode/scripts/test-recording-control
 bash infrastructure/managed-episode/scripts/test-deployment-controller
 bash scripts/recorder/qualify-capture-local.sh
 ```

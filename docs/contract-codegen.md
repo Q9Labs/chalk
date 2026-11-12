@@ -2,9 +2,7 @@
 
 Chalk publishes generated artifacts with its SDKs, and the generated output is checked in. Consumers, runtime services and package installation never run the generator. Change the source (Go endpoint declarations, sync-v1 and whiteboard contracts), then regenerate.
 
-Run `pnpm run regen` after changing a contract, route, migration or other generator input. It runs every generator in dependency order; see `package.json` for the list. `pnpm run check:generated` finds stale output without Postgres or Docker. `pnpm run contract:check` runs the non-mutating contract checks, and the root gate includes it. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts, then run `pnpm run regen`. For endpoint declarations, see the [API route guide](../apps/api/docs/route-workflow.md).
-
-`scripts/codegen/generate-sdk.sh` is the entry point for the SDK output: it exports the OpenAPI contract from the Go API and runs the emitters in `tools/contract-fixture-proof/src/emitters/` for TypeScript and Elixir.
+Run `pnpm run regen` after changing a contract, route, migration or other generator input. It runs every generator in dependency order. `pnpm run check:generated` finds stale output without Postgres or Docker. `pnpm run contract:check` runs the non-mutating contract checks, and the root gate includes it. Run `pnpm run hooks:install` once so rebases keep one side of generated files without conflicts, then run `pnpm run regen`. For endpoint declarations, see the [API route guide](../apps/api/docs/route-workflow.md).
 
 ## What generation must preserve
 

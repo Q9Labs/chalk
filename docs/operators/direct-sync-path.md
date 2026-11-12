@@ -16,12 +16,7 @@ target.
 
 ## How it works
 
-- A client with a direct URL tries it first and falls back to the Tunnel when the
-  socket errors, closes before its first server frame, or is not open after 2.5
-  seconds. After a failure every client in the page skips the direct URL for 10
-  minutes, so a blocked path costs at most one 2.5 second wait. The client logic
-  is in `sdks/typescript/client/src/sync/direct-first.ts` and
-  `sdks/typescript/client/src/direct-path.ts`.
+- A client with a direct URL tries it first and falls back to the Tunnel on error, early close or a 2.5 second timeout. After a failure every client in the page skips the direct URL for 10 minutes, so a blocked path costs at most one 2.5 second wait (`sdks/typescript/client/src/sync/direct-first.ts`).
 - A grant for an own-SFU Space can carry `directSignalingUrl` from
   `CHALK_API_DIRECT_URL`. With the SDK default `directPath: "auto"`, the client
   then uses the door for SFU signalling and, when the build sets no

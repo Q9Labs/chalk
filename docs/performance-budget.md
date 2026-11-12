@@ -21,9 +21,3 @@ Run direct diagnostics with `--bundle-only` unless you are re-measuring on a ref
 ## Changing a budget
 
 Change a budget in its own pull request that edits `perf/budgets.json` and adds a reason line to `_comment`. Give the user trade-off, old and new measurements (at least five repetitions on the same class of runner with min, median, max, CPU and Chromium version), and why the cost is worth it. Do not raise a budget to turn CI green. Compare production code against the pinned baseline commit in the data file, never against whichever revision passes today. Commit new measurements separately from product changes.
-
-## References
-
-- [CDP CPU slowdown](https://chromedevtools.github.io/devtools-protocol/tot/Emulation/#method-setCPUThrottlingRate)
-- [CDP performance metrics](https://chromedevtools.github.io/devtools-protocol/tot/Performance/#method-getMetrics)
-- [Event Timing specification](https://www.w3.org/TR/event-timing/)

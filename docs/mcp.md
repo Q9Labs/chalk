@@ -116,5 +116,4 @@ The `MCP production check` workflow (`.github/workflows/mcp-production-check.yml
 runs every six hours and after each production Promote. It expects a 401 with
 OAuth discovery on an unauthenticated request, then uses the proof Tenant's key
 for `initialize`, the tool list and one read. Run it by hand with
-`scripts/mcp-proof/check.mjs` (it reads `CHALK_PROOF_API_URL` and
-`CHALK_PROOF_API_KEY`). Set `CHALK_MCP_EXPECT_OAUTH=false` where OAuth is off.
+`scripts/mcp-proof/check.mjs`, and set `CHALK_MCP_EXPECT_OAUTH=false` where OAuth is off.

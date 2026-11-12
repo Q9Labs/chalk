@@ -16,16 +16,7 @@ The migration input is separate from these application secrets. The mandatory
 unit, and removed before API or Sync starts. It is never mounted in either
 runtime service and has no exclusion path.
 
-| Source file                          | Podman secret                         | Container target                                        |
-| ------------------------------------ | ------------------------------------- | ------------------------------------------------------- |
-| `provider-bridge/api-server.crt`     | `chalk-api-provider-server-cert`      | `/run/chalk/provider-bridge/server.crt`                 |
-| `provider-bridge/api-server.key`     | `chalk-api-provider-server-key`       | `/run/chalk/provider-bridge/server.key`                 |
-| `provider-bridge/sync-client-ca.crt` | `chalk-api-provider-client-ca`        | `/run/chalk/provider-bridge/client-ca.crt`              |
-| `provider-bridge/sync-client.crt`    | `chalk-sync-provider-client-cert`     | `/run/chalk/provider-bridge/client.crt`                 |
-| `provider-bridge/sync-client.key`    | `chalk-sync-provider-client-key`      | `/run/chalk/provider-bridge/client.key`                 |
-| `provider-bridge/api-server-ca.crt`  | `chalk-sync-provider-server-ca`       | `/run/chalk/provider-bridge/server-ca.crt`              |
-| `cloudflare/tunnel-token`            | `chalk-cloudflare-tunnel-token`       | `/run/secrets/tunnel-token`                             |
-| `migration/database-url`             | `chalk-managed-migrator-database-url` | `/run/chalk/migrate/database-url` (migration unit only) |
+The source-file to Podman-secret to container-target map lives in `chalk-deployment-controller` and the Quadlet units. The `migration/database-url` secret mounts only in the migration unit.
 
 The API server certificate must contain `chalk-api` in its DNS SAN. The Sync
 client certificate identity must satisfy the API's SPIFFE trust-domain and

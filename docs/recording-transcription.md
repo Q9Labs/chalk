@@ -6,11 +6,7 @@ keeps the decisions behind that pipeline and its release boundaries. Routes live
 in the API contracts, and the code is under `apps/api/internal/recorderworker`,
 `recordingpipeline`, `transcripts` and `apps/transcription-dispatcher`.
 
-Related: [duration limits](recording/duration-limit.md),
-[completion recovery](recording/completion-recovery.md),
-[whiteboard assets](recording-whiteboard.md),
-[shared-host rollout](../infrastructure/managed-episode/recording-control.md) and
-[managed releases](managed-release.md).
+Related: [duration limits](recording/duration-limit.md), [completion recovery](recording/completion-recovery.md), [whiteboard assets](recording-whiteboard.md) and [managed releases](managed-release.md).
 
 ## Shape
 
