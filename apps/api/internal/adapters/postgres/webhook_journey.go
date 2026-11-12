@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
 func insertWebhookJourneyEvent(ctx context.Context, tx pgx.Tx, eventID, journeyID utilities.ID, sequence int64, name, state string, parentID utilities.ID, traceID, spanID string, attributes map[string]any) error {
@@ -27,8 +28,8 @@ func webhookJourneyPhase(state string) string {
 	}
 }
 
-func insertWebhookAPIRootJourneyEvent(ctx context.Context, tx pgx.Tx, eventID, journeyID utilities.ID, name, traceID, spanID string) error {
-	return insertWebhookOperationRoot(ctx, tx, eventID, journeyID, "api."+name+".requested", traceID, spanID, map[string]any{"event_name": name})
+func insertWebhookAPIRootJourneyEvent(ctx context.Context, tx pgx.Tx, eventID, journeyID utilities.ID, name webhooks.EventName, traceID, spanID string) error {
+	return insertWebhookOperationRoot(ctx, tx, eventID, journeyID, "api."+string(name)+".requested", traceID, spanID, map[string]any{"event_name": name})
 }
 
 func insertWebhookOperationRoot(ctx context.Context, tx pgx.Tx, eventID, journeyID utilities.ID, name, traceID, spanID string, attributes map[string]any) error {
