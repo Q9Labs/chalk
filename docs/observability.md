@@ -88,9 +88,9 @@ Two questions decide most bad calls. "Why did forwarding stop" is answered by `s
 Time to first audio is measurable on both planes: the client reports `ice_connected` and `first_audio_bytes` (`duration_ms` since the media connection started, once per connection, `first_audio_bytes` to the 5 s sample interval) in `sdk.connection_report` summaries. `video_receive_stalled` reports a visible, live, unpaused video whose decoded frames stopped growing for 8 s.
 
 ```apl
-| where ['episode_id'] == "<episode-id>" and ['service.name'] == "chalk-sfu"
+| where ['attributes.episode_id'] == "<episode-id>" and ['service.name'] == "chalk-sfu"
 | where _time between (datetime(<from>) .. datetime(<to>))
-| project _time, event, participant_id, connection_id, state, cause, reason, path, source, layer, trace_id
+| project _time, event = ['attributes.event'], participant_id = ['attributes.participant_id'], connection_id = ['attributes.connection_id'], state = ['attributes.state'], cause = ['attributes.cause'], reason = ['attributes.reason'], path = ['attributes.path'], source = ['attributes.source'], layer = ['attributes.layer'], trace_id = ['attributes.trace_id']
 | sort by _time asc
 ```
 
