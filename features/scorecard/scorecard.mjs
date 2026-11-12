@@ -19,6 +19,7 @@ import { diffMetrics, renderTable } from "./diff.mjs";
 import { contentionMarkdown } from "./contention.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
+import { withoutRetiredMetrics } from "./baseline.mjs";
 import { SCORECARD_SCHEMA, countsAsEvidence, parseScorecard } from "./schema.mjs";
 
 const read = (path) => readFileSync(path, "utf8");
@@ -81,7 +82,7 @@ async function diff(argv) {
     options: { baseline: { type: "string" }, current: { type: "string" }, title: { type: "string", default: "Performance scorecard" }, "baseline-label": { type: "string", default: "the latest master run" }, markdown: { type: "string" }, "fail-on-gate": { type: "boolean" } },
   });
   const current = parseScorecard(readJson(values.current));
-  const candidate = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
+  const candidate = values.baseline ? parseScorecard(withoutRetiredMetrics(readJson(values.baseline))) : undefined;
   const baseline = candidate && countsAsEvidence(candidate) ? candidate : undefined;
   const { budgets } = await readBudgets();
   validateBudgetEntries(budgets);
