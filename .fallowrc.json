@@ -4,6 +4,8 @@
     "features/scorecard/scorecard.mjs",
     "scripts/dev/share-audio-proof.mjs",
     "tools/formal/media-control/trace-diff.mjs",
+    "tools/formal/public-invite-access/PublicInviteAccess.view.mjs",
+    "tools/formal/recording-pipeline/RecordingPipeline.view.mjs",
     "tools/formal/sync-entry-leave/EntryLeave.view.mjs",
     "scripts/dev/multi-device-proof.mjs",
     "scripts/dev/camera-backgrounds-sfu-proof.mjs",
@@ -173,6 +175,7 @@
   "health": {
     "ignore": [
       "features/scorecard/**",
+      "tools/formal/**/*.view.mjs",
       "scripts/prod-proof/**",
       "**/dist/**",
       "**/*.test.ts",
