@@ -1,12 +1,13 @@
 // The selected ICE pair of the joining guest's first peer connection, for the diagnostics sidecar. latency-trace.mjs marks each
 // "ice_connected" with a unique connection token and reads the pair afterwards ("ice_pair", same token); these pure functions pick the one the join timed
 // and summarize it over the kept cycles. Nothing here reads or changes the card: a reading that is missing or malformed is null.
-import { ICE_CANDIDATE_TYPES } from "../../features/scorecard/diagnostics.mjs";
+import { ICE_CANDIDATE_TYPES, ICE_RELAY_PROTOCOLS } from "../../features/scorecard/diagnostics.mjs";
 import { summarize } from "./latency-stats.mjs";
 
-/** @typedef {{ local_type: string | null, remote_type: string | null, requests_sent: number | null, responses_received: number | null, read_after_ms: number | null }} IceReading */
+/** @typedef {{ local_type: string | null, remote_type: string | null, relay_protocol: string | null, requests_sent: number | null, responses_received: number | null, read_after_ms: number | null }} IceReading */
 
 const candidateType = (value) => (ICE_CANDIDATE_TYPES.includes(value) ? value : null);
+const relayProtocol = (value) => (ICE_RELAY_PROTOCOLS.includes(value) ? value : null);
 const milliseconds = (value) => (Number.isFinite(value) && value >= 0 ? value : null);
 const counter = (value) => (Number.isSafeInteger(value) && value >= 0 ? value : null);
 
@@ -32,7 +33,14 @@ export function icePairOf(events, t0) {
       continue;
     }
     if (typeof connected.peer !== "number" || reading?.peer !== connected.peer) continue;
-    return { local_type: candidateType(reading.local), remote_type: candidateType(reading.remote), requests_sent: counter(reading.requestsSent), responses_received: counter(reading.responsesReceived), read_after_ms: milliseconds(reading.readAfterMs) };
+    return {
+      local_type: candidateType(reading.local),
+      remote_type: candidateType(reading.remote),
+      relay_protocol: relayProtocol(reading.relayProtocol),
+      requests_sent: counter(reading.requestsSent),
+      responses_received: counter(reading.responsesReceived),
+      read_after_ms: milliseconds(reading.readAfterMs),
+    };
   }
   return null;
 }
@@ -41,7 +49,7 @@ export function icePairOf(events, t0) {
  * iceSummary counts the cycles by pair type and gives n, p50 and p95 of the checks the winning pair sent that never got a reply
  * (requestsSent - responsesReceived). A pair that reports more replies than requests has no such count and is left out of it.
  * @param {(IceReading | undefined)[]} readings
- * @returns {{ pairs: Record<string, number>, unanswered_checks: { n: number, p50: number | null, p95: number | null } } | undefined}
+ * @returns {{ pairs: Record<string, number>, relay_protocols?: Record<string, number>, unanswered_checks: { n: number, p50: number | null, p95: number | null } } | undefined}
  *   undefined when no cycle has a reading.
  */
 export function iceSummary(readings) {
@@ -51,5 +59,7 @@ export function iceSummary(readings) {
   for (const ice of found) pairs[pairKey(ice)] = (pairs[pairKey(ice)] ?? 0) + 1;
   const unanswered = found.map((ice) => (ice.requests_sent === null || ice.responses_received === null ? null : ice.requests_sent - ice.responses_received)).filter((value) => value !== null && value >= 0);
   const { n, p50, p95 } = summarize(unanswered.map((value) => ({ unanswered: value }))).unanswered ?? { n: 0, p50: null, p95: null };
-  return { pairs, unanswered_checks: { n, p50, p95 } };
+  const relayProtocols = {};
+  for (const ice of found) if (ice.relay_protocol) relayProtocols[ice.relay_protocol] = (relayProtocols[ice.relay_protocol] ?? 0) + 1;
+  return { pairs, ...(Object.keys(relayProtocols).length ? { relay_protocols: relayProtocols } : {}), unanswered_checks: { n, p50, p95 } };
 }

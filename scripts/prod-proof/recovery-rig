@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Faults on one guest's network for recovery.mjs, on a Linux host with root (an Instabox machine).
+#
+#   recovery-rig up            # make namespace "c2" with two uplinks and print the launcher for --guest2-chromium
+#   recovery-rig blackout      # c2's packets vanish, links stay up (a stalled Wi-Fi)
+#   recovery-rig restore       # undo blackout
+#   recovery-rig change        # c2 loses its address and default route and takes a new one on another uplink (Wi-Fi to another network)
+#   recovery-rig down          # remove the namespace, the uplinks and the NAT rule
+#
+# Guest 2's Chromium runs inside c2 through the launcher; guest 1 stays on the host's own network, so only guest 2 loses its network.
+set -euo pipefail
+
+ns=c2
+dir=/tmp/recovery-rig
+launcher="$dir/chromium-c2"
+
+nat() { # nat <add|del> <subnet>
+  local flag=-A; [[ "$1" == del ]] && flag=-D
+  iptables -t nat "$flag" POSTROUTING -s "$2" -j MASQUERADE 2> /dev/null || true
+}
+
+uplink() { # uplink <n>: host side 10.200.<n>.1, guest side 10.200.<n>.2
+  ip link add "h$1" type veth peer name "g$1"
+  ip link set "g$1" netns "$ns"
+  ip addr add "10.200.$1.1/24" dev "h$1"
+  ip link set "h$1" up
+  nat add "10.200.$1.0/24"
+}
+
+case "${1:-}" in
+  up)
+    ip netns add "$ns"
+    sysctl -qw net.ipv4.ip_forward=1
+    ip netns exec "$ns" ip link set lo up
+    uplink 1
+    uplink 2
+    ip netns exec "$ns" ip link set g1 up
+    ip netns exec "$ns" ip addr add 10.200.1.2/24 dev g1
+    ip netns exec "$ns" ip route add default via 10.200.1.1
+    mkdir -p "$dir"
+    chromium="$(cd sdks/typescript/client && node -e 'console.log(require("playwright").chromium.executablePath())')"
+    printf '#!/usr/bin/env bash\nexec ip netns exec %s %q "$@"\n' "$ns" "$chromium" > "$launcher"
+    chmod +x "$launcher"
+    echo "$launcher"
+    ;;
+  blackout)
+    ip netns exec "$ns" iptables -I OUTPUT -j DROP
+    ip netns exec "$ns" iptables -I INPUT -j DROP
+    ;;
+  restore)
+    ip netns exec "$ns" iptables -D OUTPUT -j DROP
+    ip netns exec "$ns" iptables -D INPUT -j DROP
+    ;;
+  change)
+    ip netns exec "$ns" ip link set g1 down
+    ip netns exec "$ns" ip link set g2 up
+    ip netns exec "$ns" ip addr add 10.200.2.2/24 dev g2
+    ip netns exec "$ns" ip route add default via 10.200.2.1
+    ;;
+  down)
+    ip netns del "$ns" 2> /dev/null || true
+    for n in 1 2; do
+      ip link del "h$n" 2> /dev/null || true
+      nat del "10.200.$n.0/24"
+    done
+    rm -rf "$dir"
+    ;;
+  *)
+    echo "usage: recovery-rig up|blackout|restore|change|down" >&2
+    exit 2
+    ;;
+esac

@@ -92,6 +92,7 @@ export function installLatencyTrace() {
   // getStats is never called while the SDK or a measured interval runs: a connection only leaves a marker (see below), and the harness
   // asks for the readings with proofTrace.readIce() between measured intervals.
   const CANDIDATE_TYPES = ["host", "srflx", "prflx", "relay"];
+  const RELAY_PROTOCOLS = ["udp", "tcp", "tls"];
   const candidateType = (report, id) => {
     const type = typeof id === "string" ? report.get(id)?.candidateType : undefined;
     return CANDIDATE_TYPES.includes(type) ? type : null;
@@ -103,7 +104,8 @@ export function installLatencyTrace() {
     for (const row of report.values()) if (row.type === "transport" && row.selectedCandidatePairId) pair = report.get(row.selectedCandidatePairId);
     if (!pair) for (const row of report.values()) if (row.type === "candidate-pair" && row.nominated && row.state === "succeeded") pair = row;
     if (!pair) return null;
-    return { local: candidateType(report, pair.localCandidateId), remote: candidateType(report, pair.remoteCandidateId), requestsSent: counter(pair.requestsSent), responsesReceived: counter(pair.responsesReceived) };
+    const relayProtocol = typeof pair.localCandidateId === "string" ? report.get(pair.localCandidateId)?.relayProtocol : undefined;
+    return { local: candidateType(report, pair.localCandidateId), remote: candidateType(report, pair.remoteCandidateId), relayProtocol: RELAY_PROTOCOLS.includes(relayProtocol) ? relayProtocol : null, requestsSent: counter(pair.requestsSent), responsesReceived: counter(pair.responsesReceived) };
   }
 
   const READ_TIMEOUT_MS = 2000;
@@ -158,6 +160,26 @@ export function installLatencyTrace() {
         if (Number.isFinite(seconds)) values.push(seconds * 1000);
       }
       return values.length ? Math.round(Math.min(...values) * 10) / 10 : null;
+    },
+
+    // What this page received over the call so far, per kind: the loss share and the browser's jitter estimate. Cumulative since the
+    // connection started, summed over the connected peer connections; a kind with no packets reads null.
+    async receiveStats() {
+      const kinds = { audio: { received: 0, lost: 0, jitter: [] }, video: { received: 0, lost: 0, jitter: [] } };
+      for (const peer of window.proofConnections ?? []) {
+        if (peer.connectionState !== "connected") continue;
+        for (const row of (await peer.getStats()).values()) {
+          if (row.type !== "inbound-rtp") continue;
+          const kind = kinds[row.kind ?? row.mediaType];
+          if (!kind) continue;
+          kind.received += row.packetsReceived ?? 0;
+          kind.lost += Math.max(0, row.packetsLost ?? 0);
+          if (Number.isFinite(row.jitter)) kind.jitter.push(row.jitter * 1000);
+        }
+      }
+      const lossPct = ({ received, lost }) => (received + lost > 0 ? Math.round((lost / (received + lost)) * 10000) / 100 : null);
+      const jitterMs = ({ jitter }) => (jitter.length ? Math.round(Math.max(...jitter) * 10) / 10 : null);
+      return { audio_loss_pct: lossPct(kinds.audio), video_loss_pct: lossPct(kinds.video), audio_jitter_ms: jitterMs(kinds.audio), video_jitter_ms: jitterMs(kinds.video) };
     },
 
     // Cumulative audio receive counters summed over the connected peer connections. Two reads a window apart give averages for that window.
