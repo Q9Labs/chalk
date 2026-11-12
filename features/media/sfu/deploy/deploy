@@ -17,6 +17,10 @@
 # would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. SSH uses SFU_SSH_KEY (default ~/.ssh/chalk-sfu-operator_ed25519); the script exits at the start if that file is missing. Metrics export
 # turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
 # which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
+# The capture worker beside the SFU is installed when the directory also holds capture.conf
+# (NODE_ID, CONTROL_PLANE_URL, SERVER_NAME), capture-ca.crt (certs capture-ca) and bridge-ca.crt.
+# Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
+# Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
@@ -211,6 +215,65 @@ fi
 sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" \
   "${deploy_dir}/chalk-sfu.container.in" |
   as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
+# The capture worker beside the SFU is on when the operator directory holds capture.conf and the
+# worker identity. Without them the deploy removes the worker, so switching it off is deleting
+# those files and deploying again; every capture then goes to the on-demand fleet.
+capture_on=false
+if [[ -f "${dir}/capture.conf" ]]; then
+  for file in capture-ca.crt bridge-ca.crt; do
+    [[ -f "${dir}/${file}" ]] || { echo "capture.conf is present but ${dir}/${file} is missing; see certs ... capture-ca" >&2; exit 1; }
+  done
+  capture_on=true
+fi
+if $capture_on; then
+  echo "==> building chalk-recorder-capture at ${revision}"
+  repo_root="$(git -C "$sfu_root" rev-parse --show-toplevel)"
+  if [[ -n "$(git -C "$repo_root" status --porcelain -- apps/api features/mcp/api)" ]]; then
+    echo "apps/api or features/mcp/api has uncommitted changes; the capture image must match ${revision}" >&2
+    exit 1
+  fi
+  docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
+    --build-context "api=${repo_root}/apps/api" --build-context "mcpapi=${repo_root}/features/mcp/api" \
+    --file "${deploy_dir}/Dockerfile.capture" --tag "chalk-recorder-capture:${revision}" --load "$deploy_dir" >/dev/null
+  docker save "chalk-recorder-capture:${revision}" | as_sfu podman load --quiet >/dev/null
+  capture_image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-recorder-capture:${revision}")"
+  loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$capture_image_id")"
+  [[ "$loaded" == "$revision" ]] || { echo "node image ${capture_image_id} is revision ${loaded}, want ${revision}" >&2; exit 1; }
+  for pair in worker-cert:capture-worker.crt worker-key:capture-worker.key server-ca:bridge-ca.crt; do
+    name="chalk-capture-${pair%%:*}"
+    replace=()
+    as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
+    as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
+  done
+  # capture.conf holds NODE_ID (this node's ID in CHALK_SFU_NODES), CONTROL_PLANE_URL, SERVER_NAME and
+  # optionally SLOTS; no secrets. Every deploy issues the node's worker identity afresh, so it never
+  # lapses, and refuses to install one that is not this node's, from the capture CA, with 14 days left.
+  node_id="$(sed -n 's/^NODE_ID=//p' "${dir}/capture.conf")"
+  [[ -n "$node_id" ]] || { echo "${dir}/capture.conf needs NODE_ID=" >&2; exit 1; }
+  "${deploy_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
+  "${deploy_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
+  control_plane_url="$(sed -n 's/^CONTROL_PLANE_URL=//p' "${dir}/capture.conf")"
+  server_name="$(sed -n 's/^SERVER_NAME=//p' "${dir}/capture.conf")"
+  slots="$(sed -n 's/^SLOTS=//p' "${dir}/capture.conf")"
+  [[ -n "$control_plane_url" && -n "$server_name" ]] || { echo "${dir}/capture.conf needs CONTROL_PLANE_URL= and SERVER_NAME=" >&2; exit 1; }
+  # The worker gets a share the SFU was not admitted against: a quarter of the vCPUs and of the
+  # memory. The measured per-recording cost in the PR keeps well inside it.
+  if ((memory_kib > 1536 * 1024)); then
+    capture_memory=384m capture_gomemlimit=320MiB capture_cpus=0.5
+  else
+    capture_memory=192m capture_gomemlimit=160MiB capture_cpus=0.25
+  fi
+  sed -e "s|__ENVIRONMENT__|${spiffe_environment}|" -e "s|__CONTROL_PLANE_URL__|${control_plane_url}|" -e "s|__SERVER_NAME__|${server_name}|" \
+    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${deploy_dir}/capture.env.in" |
+    as_sfu sh -c "'umask 077 && cat > .config/chalk-sfu/capture.env'"
+  sed -e "s|__IMAGE__|${capture_image_id}|" -e "s|__MEMORY_LIMIT__|${capture_memory}|" -e "s|__CPU_LIMIT__|${capture_cpus}|" \
+    "${deploy_dir}/chalk-recorder-capture.container.in" |
+    as_sfu sh -c "'cat > .config/containers/systemd/chalk-recorder-capture.container'"
+else
+  echo "==> no capture.conf: the capture worker is off on this node"
+  remote systemctl --user -M chalk-sfu@ stop chalk-recorder-capture >/dev/null 2>&1 || true
+  as_sfu sh -c "'rm -f .config/containers/systemd/chalk-recorder-capture.container .config/chalk-sfu/capture.env'"
+fi
 remote systemctl --user -M chalk-sfu@ daemon-reload
 
 port=$((20000 + RANDOM % 20000))
@@ -298,3 +361,14 @@ echo "ready: incarnation $(jq -r .nodeIncarnation <<<"$ready"), budget $(jq -r .
 sent="$(jq -r '.host.udpSendBufferBytes' <<<"$ready")"
 echo "send buffer ${sent} bytes, send-buffer drops $(jq -r '.host.udpSendBufferErrors // "unknown"' <<<"$ready")"
 ((sent >= 8388608)) || { echo "the send buffer is below 8 MiB; check net.core.wmem_max" >&2; exit 1; }
+
+if $capture_on; then
+  echo "==> starting the capture worker"
+  remote systemctl --user -M chalk-sfu@ restart chalk-recorder-capture
+  for _ in $(seq 15); do
+    remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-recorder-capture && break
+    sleep 2
+  done
+  remote systemctl --user -M chalk-sfu@ is-active --quiet chalk-recorder-capture || { echo "the capture worker did not start" >&2; exit 1; }
+  as_sfu podman image prune --force >/dev/null
+fi

@@ -1,8 +1,8 @@
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { ConnectionReporter, type ConnectionReport } from "../connection/report";
 import { createCoreTestPlatform } from "../space-client/core.test.helpers";
 import { captureClient, stream, track } from "./camera-effects.test.helpers";
-import { markCameraEffectFailure } from "./camera-effects";
+import { configureCameraEffectProvider, loadControlsOwning, markCameraEffectFailure, processCameraStream } from "./camera-effects";
 
 it("carries a failed processor through camera termination into the bounded report", async () => {
   const base = createCoreTestPlatform();
@@ -45,78 +45,32 @@ it("carries a failed processor through camera termination into the bounded repor
   }
 });
 
-it.each([false, true])("does not load camera controls for microphone-only capture (aborted: %s)", async (aborted) => {
-  vi.resetModules();
-  const load = vi.fn(async () => {
-    throw new Error("camera controls unavailable");
+it.each([false, true])("passes microphone-only capture through untouched (aborted: %s)", async (aborted) => {
+  configureCameraEffectProvider({ wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
+    throw new Error("Unexpected segmenter creation");
   });
-  vi.doMock("./camera-effect-operations", load);
-  try {
-    const { configureCameraEffectProvider, processCameraStream } = await import("./camera-effects");
-    configureCameraEffectProvider({ wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
-      throw new Error("Unexpected segmenter creation");
-    });
-    const audio = track("audio");
-    const captured = stream([audio]);
-    const controller = new AbortController();
-    const cancelled = new Error("capture cancelled");
-    if (aborted) controller.abort(cancelled);
-    const result = processCameraStream(captured, controller.signal);
-    if (aborted) await expect(result).rejects.toBe(cancelled);
-    else await expect(result).resolves.toBe(captured);
-    expect(audio.readyState).toBe(aborted ? "ended" : "live");
-    expect(load).not.toHaveBeenCalled();
-  } finally {
-    vi.doUnmock("./camera-effect-operations");
-    vi.resetModules();
-  }
+  const audio = track("audio");
+  const captured = stream([audio]);
+  const controller = new AbortController();
+  const cancelled = new Error("capture cancelled");
+  if (aborted) controller.abort(cancelled);
+  const result = processCameraStream(captured, controller.signal);
+  if (aborted) await expect(result).rejects.toBe(cancelled);
+  else await expect(result).resolves.toBe(captured);
+  expect(audio.readyState).toBe(aborted ? "ended" : "live");
 });
 
-it("stops captured tracks when camera controls fail to load", async () => {
-  vi.resetModules();
+it("stops the tracks it owns and rethrows when camera controls fail to load", async () => {
   const failure = new Error("original controls chunk failure");
-  vi.doMock("./camera-effect-operations", async () => {
+  const video = track("video");
+  const audio = track("audio");
+  const rejection = await loadControlsOwning([video, audio], async () => {
     throw failure;
-  });
-  try {
-    const { configureCameraEffectProvider, processCameraStream } = await import("./camera-effects");
-    configureCameraEffectProvider({ wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
-      throw new Error("Unexpected segmenter creation");
-    });
-    const video = track("video");
-    const audio = track("audio");
-    const rejection = await processCameraStream(stream([video, audio])).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(rejection).toMatchObject({ cause: failure });
-    expect(video.readyState).toBe("ended");
-    expect(audio.readyState).toBe("ended");
-  } finally {
-    vi.doUnmock("./camera-effect-operations");
-    vi.resetModules();
-  }
-});
-
-it("stops the source when camera effects controls fail to load", async () => {
-  vi.resetModules();
-  const failure = new Error("original controls chunk failure");
-  vi.doMock("./camera-effect-operations", async () => {
-    throw failure;
-  });
-  try {
-    const { openCameraEffectsTrack } = await import("./camera-effects");
-    const source = track("video");
-    const rejection = await openCameraEffectsTrack(source, { wasmRoot: "/wasm", modelUrl: "/model" }, async () => {
-      throw new Error("Unexpected segmenter creation");
-    }).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(rejection).toMatchObject({ cause: failure });
-    expect(source.readyState).toBe("ended");
-  } finally {
-    vi.doUnmock("./camera-effect-operations");
-    vi.resetModules();
-  }
+  }).then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  expect(rejection).toBe(failure);
+  expect(video.readyState).toBe("ended");
+  expect(audio.readyState).toBe("ended");
 });

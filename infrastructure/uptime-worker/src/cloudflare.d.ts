@@ -33,3 +33,16 @@ declare interface R2Bucket {
   delete(key: string): Promise<void>;
   list(options?: R2ListOptions): Promise<R2Objects>;
 }
+
+declare interface KVNamespace {
+  get(key: string, type: "json"): Promise<unknown>;
+  put(key: string, value: string): Promise<void>;
+}
+
+declare interface CloudflareWebSocket extends WebSocket {
+  accept(): void;
+}
+
+declare interface Response {
+  webSocket?: CloudflareWebSocket | null;
+}
