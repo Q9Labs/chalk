@@ -1,11 +1,10 @@
 defmodule ChalkSync.Stateholder.Command do
   @moduledoc "Validated command intent with its stable idempotency fingerprint."
 
-  alias ChalkSync.CanonicalJSON
+  alias ChalkSync.Stateholder.Intake
   alias ChalkSync.Stateholder.ObservedContext
 
   @command_id ~r/\A[A-Za-z0-9_-]{16,64}\z/
-  @max_payload_bytes 16 * 1024
   @names %{
     "set_hand_raised" => :set_hand_raised,
     "set_display_name" => :set_display_name,
@@ -37,22 +36,16 @@ defmodule ChalkSync.Stateholder.Command do
   def new(id, name, payload) when is_binary(id) and is_map(payload) do
     with true <- Regex.match?(@command_id, id),
          {:ok, normalized_name} <- normalize_name(name),
-         :ok <- validate_payload(normalized_name, payload) do
-      normalized = %{"name" => Atom.to_string(normalized_name), "payload" => payload}
-      encoded = CanonicalJSON.encode!(normalized)
-
-      if byte_size(encoded) <= @max_payload_bytes do
-        {:ok,
-         %__MODULE__{
-           id: id,
-           name: normalized_name,
-           payload: payload,
-           fingerprint: :crypto.hash(:sha256, encoded),
-           normalized_bytes: byte_size(encoded)
-         }}
-      else
-        {:error, :payload_too_large}
-      end
+         :ok <- validate_payload(normalized_name, payload),
+         {:ok, fingerprint, bytes} <- Intake.fingerprint(normalized_name, payload) do
+      {:ok,
+       %__MODULE__{
+         id: id,
+         name: normalized_name,
+         payload: payload,
+         fingerprint: fingerprint,
+         normalized_bytes: bytes
+       }}
     else
       false -> {:error, :invalid_command_id}
       {:error, reason} -> {:error, reason}

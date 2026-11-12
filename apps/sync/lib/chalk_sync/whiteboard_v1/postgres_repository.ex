@@ -5,6 +5,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
 
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Database
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
@@ -285,7 +286,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepository do
   end
 
   defp run_transaction(transaction, callback) do
-    Postgrex.query!(transaction, SQL.transaction_settings(), [])
+    Postgrex.query!(transaction, TransactionSettings.sql(:default), [])
 
     case callback.(transaction) do
       {:ok, _result} = success -> success

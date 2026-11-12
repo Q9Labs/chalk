@@ -7,6 +7,10 @@ defmodule ChalkSync.SyncPostgres do
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
 
+  def database_url! do
+    System.get_env("CHALK_SYNC_TEST_DATABASE_URL") || System.fetch_env!("CHALK_DATABASE_URL")
+  end
+
   def start_connections(url, count \\ 4) do
     {:ok, options} = Database.connection_options(url)
 

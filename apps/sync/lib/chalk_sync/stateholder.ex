@@ -2,9 +2,10 @@ defmodule ChalkSync.Stateholder do
   @moduledoc """
   Semantic durable-decision boundary for sync control state.
 
-  A production adapter owns the complete command transaction. Callers cannot
-  assemble a receipt, event, revision, and folded state through independent
-  writes. Memory exists only for deterministic conformance and model tests.
+  The adapter owns the complete command transaction. Callers cannot assemble a
+  receipt, event, revision, and folded state through independent writes.
+  `Stateholder.Postgres` is the only adapter; tests substitute stubs through the
+  `:stateholder` setting.
   """
 
   alias ChalkSync.Stateholder.Command

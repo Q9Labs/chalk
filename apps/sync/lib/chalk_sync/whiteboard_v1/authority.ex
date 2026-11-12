@@ -23,10 +23,8 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.WhiteboardV1.Authority.Poller
+  alias ChalkSync.WhiteboardV1.Authority.Reads
 
-  @table __MODULE__
-  @poll_ms 1_000
-  @read_ms 1_000
   # A hello or a check waits at most this long for this process to find or start the poller.
   @watch_ms 1_000
   # Without a successful read for this long, sockets close so their clients reconnect.
@@ -41,15 +39,9 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @impl true
   def init(nil) do
-    :ets.new(@table, [:named_table, :public, read_concurrency: true])
+    Reads.create_table()
     {:ok, nil}
   end
-
-  @spec poll_ms() :: pos_integer()
-  def poll_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_poll_ms, @poll_ms)
-
-  @spec read_ms() :: pos_integer()
-  def read_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_read_ms, @read_ms)
 
   @doc """
   Keeps the Episode's access current while the calling socket is alive. Every watch goes through
@@ -83,7 +75,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
 
   @impl true
   def handle_info({:DOWN, _monitor, :process, poller, _reason}, state) do
-    :ets.match_delete(@table, {:_, poller, :_, :_, :_})
+    Reads.drop_poller(poller)
     {:noreply, state}
   end
 
@@ -93,7 +85,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   """
   @spec check(Identity.t(), integer() | nil) :: access()
   def check(%Identity{} = identity, connected_at \\ nil) do
-    case lookup(identity.episode) do
+    case Reads.lookup(identity.episode) do
       # No poller is reading this Episode yet, so only the connect check counts.
       :missing ->
         case watch(identity.episode) do
@@ -116,7 +108,7 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   @doc "Fresh durable members for view snapshots; unknown reads never imply a leave."
   @spec active_people(EpisodeKey.t()) :: {MapSet.t(String.t()), integer()} | nil
   def active_people(%EpisodeKey{} = episode) do
-    case lookup(episode) do
+    case Reads.lookup(episode) do
       {access, read_at, failure} when is_map(access) ->
         if freshness(read_at, failure, nil) == :fresh do
           {active_people_from(access), read_at}
@@ -142,13 +134,6 @@ defmodule ChalkSync.WhiteboardV1.Authority do
     |> MapSet.new(fn {{person, _generation}, _status} -> String.downcase(person) end)
   end
 
-  defp lookup(episode) do
-    case :ets.lookup(@table, EpisodeKey.authority_key(episode)) do
-      [{_episode, _poller, access, read_at, failure}] -> {access, read_at, failure}
-      [] -> :missing
-    end
-  end
-
   # :fresh when the stored read decides. The socket's own connect check read the database too, so it
   # counts as a fresh read, and a stored read that started no later than that check cannot deny.
   defp freshness(read_at, failure, connected_at) do
@@ -169,10 +154,6 @@ defmodule ChalkSync.WhiteboardV1.Authority do
   defp newest(nil, connected_at), do: connected_at
   defp newest(read_at, nil), do: read_at
   defp newest(read_at, connected_at), do: max(read_at, connected_at)
-
-  @doc false
-  def store(episode, access, read_at, failure),
-    do: :ets.insert(@table, {EpisodeKey.authority_key(episode), self(), access, read_at, failure})
 
   defp stale_ms, do: Application.get_env(:chalk_sync, :whiteboard_authority_stale_ms, @stale_ms)
 

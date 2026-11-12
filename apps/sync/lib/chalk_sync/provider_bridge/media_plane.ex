@@ -35,6 +35,30 @@ defmodule ChalkSync.ProviderBridge.MediaPlane do
     end
   end
 
+  @impl true
+  def with_call(%__MODULE__{} = adapter, call) do
+    adapter
+    |> apply_headers(call)
+    |> apply_participant(call)
+    |> apply_control_revision(call)
+  end
+
+  defp apply_headers(adapter, %{headers: headers}), do: with_context(adapter, headers)
+  defp apply_headers(adapter, _call), do: adapter
+
+  defp apply_participant(
+         adapter,
+         %{participant_id: participant_id, participant_generation: generation}
+       ),
+       do: with_participant_generation(adapter, participant_id, generation)
+
+  defp apply_participant(adapter, _call), do: adapter
+
+  defp apply_control_revision(adapter, %{control_revision: revision}),
+    do: with_control_revision(adapter, revision)
+
+  defp apply_control_revision(adapter, _call), do: adapter
+
   @spec with_context(t(), map() | keyword()) :: t()
   def with_context(%__MODULE__{} = adapter, context) when is_list(context),
     do: with_context(adapter, Map.new(context))
