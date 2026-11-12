@@ -104,8 +104,12 @@ func writeRateLimitError(w http.ResponseWriter, err error) {
 	writeAPIError(w, apiErr)
 }
 
+func isAuthenticatedPolicy(policy ratelimit.Policy) bool {
+	return policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite
+}
+
 func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.ResponseWriter, r *http.Request) error {
-	if options.DisableAuthenticated && (policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
+	if options.DisableAuthenticated && isAuthenticatedPolicy(policy) {
 		policy.Limit = 0
 	}
 	if options.Limiter == nil {
@@ -121,24 +125,9 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 	}
 
 	key := rateLimitKey(r, options.ClientIP)
-	principal, _ := authentication.PrincipalFromContext(r.Context())
-	_, participant := accessgrants.SubjectFromContext(r.Context())
-	tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
-	if !participant && principal.Kind == authentication.PrincipalService && err == nil &&
-		(policy.Name == ratelimit.PolicyNameAuthenticatedRead || policy.Name == ratelimit.PolicyNameAuthenticatedWrite) {
-		ceiling := policy
-		ceiling.Name += ".service_ceiling"
-		ceiling.Limit = options.ServiceReadCeiling
-		if ceiling.Limit <= 0 {
-			ceiling.Limit = serviceReadCeiling
-		}
-		if policy.Name == ratelimit.PolicyNameAuthenticatedWrite {
-			ceiling.Limit = options.ServiceWriteCeiling
-			if ceiling.Limit <= 0 {
-				ceiling.Limit = serviceWriteCeiling
-			}
-		}
+	if tenantID, scoped := serviceTenantScope(r, policy); scoped {
 		if policy.Limit > 0 {
+			ceiling := serviceCeilingPolicy(options, policy)
 			decision := options.Limiter.Allow(r.Context(), key, ceiling, now())
 			if decision.State != ratelimit.Allowed {
 				writeRateLimitHeaders(w, ceiling, decision)
@@ -153,6 +142,35 @@ func checkRateLimit(options RateLimitOptions, policy ratelimit.Policy, w http.Re
 		return rateLimitFailure(r.Context(), w, policy, decision)
 	}
 	return nil
+}
+
+// serviceTenantScope reports the Tenant a service principal's authenticated
+// request is scoped to. Such a request is limited per Tenant, under a ceiling
+// that covers all of the service's Tenants.
+func serviceTenantScope(r *http.Request, policy ratelimit.Policy) (utilities.ID, bool) {
+	if !isAuthenticatedPolicy(policy) {
+		return utilities.ID{}, false
+	}
+	principal, _ := authentication.PrincipalFromContext(r.Context())
+	if _, participant := accessgrants.SubjectFromContext(r.Context()); participant || principal.Kind != authentication.PrincipalService {
+		return utilities.ID{}, false
+	}
+	tenantID, err := utilities.ParseID(chi.URLParam(r, "tenant_id"))
+	return tenantID, err == nil
+}
+
+func serviceCeilingPolicy(options RateLimitOptions, policy ratelimit.Policy) ratelimit.Policy {
+	ceiling := policy
+	ceiling.Name += ".service_ceiling"
+	limit, fallback := options.ServiceReadCeiling, serviceReadCeiling
+	if policy.Name == ratelimit.PolicyNameAuthenticatedWrite {
+		limit, fallback = options.ServiceWriteCeiling, serviceWriteCeiling
+	}
+	if limit <= 0 {
+		limit = fallback
+	}
+	ceiling.Limit = limit
+	return ceiling
 }
 
 func writeRateLimitHeaders(w http.ResponseWriter, policy ratelimit.Policy, decision ratelimit.Decision) {

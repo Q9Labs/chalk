@@ -76,6 +76,17 @@ type PublicLeaveResult struct {
 	Removed     bool
 }
 
+// validateIdentityMode requires an account ID for an account and none for a guest.
+func validateIdentityMode(mode string, accountID utilities.ID) error {
+	switch {
+	case mode != "account" && mode != "guest":
+		return ErrInvalidIdentityMode
+	case mode == "account" && accountID.IsZero(), mode == "guest" && !accountID.IsZero():
+		return ErrInvalidAccountID
+	}
+	return nil
+}
+
 func preparePublicJoinInput(input *PublicJoinInput) error {
 	if input.TenantID.IsZero() {
 		return ErrInvalidTenantID
@@ -83,21 +94,15 @@ func preparePublicJoinInput(input *PublicJoinInput) error {
 	if input.SpaceID.IsZero() {
 		return ErrInvalidSpaceID
 	}
-	if input.IdentityMode != "account" && input.IdentityMode != "guest" {
-		return ErrInvalidIdentityMode
-	}
-	if input.IdentityMode == "account" && input.AccountID.IsZero() {
-		return ErrInvalidAccountID
-	}
-	if input.IdentityMode == "guest" && !input.AccountID.IsZero() {
-		return ErrInvalidAccountID
+	if err := validateIdentityMode(input.IdentityMode, input.AccountID); err != nil {
+		return err
 	}
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
-	if input.DisplayName == "" || !utf8.ValidString(input.DisplayName) || len(input.DisplayName) > MaximumParticipantNameBytes {
-		return ErrInvalidParticipantName
-	}
 	input.Role = strings.TrimSpace(input.Role)
-	if input.Role == "" || !utf8.ValidString(input.Role) || len(input.Role) > 128 {
+	switch {
+	case input.DisplayName == "" || !utf8.ValidString(input.DisplayName) || len(input.DisplayName) > MaximumParticipantNameBytes:
+		return ErrInvalidParticipantName
+	case input.Role == "" || !utf8.ValidString(input.Role) || len(input.Role) > 128:
 		return ErrInvalidRole
 	}
 	if err := prepareRequest(&input.Request, nil); err != nil {
@@ -119,14 +124,8 @@ func preparePublicAccessInput(input *PublicAccessInput) error {
 	if input.ParticipantGeneration <= 0 {
 		return ErrInvalidParticipantGeneration
 	}
-	if input.IdentityMode != "account" && input.IdentityMode != "guest" {
-		return ErrInvalidIdentityMode
-	}
-	if input.IdentityMode == "account" && input.AccountID.IsZero() {
-		return ErrInvalidAccountID
-	}
-	if input.IdentityMode == "guest" && !input.AccountID.IsZero() {
-		return ErrInvalidAccountID
+	if err := validateIdentityMode(input.IdentityMode, input.AccountID); err != nil {
+		return err
 	}
 	return nil
 }

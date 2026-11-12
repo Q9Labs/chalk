@@ -23,30 +23,30 @@ func validateConfigSnapshot(raw json.RawMessage) (json.RawMessage, EpisodeConfig
 		return nil, EpisodeConfigSnapshot{}, err
 	}
 	snapshot.Roles = roles
-	if snapshot.MaximumEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.MaximumEpisodeDurationSeconds > MaximumEpisodeDurationSeconds {
-		return nil, EpisodeConfigSnapshot{}, ErrInvalidMaximumDuration
-	}
-	if snapshot.DefaultEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.DefaultEpisodeDurationSeconds > snapshot.MaximumEpisodeDurationSeconds {
-		return nil, EpisodeConfigSnapshot{}, ErrInvalidMaximumDuration
-	}
-	if snapshot.LingerWindowSeconds < 0 || snapshot.LingerWindowSeconds > snapshot.MaximumEpisodeDurationSeconds {
-		return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
-	}
-	if snapshot.ArtifactPolicy != nil {
-		if err := snapshot.ArtifactPolicy.Validate(); err != nil {
-			return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
-		}
-	}
-	if snapshot.MediaPlaneBinding != nil {
-		if err := snapshot.MediaPlaneBinding.Validate(); err != nil {
-			return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
-		}
+	if err := validateSnapshotLimits(snapshot); err != nil {
+		return nil, EpisodeConfigSnapshot{}, err
 	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, EpisodeConfigSnapshot{}, ErrInvalidConfigSnapshot
 	}
 	return canonicalJSON(encoded), snapshot, nil
+}
+
+func validateSnapshotLimits(snapshot EpisodeConfigSnapshot) error {
+	switch {
+	case snapshot.MaximumEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.MaximumEpisodeDurationSeconds > MaximumEpisodeDurationSeconds:
+		return ErrInvalidMaximumDuration
+	case snapshot.DefaultEpisodeDurationSeconds < MinimumEpisodeDurationSeconds || snapshot.DefaultEpisodeDurationSeconds > snapshot.MaximumEpisodeDurationSeconds:
+		return ErrInvalidMaximumDuration
+	case snapshot.LingerWindowSeconds < 0 || snapshot.LingerWindowSeconds > snapshot.MaximumEpisodeDurationSeconds:
+		return ErrInvalidConfigSnapshot
+	case snapshot.ArtifactPolicy != nil && snapshot.ArtifactPolicy.Validate() != nil:
+		return ErrInvalidConfigSnapshot
+	case snapshot.MediaPlaneBinding != nil && snapshot.MediaPlaneBinding.Validate() != nil:
+		return ErrInvalidConfigSnapshot
+	}
+	return nil
 }
 
 func admissionPolicyMode(raw json.RawMessage) (string, error) {

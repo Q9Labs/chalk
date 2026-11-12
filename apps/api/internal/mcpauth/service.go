@@ -80,25 +80,49 @@ type AuthorizeParams struct {
 	Resources           []string
 }
 
+// authorizeClient finds the client an /authorize request names: a metadata
+// document for a URL client_id, a stored row otherwise.
+func (s Service) authorizeClient(ctx context.Context, clientID string) (Client, *AuthorizeFailure) {
+	if IsMetadataClientID(clientID) {
+		client, failure := s.metadataClient(ctx, clientID)
+		if failure != nil {
+			return Client{}, &AuthorizeFailure{Err: failure}
+		}
+		return client, nil
+	}
+	client, err := s.repository.GetClient(ctx, clientID)
+	if errors.Is(err, ErrClientNotFound) {
+		return Client{}, &AuthorizeFailure{Err: oauthError(400, "invalid_request", "unknown client_id")}
+	}
+	if err != nil {
+		slog.ErrorContext(ctx, "MCP OAuth client lookup failed", "event", "mcp.oauth.authorize_failed", "error", err)
+		return Client{}, &AuthorizeFailure{Err: oauthError(500, "server_error", "temporary failure")}
+	}
+	return client, nil
+}
+
+// authorizeParamsProblem returns the OAuth error code and description for the
+// first rule the request breaks, or an empty code.
+func (s Service) authorizeParamsProblem(params AuthorizeParams) (code, description string) {
+	switch {
+	case len(params.State) > maxStateBytes:
+		return "invalid_request", "state is too long"
+	case params.ResponseType != "code":
+		return "unsupported_response_type", "only response_type=code is supported"
+	case params.CodeChallengeMethod != "S256" || !validCodeChallenge(params.CodeChallenge):
+		return "invalid_request", "PKCE with code_challenge_method=S256 and a valid code_challenge is required"
+	case slices.ContainsFunc(params.Resources, func(resource string) bool { return resource != s.config.Resource() }):
+		return "invalid_target", "resource must be " + s.config.Resource()
+	}
+	return "", ""
+}
+
 // Authorize validates an /authorize request and stores it until a signed-in
 // person decides. It returns the dashboard consent URL.
 func (s Service) Authorize(ctx context.Context, params AuthorizeParams) (string, *AuthorizeFailure) {
-	var client Client
-	if IsMetadataClientID(params.ClientID) {
-		var failure *Error
-		if client, failure = s.metadataClient(ctx, params.ClientID); failure != nil {
-			return "", &AuthorizeFailure{Err: failure}
-		}
-	} else {
-		var err error
-		client, err = s.repository.GetClient(ctx, params.ClientID)
-		if errors.Is(err, ErrClientNotFound) {
-			return "", &AuthorizeFailure{Err: oauthError(400, "invalid_request", "unknown client_id")}
-		}
-		if err != nil {
-			slog.ErrorContext(ctx, "MCP OAuth client lookup failed", "event", "mcp.oauth.authorize_failed", "error", err)
-			return "", &AuthorizeFailure{Err: oauthError(500, "server_error", "temporary failure")}
-		}
+	client, failure := s.authorizeClient(ctx, params.ClientID)
+	if failure != nil {
+		return "", failure
 	}
 	redirectURI := params.RedirectURI
 	if redirectURI == "" && len(client.RedirectURIs) == 1 {
@@ -114,18 +138,8 @@ func (s Service) Authorize(ctx context.Context, params AuthorizeParams) (string,
 	fail := func(code, description string) (string, *AuthorizeFailure) {
 		return "", &AuthorizeFailure{Err: oauthError(400, code, description), RedirectURI: redirectURI, State: params.State}
 	}
-	switch {
-	case len(params.State) > maxStateBytes:
-		return fail("invalid_request", "state is too long")
-	case params.ResponseType != "code":
-		return fail("unsupported_response_type", "only response_type=code is supported")
-	case params.CodeChallengeMethod != "S256" || !validCodeChallenge(params.CodeChallenge):
-		return fail("invalid_request", "PKCE with code_challenge_method=S256 and a valid code_challenge is required")
-	}
-	for _, resource := range params.Resources {
-		if resource != s.config.Resource() {
-			return fail("invalid_target", "resource must be "+s.config.Resource())
-		}
+	if code, description := s.authorizeParamsProblem(params); code != "" {
+		return fail(code, description)
 	}
 	handle, handleHash, err := newSecret(handlePrefix)
 	if err != nil {

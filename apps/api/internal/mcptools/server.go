@@ -235,14 +235,10 @@ func (r *Registry) Handler(allowedOrigins []string, refuse ScopeRefusal) http.Ha
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if origins := req.Header.Values("Origin"); len(origins) > 0 {
-			origin := req.Header.Get("Origin")
-			parsed, err := url.Parse(origin)
-			if len(origins) != 1 || err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || !slices.Contains(allowedOrigins, origin) {
-				slog.WarnContext(req.Context(), "MCP Origin rejected", "event", "mcp.origin.rejected", "outcome", "origin_not_allowed")
-				http.Error(w, "Origin not allowed", http.StatusForbidden)
-				return
-			}
+		if !originAllowed(req, allowedOrigins) {
+			slog.WarnContext(req.Context(), "MCP Origin rejected", "event", "mcp.origin.rejected", "outcome", "origin_not_allowed")
+			http.Error(w, "Origin not allowed", http.StatusForbidden)
+			return
 		}
 		if req.Method == http.MethodPost {
 			body, ok := readSingleMessage(w, req)
@@ -255,6 +251,19 @@ func (r *Registry) Handler(allowedOrigins []string, refuse ScopeRefusal) http.Ha
 		}
 		transport.ServeHTTP(w, req)
 	})
+}
+
+// originAllowed is true for a request with no Origin header, or with one
+// Origin that is a bare scheme and host on the allowlist.
+func originAllowed(req *http.Request, allowedOrigins []string) bool {
+	origins := req.Header.Values("Origin")
+	if len(origins) == 0 {
+		return true
+	}
+	origin := req.Header.Get("Origin")
+	parsed, err := url.Parse(origin)
+	return len(origins) == 1 && err == nil && parsed.Host != "" && (parsed.Scheme == "https" || parsed.Scheme == "http") &&
+		parsed.User == nil && parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == "" && slices.Contains(allowedOrigins, origin)
 }
 
 // ScopeRefusal writes the response for a tool call the connection's scopes cannot

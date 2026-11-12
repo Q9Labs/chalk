@@ -32,23 +32,8 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	if len(policy.AdmissionPolicy) > 0 && string(canonicalJSON(policy.AdmissionPolicy)) != string(canonicalJSON(config.AdmissionPolicy)) {
 		return InitialControlState{}, ErrInvalidAdmissionPolicy
 	}
-	if policy.MaximumDurationSeconds == 0 {
-		policy.MaximumDurationSeconds = config.MaximumEpisodeDurationSeconds
-	}
-	if policy.MaximumDurationCeilingSeconds == 0 {
-		policy.MaximumDurationCeilingSeconds = config.MaximumEpisodeDurationSeconds
-	}
-	if policy.MaximumDurationSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationSeconds > MaximumEpisodeDurationSeconds {
-		return InitialControlState{}, ErrInvalidMaximumDuration
-	}
-	if policy.MaximumDurationCeilingSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationCeilingSeconds > MaximumEpisodeDurationSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds {
-		return InitialControlState{}, ErrInvalidMaximumDurationCeiling
-	}
-	if policy.DeadlineAt.IsZero() || policy.DeadlineAt.UnixMilli() < 1 || policy.DeadlineAt.UnixMilli() != policy.DeadlineAt.UTC().Truncate(time.Millisecond).UnixMilli() {
-		return InitialControlState{}, ErrInvalidInitialControlState
-	}
-	if policy.DeadlineGeneration < 1 {
-		return InitialControlState{}, ErrInvalidInitialControlState
+	if err := normalizeInitialControlPolicy(&policy, config); err != nil {
+		return InitialControlState{}, err
 	}
 	admissionPolicy, err := admissionPolicyMode(config.AdmissionPolicy)
 	if err != nil {
@@ -80,6 +65,29 @@ func NewInitialControlState(policy InitialControlPolicy) (InitialControlState, e
 	durableProjection["state_digest"] = hex.EncodeToString(digest[:])
 	wireSnapshot := canonicalJSON(mustJSON(durableProjection))
 	return InitialControlState{FoldedState: projection, Digest: digest, SchemaVersion: controlStateSchemaV1, SnapshotBytes: int64(len(wireSnapshot))}, nil
+}
+
+// normalizeInitialControlPolicy fills the duration limits the caller left out
+// from the Episode config and checks the limits and the deadline.
+func normalizeInitialControlPolicy(policy *InitialControlPolicy, config EpisodeConfigSnapshot) error {
+	if policy.MaximumDurationSeconds == 0 {
+		policy.MaximumDurationSeconds = config.MaximumEpisodeDurationSeconds
+	}
+	if policy.MaximumDurationCeilingSeconds == 0 {
+		policy.MaximumDurationCeilingSeconds = config.MaximumEpisodeDurationSeconds
+	}
+	deadlineMillis := policy.DeadlineAt.UnixMilli()
+	switch {
+	case policy.MaximumDurationSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationSeconds > MaximumEpisodeDurationSeconds:
+		return ErrInvalidMaximumDuration
+	case policy.MaximumDurationCeilingSeconds < MinimumEpisodeDurationSeconds || policy.MaximumDurationCeilingSeconds > MaximumEpisodeDurationSeconds || policy.MaximumDurationSeconds > policy.MaximumDurationCeilingSeconds:
+		return ErrInvalidMaximumDurationCeiling
+	case policy.DeadlineAt.IsZero() || deadlineMillis < 1 || deadlineMillis != policy.DeadlineAt.UTC().Truncate(time.Millisecond).UnixMilli():
+		return ErrInvalidInitialControlState
+	case policy.DeadlineGeneration < 1:
+		return ErrInvalidInitialControlState
+	}
+	return nil
 }
 
 func mustJSON(value any) json.RawMessage {

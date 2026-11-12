@@ -78,14 +78,24 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	if input.ParticipantID.IsZero() {
 		return ErrInvalidParticipantID
 	}
+	if err := prepareAdmissionFields(input); err != nil {
+		return err
+	}
+	payload := participantJoinedPayload(input.ParticipantID, input.Name, input.Role)
+	if err := prepareRequest(&input.Request, payload); err != nil {
+		return err
+	}
+	input.Request.Fingerprint = admissionFingerprint(*input, payload)
+	return nil
+}
 
+func prepareAdmissionFields(input *AdmitParticipantInput) error {
 	if input.Admission == "" {
 		input.Admission = AdmissionPolicy
 	}
 	if input.Admission != AdmissionPolicy && input.Admission != AdmissionDirect {
 		return ErrInvalidAdmissionPolicy
 	}
-
 	name, err := utilities.RequiredString(input.Name)
 	if err != nil || !utf8.ValidString(name) || len(name) > MaximumParticipantNameBytes {
 		return ErrInvalidParticipantName
@@ -95,7 +105,6 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 	if input.IdentityExternalID != "" && (!input.IdentityID.IsZero() || !utf8.ValidString(input.IdentityExternalID) || len(input.IdentityExternalID) > 256 || strings.TrimSpace(input.IdentityExternalID) != input.IdentityExternalID) {
 		return ErrInvalidIdentityMode
 	}
-
 	role, err := utilities.RequiredString(input.Role)
 	if err != nil || !utf8.ValidString(role) || len(role) > 128 {
 		return ErrInvalidRole
@@ -107,17 +116,16 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		return ErrInvalidIntentPayload
 	}
 	input.Metadata = metadata
+	return nil
+}
 
-	payload := participantJoinedPayload(input.ParticipantID, input.Name, input.Role)
-	if err := prepareRequest(&input.Request, payload); err != nil {
-		return err
-	}
+func admissionFingerprint(input AdmitParticipantInput, payload json.RawMessage) [32]byte {
 	// Keep policy retries compatible with fingerprints written before this option.
-	fingerprintAdmission := input.Admission
-	if fingerprintAdmission == AdmissionPolicy {
-		fingerprintAdmission = ""
+	admission := input.Admission
+	if admission == AdmissionPolicy {
+		admission = ""
 	}
-	input.Request.Fingerprint = lifecycleFingerprint(struct {
+	return lifecycleFingerprint(struct {
 		Admission          AdmissionMode   `json:"admission,omitempty"`
 		TenantID           string          `json:"tenant_id"`
 		SpaceID            string          `json:"space_id"`
@@ -131,12 +139,11 @@ func prepareAdmissionInput(input *AdmitParticipantInput) error {
 		IdentityExternalID string          `json:"identity_external_id,omitempty"`
 		Payload            json.RawMessage `json:"payload"`
 	}{
-		Admission: fingerprintAdmission,
+		Admission: admission,
 		TenantID:  input.TenantID.String(), SpaceID: input.SpaceID.String(), EpisodeID: input.EpisodeID.String(),
 		ParticipantID: input.ParticipantID.String(), IntentName: IntentParticipantJoined, Name: input.Name,
 		Metadata: input.Metadata, Role: input.Role, IdentityID: input.IdentityID.String(), IdentityExternalID: input.IdentityExternalID, Payload: payload,
 	})
-	return nil
 }
 
 func prepareParticipantRemovalInput(input *RequestParticipantRemovalInput) error {
