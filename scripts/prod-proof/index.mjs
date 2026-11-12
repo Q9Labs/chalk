@@ -5,6 +5,7 @@ import { leaveProof } from "./leave.mjs";
 import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
 import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
 import { offReasonProof } from "./off-reason.mjs";
+import { deployHoldPlan, deployHoldProof } from "./deploy-hold.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
@@ -72,6 +73,13 @@ const plans = {
     webhooks: false,
     proofs: ["long-call"],
   },
+  // Three guests and a chat message a second are held while DEPLOY_HOLD_COMMAND deploys nightly: no rejoin, no media gap, no lost message. Opt-in: the release path.
+  "deploy-hold": {
+    media: false,
+    longCall: true,
+    webhooks: false,
+    proofs: ["deploy-hold"],
+  },
   // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.
   "toggle-offers": {
     media: false,
@@ -80,8 +88,8 @@ const plans = {
     proofs: ["toggle-offers"],
   },
 };
-const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const dryRuns = { "deploy-hold": deployHoldPlan, "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|deploy-hold|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -127,6 +135,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   if (plan.longCall) receiver = await prepareIntegration(run, false);
   if (plan.ensureSpaces) await createProofKey(run);
   const actions = {
+    "deploy-hold": () => deployHoldProof(run, receiver),
     "long-call": () => longCallProof(run, receiver),
     "toggle-offers": () => toggleOffersProof(run, receiver),
     leave: () => leaveProof(run),
