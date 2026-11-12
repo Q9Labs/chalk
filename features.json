@@ -207,6 +207,7 @@
         "apps/sync/test/chalk_sync/recording_foundation_test.exs",
         "apps/web/src/routes/dashboard._app.recordings.tsx",
         "docs/recording",
+        "infrastructure/nightly/archive-cdn",
         "infrastructure/nightly/recording-control-address",
         "infrastructure/recorder",
         "packages/recording-presentation",

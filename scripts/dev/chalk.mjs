@@ -10,6 +10,7 @@ import { createResourceManager, runChecked } from "./chalk-resources.mjs";
 import { bootstrapLocalSpace, retireLocalFixture } from "./chalk-bootstrap.mjs";
 import { enableSeedInvite, proveSeededSignIn } from "./chalk-signin.mjs";
 import { writeJsonAtomic } from "./ownership.mjs";
+import { seedDashboard, dashboardServiceScopes, dashboardArtifactBindings } from "./dashboard-seed.mjs";
 
 export function createChalkSupervisor(inputConfig, { adapters = {}, output = console.log, serviceSpecs, hooks = {} } = {}) {
   const config = {
@@ -22,6 +23,8 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
   let bindings;
   let systemToken;
   let invite;
+  const dashboardToken = randomBytes(32).toString("base64url");
+  const dashboardSessionSecret = randomBytes(32).toString("base64url");
   const resolver = config.secretResolver || adapters.resolveSecrets || createSecretResolver({ op: adapters.op || "op" });
 
   const mergedHooks = {
@@ -67,7 +70,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
       if (result.stdout?.trim()) output(result.stdout.trim());
       if (result.stderr?.trim()) output(result.stderr.trim());
     },
-    logRedactions: async () => [provider?.appId, provider?.appSecret].filter(Boolean),
+    logRedactions: async () => [provider?.appId, provider?.appSecret, dashboardToken, dashboardSessionSecret].filter(Boolean),
     childEnv: async (spec) => childEnvironment(spec.id),
     waitReady: async (spec, process, context) => {
       if (spec.readiness?.filePath) await waitForFileReady(spec, { timeoutMs: config.timeouts.readinessMs });
@@ -79,6 +82,7 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         const fixtureMarker = stableMarker;
         bindings = await bootstrapLocalSpace({ apiOrigin: config.urls.api, systemToken, runtimeId, fixtureMarker, fetchImpl: adapters.fetchImpl, fresh: config.fresh });
         invite = await enableSeedInvite({ apiOrigin: config.urls.api, systemToken, tenantId: bindings.tenantId, spaceId: bindings.spaceId, fetchImpl: adapters.fetchImpl });
+        await seedDashboard({ config, serviceToken: dashboardToken });
         // Holds the system token, so it stays in the git-ignored runtime directory with mode 0600 and out of evidence.
         await writeJsonAtomic(config.seedPath, { ...bindings, invite, systemToken, urls: config.urls, publicOrigin: config.publicOrigin }, { redacted: false });
       }
@@ -110,6 +114,10 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         CHALK_API_ADDR: `127.0.0.1:${config.ports.api}`,
         CHALK_API_ENV: "local",
         CHALK_API_LOCAL_SYSTEM_TOKEN: systemToken,
+        CHALK_API_SERVICE_ID: "local-dashboard",
+        CHALK_API_SERVICE_SECRETS: dashboardToken,
+        CHALK_API_SERVICE_SCOPES: dashboardServiceScopes,
+        ...dashboardArtifactBindings(config),
         CHALK_API_REQUEST_LOGS: "all",
         CHALK_API_CORS_ALLOWED_ORIGINS: [...new Set([config.urls.web, config.urls.public])].join(","),
         CHALK_DATABASE_URL: databaseURL(config),
@@ -159,6 +167,9 @@ export function createChalkSupervisor(inputConfig, { adapters = {}, output = con
         ...base,
         ...(config.publicOrigin ? { PUBLIC_ORIGIN: config.publicOrigin } : {}),
         CHALK_DEV_SYNC_ORIGIN: config.urls.sync,
+        CHALK_DEV_DASHBOARD_SERVICE_TOKEN: dashboardToken,
+        CHALK_DEV_DASHBOARD_SESSION_SECRET: dashboardSessionSecret,
+        CHALK_DEV_DASHBOARD_ARTIFACTS: join(config.runtimeRoot, "dashboard-artifacts.json"),
         VITE_API_URL: config.publicOrigin ?? config.urls.api,
         VITE_CHALK_SYNC_URL: browserSync,
         VITE_CHALK_DEV_SYNC_URL: browserSync,
@@ -177,7 +188,7 @@ function defaultServiceSpecs(config) {
     { id: "sdk-client", command: "pnpm", args: ["--filter", "@q9labsai/chalk-client", "dev"], cwd: config.root },
     { id: "sdk-whiteboard", command: "pnpm", args: ["--filter", "@q9labsai/chalk-whiteboard", "dev"], cwd: config.root, readiness: { filePath: join(config.root, "packages/whiteboard/dist/react/index.js") } },
     { id: "sdk-react", command: "pnpm", args: ["--filter", "@q9labsai/chalk-react", "dev"], cwd: config.root, dependsOn: ["sdk-whiteboard"] },
-    { id: "web", command: "pnpm", args: ["--filter", "web", "exec", "vite", "dev", "--host", "127.0.0.1", "--port", String(config.ports.web)], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
+    { id: "web", command: "pnpm", args: ["--filter", "web", "run", "dev:raw"], cwd: config.root, dependsOn: ["sync", "sdk-client", "sdk-react", "sdk-whiteboard"], readiness: { url: `${config.urls.web}/` } },
   ];
   if (config.profile === "mobile")
     specs.push({
@@ -199,6 +210,7 @@ function formatReadySummary(config, bindings) {
     `API       ${config.urls.api}`,
     `Sync      ws://127.0.0.1:${config.ports.sync}/v1/sync`,
     "Media     Cloudflare SFU, real provider path",
+    `Dashboard ${config.urls.public}/dashboard/sign-in (Google or Apple, then Ada; Malik is empty)`,
     `Logs      ${config.aggregateLog}`,
     "Proof     pnpm dev:smoke",
     bindings ? `Runtime   ${bindings.marker}` : "",

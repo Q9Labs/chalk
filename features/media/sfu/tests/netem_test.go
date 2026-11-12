@@ -182,6 +182,13 @@ var _ net.PacketConn = (*link)(nil)
 // RTX by the repaired RID, as a browser does.
 func newMediaPeer(t *testing.T, through *link, browserRTX bool) *peer {
 	t.Helper()
+	return newPeerThrough(t, through, browserRTX, true)
+}
+
+// newPeerThrough is newMediaPeer, and without transport-wide feedback it is a client that
+// offers none: it answers without the TWCC extension and sends NACKs and receiver reports only.
+func newPeerThrough(t *testing.T, through *link, browserRTX, transportWide bool) *peer {
+	t.Helper()
 	engine := &webrtc.MediaEngine{}
 	if err := engine.RegisterDefaultCodecs(); err != nil {
 		t.Fatal(err)
@@ -191,7 +198,11 @@ func newMediaPeer(t *testing.T, through *link, browserRTX bool) *peer {
 		// Registered first, so it sees the NACK responder's RTX on its way out.
 		registry.Add(browserRTXFactory{})
 	}
-	if err := webrtc.RegisterDefaultInterceptors(engine, registry); err != nil {
+	if transportWide {
+		if err := webrtc.RegisterDefaultInterceptors(engine, registry); err != nil {
+			t.Fatal(err)
+		}
+	} else if err := errors.Join(webrtc.ConfigureNack(engine, registry), webrtc.ConfigureRTCPReports(registry)); err != nil {
 		t.Fatal(err)
 	}
 	settings := webrtc.SettingEngine{}

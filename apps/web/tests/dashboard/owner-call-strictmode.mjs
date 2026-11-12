@@ -21,7 +21,10 @@ const prefix = `
 import React, {useMemo, useEffect, useState, useRef, useSyncExternalStore} from ${JSON.stringify(require.resolve("react"))};
 import {createSpaceClientForPlatform as createReal} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/space-client.ts"))};
 import {readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeReloadRejoin} from ${JSON.stringify(resolve(web, "../../sdks/typescript/client/src/space-client/reload-rejoin.ts"))};
-import {z} from ${JSON.stringify(require.resolve("zod"))};
+import {Schema} from ${JSON.stringify(require.resolve("effect"))};
+import {useReportCredentialExpired, reportCredentialExpiredReason} from ${JSON.stringify(resolve(web, "src/lib/problem-reports.ts"))};
+import {DashboardRequestError, errorMessage, clearOwnerSeats} from ${JSON.stringify(resolve(web, "src/lib/dashboard/client.ts"))};
+import {dashboardAccessFailure} from ${JSON.stringify(resolve(web, "src/lib/dashboard/owner-access.ts"))};
 export const clients=[], admissions=[], failures=[], joins=[];
 export {ownerAccess};
 export let liveEpisodeId='episode-test';
@@ -41,6 +44,8 @@ function createSpaceClientForPlatform(...args) {
   clients.push(entry); return client;
 }
 const publicAPIBaseURL=()=>"http://engine.local";
+const publicSyncDirectURL=()=>({});
+const publicDirectPathControl=()=>({});
 const useProblemReports=()=>false;
 const problemReporter=()=>()=>Promise.resolve();
 const intentKey=()=>crypto.randomUUID();

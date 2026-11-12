@@ -370,13 +370,13 @@ type InspectResponse struct {
 }
 
 // TransportState is one session's downlink as the node's pacer and estimator
-// see it. A subscriber that sends no transport-wide feedback has no feedback
-// age, and its video layers follow its requests and its Episode alone.
+// see it. A subscriber that sends no transport-wide feedback is estimated by its
+// receiver reports and REMB, and its feedback age is the age of the latest report.
 type TransportState struct {
 	EstimateBps int64 `json:"estimateBps"`
 	// ProvenBps is what the downlink has shown it carries; layers rise only within it.
 	ProvenBps int64 `json:"provenBps"`
-	// FeedbackAgeMs is the age of the latest transport-wide feedback, absent before the first.
+	// FeedbackAgeMs is the age of the latest transport-wide feedback (or receiver report), absent before the first.
 	FeedbackAgeMs *int64 `json:"feedbackAgeMs,omitempty"`
 	QueuedBytes   int    `json:"queuedBytes"`
 	Probing       bool   `json:"probing"`

@@ -34,7 +34,7 @@ type egressBinding struct {
 	rtxPayloadType uint8
 	rtxSeq         atomic.Uint32
 	// twccID is the transport sequence extension; 0 means the subscriber sends
-	// no transport-wide feedback, so the node neither paces nor adapts.
+	// no transport-wide feedback, so its receiver reports steer the pacer and the allocator.
 	twccID       uint8
 	audioLevelID uint8
 }
@@ -69,6 +69,9 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 		}
 		if previous := e.binding.Swap(binding); previous != nil {
 			e.transport.unbind(previous)
+		}
+		if binding.twccID == 0 && e.kind == webrtc.RTPCodecTypeVideo {
+			e.transport.useReports()
 		}
 		e.transport.bind(binding)
 		return codec, nil
