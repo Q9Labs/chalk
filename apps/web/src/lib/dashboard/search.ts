@@ -10,11 +10,12 @@ export type LegacyListSearch = { readonly spaceId?: string | undefined };
 
 export const parseLegacyListSearch = (search: Record<string, unknown>): LegacyListSearch => ({ spaceId: typeof search.spaceId === "string" && UUID.test(search.spaceId) ? search.spaceId : undefined });
 
-/** The old list routes: a link filtered to one call opens that call, where its sessions, recordings and transcripts live. Others open Home. */
-export const legacyListRoute = {
+/** The old list routes: a link filtered to one call opens that call, where its sessions, recordings and transcripts live. Others open Home.
+ * A new object per route: the router writes each route's id into its options, so a shared object gives two routes one id. */
+export const legacyListRoute = () => ({
   validateSearch: parseLegacyListSearch,
   beforeLoad: ({ search }: { readonly search: LegacyListSearch }) => {
     if (search.spaceId) throw redirect({ to: "/dashboard/call/$spaceId", params: { spaceId: search.spaceId }, replace: true });
     throw redirect({ to: "/dashboard", replace: true });
   },
-};
+});
