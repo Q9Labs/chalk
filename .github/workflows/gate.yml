@@ -169,6 +169,17 @@ jobs:
           version-file: .tool-versions
           version-type: strict
 
+      # The dashboard proofs run mix deps.get. cache-warm.yml saves these on master, so a Hex outage cannot fail a pull
+      # request whose mix.lock did not change. The path list must match the saved entry exactly.
+      - name: Restore Mix dependencies
+        if: startsWith(matrix.group, 'dashboard-')
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            apps/sync/deps
+            apps/sync/_build
+          key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+
       - name: Install the dashboard database client
         if: startsWith(matrix.group, 'dashboard-')
         uses: ./.github/actions/apt-install
@@ -176,7 +187,7 @@ jobs:
           packages: postgresql-client
 
       - name: Restore Go caches
-        if: matrix.group == 'checks' || matrix.group == 'sfu'
+        if: matrix.group == 'checks' || matrix.group == 'sfu' || startsWith(matrix.group, 'dashboard-')
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
