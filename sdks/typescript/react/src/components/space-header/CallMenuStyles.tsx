@@ -8,6 +8,10 @@ export function CallMenuStyles() {
 }
 
 const CALL_MENU_CSS = `.chalk-shell-sep {height:1px;background:var(--chalk-line-strong);margin:var(--space-1) var(--space-3);}
+.chalk-details-recording .chalk-shell-detail-lead i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
+.chalk-details-recording .chalk-shell-detail-label {display:flex;align-items:baseline;gap:var(--space-2);font-weight:600;}
+.chalk-details-recording time {color:var(--chalk-muted-text);font-size:var(--type-body-sm);font-weight:500;font-variant-numeric:tabular-nums;}
+.chalk-details-recording .chalk-details-recording-stop {height:32px;flex:none;padding-inline:var(--space-3);}
 .chalk-shell-detail-value {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
 .chalk-shell-detail-value[data-tone="good"] {color:var(--chalk-positive);}
 .chalk-shell-detail-value[data-tone="warn"] {color:var(--chalk-warning);}

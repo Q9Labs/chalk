@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
+import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
 import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
@@ -7,7 +7,7 @@ import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
 import { RowIcon } from "./RowIcon";
-import type { SpaceHeaderProps } from "./space-header-contract";
+import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 // The charts load when the connection section first opens, so a call that never looks at them never downloads them.
 const CallChartsView = lazy(() => import("./CallCharts").then((module) => ({ default: module.CallChartsView })));
@@ -20,6 +20,8 @@ export function CallDetails({
   network,
   people,
   isRecording = false,
+  recordingSeconds = null,
+  onStopRecording,
   colorScheme = "dark",
   onColorSchemeChange,
   sounds,
@@ -28,7 +30,7 @@ export function CallDetails({
   onReportProblem,
   revealConnection = false,
   revealQr = false,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
+}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "recordingSeconds" | "onStopRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
@@ -44,19 +46,14 @@ export function CallDetails({
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
-  const summary = [isRecording ? "Recording" : null, people ? `${people.length} in call` : null].filter(Boolean).join(" · ");
+  const summary = people ? `${people.length} in call` : "";
   return (
     <div className="chalk-details">
       <CallMenuStyles />
       <div className="chalk-shell-details-heading">
         <div>
           <h2>{spaceName}</h2>
-          {summary ? (
-            <p className="chalk-shell-details-sub">
-              {isRecording ? <i aria-hidden="true" /> : null}
-              {summary}
-            </p>
-          ) : null}
+          {summary ? <p className="chalk-shell-details-sub">{summary}</p> : null}
         </div>
         <ChalkIconButton aria-label="Close" size="sm" onClick={onClose}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
@@ -64,6 +61,25 @@ export function CallDetails({
           </svg>
         </ChalkIconButton>
       </div>
+      {isRecording ? (
+        <>
+          <div className="chalk-details-row chalk-details-recording">
+            <span className="chalk-shell-detail-lead">
+              <i aria-hidden="true" />
+            </span>
+            <span className="chalk-shell-detail-label">
+              Recording
+              {recordingSeconds === null ? null : <time dateTime={`PT${recordingSeconds}S`}>{formatDuration(recordingSeconds)}</time>}
+            </span>
+            {onStopRecording ? (
+              <ChalkButton className="chalk-details-recording-stop" aria-label="Stop recording" onClick={onStopRecording}>
+                Stop
+              </ChalkButton>
+            ) : null}
+          </div>
+          <div className="chalk-shell-sep" />
+        </>
+      ) : null}
       <InviteLinkButton link={link} variant="menu" />
       {qr ? (
         <>
