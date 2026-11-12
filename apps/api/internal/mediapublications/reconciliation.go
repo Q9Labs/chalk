@@ -133,7 +133,9 @@ func (s Service) ObserveRemoteTracks(ctx context.Context, input RemoteTrackObser
 	candidates := remotePublicationCandidates(input.TenantID, input.EpisodeID, latest)
 	due := s.absenceEvidence.observe(input.TenantID, input.EpisodeID, candidates, requested, missing)
 	for _, candidate := range due {
-		closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
+		closeInput := candidate.closeInput
+		closeInput.OnlyWhileEnabled = true
+		closeErr := s.RecordClosedPublication(ctx, closeInput)
 		if closeErr == nil || errors.Is(closeErr, ErrInvalidPublication) {
 			s.absenceEvidence.forget(candidate.key)
 			s.liveness.forget(candidate)
