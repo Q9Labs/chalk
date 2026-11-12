@@ -52,6 +52,16 @@ No bootstrap assertion or reusable credential may enter OpenTofu state, cloud-in
 
 ## Retained boot diagnostics and cold qualification
 
+The private bucket also serves browser-authorized chat and whiteboard files
+through short-lived presigned URLs. The managed CORS rule allows any origin for
+`GET` and `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
+checksum and attachment identity headers used by chat uploads. There is no
+origin list to maintain: the API authenticates the participant before it issues
+a URL, and the URL's signature is the access control, so an origin list adds
+nothing against a caller who holds the URL. The rule does not make the bucket
+public; keep its r2.dev and custom domains off. A new tenant or portal origin
+needs no bucket change.
+
 Failed-bootstrap fleet nodes retain a `<name>-bootstrap-evidence` snapshot (the newest three are kept). To inspect one, create a Droplet from it with the diagnostic SSH key and read `/var/log/cloud-init-output.log` and `journalctl -u chalk-recorder-*`. The snapshot may hold the node's one-time bootstrap environment, so delete it after use.
 
 A separately owned boot probe must have a name starting `chalk-recorder-diagnostic-` and the `chalk-recorder-diagnostic` tag **in its original provider create payload**, alongside the normal environment, owner, role, release, image and boot-generation tags. The fleet validates its inventory fences but does not adopt, count, bootstrap, drain or delete it. Fleet-generated names are never excluded, and a journal-managed node or pending create cannot escape its lifecycle by adding the tag; the tag grants no bootstrap authority. Never retag a live node. The tag does not isolate worker traffic, so use a task firewall that keeps the bootstrap route but blocks the worker's control-plane route, so a probe cannot join live Capture demand. The operator owns a bounded cleanup deadline, certificate revocation, provider deletion and task-key and firewall cleanup. Keep provider payloads, cloud-init logs, bootstrap environments and identity artifacts in private evidence.

@@ -58,7 +58,10 @@ func (q *Queries) AuthorizeRecordingArtifactReplay(ctx context.Context, arg Auth
 }
 
 const claimRecordingJob = `-- name: ClaimRecordingJob :one
-with candidate as (
+with claimant as (
+    select sfu_node from recording_colocated_capture_workers
+    where worker_id::text = $1::text
+), candidate as (
     select recording_jobs.id, recovery.source_expires_at as recovery_expires_at,
         (recording_jobs.kind = 'capture' and recording_capture_completion_available(recording_jobs.recording_id))::boolean as completion_only,
         recording_pipelines.capture_completed_at +
@@ -81,11 +84,11 @@ with candidate as (
         select case when recording_jobs.kind = 'capture' then recording_capture_completion_attempts(recording_jobs.id) else 0 end as attempts
     ) completion
     where (
-        recording_jobs.kind = $1
-        or ($1 = 'render' and recording_jobs.kind = 'transcription')
+        recording_jobs.kind = $2
+        or ($2 = 'render' and recording_jobs.kind = 'transcription')
       )
       and recording_jobs.state = 'pending'
-      and (recording_jobs.kind <> 'transcription' or $2::boolean)
+      and (recording_jobs.kind <> 'transcription' or $3::boolean)
       and (recording_jobs.kind not in ('render', 'transcription') or
           recording_pipelines.capture_completed_at +
               ((case when recording_jobs.kind = 'transcription'
@@ -93,9 +96,20 @@ with candidate as (
                   else recording_deferred_retention_seconds(episodes.config_snapshot)
               end) * interval '1 second') > clock_timestamp())
       and (recording_jobs.kind not in ('render', 'transcription') or
-          coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $3::integer * interval '1 second' > clock_timestamp())
+          coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $4::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
-      and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or $4::boolean)
+      -- A colocated worker takes only the captures of its own node. Everyone else leaves a capture
+      -- to the colocated worker for the grace while that worker is healthy.
+      and (recording_jobs.kind <> 'capture' or case
+          when exists (select 1 from claimant)
+              then $5::integer > 0
+                  and episodes.config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
+                  and episodes.config_snapshot->'media_plane_binding'->>'node' = (select sfu_node from claimant)
+                  and not recording_capture_colocated_attempted(recording_jobs.id)
+          else not ($5::integer > 0
+                  and recording_capture_colocated(recording_jobs.recording_id, $5::integer))
+          end)
+      and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or $6::boolean)
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or (completion.attempts < 3 or recovery.job_id is not null))
       and (recording_jobs.attempt_count < recording_jobs.attempt_limit or
           (recording_jobs.kind = 'capture' and (completion.attempts < 3 or recovery.job_id is not null) and
@@ -116,14 +130,14 @@ with candidate as (
     update recording_jobs
     set state = 'leased',
         attempt_count = attempt_count + 1,
-        lease_token = $5,
-        lease_owner = $6,
+        lease_token = $7,
+        lease_owner = $1,
 		lease_expires_at = case when recording_jobs.kind in ('render', 'transcription')
-			then least($7::timestamptz, candidate.source_expires_at,
-				coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $3::integer * interval '1 second')
-            when candidate.completion_only then least($7::timestamptz,
+			then least($8::timestamptz, candidate.source_expires_at,
+				coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + $4::integer * interval '1 second')
+            when candidate.completion_only then least($8::timestamptz,
                 candidate.recovery_expires_at, recording_capture_salvage_deadline(recording_jobs.recording_id))
-            else least($7::timestamptz, candidate.recovery_expires_at) end,
+            else least($8::timestamptz, candidate.recovery_expires_at) end,
         fencing_generation = fencing_generation + 1,
         updated_at = now()
     from candidate
@@ -190,12 +204,13 @@ where leased.kind not in ('render', 'transcription')
 `
 
 type ClaimRecordingJobParams struct {
+	LeaseOwner             string             `json:"lease_owner"`
 	Kind                   string             `json:"kind"`
 	TranscriptionEnabled   bool               `json:"transcription_enabled"`
 	MaximumRenderSeconds   int32              `json:"maximum_render_seconds"`
+	ColocatedGraceSeconds  int32              `json:"colocated_grace_seconds"`
 	SupportsCompletionOnly bool               `json:"supports_completion_only"`
 	LeaseToken             pgtype.Text        `json:"lease_token"`
-	LeaseOwner             pgtype.Text        `json:"lease_owner"`
 	LeaseExpiresAt         pgtype.Timestamptz `json:"lease_expires_at"`
 }
 
@@ -239,12 +254,13 @@ type ClaimRecordingJobRow struct {
 
 func (q *Queries) ClaimRecordingJob(ctx context.Context, arg ClaimRecordingJobParams) (ClaimRecordingJobRow, error) {
 	row := q.db.QueryRow(ctx, claimRecordingJob,
+		arg.LeaseOwner,
 		arg.Kind,
 		arg.TranscriptionEnabled,
 		arg.MaximumRenderSeconds,
+		arg.ColocatedGraceSeconds,
 		arg.SupportsCompletionOnly,
 		arg.LeaseToken,
-		arg.LeaseOwner,
 		arg.LeaseExpiresAt,
 	)
 	var i ClaimRecordingJobRow
@@ -2184,6 +2200,48 @@ func (q *Queries) InsertRecordingBundle(ctx context.Context, arg InsertRecording
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const insertRecordingClaimedEvent = `-- name: InsertRecordingClaimedEvent :exec
+insert into observability_journey_events (
+    event_id, journey_id, sequence, occurred_at, name, phase, state,
+    origin_kind, first_observed_layer, upstream_visibility, parent_event_id, trace_id, span_id, attributes
+)
+select gen_random_uuid(), coalesce(start_operation.journey_id, job.recording_id),
+    coalesce((select max(sequence) + 1 from observability_journey_events
+              where journey_id = coalesce(start_operation.journey_id, job.recording_id)), 0),
+    now(), 'recording.claimed', 'capture_claim', 'succeeded', 'server', 'api', 'visible',
+    start_operation.parent_journey_event_id, $1, $2,
+    jsonb_build_object('recording_id', job.recording_id, 'job_id', job.id, 'attempt_count', job.attempt_count,
+        'claim_lag_ms', greatest(0, floor(extract(epoch from (clock_timestamp() - job.available_at)) * 1000))::bigint,
+        'placement', case when exists (select 1 from recording_colocated_capture_workers node
+                                       where node.worker_id::text = $3::text)
+                          then 'colocated' else 'fleet' end)
+from recording_jobs job
+left join sync_recordings recording on recording.recording_id = job.recording_id and recording.tenant_id = job.tenant_id
+left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
+    and start_operation.tenant_id = job.tenant_id and start_operation.episode_id = job.episode_id
+    and start_operation.recording_id = job.recording_id and start_operation.operation_name = 'start_recording'
+where job.id = $4 and job.kind = 'capture'
+`
+
+type InsertRecordingClaimedEventParams struct {
+	TraceID    pgtype.Text `json:"trace_id"`
+	SpanID     pgtype.Text `json:"span_id"`
+	LeaseOwner string      `json:"lease_owner"`
+	JobID      pgtype.UUID `json:"job_id"`
+}
+
+// The claim lag is the time the capture waited, from becoming available to this claim. The event
+// joins the Recording's start journey, so a slow start reads off the Episode's own timeline.
+func (q *Queries) InsertRecordingClaimedEvent(ctx context.Context, arg InsertRecordingClaimedEventParams) error {
+	_, err := q.db.Exec(ctx, insertRecordingClaimedEvent,
+		arg.TraceID,
+		arg.SpanID,
+		arg.LeaseOwner,
+		arg.JobID,
+	)
+	return err
 }
 
 const insertRecordingJobAttemptAuthority = `-- name: InsertRecordingJobAttemptAuthority :one

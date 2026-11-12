@@ -504,6 +504,40 @@ it("starts no head start for an off target or a source the user paused", async (
   );
 });
 
+const idleSessionBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: true, subscriptionState: true, iceRestart: true, keepsIdleSession: true } };
+
+it("keeps the connection nobody has used for the first offer when the SFU keeps idle sessions", async () => {
+  const replaceMediaConnection = async () => bootstrap("replacement");
+  await withTimedHarness(
+    async (h) => {
+      await startDormantWithCamera(h);
+
+      await h.client.prepareLocalPublicationTarget(CAMERA_ON);
+      await expect(h.client.setLocalPublicationTarget(CAMERA_ON)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+      expect(h.peers).toHaveLength(1);
+      expect(h.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1"]);
+    },
+    { bootstrap: idleSessionBootstrap, replaceMediaConnection },
+  );
+});
+
+it("replaces the kept connection when the SFU reports it gone at the first offer", async () => {
+  let replacements = 0;
+  const replaceMediaConnection = async () => bootstrap(`replacement-${++replacements}`);
+  await withTimedHarness(
+    async (h) => {
+      await startDormantWithCamera(h);
+      h.transport.nextLocalPublishFailure = new CloudflareSFUError("session gone", "signaling_failed", { status: 404 });
+
+      await expect(h.client.setLocalPublicationTarget(CAMERA_ON)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+      expect(h.transport.addInputs.at(-1)?.connectionId).toBe("replacement-1");
+    },
+    { bootstrap: idleSessionBootstrap, replaceMediaConnection },
+  );
+});
+
 it("starts ICE candidate gathering when the peer connection is created", () => {
   const { peerConnectionFactory } = createHarness();
   expect(peerConnectionFactory).toHaveBeenCalledWith(expect.objectContaining({ bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 }));
@@ -820,6 +854,40 @@ it("parks a muted microphone on the SFU and resumes the same publication without
       expect(h.transport.closeInputs).toHaveLength(0);
       expect(microphoneAdds(h)).toHaveLength(1);
       expect(h.transport.renegotiateInputs).toHaveLength(offers);
+    },
+    { bootstrap: muteInPlaceBootstrap },
+  );
+});
+
+it("toggles the microphone and the camera many times without one close, add or offer", async () => {
+  await withTimedHarness(
+    async (h) => {
+      await publishMicrophone(h);
+      h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
+      const camOn = { ...micOn, operationId: "cam-on", source: "camera" as const };
+      await expect(h.client.setLocalPublicationTarget(camOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      const offers = h.transport.renegotiateInputs.length;
+      const adds = h.transport.addInputs.length;
+      const toggles = 20;
+      for (let toggle = 0; toggle < toggles; toggle++) {
+        await h.client.closeForcedLocalPublication("microphone", "user_pause");
+        await h.client.closeForcedLocalPublication("camera", "user_pause");
+        await h.client.setLocalSourceIntent("microphone", true);
+        await expect(h.client.setLocalPublicationTarget(micOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+        await h.client.setLocalSourceIntent("camera", true);
+        await expect(h.client.setLocalPublicationTarget(camOn)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+      }
+      const paused = h.transport.updateInputs.flatMap((input) => input.tracks.map((track) => track.paused));
+      expect(paused).toEqual(Array.from({ length: toggles }, () => [true, true, false, false]).flat());
+      expect(h.transport.closeInputs).toHaveLength(0);
+      expect(h.transport.addInputs).toHaveLength(adds);
+      expect(h.transport.renegotiateInputs).toHaveLength(offers);
+      expect(
+        h.client
+          .getSnapshot()
+          .localTracks.map((track) => track.source)
+          .sort(),
+      ).toEqual(["camera", "microphone"]);
     },
     { bootstrap: muteInPlaceBootstrap },
   );

@@ -41,7 +41,7 @@ func TestCaptureSalvageLeaseAndCompletionRespectRetention(t *testing.T) {
 			}
 			claimed, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
 				Kind: "capture", MaximumRenderSeconds: 7200, SupportsCompletionOnly: true,
-				LeaseOwner: pgtype.Text{String: "retention-worker", Valid: true}, LeaseToken: pgtype.Text{String: "retention-token", Valid: true},
+				LeaseOwner: "retention-worker", LeaseToken: pgtype.Text{String: "retention-token", Valid: true},
 				LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
 			})
 			if err != nil || !claimed.CompletionOnly {

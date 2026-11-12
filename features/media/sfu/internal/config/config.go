@@ -18,6 +18,9 @@ type Config struct {
 	ControlAddr string
 	// UDPAddr is the single UDP socket every WebRTC peer shares.
 	UDPAddr string
+	// TCPAddr is the TCP listener that carries media for a peer whose network blocks UDP (ICE-TCP).
+	// Empty turns it off, and then such a peer can reach the node only through a TURN relay.
+	TCPAddr string
 	// AnnounceIPs are the addresses put into ICE candidates. Empty means the host's interfaces.
 	AnnounceIPs []string
 	// IncludeLoopback offers loopback ICE candidates. Only local runs and tests need it.
@@ -152,6 +155,7 @@ func Load(lookup Lookup) (Config, error) {
 	cfg := Config{
 		ControlAddr:                r.text("SFU_CONTROL_ADDR", ":8443"),
 		UDPAddr:                    r.text("SFU_UDP_ADDR", ":50000"),
+		TCPAddr:                    r.text("SFU_TCP_ADDR", ""),
 		AnnounceIPs:                r.list("SFU_ANNOUNCE_IPS"),
 		IncludeLoopback:            r.boolean("SFU_ICE_LOOPBACK", false),
 		UDPReceiveBuffer:           r.integer("SFU_UDP_RECEIVE_BUFFER", 8<<20, 256<<10, 64<<20),

@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
+# reliability-correctness [server|clients|all]: the Sync server gate, the client proofs against it, or both (the default).
 set -euo pipefail
 repository_root="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$repository_root"
-apps/sync/scripts/gate.sh run
-pnpm --dir sdks/typescript/client run test
-pnpm --dir packages/whiteboard run test
-pnpm --dir sdks/typescript/client run test:sync-browser
+part="${1:-all}"
+case "$part" in
+  server | clients | all) ;;
+  *)
+    echo "usage: reliability-correctness [server|clients|all]" >&2
+    exit 2
+    ;;
+esac
+if [[ "$part" != clients ]]; then
+  apps/sync/scripts/gate.sh run
+fi
+if [[ "$part" != server ]]; then
+  pnpm --dir sdks/typescript/client run test
+  pnpm --dir packages/whiteboard run test
+  pnpm --dir sdks/typescript/client run test:sync-browser
+fi

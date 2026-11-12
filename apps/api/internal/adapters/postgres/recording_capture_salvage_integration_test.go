@@ -94,7 +94,7 @@ func TestStoppedCaptureCompletesCommittedSourceWithoutStopCallback(t *testing.T)
 			}
 			claimed, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
 				Kind: "capture", MaximumRenderSeconds: 7200, SupportsCompletionOnly: true,
-				LeaseOwner: pgtype.Text{String: "salvage-worker", Valid: true}, LeaseToken: pgtype.Text{String: "salvage-token", Valid: true},
+				LeaseOwner: "salvage-worker", LeaseToken: pgtype.Text{String: "salvage-token", Valid: true},
 				LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
 			})
 			if err != nil || !claimed.CompletionOnly || claimed.CaptureEpoch != f.captureEpoch {

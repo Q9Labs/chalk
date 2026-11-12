@@ -36,7 +36,7 @@ test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => 
   assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
@@ -202,14 +202,15 @@ test("a failed Cloudflare measurement under the lease still fails its step", () 
 });
 
 // Runs the real "Prove a real call" script in a scratch tree: the lease wrapper stub runs the workload, and the proof command exits with the code given for each failing proof.
-function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseStatus = 0 }) {
+function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseStatus = 0, ownOrigin = "http://127.0.0.1:4568" }) {
   const dir = mkdtempSync(join(tmpdir(), "proof-step-"));
   try {
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
     mkdirSync(join(dir, "bin"));
     const lease = join(dir, "scripts/staging-sfu/gate-lease");
     const pnpm = join(dir, "bin/pnpm");
-    writeFileSync(lease, `#!/usr/bin/env bash\nwhile [ "$1" != -- ]; do shift; done; shift\n${leaseStatus === 0 ? 'exec "$@"' : `exit ${leaseStatus}`}\n`);
+    // staging-lock rejects a purpose that is not a plain label, so the stand-in rejects it too.
+    writeFileSync(lease, `#!/usr/bin/env bash\n[[ "$2" =~ ^[A-Za-z0-9_-]{1,100}$ ]] || { echo "staging-lock: error: argument --purpose: use a plain label" >&2; exit 2; }\nwhile [ "$1" != -- ]; do shift; done; shift\n${leaseStatus === 0 ? 'exec "$@"' : `exit ${leaseStatus}`}\n`);
     copyFileSync(resolve(root, "scripts/staging-sfu/run-proofs"), join(dir, "scripts/staging-sfu/run-proofs"));
     chmodSync(join(dir, "scripts/staging-sfu/run-proofs"), 0o755);
     const cases = Object.entries(failing)
@@ -218,7 +219,7 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
     // call-artifacts marks its start; camera-share fails unless that mark appears while it runs, which proves the two overlap.
     writeFileSync(
       pnpm,
-      `#!/usr/bin/env bash\necho "$2" >> ran\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
+      `#!/usr/bin/env bash\necho "$2" >> ran\necho "$2 $CHALK_PROOF_PROOF_ORIGIN" >> origins\necho "::add-mask::chalk_sk_fakekey.fakesecret"\necho "using chalk_sk_fakekey.fakesecret for $2"\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
     );
     for (const file of [lease, pnpm]) chmodSync(file, 0o755);
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", proofStep.run], {
@@ -230,7 +231,9 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
         PROOFS: proofs,
         CHALK_PROOF_MEDIA_PLANE: plane,
         STAGING_SFU_PROOF: String(isNightly),
-        NEED_OVERLAP: isNightly ? "1" : "",
+        NEED_OVERLAP: isNightly && ownOrigin ? "1" : "",
+        CHALK_PROOF_PROOF_ORIGIN: "http://127.0.0.1:4567",
+        CHALK_PROOF_PROOF_ORIGIN_OWN: ownOrigin,
         RUN_PREFIX: "abc",
         GITHUB_OUTPUT: join(dir, "output"),
         GITHUB_STEP_SUMMARY: join(dir, "summary"),
@@ -242,6 +245,14 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
       stdout: result.stdout,
       stderr: result.stderr,
       ran: existsSync(join(dir, "ran")) ? readFileSync(join(dir, "ran"), "utf8").trim().split("\n") : [],
+      origins: existsSync(join(dir, "origins"))
+        ? Object.fromEntries(
+            readFileSync(join(dir, "origins"), "utf8")
+              .trim()
+              .split("\n")
+              .map((line) => line.split(" ")),
+          )
+        : {},
       results: /^results=(.*)$/m.exec(output)?.[1],
     };
   } finally {
@@ -264,11 +275,31 @@ test("the nightly step passes only when every proof passes", () => {
   assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
 });
 
-test("call-artifacts runs beside the proofs that share a Space, which keep their order", () => {
+test("call-artifacts runs beside the proofs that share a Space on its own proof origin, and they keep their order", () => {
   // camera-share exits 9 unless call-artifacts started while it was running.
   const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
   assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
   assert.ok(run.ran.indexOf("camera-share") < run.ran.indexOf("long-call"));
+  assert.deepEqual(run.origins, { "call-artifacts": "http://127.0.0.1:4568", "camera-share": "http://127.0.0.1:4567", "long-call": "http://127.0.0.1:4567" });
+});
+
+test("without a second proof origin every proof runs alone on the one origin", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin: "" });
+  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
+  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);
+});
+
+test("a proof API key reaches the log only in an unlabelled ::add-mask:: line", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs });
+  const lines = run.stdout.split("\n");
+  const keyLines = lines.filter((line) => line.includes("chalk_sk_fakekey"));
+  assert.ok(keyLines.length >= 3);
+  assert.ok(
+    keyLines.every((line) => line === "::add-mask::chalk_sk_fakekey.fakesecret"),
+    keyLines.join("\n"),
+  );
+  assert.ok(lines.includes("[camera-share] using chalk_sk_*** for camera-share"));
 });
 
 test("a lease failure (exit 75) runs no nightly proof and marks every one not-run", () => {
@@ -301,7 +332,7 @@ const capMinutes = (step) => {
 const proofStep = proof.jobs.smoke.steps.find((item) => item.name === "Prove a real call");
 const jobCap = Number(/chalk_sfu' && (\d+) \|\|/.exec(proof.jobs.smoke["timeout-minutes"])?.[1]);
 const cutWaits = {
-  "camera-share proof": Number(/STAGING_LEASE_WAIT=(\d+) scripts\/staging-sfu\/gate-lease nightly-proof /.exec(proofStep.run)?.[1]),
+  "camera-share proof": Number(/STAGING_LEASE_WAIT=(\d+) scripts\/staging-sfu\/gate-lease nightly-proof nightly-proofs /.exec(proofStep.run)?.[1]),
   "latency retry": Number(/attempt === 1 \? "0" : "(\d+)"/.exec(readFileSync(resolve(root, "features/scorecard/staging-latency.mjs"), "utf8"))?.[1]),
 };
 

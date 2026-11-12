@@ -1,6 +1,8 @@
 import { Context, Effect, Layer } from "effect";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { ChalkChatFileTransport } from "../chat-files";
+import { storeUpload } from "../chat-files/types";
+import { reportUploadFailure } from "./chat-upload-report";
 import type { ConnectionLifecycleCapability } from "../connection";
 import type { ConnectionDependencies } from "../connection/dependencies";
 import { makeChatController, type ChatControllerEffects } from "./chat-controller";
@@ -66,11 +68,8 @@ export function uploadFileEffect(
       const digest = [...sha256(new Uint8Array(bytes))].map((value) => value.toString(16).padStart(2, "0")).join("");
       return input.connection.runPortCommand(() =>
         foreign(() => input.chatFiles!.initiateUpload({ clientAttachmentId, fileName, mimeType: mimeType as ChatAttachment["mimeType"], byteLength: bytes.byteLength, sha256: digest })).pipe(
-          Effect.flatMap((upload) =>
-            foreign(() => fetch(upload.uploadUrl, { method: upload.method, headers: upload.headers, body: bytes })).pipe(
-              Effect.flatMap((response) => (response.ok ? foreign(() => input.chatFiles!.finalizeUpload(upload.uploadId)) : Effect.fail(new SpaceClientError({ code: "command.rejected", recoverable: response.status >= 500, message: `Attachment upload failed with HTTP ${response.status}` })))),
-            ),
-          ),
+          Effect.flatMap((upload) => foreign(() => storeUpload(fetch, upload, bytes)).pipe(Effect.andThen(foreign(() => input.chatFiles!.finalizeUpload(upload.uploadId))))),
+          Effect.tapError((cause) => Effect.sync(() => reportUploadFailure(input.connection, cause))),
         ),
       );
     }),

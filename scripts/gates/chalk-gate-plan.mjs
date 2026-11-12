@@ -430,7 +430,8 @@ export function createGatePlan(files, options = {}) {
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
+    task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "node",
       "scripts/test/run.mjs",
@@ -438,6 +439,7 @@ export function createGatePlan(files, options = {}) {
       "--test",
       "features/scorecard/promote-graph.test.mjs",
       "features/scorecard/nightly-graph.test.mjs",
+      "features/scorecard/lease-arguments.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
@@ -462,6 +464,7 @@ export function createGatePlan(files, options = {}) {
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
+    task("mock-calls", "Assertions on mock calls may only shrink", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["node", "scripts/gates/mock-calls.mjs"]),
     task("react-tokens", "React design-token reach", reactTokens, reactTokens ? "React design-token inputs changed" : "React design tokens are unaffected", ["node", "sdks/typescript/react/scripts/check-token-reach.mjs"]),
     task("native-quality", "React Native design tokens and worklets", nativeQuality, nativeQuality ? "React Native inputs changed" : "React Native is unaffected", [
       "bash",
@@ -541,7 +544,8 @@ function workspaceConcurrencyFrom(value) {
 
 export function gatePlanOptions(context, environment = process.env) {
   return {
-    full: context.scope === "full" || context.classification.fullRequired,
+    // q9gate marks every workflow file as gate behavior. The planner decides that itself, so a pull request that edits a release workflow keeps its narrow lanes.
+    full: context.scope === "full",
     scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
     base: context.base ?? environment.GATE_BASE_REF ?? "origin/master",
     target: resolveGateTarget(environment.GATE_TARGET, context.target),
@@ -581,6 +585,8 @@ const rootLaneGroups = {
   "browser-tests": ["browser-tests"],
   "dashboard-engine": ["dashboard-engine"],
   "dashboard-refresh": ["dashboard-refresh"],
+  // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
+  sfu: ["sfu"],
   "call-leaks-1": ["call-leaks"],
   "call-leaks-2": ["call-leaks"],
   "call-leaks-3": ["call-leaks"],

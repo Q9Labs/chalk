@@ -2,6 +2,8 @@
 Description=Chalk ephemeral Redis acceleration
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Container]
 Image=__REDIS_IMAGE_REFERENCE__
@@ -34,8 +36,6 @@ PodmanArgs=--stop-timeout=10
 [Service]
 Restart=on-failure
 RestartSec=2s
-StartLimitIntervalSec=60
-StartLimitBurst=5
 TimeoutStartSec=45
 TimeoutStopSec=20
 

@@ -36,7 +36,7 @@ test("the latency entry point runs a cycle and writes both the card and the diag
     assert.equal(sidecar.cycles[0].audio["media.network_jitter_one_way_ms"], 60);
     assert.deepEqual(sidecar.summary.audio["media.network_jitter_one_way_ms"], { n: 1, p50: 60, p95: 60 });
     assert.match(result.stdout, /Audio delay a listener adds/);
-    assert.deepEqual(sidecar.cycles[0].ice, { local_type: "host", remote_type: "srflx", requests_sent: 6, responses_received: 4, read_after_ms: 400 });
+    assert.deepEqual(sidecar.cycles[0].ice, { local_type: "host", remote_type: "srflx", relay_protocol: null, requests_sent: 6, responses_received: 4, read_after_ms: 400 });
     assert.deepEqual(sidecar.summary.ice, { pairs: { "host/srflx": 1 }, unanswered_checks: { n: 1, p50: 2, p95: 2 } });
     assert.equal(card.includes("srflx"), false, "the card holds no ICE reading");
     assert.match(result.stdout, /Selected pairs: host\/srflx 1\./);

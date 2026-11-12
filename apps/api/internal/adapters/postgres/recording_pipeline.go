@@ -28,6 +28,7 @@ import (
 type recordingPipelineQuerier interface {
 	GetRecordingCaptureCompletionIdentity(context.Context, pgtype.UUID) (pgtype.UUID, error)
 	ClaimRecordingJob(context.Context, sqlc.ClaimRecordingJobParams) (sqlc.ClaimRecordingJobRow, error)
+	InsertRecordingClaimedEvent(context.Context, sqlc.InsertRecordingClaimedEventParams) error
 	LockRecordingJobClaimRequest(context.Context, string) error
 	LockRecordingFleetWorkerClaim(context.Context, sqlc.LockRecordingFleetWorkerClaimParams) (bool, error)
 	GetRecordingJobAttemptAuthorityByClaimRequest(context.Context, pgtype.UUID) (sqlc.GetRecordingJobAttemptAuthorityByClaimRequestRow, error)
@@ -173,6 +174,7 @@ type RecordingPipelineRepository struct {
 	presentationFreezer      *recordingpresentation.Freezer
 	transcriptionEnabled     bool
 	recordingBundleV2Enabled bool
+	colocatedGrace           time.Duration
 }
 
 func NewRecordingPipelineRepository(queries recordingPipelineQuerier) RecordingPipelineRepository {
@@ -213,6 +215,13 @@ func (r RecordingPipelineRepository) WithRecordingPresentationFreezer(freezer re
 // as the rollout gate for automatic audio-preparation jobs.
 func (r RecordingPipelineRepository) WithTranscriptionEnabled(enabled bool) RecordingPipelineRepository {
 	r.transcriptionEnabled = enabled
+	return r
+}
+
+// WithColocatedCapture turns on capture workers beside own-SFU nodes: such a worker claims only the
+// captures of its own node, and the fleet leaves a capture to a healthy one for the grace.
+func (r RecordingPipelineRepository) WithColocatedCapture(grace time.Duration) RecordingPipelineRepository {
+	r.colocatedGrace = grace
 	return r
 }
 
@@ -516,7 +525,7 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			role = string(recordingpipeline.PoolRoleRender)
 		}
 		authorized, err := queries.LockRecordingFleetWorkerClaim(ctx, sqlc.LockRecordingFleetWorkerClaimParams{
-			Role: role, LeaseOwner: input.Owner,
+			Role: role, LeaseOwner: input.Owner, ColocatedEnabled: r.colocatedGrace > 0,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("lock recording worker admission: %w", err)
@@ -531,9 +540,10 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 			SupportsCompletionOnly: input.SupportsCompletionOnly,
 			MaximumRenderSeconds:   int32(recordingpipeline.MaximumRenderDuration / time.Second),
 			LeaseToken:             requiredTextValue(input.LeaseToken),
-			LeaseOwner:             requiredTextValue(input.Owner),
+			LeaseOwner:             input.Owner,
 			LeaseExpiresAt:         timestamptzValue(leaseExpiresAt),
 			Kind:                   string(input.Kind),
+			ColocatedGraceSeconds:  colocatedGraceSeconds(r.colocatedGrace),
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return recordingpipeline.ErrJobNotFound
@@ -609,6 +619,14 @@ func (r RecordingPipelineRepository) Claim(ctx context.Context, input recordingp
 				LeaseToken: requiredTextValue(input.LeaseToken), LeaseOwner: requiredTextValue(input.Owner), LeaseExpiresAt: timestamptzValue(leaseExpiresAt),
 			}); err != nil {
 				return fmt.Errorf("persist recording render input authority: %w", err)
+			}
+		}
+		if claimed.Kind == recordingpipeline.JobKindCapture {
+			traceID, spanID, _, _ := lifecycleTraceContext(ctx)
+			if err := queries.InsertRecordingClaimedEvent(ctx, sqlc.InsertRecordingClaimedEventParams{
+				JobID: uuid(claimed.ID), LeaseOwner: input.Owner, TraceID: optionalText(traceID), SpanID: optionalText(spanID),
+			}); err != nil {
+				return fmt.Errorf("record recording claim: %w", err)
 			}
 		}
 		claimed.Authority = &authority

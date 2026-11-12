@@ -139,6 +139,7 @@ export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
         local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
         recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_hidden_videos: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -569,6 +570,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           "audio_receive_summary",
           "receivers_closed",
           "access_retry",
+          "chat_upload_failed",
         ]),
         granted_audio: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
         granted_video: Schema.optional(Schema.Literals(["granted", "not_granted", "unknown"])),
@@ -602,9 +604,10 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
         track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
+        upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
       }),
     ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"]),
+    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "upload_failed"]),
     version: Schema.Literal(1),
   }))();
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;

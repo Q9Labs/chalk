@@ -1,6 +1,7 @@
 package workeridentity
 
 import (
+	"crypto/sha256"
 	"errors"
 	"net/http"
 	"net/url"
@@ -78,4 +79,16 @@ func (v Verifier) identity(uri *url.URL) (Identity, error) {
 	}
 
 	return Identity{WorkerID: workerID, Role: role}, nil
+}
+
+// ColocatedWorkerID names the capture worker that runs beside one own-SFU node. It is derived,
+// not issued, so the API can register the worker from its node list and the deploy can put the
+// same ID in the worker's certificate. features/media/sfu/deploy/certs computes the same value.
+func ColocatedWorkerID(environment, sfuNode string) utilities.ID {
+	digest := sha256.Sum256([]byte("chalk-colocated-capture/v1/" + environment + "/" + sfuNode))
+	var bytes [16]byte
+	copy(bytes[:], digest[:16])
+	bytes[6] = (bytes[6] & 0x0f) | 0x80
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	return utilities.IDFromBytes(bytes)
 }

@@ -1,0 +1,2 @@
+# Use the existing private nightly state bucket. Never use production state.
+bucket = "__NIGHTLY_STATE_BUCKET__"

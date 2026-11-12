@@ -23,7 +23,7 @@ if [[ "$mode" == --all ]]; then
   export TARGET_SHA="${TARGET_SHA-$(git rev-parse HEAD)}"
 fi
 check release-source scripts/releases/check-source.sh
-check own-sfu-promotion-tests python3 -m unittest discover -s scripts/releases -p test_release.py
+check own-sfu-promotion-tests python3 -m unittest discover -s scripts/releases -p 'test_*.py'
 if [[ "${MANAGED_ENVIRONMENT:-nightly}" == nightly ]]; then
   check dispatcher-configuration python3 scripts/releases/media.py check_configuration --environment nightly
 fi
@@ -38,9 +38,11 @@ check dispatcher-init tofu -chdir=infrastructure/nightly/transcription init -bac
 check dispatcher-validate tofu -chdir=infrastructure/nightly/transcription validate -no-color
 check recorder-address-init tofu -chdir=infrastructure/nightly/recording-control-address init -backend=false -input=false -upgrade=false
 check recorder-address-validate tofu -chdir=infrastructure/nightly/recording-control-address validate -no-color
+check archive-cdn-init tofu -chdir=infrastructure/nightly/archive-cdn init -backend=false -input=false -upgrade=false
+check archive-cdn-validate tofu -chdir=infrastructure/nightly/archive-cdn validate -no-color
 # GitHub supports queue:max; actionlint 1.7.12 has not added that schema key yet.
 # https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
-check workflow-lint actionlint -ignore '^unexpected key "queue" for "concurrency" section' .github/workflows/ci.yml .github/workflows/nightly.yml .github/workflows/promote.yml .github/workflows/npm-publish.yml .github/workflows/release-contracts.yml
+check workflow-lint actionlint -ignore '^unexpected key "queue" for "concurrency" section' .github/workflows/ci.yml .github/workflows/nightly.yml .github/workflows/promote.yml .github/workflows/hotfix.yml .github/workflows/rollback-rehearsal.yml .github/workflows/npm-publish.yml .github/workflows/release-contracts.yml
 check proof-workflow-lint actionlint -ignore '^unexpected key "queue" for "concurrency" section' .github/workflows/real-call-proof.yml .github/workflows/web-call-proof.yml
 printf 'Release contract logs: %s\n' "$logs"
 exit "$failed"

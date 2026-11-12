@@ -153,7 +153,7 @@ jobs:
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: production
-      proofs: ${{ inputs.capture_proofs && 'leave-own-sfu camera-share call-artifacts' || 'leave-own-sfu camera-share' }}
+      proofs: ${{ inputs.capture_proofs && 'leave-own-sfu camera-share chat-upload call-artifacts' || 'leave-own-sfu camera-share chat-upload' }}
       media_plane: chalk_sfu
       release_sha: ${{ fromJSON(needs.select.outputs.selection).selection.target_sha }}
     secrets: inherit

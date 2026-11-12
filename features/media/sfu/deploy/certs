@@ -5,6 +5,11 @@
 #   certs <staging|production> server          the SFU's server certificate (DNS chalk-sfu), 180 days
 #   certs <staging|production> api <key> <crt> the API's identity for its existing key and names, 365 days
 #   certs <staging|production> operator        a one-day client certificate with the API identity
+#   certs <staging|production|bench> capture-ca     the capture workers' own CA, apart from the service CA
+#   certs <staging|production|bench> capture-worker <sfu node>
+#                                              the identity of the capture worker beside that node, 30 days
+#   certs <staging|production|bench> capture-worker-check <sfu node>
+#                                              fails unless the installed worker identity is the node's, from the capture CA, with 14 days left
 #
 # The API presents its identity to the SFU, and the SFU requires it
 # (SFU_CLIENT_IDENTITY). The same certificate serves the provider bridge, so it
@@ -14,7 +19,7 @@
 # 1Password, because scripts/bench deletes the whole directory with the fleet.
 set -euo pipefail
 
-usage="usage: certs <staging|production|bench> <ca|server|api|operator>"
+usage="usage: certs <staging|production|bench> <ca|server|api|operator|capture-ca|capture-worker|capture-worker-check>"
 environment="${1:?$usage}"
 command="${2:?$usage}"
 case "$environment" in
@@ -28,6 +33,8 @@ openssl="${OPENSSL:-openssl}"
 dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
 ca_title="Chalk SFU ${title_environment} Service CA Key"
 ca_ref="op://dev/${ca_title}/credential"
+capture_ca_title="Chalk SFU ${title_environment} Capture CA Key"
+capture_ca_ref="op://dev/${capture_ca_title}/credential"
 api_identity="spiffe://chalkmeet.com/environment/${spiffe_environment}/api"
 mkdir -p "$dir"
 chmod 700 "$dir"
@@ -47,45 +54,97 @@ install_pair() {
   mv "${work}/$1.crt" "${dir}/$1.crt"
 }
 
+# signer names the CA that signs: ca (the service CA) or capture-ca.
+signer=ca
 sign() {
-  if [[ ! -f "${dir}/ca.crt" ]]; then
-    echo "no ${dir}/ca.crt; run: certs ${environment} ca" >&2
+  local ref="$ca_ref"
+  [[ "$signer" == ca ]] || ref="$capture_ca_ref"
+  if [[ ! -f "${dir}/${signer}.crt" ]]; then
+    echo "no ${dir}/${signer}.crt; run: certs ${environment} ${signer}" >&2
     exit 1
   fi
   if [[ "$environment" == bench ]]; then
-    cp "${dir}/ca.key" "${work}/ca.key"
+    cp "${dir}/${signer}.key" "${work}/ca.key"
   else
-    2password read "$ca_ref" >"${work}/ca.key"
+    2password read "$ref" >"${work}/ca.key"
   fi
   chmod 600 "${work}/ca.key"
-  "$openssl" x509 -req -in "$1" -CA "${dir}/ca.crt" -CAkey "${work}/ca.key" -set_serial "0x$("$openssl" rand -hex 16)" \
+  "$openssl" x509 -req -in "$1" -CA "${dir}/${signer}.crt" -CAkey "${work}/ca.key" -set_serial "0x$("$openssl" rand -hex 16)" \
     -days "$3" -sha256 -extfile "$2" -out "$4" 2>/dev/null
   rm -f "${work}/ca.key"
   "$openssl" x509 -in "$4" -noout -subject -enddate
 }
 
+# create_ca <name: ca|capture-ca> <1Password title> <common name>
+create_ca() {
+  if [[ -f "${dir}/$1.crt" ]]; then
+    echo "${dir}/$1.crt exists; a new CA would orphan every certificate it issued" >&2
+    exit 1
+  fi
+  new_key "${work}/ca.key"
+  "$openssl" req -x509 -new -key "${work}/ca.key" -subj "/CN=$3" -days 3650 -sha256 \
+    -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign" \
+    -out "${work}/ca.crt"
+  if [[ "$environment" == bench ]]; then
+    mv "${work}/ca.key" "${dir}/$1.key"
+    mv "${work}/ca.crt" "${dir}/$1.crt"
+    echo "throwaway CA ${dir}/$1.crt; key ${dir}/$1.key"
+    return
+  fi
+  if ! 2password create api-credential --title "$2" --vault dev --stdin <"${work}/ca.key" | grep -q '"verified": true'; then
+    echo "the CA key did not verify in 1Password; nothing was kept" >&2
+    exit 1
+  fi
+  mv "${work}/ca.crt" "${dir}/$1.crt"
+  echo "CA ${dir}/$1.crt; key in 1Password as \"$2\""
+}
+
+# capture_worker_id derives the worker ID for an SFU node exactly as workeridentity.ColocatedWorkerID
+# does. A pinned test vector in test_deploy.py and in the Go package keeps the two equal.
+capture_worker_id() {
+  python3 -I - "$1" "$2" <<'PY'
+import hashlib, sys
+digest = bytearray(hashlib.sha256(f"chalk-colocated-capture/v1/{sys.argv[1]}/{sys.argv[2]}".encode()).digest()[:16])
+digest[6] = (digest[6] & 0x0F) | 0x80
+digest[8] = (digest[8] & 0x3F) | 0x80
+h = digest.hex()
+print(f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}")
+PY
+}
+
 case "$command" in
   ca)
-    if [[ -f "${dir}/ca.crt" ]]; then
-      echo "${dir}/ca.crt exists; a new CA would orphan every certificate it issued" >&2
-      exit 1
-    fi
-    new_key "${work}/ca.key"
-    "$openssl" req -x509 -new -key "${work}/ca.key" -subj "/CN=chalk-${spiffe_environment}-service-ca" -days 3650 -sha256 \
-      -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign" \
-      -out "${work}/ca.crt"
-    if [[ "$environment" == bench ]]; then
-      mv "${work}/ca.key" "${dir}/ca.key"
-      mv "${work}/ca.crt" "${dir}/ca.crt"
-      echo "throwaway service CA ${dir}/ca.crt; key ${dir}/ca.key"
-      exit 0
-    fi
-    if ! 2password create api-credential --title "$ca_title" --vault dev --stdin <"${work}/ca.key" | grep -q '"verified": true'; then
-      echo "the CA key did not verify in 1Password; nothing was kept" >&2
-      exit 1
-    fi
-    mv "${work}/ca.crt" "${dir}/ca.crt"
-    echo "service CA ${dir}/ca.crt; key in 1Password as \"${ca_title}\""
+    create_ca ca "$ca_title" "chalk-${spiffe_environment}-service-ca"
+    ;;
+  capture-ca)
+    create_ca capture-ca "$capture_ca_title" "chalk-${spiffe_environment}-capture-ca"
+    ;;
+  capture-worker)
+    node="${3:?usage: certs <env> capture-worker <sfu node id>}"
+    worker_id="$(capture_worker_id "$spiffe_environment" "$node")"
+    signer=capture-ca
+    new_key "${work}/capture-worker.key"
+    "$openssl" req -new -key "${work}/capture-worker.key" -subj "/CN=chalk-${spiffe_environment}-capture-${node}" -out "${work}/capture-worker.csr"
+    printf '%s\n' "basicConstraints=critical,CA:FALSE" "keyUsage=critical,digitalSignature" \
+      "extendedKeyUsage=clientAuth" "subjectAltName=URI:spiffe://chalkmeet.com/environment/${spiffe_environment}/capture/${worker_id}" >"${work}/capture-worker.ext"
+    sign "${work}/capture-worker.csr" "${work}/capture-worker.ext" 30 "${work}/capture-worker.crt"
+    install_pair capture-worker
+    echo "worker ${worker_id} for SFU node ${node}"
+    ;;
+  capture-worker-check)
+    node="${3:?usage: certs <env> capture-worker-check <sfu node id>}"
+    worker_id="$(capture_worker_id "$spiffe_environment" "$node")"
+    cert="${dir}/capture-worker.crt"
+    [[ -f "$cert" && -f "${dir}/capture-worker.key" ]] || { echo "no worker identity in ${dir}; run: certs ${environment} capture-worker ${node}" >&2; exit 1; }
+    "$openssl" verify -purpose sslclient -CAfile "${dir}/capture-ca.crt" "$cert" >/dev/null 2>&1 \
+      || { echo "${cert} does not verify against ${dir}/capture-ca.crt" >&2; exit 1; }
+    names="$("$openssl" x509 -in "$cert" -noout -ext subjectAltName | tr -d ' \n')"
+    [[ "$names" == *"URI:spiffe://chalkmeet.com/environment/${spiffe_environment}/capture/${worker_id}" && "$names" != *,* ]] \
+      || { echo "${cert} does not carry exactly the identity of worker ${worker_id} for node ${node}" >&2; exit 1; }
+    "$openssl" x509 -in "$cert" -noout -checkend 1209600 >/dev/null || { echo "${cert} expires within 14 days; run: certs ${environment} capture-worker ${node}" >&2; exit 1; }
+    [[ "$("$openssl" x509 -in "$cert" -noout -pubkey)" == "$("$openssl" pkey -in "${dir}/capture-worker.key" -pubout)" ]] \
+      || { echo "${dir}/capture-worker.key is not the key of ${cert}" >&2; exit 1; }
+    echo "worker ${worker_id} for SFU node ${node}: $("$openssl" x509 -in "$cert" -noout -enddate)"
     ;;
   server)
     new_key "${work}/server.key"

@@ -123,11 +123,13 @@ jobs:
     timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
-      # One run holds at most four root runners, so a full run takes 6 of the organisation's 20 hosted-runner slots
-      # (four root groups, API and Sync) instead of 10. The matrix lists the slowest groups first so they start first.
-      max-parallel: 4
+      # One run holds at most eight root runners, so a full run takes 10 of the organisation's 20 hosted-runner slots
+      # (eight root groups, API and Sync). Four left the last groups of a full run waiting 6 to 10 minutes for a slot
+      # while the slots were free (runner queue was under 10 seconds for the first four), and the work is the same
+      # whichever order it runs in. The matrix lists the slowest groups first so they start first.
+      max-parallel: 8
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
@@ -154,7 +156,7 @@ jobs:
 
       # Go runs the generated-output and contract checks.
       - name: Set up Go
-        if: matrix.group == 'checks' || startsWith(matrix.group, 'dashboard-')
+        if: matrix.group == 'checks' || matrix.group == 'sfu' || startsWith(matrix.group, 'dashboard-')
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
@@ -167,6 +169,17 @@ jobs:
           version-file: .tool-versions
           version-type: strict
 
+      # The dashboard proofs run mix deps.get. cache-warm.yml saves these on master, so a Hex outage cannot fail a pull
+      # request whose mix.lock did not change. The path list must match the saved entry exactly.
+      - name: Restore Mix dependencies
+        if: startsWith(matrix.group, 'dashboard-')
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            apps/sync/deps
+            apps/sync/_build
+          key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+
       - name: Install the dashboard database client
         if: startsWith(matrix.group, 'dashboard-')
         uses: ./.github/actions/apt-install
@@ -174,7 +187,7 @@ jobs:
           packages: postgresql-client
 
       - name: Restore Go caches
-        if: matrix.group == 'checks'
+        if: matrix.group == 'checks' || matrix.group == 'sfu' || startsWith(matrix.group, 'dashboard-')
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
@@ -247,9 +260,9 @@ jobs:
           fi
 
       # The scorecard reads the reports the lanes above wrote: the call bundle sizes in the build group and the SFU
-      # loopback and impairment tests in the checks group. It adds no job; a lane that did not run leaves no report.
+      # loopback and impairment tests in the sfu group. It adds no job; a lane that did not run leaves no report.
       - name: Score the run against the latest master run
-        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'checks') }}
+        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'sfu') }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -257,7 +270,7 @@ jobs:
         run: features/scorecard/pr-tier.sh ${{ matrix.group == 'build' && 'web' || 'sfu' }}
 
       - name: Save the scorecard
-        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'checks') }}
+        if: ${{ !cancelled() && (matrix.group == 'build' || matrix.group == 'sfu') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: scorecard-${{ matrix.group == 'build' && 'web' || 'sfu' }}
@@ -379,12 +392,17 @@ jobs:
       - name: Run the API gate
         run: apps/api/scripts/gate.sh
 
-  sync:
-    name: Sync gate
+  # The Sync server tests and the client proofs against it take about three minutes each, so they run side by side.
+  sync-parts:
+    name: Sync ${{ matrix.part }}
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [server, clients]
     env:
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
@@ -439,10 +457,24 @@ jobs:
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
 
       - name: Install Chromium for the browser reconnection proof
+        if: matrix.part == 'clients'
         uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
 
       # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
-      - name: Run the Sync gate and correctness harness
-        run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
+      - name: Run the Sync ${{ matrix.part }} part of the correctness harness
+        run: scripts/gates/with-postgres.sh -- apps/sync/scripts/reliability-correctness ${{ matrix.part }}
+
+  # The required context. A part the planner did not select is skipped, which counts as passed.
+  sync:
+    name: Sync gate
+    needs: sync-parts
+    if: always()
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Require every Sync part to pass
+        run: |
+          echo "Sync parts: ${{ needs.sync-parts.result }}"
+          [[ "${{ needs.sync-parts.result }}" == "success" || "${{ needs.sync-parts.result }}" == "skipped" ]]

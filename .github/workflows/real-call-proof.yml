@@ -232,6 +232,7 @@ jobs:
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_PROOF_ORIGIN_OWN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN_OWN }}
           CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
@@ -246,12 +247,12 @@ jobs:
           esac
           for proof in "${proofs[@]}"; do
             case "$proof" in
-              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces) ;;
+              all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|leave|leave-own-sfu|own-sfu-spaces|chat-upload) ;;
               *) echo "Unsupported proof command" >&2; exit 1 ;;
             esac
             # The older Recording, export and transcript proofs need Cloudflare. call-artifacts is the own SFU's Recording and Transcript proof, and long-call holds a call across media-access refreshes (about 11 minutes). Neither is in a default list.
-            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ]; then
-              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu and own-sfu-spaces" >&2
+            if [ "$CHALK_PROOF_MEDIA_PLANE" = chalk_sfu ] && [ "$proof" != camera-share ] && [ "$proof" != call-artifacts ] && [ "$proof" != long-call ] && [ "$proof" != leave-own-sfu ] && [ "$proof" != own-sfu-spaces ] && [ "$proof" != chat-upload ]; then
+              echo "chalk_sfu supports only camera-share, call-artifacts, long-call, leave-own-sfu, own-sfu-spaces and chat-upload" >&2
               exit 1
             fi
           done
@@ -260,12 +261,12 @@ jobs:
           failed=()
           if [[ "$STAGING_SFU_PROOF" == true ]]; then
             # The nightly proofs are independent, so one failure must not hide the others' results. One lease covers the whole group:
-            # call-artifacts runs on its own Space beside the other proofs (see run-proofs). A lease problem (exit 75) leaves a proof
+            # call-artifacts runs on its own Space beside the other proofs when it has its own proof origin (see run-proofs). A lease problem (exit 75) leaves a proof
             # without a status, so it is not-run, and gate-lease names the reason in the step output `failure`.
             status_dir=.private/proof-status
             for proof in "${proofs[@]}"; do echo "${RUN_PREFIX}-${proof}" >> .private/proof-run-ids; done
             group=0
-            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof "${proofs[*]}" "$RUN_PREFIX" -- scripts/staging-sfu/run-proofs "$RUN_PREFIX" "$status_dir" "${proofs[@]}" || group=$?
+            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof nightly-proofs "$RUN_PREFIX" -- scripts/staging-sfu/run-proofs "$RUN_PREFIX" "$status_dir" "${proofs[@]}" || group=$?
             for proof in "${proofs[@]}"; do
               if [ ! -f "$status_dir/$proof" ]; then
                 results+=("$proof=not-run")

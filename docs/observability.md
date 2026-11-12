@@ -31,7 +31,7 @@ A terminal failure, rejection or timeout must say why, in a bounded and redacted
 
 ## Journey ledger and proof
 
-Add a ledger event when a durable lifecycle boundary changes: the Episode, a participant, a publication, a recording, a webhook delivery. Do it in the same transaction as the change, link it to the parent event, and carry trace and span IDs. The webhook events are listed in `contract/webhooks/v1/journey-events.json`. MCP adds no parallel ledger.
+Add a ledger event when a durable lifecycle boundary changes: the Episode, a participant, a publication, a recording, a webhook delivery. Do it in the same transaction as the change, link it to the parent event, and carry trace and span IDs. The webhook events are listed in `contract/webhooks/v1/journey-events.json`. MCP adds no parallel ledger. A capture claim writes `recording.claimed` to the Recording's start journey in the claim transaction, with `claim_lag_ms` and `placement`, so a slow start reads off the Episode's own timeline.
 
 Do not add a ledger event for transient delivery that the client observes, such as a congestion pause, a retry, an ICE detail or a diagnostic sample. Their evidence is logs, metrics and call stats. Telemetry from the SFU cannot replace durable Postgres lifecycle evidence.
 
@@ -58,7 +58,9 @@ To compare providers after a cutover step, or when a connection report points at
 
 Check `samples` before you trust a percentile, because each sample covers about ten seconds. Add `['attributes.connection_type']` to separate relayed calls from direct ones, or `bin(_time, 1h)` for a trend. Nothing pages on this query.
 
-A rising `recv_paused_videos` with low receive bitrate means the own SFU is protecting audio on a slow link. It is not a receive stall.
+A rising `recv_paused_videos` with low receive bitrate means the own SFU is protecting audio on a slow link. It is not a receive stall. A rising `recv_hidden_videos` with low receive bitrate means the viewer's own tab or tile hid the video, which sends nothing on purpose: the SDK pauses or closes a hidden video after 5 s (15 s for a hidden page) and brings it back when the tile shows again.
+
+A failed chat file upload is reported as `chat_upload_failed` (trigger `upload_failed`) on the connection-report endpoint, with `upload_failure` naming where it broke: `initiate_failed` or `finalize_failed` (an API error), `storage_rejected` (storage answered with `http_status`), or `storage_unreachable` (the browser got no HTTP answer from storage: a network failure or a CORS block). `storage_unreachable` from a browser that otherwise works means the bucket CORS rule is wrong. The report needs an open call connection, so a chat outside a call does not report.
 
 ## Follow one Participant through the own SFU
 

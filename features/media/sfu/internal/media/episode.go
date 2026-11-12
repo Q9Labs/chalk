@@ -349,9 +349,8 @@ func (s *subscription) packetRate(limit serverLimit, now int64) float64 {
 }
 
 // allocateSession spends one subscriber transport's estimate on its video. A
-// subscriber without transport-wide feedback gets no bandwidth limit, as
-// before the allocator, and its Episode's plan alone applies. A source whose
-// lease is closed gets no share until a grant opens it.
+// subscriber without transport-wide feedback spends the ceiling its receiver
+// reports allow. A source whose lease is closed gets no share until a grant opens it.
 func allocateSession(session *Session, room bool, probes *probeBudget, now int64) {
 	transport := session.transport
 	estimate := transport.estimate(now)
@@ -363,10 +362,6 @@ func allocateSession(session *Session, room bool, probes *probeBudget, now int64
 		pub := subscription.pub
 		binding := subscription.track.binding.Load()
 		if !pub.video() || binding == nil {
-			continue
-		}
-		if binding.twccID == 0 {
-			subscription.alloc = allocation{decided: true}
 			continue
 		}
 		request := subscription.currentRequest()
