@@ -1,5 +1,5 @@
 name: Rollback rehearsal
-# Weekly, on nightly: deploy the newest held cut, roll back to the one before it with the Release job production uses, and roll forward again.
+# Weekly, on nightly: deploy the newest passed cut, roll back to the one before it with the Release job production uses, and roll forward again.
 # The rollback on 23 Oct failed because the older release's controller could not read the pointer the newer one wrote. This run fails when that happens again.
 on:
   schedule:
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - name: Pick the two newest held nightly cuts
+      - name: Pick the two newest passed nightly cuts
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}

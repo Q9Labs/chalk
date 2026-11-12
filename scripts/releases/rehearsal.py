@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pick the two newest held nightly cuts for the rollback rehearsal and judge its three deploys."""
+"""Pick the two newest passed nightly cuts for the rollback rehearsal and judge its three deploys."""
 
 import argparse
 import json
@@ -12,8 +12,9 @@ from release import env, manifest_bytes
 KEYS = ('run_id', 'target_sha', 'release_id', 'manifest_artifact_id', 'manifest_sha256')
 
 
-def held_cuts(github, count):
-    """Newest first. The GitHub boundary returns only the first match, so this walks the pages itself."""
+def passed_cuts(github, count):
+    """Newest first. A newer held cut marks the older ones inactive, so a passed cut counts when it was ever recorded as success.
+    The GitHub boundary returns only the first match, so this walks the pages itself."""
     found = []
     page = 1
     while len(found) < count:
@@ -22,8 +23,7 @@ def held_cuts(github, count):
             info = payload(item)
             if info.get('channel') != 'nightly-cut' or info.get('proof_result') != 'passed':
                 continue
-            status = github.request(f"deployments/{item['id']}/statuses?per_page=1")
-            if status and status[0]['state'] == 'success':
+            if any(status['state'] == 'success' for status in github.request(f"deployments/{item['id']}/statuses?per_page=10")):
                 found.append(info)
                 if len(found) == count:
                     break
@@ -34,11 +34,11 @@ def held_cuts(github, count):
 
 
 def plan(github, args):
-    cuts = held_cuts(github, 2)
-    require(len(cuts) == 2, 'the rehearsal needs two held nightly cuts; cut another nightly first')
+    cuts = passed_cuts(github, 2)
+    require(len(cuts) == 2, 'the rehearsal needs two nightly cuts that passed their proof; cut another nightly first')
     current, previous = cuts
     require(current['release_id'] != previous['release_id'] and current['target_sha'] != previous['target_sha'],
-            'the two newest held cuts are the same release; there is nothing to roll back to')
+            'the two newest passed cuts are the same release; there is nothing to roll back to')
     for info in cuts:
         manifest_bytes(github, info)
     outputs({'current': {key: current[key] for key in KEYS} | {'media_sha256': current.get('media_sha256', '')},

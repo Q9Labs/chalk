@@ -118,15 +118,15 @@ class Rehearsal(Files):
     def github(self, *cuts):
         items = [dict(id=index, payload=cut) for index, cut in enumerate(cuts)]
         github = Mock()
-        github.request.side_effect = lambda route, data=None: items if route.startswith('deployments?') else [dict(state='success')]
+        github.request.side_effect = lambda route, data=None: items if route.startswith('deployments?') else [dict(state='inactive'), dict(state='success')]
         return github
 
-    def test_it_takes_the_two_newest_held_cuts_and_skips_a_failed_one(self):
+    def test_it_takes_the_two_newest_passed_cuts_and_skips_a_failed_one(self):
         github = self.github(self.cut('x-new'), self.cut('y-failed', 'failed'), self.cut('z-old'))
-        self.assertEqual([cut['release_id'] for cut in rehearsal.held_cuts(github, 2)], ['x-new', 'z-old'])
+        self.assertEqual([cut['release_id'] for cut in rehearsal.passed_cuts(github, 2)], ['x-new', 'z-old'])
 
-    def test_one_held_cut_is_not_enough(self):
-        with patch.object(rehearsal, 'manifest_bytes'), self.assertRaisesRegex(ValueError, 'two held'):
+    def test_one_passed_cut_is_not_enough(self):
+        with patch.object(rehearsal, 'manifest_bytes'), self.assertRaisesRegex(ValueError, 'two nightly cuts'):
             rehearsal.plan(self.github(self.cut('x-new')), None)
 
     def judge(self, rollback_source):
