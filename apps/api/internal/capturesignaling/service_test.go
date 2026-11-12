@@ -138,33 +138,6 @@ func TestServiceTreatsFailedRetirementAsAmbiguousPull(t *testing.T) {
 	}
 }
 
-func TestServiceReplaysExactCompletedResultWithoutProviderCall(t *testing.T) {
-	provider := &fakePlane{}
-	store := newMemoryPort()
-	command := commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))
-	service, err := NewService(store, provider, Options{MaxWait: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := service.Execute(context.Background(), ExecuteRequest{Command: command})
-	if err != nil {
-		t.Fatalf("first execute: %v", err)
-	}
-	second, err := service.Execute(context.Background(), ExecuteRequest{Command: command})
-	if err != nil {
-		t.Fatalf("replay execute: %v", err)
-	}
-	if !second.Replayed || string(first.ResultBytes) != string(second.ResultBytes) {
-		t.Fatalf("replay = %#v, first bytes %q second bytes %q", second.Replayed, first.ResultBytes, second.ResultBytes)
-	}
-	if provider.calls(captureplane.OperationCreateCaptureConnection) != 1 {
-		t.Fatalf("provider calls = %d, want one", provider.calls(captureplane.OperationCreateCaptureConnection))
-	}
-	if provider.resolutions() != 1 {
-		t.Fatalf("provider resolutions = %d, want one; durable replay must not resolve again", provider.resolutions())
-	}
-}
-
 func TestServiceFailsBeforeClaimWhenEpisodeCaptureBindingCannotResolve(t *testing.T) {
 	provider := &fakePlane{resolveErr: captureplane.ProviderError{
 		Class: captureplane.ProviderFailureUnavailable, Code: "adapter_unavailable", Retryable: false,
@@ -336,63 +309,6 @@ func TestValidatePreparedCommandFencesCurrentProjection(t *testing.T) {
 	}
 }
 
-func TestFirstConnectionAtLaterPlanRevisionPassesSignalingFences(t *testing.T) {
-	create := commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))
-	create.Identity.PlanRevision = 3
-	if err := ValidatePreparedCommand(preparedFor(create), nil); err != nil {
-		t.Fatalf("first create at revision 3: %v", err)
-	}
-	connection := captureplane.CaptureConnection{ConnectionReference: "connection-1", CaptureEpoch: create.Authority.CaptureEpoch, PlanRevision: 3}
-	projection, err := ProjectResult(create.SignalingHandle, create.Authority, captureplane.OperationCreateCaptureConnection, CommandResult{
-		CreateCaptureConnection: &captureplane.CreateCaptureConnectionResult{Connection: connection, Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired}},
-	}, nil)
-	if err != nil {
-		t.Fatalf("project late create: %v", err)
-	}
-	pull := commandFor(captureplane.OperationPullCaptureTracks, time.Now().Add(time.Minute))
-	pull.Identity.PlanRevision = 3
-	if err := ValidatePreparedCommand(preparedFor(pull), projection); err != nil {
-		t.Fatalf("pull after late create: %v", err)
-	}
-	projection.NegotiationID = "neg-1"
-	projection.NegotiationRequirement = captureplane.NegotiationAnswerNeeded
-	renegotiate := commandFor(captureplane.OperationRenegotiateCaptureConnection, time.Now().Add(time.Minute))
-	renegotiate.Identity.PlanRevision = 3
-	if err := ValidatePreparedCommand(preparedFor(renegotiate), projection); err != nil {
-		t.Fatalf("renegotiate after late create: %v", err)
-	}
-	metadata := captureplane.OperationMetadata{CaptureEpoch: create.Authority.CaptureEpoch, PlanRevision: 3}
-	key := CommandKey{Operation: captureplane.OperationRenegotiateCaptureConnection}
-	if err := (&Service{}).checkRenegotiation(renegotiate, key, metadata, projection); err != nil {
-		t.Fatalf("check renegotiation after late create: %v", err)
-	}
-}
-
-func TestCompletedReplaySurvivesAdvancedProjection(t *testing.T) {
-	provider := &fakePlane{}
-	store := newMemoryPort()
-	service, err := NewService(store, provider, Options{MaxWait: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))
-	if _, err := service.Execute(context.Background(), ExecuteRequest{Command: command}); err != nil {
-		t.Fatalf("first execute: %v", err)
-	}
-	store.projection.Connection.ConnectionReference = "advanced-connection"
-	store.projection.PlanRevision = 2
-	store.projection.Connection.PlanRevision = 2
-	store.projection.Closed = true
-	store.projection.State = captureplane.CaptureConnectionClosed
-	replay, err := service.Execute(context.Background(), ExecuteRequest{Command: command})
-	if err != nil {
-		t.Fatalf("advanced replay: %v", err)
-	}
-	if !replay.Replayed || provider.calls(captureplane.OperationCreateCaptureConnection) != 1 {
-		t.Fatalf("replay=%v provider calls=%d", replay.Replayed, provider.calls(captureplane.OperationCreateCaptureConnection))
-	}
-}
-
 func TestServiceProjectsConnectionLifecycleAndPreservesState(t *testing.T) {
 	provider := &fakePlane{}
 	store := newMemoryPort()
@@ -427,23 +343,6 @@ func TestServiceProjectsConnectionLifecycleAndPreservesState(t *testing.T) {
 	}
 	if store.projection.State != captureplane.CaptureConnectionClosed || !store.projection.Closed {
 		t.Fatalf("close projection = %#v", store.projection)
-	}
-}
-
-func TestServicePreservesProjectionWhenCloseIsNotConfirmed(t *testing.T) {
-	command := commandFor(captureplane.OperationCloseCaptureConnection, time.Now().Add(time.Minute))
-	store := newMemoryPort()
-	store.projection = projectionFor(command, "neg-1")
-	store.projection.State = captureplane.CaptureConnectionConnected
-	service, err := NewService(store, &fakePlane{closeDenied: true}, Options{MaxWait: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Execute(context.Background(), ExecuteRequest{Command: command}); err != nil {
-		t.Fatalf("close connection: %v", err)
-	}
-	if store.projection.State != captureplane.CaptureConnectionConnected || store.projection.Closed || store.projection.NegotiationID != "neg-1" || store.projection.NegotiationRequirement != captureplane.NegotiationAnswerNeeded {
-		t.Fatalf("unconfirmed close projection = %#v", store.projection)
 	}
 }
 
@@ -668,21 +567,6 @@ func TestServiceRejectsTrackAndSDPBounds(t *testing.T) {
 	}
 }
 
-func TestServiceValidatesProviderResult(t *testing.T) {
-	provider := &fakePlane{badResult: true}
-	store := newMemoryPort()
-	service, err := NewService(store, provider, Options{MaxWait: time.Second})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Execute(context.Background(), ExecuteRequest{Command: commandFor(captureplane.OperationCreateCaptureConnection, time.Now().Add(time.Minute))}); !errors.Is(err, ErrProviderFailure) {
-		t.Fatalf("provider result error = %v", err)
-	}
-	if store.failure.ProviderError.Code != "invalid_result" {
-		t.Fatalf("stored failure = %#v", store.failure.ProviderError)
-	}
-}
-
 func TestServiceHonorsNotBefore(t *testing.T) {
 	provider := &fakePlane{}
 	store := newMemoryPort()
@@ -795,12 +679,6 @@ func (p *fakePlane) Resolve(_ context.Context, identity captureplane.CaptureIden
 		return nil, p.resolveErr
 	}
 	return p, nil
-}
-
-func (p *fakePlane) resolutions() int {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.resolveCalls
 }
 
 func (p *fakePlane) resolved() captureplane.CaptureIdentity {

@@ -1,1 +1,0 @@
-`dispatcher-rebind-plan.json` is a reduced copy of a real dispatcher binding plan. All string values are replaced; it keeps changed fields, provider unknown-field structure and one unchanged authentication reference. The full plan deferred three unchanged IAM/SQS policies, so the plan guard must still reject those unknown policy changes.
