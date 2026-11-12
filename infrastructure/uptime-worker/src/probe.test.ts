@@ -68,9 +68,13 @@ test("a rejected admission names its stage", async () => {
 test("a page whose delivery fails is kept and delivered on the next cycle", async () => {
   const store = new Map<string, string>();
   const writeTimes: number[] = [];
+  let lateCommitMs = 0;
   const kv = {
     get: async (key: string) => (store.has(key) ? JSON.parse(store.get(key) ?? "null") : null),
     put: async (key: string, value: string) => {
+      const late = lateCommitMs;
+      lateCommitMs = 0;
+      await new Promise((resolve) => setTimeout(resolve, late));
       writeTimes.push(Date.now());
       store.set(key, value);
     },
@@ -87,6 +91,7 @@ test("a page whose delivery fails is kept and delivered on the next cycle", asyn
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 0);
     await assert.rejects(cycle(failing), /webhook down/);
+    lateCommitMs = 300;
     await cycle(async (message) => void sent.push(message));
     assert.equal(sent.length, 1);
     assert.match(sent[0], /create episode/);

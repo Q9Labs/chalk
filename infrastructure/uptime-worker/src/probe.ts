@@ -133,8 +133,8 @@ export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: 
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
   const pending = message ?? previous?.pending;
-  const wroteAt = Date.now();
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
+  const wroteAt = Date.now();
   console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");
   if (!pending) return;
   await deliver(pending);
