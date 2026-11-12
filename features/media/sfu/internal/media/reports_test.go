@@ -1,8 +1,12 @@
 package media
 
 import (
+	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/pion/webrtc/v4"
 )
 
 func TestReportEstimatorStepsDownOnHeavyLossAndUpOnLight(t *testing.T) {
@@ -20,12 +24,12 @@ func TestReportEstimatorStepsDownOnHeavyLossAndUpOnLight(t *testing.T) {
 		t.Fatalf("a second report within the spacing moved the ceiling to %v", r.ceiling)
 	}
 	low := r.ceiling
-	r.onLoss(0, now+int64(2*time.Second))
+	r.onLoss(0, now+int64(3*time.Second))
 	if r.ceiling != low*increasePerSec {
 		t.Fatalf("ceiling %v after a clean report, want %v", r.ceiling, low*increasePerSec)
 	}
 	for step := range 100 {
-		r.onLoss(0, now+int64(time.Duration(3+step)*time.Second))
+		r.onLoss(0, now+int64(time.Duration(4+step)*time.Second))
 	}
 	if r.ceiling != reportMax {
 		t.Fatalf("ceiling %v after a long clean run, want the cap %v", r.ceiling, float64(reportMax))
@@ -55,5 +59,50 @@ func TestReportEstimatorFollowsREMBOverLoss(t *testing.T) {
 	r.onREMB(1, now)
 	if r.ceiling != minEstimate {
 		t.Fatalf("ceiling %v for a tiny REMB, want the floor", r.ceiling)
+	}
+}
+
+// A receiver reports each stream it receives, so a clean audio report can come right before a heavy
+// video report. The heavy one still steps the ceiling down, and a clean report does not raise it
+// again while that loss stands.
+func TestReportEstimatorStepsDownRightAfterACleanReport(t *testing.T) {
+	r := newReportEstimator()
+	now := int64(10 * time.Second)
+	r.onLoss(0, now)
+	raised := r.ceiling
+	if raised != reportStart*increasePerSec {
+		t.Fatalf("ceiling %v after a clean report, want %v", raised, reportStart*increasePerSec)
+	}
+	r.onLoss(0.5, now+int64(100*time.Millisecond))
+	if want := raised * 0.75; r.ceiling != want {
+		t.Fatalf("ceiling %v after a heavy report 100 ms behind a clean one, want %v", r.ceiling, want)
+	}
+	lowered := r.ceiling
+	r.onLoss(0, now+int64(1500*time.Millisecond))
+	if r.ceiling != lowered {
+		t.Fatalf("ceiling %v after a clean report while heavy loss stands, want it held at %v", r.ceiling, lowered)
+	}
+}
+
+// A receiver sends REMB only when the answer negotiates it, so the node's answer to a browser
+// offer must carry goog-remb on VP8 and on nothing else.
+func TestAnswerNegotiatesREMBForVideo(t *testing.T) {
+	offer, err := os.ReadFile(chromiumOffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := newTestNode(t, nil).newTestSession(t, testScope("alice", 1))
+	if err := session.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: string(offer)}); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := session.pc.CreateAnswer(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(answer.SDP, "a=rtcp-fb:96 goog-remb") {
+		t.Fatalf("the answer does not negotiate REMB for VP8:\n%s", answer.SDP)
+	}
+	if strings.Contains(answer.SDP, "a=rtcp-fb:111 goog-remb") {
+		t.Fatalf("the answer negotiates REMB for audio:\n%s", answer.SDP)
 	}
 }
