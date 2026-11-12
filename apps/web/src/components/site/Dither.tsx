@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { IS_NIGHTLY } from "../../lib/site-head";
-import { useSiteTheme } from "../site/theme";
+import { useSiteTheme } from "./theme";
 
 type Color = readonly [number, number, number];
 type Kind = "cta" | "speed" | "footer" | "sky";

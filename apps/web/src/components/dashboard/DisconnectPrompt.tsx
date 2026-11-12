@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
-import { trapDialogFocus } from "../docs/dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { AppPair } from "./AppLogo";
 
 /** The confirmation for cutting an app off from the account: the broken connection is the picture, the buttons are the only choice. */

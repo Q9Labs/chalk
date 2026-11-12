@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import { errorMessage } from "../../lib/dashboard/client";
-import { trapDialogFocus } from "../docs/dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
 

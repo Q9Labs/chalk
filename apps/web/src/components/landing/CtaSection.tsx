@@ -1,6 +1,6 @@
 import { IS_NIGHTLY } from "../../lib/site-head";
 import { CallActions } from "./Hero";
-import { Dither } from "./Dither";
+import { Dither } from "../site/Dither";
 
 export function CtaSection() {
   return (

@@ -4,7 +4,7 @@ import { CopyButton } from "../site/CopyButton";
 import { Icon } from "../site/Icon";
 import { START_CALL_HREF } from "../site/links";
 import { IS_NIGHTLY } from "../../lib/site-head";
-import { Dither } from "./Dither";
+import { Dither } from "../site/Dither";
 import { CallPreview } from "./CallPreview";
 
 const INSTALL = "pnpm add @q9labsai/chalk-react";
