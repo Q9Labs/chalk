@@ -1,9 +1,8 @@
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = fileURLToPath(new URL("../..", import.meta.url));
-const contractDirectory = `${root}/contract/webhooks/v1`;
+const contractDirectory = `${repositoryRoot}/contract/webhooks/v1`;
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const envelopeKeys = ["id", "event", "api_version", "occurred_at", "tenant_id", "data"];

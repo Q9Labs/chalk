@@ -3,12 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { ChalkAPIError, createChalkServerClient } from "../../sdks/typescript/client/dist/server/index.js";
 import { sourceAliases } from "../../apps/web/vite.aliases.ts";
+import { repositoryRoot } from "../lib/repository.mjs";
 import ports from "../dev/ports.json" with { type: "json" };
 
-const root = fileURLToPath(new URL("../..", import.meta.url));
 const { chromium } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("playwright");
 const { build } = createRequire(new URL("../../tools/sdk-web-consumer-e2e/package.json", import.meta.url))("esbuild");
 const localURL = (value) => {
@@ -74,7 +73,7 @@ try {
         }, { syncUrl: ${JSON.stringify(sync.href)} });
         window.client = client;
         createRoot(document.getElementById("root")).render(React.createElement(Chalk, { client, displayName: name, spaceName: "Student first proof", defaults: { camera: true, microphone: true }, features: { recording: false, sounds: false } }));`,
-      resolveDir: resolve(root, "apps/web"),
+      resolveDir: resolve(repositoryRoot, "apps/web"),
       loader: "jsx",
     },
     plugins: [

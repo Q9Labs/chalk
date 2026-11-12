@@ -2,9 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
 const logs = mkdtempSync(path.join(tmpdir(), "chalk-mutations-"));
 const go = (name) => ({ cwd: "apps/api", command: ["go", "test", "-count=1", "-v", "-vet=off", `./internal/${name}`] });
 const vitest = (workspace, file) => ({ command: ["node", "scripts/test/run.mjs", "pnpm", "--dir", workspace, "exec", "vitest", "run", file, "--maxWorkers=1"] });
@@ -136,8 +135,8 @@ const baselines = new Set();
 let killed = 0;
 for (const mutation of cases) {
   try {
-    const filename = path.join(root, mutation.file);
-    const cwd = path.join(root, mutation.cwd ?? ".");
+    const filename = path.join(repositoryRoot, mutation.file);
+    const cwd = path.join(repositoryRoot, mutation.cwd ?? ".");
     const original = readFileSync(filename, "utf8");
     if (original.split(mutation.from).length !== 2) throw new Error(`${mutation.name}: mutation must match exactly once`);
     const run = (kind) => {

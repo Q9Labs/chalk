@@ -4,23 +4,23 @@
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = join(import.meta.dirname, "..", "..");
-const pins = JSON.parse(readFileSync(join(root, ".github/action-pins.json"), "utf8"));
+const pins = JSON.parse(readFileSync(join(repositoryRoot, ".github/action-pins.json"), "utf8"));
 const toolVersions = Object.fromEntries(
-  readFileSync(join(root, ".tool-versions"), "utf8")
+  readFileSync(join(repositoryRoot, ".tool-versions"), "utf8")
     .split("\n")
     .filter((line) => line.trim())
     .map((line) => line.trim().split(/\s+/)),
 );
 
-const actionFiles = [...readdirSync(join(root, ".github/workflows")).map((name) => `.github/workflows/${name}`), ...readdirSync(join(root, ".github/actions")).map((name) => `.github/actions/${name}/action.yml`)];
+const actionFiles = [...readdirSync(join(repositoryRoot, ".github/workflows")).map((name) => `.github/workflows/${name}`), ...readdirSync(join(repositoryRoot, ".github/actions")).map((name) => `.github/actions/${name}/action.yml`)];
 const usesLine = /^(\s*(?:- )?uses: )([\w.-]+\/[\w.-]+)((?:\/[\w./-]+)?)@(\S+)(?: # .*)?$/;
 
 export function actionPinProblems(write) {
   const problems = [];
   for (const file of actionFiles) {
-    const lines = readFileSync(join(root, file), "utf8").split("\n");
+    const lines = readFileSync(join(repositoryRoot, file), "utf8").split("\n");
     lines.forEach((line, index) => {
       const match = usesLine.exec(line);
       if (!match) return;
@@ -35,17 +35,17 @@ export function actionPinProblems(write) {
       if (write) lines[index] = wanted;
       else problems.push(`${file}:${index + 1} should read: ${wanted.trim()}`);
     });
-    if (write) writeFileSync(join(root, file), lines.join("\n"));
+    if (write) writeFileSync(join(repositoryRoot, file), lines.join("\n"));
   }
   return problems;
 }
 
 export function openTofuPinProblems() {
   const wanted = toolVersions.opentofu;
-  const files = execFileSync("git", ["ls-files", "*.tf"], { cwd: root, encoding: "utf8" }).split("\n").filter(Boolean);
+  const files = execFileSync("git", ["ls-files", "*.tf"], { cwd: repositoryRoot, encoding: "utf8" }).split("\n").filter(Boolean);
   const problems = [];
   for (const file of files) {
-    const match = /required_version\s*=\s*"= ?([\d.]+)"/.exec(readFileSync(join(root, file), "utf8"));
+    const match = /required_version\s*=\s*"= ?([\d.]+)"/.exec(readFileSync(join(repositoryRoot, file), "utf8"));
     if (match && match[1] !== wanted) problems.push(`${file} requires OpenTofu ${match[1]}, .tool-versions pins ${wanted}`);
   }
   return problems;

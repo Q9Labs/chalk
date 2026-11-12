@@ -10,12 +10,12 @@ import { execFileSync } from "node:child_process";
 import { resolveDevConfig } from "./config.mjs";
 import { createChalkSupervisor } from "./chalk.mjs";
 import { revisions } from "./receive-partial-prepare.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = resolve(import.meta.dirname, "../..");
-const requireConsumer = createRequire(resolve(root, "tools/sdk-web-consumer-e2e/package.json"));
+const requireConsumer = createRequire(resolve(repositoryRoot, "tools/sdk-web-consumer-e2e/package.json"));
 const { build } = requireConsumer("esbuild");
 const { chromium } = requireConsumer("playwright");
-const output = resolve(root, process.env.CHALK_PARTIAL_OUTPUT || "artifacts/receive-partial");
+const output = resolve(repositoryRoot, process.env.CHALK_PARTIAL_OUTPUT || "artifacts/receive-partial");
 await mkdir(output, { recursive: true });
 const duration = Number(process.env.CHALK_PARTIAL_SECONDS || 150);
 assert.ok(duration >= 60 && duration <= 1200);
@@ -26,10 +26,9 @@ const credentials = JSON.parse(await readFile(credentialPath, "utf8"));
 assert.equal(credentials.environment, "development");
 assert.equal(credentials.source, "chalk-local-dev");
 assert.ok(credentials.appId && credentials.appSecret);
-const serverRoot = root;
 let systemToken, tenant, space;
 const config = resolveDevConfig({
-  root: serverRoot,
+  root: repositoryRoot,
   env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "600000", CHALK_DEV_WEB_PORT: "4870" },
   requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"],
   secretResolver: async () => credentials,
@@ -38,8 +37,8 @@ config.webJoinPath = "/synthetic";
 config.databaseName = process.env.CHALK_PARTIAL_DB || "chalk_audio_mute_matrix";
 assert.match(config.databaseName, /^[a-z_]+$/u);
 const services = [
-  { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${serverRoot}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
-  { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${serverRoot}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
+  { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${repositoryRoot}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
+  { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${repositoryRoot}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
 ];
 const localFetch = async (input, init) => {
   const url = new URL(input);
@@ -68,7 +67,7 @@ const report = {
 let http;
 let bundle = "";
 const allBrowsers = [];
-await build({ entryPoints: [resolve(root, "sdks/typescript/client/src/server/index.ts")], bundle: true, outfile: `${output}/server-client.mjs`, platform: "node", format: "esm" });
+await build({ entryPoints: [resolve(repositoryRoot, "sdks/typescript/client/src/server/index.ts")], bundle: true, outfile: `${output}/server-client.mjs`, platform: "node", format: "esm" });
 const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(`${output}/server-client.mjs`).href);
 
 // Browser instrumentation measures actual receiver stats, never the sender's UI state alone.
@@ -146,7 +145,7 @@ try {
   await once(http, "listening");
   for (const version of versions) {
     console.log(`Starting SDK ${version}.`);
-    const sdkRoot = resolve(root, ".private/receive-partial", version, "sdks/typescript");
+    const sdkRoot = resolve(repositoryRoot, ".private/receive-partial", version, "sdks/typescript");
     const clientEntry = `${sdkRoot}/client/src/index.ts`;
     const effectEntry = `${sdkRoot}/client/src/effect.ts`;
     const aliases = {
@@ -154,7 +153,7 @@ try {
       "@q9labsai/chalk-client": clientEntry,
     };
     const built = await build({
-      entryPoints: [resolve(root, "tools/sdk-web-consumer-e2e/consumer/receive-partial.jsx")],
+      entryPoints: [resolve(repositoryRoot, "tools/sdk-web-consumer-e2e/consumer/receive-partial.jsx")],
       alias: aliases,
       plugins: [
         {
@@ -169,7 +168,7 @@ try {
           },
         },
       ],
-      nodePaths: [resolve(root, "node_modules"), resolve(root, "sdks/typescript/client/node_modules"), resolve(root, "sdks/typescript/react/node_modules"), resolve(root, "tools/sdk-web-consumer-e2e/node_modules")],
+      nodePaths: [resolve(repositoryRoot, "node_modules"), resolve(repositoryRoot, "sdks/typescript/client/node_modules"), resolve(repositoryRoot, "sdks/typescript/react/node_modules"), resolve(repositoryRoot, "tools/sdk-web-consumer-e2e/node_modules")],
       bundle: true,
       write: false,
       platform: "browser",
