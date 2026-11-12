@@ -29,7 +29,7 @@ import (
 // leaves the own SFU here: only a new Episode may overflow to Cloudflare. Participants then
 // rejoin through their normal join, with fresh generations.
 func (r Registry) recoverBinding(ctx context.Context, tenantID, episodeID utilities.ID, binding mediaplane.Binding) (mediaplane.Binding, error) {
-	if r.chalk == nil || r.recovery == nil || binding.Provider != string(mediaplane.ProviderChalkSFU) || binding.Node == "" {
+	if r.chalk == nil || r.recovery == nil || !binding.Is(mediaplane.ProviderChalkSFU) || binding.Node == "" {
 		return binding, nil
 	}
 	reason, lost := r.chalk.Confirm(ctx, binding.Current())
@@ -196,7 +196,7 @@ func (r Registry) EndRetiredAllocations(ctx context.Context, tenantID, episodeID
 // the debt, and the retirement worker pays it). Without recovery configured nothing moves a binding,
 // so there is nothing to check.
 func (r Registry) bindingFence(tenantID, episodeID utilities.ID, issued mediaplane.Binding) func(context.Context) error {
-	if r.chalk == nil || r.recovery == nil || issued.Provider != string(mediaplane.ProviderChalkSFU) {
+	if r.chalk == nil || r.recovery == nil || !issued.Is(mediaplane.ProviderChalkSFU) {
 		return nil
 	}
 	return func(ctx context.Context) error {

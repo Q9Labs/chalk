@@ -12,7 +12,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -341,7 +340,7 @@ func (e *SFUExecutor) revokeSources(ctx context.Context, chalk ChalkNode, input 
 // as a terminal failure; it never falls back to Cloudflare, which would close
 // another provider's tracks by the wrong rules.
 func (e SFUExecutor) bound(ctx context.Context, input provideroperations.OperationInput) (mediaplane.Provider, TrackCloser, ChalkNode, *ExecutionResult) {
-	name, node, generation := string(spaces.MediaPlaneProviderCloudflareSFU), "", int64(0)
+	name, node, generation := mediaplane.ProviderCloudflareSFU.SettingName(), "", int64(0)
 	if e.episodes != nil {
 		found, foundNode, foundGeneration, err := e.episodes.BindingOf(ctx, input.TenantID, input.EpisodeID)
 		if err != nil {
@@ -352,13 +351,14 @@ func (e SFUExecutor) bound(ctx context.Context, input provideroperations.Operati
 			name, node, generation = found, foundNode, foundGeneration
 		}
 	}
-	switch spaces.MediaPlaneProvider(name) {
-	case spaces.MediaPlaneProviderCloudflareSFU:
+	provider, _ := mediaplane.ParseSettingName(name)
+	switch provider {
+	case mediaplane.ProviderCloudflareSFU:
 		if e.tracks == nil {
 			return mediaplane.ProviderCloudflareSFU, nil, nil, nil
 		}
 		return mediaplane.ProviderCloudflareSFU, e.tracks, nil, nil
-	case spaces.MediaPlaneProviderChalkSFU:
+	case mediaplane.ProviderChalkSFU:
 		unavailable := ExecutionResult{Outcome: provideroperations.OutcomeRetryableFailure, Reason: "executor_unavailable"}
 		if e.chalk == nil {
 			return "", nil, nil, &unavailable

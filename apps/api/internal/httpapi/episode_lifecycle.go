@@ -586,7 +586,7 @@ func episodeLifecycleEndpointAPIError(err error) (APIError, bool) {
 		return apiErrorEpisodeControlBusy, true
 	case errors.Is(err, mediapublications.ErrInvalidPublication), errors.Is(err, mediaplane.ErrInvalidSignalRequest):
 		return apiErrorInvalidRequest, true
-	case errors.Is(err, mediapublications.ErrUnavailable), errors.Is(err, mediaplaneproviders.ErrUnknownProvider), errors.Is(err, mediaplaneproviders.ErrInvalidMode), errors.Is(err, mediaplaneproviders.ErrMissingProviderConfig), errors.Is(err, mediaplaneproviders.ErrInvalidProviderConfig), errors.Is(err, mediaplaneproviders.ErrAdapterUnavailable), errors.Is(err, mediaplane.ErrPlaneUnavailable), errors.Is(err, mediaplane.ErrProviderFailed):
+	case errors.Is(err, mediapublications.ErrUnavailable), errors.Is(err, mediaplaneproviders.ErrUnknownProvider), errors.Is(err, mediaplaneproviders.ErrInvalidMode), errors.Is(err, mediaplane.ErrMissingTenantConfig), errors.Is(err, mediaplane.ErrInvalidTenantConfig), errors.Is(err, mediaplaneproviders.ErrAdapterUnavailable), errors.Is(err, mediaplane.ErrPlaneUnavailable), errors.Is(err, mediaplane.ErrProviderFailed):
 		return apiErrorMediaPlaneUnavailable, true
 	case errors.Is(err, episodes.ErrInvalidTenantID):
 		return apiErrorInvalidTenantID, true

@@ -1,13 +1,12 @@
 package spaces
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -23,12 +22,12 @@ var (
 // or nil when it names none. The column was writable by anyone before operators owned
 // it, so a value counts only when it parses, and chalk_sfu counts only when an operator
 // wrote it. Anything else is ignored and the platform default decides.
-func tenantDefault(tenant tenants.Tenant) *MediaPlaneProvider {
+func tenantDefault(tenant tenants.Tenant) *mediaplane.Provider {
 	if tenant.DefaultMediaPlane == nil {
 		return nil
 	}
-	plane, err := ParseMediaPlaneProvider(*tenant.DefaultMediaPlane)
-	if err != nil || (plane == MediaPlaneProviderChalkSFU && !tenant.DefaultMediaPlaneApproved) {
+	plane, err := mediaplane.ParseSettingName(*tenant.DefaultMediaPlane)
+	if err != nil || (plane == mediaplane.ProviderChalkSFU && !tenant.DefaultMediaPlaneApproved) {
 		return nil
 	}
 	return &plane
@@ -43,22 +42,22 @@ func tenantDefault(tenant tenants.Tenant) *MediaPlaneProvider {
 // or clears it. The previous release wrote nothing else there for a Space that
 // inherits, because dual-writes store the platform default for those. This bridge goes
 // with the allowlist in the next release.
-func SelectPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
+func SelectPlane(platform mediaplane.Provider, tenant tenants.Tenant, space Space) (mediaplane.Provider, error) {
 	selected, err := chosenPlane(platform, tenant, space)
-	if err == nil && selected == MediaPlaneProviderChalkSFU && !tenantRunsEveryProvider(tenant) {
+	if err == nil && selected == mediaplane.ProviderChalkSFU && !mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig) {
 		// A Tenant on its own Cloudflare credentials cannot reach the own SFU, whoever chose
 		// it earlier. Its next Episode starts on Cloudflare; its live Episodes keep their binding.
-		return MediaPlaneProviderCloudflareSFU, nil
+		return mediaplane.ProviderCloudflareSFU, nil
 	}
 	return selected, err
 }
 
-func chosenPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
+func chosenPlane(platform mediaplane.Provider, tenant tenants.Tenant, space Space) (mediaplane.Provider, error) {
 	if space.MediaPlaneSetting != nil {
 		return *space.MediaPlaneSetting, nil
 	}
-	if strings.TrimSpace(space.MediaPlane) == string(MediaPlaneProviderChalkSFU) {
-		return MediaPlaneProviderChalkSFU, nil
+	if strings.TrimSpace(space.MediaPlane) == mediaplane.ProviderChalkSFU.SettingName() {
+		return mediaplane.ProviderChalkSFU, nil
 	}
 	if plane := tenantDefault(tenant); plane != nil {
 		return *plane, nil
@@ -69,17 +68,17 @@ func chosenPlane(platform MediaPlaneProvider, tenant tenants.Tenant, space Space
 	if strings.TrimSpace(space.MediaPlane) == "" {
 		return "", nil
 	}
-	return ParseMediaPlaneProvider(space.MediaPlane)
+	return mediaplane.ParseSettingName(space.MediaPlane)
 }
 
 // PlanePolicy is the deployment-wide part of the choice.
 type PlanePolicy struct {
 	// Platform is CHALK_DEFAULT_MEDIA_PLANE.
-	Platform MediaPlaneProvider
+	Platform mediaplane.Provider
 	// Allowed is CHALK_SFU_ALLOWED_SPACES. It stays an AND beside the settings until it is removed.
 	Allowed ChalkSFUAllowlist
 	// NewSpace is CHALK_NEW_SPACE_MEDIA_PLANE: the plane a Create Space request gets when it names none.
-	NewSpace MediaPlaneProvider
+	NewSpace mediaplane.Provider
 	// NewEpisodesPaused is CHALK_SFU_NEW_EPISODES=off, a floor set at deploy time: every new
 	// Episode starts on Cloudflare. The live switch (NewEpisodeSwitch) pauses on top of it.
 	NewEpisodesPaused bool
@@ -116,25 +115,25 @@ func (p PlanePolicy) Paused(live bool) PlanePolicy {
 // Effective is the plane a new Episode in the Space would start on, ignoring the
 // client's capability and node room. It is empty when the Tenant has media disabled,
 // because such an Episode gets no media binding.
-func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (MediaPlaneProvider, error) {
-	if tenantMediaDisabled(tenant) {
+func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (mediaplane.Provider, error) {
+	if mediaplane.TenantMediaDisabled(tenant.MediaPlaneProviderConfig) {
 		return "", nil
 	}
 	selected, err := SelectPlane(p.Platform, tenant, space)
 	if err != nil {
 		return "", err
 	}
-	if selected == MediaPlaneProviderChalkSFU && (p.NewEpisodesPaused || !p.Allowed.Allows(space.ID)) {
-		return MediaPlaneProviderCloudflareSFU, nil
+	if selected == mediaplane.ProviderChalkSFU && (p.NewEpisodesPaused || !p.Allowed.Allows(space.ID)) {
+		return mediaplane.ProviderCloudflareSFU, nil
 	}
 	return selected, nil
 }
 
 // PublicWritePlane is the plane a Space created without one is stored with: the platform
 // default, or Cloudflare while none is configured.
-func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
+func (p PlanePolicy) PublicWritePlane() mediaplane.Provider {
 	if p.Platform == "" {
-		return MediaPlaneProviderCloudflareSFU
+		return mediaplane.ProviderCloudflareSFU
 	}
 	return p.Platform
 }
@@ -144,11 +143,11 @@ func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
 // stays an operator choice until it is the platform default. The new-Space plane is no
 // exception: the deployment fills it in for a Space that names none, after it checked that
 // the Tenant can serve it, but a caller may not name it.
-func (p PlanePolicy) PublicWriteAllowed(provider MediaPlaneProvider) bool {
-	return provider == p.PublicWritePlane() || provider == MediaPlaneProviderCloudflareSFU
+func (p PlanePolicy) PublicWriteAllowed(provider mediaplane.Provider) bool {
+	return provider == p.PublicWritePlane() || provider == mediaplane.ProviderCloudflareSFU
 }
 
-func (p PlanePolicy) publicWriteAllowed(provider MediaPlaneProvider) error {
+func (p PlanePolicy) publicWriteAllowed(provider mediaplane.Provider) error {
 	if !p.PublicWriteAllowed(provider) {
 		return ErrMediaPlaneNotPermitted
 	}
@@ -160,44 +159,14 @@ func (p PlanePolicy) publicWriteAllowed(provider MediaPlaneProvider) error {
 // the stored value would count as the Space's own choice (see SelectPlane) and survive a
 // platform default that moves back to Cloudflare. It stores Cloudflare, which both releases
 // can serve, and follows the platform default through its empty setting.
-func (p PlanePolicy) legacyPlane(setting *MediaPlaneProvider) string {
+func (p PlanePolicy) legacyPlane(setting *mediaplane.Provider) string {
 	if setting != nil {
-		return string(*setting)
+		return setting.SettingName()
 	}
-	if p.Platform == MediaPlaneProviderChalkSFU {
-		return string(MediaPlaneProviderCloudflareSFU)
+	if p.Platform == mediaplane.ProviderChalkSFU {
+		return mediaplane.ProviderCloudflareSFU.SettingName()
 	}
-	return string(p.Platform)
-}
-
-// tenantMediaDisabled is true when the Tenant's provider configuration turns media off.
-func tenantMediaDisabled(tenant tenants.Tenant) bool {
-	raw := bytes.TrimSpace(tenant.MediaPlaneProviderConfig)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return false
-	}
-	var config struct {
-		Enabled *bool `json:"enabled"`
-	}
-	return json.Unmarshal(raw, &config) == nil && config.Enabled != nil && !*config.Enabled
-}
-
-// tenantRunsEveryProvider is true when Chalk runs every provider for the Tenant.
-// A Tenant with its own credentials serves only that provider, and a disabled one
-// serves none.
-func tenantRunsEveryProvider(tenant tenants.Tenant) bool {
-	raw := bytes.TrimSpace(tenant.MediaPlaneProviderConfig)
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
-		return true
-	}
-	var config struct {
-		Enabled *bool  `json:"enabled"`
-		Mode    string `json:"mode"`
-	}
-	if err := json.Unmarshal(raw, &config); err != nil {
-		return false
-	}
-	return (config.Enabled == nil || *config.Enabled) && strings.TrimSpace(config.Mode) == tenantModeChalkManaged
+	return p.Platform.SettingName()
 }
 
 // TenantPlaneStore reads a Tenant and writes its default plane with operator authority.
@@ -209,7 +178,7 @@ type TenantPlaneStore interface {
 // PlaneAdopter moves a Space stored on a plane onto the setting in one conditional
 // write that re-checks the Space and its Tenant, and reports whether it wrote.
 type PlaneAdopter interface {
-	AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane MediaPlaneProvider) (bool, error)
+	AdoptStoredPlaneSetting(ctx context.Context, tenantID, spaceID utilities.ID, plane mediaplane.Provider) (bool, error)
 }
 
 // PlaneOperator changes Tenant and Space plane settings with operator authority.
@@ -239,16 +208,8 @@ type PlaneChange struct {
 	After  *string
 }
 
-func planeText(plane *MediaPlaneProvider) *string {
-	if plane == nil {
-		return nil
-	}
-	text := string(*plane)
-	return &text
-}
-
 // SetTenant sets the Tenant default plane, or clears it with nil.
-func (o PlaneOperator) SetTenant(ctx context.Context, tenantID utilities.ID, plane *MediaPlaneProvider) (PlaneChange, error) {
+func (o PlaneOperator) SetTenant(ctx context.Context, tenantID utilities.ID, plane *mediaplane.Provider) (PlaneChange, error) {
 	tenant, err := o.tenants.GetTenant(ctx, tenantID)
 	if err != nil {
 		return PlaneChange{}, fmt.Errorf("read Tenant: %w", err)
@@ -256,7 +217,7 @@ func (o PlaneOperator) SetTenant(ctx context.Context, tenantID utilities.ID, pla
 	if err := o.checkServes(tenant, plane); err != nil {
 		return PlaneChange{}, err
 	}
-	change := PlaneChange{Before: tenant.DefaultMediaPlane, After: planeText(plane)}
+	change := PlaneChange{Before: tenant.DefaultMediaPlane, After: mediaplane.OptionalSettingName(plane)}
 	if _, err := o.tenants.SetDefaultMediaPlane(ctx, tenantID, change.After); err != nil {
 		return PlaneChange{}, fmt.Errorf("write Tenant plane: %w", err)
 	}
@@ -264,7 +225,7 @@ func (o PlaneOperator) SetTenant(ctx context.Context, tenantID utilities.ID, pla
 }
 
 // SetSpace sets the Space's own plane, or clears it with nil so the Space inherits.
-func (o PlaneOperator) SetSpace(ctx context.Context, tenantID, spaceID utilities.ID, plane *MediaPlaneProvider) (PlaneChange, error) {
+func (o PlaneOperator) SetSpace(ctx context.Context, tenantID, spaceID utilities.ID, plane *mediaplane.Provider) (PlaneChange, error) {
 	tenant, err := o.tenants.GetTenant(ctx, tenantID)
 	if err != nil {
 		return PlaneChange{}, fmt.Errorf("read Tenant: %w", err)
@@ -287,7 +248,7 @@ func (o PlaneOperator) SetSpace(ctx context.Context, tenantID, spaceID utilities
 	if err != nil {
 		return PlaneChange{}, fmt.Errorf("write Space plane: %w", err)
 	}
-	return PlaneChange{Before: planeText(space.MediaPlaneSetting), After: planeText(plane)}, nil
+	return PlaneChange{Before: mediaplane.OptionalSettingName(space.MediaPlaneSetting), After: mediaplane.OptionalSettingName(plane)}, nil
 }
 
 // AdoptStoredChalkSFU gives a Space that stores chalk_sfu and has no setting that setting,
@@ -300,7 +261,7 @@ func (o PlaneOperator) AdoptStoredChalkSFU(ctx context.Context, tenantID, spaceI
 	if err != nil {
 		return false, fmt.Errorf("read Tenant: %w", err)
 	}
-	own := MediaPlaneProviderChalkSFU
+	own := mediaplane.ProviderChalkSFU
 	if err := o.checkServes(tenant, &own); err != nil {
 		return false, err
 	}
@@ -313,8 +274,8 @@ func (o PlaneOperator) AdoptStoredChalkSFU(ctx context.Context, tenantID, spaceI
 	return o.adopter.AdoptStoredPlaneSetting(ctx, tenantID, spaceID, own)
 }
 
-func (o PlaneOperator) checkServes(tenant tenants.Tenant, plane *MediaPlaneProvider) error {
-	if plane != nil && *plane == MediaPlaneProviderChalkSFU && !tenantRunsEveryProvider(tenant) {
+func (o PlaneOperator) checkServes(tenant tenants.Tenant, plane *mediaplane.Provider) error {
+	if plane != nil && *plane == mediaplane.ProviderChalkSFU && !mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig) {
 		return ErrTenantCannotServePlane
 	}
 	return nil
@@ -323,8 +284,8 @@ func (o PlaneOperator) checkServes(tenant tenants.Tenant, plane *MediaPlaneProvi
 // EffectiveMediaPlanes is, for each Space, the plane a new Episode would start on,
 // ignoring the client's capability and node room. An entry is nil when the Space's
 // stored values cannot be resolved. It reads the Tenant once.
-func (s Service) EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID, list []Space) ([]*MediaPlaneProvider, error) {
-	effective := make([]*MediaPlaneProvider, len(list))
+func (s Service) EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID, list []Space) ([]*mediaplane.Provider, error) {
+	effective := make([]*mediaplane.Provider, len(list))
 	if s.tenants == nil || len(list) == 0 {
 		return effective, nil
 	}

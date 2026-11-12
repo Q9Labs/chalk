@@ -8,10 +8,9 @@ import (
 	"testing"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
-func placementLogs(t *testing.T, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) []map[string]any {
+func placementLogs(t *testing.T, provider mediaplane.Provider, reason mediaplane.PlacementReason) []map[string]any {
 	t.Helper()
 	var out bytes.Buffer
 	telemetry := NewMediaPlaneResolutionTelemetry(slog.New(slog.NewJSONHandler(&out, nil)))
@@ -33,14 +32,14 @@ func placementLogs(t *testing.T, provider spaces.MediaPlaneProvider, reason medi
 func TestRecordPlacementLogsEveryOverflowWithAStableEvent(t *testing.T) {
 	cases := []struct {
 		name     string
-		provider spaces.MediaPlaneProvider
+		provider mediaplane.Provider
 		reason   mediaplane.PlacementReason
 	}{
-		{"moved to Cloudflare, no room", spaces.MediaPlaneProviderCloudflareSFU, mediaplane.PlacementOverflowNoRoom},
-		{"moved to Cloudflare, host guard", spaces.MediaPlaneProviderCloudflareSFU, mediaplane.PlacementOverflowHostGuard},
-		{"refused, draining", spaces.MediaPlaneProviderChalkSFU, mediaplane.PlacementOverflowDraining},
-		{"moved to Cloudflare, node unavailable", spaces.MediaPlaneProviderCloudflareSFU, mediaplane.PlacementOverflowNodeUnavailable},
-		{"moved to Cloudflare, node too old", spaces.MediaPlaneProviderCloudflareSFU, mediaplane.PlacementOverflowNodeProtocol},
+		{"moved to Cloudflare, no room", mediaplane.ProviderCloudflareSFU, mediaplane.PlacementOverflowNoRoom},
+		{"moved to Cloudflare, host guard", mediaplane.ProviderCloudflareSFU, mediaplane.PlacementOverflowHostGuard},
+		{"refused, draining", mediaplane.ProviderChalkSFU, mediaplane.PlacementOverflowDraining},
+		{"moved to Cloudflare, node unavailable", mediaplane.ProviderCloudflareSFU, mediaplane.PlacementOverflowNodeUnavailable},
+		{"moved to Cloudflare, node too old", mediaplane.ProviderCloudflareSFU, mediaplane.PlacementOverflowNodeProtocol},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -52,7 +51,7 @@ func TestRecordPlacementLogsEveryOverflowWithAStableEvent(t *testing.T) {
 			if line["event"] != "chalk_sfu.overflow" || line["level"] != "WARN" {
 				t.Fatalf("event %v level %v, want chalk_sfu.overflow at WARN", line["event"], line["level"])
 			}
-			if line["provider"] != string(tc.provider) || line["placement_reason"] != string(tc.reason) {
+			if line["provider"] != tc.provider.SettingName() || line["placement_reason"] != string(tc.reason) {
 				t.Fatalf("provider %v reason %v, want %s %s", line["provider"], line["placement_reason"], tc.provider, tc.reason)
 			}
 			for key := range line {
@@ -68,7 +67,7 @@ func TestRecordPlacementLogsEveryOverflowWithAStableEvent(t *testing.T) {
 
 func TestRecordPlacementLogsNothingForAPlacementOnANode(t *testing.T) {
 	for _, reason := range []mediaplane.PlacementReason{mediaplane.PlacementPrimary, mediaplane.PlacementStandby, mediaplane.PlacementNoCapacity} {
-		if lines := placementLogs(t, spaces.MediaPlaneProviderChalkSFU, reason); len(lines) != 0 {
+		if lines := placementLogs(t, mediaplane.ProviderChalkSFU, reason); len(lines) != 0 {
 			t.Fatalf("reason %s logged %d lines, want none", reason, len(lines))
 		}
 	}

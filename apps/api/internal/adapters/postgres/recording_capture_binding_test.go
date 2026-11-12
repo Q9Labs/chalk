@@ -16,7 +16,7 @@ import (
 
 func TestRecordingCaptureBindingSourceUsesFullIdentityAndFrozenBinding(t *testing.T) {
 	identity := captureBindingIdentity(t)
-	binding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "capture-app")
+	binding, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
 	if err != nil {
 		t.Fatalf("create binding: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestRecordingCaptureBindingSourceUsesFullIdentityAndFrozenBinding(t *testin
 
 func TestRecordingCaptureBindingSourceRejectsMissingOrInvalidAuthority(t *testing.T) {
 	identity := captureBindingIdentity(t)
-	validBinding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "capture-app")
+	validBinding, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "capture-app")
 	if err != nil {
 		t.Fatalf("create binding: %v", err)
 	}

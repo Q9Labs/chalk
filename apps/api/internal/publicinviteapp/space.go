@@ -30,7 +30,7 @@ const startCallLingerWindowSeconds int32 = 30
 // configuration cannot create a Space in another Tenant.
 type SpaceConfig struct {
 	ManagedTenantID   utilities.ID
-	DefaultMediaPlane string
+	DefaultMediaPlane mediaplane.Provider
 	// RefuseClient is asked before the Space exists, so a client that the media
 	// plane will refuse leaves no Space behind. Nil asks nothing.
 	RefuseClient func(context.Context, tenants.Tenant, spaces.Space, mediaplane.ClientProviders) error
@@ -58,12 +58,12 @@ func NewSpacePort(spaceService spaceService, tenantService tenantService, config
 	if spaceService == nil || tenantService == nil {
 		return nil, ErrSpacePortUnavailable
 	}
-	if config.ManagedTenantID.IsZero() || strings.TrimSpace(config.DefaultMediaPlane) == "" {
+	if config.ManagedTenantID.IsZero() || config.DefaultMediaPlane == "" {
 		return nil, ErrInvalidSpacePort
 	}
 	return spacePort{spaces: spaceService, tenant: tenantService, config: SpaceConfig{
 		ManagedTenantID:   config.ManagedTenantID,
-		DefaultMediaPlane: strings.TrimSpace(config.DefaultMediaPlane),
+		DefaultMediaPlane: config.DefaultMediaPlane,
 		RefuseClient:      config.RefuseClient,
 	}}, nil
 }
@@ -81,8 +81,8 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 	}
 	if a.config.RefuseClient != nil {
 		// The Space created below stores this plane as its own setting, so the check sees it too.
-		plane := spaces.MediaPlaneProvider(a.config.DefaultMediaPlane)
-		if err := a.config.RefuseClient(ctx, tenant, spaces.Space{MediaPlane: a.config.DefaultMediaPlane, MediaPlaneSetting: &plane}, input.MediaClients); err != nil {
+		plane := a.config.DefaultMediaPlane
+		if err := a.config.RefuseClient(ctx, tenant, spaces.Space{MediaPlane: plane.SettingName(), MediaPlaneSetting: &plane}, input.MediaClients); err != nil {
 			return publicinvites.PublicSpace{}, fmt.Errorf("check the client before creating a public Space: %w", err)
 		}
 	}
@@ -95,7 +95,7 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		Name:                          string(name),
 		TenantID:                      a.config.ManagedTenantID,
 		Slug:                          publicSpaceSlug(input.RequestKey),
-		MediaPlane:                    a.config.DefaultMediaPlane,
+		MediaPlane:                    a.config.DefaultMediaPlane.SettingName(),
 		MediaPlaneFromConfig:          true,
 		Metadata:                      json.RawMessage(`{}`),
 		AdmissionPolicy:               json.RawMessage(`{"mode":"open"}`),

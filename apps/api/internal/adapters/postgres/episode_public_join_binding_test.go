@@ -7,15 +7,14 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 )
 
 func TestRequireClientRunsBinding(t *testing.T) {
-	own, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderChalkSFU), mediaplane.BindingSourceDeploymentDefault, "app")
+	own, err := mediaplane.NewBinding(mediaplane.ProviderChalkSFU, mediaplane.BindingSourceDeploymentDefault, "app")
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloudflare, err := mediaplane.NewBinding(string(spaces.MediaPlaneProviderCloudflareSFU), mediaplane.BindingSourceDeploymentDefault, "app")
+	cloudflare, err := mediaplane.NewBinding(mediaplane.ProviderCloudflareSFU, mediaplane.BindingSourceDeploymentDefault, "app")
 	if err != nil {
 		t.Fatal(err)
 	}
