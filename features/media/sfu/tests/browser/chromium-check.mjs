@@ -271,6 +271,8 @@ async function pull(page, control, connectionId, publisherId, scope, name, prefe
     },
     { serverOffer: pulled.body.sessionDescription, name },
   );
+  // The node paces and adapts a browser by its transport-wide feedback, so an answer without it would run unadapted.
+  expect(/a=rtcp-fb:\d+ transport-cc/.test(answer.sdp) && /transport-wide-cc-extensions/.test(answer.sdp), `${name} answered without transport-wide congestion control`);
   const renegotiated = await control.post(`/v1/sessions/${connectionId}/renegotiate`, {
     operationId: `renegotiate-${connectionId}`,
     scope,
