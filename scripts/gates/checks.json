@@ -364,6 +364,17 @@
       "builtin": true
     },
     {
+      "id": "workflow:boot-smoke.yml#boot",
+      "owner": "Call",
+      "catches": "A broken developer bootstrap: `pnpm dev` not reaching ready from an empty machine, `pnpm dev:doctor` failing, or a fake-media call that cannot join through the SFU.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
+    },
+    {
       "id": "workflow:gate.yml#changes",
       "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
