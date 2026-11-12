@@ -1,5 +1,7 @@
 export { createChalkPublicClient, createChalkPublicInviteClient } from "./client.js";
 export { parseInviteCode } from "./code.js";
+export { buildInviteCodeLink, buildSpaceInviteLink, canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, INVITE_HOSTS, parseChalkInviteLink, parseSpaceInviteLink, readSpaceInviteToken, verifiedSpaceInviteLink } from "./link.js";
+export type { ChalkInviteLink, InviteLinkOptions, SpaceInviteLink } from "./link.js";
 export type {
   ArriveBySpacePublicInviteInput,
   ChalkPublicClient,
