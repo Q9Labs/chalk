@@ -80,6 +80,7 @@
     "prod:fleet": "node scripts/prod-proof/fleet.mjs",
     "prod:sfu-e2e": "node scripts/prod-proof/sfu-e2e.mjs",
     "prod:latency": "node scripts/prod-proof/latency.mjs",
+    "prod:recovery": "node scripts/prod-proof/recovery.mjs",
     "prod:sfu-classes": "node scripts/prod-proof/sfu-classes.mjs",
     "prod:proof:compare-leave": "node scripts/prod-proof/leave-session.mjs",
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",

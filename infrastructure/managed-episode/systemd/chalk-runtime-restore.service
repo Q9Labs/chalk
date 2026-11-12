@@ -7,6 +7,7 @@ StartLimitBurst=10
 
 [Service]
 Type=oneshot
+ExecStartPre=/usr/local/libexec/chalk-deployment-controller boot-end
 ExecStart=/usr/local/libexec/chalk-deployment-controller restore
 RemainAfterExit=yes
 Restart=on-failure

@@ -37,7 +37,7 @@ var fieldSources = map[string]source{
 	"trace_id": restrictedID, "journey_id": restrictedID,
 
 	"allocation": number, "code": enum, "reason": enum, "sessions": number, "cause": enum,
-	"lifetime_ms": number, "publications": number, "subscriptions": number, "state": enum, "path": enum,
+	"lifetime_ms": number, "publications": number, "subscriptions": number, "state": enum, "path": enum, "protocol": enum,
 	"source": enum, "media_kind": enum, "publisher_id": restrictedID, "mid": serverAssigned,
 	"was": enum, "layer": enum, "ceiling": enum, "server_limit": enum, "level": enum, "ceiling_packets": number, "revision": number,
 	"connectionId": restrictedID, "estimateBps": number, "provenBps": number, "deliveredShare": number,
@@ -61,7 +61,7 @@ var exportedEvents = map[string][]string{
 	"sfu.admission.refused":       {"reason", "sessions"},
 	"sfu.session.closed":          {"cause", "lifetime_ms", "publications", "subscriptions"},
 	"sfu.peer.state":              {"state"},
-	"sfu.ice.state":               {"state", "path"},
+	"sfu.ice.state":               {"state", "path", "protocol"},
 	"sfu.dtls.state":              {"state"},
 	"sfu.publication.started":     {"source", "media_kind"},
 	"sfu.publication.stopped":     {"source", "media_kind", "reason"},

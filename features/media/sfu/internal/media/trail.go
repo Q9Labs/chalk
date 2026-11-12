@@ -119,28 +119,38 @@ func (s *Session) onICEState(state webrtc.ICEConnectionState) {
 	}
 	attrs := []any{"state", state.String()}
 	if state == webrtc.ICEConnectionStateConnected {
-		attrs = append(attrs, "path", s.selectedPath())
+		path, protocol := s.selectedPath()
+		attrs = append(attrs, "path", path, "protocol", protocol)
 	}
 	s.trail(level, "sfu.ice.state", attrs...)
 }
 
-// selectedPath is the candidate type of each end of the selected ICE pair, such as "host/relay".
-// It holds types only, never an address.
-func (s *Session) selectedPath() string {
+// selectedPath is the candidate type of each end of the selected ICE pair, such as "host/relay",
+// and the transport the node's end of the pair uses ("udp" or "tcp", the latter for a peer whose
+// network blocks UDP). It holds types only, never an address.
+func (s *Session) selectedPath() (path, protocol string) {
+	pair := s.selectedPair()
+	if pair == nil {
+		return "unknown", "unknown"
+	}
+	return pair.Local.Typ.String() + "/" + pair.Remote.Typ.String(), pair.Local.Protocol.String()
+}
+
+func (s *Session) selectedPair() *webrtc.ICECandidatePair {
 	sctp := s.pc.SCTP()
 	if sctp != nil && sctp.Transport() != nil {
 		if pair, err := sctp.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil {
-			return pair.Local.Typ.String() + "/" + pair.Remote.Typ.String()
+			return pair
 		}
 	}
 	for _, transceiver := range s.pc.GetTransceivers() {
 		if receiver := transceiver.Receiver(); receiver != nil && receiver.Transport() != nil {
 			if pair, err := receiver.Transport().ICETransport().GetSelectedCandidatePair(); err == nil && pair != nil {
-				return pair.Local.Typ.String() + "/" + pair.Remote.Typ.String()
+				return pair
 			}
 		}
 	}
-	return "unknown"
+	return nil
 }
 
 // CloseUnspecified is the cause of a Close that names none.
