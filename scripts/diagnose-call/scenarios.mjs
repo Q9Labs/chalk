@@ -74,6 +74,27 @@ function hiddenByViewerCall() {
   return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, recv_hidden_videos: second < 20 ? 0 : 1 }))];
 }
 
+/** The publisher's sender reports 0 kbps from the start while the viewer waits: the node accepted the publication and nothing came. */
+function silentPublisherCall() {
+  return [
+    ...callStats("publisher", "conn-pub", 0, 300, () => ({ send_bitrate_kbps: 0 })),
+    ...callStats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 0, recv_height: 720 })),
+    node(0, "sfu.session.registered", "publisher", "conn-pub"),
+    node(1, "sfu.publication.started", "publisher", "conn-pub"),
+    node(3, "sfu.subscription.started", "viewer", "conn-view"),
+  ];
+}
+
+/** A viewer whose downlink lost packets and queued: the bitrate fell to a trickle while the node and the publisher were fine. */
+function congestedViewerCall() {
+  return [
+    ...flow("conn-pub"),
+    ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 60, recv_height: 360, recv_loss_pct: second < 20 ? 0 : 11, rtt_ms: second < 20 ? 40 : 420, available_incoming_kbps: second < 20 ? 6000 : 250 })),
+    node(0, "sfu.session.registered", "viewer", "conn-view"),
+    node(20, "sfu.subscription.layer", "viewer", "conn-view", { layer: "low", ceiling: "high", server_limit: "high" }),
+  ];
+}
+
 /** Every scenario the verdict rules must name, as raw rows. The Go collector reads the same file, so the two implementations agree. */
 export const scenarios = {
   "dormant replacement then silence": dormantReplacementCall,
@@ -82,4 +103,6 @@ export const scenarios = {
   "replacement soon after join": earlyReplacementCall,
   "healthy call": healthyCall,
   "viewer hid the video itself": hiddenByViewerCall,
+  "publisher sent nothing": silentPublisherCall,
+  "congested viewer": congestedViewerCall,
 };

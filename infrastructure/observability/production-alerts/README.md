@@ -19,7 +19,8 @@ When `CHALK_ALERT_AXIOM_QUERY_TOKEN` is set in `/etc/chalk-alerts/collector.env`
 - It reads rows by id: every row of the Axiom log dataset that names the Episode, then the SFU node events of the connections those rows name. The time range only bounds the scan.
 - The rules and thresholds are `call-verdict.json`, which `pnpm diagnose:call` reads too. Both test against `scripts/diagnose-call/fixtures/cases.json`, so a changed rule fails in both places until both agree.
 - `CHALK_ALERT_AXIOM_ORG_ID` and `CHALK_ALERT_QUERY_DATASET` (default: `CHALK_ALERT_LOG_DATASET`) are optional. The query token needs read access to the log dataset only; the ingest token cannot query. The goroutine has a 12-second budget and a failure prints a short message to the journal, so the other rows never wait on it.
-- The flag is as early as about 30 seconds after the Episode end and no later than about 90 seconds plus one collector run (one minute) plus one monitor evaluation. A dataset that has not yet received node events (`attributes.connection_id` unknown) gives a verdict from the API rows alone, with the cause "unknown".
+- The `call-verdict` row is written 30 to 90 seconds after the Episode ends, plus at most the collector's 12-second query budget, so no later than 102 seconds (`flag_within_ms` in `call-verdict.json` is 120 seconds, and a test fails when the constants pass it). The monitor then evaluates once a minute, so the Discord and Oncall alert follows within another minute. A dataset that has not yet received node events (`attributes.connection_id` unknown) gives a verdict from the API rows alone, with the cause "unknown".
+- The verdict line names the failing stage and the side (see "Diagnose one call" in `docs/observability.md`). A stretch the viewer chose, such as a hidden tab, is named in the line but raises no row.
 
 ## Read-only state collector
 

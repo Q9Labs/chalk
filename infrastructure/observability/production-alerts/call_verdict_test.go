@@ -133,9 +133,18 @@ func TestBadVerdictBecomesOneAlertRowAndAGoodOneNone(t *testing.T) {
 		t.Fatalf("unexpected row: %+v", item)
 	}
 
-	served = "healthy call"
-	flags, err = collectCallVerdicts(context.Background(), querier, episodes, loadVerdictThresholds())
-	if err != nil || len(flags) != 0 {
-		t.Fatalf("a healthy call must raise nothing: %v %v", flags, err)
+	for _, quiet := range []string{"healthy call", "viewer hid the video itself"} {
+		served = quiet
+		flags, err = collectCallVerdicts(context.Background(), querier, episodes, loadVerdictThresholds())
+		if err != nil || len(flags) != 0 {
+			t.Fatalf("%s must raise nothing: %v %v", quiet, flags, err)
+		}
+	}
+}
+
+func TestVerdictRowLandsWithinTheFlagBound(t *testing.T) {
+	worst := callVerdictSettle + callVerdictBand + callVerdictBudget
+	if bound := time.Duration(loadVerdictThresholds().FlagWithinMS) * time.Millisecond; worst > bound {
+		t.Fatalf("an Episode is judged up to %s after it ends, past the %s bound in call-verdict.json", worst, bound)
 	}
 }

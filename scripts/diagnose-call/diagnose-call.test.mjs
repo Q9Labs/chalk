@@ -21,7 +21,7 @@ test("a connection replaced as dormant that the node never resumed is named as t
   assert.equal(silence.participant, hashOf.viewer);
   assert.match(silence.cause, /replaced \(dormant_connection\)/u);
   assert.ok(silence.to - silence.from > thresholds.silence_ms);
-  assert.match(verdictLine(findings), /^Participant [0-9a-f]{8} received no media for \d+ s while a sender was sending from \d\d:\d\d:\d\d to \d\d:\d\d:\d\d UTC; cause: the connection was replaced/u);
+  assert.match(verdictLine(findings), /^Participant [0-9a-f]{8} received no media for \d+ s while a sender was sending from \d\d:\d\d:\d\d to \d\d:\d\d:\d\d UTC; failing stage: reconnecting, side: API; cause: the connection was replaced/u);
 });
 
 test("a viewer held at 26 kbps on a healthy link is named with the layer limit that held it", () => {
@@ -31,9 +31,36 @@ test("a viewer held at 26 kbps on a healthy link is named with the layer limit t
   assert.match(findings[0].cause, /node held the viewer to the low layer \(server limit low, viewer ceiling high\)/u);
 });
 
-test("the same low bitrate on a link with loss is not called starvation", () => {
+test("the same low bitrate on a link with loss is the viewer's network, not starvation", () => {
   const rows = starvedViewerCall().map((row) => (row.attributes.event === "sdk.call_stats" ? { ...row, attributes: { ...row.attributes, recv_loss_pct: 9 } } : row));
-  assert.deepEqual(verdictOf(rows).findings, []);
+  const [finding] = verdictOf(rows).findings;
+  assert.equal(finding.kind, "congested_viewer");
+  assert.equal(finding.side, "network");
+  assert.match(finding.cause, /9% loss at worst/u);
+});
+
+test("a viewer held by the node, one that capped itself and a publisher that sent no better layer are told apart", () => {
+  const withLayer = (layer) => starvedViewerCall().map((row) => (row.attributes.event === "sfu.subscription.layer" ? { ...row, attributes: { ...row.attributes, ...layer } } : row));
+  const sideOf = (layer) => verdictOf(withLayer(layer)).findings[0].side;
+  assert.equal(sideOf({}), "SFU");
+  assert.equal(sideOf({ ceiling: "low", server_limit: "high" }), "viewer");
+  assert.equal(sideOf({ ceiling: "high", server_limit: "high" }), "publisher");
+});
+
+test("a publisher whose sender reports 0 kbps while the viewer waits is the publisher's side", () => {
+  const [finding] = verdictOf(scenarios["publisher sent nothing"]()).findings;
+  assert.equal(finding.kind, "publisher_silent");
+  assert.equal(finding.participant, hashOf.publisher);
+  assert.equal(finding.side, "publisher");
+  assert.match(finding.cause, /accepted the publication/u);
+});
+
+test("a node that paused the subscription for congestion is the network, for the viewer's own pause it is the viewer", () => {
+  const paused = (reason) => [...dormantReplacementCall().filter((row) => !String(row.attributes.event).startsWith("media.")), { _time: at(100), "service.name": "chalk-sfu", attributes: { event: "sfu.subscription.paused", episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", reason } }];
+  const silence = (reason) => verdictOf(paused(reason)).findings.find((finding) => finding.kind === "media_silence");
+  assert.equal(silence("congestion").side, "network");
+  assert.equal(silence("viewer").side, "viewer");
+  assert.equal(silence("planner").side, "SFU");
 });
 
 test("a failed join names the API refusal that shares the report's journey id", () => {
@@ -56,9 +83,13 @@ test("a receiver that never took media is a failed start, not silence", () => {
   assert.deepEqual(verdictOf(rows).findings, []);
 });
 
-test("a call nobody sends into is not silence", () => {
+test("a call nobody sends into is not silence, and a lone Participant who sends nothing is not a bad call", () => {
   const rows = [...callStats("publisher", "conn-pub", 0, 100, () => ({ send_bitrate_kbps: 0 })), ...callStats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 0 }))];
-  assert.deepEqual(verdictOf(rows).findings, []);
+  assert.deepEqual(
+    verdictOf(rows).findings.map((finding) => finding.kind),
+    ["publisher_silent"],
+  );
+  assert.deepEqual(verdictOf(callStats("publisher", "conn-pub", 0, 100, () => ({ send_bitrate_kbps: 0 }))).findings, []);
 });
 
 test("a call with media flowing has no finding", () => {
@@ -119,8 +150,23 @@ test("evidence the rows lack is listed: a Participant with no inbound rows and n
   assert.ok(missing.some((line) => /no sync rows/u.test(line)));
 });
 
-test("a viewer that hid the video itself is neither silent nor starved, and without the field the same rows are silence", () => {
+test("a viewer that hid the video itself is named as its own choice, not as a bad call, and without the field the same rows are silence", () => {
   const withField = (hidden) => [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, ...(hidden ? { recv_hidden_videos: 1 } : {}) }))];
-  assert.deepEqual(verdictOf(withField(true)).findings, []);
+  const hidden = verdictOf(withField(true)).findings;
+  assert.deepEqual(hidden.map((finding) => [finding.kind, finding.benign, finding.side]), [["viewer_hid_video", true, "viewer"]]);
+  assert.match(verdictLine(hidden), /^No bad call found by the rules.*Participant [0-9a-f]{8} hid its own video.*side: viewer, by choice/u);
   assert.equal(verdictOf(withField(false)).findings[0]?.kind, "media_silence");
+});
+
+test("a failed join with no failed API request is placed by the step the client report says failed first", () => {
+  const events = [
+    { event: "space_join_span", step: "access_initialize", outcome: "succeeded" },
+    { event: "space_join_span", step: "wait_for_sync_live", outcome: "failed", code: "sync_start_failed", duration_ms: 30021 },
+    { event: "space_join_span", step: "join", outcome: "failed", code: "sync_start_failed", duration_ms: 33151 },
+  ];
+  const [finding] = verdictOf([api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", report: JSON.stringify({ trigger: "join_failed", events }) })]).findings;
+  assert.deepEqual([finding.stage, finding.side], ["wait_for_sync_live", "Sync"]);
+  assert.match(finding.cause, /sync_start_failed\) after 30 s/u);
+  const [bare] = verdictOf([api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", report: "not json" })]).findings;
+  assert.equal(bare.side, "unknown");
 });

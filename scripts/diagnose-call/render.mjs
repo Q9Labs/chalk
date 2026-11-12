@@ -26,7 +26,7 @@ function timeline(rows, findings) {
     return `  ${clock(row.time)}  ${row.source.padEnd(6)} ${row.event.padEnd(34)} ${row.participant ? row.participant.slice(0, 8) : "-"}  ${detail}`.trimEnd();
   });
   if (notable.length > 80) lines.push(`  ... ${notable.length - 80} more rows`);
-  for (const finding of findings) lines.push(`  ${clock(finding.from)}  FOUND  ${finding.kind}: ${finding.experience}`);
+  for (const finding of findings) lines.push(`  ${clock(finding.from)}  FOUND  ${finding.kind} [${finding.stage}/${finding.side}]: ${finding.experience}`);
   return lines;
 }
 

@@ -14,6 +14,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -206,63 +207,79 @@ func runsOf(samples []sample, match func(sample) bool) []sampleRun {
 
 func positive(value *float64) bool { return value != nil && *value > 0 }
 
+// finding is one thing the rules call bad (or, when benign, a quiet stretch the Participant chose). stage names the
+// step of the media path that failed and side whose it is: publisher, viewer, SFU, API, Sync, client, network or unknown.
 type finding struct {
-	kind, participant, experience, cause string
-	from, to                             time.Time
+	kind, participant, experience, cause, stage, side string
+	from, to                                          time.Time
+	benign                                            bool
 }
 
-var findingOrder = map[string]int{"failed_join": 0, "media_silence": 1, "starved_viewer": 2, "early_replacement": 3}
+type verdictCause struct{ text, stage, side string }
+
+var findingOrder = map[string]int{"failed_join": 0, "media_silence": 1, "publisher_silent": 2, "starved_viewer": 3, "congested_viewer": 4, "early_replacement": 5, "viewer_hid_video": 6}
 
 func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 	rows = append([]logRow(nil), rows...)
 	sort.SliceStable(rows, func(a, b int) bool { return rows[a].time.Before(rows[b].time) })
 	samples := samplesOf(rows)
 	var findings []finding
+	add := func(kind, participant string, from, to time.Time, experience string, why verdictCause, benign bool) {
+		findings = append(findings, finding{kind: kind, participant: participant, from: from, to: to, experience: experience, cause: why.text, stage: why.stage, side: why.side, benign: benign})
+	}
+	silence := time.Duration(t.SilenceMS) * time.Millisecond
+	long := time.Duration(t.StarvedMS) * time.Millisecond
 
 	for i := range rows {
-		report := &rows[i]
-		if report.event != "sdk.connection_report" || report.text("trigger") != "join_failed" {
-			continue
+		if report := &rows[i]; report.event == "sdk.connection_report" && report.text("trigger") == "join_failed" {
+			add("failed_join", report.participant, report.time, report.time, "could not join", joinCause(rows, report), false)
 		}
-		cause := "unknown: no failed API request shares the report's journey id"
-		for j := range rows {
-			if rows[j].event == "http.failure" && report.journey != "" && rows[j].journey == report.journey {
-				if code := rows[j].text("error_code"); code != "" {
-					cause = "the API refused the request (" + code + ")"
-				}
-				break
-			}
-		}
-		findings = append(findings, finding{kind: "failed_join", participant: report.participant, from: report.time, to: report.time, experience: "could not join", cause: cause})
 	}
 
 	for _, r := range runsOf(samples, func(s sample) bool { return s.recv != nil && *s.recv == 0 && !hiddenByViewer(s) }) {
 		duration := r.to.Sub(r.from)
-		if duration <= time.Duration(t.SilenceMS)*time.Millisecond || !senderWasSending(samples, r) || !receivedBefore(samples, r) {
+		if duration <= silence || !senderWasSending(samples, r) || !receivedBefore(samples, r) {
 			continue
 		}
-		findings = append(findings, finding{kind: "media_silence", participant: r.participant, from: r.from, to: r.to,
-			experience: fmt.Sprintf("received no media for %d s while a sender was sending", seconds(duration)), cause: silenceCause(rows, r)})
+		add("media_silence", r.participant, r.from, r.to, fmt.Sprintf("received no media for %d s while a sender was sending", seconds(duration)), silenceCause(rows, r), false)
 	}
 
-	healthy := func(s sample) bool {
-		return (s.loss == nil || *s.loss <= t.HealthyLossPct) && (s.rtt == nil || *s.rtt <= t.HealthyRTTMS) &&
-			(s.availableIncomingK == nil || *s.availableIncomingK >= 4*t.StarvedFloorKbps)
-	}
-	starved := func(s sample) bool {
-		return s.height != nil && s.recv != nil && *s.recv > 0 && *s.recv < t.StarvedFloorKbps && healthy(s) && !hiddenByViewer(s)
-	}
-	for _, r := range runsOf(samples, starved) {
+	for _, r := range runsOf(samples, func(s sample) bool { return s.send != nil && *s.send == 0 }) {
 		duration := r.to.Sub(r.from)
-		if duration <= time.Duration(t.StarvedMS)*time.Millisecond {
+		if duration <= silence || !someoneElseReported(samples, r) {
 			continue
 		}
+		add("publisher_silent", r.participant, r.from, r.to, fmt.Sprintf("sent no media for %d s while another Participant was in the call", seconds(duration)), publishCause(rows, r), false)
+	}
+
+	linkFault := func(s sample) [3]bool {
+		return [3]bool{
+			s.loss != nil && *s.loss > t.HealthyLossPct,
+			s.rtt != nil && *s.rtt > t.HealthyRTTMS,
+			s.availableIncomingK != nil && *s.availableIncomingK < 4*t.StarvedFloorKbps,
+		}
+	}
+	faulty := func(s sample) bool { f := linkFault(s); return f[0] || f[1] || f[2] }
+	lowVideo := func(s sample) bool {
+		return s.height != nil && s.recv != nil && *s.recv > 0 && *s.recv < t.StarvedFloorKbps && !hiddenByViewer(s)
+	}
+	peakOf := func(r sampleRun) float64 {
 		peak := 0.0
 		for _, s := range r.samples {
 			peak = max(peak, *s.recv)
 		}
-		findings = append(findings, finding{kind: "starved_viewer", participant: r.participant, from: r.from, to: r.to,
-			experience: fmt.Sprintf("received video at %d kbps or less for %d s on a healthy link", int(peak), seconds(duration)), cause: starvedCause(rows, r)})
+		return peak
+	}
+	for _, r := range runsOf(samples, func(s sample) bool { return lowVideo(s) && !faulty(s) }) {
+		if duration := r.to.Sub(r.from); duration > long {
+			add("starved_viewer", r.participant, r.from, r.to, fmt.Sprintf("received video at %d kbps or less for %d s on a healthy link", int(peakOf(r)), seconds(duration)), starvedCause(rows, r), false)
+		}
+	}
+	for _, r := range runsOf(samples, func(s sample) bool { return lowVideo(s) && faulty(s) }) {
+		if duration := r.to.Sub(r.from); duration > long {
+			add("congested_viewer", r.participant, r.from, r.to, fmt.Sprintf("received video at %d kbps or less for %d s on a poor link", int(peakOf(r)), seconds(duration)),
+				verdictCause{"the viewer's link was poor (" + describeLink(r, linkFault) + ")", "receiving", "network"}, false)
+		}
 	}
 
 	for i := range rows {
@@ -274,13 +291,17 @@ func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 		if !ok || row.time.Sub(joined) > time.Duration(t.EarlyReplacementMS)*time.Millisecond {
 			continue
 		}
-		cause := row.text("replacement_cause")
-		if cause == "" {
-			cause = "cause not logged"
-		}
-		findings = append(findings, finding{kind: "early_replacement", participant: row.participant, from: joined, to: row.time,
-			experience: fmt.Sprintf("had the media connection replaced %d s after joining", seconds(row.time.Sub(joined))), cause: cause})
+		add("early_replacement", row.participant, joined, row.time, fmt.Sprintf("had the media connection replaced %d s after joining", seconds(row.time.Sub(joined))),
+			verdictCause{replacementCause(row), "reconnecting", "API"}, false)
 	}
+
+	for _, r := range runsOf(samples, func(s sample) bool { return hiddenByViewer(s) && s.recv != nil && *s.recv < t.StarvedFloorKbps }) {
+		if duration := r.to.Sub(r.from); duration > silence {
+			add("viewer_hid_video", r.participant, r.from, r.to, fmt.Sprintf("hid its own video for %d s, so little or no media arrived", seconds(duration)),
+				verdictCause{"the viewer's tile or page was hidden, which the SDK treats as a reason to stop receiving", "receiving", "viewer"}, true)
+		}
+	}
+
 	sort.SliceStable(findings, func(a, b int) bool {
 		if findingOrder[findings[a].kind] != findingOrder[findings[b].kind] {
 			return findingOrder[findings[a].kind] < findingOrder[findings[b].kind]
@@ -288,6 +309,124 @@ func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 		return findings[a].from.Before(findings[b].from)
 	})
 	return findings
+}
+
+// describeLink names each measure that crossed its threshold in the run, with its worst value.
+func describeLink(r sampleRun, linkFault func(sample) [3]bool) string {
+	var parts []string
+	number := func(value float64) string { return strconv.FormatFloat(value, 'f', -1, 64) }
+	extreme := func(largest bool, read func(sample) *float64) string {
+		var value *float64
+		for _, s := range r.samples {
+			if v := read(s); v != nil {
+				if value == nil {
+					value = v
+				} else {
+					merged := min(*value, *v)
+					if largest {
+						merged = max(*value, *v)
+					}
+					value = &merged
+				}
+			}
+		}
+		return number(*value)
+	}
+	flagged := [3]bool{}
+	for _, s := range r.samples {
+		for i, faulty := range linkFault(s) {
+			flagged[i] = flagged[i] || faulty
+		}
+	}
+	if flagged[0] {
+		parts = append(parts, extreme(true, func(s sample) *float64 { return s.loss })+"% loss at worst")
+	}
+	if flagged[1] {
+		parts = append(parts, extreme(true, func(s sample) *float64 { return s.rtt })+" ms round trip at worst")
+	}
+	if flagged[2] {
+		parts = append(parts, extreme(false, func(s sample) *float64 { return s.availableIncomingK })+" kbps available at best")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// someoneElseReported is true when another Participant reported stats while the run lasted, so there was someone to send to.
+func someoneElseReported(samples []sample, r sampleRun) bool {
+	for _, s := range samples {
+		if s.participant != r.participant && s.end.After(r.from) && s.start.Before(r.to) {
+			return true
+		}
+	}
+	return false
+}
+
+func publishCause(rows []logRow, r sampleRun) verdictCause {
+	events := nodeEvents(rows, r.conn)
+	if stopped := lastBefore(events, "sfu.publication.stopped", r.to); stopped != nil {
+		return verdictCause{"the node stopped the publication (" + orNotLogged(stopped.text("reason")) + ") and the client sent nothing after it", "publishing", "SFU"}
+	}
+	for _, event := range events {
+		if event.event == "sfu.publication.started" {
+			return verdictCause{"the node accepted the publication and the client's sender then sent 0 kbps", "publishing", "publisher"}
+		}
+	}
+	if len(events) == 0 {
+		return verdictCause{"unknown: the SFU node logged no event for this connection, and the client's sender sent 0 kbps", "publishing", "unknown"}
+	}
+	return verdictCause{"the node logged no publication for this connection, and the client's sender sent 0 kbps", "publishing", "publisher"}
+}
+
+// joinStepSides names whose a failed join step is.
+var joinStepSides = map[string]string{
+	"acquire_initial_media": "client", "access_initialize": "API", "create_media_client": "SFU", "start_media": "SFU",
+	"create_sync_client": "Sync", "start_sync": "Sync", "wait_for_sync_live": "Sync", "confirm_entered": "Sync",
+}
+
+// joinCause reads the API refusal that shares the report's journey, else the step the client report says failed first.
+// The report is a JSON string; one that does not parse names no step.
+func joinCause(rows []logRow, report *logRow) verdictCause {
+	for i := range rows {
+		if rows[i].event == "http.failure" && report.journey != "" && rows[i].journey == report.journey {
+			return verdictCause{"the API refused the request (" + codeOrNotLogged(rows[i].text("error_code")) + ")", "access_initialize", "API"}
+		}
+	}
+	var parsed struct {
+		Events []struct {
+			Event      string   `json:"event"`
+			Step       string   `json:"step"`
+			Outcome    string   `json:"outcome"`
+			Code       string   `json:"code"`
+			DurationMS *float64 `json:"duration_ms"`
+		} `json:"events"`
+	}
+	if json.Unmarshal([]byte(report.text("report")), &parsed) == nil {
+		for _, event := range parsed.Events {
+			side, known := joinStepSides[event.Step]
+			if event.Event != "space_join_span" || event.Outcome != "failed" || !known {
+				continue
+			}
+			duration := 0.0
+			if event.DurationMS != nil {
+				duration = *event.DurationMS
+			}
+			return verdictCause{fmt.Sprintf("the join failed at %s (%s) after %d s", event.Step, codeOrNotLogged(event.Code), seconds(ms(duration))), event.Step, side}
+		}
+	}
+	return verdictCause{"unknown: no failed API request shares the report's journey id and the report names no failed step", "joining", "unknown"}
+}
+
+func replacementCause(row *logRow) string {
+	if cause := row.text("replacement_cause"); cause != "" {
+		return cause
+	}
+	return "cause not logged"
+}
+
+func codeOrNotLogged(code string) string {
+	if code == "" {
+		return "code not logged"
+	}
+	return code
 }
 
 func seconds(d time.Duration) int { return int((d + 500*time.Millisecond) / time.Second) }
@@ -337,7 +476,7 @@ func orNotLogged(value string) string {
 	return value
 }
 
-func silenceCause(rows []logRow, r sampleRun) string {
+func silenceCause(rows []logRow, r sampleRun) verdictCause {
 	events := nodeEvents(rows, r.conn)
 	resumed := false
 	for _, event := range events {
@@ -352,33 +491,37 @@ func silenceCause(rows []logRow, r sampleRun) string {
 		}
 	}
 	if paused := lastBefore(events, "sfu.subscription.paused", r.to); paused != nil && !resumed {
-		return "the node paused the subscription (" + orNotLogged(paused.text("reason")) + ") and did not resume it"
+		side := map[string]string{"viewer": "viewer", "congestion": "network"}[paused.text("reason")]
+		if side == "" {
+			side = "SFU"
+		}
+		return verdictCause{"the node paused the subscription (" + orNotLogged(paused.text("reason")) + ") and did not resume it", "forwarding", side}
 	}
 	if lost := lastBefore(events, "sfu.source.lease_lost", r.to); lost != nil {
-		return "the source lost its lease on the node (" + orNotLogged(lost.text("cause")) + ")"
+		return verdictCause{"the source lost its lease on the node (" + orNotLogged(lost.text("cause")) + ")", "publishing", "SFU"}
 	}
 	if replacement != nil && !resumed {
-		return "the connection was replaced (" + orNotLogged(replacement.text("replacement_cause")) + ") and the node logged no subscription starting on the new one"
+		return verdictCause{"the connection was replaced (" + orNotLogged(replacement.text("replacement_cause")) + ") and the node logged no subscription starting on the new one", "reconnecting", "API"}
 	}
 	if len(events) == 0 {
-		return "unknown: the SFU node logged no event for this connection"
+		return verdictCause{"unknown: the SFU node logged no event for this connection", "unknown", "unknown"}
 	}
-	return "unknown: the node events for this connection do not explain it"
+	return verdictCause{"unknown: the node events for this connection do not explain it", "unknown", "unknown"}
 }
 
-func starvedCause(rows []logRow, r sampleRun) string {
+func starvedCause(rows []logRow, r sampleRun) verdictCause {
 	layer := lastBefore(nodeEvents(rows, r.conn), "sfu.subscription.layer", r.to)
 	if layer == nil {
-		return "unknown: the SFU node logged no layer for this connection"
+		return verdictCause{"unknown: the SFU node logged no layer for this connection", "unknown", "unknown"}
 	}
 	now, ceiling, limit := orNotLogged(layer.text("layer")), orNotLogged(layer.text("ceiling")), orNotLogged(layer.text("server_limit"))
 	switch {
 	case limit == "low" && ceiling != "low":
-		return fmt.Sprintf("the node held the viewer to the %s layer (server limit %s, viewer ceiling %s)", now, limit, ceiling)
+		return verdictCause{fmt.Sprintf("the node held the viewer to the %s layer (server limit %s, viewer ceiling %s)", now, limit, ceiling), "forwarding", "SFU"}
 	case ceiling == "low":
-		return fmt.Sprintf("the viewer asked for the %s layer (ceiling %s)", now, ceiling)
+		return verdictCause{fmt.Sprintf("the viewer asked for the %s layer (ceiling %s)", now, ceiling), "receiving", "viewer"}
 	}
-	return fmt.Sprintf("the node and the viewer allowed more than the %s layer, so the publisher sent no better one (ceiling %s, server limit %s)", now, ceiling, limit)
+	return verdictCause{fmt.Sprintf("the node and the viewer allowed more than the %s layer, so the publisher sent no better one (ceiling %s, server limit %s)", now, ceiling, limit), "publishing", "publisher"}
 }
 
 func joinedAt(rows []logRow, participant string) (time.Time, bool) {
@@ -390,21 +533,35 @@ func joinedAt(rows []logRow, participant string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// verdictLine is the one line a person reads: who, what they lived through, from when to when, and why.
+// verdictLine is the one line a person reads: who, what they lived through, from when to when, the failing stage and side, and why.
 func verdictLine(findings []finding) string {
-	if len(findings) == 0 {
-		return "No bad call found by the rules: no failed join, media silence, starved viewer or early replacement."
+	var first, note *finding
+	for i := range findings {
+		switch {
+		case !findings[i].benign && first == nil:
+			first = &findings[i]
+		case findings[i].benign && note == nil:
+			note = &findings[i]
+		}
 	}
-	first := findings[0]
+	short := func(participant string) string {
+		if len(participant) > 8 {
+			return participant[:8]
+		}
+		return participant
+	}
+	if first == nil {
+		none := "No bad call found by the rules: no failed join, media silence, silent publisher, starved or congested viewer or early replacement"
+		if note != nil {
+			return none + ". Participant " + short(note.participant) + " " + note.experience + " (stage: " + note.stage + ", side: " + note.side + ", by choice)."
+		}
+		return none + "."
+	}
 	window := "from " + first.from.UTC().Format("15:04:05") + " to " + first.to.UTC().Format("15:04:05")
 	if first.from.Equal(first.to) {
 		window = "at " + first.from.UTC().Format("15:04:05")
 	}
-	participant := first.participant
-	if len(participant) > 8 {
-		participant = participant[:8]
-	}
-	return "Participant " + participant + " " + first.experience + " " + window + " UTC; cause: " + first.cause + "."
+	return "Participant " + short(first.participant) + " " + first.experience + " " + window + " UTC; failing stage: " + first.stage + ", side: " + first.side + "; cause: " + first.cause + "."
 }
 
 // episodeIDPattern keeps anything but an Episode id out of a query.
@@ -554,7 +711,7 @@ func collectCallVerdicts(ctx context.Context, querier axiomQuerier, episodes []e
 			continue
 		}
 		findings := diagnoseRows(rows, thresholds)
-		if len(findings) == 0 {
+		if !hasBadFinding(findings) {
 			continue
 		}
 		snapshots = append(snapshots, snapshot{
@@ -565,6 +722,16 @@ func collectCallVerdicts(ctx context.Context, querier axiomQuerier, episodes []e
 	return snapshots, failed
 }
 
+// hasBadFinding is false for a call with nothing wrong and for one whose only finding is a stretch the viewer chose.
+func hasBadFinding(findings []finding) bool {
+	for _, f := range findings {
+		if !f.benign {
+			return true
+		}
+	}
+	return false
+}
+
 // callVerdictRulePrefix starts the rule of every call-verdict row. The Episode id ends it, so the failure monitor,
 // which keeps the latest row of each rule and Tenant, raises one alert for each bad Episode.
 const callVerdictRulePrefix = "call-verdict "
@@ -572,7 +739,7 @@ const callVerdictRulePrefix = "call-verdict "
 // collectCallVerdictsFromEnv judges the Episodes that ended a moment ago. It returns nothing when it cannot read,
 // because a missing verdict must not look like a failing call. The failure goes to stderr without the secret.
 func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snapshot {
-	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, callVerdictBudget)
 	defer cancel()
 	querier := axiomQuerier{
 		client: client, token: os.Getenv("CHALK_ALERT_AXIOM_QUERY_TOKEN"), org: os.Getenv("CHALK_ALERT_AXIOM_ORG_ID"),
@@ -596,7 +763,11 @@ func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snap
 
 // An Episode is judged between callVerdictSettle and callVerdictSettle+callVerdictBand after it ended: the wait lets
 // the last SDK uploads land, and the band is the collector's period, so each Episode is judged once.
+//
+// The verdict row is therefore written no later than callVerdictSettle + callVerdictBand + callVerdictBudget after the
+// Episode ended, which call-verdict.json bounds with flag_within_ms.
 const (
 	callVerdictSettle = 30 * time.Second
 	callVerdictBand   = time.Minute
+	callVerdictBudget = 12 * time.Second
 )
