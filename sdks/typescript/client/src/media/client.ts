@@ -3,7 +3,8 @@ import { ReceiveStallRecovery } from "./receive-stall";
 import { AudioReceiveHealth } from "./audio-receive-health";
 import { CameraUplinkPolicy, cameraUplinkBitrate } from "./camera-uplink";
 import { ViewerLayerSelector, type ViewerLayerChange } from "./viewer-layer";
-import { UNREPORTED_TILE_WAIT_MS, VideoTileSubscriptions } from "./video-tile-visibility";
+import { decodedFrames, VideoDecodeStallDetector } from "./video-decode-stall";
+import { UNREPORTED_TILE_WAIT_MS, VideoTileSubscriptions, videoTileOnScreen } from "./video-tile-visibility";
 import { subscribeSnapshot } from "./observers";
 import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
@@ -131,6 +132,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #remotePullIncomplete = false;
   readonly #remotePullRetries = new Map<string, { readonly retryAfter: number; readonly failures: number; readonly receiveStalled?: boolean }>();
   readonly #receiveProgress = new ReceiveStallRecovery();
+  readonly #videoDecode = new VideoDecodeStallDetector();
+  #videoStallReports = 0;
+  #connectionStartedAt = Date.now();
   readonly #receiveHealth: AudioReceiveHealth;
   readonly #viewerLayerPending = new Map<string, ViewerLayerChange>();
   readonly #delivery = new SubscriptionDelivery();
@@ -151,6 +155,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   #syncPublications: readonly MediaPublication[] = [];
   readonly #videoTiles: VideoTileSubscriptions;
   readonly #stopObservingVideoTiles: () => void;
+  readonly #stopFlushingCallStats: () => void;
   #videoTileWake: ReturnType<typeof globalThis.setTimeout> | undefined;
   // A tile change must reach the provider even while the tab is hidden, where routine polls pause.
   #videoTilesChanged = false;
@@ -199,6 +204,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       setInterval: (callback, ms) => globalThis.setInterval(callback, ms),
       clearInterval: (timer) => globalThis.clearInterval(timer),
       connection: () => this.#connection,
+      connectionStartedAt: () => this.#connectionStartedAt,
       tracks: () => this.#remoteTracks.values(),
       onEvent: (event) => this.#invokeListener(() => this.#onReceiveHealth?.(event)),
     });
@@ -212,6 +218,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     });
     this.#observeConnection(this.#connection, this.#generation, this.#connectionEpoch);
     this.#stopObservingVideoTiles = this.#observeVideoTiles();
+    this.#stopFlushingCallStats = this.#flushCallStatsOnPageExit();
   }
   getSnapshot(): CloudflareSFUSnapshot {
     return this.#snapshot;
@@ -990,6 +997,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#recentRecoveries.clear();
     this.#subscribedPublicationIds.clear();
     this.#stopObservingVideoTiles();
+    this.#stopFlushingCallStats();
     this.#generation++;
     this.#connectionEpoch++;
     this.#clearPoll();
@@ -1964,6 +1972,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const reads = this.#readsSubscriptions();
     const { stalled, advanced } = this.#receiveProgress.sample(now, connection, report, received, reads ? (id) => this.#delivery.held(id, now) : undefined);
     for (const publicationId of advanced) this.#remotePullRetries.delete(publicationId);
+    this.#observeVideoDecode(now, report, received, reads);
     if (reads) this.#observeDelivery(now, connection, received, new Set(advanced), current);
     this.#publishSnapshot();
     if (!stalled.some((id) => this.#receiveProgress.canRepull(id) || (this.#replaceMediaConnection && this.#receiveProgress.canRebuild(id)))) return;
@@ -1972,6 +1981,23 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
     this.#remotePullIncomplete = true;
     this.remotePublicationsChanged();
+  }
+  // Reports a visible, live video whose decoder stopped. A video paused on purpose, off screen or in a hidden tab is not expected to move.
+  #observeVideoDecode(now: number, report: RTCStatsReport, received: readonly CloudflareSFURemoteTrack[], reads: boolean): void {
+    const decoded = decodedFrames(report);
+    const videos = pageIsHidden()
+      ? []
+      : received.flatMap((publication) => {
+          const framesDecoded = decoded.get(publication.track.id);
+          const expected = isVideoPublication(publication) && publication.track.readyState === "live" && videoTileOnScreen(publication.publicationId) && !(reads && this.#delivery.held(publication.publicationId, now));
+          return expected && framesDecoded !== undefined ? [{ publicationId: publication.publicationId, trackId: publication.track.id, framesDecoded }] : [];
+        });
+    for (const stall of this.#videoDecode.sample(now, videos)) {
+      const source = received.find((publication) => publication.publicationId === stall.publicationId)?.source;
+      if (this.#videoStallReports >= MAX_VIDEO_STALL_REPORTS || (source !== "camera" && source !== "screen")) continue;
+      this.#videoStallReports++;
+      this.#invokeListener(() => this.#onReceiveHealth?.({ event: "video_receive_stalled", source, duration_ms: Math.round(stall.stalledMs) }));
+    }
   }
   #readsSubscriptions(): boolean {
     return this.#capabilities().subscriptionState && this.#transport?.listSubscriptions !== undefined;
@@ -2132,6 +2158,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const cameraPolicy = new CameraUplinkPolicy();
     const viewerLayers = new ViewerLayerSelector({ followsNetwork: !this.#capabilities().serverLayerAdaptation });
     let observedCamera: LocalTrackState | undefined;
+    const startedAt = Date.now();
+    this.#connectionStartedAt = startedAt;
+    let iceReported = false;
     const observed = () => !disposed && generation === this.#generation && connectionEpoch === this.#connectionEpoch && !this.#stopped && connection.connectionState !== "closed";
     const current = () => observed() && connection.connectionState !== "failed";
     // Sampling skips a failed path but keeps its schedule, so an ICE restart on the same connection resumes it.
@@ -2171,7 +2200,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     };
     const observe = () => {
       if (disposed || generation !== this.#generation || connectionEpoch !== this.#connectionEpoch || this.#stopped) return;
-      if (connectionIsLive(connection)) this.#connectedEpoch = connectionEpoch;
+      if (connectionIsLive(connection)) {
+        this.#connectedEpoch = connectionEpoch;
+        if (!iceReported) {
+          iceReported = true;
+          this.#invokeListener(() => this.#onReceiveHealth?.({ event: "ice_connected", duration_ms: Date.now() - startedAt }));
+        }
+      }
       const observation = this.#observeIceRecovery(connection, connectionEpoch, observeConnectionState(connection.connectionState, connection.iceConnectionState, this.#started));
       if (observation) this.#publishSnapshot(observation.phase, observation.failure);
       else this.#publishSnapshot();
@@ -2406,6 +2441,28 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#delivery.clear();
     this.#publishSnapshot();
     this.#emitRemote();
+  }
+  /**
+   * A closed or reloaded tab never reaches stop(), and a batch uploads only once it holds a minute of samples, so a short
+   * call and the last minute of every call would otherwise never reach the API. The page being hidden or unloaded is the
+   * last moment the closing upload can still leave.
+   */
+  #flushCallStatsOnPageExit(): () => void {
+    if (typeof document === "undefined") return () => undefined;
+    const flush = () => {
+      if (this.#stopped) return;
+      const transport = this.#transport;
+      void this.#callStats.flush(async (stats) => transport?.uploadCallStats?.(stats, true));
+    };
+    const onVisibility = () => {
+      if (pageIsHidden()) flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    globalThis.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      globalThis.removeEventListener("pagehide", flush);
+    };
   }
   #observeVideoTiles(): () => void {
     const stopReports = this.#videoTiles.observe(() => this.#reconcileVideoTiles());
@@ -2642,6 +2699,7 @@ function isVideoPublication(publication: Pick<CloudflareSFUPublication, "source"
   return publication.source === "camera" || publication.source === "screen";
 }
 // Picture-in-picture events bubble from the video element to the document.
+const MAX_VIDEO_STALL_REPORTS = 8;
 const PAGE_VISIBILITY_EVENTS = ["visibilitychange", "enterpictureinpicture", "leavepictureinpicture"] as const;
 function pictureInPictureTracks(): readonly MediaStreamTrack[] {
   if (typeof document === "undefined" || typeof HTMLVideoElement === "undefined" || typeof MediaStream === "undefined") return [];

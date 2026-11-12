@@ -24,6 +24,7 @@ function receiveReportFields(event: ConnectionReportTransportEvent): Partial<Rep
     receive_state: event.receive_state,
     track_state: event.track_state,
     element_state: event.element_state,
+    element: event.element,
     play_result: event.play_result,
     media_error_kind: event.media_error_kind,
     media_error_step: event.media_error_step,
@@ -33,11 +34,15 @@ function receiveReportFields(event: ConnectionReportTransportEvent): Partial<Rep
   };
 }
 
-const isAudioReceive = (event: ReportEvent) => event.event === "audio_receive_stuck" || event.event === "audio_receive_summary";
+// Timing events are measurements, not failures: they ride the next summary and are sent once.
+const isTiming = (event: ReportEvent) => event.event === "ice_connected" || event.event === "first_audio_bytes";
+const isAudioReceive = (event: ReportEvent) => event.event === "audio_receive_stuck" || event.event === "audio_receive_unbound" || event.event === "audio_receive_summary" || isTiming(event);
 function transportTrigger(event: ConnectionReportTransportEvent["event"]): ConnectionReport["trigger"] | null {
   switch (event) {
     case "media_projection_mismatch":
     case "audio_receive_stuck":
+    case "audio_receive_unbound":
+    case "video_receive_stalled":
     case "audio_receive_summary":
       return event;
     default:
@@ -92,6 +97,7 @@ export class ConnectionReporter {
   #unsubscribe: (() => void) | undefined;
   #controller: AbortController | null = null;
   #retryOnReconnect = false;
+  readonly #sentTimings = new WeakSet<ReportEvent>();
   #disposed = false;
 
   constructor(options: ReporterOptions) {
@@ -163,7 +169,8 @@ export class ConnectionReporter {
     this.#events.push(event);
     if (this.#events.length > MAX_EVENTS) this.#events.shift();
     if (event.event === "audio_receive_summary" && this.#pending?.report.trigger === "audio_receive_summary" && this.#pending.attempts === 0) {
-      this.#pending = { ...this.#pending, report: { ...this.#pending.report, events: this.#events.filter(isAudioReceive) } };
+      const queued = this.#pending.report.events;
+      this.#pending = { ...this.#pending, report: { ...this.#pending.report, events: this.#events.filter((item) => isAudioReceive(item) && (!this.#sentTimings.has(item) || queued.includes(item))) } };
     }
   }
   #report(trigger: ConnectionReport["trigger"]): void {
@@ -174,10 +181,13 @@ export class ConnectionReporter {
     const summary = trigger === "audio_receive_summary";
     const now = this.#options.now();
     if (!summary && !reserveParticipantReport(access, now)) return;
-    const events = summary ? this.#events.filter(isAudioReceive) : this.#events.slice();
+    const events = summary ? this.#events.filter((event) => isAudioReceive(event) && !this.#sentTimings.has(event)) : this.#events.slice();
     const report = boundedReport(trigger, events);
     if (!report) return;
-    if (summary) this.#lastSummaryAt = now;
+    if (summary) {
+      this.#lastSummaryAt = now;
+      for (const event of events) if (isTiming(event)) this.#sentTimings.add(event);
+    }
     this.#enqueue({ access, report, attempts: 0 });
   }
   #enqueue(pending: PendingReport): void {

@@ -28,6 +28,11 @@ export function setVideoTileVisibility(publicationId: string, size: VideoRenderS
   if (flipped) for (const listener of listeners) listener();
 }
 
+/** Whether the UI has reported this publication's tile as on screen. A tile nobody reported is not known to be visible. */
+export function videoTileOnScreen(publicationId: string): boolean {
+  return reports.get(publicationId)?.size != null;
+}
+
 export type VideoTileSelection = {
   /** Remote video publications to keep or start pulling. */
   readonly wanted: ReadonlySet<string>;

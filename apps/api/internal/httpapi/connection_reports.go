@@ -60,6 +60,7 @@ type connectionReportEvent struct {
 	ReceiveState     string                         `json:"receive_state,omitempty"`
 	TrackState       string                         `json:"track_state,omitempty"`
 	ElementState     string                         `json:"element_state,omitempty"`
+	Element          string                         `json:"element,omitempty"`
 	PlayResult       string                         `json:"play_result,omitempty"`
 	ReceiveCounts    *connectionReportReceiveCounts `json:"receive_counts,omitempty"`
 	ReceiversStopped *int64                         `json:"receivers_stopped,omitempty"`
@@ -89,17 +90,19 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "granted_audio", "granted_video":
 		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":
-		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"}
+		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "receivers_closed", "access_retry"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "ice_connected", "first_audio_bytes", "audio_receive_summary", "receivers_closed", "access_retry"}
 	case "source":
-		return []string{"microphone", "camera", "screen_audio"}
+		return []string{"microphone", "camera", "screen", "screen_audio"}
 	case "receive_state":
 		return []string{"announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"}
 	case "track_state":
 		return []string{"live", "muted", "ended"}
 	case "element_state":
 		return []string{"paused", "playing"}
+	case "element":
+		return []string{"none", "bound", "playing"}
 	case "play_result":
 		return []string{"ok", "NotAllowedError", "AbortError", "unknown"}
 	case "publication_state", "projection_state":
@@ -151,7 +154,7 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
-		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "play_result": event.PlayResult} {
+		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "element": event.Element, "play_result": event.PlayResult} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
 			}
@@ -217,8 +220,9 @@ func rejectConnectionReport(r *http.Request, reason string) error {
 	return apiErrorInvalidRequest
 }
 
-// provider comes from the verified media credential, as in sdk.call_stats, so an
-// old client reports it too and a join_failed alert can name the failing provider.
+// provider and provider_session_id come from the verified media credential, as in sdk.call_stats, so an
+// old client reports them too, a join_failed alert can name the failing provider, and a report joins to
+// the call_stats rows and the SFU logs of the same connection.
 func logConnectionReport(ctx context.Context, subject accessgrants.Subject, report connectionReport) error {
 	encoded, err := json.Marshal(report)
 	if err != nil {
@@ -226,14 +230,19 @@ func logConnectionReport(ctx context.Context, subject accessgrants.Subject, repo
 	}
 	level := slog.LevelWarn
 	message := "SDK connection failure"
-	if report.Trigger == "audio_receive_summary" {
+	switch report.Trigger {
+	case "audio_receive_summary":
 		level = slog.LevelInfo
 		message = "SDK audio receive summary"
+	case "audio_receive_unbound":
+		// Bytes arrive and no element plays them: a client that never plays audio, not a listener who cannot hear.
+		level = slog.LevelInfo
+		message = "SDK audio receive without a bound element"
 	}
 	observability.RequestLogger(ctx).Log(ctx, level, message, "event", "sdk.connection_report",
 		"trace_id", trace.SpanContextFromContext(ctx).TraceID().String(),
 		"tenant_id", subject.TenantID.String(), "space_id", subject.SpaceID.String(), "episode_id", subject.EpisodeID.String(),
-		"provider", subject.Provider,
+		"provider", subject.Provider, "provider_session_id", subject.ConnectionID,
 		"participant_id_hash", fmt.Sprintf("%x", sha256.Sum256([]byte(subject.ParticipantID.String()))), "trigger", report.Trigger, "report", string(encoded))
 	return nil
 }

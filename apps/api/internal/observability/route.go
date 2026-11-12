@@ -31,7 +31,7 @@ func requestTenantID(ctx context.Context) string {
 	return tenantID.String()
 }
 
-// tagRequestSpans puts the matched route pattern and the tenant on the server
+// tagRequestSpans puts the matched route pattern, the tenant and, for a media request, the Episode, hashed Participant and media plane on the server
 // span and on the journey span, so route latency can be queried. The route is
 // known only after dispatch; an unmatched request gets no route, as the OpenTelemetry
 // convention asks.
@@ -43,6 +43,7 @@ func tagRequestSpans(ctx context.Context, route string) {
 	if tenantID := requestTenantID(ctx); tenantID != "" {
 		attributes = append(attributes, attribute.String(TenantIDKey, tenantID))
 	}
+	attributes = append(attributes, requestMediaSpanAttributes(ctx)...)
 	if len(attributes) == 0 {
 		return
 	}

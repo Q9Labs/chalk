@@ -191,9 +191,21 @@ export async function playProofMedia() {
     const element = proofElement(remote);
     element.dataset.participantId = remote.participantId;
     element.dataset.proofSource = remote.source;
-    if (element.srcObject?.getTracks()[0] !== remote.track) element.srcObject = new MediaStream([remote.track]);
+    const rebound = element.srcObject?.getTracks()[0] !== remote.track;
+    if (rebound) element.srcObject = new MediaStream([remote.track]);
     if (element instanceof HTMLVideoElement) element.muted = true;
     document.body.append(element);
-    await element.play();
+    // Bind the sink the way AudioOutput does, or the SDK sees bytes with no element and cannot tell this guest from a listener who hears nothing.
+    if (remote.track.kind === "audio" && rebound) {
+      element.chalkObservation?.detach();
+      element.chalkObservation = window.proofClient.media?.observeAudioElement?.(remote.track, element);
+    }
+    await element.play().then(
+      () => element.chalkObservation?.played(undefined),
+      (cause) => {
+        element.chalkObservation?.played(cause);
+        throw cause;
+      },
+    );
   }
 }

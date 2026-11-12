@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -39,6 +40,8 @@ func requireParticipantMediaCredential(verifier ParticipantMediaVerifier) func(h
 				return
 			}
 			ctx := accessgrants.WithSubject(r.Context(), subject)
+			// The credential names the Episode, Participant and plane before any handler can fail, so the failure log and the request spans join to an Episode.
+			observability.SetRequestMedia(ctx, subject.EpisodeID.String(), subject.ParticipantID.String(), subject.Provider)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

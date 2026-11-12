@@ -19,13 +19,15 @@ type Entry = {
   trackId?: string;
   bytes?: number;
 };
-type Snapshot = Pick<ConnectionReportTransportEvent, "receive_state" | "track_state" | "element_state" | "play_result">;
+type Snapshot = Pick<ConnectionReportTransportEvent, "receive_state" | "track_state" | "element_state" | "element" | "play_result">;
 
 export type AudioReceiveHealthOptions = {
   now: () => number;
   setInterval: (callback: () => void, milliseconds: number) => ReturnType<typeof setInterval>;
   clearInterval: (timer: ReturnType<typeof setInterval>) => void;
   connection: () => RTCPeerConnection | null;
+  /** When the current peer connection was created, on the same clock as `now`. */
+  connectionStartedAt: () => number;
   tracks: () => Iterable<CloudflareSFURemoteTrack>;
   onEvent: (event: ConnectionReportTransportEvent) => void;
 };
@@ -42,6 +44,7 @@ export class AudioReceiveHealth {
   #stuckEvents = 0;
   #connection: RTCPeerConnection | null = null;
   #connectionRevision = 0;
+  #firstAudioConnection: RTCPeerConnection | null = null;
 
   constructor(options: AudioReceiveHealthOptions) {
     this.#options = options;
@@ -207,6 +210,7 @@ export class AudioReceiveHealth {
         entry.projectionOff = false;
       }
       const snapshot = this.#snapshot(entry, track, inbound);
+      this.#reportFirstAudio(entry, now);
       const state = snapshot.receive_state ?? "announced";
       increment(counts, state);
       this.#reportStuck(entry, snapshot, now);
@@ -216,18 +220,26 @@ export class AudioReceiveHealth {
     }
   }
 
+  /** Once per peer connection: the first sample that finds remote audio bytes, so time to first audio compares across planes. Its precision is the sample interval. */
+  #reportFirstAudio(entry: Entry, now: number): void {
+    if (!this.#connection || this.#firstAudioConnection === this.#connection || !entry.bytes) return;
+    this.#firstAudioConnection = this.#connection;
+    this.#options.onEvent({ event: "first_audio_bytes", source: entry.source, duration_ms: Math.max(0, Math.floor(now - this.#options.connectionStartedAt())) });
+  }
+
   #enabled(entry: Entry, track: MediaStreamTrack | undefined): boolean {
     if (this.#projection === undefined) return track?.enabled !== false;
     return this.#projection.has(entry.projectionKey);
   }
 
   #snapshot(entry: Entry, track: MediaStreamTrack | undefined, inbound: Map<string, AudioStats>): Snapshot {
-    const snapshot: Snapshot = { receive_state: entry.pull };
+    const snapshot: Snapshot = { receive_state: entry.pull, element: "none" };
     if (!track) return snapshot;
     snapshot.track_state = trackState(track);
     const flowing = updateBytes(entry, track, inbound.get(track.id));
     const observation = boundElement(this.#elements.get(track), track);
     if (observation) {
+      snapshot.element = observation.playing ? "playing" : "bound";
       snapshot.element_state = observation.element.paused ? "paused" : "playing";
       snapshot.play_result = observation.result;
     }
@@ -248,7 +260,8 @@ export class AudioReceiveHealth {
     entry.reported = true;
     this.#stuckEvents++;
     this.#options.onEvent({
-      event: "audio_receive_stuck",
+      // Bytes are arriving and no element was ever bound: this client never plays audio (a proof guest, a headless viewer), which is not a listener who cannot hear.
+      event: snapshot.receive_state === "bytes_flowing" && snapshot.element === "none" ? "audio_receive_unbound" : "audio_receive_stuck",
       source: entry.source,
       ...snapshot,
       duration_ms: Math.min(2147483647, Math.max(0, Math.floor(now - entry.since))),

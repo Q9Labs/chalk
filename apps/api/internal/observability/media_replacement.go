@@ -19,5 +19,6 @@ func LogMediaConnectionReplacement(ctx context.Context, cause string) {
 	if !slices.Contains(MediaReplacementCauses(), cause) {
 		return
 	}
-	RequestLogger(ctx).InfoContext(ctx, "media connection replacement", "event", "media.connection_replacement", "replacement_cause", cause)
+	attrs := append([]any{"event", "media.connection_replacement", "replacement_cause", cause}, requestMediaAttrs(ctx)...)
+	RequestLogger(ctx).InfoContext(ctx, "media connection replacement", attrs...)
 }
