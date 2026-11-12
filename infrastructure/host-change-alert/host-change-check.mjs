@@ -72,10 +72,14 @@ async function readDeployments({ fetchImpl, token, repository }) {
   return (await response.json()).map((deployment) => new Date(deployment.created_at));
 }
 
-async function readHostCalls({ instanceId, now, awsImpl }) {
+// One lookup per event name: a lookup by resource returns the newest 50 events of any kind, which API reads can fill.
+async function readHostCalls({ now, awsImpl }) {
   const start = new Date(now.getTime() - CLOUDTRAIL_WINDOW_MS).toISOString();
-  const output = await awsImpl(["cloudtrail", "lookup-events", "--lookup-attributes", `AttributeKey=ResourceName,AttributeValue=${instanceId}`, "--start-time", start, "--end-time", now.toISOString(), "--max-results", "50", "--output", "json"]);
-  return JSON.parse(output).Events.map((event) => ({ ...JSON.parse(event.CloudTrailEvent), EventId: event.EventId, Username: event.Username, Resources: event.Resources, EventName: event.EventName, EventTime: event.EventTime }));
+  const lookups = [...HOST_CALLS].map(async (name) => {
+    const output = await awsImpl(["cloudtrail", "lookup-events", "--lookup-attributes", `AttributeKey=EventName,AttributeValue=${name}`, "--start-time", start, "--end-time", now.toISOString(), "--max-results", "50", "--output", "json"]);
+    return JSON.parse(output).Events;
+  });
+  return (await Promise.all(lookups)).flat().map((event) => ({ EventId: event.EventId, EventName: event.EventName, EventTime: event.EventTime, Username: event.Username, Resources: event.Resources }));
 }
 
 const aws = async (args) => (await run("aws", args)).stdout;
@@ -89,7 +93,7 @@ export async function check({ env, fetchImpl = fetch, awsImpl = aws, now = new D
   if (!drill) {
     const startTime = new Date(now.getTime() - START_WINDOW_MS).toISOString();
     const [calls, starts, deployments] = await Promise.all([
-      readHostCalls({ instanceId: env.PRODUCTION_INSTANCE_ID, now, awsImpl }),
+      readHostCalls({ now, awsImpl }),
       readStarts({ fetchImpl, token: env.CHALK_AXIOM_QUERY_TOKEN, dataset: env.CHALK_AXIOM_LOG_DATASET, startTime, endTime: now.toISOString() }),
       readDeployments({ fetchImpl, token: env.GITHUB_TOKEN, repository: env.GITHUB_REPOSITORY }),
     ]);
