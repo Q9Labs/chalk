@@ -16,7 +16,7 @@ defmodule ChalkSync.ProviderBridgeReadinessIntegrationTest do
     database_url =
       System.get_env("CHALK_SYNC_TEST_DATABASE_URL") || System.fetch_env!("CHALK_DATABASE_URL")
 
-    Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
+    Application.put_env(:chalk_sync, :database_workers, true)
     Application.put_env(:chalk_sync, :database_url, database_url)
     Application.put_env(:chalk_sync, :port, 0)
     Application.put_env(:chalk_sync, :require_synchronous_standby, false)

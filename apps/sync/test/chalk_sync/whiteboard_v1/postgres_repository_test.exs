@@ -20,8 +20,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
-
   setup_all do
     if @database_url do
       previous_connections = Application.get_env(:chalk_sync, :database_connections)
@@ -563,7 +561,7 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   end
 
   defp wait_for_entry(episode, after_ms \\ nil, attempts \\ 200) do
-    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
+    case :ets.lookup(:whiteboard_authority_reads, EpisodeKey.authority_key(episode)) do
       [{_episode, _poller, _access, read_at, _failure}] = entry
       when is_nil(after_ms) or read_at > after_ms ->
         entry

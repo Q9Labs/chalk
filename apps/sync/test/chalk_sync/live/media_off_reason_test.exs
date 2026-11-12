@@ -1,38 +1,29 @@
 defmodule ChalkSync.Live.MediaOffReasonTest do
-  use ExUnit.Case, async: false
+  use ChalkSync.PostgresCase, async: false
 
   alias ChalkSync.Contract.GeneratedV1
+  alias ChalkSync.ExternalOperationConsumer
   alias ChalkSync.Live.Episode, as: LiveEpisode
   alias ChalkSync.Live.MediaPlaneTestAdapter
   alias ChalkSync.Live.Projection
-  alias ChalkSync.Stateholder.EpisodeKey
-  alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Memory
   alias ChalkSync.Stateholder.Operation
+  alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
-  setup do
-    Memory.reset()
+  setup %{connection: connection} do
+    fixture =
+      SyncPostgres.seed_episode(connection, 2, %{}, %{
+        participants: [%{}, %{role: "collaborator"}]
+      })
 
-    episode = %EpisodeKey{
-      tenant_id: UUID.generate(),
-      space_id: UUID.generate(),
-      episode_id: UUID.generate()
-    }
-
-    host_id = UUID.generate()
-    guest_id = UUID.generate()
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: host_id, generation: 1, display_name: "Host", role: "owner"},
-        %{id: guest_id, generation: 1, display_name: "Guest", role: "collaborator"}
-      ])
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    [host, guest] = fixture.identities
 
     previous = Application.get_env(:chalk_sync, :media_plane)
     on_exit(fn -> restore_media_plane(previous) end)
 
-    {:ok, episode: episode, host: identity(episode, host_id), guest: identity(episode, guest_id)}
+    {:ok, episode: fixture.episode, host: host, guest: guest}
   end
 
   test "a host mute shows the revision of its stop event even with no publication", ctx do
@@ -114,7 +105,7 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
       }
     ])
 
-    :ok = Memory.set_media_pause(ctx.guest, :microphone, publication_id)
+    :ok = Postgres.set_media_pause(ctx.guest, :microphone, publication_id)
 
     assert [%{"enabled" => false, "off_reason" => "self"} = item] = items(ctx.episode)
     refute Map.has_key?(item, "off_revision")
@@ -132,7 +123,7 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
       }
     ])
 
-    :ok = Memory.set_media_pause(ctx.guest, :microphone, publication_id)
+    :ok = Postgres.set_media_pause(ctx.guest, :microphone, publication_id)
     revision = mute(ctx)
 
     assert [%{"off_reason" => "host", "off_revision" => ^revision}] = items(ctx.episode)
@@ -204,25 +195,28 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
       })
 
     assert {:ok, %{external_operation_id: operation_id}} =
-             Memory.begin_operation(ctx.host, operation)
+             Postgres.begin_operation(ctx.host, operation)
 
-    assert {:ok, claimed} = Memory.claim_operations(64)
+    assert {:ok, claimed} = Postgres.claim_operations(64)
 
-    {episode, _external} =
+    {episode, external} =
       Enum.find(claimed, fn {_episode, candidate} ->
         candidate.external_operation_id == operation_id
       end)
 
-    assert {:ok, _decision} =
-             Memory.finalize_operation(
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
                episode,
-               operation_id,
-               {:applied, :participant_microphone_stopped,
-                %{"participant_id" => ctx.guest.participant_id}}
+               external,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
              )
 
     assert {:ok, %{status: :applied, applied_revision: revision}} =
-             Memory.read_operation(ctx.episode, operation_id)
+             Postgres.read_operation(ctx.episode, operation_id)
 
     revision
   end
@@ -234,10 +228,6 @@ defmodule ChalkSync.Live.MediaOffReasonTest do
       )
 
     Application.put_env(:chalk_sync, :media_plane, {MediaPlaneTestAdapter, adapter})
-  end
-
-  defp identity(episode, participant_id) do
-    %Identity{episode: episode, participant_id: participant_id, participant_generation: 1}
   end
 
   defp restore_media_plane(nil), do: Application.delete_env(:chalk_sync, :media_plane)

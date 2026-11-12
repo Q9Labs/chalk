@@ -14,7 +14,6 @@ defmodule ChalkSync.Live.MediaOffReasonPostgresTest do
 
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
   @old_item_keys ["enabled", "participant_id", "publication_id", "source"]
 
