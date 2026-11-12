@@ -18,3 +18,21 @@ export function noticeAnnouncement(toast: Pick<ChalkToastProps, "message" | "ann
 export function noticeIdentity(toast: Pick<ChalkToastProps, "message" | "announcementText" | "announcementKey" | "type">): string {
   return JSON.stringify([noticeAnnouncement(toast), toast.announcementKey, toast.type ?? "info"]);
 }
+
+type Notice = Pick<ChalkToastProps, "message" | "announcementText" | "announcementKey" | "type"> & { readonly id: string };
+
+/**
+ * Repeats of one message collapse into its latest notice, at the latest one's place. `ids` holds every notice the group stands for,
+ * so dismissing the group dismisses them all. A notice with no speech text or key has no comparable identity and never merges.
+ */
+export function mergeRepeats<T extends Notice>(notices: readonly T[]): readonly { readonly notice: T; readonly ids: readonly string[] }[] {
+  const groups = new Map<string, { notice: T; ids: string[] }>();
+  for (const notice of notices) {
+    const key = noticeAnnouncement(notice) || notice.announcementKey ? noticeIdentity(notice) : `id:${notice.id}`;
+    const ids = groups.get(key)?.ids ?? [];
+    ids.push(notice.id);
+    groups.delete(key);
+    groups.set(key, { notice, ids });
+  }
+  return [...groups.values()];
+}
