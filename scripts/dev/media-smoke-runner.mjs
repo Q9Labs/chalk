@@ -118,3 +118,11 @@ function hasSpaceInviteToken(url) {
   const token = new URLSearchParams(url.hash.slice(1)).get("spaceInviteToken");
   return typeof token === "string" && token.startsWith("cspi1");
 }
+
+if (import.meta.main) {
+  const manifestPath = process.argv.slice(2).find((argument) => !argument.startsWith("--")) ?? process.env.CHALK_DEV_RUNTIME_MANIFEST;
+  if (!manifestPath) throw new Error("Usage: node scripts/dev/media-smoke-runner.mjs <ready-runtime-manifest.json>");
+  const report = await runMediaProof(manifestPath);
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  if (report.result !== "passed") process.exitCode = 1;
+}
