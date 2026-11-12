@@ -183,13 +183,21 @@ type phaseReport struct {
 	name                  string
 	audioGap, videoFreeze time.Duration
 	audioSlowest          time.Duration // the longest time the node's audio count stood still
-	startState            string
+	startState, endState  string
 	changes               []change
 }
 
 func (r phaseReport) String() string {
 	return fmt.Sprintf("%-14s audio gap %4dms (node sent none for %4dms), video freeze %4dms, camera %s %v",
 		r.name, r.audioGap.Milliseconds(), r.audioSlowest.Milliseconds(), r.videoFreeze.Milliseconds(), r.startState, r.changes)
+}
+
+// lastChangeAt is when the camera made its last move during the phase, or 0 when it never moved.
+func lastChangeAt(r phaseReport) time.Duration {
+	if len(r.changes) == 0 {
+		return 0
+	}
+	return r.changes[len(r.changes)-1].at
 }
 
 // firstChange is when the camera first moved to state during the phase, or -1.
@@ -227,28 +235,69 @@ func (c *constrainedCall) report(name string, from, to time.Time) phaseReport {
 			audioSent, standing = sample.audioSent, sample.at
 		}
 	}
+	r.endState = state
 	return r
+}
+
+// The bounds sit well above what a healthy node measured (audio gap under 110ms, video freeze under
+// 130ms, a layer move within 1s) and well below what a viewer notices as a failure.
+const (
+	continuousAudioGap  = 250 * time.Millisecond
+	continuousVideoGap  = 400 * time.Millisecond
+	nodeAudioStall      = 150 * time.Millisecond
+	lowerLayerWithin    = 2500 * time.Millisecond
+	bestLayerBackWithin = 5 * time.Second
+	blackoutSlack       = 500 * time.Millisecond
+)
+
+// requireContinuous says media kept flowing through a phase that only slowed or thinned the link.
+func requireContinuous(t *testing.T, r phaseReport) {
+	t.Helper()
+	if r.audioGap > continuousAudioGap || r.audioSlowest > nodeAudioStall || r.videoFreeze > continuousVideoGap {
+		t.Errorf("%s: audio gap %v (node stalled %v), video freeze %v; want at most %v, %v and %v", r.name, r.audioGap, r.audioSlowest, r.videoFreeze, continuousAudioGap, nodeAudioStall, continuousVideoGap)
+	}
 }
 
 func TestConstrainedLinkKeepsAudioAndFollowsTheBandwidth(t *testing.T) {
 	call := startConstrainedCall(t)
 	link := call.viewer.link
-	var reports []phaseReport
 	run := func(name string, hold time.Duration, shape func()) phaseReport {
 		from := time.Now()
 		shape()
 		time.Sleep(hold)
 		r := call.report(name, from, time.Now())
-		reports = append(reports, r)
 		t.Log(r)
 		return r
 	}
 
-	run("bandwidth down", 12*time.Second, func() { link.shape(700_000, 30_000, 20*time.Millisecond, 0, 0) })
-	run("bandwidth up", 20*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0, 0) })
-	run("2% loss", 8*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0.02, 0) })
-	run("10% loss", 8*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0.10, 0) })
-	run("2s blackout", 2*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 1, 0) })
-	run("after blackout", 15*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0, 0) })
-	_ = reports
+	down := run("bandwidth down", 8*time.Second, func() { link.shape(700_000, 30_000, 20*time.Millisecond, 0, 0) })
+	requireContinuous(t, down)
+	if at := down.firstChange("l"); at < 0 || at > lowerLayerWithin {
+		t.Errorf("bandwidth down: the camera moved to the low layer at %v; want within %v", at, lowerLayerWithin)
+	}
+
+	// A receiver on a healthy link must be back on the best layer it can carry within a bound.
+	up := run("bandwidth up", 10*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0, 0) })
+	requireContinuous(t, up)
+	if at := up.firstChange("h"); at < 0 || at > bestLayerBackWithin {
+		t.Errorf("bandwidth up: the camera returned to the high layer at %v; want within %v", at, bestLayerBackWithin)
+	}
+
+	light := run("2% loss", 5*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0.02, 0) })
+	requireContinuous(t, light)
+	if len(light.changes) != 0 {
+		t.Errorf("2%% loss: the camera moved %v; light loss must not change the layer", light.changes)
+	}
+	requireContinuous(t, run("10% loss", 5*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0.10, 0) }))
+
+	blackout := run("2s blackout", 2*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 1, 0) })
+	if limit := 2*time.Second + blackoutSlack; blackout.audioGap > limit || blackout.videoFreeze > limit {
+		t.Errorf("2s blackout: audio gap %v, video freeze %v; want at most %v, the blackout itself", blackout.audioGap, blackout.videoFreeze, limit)
+	}
+
+	after := run("after blackout", 8*time.Second, func() { link.shape(0, 0, 20*time.Millisecond, 0, 0) })
+	requireContinuous(t, after)
+	if backAt := lastChangeAt(after); after.endState != "h" || backAt > bestLayerBackWithin+blackoutSlack {
+		t.Errorf("after blackout: the camera ended on %q after its last move at %v; want h within %v", after.endState, backAt, bestLayerBackWithin+blackoutSlack)
+	}
 }
