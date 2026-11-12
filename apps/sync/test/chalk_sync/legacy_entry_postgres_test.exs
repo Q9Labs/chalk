@@ -117,6 +117,44 @@ defmodule ChalkSync.LegacyEntryPostgresTest do
     assert {:error, :invalid_admission_intent} = Postgres.admit_entry(fixture.identity, :new)
   end
 
+  @tag :published_legacy_entry
+  test "an identity from an older participant generation cannot be admitted", %{
+    connection: connection
+  } do
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    stale = %{fixture.identity | participant_generation: 2}
+    assert {:error, :stale_participant_generation} = Postgres.admit_entry(stale, :new)
+    assert {:ok, _identity} = Postgres.admit_entry(fixture.identity, :new)
+  end
+
+  @tag :published_legacy_entry
+  test "an Episode that is no longer active admits no new entry", %{connection: connection} do
+    fixture = SyncPostgres.seed_pending_join(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+
+    Postgrex.query!(
+      connection,
+      "update episodes set status='ending' where tenant_id=$1 and space_id=$2 and id=$3",
+      [
+        UUID.dump!(fixture.episode.tenant_id),
+        UUID.dump!(fixture.episode.space_id),
+        UUID.dump!(fixture.episode.episode_id)
+      ]
+    )
+
+    assert {:ok, identity} = Postgres.admit_entry(fixture.identity, :new)
+    assert identity.entry_generation == nil
+
+    assert [] =
+             Postgrex.query!(
+               connection,
+               "select 1 from participant_join_seats where participant_id=$1",
+               [UUID.dump!(fixture.identity.participant_id)]
+             ).rows
+  end
+
   defp prepare_storage(_connection, _fixture, :pending), do: :ok
 
   defp prepare_storage(_connection, fixture, :active) do
