@@ -1,15 +1,18 @@
-// Vision review of the screens that changed. One request holds up to MAX_SCREENS before | after images and asks one
-// question per screen: is anything visibly broken. A finding blocks only when it names a region that overlaps a
-// region the pixel comparison found changed, so the model cannot block on something the branch did not touch.
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+// Vision review of the screens that changed. One headless Claude Code run (`claude -p`, on the Q9 Claude subscription, no API
+// key) reads up to MAX_SCREENS before | after images and answers one question per screen: is anything visibly broken. A
+// finding blocks only when it names a region that overlaps a region the pixel comparison found changed, so the model cannot
+// block on something the branch did not touch.
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
-export const MODEL = process.env.UI_CHECK_MODEL ?? "claude-fable-5-2";
+const run = promisify(execFile);
+
+export const MODEL = process.env.UI_CHECK_MODEL ?? "claude-opus-5-5";
+export const EFFORT = "high";
 export const MAX_SCREENS = 10;
 /** Screens whose changed pixels are under this fraction are font or antialiasing noise, not worth a model call. */
 export const MIN_CHANGED_FRACTION = 0.0005;
-/** US dollars per million tokens for MODEL, from Anthropic's pricing page. Update with MODEL. */
-const PRICE_PER_MTOK = { input: Number(process.env.UI_CHECK_PRICE_IN ?? 8), output: Number(process.env.UI_CHECK_PRICE_OUT ?? 40) };
+const TIMEOUT_MS = 8 * 60_000;
 
 const SYSTEM = `You review screenshots of a video-call web app for visible breakage. Each image shows BEFORE on the left and AFTER on the right; red boxes mark pixels that changed. Judge only the AFTER picture, and only what the change touched.
 
@@ -27,37 +30,8 @@ Answer with JSON only: {"screens":[{"frame":"<id>","broken":true|false,"finding"
 
 const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
-/**
- * @param {{ comparisons: { frame: string, label: string, size: string, scheme: string, fraction: number, changed: number, regions: { x: number, y: number, w: number, h: number }[], afterWidth: number, afterHeight: number }[], dir: string, apiKey: string | undefined }} input
- */
-export async function reviewScreens({ comparisons, dir, apiKey }) {
-  const candidates = comparisons
-    .filter((item) => item.fraction >= MIN_CHANGED_FRACTION)
-    .sort((a, b) => b.changed - a.changed)
-    .slice(0, MAX_SCREENS);
-  if (candidates.length === 0) return { status: "nothing-to-review", findings: [], reviewed: 0, cost: 0 };
-  if (!apiKey) return { status: "skipped-no-key", findings: [], reviewed: 0, cost: 0 };
-  const content = [];
-  for (const item of candidates) {
-    content.push({ type: "text", text: `Screen ${item.frame}: ${item.label}, ${item.size}, ${item.scheme} theme.` });
-    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: (await readFile(join(dir, `${item.frame}.review.jpg`))).toString("base64") } });
-  }
-  content.push({ type: "text", text: "Return the JSON now." });
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 2000, system: SYSTEM, messages: [{ role: "user", content }] }),
-  });
-  if (!response.ok) return { status: `error-${response.status}`, findings: [], reviewed: 0, cost: 0, error: (await response.text()).slice(0, 300) };
-  const body = await response.json();
-  const cost = ((body.usage?.input_tokens ?? 0) * PRICE_PER_MTOK.input + (body.usage?.output_tokens ?? 0) * PRICE_PER_MTOK.output) / 1_000_000;
-  const text = body.content?.find((part) => part.type === "text")?.text ?? "";
-  let screens;
-  try {
-    screens = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)).screens;
-  } catch {
-    return { status: "error-unparseable", findings: [], reviewed: candidates.length, cost, error: text.slice(0, 300) };
-  }
+/** The screens the model judged broken, each with whether it points at a region the pixel comparison found changed. */
+function toFindings(screens, candidates) {
   const byFrame = new Map(candidates.map((item) => [item.frame, item]));
   const findings = [];
   for (const screen of screens ?? []) {
@@ -68,5 +42,45 @@ export async function reviewScreens({ comparisons, dir, apiKey }) {
     const touched = pointed && item.regions.some((changed) => overlaps(region, { x: changed.x / item.afterWidth, y: changed.y / item.afterHeight, w: changed.w / item.afterWidth, h: changed.h / item.afterHeight }));
     findings.push({ frame: item.frame, label: item.label, size: item.size, scheme: item.scheme, finding: String(screen.finding ?? ""), region: pointed ? region : null, blocking: Boolean(touched) });
   }
-  return { status: "ok", findings, reviewed: candidates.length, cost, tokens: body.usage };
+  return findings;
+}
+
+/**
+ * @param {{ comparisons: { frame: string, label: string, size: string, scheme: string, fraction: number, changed: number, regions: { x: number, y: number, w: number, h: number }[], afterWidth: number, afterHeight: number }[], dir: string, token: string | undefined }} input
+ * `dir` holds `<frame>.review.jpg` for every compared frame; `token` is a Claude subscription OAuth token (`claude setup-token`).
+ */
+export async function reviewScreens({ comparisons, dir, token }) {
+  const candidates = comparisons
+    .filter((item) => item.fraction >= MIN_CHANGED_FRACTION)
+    .sort((a, b) => b.changed - a.changed)
+    .slice(0, MAX_SCREENS);
+  if (candidates.length === 0) return { status: "nothing-to-review", findings: [], reviewed: 0 };
+  if (!token) return { status: "skipped-no-token", findings: [], reviewed: 0 };
+  const prompt = [
+    "Read each of these images with the Read tool, then return the JSON.",
+    ...candidates.map((item) => `- ${item.frame}.review.jpg is screen ${item.frame}: ${item.label}, ${item.size}, ${item.scheme} theme.`),
+  ].join("\n");
+  const args = ["-p", prompt, "--model", MODEL, "--effort", EFFORT, "--output-format", "json", "--system-prompt", SYSTEM, "--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk", "--setting-sources", "", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"];
+  let output;
+  try {
+    const { stdout } = await run("claude", args, { cwd: dir, timeout: TIMEOUT_MS, maxBuffer: 10_000_000, env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_CODE_OAUTH_TOKEN: token } });
+    output = stdout;
+  } catch (error) {
+    return { status: "error-claude", findings: [], reviewed: 0, error: String(error.stderr || error.stdout || error.message).slice(0, 300) };
+  }
+  let result;
+  try {
+    result = JSON.parse(output);
+  } catch {
+    return { status: "error-unparseable", findings: [], reviewed: candidates.length, error: output.slice(0, 300) };
+  }
+  const text = typeof result.result === "string" ? result.result : "";
+  if (result.is_error) return { status: "error-claude", findings: [], reviewed: 0, error: text.slice(0, 300) };
+  let screens;
+  try {
+    screens = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)).screens;
+  } catch {
+    return { status: "error-unparseable", findings: [], reviewed: candidates.length, error: text.slice(0, 300) };
+  }
+  return { status: "ok", findings: toFindings(screens, candidates), reviewed: candidates.length };
 }

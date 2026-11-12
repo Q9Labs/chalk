@@ -57,6 +57,11 @@ jobs:
         with:
           browsers: chromium
 
+      # Only pull requests from this repository get the token, so only they need the CLI for the model review.
+      - name: Install Claude Code
+        if: steps.select.outputs.ui == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+        run: npm install --global @anthropic-ai/claude-code@2.1.322
+
       - name: Check the check
         if: steps.select.outputs.ui == 'true'
         run: node --test scripts/ui-check/*.test.mjs
@@ -75,8 +80,9 @@ jobs:
         id: walk
         if: steps.select.outputs.ui == 'true'
         env:
-          # Pull requests from forks get no secret, and the vision review then says it did not run.
-          ANTHROPIC_API_KEY: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.ANTHROPIC_API_KEY || '' }}
+          # The model review runs on the Q9 Claude subscription (`claude setup-token`). Pull requests from forks get no secret,
+          # and the review then says, in the comment and as a warning, that it did not run.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           UI_CHECK_IMAGE_BASE: https://raw.githubusercontent.com/${{ github.repository }}/ui-check-evidence/pr-${{ github.event.pull_request.number }}/${{ github.event.pull_request.head.sha }}
         run: node scripts/ui-check/run.mjs --base "origin/${{ github.base_ref || 'master' }}" --base-cache ui-check-base
 

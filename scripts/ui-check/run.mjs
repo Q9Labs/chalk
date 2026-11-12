@@ -15,7 +15,7 @@ import { promisify } from "node:util";
 import { serveBuild } from "../../apps/web/scripts/call-performance-server.mjs";
 import { capture, planRuns } from "./capture.mjs";
 import { compareFrames } from "./compare.mjs";
-import { renderComment } from "./comment.mjs";
+import { isReviewed, renderComment } from "./comment.mjs";
 import { reviewScreens } from "./review.mjs";
 import { newFindings } from "./verdict.mjs";
 
@@ -108,7 +108,7 @@ try {
   const review = await reviewScreens({
     comparisons: comparisons.map((item) => ({ ...item, label: frameInfo.get(item.frame)?.label ?? "", size: frameInfo.get(item.frame)?.size ?? "", scheme: frameInfo.get(item.frame)?.scheme ?? "" })),
     dir: dirs.diff,
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    token: process.env.CLAUDE_CODE_OAUTH_TOKEN,
   });
 
   const blocking = findings.length > 0 || review.findings.some((finding) => finding.blocking);
@@ -126,7 +126,8 @@ try {
   };
   writeFileSync(join(out, "report.json"), JSON.stringify(report, null, 1));
   writeFileSync(join(out, "comment.md"), renderComment({ report, imageBase: process.env.UI_CHECK_IMAGE_BASE, frames: headRun.frames }));
-  console.log(`ui-check: ${report.frames} frames in ${report.seconds}s, ${report.changedFrames} changed, ${findings.length} new layout findings, vision ${review.status} (${review.findings.length} findings, $${review.cost.toFixed(3)}). ${blocking ? "BLOCKING" : "ok"}`);
+  console.log(`ui-check: ${report.frames} frames in ${report.seconds}s, ${report.changedFrames} changed, ${findings.length} new layout findings, vision ${review.status} (${review.findings.length} findings). ${blocking ? "BLOCKING" : "ok"}`);
+  if (!isReviewed(review)) console.log(`::warning title=UI check::The model review did not run (${review.status}). Only the layout checks decided.`);
   process.exitCode = blocking ? 1 : 0;
 } finally {
   for (const harness of harnesses) harness.stop();

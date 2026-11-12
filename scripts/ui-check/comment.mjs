@@ -29,7 +29,8 @@ export function renderComment({ report, imageBase, frames }) {
   const { findings, review, comparisons } = report;
   const blockingReview = review.findings.filter((finding) => finding.blocking);
   const total = findings.length + blockingReview.length;
-  const lines = [MARKER, `## UI check: ${report.blocking ? `${total} finding${total === 1 ? "" : "s"} to fix` : "passed"}`, ""];
+  const verdict = report.blocking ? `${total} finding${total === 1 ? "" : "s"} to fix` : isReviewed(review) ? "passed" : "passed the layout checks, NOT reviewed by the model";
+  const lines = [MARKER, `## UI check: ${verdict}`, ""];
   lines.push(
     `Walked ${report.runs} journey runs (${report.frames} frames: pre-join, calls of 1 to 10 people, panels and sheets, toggles, leave) at phone 390, tablet 820 and desktop 1440, light and dark, on this branch and on \`${report.baseRef}\`. ${report.changedFrames} frames look different from the base. Took ${report.seconds}s.`,
     "",
@@ -63,9 +64,12 @@ export function renderComment({ report, imageBase, frames }) {
   return lines.join("\n");
 }
 
+/** True when the model looked at every screen that needed it; a skipped or failed review is not a pass. */
+export const isReviewed = (review) => review.status === "ok" || review.status === "nothing-to-review";
+
 function describeReview(review) {
   if (review.status === "nothing-to-review") return "no screen changed enough to review.";
-  if (review.status === "skipped-no-key") return "not run, because this run has no model key (pull requests from forks get none).";
-  if (review.status !== "ok") return `did not run (${review.status}); the layout checks above still apply.`;
-  return `${review.reviewed} changed screens reviewed, ${review.findings.length === 0 ? "nothing visibly broken" : `${review.findings.length} flagged`}. Model cost about $${review.cost.toFixed(3)}.`;
+  if (review.status === "skipped-no-token") return "**NOT RUN**: this run has no Claude token (pull requests from forks get none, and the repository secret `CLAUDE_CODE_OAUTH_TOKEN` may be missing). Only the layout checks decided, so do not read this as a pass for the look of the changed screens.";
+  if (review.status !== "ok") return `**NOT RUN** (${review.status}${review.error ? `: ${review.error}` : ""}). Only the layout checks decided, so do not read this as a pass for the look of the changed screens.`;
+  return `${review.reviewed} changed screens reviewed by Claude Opus 5.5, ${review.findings.length === 0 ? "nothing visibly broken" : `${review.findings.length} flagged`}.`;
 }
