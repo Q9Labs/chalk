@@ -6,7 +6,10 @@ import { gatedActionIds, planeBudgets, validateBudgetEntries } from "./budgets.m
 import { diffMetrics } from "./diff.mjs";
 import { parseScorecard } from "./schema.mjs";
 
-const [revision, runId, ...paths] = process.argv.slice(2);
+// --latency-deferred: the cut's cards carry no latency kit run; the staging latency workflow scores that one against the same budgets.
+const args = process.argv.slice(2);
+const latencyDeferred = args.includes("--latency-deferred");
+const [revision, runId, ...paths] = args.filter((arg) => arg !== "--latency-deferred");
 if (!/^[0-9a-f]{40}$/.test(revision ?? "") || !/^\d+$/.test(runId ?? "")) throw new Error("usage: evaluate.mjs <cut-sha> <run-id> [scorecard.json]...");
 const { budgets } = JSON.parse(execFileSync("git", ["show", `${revision}:perf/budgets.json`], { encoding: "utf8" }));
 validateBudgetEntries(budgets);
@@ -30,7 +33,7 @@ for (const path of paths) {
 // Every deployed nightly cut runs the own-SFU proof; a Cloudflare card cannot replace its measurements.
 // The latency kit records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
 if (planes.has("chalk_sfu")) {
-  for (const id of gatedActionIds(budgets, "chalk_sfu")) if (!measured.has(id)) missing.add(`chalk_sfu.${id}`);
+  if (!latencyDeferred) for (const id of gatedActionIds(budgets, "chalk_sfu")) if (!measured.has(id)) missing.add(`chalk_sfu.${id}`);
 } else if (![...missing].some((item) => item.startsWith("chalk_sfu scorecard"))) {
   missing.add("chalk_sfu scorecard");
 }
