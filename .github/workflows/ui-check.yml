@@ -114,13 +114,16 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # A job that failed before it walked anything uploads no report; the comment below then says the walk did not finish.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
         with:
           name: ui-check-report
           path: ui-check-report
 
       - name: Publish the images the comment shows
         if: needs.ui-check.result == 'failure'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -139,14 +142,21 @@ jobs:
           cp -r ui-check-report/diff ui-check-report/head "${target}/" 2>/dev/null || true
           git -C "${dest}" add -A
           git -C "${dest}" -c user.name="chalk-ui-check" -c user.email="noreply@github.com" commit -m "UI check evidence for pull request ${PR}" --allow-empty
-          git -C "${dest}" push origin ui-check-evidence
+          # Pull requests run at the same time and share this branch, so a rejected push is retried on the new tip.
+          for attempt in 1 2 3 4 5; do
+            git -C "${dest}" push origin ui-check-evidence && exit 0
+            git -C "${dest}" pull --rebase origin ui-check-evidence
+          done
+          exit 1
 
       - name: Post the sticky comment
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          mkdir -p ui-check-report
           if [[ ! -f ui-check-report/comment.md ]]; then
             printf '<!-- chalk-ui-check -->\n## UI check: did not finish\n\nThe walk stopped before it wrote a report. See the run log.\n' > ui-check-report/comment.md
           fi

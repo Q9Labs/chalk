@@ -3,6 +3,9 @@
 // finding blocks only when it names a region that overlaps a region the pixel comparison found changed, so the model cannot
 // block on something the branch did not touch.
 import { execFile } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -61,12 +64,19 @@ export async function reviewScreens({ comparisons, dir, token }) {
     ...candidates.map((item) => `- ${item.frame}.review.jpg is screen ${item.frame}: ${item.label}, ${item.size}, ${item.scheme} theme.`),
   ].join("\n");
   const args = ["-p", prompt, "--model", MODEL, "--effort", EFFORT, "--output-format", "json", "--system-prompt", SYSTEM, "--tools", "Read", "--allowedTools", "Read", "--permission-mode", "dontAsk", "--setting-sources", "", "--disable-slash-commands", "--strict-mcp-config", "--no-session-persistence"];
+  // The CLI runs in a fresh folder outside the checkout, with only the images in it and an empty home, so it finds no CLAUDE.md,
+  // settings or other file of the pull request to follow or read.
+  const work = mkdtempSync(join(tmpdir(), "ui-check-review-"));
+  for (const item of candidates) copyFileSync(join(dir, `${item.frame}.review.jpg`), join(work, `${item.frame}.review.jpg`));
+  mkdirSync(join(work, "home"));
   let output;
   try {
-    const { stdout } = await run("claude", args, { cwd: dir, timeout: TIMEOUT_MS, maxBuffer: 10_000_000, env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_CODE_OAUTH_TOKEN: token } });
+    const { stdout } = await run("claude", args, { cwd: work, timeout: TIMEOUT_MS, maxBuffer: 10_000_000, env: { PATH: process.env.PATH, HOME: join(work, "home"), CLAUDE_CODE_OAUTH_TOKEN: token } });
     output = stdout;
   } catch (error) {
     return { status: "error-claude", findings: [], reviewed: 0, error: String(error.stderr || error.stdout || error.message).slice(0, 300) };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
   }
   let result;
   try {
@@ -82,5 +92,9 @@ export async function reviewScreens({ comparisons, dir, token }) {
   } catch {
     return { status: "error-unparseable", findings: [], reviewed: candidates.length, error: text.slice(0, 300) };
   }
+  // A missing judgment is not a pass: every screen sent must come back with a verdict.
+  const judged = new Set(Array.isArray(screens) ? screens.filter((screen) => typeof screen?.broken === "boolean").map((screen) => screen.frame) : []);
+  const missing = candidates.filter((item) => !judged.has(item.frame));
+  if (missing.length > 0) return { status: "error-incomplete", findings: [], reviewed: 0, error: `no verdict for ${missing.map((item) => item.frame).join(", ")}`.slice(0, 300) };
   return { status: "ok", findings: toFindings(screens, candidates), reviewed: candidates.length };
 }

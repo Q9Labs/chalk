@@ -13,7 +13,7 @@ writeFileSync(
   `#!/usr/bin/env node
 const { readFileSync, writeFileSync } = require("node:fs");
 const reply = JSON.parse(readFileSync(${JSON.stringify(join(bin, "reply.json"))}, "utf8"));
-writeFileSync(${JSON.stringify(join(bin, "call.json"))}, JSON.stringify({ args: process.argv.slice(2), token: process.env.CLAUDE_CODE_OAUTH_TOKEN, apiKey: process.env.ANTHROPIC_API_KEY ?? null }));
+writeFileSync(${JSON.stringify(join(bin, "call.json"))}, JSON.stringify({ args: process.argv.slice(2), token: process.env.CLAUDE_CODE_OAUTH_TOKEN, apiKey: process.env.ANTHROPIC_API_KEY ?? null, cwd: process.cwd(), home: process.env.HOME, images: require("node:fs").readdirSync(process.cwd()) }));
 if (reply.exit) { console.error(reply.stderr); process.exit(reply.exit); }
 process.stdout.write(reply.stdout);
 `,
@@ -41,7 +41,7 @@ test("without a token the review says it was skipped", async () => {
 });
 
 test("the review runs Claude Opus 5.5 at high effort with only the Read tool and the subscription token", async () => {
-  answer([]);
+  answer([{ frame: screen.frame, broken: false }]);
   const result = await reviewScreens({ comparisons: [screen], dir, token: "subscription-token" });
   assert.equal(result.status, "ok");
   const call = JSON.parse(readFileSync(join(bin, "call.json"), "utf8"));
@@ -53,6 +53,25 @@ test("the review runs Claude Opus 5.5 at high effort with only the Read tool and
   assert.match(after("-p"), /chat@phone-dark\.1\.review\.jpg/u);
   assert.equal(call.token, "subscription-token");
   assert.equal(call.apiKey, null);
+});
+
+test("the CLI runs in a fresh folder outside the checkout with an empty home and only the images", async () => {
+  answer([{ frame: screen.frame, broken: false }]);
+  await reviewScreens({ comparisons: [screen], dir, token: "token" });
+  const call = JSON.parse(readFileSync(join(bin, "call.json"), "utf8"));
+  assert.notEqual(call.cwd, process.cwd());
+  assert.ok(!call.cwd.startsWith(process.cwd()));
+  assert.equal(call.home, `${call.cwd}/home`.replace(/^\/private/u, ""));
+  assert.deepEqual(call.images.sort(), ["chat@phone-dark.1.review.jpg", "home"]);
+});
+
+test("an answer that leaves a screen without a verdict is reported as not reviewed", async () => {
+  for (const screens of [[], [{ frame: "other@phone-dark.0", broken: false }], [{ frame: screen.frame }]]) {
+    answer(screens);
+    const result = await reviewScreens({ comparisons: [screen], dir, token: "token" });
+    assert.equal(result.status, "error-incomplete");
+    assert.equal(result.reviewed, 0);
+  }
 });
 
 test("a finding inside a changed region blocks", async () => {
