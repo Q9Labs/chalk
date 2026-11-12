@@ -3,7 +3,6 @@ package recordingpipeline
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -187,17 +186,6 @@ func (s Service) RequestStop(ctx context.Context, tenantID, episodeID, recording
 	return s.repository.RequestStop(ctx, tenantID, episodeID, recordingID, operationID)
 }
 
-func (s Service) RecoverExpired(ctx context.Context) ([]Job, error) {
-	return s.repository.RecoverExpired(ctx)
-}
-
-func (s Service) ExpireReservations(ctx context.Context, now time.Time) ([]Reservation, error) {
-	if now.IsZero() {
-		now = s.now().UTC()
-	}
-	return s.repository.ExpireReservations(ctx, now)
-}
-
 func (s Service) ListDeadLetters(ctx context.Context, tenantID utilities.ID, limit int) ([]Job, error) {
 	if tenantID.IsZero() {
 		return nil, ErrInvalidTenantID
@@ -272,12 +260,6 @@ func (s Service) Claim(ctx context.Context, input ClaimInput) (Job, error) {
 	}
 	if input.LeaseFor <= 0 || input.LeaseToken == "" || input.Owner == "" {
 		return Job{}, ErrInvalidLease
-	}
-	if _, err := s.repository.RecoverExpired(ctx); err != nil {
-		return Job{}, fmt.Errorf("recover recording jobs before claim: %w", err)
-	}
-	if _, err := s.repository.ExpireReservations(ctx, s.now().UTC()); err != nil {
-		return Job{}, fmt.Errorf("expire recording reservations before claim: %w", err)
 	}
 	return s.repository.Claim(ctx, input)
 }
