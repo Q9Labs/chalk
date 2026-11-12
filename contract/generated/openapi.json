@@ -14452,6 +14452,10 @@
           "force": {
             "type": "boolean"
           },
+          "reason": {
+            "enum": ["user_mute", "unpublish", "replacement", "leave", "error"],
+            "type": "string"
+          },
           "receive_only": {
             "type": "boolean"
           },
@@ -14741,6 +14745,10 @@
           },
           "pull_published_audio": {
             "type": "boolean"
+          },
+          "reason": {
+            "enum": ["user_mute", "unpublish", "replacement", "leave", "error"],
+            "type": "string"
           },
           "receive_only": {
             "type": "boolean"
@@ -15153,6 +15161,10 @@
                   "minimum": 0,
                   "type": "integer"
                 },
+                "element": {
+                  "enum": ["none", "bound", "playing"],
+                  "type": "string"
+                },
                 "element_state": {
                   "enum": ["paused", "playing"],
                   "type": "string"
@@ -15178,6 +15190,10 @@
                     "media_http_error",
                     "media_projection_mismatch",
                     "audio_receive_stuck",
+                    "audio_receive_unbound",
+                    "video_receive_stalled",
+                    "ice_connected",
+                    "first_audio_bytes",
                     "audio_receive_summary",
                     "receivers_closed",
                     "access_retry"
@@ -15291,7 +15307,7 @@
                   "type": ["integer", "null"]
                 },
                 "source": {
-                  "enum": ["microphone", "camera", "screen_audio"],
+                  "enum": ["microphone", "camera", "screen", "screen_audio"],
                   "type": "string"
                 },
                 "state": {
@@ -15315,7 +15331,7 @@
             "type": "array"
           },
           "trigger": {
-            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"],
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary"],
             "type": "string"
           },
           "version": {

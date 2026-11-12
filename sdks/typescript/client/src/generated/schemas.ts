@@ -216,6 +216,7 @@ export const CloudflareSFUCloseTracksRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     connection_id: Schema.String.check(Schema.isMinLength(1)),
     force: Schema.Boolean,
+    reason: Schema.optional(Schema.Literals(["user_mute", "unpublish", "replacement", "leave", "error"])),
     receive_only: Schema.optional(Schema.Boolean),
     session_description: Schema.optional(
       Schema.NullOr(
@@ -344,6 +345,7 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
     force: Schema.optional(Schema.Boolean),
     op: Schema.Literals(["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"]),
     pull_published_audio: Schema.optional(Schema.Boolean),
+    reason: Schema.optional(Schema.Literals(["user_mute", "unpublish", "replacement", "leave", "error"])),
     receive_only: Schema.optional(Schema.Boolean),
     replacement_cause: Schema.optional(
       Schema.Literals([
@@ -545,6 +547,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         ),
         duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         elapsed_ms: Schema.Number,
+        element: Schema.optional(Schema.Literals(["none", "bound", "playing"])),
         element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
         event: Schema.Literals([
           "space_join_span",
@@ -566,6 +569,10 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           "media_http_error",
           "media_projection_mismatch",
           "audio_receive_stuck",
+          "audio_receive_unbound",
+          "video_receive_stalled",
+          "ice_connected",
+          "first_audio_bytes",
           "audio_receive_summary",
           "receivers_closed",
           "access_retry",
@@ -598,13 +605,13 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         ),
         receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
         receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
-        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio"])),
+        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen", "screen_audio"])),
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
         track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
       }),
     ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"]),
+    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary"]),
     version: Schema.Literal(1),
   }))();
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;

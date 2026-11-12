@@ -1470,6 +1470,8 @@ export interface components {
     CloudflareSFUCloseTracksRequest: {
       connection_id: string;
       force: boolean;
+      /** @enum {string} */
+      reason?: "user_mute" | "unpublish" | "replacement" | "leave" | "error";
       receive_only?: boolean;
       session_description?: {
         sdp: string;
@@ -1560,6 +1562,8 @@ export interface components {
       /** @enum {string} */
       op: "publications" | "subscriptions" | "tracks" | "tracks_close" | "tracks_update" | "renegotiate";
       pull_published_audio?: boolean;
+      /** @enum {string} */
+      reason?: "user_mute" | "unpublish" | "replacement" | "leave" | "error";
       receive_only?: boolean;
       /** @enum {string} */
       replacement_cause?:
@@ -1699,6 +1703,8 @@ export interface components {
         duration_ms?: number | null;
         elapsed_ms: number;
         /** @enum {string} */
+        element?: "none" | "bound" | "playing";
+        /** @enum {string} */
         element_state?: "paused" | "playing";
         /** @enum {string} */
         event:
@@ -1721,6 +1727,10 @@ export interface components {
           | "media_http_error"
           | "media_projection_mismatch"
           | "audio_receive_stuck"
+          | "audio_receive_unbound"
+          | "video_receive_stalled"
+          | "ice_connected"
+          | "first_audio_bytes"
           | "audio_receive_summary"
           | "receivers_closed"
           | "access_retry";
@@ -1759,7 +1769,7 @@ export interface components {
         receive_state?: "announced" | "pull_requested" | "pull_failed" | "pull_succeeded" | "track_received" | "bytes_flowing" | "element_bound" | "playing";
         receivers_stopped?: number | null;
         /** @enum {string} */
-        source?: "microphone" | "camera" | "screen_audio";
+        source?: "microphone" | "camera" | "screen" | "screen_audio";
         /** @enum {string} */
         state?: "idle" | "joining" | "live" | "reconnecting" | "leaving" | "left" | "failed";
         /** @enum {string} */
@@ -1768,7 +1778,7 @@ export interface components {
         track_state?: "live" | "muted" | "ended";
       }[];
       /** @enum {string} */
-      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch" | "audio_receive_stuck" | "audio_receive_summary";
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch" | "audio_receive_stuck" | "audio_receive_unbound" | "video_receive_stalled" | "audio_receive_summary";
       /** @enum {integer} */
       version: 1;
     };
