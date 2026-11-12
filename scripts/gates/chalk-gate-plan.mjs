@@ -462,6 +462,7 @@ export function createGatePlan(files, options = {}) {
     task("syncpack", "Workspace dependency policy", dependencyChange, dependencyChange ? "workspace dependency inputs changed" : "workspace dependency inputs are unchanged", ["pnpm", "run", "deps:syncpack"]),
     task("types", "Affected workspace type checks", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", filteredPnpmCommand(selectedWorkspaces, "check-types", [], [workspaceConcurrency, "--sort"])),
     task("explicit-any", "TypeScript any policies", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["bash", "-c", "node scripts/gates/implicit-any.mjs && node scripts/gates/explicit-any.mjs"]),
+    task("mock-calls", "Assertions on mock calls may only shrink", typePolicy, typePolicy ? "TypeScript or dependency inputs changed" : "TypeScript is unaffected", ["node", "scripts/gates/mock-calls.mjs"]),
     task("react-tokens", "React design-token reach", reactTokens, reactTokens ? "React design-token inputs changed" : "React design tokens are unaffected", ["node", "sdks/typescript/react/scripts/check-token-reach.mjs"]),
     task("native-quality", "React Native design tokens and worklets", nativeQuality, nativeQuality ? "React Native inputs changed" : "React Native is unaffected", [
       "bash",

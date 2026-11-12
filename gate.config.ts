@@ -17,6 +17,7 @@ const taskIds = [
   "syncpack",
   "types",
   "explicit-any",
+  "mock-calls",
   "react-tokens",
   "native-quality",
   "tests",

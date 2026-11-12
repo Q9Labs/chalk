@@ -25,3 +25,7 @@ A new terminal failure, rejection, or timeout must say why, in a bounded and red
 ## Generated outputs come from their generators
 
 A diff that edits a generated file by hand, or adds a second copy of logic that a generator or a shared module already owns, should instead change the source and run `pnpm run regen`.
+
+## Tests do not replace our own code
+
+A test may not mock a module of this repository (`vi.mock`, `vi.doMock`, `jest.mock` or `mock.module` with a relative or workspace-package specifier), because it then asserts on wiring the author just wrote and breaks on every refactor. Run the real module and fake only the real boundary: the network, time, storage, a provider's SDK or a browser API. A seam that exists only so a test can fail a chunk download or inject a loader is a fine parameter with a production default. The `ast-grep` lane of the Root gate enforces this with no suppressions (`forbid-own-module-mocks` in `scripts/gates/ast-grep.mjs`). Assertions on mock calls cannot be judged by lint, since a callback the test passed in being called is a real output, so the `mock-calls` lane counts them per package against `scripts/gates/mock-call-baseline.json` and fails when a count rises. After a drop, run `node scripts/gates/mock-calls.mjs --update`.

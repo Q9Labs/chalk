@@ -61,6 +61,18 @@ addSourceRule("forbid-focused-or-skipped-tests", "Do not commit focused or skipp
   files: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
 });
 
+// A test may not replace a module of this repository: it would assert on wiring the author just wrote. Fake the real boundary (network, time, storage, a provider SDK, browser APIs) and run our own code.
+const repoModuleSpecifier = "^['\"](?:\\.{1,2}(?:/|['\"])|@/|@chalk/|@q9labsai/)";
+addSourceRule(
+  "forbid-own-module-mocks",
+  "Do not mock a module of this repository. Run the real module and fake only the real boundary (network, time, storage, provider SDK, browser APIs); see CODING_STANDARDS.md.",
+  anyPattern(...["vi.mock", "vi.doMock", "vi.setMock", "jest.mock", "jest.doMock", "jest.setMock", "mock.module", "t.mock.module"].flatMap((callee) => [`${callee}($SPEC)`, `${callee}($SPEC, $$$REST)`])),
+  {
+    files: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**"],
+    constraints: { SPEC: { kind: "string", regex: repoModuleSpecifier } },
+  },
+);
+
 addSourceRule(
   "forbid-unjustified-ts-ignore",
   "TypeScript and lint suppressions need a same-line justification.",

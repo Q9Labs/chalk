@@ -39,6 +39,10 @@ Documentation-only changes keep the hygiene, secrets, generated-output and forma
 
 The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow values in web, UI, SDK and mobile source against `design-tokens-baseline.json`. A new raw value fails. A removed value also fails until the baseline shrinks, so the removing change runs `pnpm exec q9gate accept-baseline design-tokens --message "shrink design-token baseline"` and commits the smaller file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on the line or the line above.
 
+## Test policy checks
+
+The `ast-grep` lane rejects a test that mocks a module of this repository. The `mock-calls` lane counts assertions on mock calls per package against `mock-call-baseline.json` and fails when a count rises; `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
+
 ## Heavy runs on Instabox
 
 Commit and push first: `box run` fetches the pushed HEAD, not working-tree edits. Run Linux gates and browser suites on Instabox, never on the laptop. The machine is deleted when the command ends. `--size 2x4` is half the price of the default and enough, since every full-gate lane peaks at or below 2.5 GiB; keep the single-worker settings (`instabox-run.sh` sets `VITEST_MAX_WORKERS=4` because most test files wait on timers).
