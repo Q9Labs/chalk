@@ -1,10 +1,12 @@
 import { strict as assert } from "node:assert";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { holdParticipant, knock, sql, terminalProjection, waitForSql } from "./admission-support.mjs";
 import { writeFile } from "node:fs/promises";
 
 export async function proveInvalidationTick(c) {
-  const { page, origin, tenantId, spaceId, out } = c;
+  const { page, origin, tenantId, spaceId, out, repository } = c;
   assert.equal(process.env.CHALK_DEADLINE_SCHEDULER_INTERVAL_MS, "3600000", "Automatic deadline ticks must be disabled for the one-tick witness");
   const dashboard = await page.context().newPage();
   await dashboard.goto(`${origin}/dashboard/call/${spaceId}`);
@@ -41,7 +43,7 @@ export async function proveInvalidationTick(c) {
 }
 
 export async function proveDashboardDecisionRetry(c) {
-  const { page, origin, tenantId, spaceId, out } = c;
+  const { page, origin, tenantId, spaceId, out, repository } = c;
   const dashboard = await page.context().newPage();
   await dashboard.goto(`${origin}/dashboard/call/${spaceId}`);
   await dashboard.getByRole("link", { name: "Join call", exact: true }).waitFor();

@@ -16,7 +16,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   const guestUrl = `${origin}${invite.pathname}${invite.search}${invite.hash}`;
   const journeys = [];
   const terminalLedger = [];
-  const c = { browser, page, origin, tenantId, spaceId, guestUrl, out, journeys, terminalLedger };
+  const c = { browser, page, origin, tenantId, spaceId, guestUrl, out, journeys, terminalLedger, repository };
   if (process.argv.includes("--admission-dashboard-retry")) {
     await proveDashboardDecisionRetry(c);
     return;

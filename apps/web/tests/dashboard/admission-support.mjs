@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 /** Helpers for the public-admission proof. `c` is the proof's context: the browsers, ids and evidence it collects. */
