@@ -26,6 +26,7 @@ type recordingFleetAuthorityQuerier interface {
 	AuthorizeRecordingFleetWorker(context.Context, sqlc.AuthorizeRecordingFleetWorkerParams) (bool, error)
 	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error)
 	CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error)
+	EnsureRecordingColocatedCaptureWorker(context.Context, sqlc.EnsureRecordingColocatedCaptureWorkerParams) error
 	GetRecordingFleetDemand(context.Context, sqlc.GetRecordingFleetDemandParams) (sqlc.GetRecordingFleetDemandRow, error)
 	ListRecordingFleetNodeObservations(context.Context, sqlc.ListRecordingFleetNodeObservationsParams) ([]sqlc.ListRecordingFleetNodeObservationsRow, error)
 	PublishRecordingFleetPool(context.Context, sqlc.PublishRecordingFleetPoolParams) (string, error)
@@ -63,6 +64,7 @@ func (r RecordingFleetAuthorityRepository) AbandonBootstrap(ctx context.Context,
 type RecordingFleetAuthorityRepository struct {
 	admissionLimits recordingpipeline.AdmissionLimits
 	ownCapture      bool
+	colocatedGrace  time.Duration
 	queries         recordingFleetAuthorityQuerier
 }
 
@@ -76,6 +78,7 @@ func (r RecordingFleetAuthorityRepository) GetDemand(ctx context.Context, key re
 	}
 	row, err := r.queries.GetRecordingFleetDemand(ctx, sqlc.GetRecordingFleetDemandParams{
 		RecordingCap: int32(r.admissionLimits.WithDefaults().RecordingCap), Role: string(key.Role), ObservedAt: timestamptzValue(observedAt), OwnCapture: r.ownCapture,
+		ColocatedGraceSeconds: colocatedGraceSeconds(r.colocatedGrace),
 	})
 	if err != nil {
 		return recorderfleet.Demand{}, fmt.Errorf("read recording fleet demand: %w", err)
@@ -291,7 +294,7 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorker(ctx context.Context, 
 		return recorderfleet.ErrProviderUnavailable
 	}
 	authorized, err := r.queries.AuthorizeRecordingFleetWorker(ctx, sqlc.AuthorizeRecordingFleetWorkerParams{
-		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
+		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID), ColocatedEnabled: r.colocatedGrace > 0,
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker: %w", err)
@@ -307,7 +310,7 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorkerClaim(ctx context.Cont
 		return recorderfleet.ErrProviderUnavailable
 	}
 	claim, err := r.queries.AuthorizeRecordingFleetWorkerClaim(ctx, sqlc.AuthorizeRecordingFleetWorkerClaimParams{
-		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
+		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID), ColocatedEnabled: r.colocatedGrace > 0,
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker claim: %w", err)
@@ -401,4 +404,35 @@ func (r RecordingFleetAuthorityRepository) WithOwnCapture(enabled bool) Recordin
 func (r RecordingFleetAuthorityRepository) WithAdmissionLimits(limits recordingpipeline.AdmissionLimits) RecordingFleetAuthorityRepository {
 	r.admissionLimits = limits.WithDefaults()
 	return r
+}
+
+// WithColocatedCapture turns on capture workers beside own-SFU nodes. A capture waits for the
+// healthy worker of its Episode's node for the grace, then the fleet may take it. Zero is off.
+func (r RecordingFleetAuthorityRepository) WithColocatedCapture(grace time.Duration) RecordingFleetAuthorityRepository {
+	r.colocatedGrace = grace
+	return r
+}
+
+// EnsureColocatedCaptureWorkers registers the worker beside each named own-SFU node. Its ID is
+// derived from the node, and an existing or revoked registration stays as it is.
+func (r RecordingFleetAuthorityRepository) EnsureColocatedCaptureWorkers(ctx context.Context, environment string, sfuNodes []string) error {
+	if r.queries == nil {
+		return recorderfleet.ErrProviderUnavailable
+	}
+	for _, node := range sfuNodes {
+		err := r.queries.EnsureRecordingColocatedCaptureWorker(ctx, sqlc.EnsureRecordingColocatedCaptureWorkerParams{
+			Environment: environment, SfuNode: node, WorkerID: uuid(workeridentity.ColocatedWorkerID(environment, node)),
+		})
+		if err != nil {
+			return fmt.Errorf("register colocated capture worker for SFU node %q: %w", node, err)
+		}
+	}
+	return nil
+}
+
+func colocatedGraceSeconds(grace time.Duration) int32 {
+	if grace <= 0 {
+		return 0
+	}
+	return max(1, int32(grace/time.Second))
 }

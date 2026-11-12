@@ -22,12 +22,16 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordingobjects"
 )
 
-func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName, keyFrameInterval, captureSlots string) error {
+func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serverCA, serverName, keyFrameInterval, captureSlots, claimPoll string) error {
 	if strings.TrimSpace(environment) == "" {
 		return errors.New("--environment or CHALK_RECORDER_ENVIRONMENT is required")
 	}
 	if strings.TrimSpace(controlPlaneURL) == "" {
 		return errors.New("--control-plane-url or CHALK_RECORDER_CONTROL_PLANE_URL is required")
+	}
+	noWorkWait, err := parseClaimPoll(claimPoll)
+	if err != nil {
+		return err
 	}
 	slots, err := parseCaptureSlots(captureSlots)
 	if err != nil {
@@ -63,7 +67,7 @@ func runWorker(environment, controlPlaneURL, workerCertificate, workerKey, serve
 	if err != nil {
 		return fmt.Errorf("create recorder capture factory: %w", err)
 	}
-	daemon, err := recorderworker.NewCaptureDaemon(control, factory, recorderworker.CaptureDaemonConfig{Slots: slots})
+	daemon, err := recorderworker.NewCaptureDaemon(control, factory, recorderworker.CaptureDaemonConfig{Slots: slots, NoWorkWait: noWorkWait})
 	if err != nil {
 		return fmt.Errorf("create recorder capture daemon: %w", err)
 	}
@@ -242,4 +246,17 @@ func parseCaptureSlots(value string) (int, error) {
 		return 0, errors.New("--slots or CHALK_RECORDER_CAPTURE_SLOTS must be a positive integer")
 	}
 	return slots, nil
+}
+
+// parseClaimPoll reads how long an idle worker waits between claims. Empty keeps the daemon default.
+func parseClaimPoll(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+	wait, err := time.ParseDuration(value)
+	if err != nil || wait < 100*time.Millisecond || wait > 10*time.Second {
+		return 0, fmt.Errorf("--claim-poll or CHALK_RECORDER_CLAIM_POLL must be a duration from 100ms to 10s, got %q", value)
+	}
+	return wait, nil
 }

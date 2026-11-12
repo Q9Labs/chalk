@@ -11,6 +11,7 @@ with reservation_demand as (
     where state = 'reserved'
       and ends_at > sqlc.arg(observed_at)::timestamptz
       and coalesce(starts_at, created_at) <= sqlc.arg(observed_at)::timestamptz + interval '5 minutes'
+      and not (sqlc.arg(role)::text = 'capture' and recording_capture_colocated(recording_id, sqlc.arg(colocated_grace_seconds)::integer))
 ),
 job_demand as (
     select
@@ -28,6 +29,7 @@ job_demand as (
           or state = 'leased'
           or available_at <= sqlc.arg(observed_at)::timestamptz
       )
+      and not (kind = 'capture' and recording_capture_colocated(recording_id, sqlc.arg(colocated_grace_seconds)::integer))
 ),
 preparation_demand as (
     select count(*)::integer as count, max(preparation.updated_at) as revision
@@ -37,11 +39,14 @@ preparation_demand as (
       and preparation.starts_at <= sqlc.arg(observed_at)::timestamptz + interval '5 minutes'
       and preparation.starts_at > sqlc.arg(observed_at)::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
-      and (sqlc.arg(own_capture)::boolean or coalesce(
+      and (coalesce(
         (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
          where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
         nullif(btrim(spaces.media_plane), ''),
-        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
+        or (sqlc.arg(own_capture)::boolean and not (sqlc.arg(colocated_grace_seconds)::integer > 0 and exists (
+            select 1 from recording_fleet_nodes colocated
+            where colocated.colocated_sfu_node is not null and recording_colocated_worker_healthy(colocated.colocated_sfu_node)))))
 ),
 facts as (
     select
@@ -168,6 +173,7 @@ where node.environment = sqlc.arg(environment)
   and node.role = sqlc.arg(role)
   and node.state in ('active', 'draining', 'revoked')
   and node.worker_id is not null
+  and node.colocated_sfu_node is null
 order by node.provider_id;
 
 -- name: ObserveRecordingFleetIdentityLeases :one
@@ -256,6 +262,7 @@ select exists (
       and role = sqlc.arg(role)
       and worker_id = sqlc.arg(worker_id)
       and state in ('active', 'draining')
+      and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
 ) as authorized;
 
 -- name: AuthorizeRecordingFleetWorkerClaim :one
@@ -266,6 +273,7 @@ with worker as (
       and role = sqlc.arg(role)
       and worker_id = sqlc.arg(worker_id)
       and state in ('active', 'draining')
+      and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
 )
 select exists (
     select 1 from worker
@@ -282,6 +290,7 @@ exists (
 
 -- name: LockRecordingFleetWorkerClaim :one
 select coalesce((role = sqlc.arg(role) and state = 'active' and ready and admission_open
+    and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
     and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
     and observed_at <= clock_timestamp()), false)::boolean as authorized
 from recording_fleet_nodes
@@ -304,3 +313,16 @@ on conflict (role) do update set
     updated_at = now()
 where recording_pool_health.observed_at <= excluded.observed_at
 returning role;
+
+-- name: EnsureRecordingColocatedCaptureWorker :exec
+-- The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+-- existing row is never reactivated or rewritten here.
+insert into recording_fleet_nodes (
+    environment, role, provider_id, node_name, region, release_id, image_digest,
+    boot_generation, inventory_digest, worker_id, state, colocated_sfu_node
+) values (
+    sqlc.arg(environment), 'capture', 'sfu:' || sqlc.arg(sfu_node)::text, sqlc.arg(sfu_node), 'colocated', 'colocated',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000', 1,
+    '0000000000000000000000000000000000000000000000000000000000000000', sqlc.arg(worker_id), 'active', sqlc.arg(sfu_node)
+)
+on conflict do nothing;

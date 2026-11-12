@@ -110,7 +110,7 @@ func newStoppedCompletionFixture(t *testing.T) (pgx.Tx, transcriptionAllocationC
 	}
 	claim, err := queries.ClaimRecordingJob(ctx, sqlc.ClaimRecordingJobParams{
 		Kind: "capture", MaximumRenderSeconds: 7200, SupportsCompletionOnly: true,
-		LeaseOwner: pgtype.Text{String: "completion-worker", Valid: true}, LeaseToken: pgtype.Text{String: "completion-token", Valid: true},
+		LeaseOwner: "completion-worker", LeaseToken: pgtype.Text{String: "completion-token", Valid: true},
 		LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
 	})
 	if err != nil || !claim.CompletionOnly || claim.CaptureEpoch != f.captureEpoch || claim.AttemptCount != 2 {

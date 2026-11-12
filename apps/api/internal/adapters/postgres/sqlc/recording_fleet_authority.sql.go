@@ -80,7 +80,7 @@ where environment = $2
   and boot_generation = $9
   and inventory_digest = $10
   and (state = 'requested' or (state = 'active' and worker_id = $1))
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at, colocated_sfu_node
 `
 
 type ActivateRecordingFleetBootstrapParams struct {
@@ -131,6 +131,7 @@ func (q *Queries) ActivateRecordingFleetBootstrap(ctx context.Context, arg Activ
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ColocatedSfuNode,
 	)
 	return i, err
 }
@@ -142,17 +143,24 @@ select exists (
       and role = $2
       and worker_id = $3
       and state in ('active', 'draining')
+      and (colocated_sfu_node is null or $4::boolean)
 ) as authorized
 `
 
 type AuthorizeRecordingFleetWorkerParams struct {
-	Environment string      `json:"environment"`
-	Role        string      `json:"role"`
-	WorkerID    pgtype.UUID `json:"worker_id"`
+	Environment      string      `json:"environment"`
+	Role             string      `json:"role"`
+	WorkerID         pgtype.UUID `json:"worker_id"`
+	ColocatedEnabled bool        `json:"colocated_enabled"`
 }
 
 func (q *Queries) AuthorizeRecordingFleetWorker(ctx context.Context, arg AuthorizeRecordingFleetWorkerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorker, arg.Environment, arg.Role, arg.WorkerID)
+	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorker,
+		arg.Environment,
+		arg.Role,
+		arg.WorkerID,
+		arg.ColocatedEnabled,
+	)
 	var authorized bool
 	err := row.Scan(&authorized)
 	return authorized, err
@@ -166,6 +174,7 @@ with worker as (
       and role = $2
       and worker_id = $3
       and state in ('active', 'draining')
+      and (colocated_sfu_node is null or $4::boolean)
 )
 select exists (
     select 1 from worker
@@ -182,9 +191,10 @@ exists (
 `
 
 type AuthorizeRecordingFleetWorkerClaimParams struct {
-	Environment string      `json:"environment"`
-	Role        string      `json:"role"`
-	WorkerID    pgtype.UUID `json:"worker_id"`
+	Environment      string      `json:"environment"`
+	Role             string      `json:"role"`
+	WorkerID         pgtype.UUID `json:"worker_id"`
+	ColocatedEnabled bool        `json:"colocated_enabled"`
 }
 
 type AuthorizeRecordingFleetWorkerClaimRow struct {
@@ -193,7 +203,12 @@ type AuthorizeRecordingFleetWorkerClaimRow struct {
 }
 
 func (q *Queries) AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error) {
-	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorkerClaim, arg.Environment, arg.Role, arg.WorkerID)
+	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorkerClaim,
+		arg.Environment,
+		arg.Role,
+		arg.WorkerID,
+		arg.ColocatedEnabled,
+	)
 	var i AuthorizeRecordingFleetWorkerClaimRow
 	err := row.Scan(&i.Authorized, &i.AdmissionClosed)
 	return i, err
@@ -233,6 +248,31 @@ func (q *Queries) CloseRecordingFleetNodeAdmission(ctx context.Context, arg Clos
 	return provider_id, err
 }
 
+const ensureRecordingColocatedCaptureWorker = `-- name: EnsureRecordingColocatedCaptureWorker :exec
+insert into recording_fleet_nodes (
+    environment, role, provider_id, node_name, region, release_id, image_digest,
+    boot_generation, inventory_digest, worker_id, state, colocated_sfu_node
+) values (
+    $1, 'capture', 'sfu:' || $2::text, $2, 'colocated', 'colocated',
+    'sha256:0000000000000000000000000000000000000000000000000000000000000000', 1,
+    '0000000000000000000000000000000000000000000000000000000000000000', $3, 'active', $2
+)
+on conflict do nothing
+`
+
+type EnsureRecordingColocatedCaptureWorkerParams struct {
+	Environment string      `json:"environment"`
+	SfuNode     string      `json:"sfu_node"`
+	WorkerID    pgtype.UUID `json:"worker_id"`
+}
+
+// The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+// existing row is never reactivated or rewritten here.
+func (q *Queries) EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error {
+	_, err := q.db.Exec(ctx, ensureRecordingColocatedCaptureWorker, arg.Environment, arg.SfuNode, arg.WorkerID)
+	return err
+}
+
 const getRecordingFleetDemand = `-- name: GetRecordingFleetDemand :one
 with reservation_demand as (
     select
@@ -246,6 +286,7 @@ with reservation_demand as (
     where state = 'reserved'
       and ends_at > $2::timestamptz
       and coalesce(starts_at, created_at) <= $2::timestamptz + interval '5 minutes'
+      and not ($1::text = 'capture' and recording_capture_colocated(recording_id, $3::integer))
 ),
 job_demand as (
     select
@@ -263,6 +304,7 @@ job_demand as (
           or state = 'leased'
           or available_at <= $2::timestamptz
       )
+      and not (kind = 'capture' and recording_capture_colocated(recording_id, $3::integer))
 ),
 preparation_demand as (
     select count(*)::integer as count, max(preparation.updated_at) as revision
@@ -272,11 +314,14 @@ preparation_demand as (
       and preparation.starts_at <= $2::timestamptz + interval '5 minutes'
       and preparation.starts_at > $2::timestamptz - interval '5 minutes'
       and spaces.archived_at is null and spaces.recording_policy <> 'disabled'
-      and ($3::boolean or coalesce(
+      and (coalesce(
         (select coalesce(episode.config_snapshot->'media_plane_binding'->>'provider', '') from episodes episode
          where episode.tenant_id = spaces.tenant_id and episode.space_id = spaces.id and episode.status = 'active' limit 1),
         nullif(btrim(spaces.media_plane), ''),
-        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu')
+        (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
+        or ($4::boolean and not ($3::integer > 0 and exists (
+            select 1 from recording_fleet_nodes colocated
+            where colocated.colocated_sfu_node is not null and recording_colocated_worker_healthy(colocated.colocated_sfu_node)))))
 ),
 facts as (
     select
@@ -301,7 +346,7 @@ facts as (
         greatest(reservation_demand.reservation_revision, job_demand.job_revision) as revised_at
     from reservation_demand, job_demand
 ), target as (
-    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($4::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
+    select facts.scheduled_prewarms, facts.held_starts, facts.queued_jobs, facts.leased_jobs, facts.slot_demand, facts.physical_node_floor, facts.base_nodes, facts.revised_at, least(preparation_demand.count, greatest(0, coalesce(nullif($5::integer, 0), 10) - base_nodes))::integer as prepared_nodes,
         greatest(facts.revised_at, preparation_demand.revision) as target_revision
     from facts cross join preparation_demand
 )
@@ -318,10 +363,11 @@ from target
 `
 
 type GetRecordingFleetDemandParams struct {
-	Role         string             `json:"role"`
-	ObservedAt   pgtype.Timestamptz `json:"observed_at"`
-	OwnCapture   bool               `json:"own_capture"`
-	RecordingCap int32              `json:"recording_cap"`
+	Role                  string             `json:"role"`
+	ObservedAt            pgtype.Timestamptz `json:"observed_at"`
+	ColocatedGraceSeconds int32              `json:"colocated_grace_seconds"`
+	OwnCapture            bool               `json:"own_capture"`
+	RecordingCap          int32              `json:"recording_cap"`
 }
 
 type GetRecordingFleetDemandRow struct {
@@ -339,6 +385,7 @@ func (q *Queries) GetRecordingFleetDemand(ctx context.Context, arg GetRecordingF
 	row := q.db.QueryRow(ctx, getRecordingFleetDemand,
 		arg.Role,
 		arg.ObservedAt,
+		arg.ColocatedGraceSeconds,
 		arg.OwnCapture,
 		arg.RecordingCap,
 	)
@@ -384,6 +431,7 @@ where node.environment = $1
   and node.role = $2
   and node.state in ('active', 'draining', 'revoked')
   and node.worker_id is not null
+  and node.colocated_sfu_node is null
 order by node.provider_id
 `
 
@@ -438,20 +486,22 @@ func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg Li
 
 const lockRecordingFleetWorkerClaim = `-- name: LockRecordingFleetWorkerClaim :one
 select coalesce((role = $1 and state = 'active' and ready and admission_open
+    and (colocated_sfu_node is null or $2::boolean)
     and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
     and observed_at <= clock_timestamp()), false)::boolean as authorized
 from recording_fleet_nodes
-where worker_id::text = $2::text
+where worker_id::text = $3::text
 for share
 `
 
 type LockRecordingFleetWorkerClaimParams struct {
-	Role       string `json:"role"`
-	LeaseOwner string `json:"lease_owner"`
+	Role             string `json:"role"`
+	ColocatedEnabled bool   `json:"colocated_enabled"`
+	LeaseOwner       string `json:"lease_owner"`
 }
 
 func (q *Queries) LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error) {
-	row := q.db.QueryRow(ctx, lockRecordingFleetWorkerClaim, arg.Role, arg.LeaseOwner)
+	row := q.db.QueryRow(ctx, lockRecordingFleetWorkerClaim, arg.Role, arg.ColocatedEnabled, arg.LeaseOwner)
 	var authorized bool
 	err := row.Scan(&authorized)
 	return authorized, err
@@ -640,7 +690,7 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
   and recording_fleet_nodes.state <> 'revoked'
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at, colocated_sfu_node
 `
 
 type ReserveRecordingFleetBootstrapParams struct {
@@ -689,6 +739,7 @@ func (q *Queries) ReserveRecordingFleetBootstrap(ctx context.Context, arg Reserv
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.ColocatedSfuNode,
 	)
 	return i, err
 }

@@ -4323,6 +4323,7 @@ create table recording_fleet_nodes (
     revoked_at timestamptz,
     updated_at timestamptz not null default now(),
     created_at timestamptz not null default now(),
+    colocated_sfu_node text,
     primary key (environment, role, provider_id),
     unique (worker_id),
     constraint recording_fleet_nodes_environment_provider_key unique (environment, provider_id),
@@ -4332,11 +4333,19 @@ create table recording_fleet_nodes (
     ),
     check (not admission_open or (state = 'active' and ready and ready_capacity > 0)),
     check ((state = 'revoked') = (revoked_at is not null)),
-    check (state <> 'revoked' or (not ready and not admission_open and ready_capacity = 0))
+    check (state <> 'revoked' or (not ready and not admission_open and ready_capacity = 0)),
+    constraint recording_fleet_nodes_colocated_check check (
+        colocated_sfu_node is null
+        or (role = 'capture' and provider_id = 'sfu:' || colocated_sfu_node and octet_length(colocated_sfu_node) between 1 and 100)
+    )
 );
 
 create index recording_fleet_nodes_role_state_idx
     on recording_fleet_nodes(environment, role, state, provider_id);
+
+create unique index recording_fleet_nodes_colocated_idx
+    on recording_fleet_nodes(environment, colocated_sfu_node)
+    where colocated_sfu_node is not null;
 
 create table recording_preparations (
     tenant_id uuid not null,
@@ -4553,6 +4562,36 @@ RETURNS timestamptz LANGUAGE sql STABLE AS $$
     JOIN episodes episode ON episode.id = job.episode_id
     WHERE pipeline.recording_id = target_recording_id
       AND NOT recording_capture_stop_confirmed(target_recording_id);
+$$;
+
+CREATE FUNCTION recording_colocated_worker_healthy(target_node text)
+returns boolean language sql stable as $$
+    select exists (
+        select 1 from recording_fleet_nodes node
+        where node.colocated_sfu_node = target_node
+          and node.role = 'capture' and node.state = 'active'
+          and node.ready and node.admission_open and node.ready_capacity > 0
+          and node.observed_at > clock_timestamp() - interval '35 seconds'
+          and node.observed_at <= clock_timestamp()
+    );
+$$;
+
+CREATE FUNCTION recording_capture_colocated(target_recording_id uuid, grace_seconds integer)
+returns boolean language sql stable as $$
+    select grace_seconds > 0 and exists (
+        select 1 from recording_jobs job
+        join episodes on episodes.id = job.episode_id
+        where job.recording_id = target_recording_id and job.kind = 'capture'
+          and (
+              (job.state = 'leased' and exists (
+                  select 1 from recording_fleet_nodes node
+                  where node.worker_id::text = job.lease_owner and node.colocated_sfu_node is not null))
+              or (job.state in ('pending', 'retryable_failure')
+                  and job.available_at + grace_seconds * interval '1 second' > clock_timestamp()
+                  and episodes.config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
+                  and recording_colocated_worker_healthy(episodes.config_snapshot->'media_plane_binding'->>'node'))
+          )
+    );
 $$;
 
 CREATE FUNCTION recording_capture_completion_available(target_recording_id uuid)

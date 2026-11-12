@@ -120,6 +120,9 @@ type Querier interface {
 	DestroyOldWebhookTargetURLs(ctx context.Context, arg DestroyOldWebhookTargetURLsParams) (int64, error)
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
 	DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error
+	// The API registers the capture worker beside each own-SFU node from its node list. A revoked or
+	// existing row is never reactivated or rewritten here.
+	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
 	// admission use that same lock, so an earlier reconnect cancels the old window.
@@ -243,6 +246,9 @@ type Querier interface {
 	InsertRecordingCaptureConnection(ctx context.Context, arg InsertRecordingCaptureConnectionParams) (RecordingCaptureConnection, error)
 	InsertRecordingCaptureLifecycleOperation(ctx context.Context, arg InsertRecordingCaptureLifecycleOperationParams) (SyncExternalOperation, error)
 	InsertRecordingCapturePlan(ctx context.Context, arg InsertRecordingCapturePlanParams) (RecordingCapturePlan, error)
+	// The claim lag is the time the capture waited, from becoming available to this claim. The event
+	// joins the Recording's start journey, so a slow start reads off the Episode's own timeline.
+	InsertRecordingClaimedEvent(ctx context.Context, arg InsertRecordingClaimedEventParams) error
 	InsertRecordingDataKey(ctx context.Context, arg InsertRecordingDataKeyParams) (RecordingDataKey, error)
 	InsertRecordingJobAttemptAuthority(ctx context.Context, arg InsertRecordingJobAttemptAuthorityParams) (RecordingJobAttemptAuthority, error)
 	InsertRecordingPresentation(ctx context.Context, arg InsertRecordingPresentationParams) (RecordingPresentation, error)
