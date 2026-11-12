@@ -68,9 +68,11 @@ export type MediaPlaneResult = {
 export type ClientMediaPlane = {
   readonly observeAudioElement?: (track: MediaStreamTrack, element: HTMLAudioElement) => { played(result: unknown): void; detach(): void };
   /**
-   * Runs the part of an enable that needs no grant, while Sync still decides it. It sends no media and
-   * publishes nothing: `setLocalPublicationTarget` stays the only step that publishes, and it redoes
-   * whatever this left undone. A rejection is safe to ignore for that reason.
+   * Runs the part of an enable that needs no grant, while Sync still decides it. It never creates a
+   * publication: `setLocalPublicationTarget` stays the only step that publishes, and it redoes whatever
+   * this left undone. A rejection is safe to ignore for that reason. A plane that parks a muted track
+   * on its server (mute in place) may resume that track here, because the server forwards it only
+   * under the grant Sync's answer opens or revokes; a refusal then closes the publication.
    */
   readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;

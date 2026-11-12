@@ -102,12 +102,12 @@ export class V1LiveTargetCoordinator {
     return promise;
   }
 
-  // The frame is already on the wire. Only grant-independent work starts here; publishing waits for the server result in #executeLocal.
+  // The frame is already on the wire. Only work that needs no grant starts here (the plane may resume a parked track, which the server forwards only under the grant). A new publication waits for the server result in #executeLocal, which settles only when that result and the local step are both done.
   #prepareLocal(operationId: string, source: V1MediaSource, participantId: string): void {
     const prepare = this.#options.mediaPlane?.prepareLocalPublicationTarget;
     if (!prepare) return;
     const target = { operationId, participantId, source, enabled: true };
-    // #executeLocal runs the same work after the grant and reports its failure, so a failed head start needs no handling here.
+    // #executeLocal redoes whatever the head start left undone and reports its failure, so a failed head start needs no handling here.
     void Promise.resolve()
       .then(() => prepare.call(this.#options.mediaPlane, target))
       .catch(() => {});
