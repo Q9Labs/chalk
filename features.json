@@ -435,7 +435,6 @@
         ".github/workflows/release-contracts.yml",
         ".github/workflows/rollback-rehearsal.yml",
         ".github/workflows/sdk-web-consumer-e2e.yml",
-        "apps/sync/lib/chalk_sync/release_topology",
         "infrastructure/.gitignore",
         "infrastructure/host-change-alert",
         "infrastructure/README.md",
