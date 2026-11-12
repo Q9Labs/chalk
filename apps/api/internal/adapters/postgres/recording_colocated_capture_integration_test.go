@@ -218,3 +218,37 @@ func TestColocatedCaptureClaimedEvent(t *testing.T) {
 		t.Errorf("recording.claimed placement=%q claim_lag_ms=%d, want colocated and at least 3000", placement, lagMillis)
 	}
 }
+
+// A capture the colocated worker holds is lost when its node dies or the worker process dies. The
+// lease lapses and recovery requeues the job; the fleet must then be able to take it, at once when
+// the worker's reports have stopped (the node is gone) and after the grace when the worker is
+// still reporting (the process came back).
+func TestColocatedCaptureLeaseLapse(t *testing.T) {
+	lapse := func(t *testing.T, s colocatedScenario) {
+		t.Helper()
+		s.wantClaim(t, s.worker, colocatedTestGrace)
+		execCleanupFixture(t, s.tx, `update recording_jobs set lease_expires_at=now()-interval '1 second' where id=$1`, s.fixture.jobID.Bytes())
+		if _, err := s.queries.RecoverExpiredRecordingJobs(t.Context(), 7200); err != nil {
+			t.Fatalf("recover expired jobs: %v", err)
+		}
+		execCleanupFixture(t, s.tx, `update recording_jobs set available_at=now()-interval '1 second' where id=$1`, s.fixture.jobID.Bytes())
+	}
+	t.Run("node dies: reports stop and the fleet takes the capture at once", func(t *testing.T) {
+		s := newColocatedScenario(t)
+		lapse(t, s)
+		s.reportWorker(t, "now()-interval '2 minutes'", true)
+		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)
+	})
+	t.Run("worker process dies and returns: it keeps the capture, the fleet waits out the grace", func(t *testing.T) {
+		s := newColocatedScenario(t)
+		lapse(t, s)
+		s.wantNoClaim(t, fleetTestWorker, colocatedTestGrace)
+		s.wantClaim(t, s.worker, colocatedTestGrace)
+	})
+	t.Run("worker process dies and does not return: the fleet takes the capture after the grace", func(t *testing.T) {
+		s := newColocatedScenario(t)
+		lapse(t, s)
+		execCleanupFixture(t, s.tx, `update recording_jobs set available_at=now()-interval '1 minute' where id=$1`, s.fixture.jobID.Bytes())
+		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)
+	})
+}
