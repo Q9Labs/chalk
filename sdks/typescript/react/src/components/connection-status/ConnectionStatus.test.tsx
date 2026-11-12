@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { ConnectionStatus, formatElapsed, reconnectingCopy } from "./ConnectionStatus";
+import { ConnectionStatus, formatElapsed, reconnectedToast, reconnectingCopy } from "./ConnectionStatus";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -41,10 +41,10 @@ it("shows nothing for a drop shorter than 2 seconds and the card after it", () =
   unmount();
 });
 
-it("confirms the return with how long the person was away", () => {
+it("confirms the return with how long the person was away, as a bottom notice rather than over the stage", () => {
+  expect(reconnectedToast(14_000)).toMatchObject({ type: "success", message: "Back in the call · Away 14 s" });
   const { host, unmount } = mount(<ConnectionStatus phase="reconnected" since={null} awayMs={14_000} />);
-  expect(host.textContent).toContain("Back in the call");
-  expect(host.textContent).toContain("Away 14 s");
+  expect(host.textContent).not.toContain("Back in the call");
   unmount();
 });
 
