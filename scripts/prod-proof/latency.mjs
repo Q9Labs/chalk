@@ -25,7 +25,7 @@ import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { icePairOf } from "./latency-ice.mjs";
-import { ICE_PATHS, joinExpected } from "./latency-path.mjs";
+import { ICE_PATHS, joinExpected, pathMismatch } from "./latency-path.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
@@ -172,6 +172,8 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) 
     },
     { stages: {}, ice: null },
   );
+  const mismatch = pathMismatch(icePath, joined.ice);
+  if (mismatch) throw new Error(mismatch);
   const stages = joined.stages;
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
   for (const step of toggles(sender)) {
@@ -224,6 +226,12 @@ async function blockedJoin(page, icePath, sample, joinArgs, specs) {
   const seen = await page.evaluate((watch) => window.proofLatency.result(watch), id);
   for (const { name, at } of seen) sample[name] = at === null ? null : Math.round(at - joinStartedAt);
   const connected = await page.evaluate(() => (window.proofConnections ?? []).some((peer) => peer.connectionState === "connected"));
+  // A join that connected is held to the same evidence as any other: the selected pair must show the requested path.
+  if (connected && settled) {
+    await observe("ice pair", () => page.evaluate(() => window.proofTrace.readIce()), undefined);
+    const mismatch = pathMismatch(icePath, icePairOf(await takeTrace(page, 0), 0));
+    if (mismatch) throw new Error(mismatch);
+  }
   const receive = await observe("receive stats", () => page.evaluate(() => window.proofTrace.receiveStats()), {});
   return {
     sample,

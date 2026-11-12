@@ -1160,6 +1160,37 @@ if FAKE_MIGRATION_TARGET=20260819120000 run_controller "$stable_state" "${fixtur
   fail "a migration target below the manifest minimum was accepted"
 fi
 grep -Fq 'release migration unit target does not match the manifest' "${fixture_root}/invalid-migration-target.log" || fail "a mismatched migration target did not fail closed"
+# A job re-run repeats a deploy this host already promoted: it passes on health alone and changes nothing.
+retry_state="${fixture_root}/retry-state"
+mkdir -p "$retry_state"
+make_request retry "${fixture_root}/retry-request.json"
+make_manifest retry >"${fixture_root}/retry-manifest.json"
+run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >/dev/null
+retry_pulls="$(grep -c '^podman pull ' "${fixture_root}/commands.log")"
+run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry.log"
+grep -Fq 'RESULT {"schema_version":1,"status":"deployed","release_id":"retry","health":"passed","rolled_back":false' "${fixture_root}/retry.log" || fail "a repeated deploy of the active release did not pass"
+[[ "$(grep -c '^podman pull ' "${fixture_root}/commands.log")" == "$retry_pulls" ]] || fail "a repeated deploy of the active release pulled images again"
+jq -e -s 'length == 1' "${retry_state}/ledger.jsonl" >/dev/null || fail "a repeated deploy of the active release wrote a second ledger record"
+printf '0' >"${fixture_root}/health-index"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" fail >"${fixture_root}/retry-unhealthy.log" 2>&1; then
+  fail "a repeated deploy of an unhealthy active release passed"
+fi
+make_manifest retry | jq '.generated_at = "2026-08-19T00:00:00Z"' >"${fixture_root}/retry-changed-manifest.json"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-changed-manifest.json" ok >"${fixture_root}/retry-changed.log" 2>&1; then
+  fail "a repeated release id with a different manifest passed"
+fi
+grep -Fq 'is already active with a different manifest' "${fixture_root}/retry-changed.log" || fail "a changed manifest for the active release was not named"
+make_request retry "${fixture_root}/retry-excluded-request.json" '["api-env"]'
+if run_controller "$retry_state" "${fixture_root}/retry-excluded-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-excluded.log" 2>&1; then
+  fail "a repeated deploy with other exclusions passed"
+fi
+grep -Fq 'already active with different deployment settings' "${fixture_root}/retry-excluded.log" || fail "changed deployment settings for the active release were not named"
+# A promotion cut short after another release started leaves the pointer on this one: health alone must not pass it.
+cp "${fixture_root}/retry-changed-manifest.json" "${fixture_root}/run/release/release-manifest.json"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-interrupted.log" 2>&1; then
+  fail "a repeated deploy passed while another release was running"
+fi
+grep -Fq 'the running release differs' "${fixture_root}/retry-interrupted.log" || fail "a running release that differs from the active pointer was not named"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
@@ -1402,7 +1433,9 @@ fi
 
 if group_enabled restore; then
   # A promoted runtime gives the user manager the container grace, not Ubuntu's 5 seconds.
-  grep -Fxq 'TimeoutStopSec=60' "${fixture_root}/systemd/user@.service.d/timeout.conf" || fail "user manager stop grace was not installed"
+  grep -Fxq 'TimeoutStopSec=130' "${fixture_root}/systemd/user@.service.d/timeout.conf" || fail "user manager stop grace was not installed"
+  # The API unit reads boot.env without an optional prefix, so a deploy must leave the file in place before the API starts.
+  [[ -s "${fixture_root}/run/boot.env" ]] || fail "deploy did not create boot.env for the API unit"
 
   # boot-end names how the previous boot ended: clean, killed or unknown.
   cat >"${fixture_root}/bin/journalctl" <<'JOURNAL'

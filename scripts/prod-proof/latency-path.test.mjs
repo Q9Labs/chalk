@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DIAGNOSTICS_SCHEMA, diagnosticsMarkdown, problemOf } from "../../features/scorecard/diagnostics.mjs";
 import { icePairOf, iceSummary } from "./latency-ice.mjs";
-import { ICE_PATHS, chromiumArgsFor, installIcePath, joinExpected } from "./latency-path.mjs";
+import { ICE_PATHS, chromiumArgsFor, installIcePath, joinExpected, pathMismatch } from "./latency-path.mjs";
 import { diagnosticsOf } from "./latency-stages.mjs";
 
 // The servers the relay mints: STUN, TURN over UDP, TCP and TLS, each on more than one port.
@@ -104,4 +104,47 @@ test("the sidecar names an unknown path, an unknown relay protocol and a join co
   assert.match(problemOf({ ...base, cycles: [{ cycle: 1, timestamp: "t", path: { mode: "tunnel", joined: true } }] }), /known path/);
   assert.match(problemOf({ ...base, cycles: [{ cycle: 1, timestamp: "t", ice: { relay_protocol: "quic" } }] }), /relay protocol/);
   assert.match(problemOf({ ...base, summary: { path: { mode: "direct", cycles: 1, joined: 2 } } }), /counts/);
+});
+
+// A selected pair as the page reads it: local and remote candidate type, the local candidate's transport, and the relay's protocol.
+const pair = (local_type, protocol, relay_protocol = null) => ({ local_type, remote_type: "host", protocol, relay_protocol });
+
+test("a path is confirmed only by the selected pair that shows it", () => {
+  assert.equal(pathMismatch("direct", pair("srflx", "udp")), null);
+  assert.equal(pathMismatch("relay-udp", pair("relay", "udp", "udp")), null);
+  assert.equal(pathMismatch("relay-tcp", pair("relay", "udp", "tcp")), null);
+  assert.equal(pathMismatch("relay-tls", pair("relay", "udp", "tls")), null);
+  assert.equal(pathMismatch("blocked-no-relay", pair("host", "tcp")), null);
+  assert.equal(pathMismatch("blocked-relay-tls", pair("relay", "tcp", "tls")), null);
+});
+
+test("a call that went through the relay is not accepted as direct, and a TCP path is not accepted as UDP", () => {
+  assert.match(pathMismatch("direct", pair("relay", "udp", "udp")), /direct: the selected pair is relay\/host relay udp/);
+  assert.match(pathMismatch("direct", pair("host", "tcp")), /host\/host tcp/);
+  assert.match(pathMismatch("blocked-no-relay", pair("host", "udp")), /blocked-no-relay/);
+  assert.match(pathMismatch("blocked-no-relay", pair("relay", "udp", "udp")), /blocked-no-relay/);
+  assert.match(pathMismatch("relay-udp", pair("relay", "tcp", "tcp")), /relay-udp/);
+  assert.match(pathMismatch("relay-tls", pair("relay", "udp", "udp")), /relay-tls/);
+  assert.match(pathMismatch("blocked-relay-tls", pair("relay", "udp", "tcp")), /blocked-relay-tls/);
+});
+
+test("a missing or unreadable pair never confirms a path", () => {
+  for (const path of ICE_PATHS) {
+    assert.match(pathMismatch(path, null), /unconfirmed/, path);
+    assert.match(pathMismatch(path, undefined), /unconfirmed/, path);
+    assert.notEqual(pathMismatch(path, { local_type: null, remote_type: null, protocol: null, relay_protocol: null }), null, path);
+  }
+});
+
+test("the transport of the selected pair reaches the reading and a value outside udp and tcp does not", () => {
+  const read = (protocol) =>
+    icePairOf(
+      [
+        { t: 10, k: "ice_connected", peer: 1 },
+        { t: 20, k: "ice_pair", d: JSON.stringify({ peer: 1, local: "host", remote: "host", protocol }) },
+      ],
+      0,
+    );
+  assert.equal(read("tcp").protocol, "tcp");
+  assert.equal(read("sctp").protocol, null);
 });
