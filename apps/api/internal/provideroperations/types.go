@@ -15,7 +15,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -218,7 +217,7 @@ type canonicalPublication struct {
 	PublicationID *string                      `json:"publication_id"`
 }
 
-func Canonicalize(input OperationInput) (CanonicalOperation, error) {
+func (input OperationInput) Canonicalize() (CanonicalOperation, error) {
 	input.OperationID = strings.TrimSpace(input.OperationID)
 	if err := ValidateIdentity(input.OperationID, input.Effect); err != nil {
 		return CanonicalOperation{}, err
@@ -301,13 +300,9 @@ func ValidateIdentity(operationID string, effect Effect) error {
 	return nil
 }
 
-func (input OperationInput) Canonicalize() (CanonicalOperation, error) {
-	return Canonicalize(input)
-}
-
 func (reservation RecordingReservation) Validate() error {
 	if reservation.SpaceID.IsZero() || reservation.ParticipantCount < 1 || reservation.ParticipantCount > 10 ||
-		reservation.MaxDurationSeconds < 1 || reservation.MaxDurationSeconds > int(recordingpipeline.MaximumRecordingDuration/time.Second) ||
+		reservation.MaxDurationSeconds < 1 || reservation.MaxDurationSeconds > int(artifactpolicy.MaximumRecordingDuration/time.Second) ||
 		reservation.InputBitrateBPS < 1 || reservation.InputBitrateBPS > 4_000_000 ||
 		reservation.PolicySnapshotVersion != artifactpolicy.SnapshotSchemaVersion {
 		return ErrInvalidRecordingReservation
@@ -371,7 +366,7 @@ func OperationFromReceipt(receipt Receipt) (OperationInput, error) {
 		}
 	}
 
-	canonical, err := Canonicalize(input)
+	canonical, err := input.Canonicalize()
 	if err != nil || canonical.Fingerprint != receipt.Fingerprint ||
 		receipt.Effect != input.Effect || receipt.TenantID != input.TenantID || receipt.EpisodeID != input.EpisodeID ||
 		receipt.ParticipantID != input.ParticipantID || receipt.ParticipantGeneration != input.ParticipantGeneration ||
@@ -382,14 +377,6 @@ func OperationFromReceipt(receipt Receipt) (OperationInput, error) {
 		return OperationInput{}, ErrReceiptPayloadCorrupt
 	}
 	return canonical.Input, nil
-}
-
-func Fingerprint(input OperationInput) ([32]byte, error) {
-	canonical, err := Canonicalize(input)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	return canonical.Fingerprint, nil
 }
 
 func (completion Completion) Validate() error {
@@ -409,7 +396,7 @@ func (completion Completion) Validate() error {
 	return nil
 }
 
-func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte, json.RawMessage, error) {
+func (input ObservationInput) Canonicalize() (ObservationInput, [32]byte, json.RawMessage, error) {
 	if input.TenantID.IsZero() {
 		return ObservationInput{}, [32]byte{}, nil, ErrInvalidTenantID
 	}
@@ -465,10 +452,6 @@ func CanonicalizeObservation(input ObservationInput) (ObservationInput, [32]byte
 		return ObservationInput{}, [32]byte{}, nil, fmt.Errorf("provider observation exceeds %d bytes", MaxPayloadBytes)
 	}
 	return input, sha256.Sum256(payload), payload, nil
-}
-
-func (input ObservationInput) Canonicalize() (ObservationInput, [32]byte, json.RawMessage, error) {
-	return CanonicalizeObservation(input)
 }
 
 func (input ObservationInput) Cursor() Cursor {

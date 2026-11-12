@@ -363,10 +363,10 @@ func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpac
 	if cfDefault.PublicWriteAllowed(own) {
 		t.Fatal("under a Cloudflare default an owner must not name the own SFU")
 	}
-	if got := policy.legacyPlane(nil); got != string(cf) {
+	if got := policy.legacyPlane(nil); got != cf.SettingName() {
 		t.Fatalf("an inheriting Space must store cf_sfu, got %q", got)
 	}
-	if got := policy.legacyPlane(planePtr(own)); got != string(own) {
+	if got := policy.legacyPlane(planePtr(own)); got != own.SettingName() {
 		t.Fatalf("a Space's own choice is stored as is, got %q", got)
 	}
 }

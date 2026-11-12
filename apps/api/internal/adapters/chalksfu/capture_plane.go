@@ -43,10 +43,6 @@ func captureOperationID(metadata captureplane.OperationMetadata, operation captu
 	return "cap-" + hex.EncodeToString(scope[:16]), nil
 }
 
-func captureConnection(metadata captureplane.OperationMetadata, reference captureplane.ProviderReference) captureplane.CaptureConnection {
-	return captureplane.CaptureConnection{ConnectionReference: reference, CaptureEpoch: metadata.CaptureEpoch, PlanRevision: metadata.PlanRevision}
-}
-
 // captureFailure maps a node failure to the port's bounded errors. A retry of a failed
 // operation repeats its operation ID, which the node answers once, so transient failures retry.
 func captureFailure(operation captureplane.OperationKind, metadata captureplane.OperationMetadata, err error) error {
@@ -67,19 +63,6 @@ func captureFailure(operation captureplane.OperationKind, metadata captureplane.
 		return captureplane.ProviderError{Class: captureplane.ProviderFailureUnavailable, Code: "sfu_unavailable", Retryable: true}
 	}
 	return captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "adapter_error"}
-}
-
-func captureLayerRID(layer captureplane.TrackLayer) string {
-	switch layer {
-	case captureplane.TrackLayerHigh:
-		return "h"
-	case captureplane.TrackLayerMedium:
-		return "m"
-	case captureplane.TrackLayerLow:
-		return "l"
-	default:
-		return ""
-	}
 }
 
 // captureOffer is the node's offer for a pull. The recorder must answer it through
@@ -124,7 +107,7 @@ func (a *Adapter) CreateCaptureConnection(ctx context.Context, input captureplan
 		return captureplane.CreateCaptureConnectionResult{}, captureplane.ProviderError{Class: captureplane.ProviderFailureProtocol, Code: "invalid_contract"}
 	}
 	result := captureplane.CreateCaptureConnectionResult{
-		Connection:  captureConnection(input.Metadata, reference),
+		Connection:  input.Metadata.Connection(reference),
 		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
 	}
 	return result, captureplane.ReplayStore(a.captureReplay, input.Metadata, operation, input, result)
@@ -157,7 +140,7 @@ func (a *Adapter) PullCaptureTracks(ctx context.Context, input captureplane.Pull
 	}
 	for _, track := range tracks {
 		wired := wireTrack{Location: "remote", SessionID: track.OwnerReference.String(), TrackName: track.TrackReference.String()}
-		if rid := captureLayerRID(track.RequestedLayer); rid != "" {
+		if rid := track.RequestedLayer.RID(); rid != "" {
 			wired.Simulcast = &wireSimulcast{PreferredRID: rid, PriorityOrdering: "none", RIDNotAvailable: "none"}
 		}
 		request.Tracks = append(request.Tracks, wired)
@@ -191,7 +174,7 @@ func capturePullResult(input captureplane.PullCaptureTracksInput, response wireT
 		}
 		missing[captureTrackKey{failed.SessionID, failed.TrackName}] = true
 	}
-	result := captureplane.PullCaptureTracksResult{Connection: captureConnection(input.Metadata, input.Connection)}
+	result := captureplane.PullCaptureTracksResult{Connection: input.Metadata.Connection(input.Connection)}
 	for _, track := range input.Tracks {
 		key := captureTrackKey{track.OwnerReference.String(), track.TrackReference.String()}
 		if missing[key] {
@@ -238,7 +221,7 @@ func (a *Adapter) RenegotiateCaptureConnection(ctx context.Context, input captur
 		return captureplane.RenegotiateCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
 	result := captureplane.RenegotiateCaptureConnectionResult{
-		Connection:  captureConnection(input.Metadata, input.Connection),
+		Connection:  input.Metadata.Connection(input.Connection),
 		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
 	}
 	return result, captureplane.ReplayStore(a.captureReplay, input.Metadata, operation, input, result)
@@ -281,7 +264,7 @@ func (a *Adapter) InspectCaptureConnection(ctx context.Context, input capturepla
 		observed = append(observed, captureplane.ObservedCaptureTrack{PulledCaptureTrack: track, Active: active})
 	}
 	result := captureplane.InspectCaptureConnectionResult{
-		Connection:  captureConnection(input.Metadata, input.Connection),
+		Connection:  input.Metadata.Connection(input.Connection),
 		State:       state,
 		Tracks:      observed,
 		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
@@ -316,7 +299,7 @@ func (a *Adapter) CloseCaptureTracks(ctx context.Context, input captureplane.Clo
 		return captureplane.CloseCaptureTracksResult{}, captureFailure(operation, input.Metadata, err)
 	}
 	result := captureplane.CloseCaptureTracksResult{
-		Connection:  captureConnection(input.Metadata, input.Connection),
+		Connection:  input.Metadata.Connection(input.Connection),
 		Tracks:      input.Tracks,
 		Negotiation: captureplane.Negotiation{Requirement: captureplane.NegotiationNotRequired},
 	}
@@ -340,6 +323,6 @@ func (a *Adapter) CloseCaptureConnection(ctx context.Context, input captureplane
 	if err := a.call(ctx, path, wireRemoveRequest{Scope: captureScope(input.Metadata)}, nil); err != nil && !errors.Is(err, mediaplane.ErrConnectionNotFound) {
 		return captureplane.CloseCaptureConnectionResult{}, captureFailure(operation, input.Metadata, err)
 	}
-	result := captureplane.CloseCaptureConnectionResult{Connection: captureConnection(input.Metadata, input.Connection), Closed: true}
+	result := captureplane.CloseCaptureConnectionResult{Connection: input.Metadata.Connection(input.Connection), Closed: true}
 	return result, captureplane.ReplayStore(a.captureReplay, input.Metadata, operation, input, result)
 }

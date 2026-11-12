@@ -10,6 +10,8 @@ import (
 const (
 	SnapshotSchemaVersion = "episode_config.v2"
 	RecordingProfile      = "composite_720p_v1"
+	// MaximumRecordingDuration is the longest Recording any layer accepts.
+	MaximumRecordingDuration = 4 * time.Hour
 	// MaximumSourceWindow bounds the sealed capture inputs used by both
 	// automatic transcription and the deferred MP4 export. It is anchored at
 	// capture completion; neither playback nor download requests renew it.

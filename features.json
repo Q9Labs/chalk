@@ -154,7 +154,7 @@
         "apps/api/internal/adapters/cloudflare/r2",
         "apps/api/internal/adapters/digitalocean",
         "apps/api/internal/adapters/pion",
-        "apps/api/internal/adapters/recorderbootprobe",
+        "apps/api/internal/adapters/digitalocean/bootprobe",
         "apps/api/internal/adapters/recordercontrollease",
         "apps/api/internal/adapters/recorderfleetcontrol",
         "apps/api/internal/adapters/recorderfleetissuer",

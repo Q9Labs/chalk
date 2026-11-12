@@ -35,7 +35,7 @@ func NewProviderOperationRepositoryWithPool(pool *pgxpool.Pool) ProviderOperatio
 }
 
 func (r ProviderOperationRepository) Prepare(ctx context.Context, input provideroperations.OperationInput) (provideroperations.PrepareResult, error) {
-	canonical, err := provideroperations.Canonicalize(input)
+	canonical, err := input.Canonicalize()
 	if err != nil {
 		return provideroperations.PrepareResult{}, err
 	}
@@ -157,7 +157,7 @@ func (r ProviderOperationRepository) AppendObservation(ctx context.Context, inpu
 }
 
 func (r ProviderOperationRepository) appendObservation(ctx context.Context, input provideroperations.ObservationInput, publisher *mediapublications.PublicationParticipant) (provideroperations.Observation, error) {
-	canonical, fingerprint, payload, err := provideroperations.CanonicalizeObservation(input)
+	canonical, fingerprint, payload, err := input.Canonicalize()
 	if err != nil {
 		return provideroperations.Observation{}, err
 	}

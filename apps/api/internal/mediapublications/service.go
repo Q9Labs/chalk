@@ -152,6 +152,10 @@ type RemoteTrackObserver interface {
 	ObserveRemoteTracks(context.Context, RemoteTrackObservationInput) error
 }
 
+// Service keeps its absence evidence, receive health and liveness checks in
+// process memory. That is correct only while one API process serves the
+// deployment: production runs a single API container on a single node, and
+// single_instance_test.go fails when the deployment stops declaring that.
 type Service struct {
 	repository      Repository
 	absenceEvidence *remoteTrackAbsenceEvidence

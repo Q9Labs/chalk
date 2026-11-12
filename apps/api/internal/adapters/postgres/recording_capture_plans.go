@@ -252,10 +252,10 @@ type persistedCapturePlanParticipant struct {
 }
 
 type persistedCapturePlanPublication struct {
-	ParticipantID string  `json:"participant_id"`
-	Source        mediaplane.PublicationSource  `json:"source"`
-	Enabled       bool    `json:"enabled"`
-	PublicationID *string `json:"publication_id"`
+	ParticipantID string                       `json:"participant_id"`
+	Source        mediaplane.PublicationSource `json:"source"`
+	Enabled       bool                         `json:"enabled"`
+	PublicationID *string                      `json:"publication_id"`
 }
 
 func buildRecordingCapturePlan(source sqlc.GetRecordingCapturePlanSourceRow, input captureplan.WaitInput, revision int64, now time.Time) (captureplan.Plan, error) {

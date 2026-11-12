@@ -1,5 +1,5 @@
-// Package recorderbootprobe runs the fleet's provider path for isolated boot checks.
-package recorderbootprobe
+// Package bootprobe runs the fleet's provider path for isolated boot checks.
+package bootprobe
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/adapters/aws/recorderarchive"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
@@ -332,7 +333,7 @@ func verifyCertificate(input Input) (Output, error) {
 	if _, err := certificate.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
 		return Output{}, fmt.Errorf("verify installed certificate: %w", err)
 	}
-	expectedURI := fmt.Sprintf("spiffe://%s/environment/%s/%s/%s", input.TrustDomain, input.Environment, input.Identity.Role, input.Identity.WorkerID)
+	expectedURI := spiffe.URI(input.TrustDomain, input.Environment, input.Identity.Role, input.Identity.WorkerID)
 	if len(certificate.URIs) != 1 || certificate.URIs[0].String() != expectedURI || certificate.SerialNumber.Text(16) != input.Serial {
 		return Output{}, errors.New("issuer/installed certificate identity or serial mismatch")
 	}
