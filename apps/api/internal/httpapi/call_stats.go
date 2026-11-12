@@ -141,19 +141,44 @@ func validateCallStatsSample(sample callStatsSample) string {
 	if sample.WindowMS < CallStatsMinWindowMS || sample.WindowMS > CallStatsMaxWindowMS {
 		return "window_range"
 	}
-	for field, value := range map[string]string{"connection_type": sample.ConnectionType, "local_candidate_type": sample.LocalCandidateType, "remote_candidate_type": sample.RemoteCandidateType, "relay_protocol": sample.RelayProtocol, "send_layer": sample.SendLayer} {
-		if (value != "" || field == "connection_type") && !slices.Contains(CallStatsFieldEnum(field), value) {
-			return field + "_label"
+	if reason := callStatsLabelRejection(sample); reason != "" {
+		return reason
+	}
+	return callStatsRangeRejection(sample)
+}
+
+func callStatsLabelRejection(sample callStatsSample) string {
+	for _, label := range []struct{ field, value string }{
+		{"connection_type", sample.ConnectionType}, {"local_candidate_type", sample.LocalCandidateType},
+		{"remote_candidate_type", sample.RemoteCandidateType}, {"relay_protocol", sample.RelayProtocol}, {"send_layer", sample.SendLayer},
+	} {
+		if (label.value != "" || label.field == "connection_type") && !slices.Contains(CallStatsFieldEnum(label.field), label.value) {
+			return label.field + "_label"
 		}
 	}
-	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos, "recv_hidden_videos": sample.RecvHiddenVideos} {
-		if value != nil && (*value < 0 || *value > CallStatsMaximum(field)) {
-			return field + "_range"
+	return ""
+}
+
+func callStatsRangeRejection(sample callStatsSample) string {
+	for _, counter := range []struct {
+		field string
+		value *int64
+	}{
+		{"rtt_ms", sample.RTTMS}, {"send_bitrate_kbps", sample.SendBitrateKbps}, {"send_jitter_ms", sample.SendJitterMS},
+		{"recv_bitrate_kbps", sample.RecvBitrateKbps}, {"recv_jitter_ms", sample.RecvJitterMS}, {"recv_height", sample.RecvHeight},
+		{"freeze_count", sample.FreezeCount}, {"freeze_ms", sample.FreezeMS},
+		{"recv_paused_videos", sample.RecvPausedVideos}, {"recv_hidden_videos", sample.RecvHiddenVideos},
+	} {
+		if counter.value != nil && (*counter.value < 0 || *counter.value > CallStatsMaximum(counter.field)) {
+			return counter.field + "_range"
 		}
 	}
-	for field, value := range map[string]*float64{"send_loss_pct": sample.SendLossPct, "recv_loss_pct": sample.RecvLossPct} {
-		if value != nil && (*value < 0 || *value > float64(CallStatsMaximum(field))) {
-			return field + "_range"
+	for _, loss := range []struct {
+		field string
+		value *float64
+	}{{"send_loss_pct", sample.SendLossPct}, {"recv_loss_pct", sample.RecvLossPct}} {
+		if loss.value != nil && (*loss.value < 0 || *loss.value > float64(CallStatsMaximum(loss.field))) {
+			return loss.field + "_range"
 		}
 	}
 	return ""
@@ -182,50 +207,46 @@ func callStatsOrigin(r *http.Request) []any {
 	return []any{"country", country, "client_family", family, "client_os", system}
 }
 
+// userAgentMatch names a client family or OS when the User-Agent holds any of its markers.
+type userAgentMatch struct {
+	name    string
+	markers []string
+}
+
+// Order matters: the first match wins, so Edge and Chrome markers precede the generic Safari one.
+var (
+	clientFamilyMatches = []userAgentMatch{
+		{"edge", []string{"Edg/", "EdgA/", "EdgiOS/"}},
+		{"opera", []string{"OPR/"}},
+		{"samsung", []string{"SamsungBrowser/"}},
+		{"firefox", []string{"Firefox/", "FxiOS/"}},
+		{"chrome", []string{"Chrome/", "CriOS/"}},
+		{"safari", []string{"Safari/"}},
+		{"native", []string{"CFNetwork", "okhttp", "ReactNative", "Hermes"}},
+	}
+	clientSystemMatches = []userAgentMatch{
+		{"android", []string{"Android", "okhttp"}},
+		{"ios", []string{"iPhone", "iPad", "iPod", "CFNetwork"}},
+		{"windows", []string{"Windows"}},
+		{"chromeos", []string{"CrOS"}},
+		{"macos", []string{"Mac OS X", "Macintosh"}},
+		{"linux", []string{"Linux", "X11"}},
+	}
+)
+
 func clientFamilies(userAgent string) (family, system string) {
-	has := func(parts ...string) bool {
-		for _, part := range parts {
-			if strings.Contains(userAgent, part) {
-				return true
+	return firstUserAgentMatch(userAgent, clientFamilyMatches), firstUserAgentMatch(userAgent, clientSystemMatches)
+}
+
+func firstUserAgentMatch(userAgent string, matches []userAgentMatch) string {
+	for _, match := range matches {
+		for _, marker := range match.markers {
+			if strings.Contains(userAgent, marker) {
+				return match.name
 			}
 		}
-		return false
 	}
-	switch {
-	case has("Edg/", "EdgA/", "EdgiOS/"):
-		family = "edge"
-	case has("OPR/"):
-		family = "opera"
-	case has("SamsungBrowser/"):
-		family = "samsung"
-	case has("Firefox/", "FxiOS/"):
-		family = "firefox"
-	case has("Chrome/", "CriOS/"):
-		family = "chrome"
-	case has("Safari/"):
-		family = "safari"
-	case has("CFNetwork", "okhttp", "ReactNative", "Hermes"):
-		family = "native"
-	default:
-		family = "other"
-	}
-	switch {
-	case has("Android", "okhttp"):
-		system = "android"
-	case has("iPhone", "iPad", "iPod", "CFNetwork"):
-		system = "ios"
-	case has("Windows"):
-		system = "windows"
-	case has("CrOS"):
-		system = "chromeos"
-	case has("Mac OS X", "Macintosh"):
-		system = "macos"
-	case has("Linux", "X11"):
-		system = "linux"
-	default:
-		system = "other"
-	}
-	return family, system
+	return "other"
 }
 
 // A still-valid signed credential is enough: the last summary is sent as the

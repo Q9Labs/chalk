@@ -92,14 +92,10 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker failure")
 			return
 		}
-		availableAt := time.Now().UTC()
-		if body.AvailableAt != "" {
-			parsed, err := time.Parse(time.RFC3339Nano, body.AvailableAt)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
-				return
-			}
-			availableAt = parsed
+		availableAt, ok := recorderWorkerRetryTime(body.AvailableAt)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
+			return
 		}
 		if service == nil {
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
@@ -115,13 +111,26 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 			writeRecorderWorkerError(w, err)
 			return
 		}
-		if (job.Kind == recordingpipeline.JobKindRender || job.Kind == recordingpipeline.JobKindTranscription) && body.ErrorCode == "render_attempt_failed" {
-			observability.LogRenderAttemptFailure(request.Context(), logger, input)
-		}
-		if job.Kind == recordingpipeline.JobKindCapture {
-			observability.LogCaptureAttemptFailure(request.Context(), logger, job, input)
-		}
+		logRecorderAttemptFailure(request.Context(), logger, job, input, body.ErrorCode)
 		writeJSON(w, http.StatusOK, recorderWorkerJobResponseValue(job))
+	}
+}
+
+// recorderWorkerRetryTime reads the optional retry time; an empty value means retry now.
+func recorderWorkerRetryTime(value string) (time.Time, bool) {
+	if value == "" {
+		return time.Now().UTC(), true
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return parsed, err == nil
+}
+
+func logRecorderAttemptFailure(ctx context.Context, logger *slog.Logger, job recordingpipeline.Job, input recordingpipeline.FailureInput, reportedCode string) {
+	if (job.Kind == recordingpipeline.JobKindRender || job.Kind == recordingpipeline.JobKindTranscription) && reportedCode == "render_attempt_failed" {
+		observability.LogRenderAttemptFailure(ctx, logger, input)
+	}
+	if job.Kind == recordingpipeline.JobKindCapture {
+		observability.LogCaptureAttemptFailure(ctx, logger, job, input)
 	}
 }
 
@@ -183,28 +192,33 @@ func recorderWorkerCompleteHandler(service RecorderWorkerService, logger *slog.L
 			writeError(w, http.StatusServiceUnavailable, "service.unavailable", "Recorder worker service is unavailable")
 			return
 		}
-		var job recordingpipeline.Job
-		var err error
-		if captureCompleter, ok := service.(interface {
-			CompleteCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
-		}); ok {
-			job, err = captureCompleter.CompleteCapture(request.Context(), lease)
-		} else {
-			job, err = service.Complete(request.Context(), lease)
-		}
+		job, err := completeRecorderJob(request.Context(), service, lease)
 		if err != nil {
 			apiErr := recorderWorkerAPIError(err)
 			if apiErr.Status >= http.StatusInternalServerError || errors.Is(err, recordingpresentation.ErrInvalidCompletionSource) {
-				detail := err.Error()
-				if len(detail) > 256 {
-					detail = detail[:256]
-				}
-				logger.ErrorContext(request.Context(), "recorder completion failed", "event", "http.failure",
-					"method", request.Method, "route", "/internal/v1/recorder/jobs/complete", "code", apiErr.Code, "error", detail)
+				logRecorderCompletionFailure(request, logger, apiErr, err)
 			}
 			writeAPIError(w, apiErr)
 			return
 		}
 		writeJSON(w, http.StatusOK, recorderWorkerJobResponseValue(job))
 	}
+}
+
+func completeRecorderJob(ctx context.Context, service RecorderWorkerService, lease recordingpipeline.LeaseInput) (recordingpipeline.Job, error) {
+	if captureCompleter, ok := service.(interface {
+		CompleteCapture(context.Context, recordingpipeline.LeaseInput) (recordingpipeline.Job, error)
+	}); ok {
+		return captureCompleter.CompleteCapture(ctx, lease)
+	}
+	return service.Complete(ctx, lease)
+}
+
+func logRecorderCompletionFailure(request *http.Request, logger *slog.Logger, apiErr APIError, err error) {
+	detail := err.Error()
+	if len(detail) > 256 {
+		detail = detail[:256]
+	}
+	logger.ErrorContext(request.Context(), "recorder completion failed", "event", "http.failure",
+		"method", request.Method, "route", "/internal/v1/recorder/jobs/complete", "code", apiErr.Code, "error", detail)
 }

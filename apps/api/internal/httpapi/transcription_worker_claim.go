@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -71,6 +72,7 @@ type workerManifestAssignment struct {
 }
 
 func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer, chunks ChunkAuthority, manifests ManifestAuthority, results ResultAuthority) http.HandlerFunc {
+	signer := assignmentSigner{chunks: chunks, manifests: manifests, results: results}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
 			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
@@ -88,7 +90,7 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 		assignments := make([]workerAssignment, 0, body.BatchSize)
 		for i := 0; i < body.BatchSize; i++ {
 			now := time.Now()
-			assignment, err := service.Claim(r.Context(), transcripts.ClaimInput{Owner: transcriptionWorkloadRole, LeaseDuration: transcriptionWorkLeaseDuration, Now: now})
+			claimed, err := service.Claim(r.Context(), transcripts.ClaimInput{Owner: transcriptionWorkloadRole, LeaseDuration: transcriptionWorkLeaseDuration, Now: now})
 			if errors.Is(err, transcripts.ErrNoClaimableJob) {
 				break
 			}
@@ -96,52 +98,79 @@ func workerClaimHandler(service TranscriptWorkerService, auth WorkloadAuthorizer
 				writeWorkerError(w, err)
 				return
 			}
-			if assignment.Chunk == nil || assignment.Source == nil || assignment.Job.LeaseExpiresAt == nil || assignment.Transcript.SourceManifestKey == nil {
-				writeError(w, http.StatusInternalServerError, "internal.error", "Invalid worker assignment")
-				return
-			}
-			urlTTL := assignment.Job.LeaseExpiresAt.Sub(now)
-			if urlTTL > transcriptionWorkLeaseDuration {
-				urlTTL = transcriptionWorkLeaseDuration
-			}
-			if urlTTL <= 0 {
-				writeError(w, http.StatusConflict, "lease.stale", "Transcription source authority expired")
-				return
-			}
-			inputURL, err := chunks.CreateChunkGETURL(r.Context(), ChunkURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.StorageKey, ExpiresIn: urlTTL})
+			assignment, err := signer.sign(r.Context(), claimed, now)
 			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
+				writeAssignmentError(w, err)
 				return
 			}
-			manifestURL, err := manifests.CreateManifestGETURL(r.Context(), ManifestURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: *assignment.Transcript.SourceManifestKey, ExpiresIn: urlTTL})
-			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
-				return
-			}
-			outputURL, err := results.CreateResultPUTURL(r.Context(), ResultURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: assignment.Chunk.ResultKey, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: urlTTL})
-			if err != nil {
-				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
-				return
-			}
-			assignments = append(assignments, workerAssignment{
-				TranscriptLanguage: assignment.Job.TranscriptLanguage.String(),
-				JobID:              assignment.Job.ID.String(), TenantID: assignment.Job.TenantID.String(), EpisodeID: assignment.Job.EpisodeID.String(), RecordingID: assignment.Job.RecordingID.String(),
-				PresentationSHA256: hex.EncodeToString(assignment.Source.PresentationSHA256), SourceExpiresAt: utilities.FormatTimestamp(assignment.Source.ExpiresAt), Attempt: assignment.Job.Attempt,
-				LeaseToken: assignment.LeaseToken, LeaseExpiresAt: utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt),
-				Chunk: workerChunkAssignment{
-					ChunkID: assignment.Chunk.ID.String(), InputObjectKey: assignment.Chunk.StorageKey, ChunkIndex: assignment.Chunk.Index, Generation: assignment.Chunk.Generation,
-					InputURL: inputURL, InputURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), InputContentType: assignment.Chunk.ContentType, InputSizeBytes: assignment.Chunk.Size, InputSHA256: hex.EncodeToString(assignment.Chunk.Checksum),
-					EpisodeStartMS: assignment.Chunk.StartMS, EpisodeEndMS: assignment.Chunk.EndMS, SourceStartMS: assignment.Chunk.SourceStartMS, SourceEndMS: assignment.Chunk.SourceEndMS,
-					AllocationID: assignment.Chunk.AllocationID.String(), ObjectVersion: assignment.Chunk.ObjectVersion, ObjectETag: assignment.Chunk.ObjectETag,
-					SourceIdentity:   workerSourceIdentity{Kind: assignment.Chunk.IdentityKind, ParticipantRef: assignment.Chunk.ParticipantRef, ParticipantGeneration: assignment.Chunk.ParticipantGeneration, TrackID: assignment.Chunk.TrackID, TrackEpoch: assignment.Chunk.TrackEpoch},
-					SourceTrackClass: assignment.Chunk.TrackClass, DisplayName: assignment.Chunk.DisplayNameSnapshot, Overlap: assignment.Chunk.Overlap,
-				},
-				Manifest:     workerManifestAssignment{InputURL: manifestURL, ExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), ContentType: "application/json", SizeBytes: derefInt64(assignment.Transcript.SourceManifestSize), SHA256: hex.EncodeToString(assignment.Transcript.SourceManifestSHA256)},
-				OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(urlTTL).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json",
-			})
+			assignments = append(assignments, assignment)
 		}
 		writeJSON(w, http.StatusOK, workerClaimResponse{Assignments: assignments})
 	}
+}
+
+var (
+	errInvalidAssignment      = errors.New("invalid worker assignment")
+	errAssignmentLeaseExpired = errors.New("transcription source authority expired")
+	errWorkloadUnavailable    = errors.New("workload authority unavailable")
+)
+
+func writeAssignmentError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errAssignmentLeaseExpired):
+		writeError(w, http.StatusConflict, "lease.stale", "Transcription source authority expired")
+	case errors.Is(err, errWorkloadUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Workload authority unavailable")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal.error", "Invalid worker assignment")
+	}
+}
+
+// assignmentSigner turns a claimed transcription job into the worker's assignment, with presigned URLs for its input, manifest and result.
+type assignmentSigner struct {
+	chunks    ChunkAuthority
+	manifests ManifestAuthority
+	results   ResultAuthority
+}
+
+func (s assignmentSigner) sign(ctx context.Context, claimed transcripts.Assignment, now time.Time) (workerAssignment, error) {
+	if claimed.Chunk == nil || claimed.Source == nil || claimed.Job.LeaseExpiresAt == nil || claimed.Transcript.SourceManifestKey == nil {
+		return workerAssignment{}, errInvalidAssignment
+	}
+	urlTTL := min(claimed.Job.LeaseExpiresAt.Sub(now), transcriptionWorkLeaseDuration)
+	if urlTTL <= 0 {
+		return workerAssignment{}, errAssignmentLeaseExpired
+	}
+	job, chunk := claimed.Job, claimed.Chunk
+	inputURL, err := s.chunks.CreateChunkGETURL(ctx, ChunkURLInput{JobID: job.ID, Attempt: job.Attempt, Key: chunk.StorageKey, ExpiresIn: urlTTL})
+	if err != nil {
+		return workerAssignment{}, errWorkloadUnavailable
+	}
+	manifestURL, err := s.manifests.CreateManifestGETURL(ctx, ManifestURLInput{JobID: job.ID, Attempt: job.Attempt, Key: *claimed.Transcript.SourceManifestKey, ExpiresIn: urlTTL})
+	if err != nil {
+		return workerAssignment{}, errWorkloadUnavailable
+	}
+	outputURL, err := s.results.CreateResultPUTURL(ctx, ResultURLInput{JobID: job.ID, Attempt: job.Attempt, Key: chunk.ResultKey, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: urlTTL})
+	if err != nil {
+		return workerAssignment{}, errWorkloadUnavailable
+	}
+	expiresAt := now.Add(urlTTL).UTC().Format(time.RFC3339Nano)
+	return workerAssignment{
+		TranscriptLanguage: job.TranscriptLanguage.String(),
+		JobID:              job.ID.String(), TenantID: job.TenantID.String(), EpisodeID: job.EpisodeID.String(), RecordingID: job.RecordingID.String(),
+		PresentationSHA256: hex.EncodeToString(claimed.Source.PresentationSHA256), SourceExpiresAt: utilities.FormatTimestamp(claimed.Source.ExpiresAt), Attempt: job.Attempt,
+		LeaseToken: claimed.LeaseToken, LeaseExpiresAt: utilities.FormatTimestamp(*job.LeaseExpiresAt),
+		Chunk: workerChunkAssignment{
+			ChunkID: chunk.ID.String(), InputObjectKey: chunk.StorageKey, ChunkIndex: chunk.Index, Generation: chunk.Generation,
+			InputURL: inputURL, InputURLExpiresAt: expiresAt, InputContentType: chunk.ContentType, InputSizeBytes: chunk.Size, InputSHA256: hex.EncodeToString(chunk.Checksum),
+			EpisodeStartMS: chunk.StartMS, EpisodeEndMS: chunk.EndMS, SourceStartMS: chunk.SourceStartMS, SourceEndMS: chunk.SourceEndMS,
+			AllocationID: chunk.AllocationID.String(), ObjectVersion: chunk.ObjectVersion, ObjectETag: chunk.ObjectETag,
+			SourceIdentity:   workerSourceIdentity{Kind: chunk.IdentityKind, ParticipantRef: chunk.ParticipantRef, ParticipantGeneration: chunk.ParticipantGeneration, TrackID: chunk.TrackID, TrackEpoch: chunk.TrackEpoch},
+			SourceTrackClass: chunk.TrackClass, DisplayName: chunk.DisplayNameSnapshot, Overlap: chunk.Overlap,
+		},
+		Manifest:     workerManifestAssignment{InputURL: manifestURL, ExpiresAt: expiresAt, ContentType: "application/json", SizeBytes: derefInt64(claimed.Transcript.SourceManifestSize), SHA256: hex.EncodeToString(claimed.Transcript.SourceManifestSHA256)},
+		OutputPutURL: outputURL, OutputPutURLExpiresAt: expiresAt, OutputContentType: "application/json",
+	}, nil
 }
 
 func derefInt64(value *int64) int64 {

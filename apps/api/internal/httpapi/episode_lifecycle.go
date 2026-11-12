@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
@@ -134,71 +132,8 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 }
 
 func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
-		// Refuse an SDK that cannot run the Episode's media before admission stores
-		// the Participant and takes a join seat. Other resolution failures surface
-		// from the join below, as before, so a waiting-room request needs no media.
-		if _, err := resolveMediaPlaneForClients(ctx, media, spacesService, tenantsService, request.TenantID, request.SpaceID, request.EpisodeID, request.MediaClients); errors.Is(err, mediaplane.ErrClientUnsupported) {
-			return participantLifecycleResponse{}, err
-		}
-		admission, err := service.AdmitParticipant(ctx, episodes.AdmitParticipantInput{Admission: request.Body.Admission, TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID, Name: request.Body.Name, Metadata: request.Body.Metadata.Value, Role: request.Body.Role, IdentityID: request.IdentityID, IdentityExternalID: request.Body.IdentityExternalID, Request: episodes.Request{Key: request.RequestKey}})
-		if err != nil {
-			return participantLifecycleResponse{}, err
-		}
-		response := newParticipantLifecycleResponse(admission.Participant, admission.Intent)
-		if admission.AdmissionRequest != nil {
-			response.AdmissionRequest = &admissionRequestResponse{ID: admission.AdmissionRequest.ID.String(), Status: admission.AdmissionRequest.Status, ExpiresAt: admission.AdmissionRequest.ExpiresAt.UTC().Format(time.RFC3339)}
-			return response, nil
-		}
-		var syncCredential synctokens.Token
-		if tokens != nil {
-			token, err := tokens.Issue(ctx, synctokens.Input{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, StartedAt: &admission.Episode.StartedAt, ParticipantID: admission.Participant.ID, ParticipantGeneration: admission.Participant.Generation, AdmissionLifecycleIntentID: admission.Intent.ID, DisplayName: request.Body.Name, Role: admission.Participant.Role, Capabilities: append([]string(nil), admission.Participant.Capabilities...)})
-			if err != nil {
-				return participantLifecycleResponse{}, err
-			}
-			syncCredential = token
-			response.SyncToken, response.ExpiresAt = token.Value, token.ExpiresAt.UTC().Format(time.RFC3339)
-		} else if refresh != nil {
-			token, err := refresh.IssueForParticipant(ctx, synctokens.SubjectKey{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, ParticipantID: admission.Participant.ID})
-			if err != nil {
-				return participantLifecycleResponse{}, err
-			}
-			syncCredential = token
-			response.SyncToken, response.ExpiresAt = token.Value, token.ExpiresAt.UTC().Format(time.RFC3339)
-		}
-		join, err := createParticipantJoin(ctx, spacesService, tenantsService, media, admission.Participant, request.MediaClients)
-		if err != nil {
-			return participantLifecycleResponse{}, err
-		}
-		if join.Provider != "" {
-			response.MediaPlane = &mediaPlaneResponse{Provider: string(join.Provider), ClientPayload: join.ClientPayload}
-		}
-		if grantProvider(join.Provider) {
-			if generations == nil {
-				return participantLifecycleResponse{}, apiErrorServiceUnavailable
-			}
-			accessRequest := issueAccessGrantRequest{TenantID: admission.Participant.TenantID, SpaceID: admission.Participant.SpaceID, EpisodeID: admission.Participant.EpisodeID, ParticipantID: admission.Participant.ID, Body: issueAccessGrantBody{ParticipantGeneration: admission.Participant.Generation}}
-			subject, err := accessGrantSubjectForJoin(accessRequest, join)
-			if err != nil {
-				return participantLifecycleResponse{}, err
-			}
-			if mediaTokens != nil && syncCredential.Value != "" {
-				mediaCredential, err := mediaTokens.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
-				if err != nil {
-					return participantLifecycleResponse{}, err
-				}
-				response.Access = func() *accessGrantResponse {
-					grant := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-
-					return &grant
-				}()
-			}
-			if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
-				return participantLifecycleResponse{}, err
-			}
-		}
-		return response, nil
-	}).Permission(authorizer, writeEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	admitter := participantAdmitter{service: service, tokens: tokens, refresh: refresh, mediaTokens: mediaTokens, generations: generations, spaces: spacesService, tenants: tenantsService, media: media}
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, admitter.admit).Permission(authorizer, writeEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("AdmitEpisodeParticipantRequest", admitParticipantRequest{}).
 		Responds(http.StatusCreated, "ParticipantLifecycle", participantLifecycleResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorInvalidRequestKey, apiErrorSpaceNotFound, apiErrorEpisodeNotFound, apiErrorEpisodeNotActive, apiErrorParticipantNotActive, apiErrorIdempotencyConflict, apiErrorEpisodeCapacityExceeded, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
