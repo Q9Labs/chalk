@@ -9,87 +9,23 @@ import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
+import { dryRunNames, noBrowserNames, proofDescription, proofNames, proofPlan } from "./registry.mjs";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createRun, loadConfig, save, check, publicFailure, recordResult, errorEvidence } from "./runtime.mjs";
 import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { createProofKey, prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
-const plans = {
-  leave: { media: false, webhooks: false, proofs: ["leave"] },
-  // The current client's Leave on the own SFU (CHALK_PROOF_MEDIA_PLANE=chalk_sfu): acknowledgement, released capture, removed participant and media.
-  "leave-own-sfu": { media: false, webhooks: false, proofs: ["leave-own-sfu"] },
-  // Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
-  "own-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["own-sfu-spaces"] },
-  offreason: { media: false, webhooks: false, proofs: ["offreason"] },
-  // A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket. No browser or media.
-  "chat-upload": { media: false, webhooks: false, proofs: ["chat-upload"] },
-  all: {
-    media: true,
-    cameraShare: true,
-    webhooks: true,
-    proofs: ["camera-share", "export", "smoke", "transcript"],
-  },
-  smoke: {
-    media: true,
-    cameraShare: false,
-    webhooks: true,
-    proofs: ["export", "smoke"],
-  },
-  "camera-share": {
-    media: true,
-    cameraShare: true,
-    webhooks: false,
-    proofs: ["camera-share"],
-  },
-  "recording-rejoin": {
-    media: true,
-    rejoin: true,
-    cameraShare: false,
-    webhooks: false,
-    proofs: ["export", "recording-rejoin"],
-  },
-  export: {
-    media: true,
-    cameraShare: false,
-    webhooks: false,
-    proofs: ["export"],
-  },
-  transcript: {
-    media: true,
-    cameraShare: false,
-    webhooks: true,
-    proofs: ["transcript"],
-  },
-  // Three guests with automatic Recording and Transcript, on the media plane CHALK_PROOF_MEDIA_PLANE selects.
-  "call-artifacts": {
-    media: false,
-    callArtifacts: true,
-    webhooks: false,
-    proofs: ["export", "call-artifacts"],
-  },
-  // Three guests held across media-access refreshes for at least ten minutes, with mic and camera toggles on a schedule. Opt-in: nightly only.
-  "long-call": {
-    media: false,
-    longCall: true,
-    webhooks: false,
-    proofs: ["long-call"],
-  },
-  // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.
-  "toggle-offers": {
-    media: false,
-    longCall: true,
-    webhooks: false,
-    proofs: ["toggle-offers"],
-  },
-};
-const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const plans = Object.fromEntries(proofNames.map((name) => [name, proofPlan(name)]));
+const dryRunPlans = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
+const dryRuns = Object.fromEntries(dryRunNames.map((name) => [name, dryRunPlans[name]]));
+const usage = `Usage: pnpm prod:proof [${proofNames.join("|")}] [--force-layer-switch|--no-layer-switch] [${dryRunNames.join("|")} --dry-run]
+${proofNames.map((name) => `  ${name}: ${proofDescription(name)}`).join("\n")}
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
-offreason and chat-upload need no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the path to a built SDK entry to prove instead of the checkout, such as an installed package's dist/index.js.
+${noBrowserNames.join(" and ")} need no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the path to a built SDK entry to prove instead of the checkout, such as an installed package's dist/index.js.
 Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password or environment variables; API readiness checks capabilities.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
