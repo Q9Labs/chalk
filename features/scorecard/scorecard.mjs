@@ -3,6 +3,7 @@
 // scorecard diff:  compares a scorecard with a baseline and prints the delta table.
 // scorecard append: adds scorecards to the nightly history. scorecard baseline: the median of the last seven nightly runs.
 // scorecard comment: creates or updates one section of the pull request's single scorecard comment.
+// scorecard evidence: prints "yes" or "no" for whether a scorecard file counts as evidence (see countsAsEvidence).
 // scorecard go-output: prints the human-readable lines of `go test -json` on stdin, so a gate can keep its log.
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -18,7 +19,7 @@ import { diffMetrics, renderTable } from "./diff.mjs";
 import { contentionMarkdown } from "./contention.mjs";
 import { planeNoteMarkdown } from "./plane-note.mjs";
 import { appendCards, baselineCard, readHistory, writeTrends } from "./history.mjs";
-import { SCORECARD_SCHEMA, parseScorecard } from "./schema.mjs";
+import { SCORECARD_SCHEMA, countsAsEvidence, parseScorecard } from "./schema.mjs";
 
 const read = (path) => readFileSync(path, "utf8");
 const readJson = (path) => JSON.parse(read(path));
@@ -81,11 +82,11 @@ async function diff(argv) {
   });
   const current = parseScorecard(readJson(values.current));
   const candidate = values.baseline ? parseScorecard(readJson(values.baseline)) : undefined;
-  const baseline = candidate?.contention?.contended || candidate?.contention?.unobservable ? undefined : candidate;
+  const baseline = candidate && countsAsEvidence(candidate) ? candidate : undefined;
   const { budgets } = await readBudgets();
   validateBudgetEntries(budgets);
   const result = diffMetrics(baseline?.metrics ?? [], current.metrics, planeBudgets(budgets, current.mediaPlane));
-  if (current.contention?.contended || current.contention?.unobservable) {
+  if (!countsAsEvidence(current)) {
     result.failures = [];
     for (const row of result.rows) row.gate = false;
   }
@@ -93,7 +94,7 @@ async function diff(argv) {
   const output = planeNoteMarkdown(current.mediaPlane) + table;
   if (values.markdown) writeFileSync(values.markdown, output);
   console.log(output);
-  if (values["fail-on-gate"] && !current.contention?.contended && !current.contention?.unobservable && result.failures.length > 0) {
+  if (values["fail-on-gate"] && countsAsEvidence(current) && result.failures.length > 0) {
     console.error(`${result.failures.length} metric(s) are over a gated budget: ${result.failures.map((row) => row.id).join(", ")}`);
     process.exitCode = 1;
   }
@@ -129,6 +130,10 @@ function baseline(argv) {
   console.log(`Baseline for ${values.plane}: median of ${card.run.id}.`);
 }
 
+function evidence(argv) {
+  console.log(countsAsEvidence(parseScorecard(readJson(argv[0]))) ? "yes" : "no");
+}
+
 async function goOutput() {
   for await (const line of createInterface({ input: process.stdin })) {
     if (!line.startsWith("{")) continue;
@@ -143,5 +148,6 @@ else if (command === "diff") await diff(rest);
 else if (command === "comment") comment(rest);
 else if (command === "append") await append(rest);
 else if (command === "baseline") baseline(rest);
+else if (command === "evidence") evidence(rest);
 else if (command === "go-output") await goOutput();
-else throw new Error("Usage: scorecard.mjs build|diff|comment|append|baseline|go-output");
+else throw new Error("Usage: scorecard.mjs build|diff|comment|append|baseline|evidence|go-output");

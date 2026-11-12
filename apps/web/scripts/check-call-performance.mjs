@@ -11,7 +11,7 @@ import { serveBuild } from "./call-performance-server.mjs";
 import { installVideoQualityObserver, videoCounterDelta } from "./call-video-quality.mjs";
 import { checkLeaks, LEAK_JOURNEYS, leakShard } from "./call-leak-check.mjs";
 import { measureRouteBundle } from "./call-route-bundle.mjs";
-import { validateBudgets, validateScenarioBudgets, summarize, percentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
+import { validateBudgets, validateScenarioBudgets, summarize, measuredPercentile, budgetFailures, trustedInteractionMs, METRICS, BUNDLE_METRICS } from "./call-performance-metrics.mjs";
 import { scenarios } from "./call-performance-scenarios.mjs";
 import { loadCallBudgets, readBudgets } from "../../../features/scorecard/budgets.mjs";
 
@@ -226,7 +226,7 @@ async function calibrate(device) {
     await page.evaluate(installObservers);
     await page.waitForTimeout(1200);
     const frames = await page.evaluate(() => window.__callPerf.frames);
-    return { frameMedianMs: percentile(frames, 0.5), frameP95Ms: percentile(frames, 0.95), samples: frames.length };
+    return { frameMedianMs: measuredPercentile(frames, 0.5), frameP95Ms: measuredPercentile(frames, 0.95), samples: frames.length };
   } finally {
     await context.close();
   }
@@ -383,7 +383,7 @@ async function measure(device, scenario, { inject = false, pauseVideo = false, c
       layoutShifts: data.layoutShifts,
       videoDroppedFramePercent: data.videoQuality.frames ? (100 * data.videoQuality.dropped) / data.videoQuality.frames : data.videoQuality.dropped ? 100 : 0,
       videoQuality: data.videoQuality,
-      frameP95Ms: data.frames.length ? percentile(data.frames, 0.95) : null,
+      frameP95Ms: data.frames.length ? measuredPercentile(data.frames, 0.95) : null,
       droppedFramePercent: data.frames.length ? (100 * missed) / (missed + data.frames.length) : null,
       longTasks: data.tasks.length,
       blockingMs: data.tasks.reduce((sum, ms) => sum + Math.max(0, ms - 50), 0),

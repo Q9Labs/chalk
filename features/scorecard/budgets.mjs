@@ -2,11 +2,11 @@
 // The call performance check still thinks in devices and scenarios, so this module converts
 // between the two views: loadCallBudgets for the check, withCallLimits for propose-call-budgets.
 import { readFile } from "node:fs/promises";
+import { MEDIA_PLANES } from "./schema.mjs";
 import { CALL_METRICS, ROUTE_METRICS, callMetricId, routeMetricId } from "./metrics.mjs";
 
 const BUDGETS_FILE = new URL("../../perf/budgets.json", import.meta.url);
 
-const PLANES = ["chalk_sfu", "cf_sfu"];
 const CALL_SEGMENTS = Object.fromEntries(Object.entries(CALL_METRICS).map(([metric, { segment }]) => [metric, segment]));
 
 export async function readBudgets() {
@@ -39,7 +39,7 @@ export function planeBudgets(budgets, plane) {
   const own = Object.entries(budgets)
     .filter(([id]) => id.startsWith(prefix))
     .map(([id, entry]) => [id.slice(prefix.length), entry]);
-  const others = Object.entries(budgets).filter(([id]) => !PLANES.some((name) => id.startsWith(`${name}.`)));
+  const others = Object.entries(budgets).filter(([id]) => !MEDIA_PLANES.some((name) => id.startsWith(`${name}.`)));
   return Object.fromEntries([...others, ...own]);
 }
 

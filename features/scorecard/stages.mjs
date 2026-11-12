@@ -93,12 +93,6 @@ export const STAGE_GROUPS = [
 export const STAGE_IDS = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
 
 /**
- * Stage ids earlier versions of the kit wrote and no longer record. The validator still accepts them so a sidecar written
- * before the change is shown, but nothing emits or displays them.
- */
-export const RETIRED_STAGE_IDS = ["mic_off", "camera_off", "screen_stop"].flatMap((group) => ["close_tracks", "renegotiate"].map((stage) => `${group}.${stage}`));
-
-/**
  * The audio delay a listener adds, estimated from the receiver's WebRTC stats while a call is steady. Informational, like every
  * stage: no budget reads it and it is not a card metric. media.network_jitter_one_way_ms is media.network_ms plus
  * media.jitter_buffer_ms. Capture, encode, SFU forwarding and playout are excluded, so it is not mouth to ear. media.playout_ms
