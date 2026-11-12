@@ -22,7 +22,10 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const { spaceName, duration = 0, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
-  const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
+  // Recording shows only here: the call menu trigger's elapsed time turns red, at every width, and the menu opens on the Recording row.
+  const recording = props.isRecording === true;
+  const timerStyle = recording || (remaining !== null && remaining <= 60) ? { color: "var(--chalk-danger-text)" } : remaining === null ? undefined : { color: "var(--chalk-warning)" };
+  const triggerLabel = recording ? "Call details, recording" : "Call details";
   const [sounds, setSounds] = useSoundsSetting();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusScope = useRef<HTMLElement>(null);
@@ -54,9 +57,9 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
     </svg>
   );
   const trigger = (
-    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label="Call details" className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
+    <button ref={triggerRef} type="button" data-part="call-name" title={spaceName} aria-label={triggerLabel} className="chalk-call-name" onPointerEnter={() => void preloadDetails()} onFocus={() => void preloadDetails()}>
       <span dir="auto">{spaceName}</span>
-      <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
+      <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
         {timer}
       </span>
       {chevron}
@@ -108,7 +111,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               data-part="call-name"
               title={spaceName}
               className="chalk-call-name chalk-call-name-phone"
-              aria-label="Call details"
+              aria-label={triggerLabel}
               aria-haspopup="dialog"
               aria-expanded={open}
               onPointerDown={() => void preloadDetails()}
@@ -117,15 +120,15 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               <span dir="auto">{spaceName}</span>
               {chevron}
             </button>
-            <span data-part="call-timer" className="chalk-call-timer" style={timerStyle}>
+            <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
               {timer}
             </span>
-            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={spaceName} accessibleLabel="Call details">
+            <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={inviteOpen ? "Your call is ready" : spaceName} accessibleLabel="Call details">
               {content}
             </ChalkSheet>
           </>
         ) : (
-          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip="Call details" trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
+          <ChalkPopover open={open} onOpenChange={changeOpen} tooltip={recording ? "Recording" : "Call details"} trigger={trigger} label="Call details" className="chalk-call-details" alignOffset={-2}>
             {content}
           </ChalkPopover>
         )}

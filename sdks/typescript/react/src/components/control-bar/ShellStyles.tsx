@@ -228,16 +228,40 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
     color 0.15s ease-out,
     opacity 0.25s ease-out;
 }
+/* Leave is the dock's only solid red. While recording, Record keeps its neutral fill and only its glyph turns red. */
 .chalk-shell-record .chalk-icon-button[aria-pressed="true"] {
-  background: var(--chalk-danger);
-  color: var(--chalk-on-overlay);
+  background: var(--chalk-raised);
+  color: var(--chalk-danger-text);
 }
 .chalk-shell-record .chalk-icon-button[aria-pressed="true"]:hover {
-  background: var(--chalk-danger-hover);
+  background: var(--chalk-hover);
+}
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"]:active {
+  background: var(--chalk-pressed);
+}
+/* Leave sits one step apart from the controls, so a reach for the last control never lands on it. */
+.chalk-shell-dock .chalk-shell-leave {
+  margin-inline-start: var(--space-2);
+}
+/* Starting or stopping: the glyph breathes until the server answers, so a click never looks missed. */
+.chalk-shell-record[data-pending] .chalk-icon-button svg {
+  animation: chalk-shell-record-pending 0.6s ease-in-out infinite alternate;
+}
+@keyframes chalk-shell-record-pending {
+  to {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chalk-shell-record[data-pending] .chalk-icon-button svg {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 .chalk-shell-chat {
   inset-inline-end: 20px;
 }
+.chalk-call-timer {transition: color 0.2s ease-out;}
 .chalk-shell-phone {
   display: none;
 }
@@ -446,9 +470,11 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   box-shadow: var(--chalk-shadow);
 }
 ${phoneRules(`
-  .chalk-shell-details-heading {display:none;}
-  .chalk-shell-detail-action,.chalk-invite-link[data-variant="menu"],.chalk-details-row {min-height:48px;}
+  .chalk-shell-details-heading {padding:0 var(--space-3) var(--space-2);}
+  .chalk-shell-details-heading :is(h2, .chalk-icon-button) {display:none;}
+  .chalk-shell-detail-action,.chalk-details-row {min-height:48px;}
   .chalk-shell-diagnostics-copy .chalk-copy {width:44px;height:44px;}
+  .chalk-shell-dock .chalk-shell-leave {margin-inline-start:0;}
   .chalk-shell-dock {
     height: 52px;
     justify-content: space-between;

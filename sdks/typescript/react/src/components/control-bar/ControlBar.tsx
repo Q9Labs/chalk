@@ -123,7 +123,9 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       {!reactions && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
       {has("record") && (props.onToggleRecording || props.displayOnly) ? (
-        <span className="chalk-shell-record chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span>
+        <span className="chalk-shell-record chalk-shell-desktop" data-pending={props.isRecordingPending || undefined}>
+          {iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}
+        </span>
       ) : null}
 
       <span className="chalk-shell-phone">
@@ -202,7 +204,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
           onLeave={props.onLeft}
           onEndForEveryone={props.onEndForEveryone}
           renderButton={(buttonProps) => (
-            <ChalkIconButton {...buttonProps} size="lg" tone="danger" aria-label="Leave call">
+            <ChalkIconButton {...buttonProps} size="lg" tone="danger" className="chalk-shell-leave" aria-label="Leave call">
               <ShellIcon name="hang" />
             </ChalkIconButton>
           )}
@@ -213,7 +215,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   );
 });
 ControlBarSurface.displayName = "ControlBarSurface";
-/** A standalone dock has no call toast stack, so its media notice or command failure gets one of its own, dismissible until the message changes. */
+/** A standalone dock has no call toast stack, so its media notice or command failure gets one of its own, dismissible until the message changes. Inside a call (`onCommandError` set) the call's own stack shows both, above the dock. */
 function ControlBarNotice({ message }: { readonly message: string | undefined }): React.JSX.Element | null {
   const [dismissed, setDismissed] = useState<string | undefined>(undefined);
   if (!message || message === dismissed) return null;
@@ -226,7 +228,7 @@ export function ControlBar(props: ControlBarProps): React.JSX.Element {
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <ControlBarNotice message={mediaNotice ?? failure} />
+      {props.onCommandError ? null : <ControlBarNotice message={mediaNotice ?? failure} />}
       {requestingDevice ? (
         <Suspense fallback={null}>
           <LazyDeviceAccessWaiting device={requestingDevice} />
