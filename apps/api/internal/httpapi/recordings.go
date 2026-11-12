@@ -327,8 +327,6 @@ func recordingReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-var recordingDownloadRules = errorRules{}
-
 var recordingRules = errorRules{
 	ruleFor(apiErrorInvalidTenantID, recordings.ErrInvalidTenantID),
 	ruleFor(apiErrorInvalidRecordingID, recordings.ErrInvalidRecordingID),
