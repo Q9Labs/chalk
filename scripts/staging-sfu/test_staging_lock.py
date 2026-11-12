@@ -181,6 +181,15 @@ time.sleep(120)
             status = lock.run(args)
         return status, started.exists(), clock[0]
 
+    def test_every_workflow_passes_gate_lease_a_holder_and_purpose_the_lock_accepts(self):
+        # A quoted shell expansion as the purpose ("${proofs[*]}") held a whole cut: staging-lock refused the spaces.
+        calls = []
+        for workflow in sorted((Path(__file__).parents[2] / ".github/workflows").glob("*.yml")):
+            calls += re.findall(r"scripts/staging-sfu/gate-lease (\S+) (\S+) ", workflow.read_text())
+        self.assertGreaterEqual(len(calls), 3)
+        for holder, purpose in calls:
+            self.assertEqual((lock.label(holder), lock.label(purpose)), (holder, purpose))
+
     def test_cut_outwaits_a_cloudflare_latency_run_that_owns_the_lease_for_its_whole_step(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/real-call-proof.yml").read_text()
         wait = int(re.search(r"STAGING_LEASE_WAIT=(\d+) scripts/staging-sfu/gate-lease nightly-proof ", workflow).group(1))

@@ -265,7 +265,7 @@ jobs:
             status_dir=.private/proof-status
             for proof in "${proofs[@]}"; do echo "${RUN_PREFIX}-${proof}" >> .private/proof-run-ids; done
             group=0
-            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof "${proofs[*]}" "$RUN_PREFIX" -- scripts/staging-sfu/run-proofs "$RUN_PREFIX" "$status_dir" "${proofs[@]}" || group=$?
+            STAGING_LEASE_WAIT=1800 scripts/staging-sfu/gate-lease nightly-proof real-call-proofs "$RUN_PREFIX" -- scripts/staging-sfu/run-proofs "$RUN_PREFIX" "$status_dir" "${proofs[@]}" || group=$?
             for proof in "${proofs[@]}"; do
               if [ ! -f "$status_dir/$proof" ]; then
                 results+=("$proof=not-run")
