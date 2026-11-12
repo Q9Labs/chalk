@@ -6,7 +6,7 @@ import type { ChalkProps } from "@q9labsai/chalk-react";
 const apiFetch = withRequestContext();
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
 type ReportConnection = Pick<ReturnType<SpaceClient["getSnapshot"]>["connection"], "lastError"> & { readonly status: string };
-export const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
+const reportCredentialExpiredReason = "Your call access has expired, so this report cannot be sent. You can copy your text before closing.";
 const reportsOffReason = "Reporting is temporarily unavailable. Your draft is kept here.";
 
 /** Why a report cannot be sent right now, or nothing. "Report a problem" stays visible either way, and the dialog says why it cannot send. */
