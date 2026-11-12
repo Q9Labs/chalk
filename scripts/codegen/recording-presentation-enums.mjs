@@ -22,7 +22,10 @@ const go = `// ${header}
 
 package recordingpresentation
 
-${enums.filter(({ goUnused }) => !goUnused).map(({ name, values }) => `var ${name} = map[string]struct{}{${values.map((value) => `${JSON.stringify(value)}: {}`).join(", ")}}`).join("\n\n")}
+${enums
+  .filter(({ goUnused }) => !goUnused)
+  .map(({ name, values }) => `var ${name} = map[string]struct{}{${values.map((value) => `${JSON.stringify(value)}: {}`).join(", ")}}`)
+  .join("\n\n")}
 `;
 // Same layout oxfmt gives the file at the repo print width, so the format check passes on generated output.
 const PRINT_WIDTH = 300;
