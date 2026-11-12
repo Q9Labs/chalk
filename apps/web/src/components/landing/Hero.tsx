@@ -49,7 +49,7 @@ function JoinForm() {
 export function CallActions() {
   return (
     <div className="hact">
-      <a className="btn pri lg" href={START_CALL_HREF}>
+      <a className="btn pri lg" href={START_CALL_HREF} data-call-cta>
         <Icon name="plus" />
         Start a call
       </a>

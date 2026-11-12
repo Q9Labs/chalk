@@ -46,6 +46,7 @@
   --site-shadow-hero-light: 0 50px 110px -40px rgba(27, 28, 31, 0.35);
   --site-glow-hero: 0 -20px 80px -20px rgba(80, 140, 255, 0.35);
   --site-shadow-key-edge: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  --site-shadow-hairline: inset 0 0 0 1px var(--chalk-line-strong);
 }
 
 .site[data-chalk-theme="light"] {
@@ -351,6 +352,12 @@ html:has(.site[data-chalk-theme="light"]) {
     font: 600 var(--type-caption)/1 var(--chalk-font-family);
   }
 
+  /* Lowercase key names sit on the baseline, so they drop below the arrows' center and read heavier; this lifts and lightens them to match. */
+  & .kbd[data-word] {
+    padding-bottom: var(--space-0-5);
+    font-weight: 500;
+  }
+
   & .dot {
     display: inline-block;
     flex: none;
@@ -524,6 +531,25 @@ html:has(.site[data-chalk-theme="light"]) {
 
   & .nav-menu {
     display: none;
+  }
+
+  /* While the page's own Start a call is on screen, the bar's is a ghost pill; it fills in once that button scrolls away. */
+  & .nav-start {
+    transition:
+      background-color 160ms ease-out,
+      color 160ms ease-out,
+      box-shadow 160ms ease-out,
+      transform 0.15s ease-out;
+  }
+
+  & .nav-start[data-quiet] {
+    background: none;
+    color: var(--chalk-text);
+    box-shadow: var(--site-shadow-hairline);
+  }
+
+  & .nav-start[data-quiet]:hover {
+    background: var(--chalk-raised);
   }
 
   & .navsheet {
@@ -1099,11 +1125,14 @@ html:has(.site[data-chalk-theme="light"]) {
     font-size: var(--type-body-lg);
   }
 
+  /* The clone command is one copyable line: it scrolls sideways before it ever wraps. */
   & .ghrow .mono {
     display: block;
     margin-top: var(--space-0-5);
     font-size: var(--type-caption);
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 }
 
@@ -1272,10 +1301,6 @@ html:has(.site[data-chalk-theme="light"]) {
 
     & .hostbar .when-wide {
       display: none;
-    }
-
-    & .ghrow .mono > span {
-      display: block;
     }
   }
 }
