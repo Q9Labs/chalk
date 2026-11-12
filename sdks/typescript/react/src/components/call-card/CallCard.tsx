@@ -25,7 +25,7 @@ export interface CallCardProps {
  */
 export function CallCard({ state, onClose, interactive = true, children, panel, onPanelChange, peopleCount, chatEnabled = true, participantsEnabled = true }: CallCardProps) {
   const narrowWindow = useIsMobile();
-  const phone = useNarrowCall() || narrowWindow;
+  const phone = narrowWindow;
   const id = useId();
   const tabs: ("participants" | "chat")[] = [];
   if (participantsEnabled) tabs.push("participants");

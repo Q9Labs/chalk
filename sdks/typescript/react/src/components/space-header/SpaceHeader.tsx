@@ -42,7 +42,7 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
   const showShortcuts = useCallback(() => setDialog({ kind: "shortcuts", open: true }), []);
   useCallShortcuts(props.shortcuts, showShortcuts);
   const narrowWindow = useMediaQuery("(max-width: 640px)");
-  const phone = useNarrowCall() || narrowWindow;
+  const phone = narrowWindow;
   const chevron = (
     <svg width={phone ? "16" : "14"} height={phone ? "16" : "14"} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden="true">
       <path d="m6 9 6 6 6-6" />

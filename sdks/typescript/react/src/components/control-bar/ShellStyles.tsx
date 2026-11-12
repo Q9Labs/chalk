@@ -6,8 +6,7 @@ export function ShellStyles() {
   );
 }
 /** Phone rules follow a narrow window, or a narrow call inside a wider window. */
-const phoneRules = (rules: string) => `@media (max-width: 640px) {${rules}}
-@container chalk-call (max-width: 640px) {${rules}}`;
+const phoneRules = (rules: string) => `@media (max-width: 640px) {${rules}}`;
 const CALL_SHELL_CSS = `.chalk-shell-dock {
   display: flex;
   align-items: center;
