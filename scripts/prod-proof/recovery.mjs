@@ -21,7 +21,7 @@ import { parseArgs, promisify } from "node:util";
 import { check, createRun, errorEvidence, loadConfig, publicFailure, save } from "./runtime.mjs";
 import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
-import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
+import { createEpisode, createSpace, prepareIntegration } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
 import { lossStepOf } from "./loss-step.mjs";
 import { recoveryOf } from "./recovery-analysis.mjs";
@@ -78,10 +78,7 @@ async function waitReady(page) {
 
 async function callUnderFault(run, origin, settings) {
   const space = await createSpace(run, "chalk_sfu");
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
-  const episode = await run.apiRequest("POST", path, { metadata: { proof_run_id: run.runId } });
-  await trackEpisode(run, space, episode);
-  const ending = episodeEnd(run, `${path}/${episode.id}`);
+  const { episode, ...ending } = await createEpisode(run, space);
   const executablePaths = settings.guest2Chromium ? { 1: settings.guest2Chromium } : undefined;
   try {
     const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane: "chalk_sfu", observeLeave: true, executablePaths });
