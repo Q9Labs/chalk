@@ -1,4 +1,4 @@
-import { readReloadRejoin, reloadRejoinAccess, reloadRejoinStorageKey, writeReloadRejoin, type GetAccess, type SpaceClient } from "@q9labsai/chalk-client";
+import { readReloadRejoin, reloadRejoinAccess, reloadRejoinPresence, reloadRejoinStorageKey, writeReloadRejoin, type GetAccess, type SpaceClient } from "@q9labsai/chalk-client";
 import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
@@ -125,9 +125,7 @@ function ownerAccess(spaceId: string, userId: string) {
       ...reloadRejoinAccess(current),
       space: spaceId,
       tenantId: current.subject.tenant_id,
-      displayName: snapshot.self.displayName ?? "",
-      microphone: snapshot.media.local.microphone.state === "enabled",
-      camera: snapshot.media.local.camera.state === "enabled",
+      ...reloadRejoinPresence(snapshot, ""),
       ownerJoinKey: joinKey,
       ownerUserId: userId,
     };

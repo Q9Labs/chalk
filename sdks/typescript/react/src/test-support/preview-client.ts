@@ -73,6 +73,10 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     options.onCommand?.(command, nextSnapshot);
   };
 
+  const dispose = (): void => {
+    cameraPreviewClient?.dispose();
+    listeners.clear();
+  };
   const client = {
     media: {
       observeAudioElement: () => ({ played: () => {}, detach: () => {} }),
@@ -168,10 +172,8 @@ export function createPreviewClient(initialSnapshot = createSnapshot(), options:
     whiteboard: { transport: () => null },
     join: () => dispatch({ type: "join" }),
     leave: () => dispatch({ type: "leave" }),
-    dispose: () => {
-      cameraPreviewClient?.dispose();
-      listeners.clear();
-    },
+    close: async () => dispose(),
+    dispose,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
