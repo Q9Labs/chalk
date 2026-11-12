@@ -80,7 +80,7 @@ jobs:
     with:
       environment: nightly
       # long-call holds one call for about 11 minutes across media-access refreshes; nightly only.
-      proofs: camera-share call-artifacts long-call
+      proofs: camera-share call-artifacts long-call chat-upload
       media_plane: chalk_sfu
       # Only the first cut of a UTC day pays for a Transcript (the plan decides); every cut still records and checks the call.
       transcribe: ${{ needs.plan.outputs.transcribe == 'true' }}

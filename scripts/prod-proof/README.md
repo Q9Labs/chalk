@@ -22,6 +22,7 @@ pnpm prod:proof transcript
 CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts # three guests, scripted call, automatic Recording and Transcript (about 2 minutes of call; CHALK_PROOF_CAPTURE_RESTART_COMMAND adds a capture-node restart)
 pnpm prod:proof leave
 pnpm prod:proof offreason # Node only: no browser, media, or ffmpeg
+pnpm prod:proof chat-upload # Node only: a chat attachment upload from an origin on no list, through the storage bucket's CORS rule
 pnpm prod:proof:compare-leave # staging plus an in-memory production baseline config
 ```
 

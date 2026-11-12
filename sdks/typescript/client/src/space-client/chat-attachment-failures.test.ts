@@ -5,6 +5,7 @@ import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
 const message = "Could not reach the chat attachment service (network or browser access failure).";
+const storageMessage = "Could not send the file to storage (network or browser access failure).";
 const file = { fileName: "note.txt", mimeType: "text/plain", bytes: new TextEncoder().encode("hello").buffer } as const;
 const attachment = { attachmentId: "attachment-1", fileName: "note.txt", mimeType: "text/plain", byteLength: 5 } as const;
 
@@ -100,9 +101,23 @@ describe("public chat attachment failures", () => {
     const client = attachmentClient(({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch: descriptorFetch }), storageFetch);
     try {
       await client.join({ microphone: false, camera: false });
-      await expect(client.chat.files.upload(file)).rejects.toMatchObject({ code: "collaboration.unavailable", recoverable: true, message });
+      await expect(client.chat.files.upload(file)).rejects.toMatchObject({ code: "collaboration.unavailable", recoverable: true, message: storageMessage, uploadFailure: { kind: "storage_unreachable" } });
       expect(storageFetch).toHaveBeenCalledTimes(1);
       expect(descriptorFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      client.dispose();
+    }
+  });
+
+  it("keeps the HTTP status when storage rejects the signed upload", async () => {
+    const descriptorFetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(Response.json({ attachmentId: "attachment-1", uploadId: "upload-1", method: "PUT", uploadUrl: "https://storage.example/upload", headers: { "content-type": "text/plain" }, expiresAt: "2099-01-01T00:00:00Z" }, { status: 201 }));
+    const storageFetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status: 403 }));
+    const client = attachmentClient(({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch: descriptorFetch }), storageFetch);
+    try {
+      await client.join({ microphone: false, camera: false });
+      await expect(client.chat.files.upload(file)).rejects.toMatchObject({ code: "command.rejected", recoverable: false, message: "Attachment upload failed with HTTP 403", uploadFailure: { kind: "storage_rejected", httpStatus: 403 } });
     } finally {
       client.dispose();
     }

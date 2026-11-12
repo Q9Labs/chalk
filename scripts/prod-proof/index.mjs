@@ -5,6 +5,7 @@ import { leaveProof } from "./leave.mjs";
 import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
 import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
 import { offReasonProof } from "./off-reason.mjs";
+import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
@@ -21,6 +22,8 @@ const plans = {
   // Finds or creates Promote's two own-SFU proof Spaces by slug and moves them to chalk_sfu. Run it before the release that adds the per-Space setting deploys.
   "own-sfu-spaces": { media: false, ensureSpaces: true, webhooks: false, proofs: ["own-sfu-spaces"] },
   offreason: { media: false, webhooks: false, proofs: ["offreason"] },
+  // A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket. No browser or media.
+  "chat-upload": { media: false, webhooks: false, proofs: ["chat-upload"] },
   all: {
     media: true,
     cameraShare: true,
@@ -81,12 +84,12 @@ const plans = {
   },
 };
 const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
              macOS say or Linux espeak; pnpm install and pnpm --filter @q9labsai/chalk-client exec playwright install chromium.
-offreason needs no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the path to a built SDK entry to prove instead of the checkout, such as an installed package's dist/index.js.
+offreason and chat-upload need no browser. CHALK_PROOF_CANDIDATE_SDK_ENTRY (optional) is the path to a built SDK entry to prove instead of the checkout, such as an installed package's dist/index.js.
 Private artifacts: .private/prod-proof/<run>/ (never commit). Configuration is loaded from 1Password or environment variables; API readiness checks capabilities.`;
 const args = process.argv.slice(2);
 const mode = args.find((argument) => !argument.startsWith("--")) ?? "all";
@@ -133,6 +136,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     "leave-own-sfu": () => leaveOwnSfuProof(run),
     "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
     offreason: () => offReasonProof(run),
+    "chat-upload": () => chatUploadProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);
       return captured.camera;

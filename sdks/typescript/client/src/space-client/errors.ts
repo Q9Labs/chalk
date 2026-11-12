@@ -1,5 +1,5 @@
 import { Data } from "effect";
-import { ChalkChatFileError } from "../chat-files/types";
+import { ChalkChatFileError, chatUploadFailureOf } from "../chat-files/types";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
 import type { ConnectionError } from "../connection/types";
 import { permissionBlockOf } from "../media/capture-error";
@@ -89,15 +89,21 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
 }
 
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {
-  if (!(cause instanceof ChalkChatFileError) || cause.code !== "unavailable") return null;
+  if (!(cause instanceof ChalkChatFileError)) return null;
+  const uploadFailure = chatUploadFailureOf(cause);
+  const detail = uploadFailure ? { uploadFailure } : {};
+  if (cause.operation === "store_upload") {
+    return new SpaceClientError({ code: cause.code === "unavailable" ? "collaboration.unavailable" : "command.rejected", recoverable: cause.recoverable, message: cause.message, ...detail });
+  }
+  if (cause.code !== "unavailable") return null;
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
   }
-  return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message });
+  return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message, ...detail });
 }
 
 export function failureFromError(error: SpaceClientError): ClientFailure {
-  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}), ...(error.sync ? { sync: error.sync } : {}) });
+  return Object.freeze({ code: error.code, recoverable: error.recoverable, message: error.message, ...(error.permissionBlock ? { permissionBlock: error.permissionBlock } : {}), ...(error.sync ? { sync: error.sync } : {}), ...(error.uploadFailure ? { uploadFailure: error.uploadFailure } : {}) });
 }
 
 export function isAccessInvalid(cause: unknown): boolean {

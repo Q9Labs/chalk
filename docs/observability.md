@@ -961,6 +961,17 @@ A browser camera-effects processing failure records `media_state` with
 the generated track ends. These are existing allowlisted labels. No error text,
 device identifiers, image data, or camera frames enter the diagnostic buffer.
 
+A failed chat file upload uses the same endpoint. The `chat_upload_failed` event
+is also its own trigger (`upload_failed`, Warn-level, sharing the participant
+failure cooldown). `upload_failure` names where the upload broke:
+`initiate_failed` or `finalize_failed` (an API error; `http_status` carries the
+status when the API answered), `storage_rejected` (the presigned storage URL
+answered with `http_status`), or `storage_unreachable` (the browser got no HTTP
+answer from storage: a network failure or a CORS block). A page with
+`storage_unreachable` from a browser that otherwise works means the bucket CORS
+rule is wrong. The report needs an open call connection, so a chat that runs
+outside a call does not report.
+
 Listener audio receive health uses the same report endpoint, not a second
 diagnostic channel. It tracks desired remote `microphone` and `screen_audio`
 publications, never camera or local capture. Two event names also serve as report

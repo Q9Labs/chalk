@@ -250,12 +250,15 @@ explicit generated name. All backend configuration and credentials are
 provided outside this tree; `scripts/recorder/gate.sh` always initializes with the backend
 disabled and never applies a provider.
 
-The private bucket also serves browser-authorized whiteboard files through
-short-lived presigned URLs. Every apply must set `whiteboard_allowed_origins`
-to the exact web origins for that environment. The managed CORS rule permits
-only `GET`, `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
-checksum and attachment identity headers used by chat uploads; it does not make
-the bucket public. Wildcard origins, paths, and trailing slashes are rejected.
+The private bucket also serves browser-authorized chat and whiteboard files
+through short-lived presigned URLs. The managed CORS rule allows any origin for
+`GET` and `PUT`, the four headers signed by whiteboard-v1, and the SHA-256
+checksum and attachment identity headers used by chat uploads. There is no
+origin list to maintain: the API authenticates the participant before it issues
+a URL, and the URL's signature is the access control, so an origin list adds
+nothing against a caller who holds the URL. The rule does not make the bucket
+public; keep its r2.dev and custom domains off. A new tenant or portal origin
+needs no bucket change.
 
 The reference bootstrap templates mirror the external controller's cloud-init
 contract. The issuer verifies live DigitalOcean inventory before returning a
