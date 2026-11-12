@@ -20,8 +20,8 @@ export const ROUTE_METRICS = {
   routeJsGzipKiB: { segment: "js_gzip_kib", unit: "kib", description: "Gzipped JavaScript the pre-join route loads" },
   routeCssGzipKiB: { segment: "css_gzip_kib", unit: "kib", description: "Gzipped CSS the pre-join route loads" },
 };
-export const CALL_DEVICES = ["laptop", "phone"];
-export const CALL_SCENARIOS = ["calm-six", "grid-24", "panels", "spotlight-share", "board", "reactions", "reconnect", "first-load"];
+const CALL_DEVICES = ["laptop", "phone"];
+const CALL_SCENARIOS = ["calm-six", "grid-24", "panels", "spotlight-share", "board", "reactions", "reconnect", "first-load"];
 
 export const callMetricId = (device, scenario, metric) => `web.${device}.${scenario}.${CALL_METRICS[metric].segment}`;
 export const routeMetricId = (metric) => `web.route.${ROUTE_METRICS[metric].segment}`;
