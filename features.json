@@ -427,6 +427,7 @@
         ".github/workflows/cache-warm.yml",
         ".github/workflows/ci.yml",
         ".github/workflows/codeql.yml",
+        ".github/workflows/formal-external-operations.yml",
         ".github/workflows/gate.yml",
         ".github/workflows/host-change-check.yml",
         ".github/workflows/hotfix.yml",
