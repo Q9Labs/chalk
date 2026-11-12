@@ -93,7 +93,7 @@ func issueAccessGrantEndpoint(
 			stage := "tenant_authorization"
 			defer func() {
 				if failure != nil {
-					apiErr := accessGrantAPIError(failure)
+					apiErr := episodeLifecycleRules.apiError(failure)
 					observability.LogAccessGrantFailure(ctx, stage, apiErr.Code)
 				}
 			}()
@@ -276,7 +276,7 @@ func issueAccessGrantEndpoint(
 		RequestBody("IssueAccessGrantRequest", issueAccessGrantBody{}).
 		Responds(http.StatusCreated, "AccessGrant", accessGrantResponse{}).
 		Errors(accessGrantErrors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorParticipantNotFound, apiErrorParticipantGenerationMismatch, apiErrorMediaPlaneUnavailable, apiErrorMediaClientUnsupported, apiErrorRateLimited))...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 func decodeIssueAccessGrantRequest(request *http.Request) (issueAccessGrantRequest, error) {

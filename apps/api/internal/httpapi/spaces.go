@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -163,7 +162,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		RequestBody("CreateSpaceRequest", createSpaceRequest{}).
 		Responds(http.StatusCreated, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceArtifactPolicy, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorSpaceSlugAlreadyUsed, apiErrorRateLimited)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
@@ -189,7 +188,7 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
 		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
 		Errors(spaceReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorInvalidSpaceArchiveFilter)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
@@ -205,7 +204,7 @@ func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoin
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[updateSpaceEndpointRequest, spaceResponse] {
@@ -227,7 +226,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 		RequestBody("UpdateSpaceRequest", updateSpaceRequest{}).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidRequest, apiErrorInvalidMediaPlane, apiErrorSpaceMediaPlaneNotPermitted, apiErrorInvalidSpaceID, apiErrorInvalidSpaceArtifactPolicy, apiErrorSpaceSlugAlreadyUsed, apiErrorSpaceNotFound, apiErrorRateLimited)...).
-		MapErrors(spaceEndpointAPIError)
+		ErrorRules(spaceRules)
 }
 
 func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
@@ -246,7 +245,7 @@ func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules)
 }
 
 func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
@@ -265,7 +264,7 @@ func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
 	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "Space", spaceResponse{}).
-		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError)
+		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules)
 }
 
 func decodeCreateSpaceRequest(r *http.Request) (createSpaceEndpointRequest, error) {
@@ -364,49 +363,19 @@ func spaceWriteErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func spaceEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := spaceServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func spaceServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, spaces.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, spaces.ErrInvalidSpaceID):
-		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, spaces.ErrInvalidSpaceName):
-		return apiErrorInvalidSpaceName, true
-	case errors.Is(err, spaces.ErrInvalidSpaceSlug):
-		return apiErrorInvalidSpaceSlug, true
-	case errors.Is(err, spaces.ErrInvalidMediaPlane):
-		return apiErrorInvalidMediaPlane, true
-	case errors.Is(err, spaces.ErrMediaPlaneNotPermitted):
-		return apiErrorSpaceMediaPlaneNotPermitted, true
-	case errors.Is(err, spaces.ErrInvalidAdmissionPolicy),
-		errors.Is(err, spaces.ErrInvalidEpisodeDuration),
-		errors.Is(err, spaces.ErrInvalidEpisodeCeiling),
-		errors.Is(err, spaces.ErrInvalidLingerWindow),
-		errors.Is(err, spaces.ErrInvalidSpaceField):
-		return apiErrorInvalidSpaceField, true
-	case errors.Is(err, spaces.ErrInvalidRecordingPolicy),
-		errors.Is(err, spaces.ErrInvalidTranscriptionPolicy):
-		return apiErrorInvalidSpaceArtifactPolicy, true
-	case errors.Is(err, spaces.ErrSpaceNotFound):
-		return apiErrorSpaceNotFound, true
-	case errors.Is(err, spaces.ErrSpaceSlugAlreadyUsed):
-		return apiErrorSpaceSlugAlreadyUsed, true
-	case errors.Is(err, spaces.ErrInvalidRequestKey):
-		return apiErrorInvalidRequestKey, true
-	case errors.Is(err, spaces.ErrIdempotencyConflict):
-		return apiErrorIdempotencyConflict, true
-	default:
-		return APIError{}, false
-	}
+var spaceRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, spaces.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidSpaceID, spaces.ErrInvalidSpaceID),
+	ruleFor(apiErrorInvalidSpaceName, spaces.ErrInvalidSpaceName),
+	ruleFor(apiErrorInvalidSpaceSlug, spaces.ErrInvalidSpaceSlug),
+	ruleFor(apiErrorInvalidMediaPlane, spaces.ErrInvalidMediaPlane),
+	ruleFor(apiErrorSpaceMediaPlaneNotPermitted, spaces.ErrMediaPlaneNotPermitted),
+	ruleFor(apiErrorInvalidSpaceField, spaces.ErrInvalidAdmissionPolicy, spaces.ErrInvalidEpisodeDuration, spaces.ErrInvalidEpisodeCeiling, spaces.ErrInvalidLingerWindow, spaces.ErrInvalidSpaceField),
+	ruleFor(apiErrorInvalidSpaceArtifactPolicy, spaces.ErrInvalidRecordingPolicy, spaces.ErrInvalidTranscriptionPolicy),
+	ruleFor(apiErrorSpaceNotFound, spaces.ErrSpaceNotFound),
+	ruleFor(apiErrorSpaceSlugAlreadyUsed, spaces.ErrSpaceSlugAlreadyUsed),
+	ruleFor(apiErrorInvalidRequestKey, spaces.ErrInvalidRequestKey),
+	ruleFor(apiErrorIdempotencyConflict, spaces.ErrIdempotencyConflict),
 }
 
 // SpacePlaneService reports the plane a new Episode would start on in each Space.

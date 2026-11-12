@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -117,7 +116,7 @@ func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[init
 		RequestBody("InitiateChatAttachmentUploadRequest", initiateChatAttachmentBody{}).
 		Responds(http.StatusCreated, "ChatAttachmentUpload", chatAttachmentUploadResponse{}).
 		Errors(chatAttachmentErrors()...).
-		MapErrors(chatAttachmentAPIError)
+		ErrorRules(chatAttachmentRules)
 }
 
 func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[finalizeChatAttachmentRequest, chatAttachmentResponse] {
@@ -143,7 +142,7 @@ func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[fina
 		Parameters(chatUploadIDParameter()).
 		Responds(http.StatusOK, "ChatAttachment", chatAttachmentResponse{}).
 		Errors(chatAttachmentErrors()...).
-		MapErrors(chatAttachmentAPIError)
+		ErrorRules(chatAttachmentRules)
 }
 
 func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[downloadChatAttachmentRequest, chatAttachmentDownloadResponse] {
@@ -171,7 +170,7 @@ func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[down
 		Parameters(chatAttachmentIDParameter()).
 		Responds(http.StatusOK, "ChatAttachmentDownload", chatAttachmentDownloadResponse{}).
 		Errors(chatAttachmentErrors()...).
-		MapErrors(chatAttachmentAPIError)
+		ErrorRules(chatAttachmentRules)
 }
 
 func requireChatParticipant(verifier ChatParticipantVerifier) func(http.Handler) http.Handler {
@@ -253,32 +252,15 @@ func chatAttachmentErrors() []APIError {
 	}
 }
 
-func chatAttachmentAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, chatattachments.ErrInvalidInput):
-		return apiErrorChatAttachmentInvalid, true
-	case errors.Is(err, chatattachments.ErrPermissionDenied):
-		return apiErrorForbidden, true
-	case errors.Is(err, chatattachments.ErrClientAttachmentIDConflict):
-		return apiErrorChatAttachmentIDConflict, true
-	case errors.Is(err, chatattachments.ErrQuotaExceeded):
-		return apiErrorChatAttachmentQuota, true
-	case errors.Is(err, chatattachments.ErrUploadNotFound):
-		return apiErrorChatAttachmentUploadMissing, true
-	case errors.Is(err, chatattachments.ErrUploadExpired):
-		return apiErrorChatAttachmentUploadExpired, true
-	case errors.Is(err, chatattachments.ErrUploadNotReady):
-		return apiErrorChatAttachmentUploadPending, true
-	case errors.Is(err, chatattachments.ErrAttachmentNotFound):
-		return apiErrorChatAttachmentMissing, true
-	case errors.Is(err, chatattachments.ErrFileTransferFailed),
-		errors.Is(err, objectstorage.ErrObjectNotFound),
-		errors.Is(err, objectstorage.ErrObjectAlreadyExists):
-		return apiErrorChatAttachmentTransfer, true
-	case errors.Is(err, objectstorage.ErrStoreUnavailable),
-		errors.Is(err, objectstorage.ErrProviderFailed):
-		return apiErrorChatAttachmentStorage, true
-	default:
-		return APIError{}, false
-	}
+var chatAttachmentRules = errorRules{
+	ruleFor(apiErrorChatAttachmentInvalid, chatattachments.ErrInvalidInput),
+	ruleFor(apiErrorForbidden, chatattachments.ErrPermissionDenied),
+	ruleFor(apiErrorChatAttachmentIDConflict, chatattachments.ErrClientAttachmentIDConflict),
+	ruleFor(apiErrorChatAttachmentQuota, chatattachments.ErrQuotaExceeded),
+	ruleFor(apiErrorChatAttachmentUploadMissing, chatattachments.ErrUploadNotFound),
+	ruleFor(apiErrorChatAttachmentUploadExpired, chatattachments.ErrUploadExpired),
+	ruleFor(apiErrorChatAttachmentUploadPending, chatattachments.ErrUploadNotReady),
+	ruleFor(apiErrorChatAttachmentMissing, chatattachments.ErrAttachmentNotFound),
+	ruleFor(apiErrorChatAttachmentTransfer, chatattachments.ErrFileTransferFailed, objectstorage.ErrObjectNotFound, objectstorage.ErrObjectAlreadyExists),
+	ruleFor(apiErrorChatAttachmentStorage, objectstorage.ErrStoreUnavailable, objectstorage.ErrProviderFailed),
 }

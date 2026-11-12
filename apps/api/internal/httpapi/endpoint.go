@@ -21,14 +21,13 @@ type RouteEndpoint interface {
 
 type EndpointDecoder[Request any] func(r *http.Request) (Request, error)
 type EndpointHandler[Request any, Response any] func(ctx context.Context, request Request) (Response, error)
-type EndpointErrorMapper func(err error) (APIError, bool)
 type EndpointWriter[Response any] func(w http.ResponseWriter, r *http.Request, status int, response Response)
 
 type Endpoint[Request any, Response any] struct {
 	contract       APIRouteContract
 	decode         EndpointDecoder[Request]
 	handle         EndpointHandler[Request, Response]
-	mapError       EndpointErrorMapper
+	rules          errorRules
 	middlewares    []func(http.Handler) http.Handler
 	afterRateLimit []func(http.Handler) http.Handler
 	write          EndpointWriter[Response]
@@ -175,8 +174,13 @@ func (e Endpoint[Request, Response]) Errors(errors ...APIError) Endpoint[Request
 	return e
 }
 
-func (e Endpoint[Request, Response]) MapErrors(mapper EndpointErrorMapper) Endpoint[Request, Response] {
-	e.mapError = mapper
+// ErrorRules sets how domain errors become API errors. Earlier sets win, so an
+// endpoint lists its own rules before the shared ones.
+func (e Endpoint[Request, Response]) ErrorRules(sets ...errorRules) Endpoint[Request, Response] {
+	e.rules = nil
+	for _, set := range sets {
+		e.rules = append(e.rules, set...)
+	}
 	return e
 }
 
@@ -297,15 +301,7 @@ func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http
 }
 
 func (e Endpoint[Request, Response]) apiError(err error) APIError {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr
-	}
-	if e.mapError != nil {
-		if apiErr, ok := e.mapError(err); ok {
-			return apiErr
-		}
-	}
-	return apiErrorInternal
+	return e.rules.apiError(err)
 }
 
 func (e Endpoint[Request, Response]) successStatus() int {
@@ -359,4 +355,33 @@ func appendAPIError(errors []APIError, apiError APIError) []APIError {
 		}
 	}
 	return append(errors, apiError)
+}
+
+// errorRule says which API error a domain error becomes.
+type errorRule struct {
+	kind   APIError
+	causes []error
+}
+
+func ruleFor(kind APIError, causes ...error) errorRule {
+	return errorRule{kind: kind, causes: causes}
+}
+
+// errorRules is an ordered table: the first rule with a matching cause wins.
+type errorRules []errorRule
+
+// apiError returns an APIError found in err as is, then the first matching
+// rule, then the authorization error or internal error for anything else.
+func (rules errorRules) apiError(err error) APIError {
+	if apiErr, ok := errorAsAPIError(err); ok {
+		return apiErr
+	}
+	for _, rule := range rules {
+		for _, cause := range rule.causes {
+			if errors.Is(err, cause) {
+				return rule.kind
+			}
+		}
+	}
+	return authorizationAPIError(err)
 }

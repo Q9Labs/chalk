@@ -38,5 +38,5 @@ func getEpisodeAttendanceEndpoint(service EpisodeLifecycleService, authorizer Te
 		return result, nil
 	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter()).Responds(http.StatusOK, "EpisodeAttendance", episodeAttendanceResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorEpisodeNotFound, apiErrorRateLimited)...).MapErrors(episodeLifecycleEndpointAPIError)
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorEpisodeNotFound, apiErrorRateLimited)...).ErrorRules(episodeLifecycleRules)
 }

@@ -2,12 +2,8 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
-	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/authorization"
-	"github.com/q9labs/chalk/apps/api/internal/memberships"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -50,7 +46,7 @@ func transcriptDocumentEndpoint(service TranscriptArtifactService, objects Recor
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
-	}).Needs(service, objects).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+	}).Needs(service, objects).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).ErrorRules(transcriptArtifactRules, objectStorageRules, transcriptDocumentRules)
 }
 
 func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
@@ -124,15 +120,4 @@ func newTranscriptDocumentResponse(transcript transcripts.Transcript, document t
 	return response
 }
 
-func transcriptDocumentAPIError(err error) (APIError, bool) {
-	if apiErr, ok := transcriptArtifactAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := objectStorageAPIError(err); ok {
-		return apiErr, true
-	}
-	if errors.Is(err, transcripts.ErrDocumentTooLarge) || errors.Is(err, transcripts.ErrInvalidDocument) {
-		return apiErrorInternal, true
-	}
-	return APIError{}, false
-}
+var transcriptDocumentRules = errorRules{}

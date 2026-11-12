@@ -16,7 +16,7 @@ func createWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 			return webhookEndpointWithSecretResponse{}, err
 		}
 		return newWebhookEndpointWithSecretResponse(result.Endpoint, result.Secret), nil
-	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), idempotencyKeyParameter()).RequestBody("CreateWebhookEndpointRequest", createWebhookContractBody{}).Responds(http.StatusCreated, "WebhookEndpointWithSecret", webhookEndpointWithSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), idempotencyKeyParameter()).RequestBody("CreateWebhookEndpointRequest", createWebhookContractBody{}).Responds(http.StatusCreated, "WebhookEndpointWithSecret", webhookEndpointWithSecretResponse{}).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }
 
 func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhooksRequest, webhookEndpointListResponse] {
@@ -34,41 +34,41 @@ func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) E
 			response.Endpoints = append(response.Endpoints, newWebhookEndpointResponse(endpoint))
 		}
 		return response, nil
-	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "WebhookEndpointList", webhookEndpointListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).Responds(http.StatusOK, "WebhookEndpointList", webhookEndpointListResponse{}).Errors(webhookReadErrors()...).ErrorRules(webhookRules)
 }
 
 func getWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookIDsRequest, webhookEndpointResponse] {
 	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "getWebhookEndpoint", decodeWebhookIDsRequest, func(ctx context.Context, request webhookIDsRequest) (webhookEndpointResponse, error) {
 		value, err := service.Get(ctx, request.TenantID, request.EndpointID)
 		return newWebhookEndpointResponse(value), err
-	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter()).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter()).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookReadErrors()...).ErrorRules(webhookRules)
 }
 
 func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[patchWebhookRequest, webhookEndpointResponse] {
 	return Patch("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "updateWebhookEndpoint", decodePatchWebhookRequest, func(ctx context.Context, request patchWebhookRequest) (webhookEndpointResponse, error) {
 		value, err := service.Patch(ctx, request.TenantID, request.EndpointID, request.Body.toInput(request.Revision, request.Key))
 		return newWebhookEndpointResponse(value), err
-	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RequestBody("UpdateWebhookEndpointRequest", patchWebhookContractBody{}).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RequestBody("UpdateWebhookEndpointRequest", patchWebhookContractBody{}).Responds(http.StatusOK, "WebhookEndpoint", webhookEndpointResponse{}).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }
 
 func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[deleteWebhookRequest, noResponse] {
 	return Delete("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "deleteWebhookEndpoint", decodeDeleteWebhookRequest, func(ctx context.Context, request deleteWebhookRequest) (noResponse, error) {
 		return noResponse{}, service.Delete(ctx, request.TenantID, request.EndpointID, request.Revision, request.Key)
-	}).Needs(service).Permission(authorizer, deleteWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RespondsNoBody(http.StatusNoContent).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, deleteWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), ifMatchParameter(), idempotencyKeyParameter()).RespondsNoBody(http.StatusNoContent).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }
 
 func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[rotateWebhookRequest, rotateWebhookSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret", "rotateWebhookEndpointSecret", decodeRotateWebhookRequest, func(ctx context.Context, request rotateWebhookRequest) (rotateWebhookSecretResponse, error) {
 		value, err := service.RotateSecret(ctx, request.TenantID, request.EndpointID, *request.Body.RevokePreviousImmediately.Value, request.Key)
 		return rotateWebhookSecretResponse{EndpointID: value.EndpointID.String(), Revision: value.Revision, Secret: value.Secret, PreviousSecretExpiresAt: responseTime(value.PreviousSecretExpiresAt)}, err
-	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).RequestBody("RotateWebhookSecretRequest", rotateWebhookContractBody{}).Responds(http.StatusOK, "RotateWebhookSecretResponse", rotateWebhookSecretResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).RequestBody("RotateWebhookSecretRequest", rotateWebhookContractBody{}).Responds(http.StatusOK, "RotateWebhookSecretResponse", rotateWebhookSecretResponse{}).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }
 
 func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookActionRequest, webhookDeliveryCreatedResponse] {
 	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test", "testWebhookEndpoint", decodeWebhookActionRequest, func(ctx context.Context, request webhookActionRequest) (webhookDeliveryCreatedResponse, error) {
 		value, err := service.Test(ctx, request.TenantID, request.EndpointID, request.Key, webhooks.EventMetadata{})
 		return newWebhookDeliveryCreatedResponse(value), err
-	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }
 
 func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhookDeliveriesRequest, webhookDeliveryListResponse] {
@@ -86,7 +86,7 @@ func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuth
 			response.Deliveries = append(response.Deliveries, newWebhookDeliveryResponse(delivery))
 		}
 		return response, nil
-	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append(append([]APIParameterContract{tenantIDParameter(), webhookEndpointIDParameter()}, webhookDeliveryFilterParameters()...), paginationParameters()...)...).Responds(http.StatusOK, "WebhookDeliveryList", webhookDeliveryListResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(append(append([]APIParameterContract{tenantIDParameter(), webhookEndpointIDParameter()}, webhookDeliveryFilterParameters()...), paginationParameters()...)...).Responds(http.StatusOK, "WebhookDeliveryList", webhookDeliveryListResponse{}).Errors(webhookReadErrors()...).ErrorRules(webhookRules)
 }
 
 func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryIDsRequest, webhookDeliveryDetailResponse] {
@@ -96,12 +96,12 @@ func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthori
 			return webhookDeliveryDetailResponse{}, err
 		}
 		return newWebhookDeliveryDetailResponse(detail), nil
-	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter()).Responds(http.StatusOK, "WebhookDeliveryDetail", webhookDeliveryDetailResponse{}).Errors(webhookReadErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, readWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(webhookReadRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter()).Responds(http.StatusOK, "WebhookDeliveryDetail", webhookDeliveryDetailResponse{}).Errors(webhookReadErrors()...).ErrorRules(webhookRules)
 }
 
 func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryActionRequest, webhookDeliveryCreatedResponse] {
 	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver", "redeliverWebhookDelivery", decodeWebhookDeliveryActionRequest, func(ctx context.Context, request webhookDeliveryActionRequest) (webhookDeliveryCreatedResponse, error) {
 		value, err := service.Redeliver(ctx, request.TenantID, request.EndpointID, request.DeliveryID, request.Key)
 		return newWebhookDeliveryCreatedResponse(value), err
-	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).MapErrors(webhookAPIError)
+	}).Needs(service).Permission(authorizer, writeWebhooksPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), webhookEndpointIDParameter(), webhookDeliveryIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "WebhookDeliveryCreated", webhookDeliveryCreatedResponse{}).Errors(webhookWriteErrors()...).ErrorRules(webhookRules)
 }

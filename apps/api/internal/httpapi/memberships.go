@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -107,7 +106,7 @@ func createMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(membershipEndpointAPIError)
+		ErrorRules(membershipRules)
 }
 
 func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[listMembershipsRequest, membershipListResponse] {
@@ -131,7 +130,7 @@ func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthori
 			apiErrorInvalidCursor,
 			apiErrorInternal,
 		).
-		MapErrors(membershipEndpointAPIError)
+		ErrorRules(membershipRules)
 }
 
 func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[updateMembershipEndpointRequest, membershipResponse] {
@@ -161,7 +160,7 @@ func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(membershipEndpointAPIError)
+		ErrorRules(membershipRules)
 }
 
 func decodeCreateMembershipRequest(r *http.Request) (createMembershipEndpointRequest, error) {
@@ -204,32 +203,13 @@ func decodeUpdateMembershipRequest(r *http.Request) (updateMembershipEndpointReq
 	return updateMembershipEndpointRequest{TenantID: tenantID, MembershipID: membershipID, Body: body}, nil
 }
 
-func membershipEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := membershipServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func membershipServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, memberships.ErrInvalidMembershipID):
-		return apiErrorInvalidMembershipID, true
-	case errors.Is(err, memberships.ErrInvalidMembershipRole):
-		return apiErrorInvalidMembershipRole, true
-	case errors.Is(err, memberships.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, memberships.ErrInvalidUserID):
-		return apiErrorInvalidUserID, true
-	case errors.Is(err, memberships.ErrLastOwner):
-		return apiErrorLastOwner, true
-	case errors.Is(err, memberships.ErrMembershipNotFound):
-		return apiErrorMembershipNotFound, true
-	default:
-		return APIError{}, false
-	}
+var membershipRules = errorRules{
+	ruleFor(apiErrorInvalidMembershipID, memberships.ErrInvalidMembershipID),
+	ruleFor(apiErrorInvalidMembershipRole, memberships.ErrInvalidMembershipRole),
+	ruleFor(apiErrorInvalidTenantID, memberships.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidUserID, memberships.ErrInvalidUserID),
+	ruleFor(apiErrorLastOwner, memberships.ErrLastOwner),
+	ruleFor(apiErrorMembershipNotFound, memberships.ErrMembershipNotFound),
 }
 
 func newMembershipListResponse(list memberships.MembershipList) (membershipListResponse, error) {

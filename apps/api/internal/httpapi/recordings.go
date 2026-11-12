@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"mime"
 	"net/http"
 	"time"
@@ -162,7 +161,7 @@ func requestRecordingExportEndpoint(service RecordingService, exports RecordingE
 		}
 		response := newRecordingResponse(recording, state)
 		return requestRecordingExportResponse{Recording: response, Export: response.Export}, nil
-	}).Needs(service, exports).Permission(authorizer, readRecordingsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).MapErrors(recordingEndpointAPIError)
+	}).Needs(service, exports).Permission(authorizer, readRecordingsPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).Parameters(tenantIDParameter(), recordingIDParameter()).RequestBody("RequestRecordingExportRequest", struct{}{}).Responds(http.StatusAccepted, "RecordingExportRequestAcceptedResponse", requestRecordingExportResponse{}).Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorRecordingExportRetryLimit, apiErrorRateLimited)...).ErrorRules(recordingRules)
 }
 
 func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecordingExportEndpointRequest, error) {
@@ -189,7 +188,7 @@ func listRecordingsEndpoint(service RecordingService, artifacts RecordingExportS
 		Parameters(append([]APIParameterContract{tenantIDParameter(), spaceIDQueryParameter(), episodeIDQueryParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "RecordingList", recordingListResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
-		MapErrors(recordingEndpointAPIError)
+		ErrorRules(recordingRules)
 }
 
 func getRecordingEndpoint(service RecordingService, artifacts RecordingExportService, authorizer TenantAuthorizer) Endpoint[getRecordingRequest, recordingResponse] {
@@ -209,7 +208,7 @@ func getRecordingEndpoint(service RecordingService, artifacts RecordingExportSer
 		Parameters(tenantIDParameter(), recordingIDParameter()).
 		Responds(http.StatusOK, "Recording", recordingResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRecordingID, apiErrorRecordingNotFound)...).
-		MapErrors(recordingEndpointAPIError)
+		ErrorRules(recordingRules)
 }
 
 func createRecordingDownloadURLEndpoint(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
@@ -263,7 +262,7 @@ func createRecordingDownloadURLEndpoint(service RecordingService, exports Record
 		RequestBody("CreateRecordingDownloadURLRequest", createRecordingDownloadURLRequest{}).
 		Responds(http.StatusOK, "RecordingDownloadURL", recordingDownloadURLResponse{}).
 		Errors(recordingReadErrors(apiErrorInvalidRequest, apiErrorInvalidRecordingID, apiErrorRecordingNotFound, apiErrorRecordingNotReady, apiErrorInvalidStorageProvider, apiErrorInvalidStorageKey, apiErrorInvalidURLExpiration, apiErrorRecordingArtifactNotFound, apiErrorRateLimited)...).
-		MapErrors(recordingDownloadEndpointAPIError)
+		ErrorRules(recordingRules, objectStorageRules)
 }
 
 func decodeListRecordingsRequest(r *http.Request) (listRecordingsRequest, error) {
@@ -328,77 +327,31 @@ func recordingReadErrors(extra ...APIError) []APIError {
 	}, extra...)
 }
 
-func recordingEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := recordingServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
+var recordingDownloadRules = errorRules{}
+
+var recordingRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, recordings.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidRecordingID, recordings.ErrInvalidRecordingID),
+	ruleFor(apiErrorInvalidSpaceID, recordings.ErrInvalidSpaceID),
+	ruleFor(apiErrorInvalidEpisodeID, recordings.ErrInvalidEpisodeID),
+	ruleFor(apiErrorInvalidRecordingStatus, recordings.ErrInvalidRecordingStatus),
+	ruleFor(apiErrorInvalidStorageProvider, recordings.ErrInvalidStorageProvider),
+	ruleFor(apiErrorInvalidStorageKey, recordings.ErrInvalidStorageKey),
+	ruleFor(apiErrorInvalidRecordingField, recordings.ErrInvalidRecordingField),
+	ruleFor(apiErrorEpisodeNotFound, recordings.ErrEpisodeNotFound),
+	ruleFor(apiErrorRecordingNotFound, recordings.ErrRecordingNotFound),
+	ruleFor(apiErrorInvalidTenantID, recordingpipeline.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidRecordingID, recordingpipeline.ErrInvalidRecordingID),
+	ruleFor(apiErrorRecordingNotFound, recordingpipeline.ErrPipelineNotFound),
+	ruleFor(apiErrorRecordingNotReady, recordingpipeline.ErrExportUnavailable),
+	ruleFor(apiErrorRecordingExportRetryLimit, recordingpipeline.ErrExportRetryLimit),
 }
 
-func recordingDownloadEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := recordingServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := objectStorageAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func recordingServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, recordings.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, recordings.ErrInvalidRecordingID):
-		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordings.ErrInvalidSpaceID):
-		return apiErrorInvalidSpaceID, true
-	case errors.Is(err, recordings.ErrInvalidEpisodeID):
-		return apiErrorInvalidEpisodeID, true
-	case errors.Is(err, recordings.ErrInvalidRecordingStatus):
-		return apiErrorInvalidRecordingStatus, true
-	case errors.Is(err, recordings.ErrInvalidStorageProvider):
-		return apiErrorInvalidStorageProvider, true
-	case errors.Is(err, recordings.ErrInvalidStorageKey):
-		return apiErrorInvalidStorageKey, true
-	case errors.Is(err, recordings.ErrInvalidRecordingField):
-		return apiErrorInvalidRecordingField, true
-	case errors.Is(err, recordings.ErrEpisodeNotFound):
-		return apiErrorEpisodeNotFound, true
-	case errors.Is(err, recordings.ErrRecordingNotFound):
-		return apiErrorRecordingNotFound, true
-	case errors.Is(err, recordingpipeline.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, recordingpipeline.ErrInvalidRecordingID):
-		return apiErrorInvalidRecordingID, true
-	case errors.Is(err, recordingpipeline.ErrPipelineNotFound):
-		return apiErrorRecordingNotFound, true
-	case errors.Is(err, recordingpipeline.ErrExportUnavailable):
-		return apiErrorRecordingNotReady, true
-	case errors.Is(err, recordingpipeline.ErrExportRetryLimit):
-		return apiErrorRecordingExportRetryLimit, true
-	default:
-		return APIError{}, false
-	}
-}
-
-func objectStorageAPIError(err error) (APIError, bool) {
-	switch {
-	case err == nil:
-		return APIError{}, false
-	case errors.Is(err, objectstorage.ErrInvalidObjectKey):
-		return apiErrorInvalidStorageKey, true
-	case errors.Is(err, objectstorage.ErrInvalidURLExpiration):
-		return apiErrorInvalidURLExpiration, true
-	case errors.Is(err, objectstorage.ErrStoreUnavailable):
-		return apiErrorServiceUnavailable, true
-	case errors.Is(err, objectstorage.ErrObjectNotFound):
-		return apiErrorRecordingArtifactNotFound, true
-	default:
-		return APIError{}, false
-	}
+var objectStorageRules = errorRules{
+	ruleFor(apiErrorInvalidStorageKey, objectstorage.ErrInvalidObjectKey),
+	ruleFor(apiErrorInvalidURLExpiration, objectstorage.ErrInvalidURLExpiration),
+	ruleFor(apiErrorServiceUnavailable, objectstorage.ErrStoreUnavailable),
+	ruleFor(apiErrorRecordingArtifactNotFound, objectstorage.ErrObjectNotFound),
 }
 
 func newRecordingListResponse(ctx context.Context, list recordings.RecordingList, artifacts RecordingExportService) (recordingListResponse, error) {

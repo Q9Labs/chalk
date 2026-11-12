@@ -32,7 +32,7 @@ func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer Te
 		return prepareEntrance(ctx, preparer, request.TenantID, request.SpaceID)
 	}).Permission(authorizer, readSpacesPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
-		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError).
+		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules).
 		Middleware(noStoreResponses)
 }
 
@@ -59,7 +59,7 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 	}).Needs(invites).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
 		RequestBody("EntranceInvite", entranceInviteBody{}).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(apiErrorInvalidPublicInviteToken, apiErrorPublicInviteUnavailable, apiErrorSpaceNotFound, apiErrorServiceUnavailable, apiErrorInternal, apiErrorRateLimited).
-		MapErrors(publicInviteEndpointAPIError)
+		ErrorRules(publicInviteRules)
 }
 
 func prepareEntrance(ctx context.Context, preparer RecordingEntrancePreparer, tenantID, spaceID utilities.ID) (entrancePreparationResponse, error) {

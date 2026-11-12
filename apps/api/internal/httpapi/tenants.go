@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -155,7 +154,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
@@ -198,7 +197,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, tenantResponse] {
@@ -223,7 +222,7 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[updateTenantEndpointRequest, tenantResponse] {
@@ -256,7 +255,7 @@ func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) En
 			apiErrorRateLimited,
 			apiErrorInternal,
 		).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }
 
 func decodeListTenantsRequest(r *http.Request) (listTenantsRequest, error) {
@@ -332,42 +331,15 @@ func tenantIDFromRequest(r *http.Request) (utilities.ID, error) {
 	return id, nil
 }
 
-func tenantEndpointAPIError(err error) (APIError, bool) {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr, true
-	}
-	if apiErr, ok := tenantServiceAPIError(err); ok {
-		return apiErr, true
-	}
-	return authorizationAPIError(err), true
-}
-
-func tenantServiceAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, tenants.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, tenants.ErrInvalidTenantName):
-		return apiErrorInvalidTenantName, true
-	case errors.Is(err, tenants.ErrInvalidTenantField):
-		return apiErrorInvalidTenantField, true
-	case errors.Is(err, tenants.ErrMediaPlaneNotPermitted):
-		return apiErrorTenantMediaPlaneNotPermitted, true
-	case errors.Is(err, tenants.ErrInvalidCORSOrigin):
-		return apiErrorInvalidTenantCORSOrigin, true
-	case errors.Is(err, artifactpolicy.ErrDefaultExceedsCeiling):
-		return apiErrorTenantArtifactPolicyConflict, true
-	case errors.Is(err, artifactpolicy.ErrInvalidRecordingMode),
-		errors.Is(err, artifactpolicy.ErrInvalidTranscriptionMode),
-		errors.Is(err, artifactpolicy.ErrInvalidRetention),
-		errors.Is(err, artifactpolicy.ErrInvalidSourceWindow),
-		errors.Is(err, artifactpolicy.ErrMissingProviderPolicy),
-		errors.Is(err, tenants.ErrInvalidArtifactPolicy):
-		return apiErrorInvalidTenantArtifactPolicy, true
-	case errors.Is(err, tenants.ErrTenantNotFound):
-		return apiErrorTenantNotFound, true
-	default:
-		return APIError{}, false
-	}
+var tenantRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, tenants.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidTenantName, tenants.ErrInvalidTenantName),
+	ruleFor(apiErrorInvalidTenantField, tenants.ErrInvalidTenantField),
+	ruleFor(apiErrorTenantMediaPlaneNotPermitted, tenants.ErrMediaPlaneNotPermitted),
+	ruleFor(apiErrorInvalidTenantCORSOrigin, tenants.ErrInvalidCORSOrigin),
+	ruleFor(apiErrorTenantArtifactPolicyConflict, artifactpolicy.ErrDefaultExceedsCeiling),
+	ruleFor(apiErrorInvalidTenantArtifactPolicy, artifactpolicy.ErrInvalidRecordingMode, artifactpolicy.ErrInvalidTranscriptionMode, artifactpolicy.ErrInvalidRetention, artifactpolicy.ErrInvalidSourceWindow, artifactpolicy.ErrMissingProviderPolicy, tenants.ErrInvalidArtifactPolicy),
+	ruleFor(apiErrorTenantNotFound, tenants.ErrTenantNotFound),
 }
 
 func newTenantListResponse(list tenants.TenantList) (tenantListResponse, error) {
@@ -491,5 +463,5 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512, CodePointLength: true}).
 		Responds(http.StatusOK, "Tenant", tenantResponse{}).
 		Errors(apiErrorRateLimited, apiErrorUnauthenticated, apiErrorForbidden, apiErrorServiceUnavailable, apiErrorInvalidTenantField, apiErrorTenantNotFound, apiErrorInternal).
-		MapErrors(tenantEndpointAPIError)
+		ErrorRules(tenantRules)
 }

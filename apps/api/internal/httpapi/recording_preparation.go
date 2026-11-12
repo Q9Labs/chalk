@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -60,7 +59,7 @@ func getRecordingPreparationEndpoint(service RecordingPreparationService, author
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorPreparationNotFound, apiErrorInvalidPreparation)...).
-		MapErrors(preparationAPIError)
+		ErrorRules(preparationRules, spaceRules)
 }
 
 func prepareRecordingEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
@@ -71,7 +70,7 @@ func prepareRecordingEndpoint(service RecordingPreparationService, authorizer Te
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("PrepareRecordingRequest", preparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationConflict, apiErrorPreparationPolicy)...).
-		MapErrors(preparationAPIError)
+		ErrorRules(preparationRules, spaceRules)
 }
 
 func cancelRecordingPreparationEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
@@ -82,7 +81,7 @@ func cancelRecordingPreparationEndpoint(service RecordingPreparationService, aut
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("CancelRecordingPreparationRequest", cancelPreparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationNotFound, apiErrorPreparationConflict)...).
-		MapErrors(preparationAPIError)
+		ErrorRules(preparationRules, spaceRules)
 }
 
 func decodePreparationRequest(r *http.Request) (recordingpreparation.Input, error) {
@@ -123,17 +122,9 @@ func newPreparationResponse(p recordingpreparation.Preparation) preparationRespo
 	}
 }
 
-func preparationAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, recordingpreparation.ErrInvalidInput):
-		return apiErrorInvalidPreparation, true
-	case errors.Is(err, recordingpreparation.ErrNotFound):
-		return apiErrorPreparationNotFound, true
-	case errors.Is(err, recordingpreparation.ErrConflict):
-		return apiErrorPreparationConflict, true
-	case errors.Is(err, recordingpreparation.ErrPolicyDenied):
-		return apiErrorPreparationPolicy, true
-	default:
-		return spaceEndpointAPIError(err)
-	}
+var preparationRules = errorRules{
+	ruleFor(apiErrorInvalidPreparation, recordingpreparation.ErrInvalidInput),
+	ruleFor(apiErrorPreparationNotFound, recordingpreparation.ErrNotFound),
+	ruleFor(apiErrorPreparationConflict, recordingpreparation.ErrConflict),
+	ruleFor(apiErrorPreparationPolicy, recordingpreparation.ErrPolicyDenied),
 }

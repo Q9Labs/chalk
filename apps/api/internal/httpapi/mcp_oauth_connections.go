@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -114,7 +113,7 @@ func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLooku
 		RequestBody("MCPConsentLookup", mcpConsentLookupBody{}).
 		Responds(http.StatusOK, "MCPConsentRequest", mcpConsentResponse{}).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorMCPConsentNotFound, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
-		MapErrors(mcpOAuthAPIError)
+		ErrorRules(mcpOAuthRules)
 }
 
 func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConsentApproveBody, mcpConsentRedirectResponse] {
@@ -142,7 +141,7 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 		RequestBody("MCPConsentApproval", mcpConsentApproveBody{}).
 		Responds(http.StatusOK, "MCPConsentRedirect", mcpConsentRedirectResponse{}).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidTenantID, apiErrorMCPConsentNotFound, apiErrorMCPInvalidScope, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
-		MapErrors(mcpOAuthAPIError)
+		ErrorRules(mcpOAuthRules)
 }
 
 func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentRedirectResponse] {
@@ -161,7 +160,7 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 		RequestBody("MCPConsentLookup", mcpConsentLookupBody{}).
 		Responds(http.StatusOK, "MCPConsentRedirect", mcpConsentRedirectResponse{}).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorMCPConsentNotFound, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
-		MapErrors(mcpOAuthAPIError)
+		ErrorRules(mcpOAuthRules)
 }
 
 func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[listMCPConnectionsRequest, mcpConnectionListResponse] {
@@ -185,7 +184,7 @@ func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthor
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "MCPConnectionList", mcpConnectionListResponse{}).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidTenantID, apiErrorInvalidPageSize, apiErrorInvalidCursor, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
-		MapErrors(mcpOAuthAPIError)
+		ErrorRules(mcpOAuthRules)
 }
 
 func revokeMCPConnectionEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConnectionIDsRequest, noResponse] {
@@ -204,20 +203,11 @@ func revokeMCPConnectionEndpoint(service MCPOAuthService, authorizer TenantAutho
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "connection_id", In: "path", Type: "string", Required: true}).
 		RespondsNoBody(http.StatusNoContent).
 		Errors(apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidTenantID, apiErrorMCPConnectionNotFound, apiErrorServiceUnavailable, apiErrorRateLimited, apiErrorInternal).
-		MapErrors(mcpOAuthAPIError)
+		ErrorRules(mcpOAuthRules)
 }
 
-func mcpOAuthAPIError(err error) (APIError, bool) {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr, true
-	}
-	switch {
-	case errors.Is(err, mcpauth.ErrRequestNotFound):
-		return apiErrorMCPConsentNotFound, true
-	case errors.Is(err, mcpauth.ErrInvalidApproval):
-		return apiErrorMCPInvalidScope, true
-	case errors.Is(err, mcpauth.ErrGrantNotFound):
-		return apiErrorMCPConnectionNotFound, true
-	}
-	return authorizationAPIError(err), true
+var mcpOAuthRules = errorRules{
+	ruleFor(apiErrorMCPConsentNotFound, mcpauth.ErrRequestNotFound),
+	ruleFor(apiErrorMCPInvalidScope, mcpauth.ErrInvalidApproval),
+	ruleFor(apiErrorMCPConnectionNotFound, mcpauth.ErrGrantNotFound),
 }

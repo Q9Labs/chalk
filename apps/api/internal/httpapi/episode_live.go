@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -81,10 +80,5 @@ func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer T
 	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceLiveEpisodeList", spaceLiveEpisodeListResponse{}).
-		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (APIError, bool) {
-		if errors.Is(err, episodes.ErrInvalidSpaceIDs) {
-			return apiErrorInvalidSpaceIDs, true
-		}
-		return episodeLifecycleEndpointAPIError(err)
-	})
+		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(errorRules{ruleFor(apiErrorInvalidSpaceIDs, episodes.ErrInvalidSpaceIDs)}, episodeLifecycleRules)
 }

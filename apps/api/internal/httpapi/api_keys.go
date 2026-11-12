@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -151,7 +150,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		RequestBody("CreateAPIKeyRequest", createAPIKeyBody{}).
 		Responds(http.StatusCreated, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
 		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeySecretNotReplayable)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[listAPIKeysRequest, apiKeyListResponse] {
@@ -168,7 +167,7 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 		Middleware(noStoreAPIKeyResponse).
 		Responds(http.StatusOK, "APIKeyList", apiKeyListResponse{}).
 		Errors(apiKeyReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
@@ -194,7 +193,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		RequestBody("RotateAPIKeyRequest", rotateAPIKeyBody{}).
 		Responds(http.StatusOK, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
 		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidAPIKeyID, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeySecretNotReplayable)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[apiKeyIDsRequest, noResponse] {
@@ -211,7 +210,7 @@ func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		Parameters(tenantIDParameter(), apiKeyIDParameter()).
 		RespondsNoBody(http.StatusNoContent).
 		Errors(apiKeyWriteErrors(apiErrorInvalidAPIKeyID, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func decodeCreateAPIKeyRequest(r *http.Request) (createAPIKeyRequest, error) {
@@ -316,27 +315,15 @@ func apiKeyWriteErrors(extra ...APIError) []APIError {
 	return append(apiKeyReadErrors(apiErrorRateLimited), extra...)
 }
 
-func apiKeyAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, apikeys.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, apikeys.ErrInvalidAPIKeyID):
-		return apiErrorInvalidAPIKeyID, true
-	case errors.Is(err, apikeys.ErrInvalidExpiry):
-		return apiErrorInvalidAPIKeyExpiry, true
-	case errors.Is(err, apikeys.ErrInvalidName), errors.Is(err, apikeys.ErrInvalidScopes):
-		return apiErrorInvalidRequest, true
-	case errors.Is(err, apikeys.ErrInvalidRequestKey):
-		return apiErrorInvalidRequestKey, true
-	case errors.Is(err, apikeys.ErrIdempotencyConflict):
-		return apiErrorIdempotencyConflict, true
-	case errors.Is(err, apikeys.ErrAPIKeyNotFound):
-		return apiErrorAPIKeyNotFound, true
-	case errors.Is(err, apikeys.ErrAPIKeyRevoked), errors.Is(err, apikeys.ErrAPIKeyExpired):
-		return apiErrorAPIKeyInactive, true
-	default:
-		return authorizationAPIError(err), true
-	}
+var apiKeyRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, apikeys.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidAPIKeyID, apikeys.ErrInvalidAPIKeyID),
+	ruleFor(apiErrorInvalidAPIKeyExpiry, apikeys.ErrInvalidExpiry),
+	ruleFor(apiErrorInvalidRequest, apikeys.ErrInvalidName, apikeys.ErrInvalidScopes),
+	ruleFor(apiErrorInvalidRequestKey, apikeys.ErrInvalidRequestKey),
+	ruleFor(apiErrorIdempotencyConflict, apikeys.ErrIdempotencyConflict),
+	ruleFor(apiErrorAPIKeyNotFound, apikeys.ErrAPIKeyNotFound),
+	ruleFor(apiErrorAPIKeyInactive, apikeys.ErrAPIKeyRevoked, apikeys.ErrAPIKeyExpired),
 }
 
 func newAPIKeyResponse(key apikeys.Key) apiKeyResponse {

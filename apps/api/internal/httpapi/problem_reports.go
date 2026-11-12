@@ -83,19 +83,11 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 		RequestBodyWithLimit("ProblemReportRequest", problemreports.Report{}, reportBodyLimitBytes).
 		Responds(http.StatusOK, "ProblemReportSent", problemReportSent{}).
 		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorInternal).
-		MapErrors(func(err error) (APIError, bool) {
-			switch {
-			case errors.Is(err, problemreports.ErrInvalid):
-				return apiErrorInvalidRequest, true
-			case errors.Is(err, problemreports.ErrForbidden):
-				return apiErrorForbidden, true
-			case errors.Is(err, problemreports.ErrUnavailable):
-				return apiErrorReportsUnavailable, true
-			case errors.Is(err, problemreports.ErrDelivery):
-				return apiErrorReportDelivery, true
-			default:
-				return APIError{}, false
-			}
+		ErrorRules(errorRules{
+			ruleFor(apiErrorInvalidRequest, problemreports.ErrInvalid),
+			ruleFor(apiErrorForbidden, problemreports.ErrForbidden),
+			ruleFor(apiErrorReportsUnavailable, problemreports.ErrUnavailable),
+			ruleFor(apiErrorReportDelivery, problemreports.ErrDelivery),
 		})
 	return []RouteEndpoint{availability, submit}
 }

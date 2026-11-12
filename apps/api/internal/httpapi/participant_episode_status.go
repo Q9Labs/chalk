@@ -39,7 +39,7 @@ func participantEpisodeStatusEndpoint(service EpisodeLookup, verifier Participan
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantEpisodeStatus", participantEpisodeStatusResponse{}).
 		Errors(lifecycleReadErrors(apiErrorRateLimited, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 func noStoreParticipantEpisodeStatus(next http.Handler) http.Handler {

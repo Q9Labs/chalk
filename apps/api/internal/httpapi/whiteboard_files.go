@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -70,7 +69,7 @@ func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[down
 		Parameters(whiteboardFileIDParameter()).
 		Responds(http.StatusOK, "WhiteboardFileDownload", whiteboardFileDownloadResponse{}).
 		Errors(whiteboardFileErrors()...).
-		MapErrors(whiteboardFileAPIError)
+		ErrorRules(whiteboardFileRules)
 }
 
 func requireWhiteboardParticipant(verifier WhiteboardParticipantVerifier) func(http.Handler) http.Handler {
@@ -126,19 +125,10 @@ func whiteboardFileErrors() []APIError {
 	}
 }
 
-func whiteboardFileAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, whiteboardfiles.ErrInvalidInput):
-		return apiErrorWhiteboardInvalidFile, true
-	case errors.Is(err, whiteboardfiles.ErrPermissionDenied):
-		return apiErrorForbidden, true
-	case errors.Is(err, whiteboardfiles.ErrFileNotFound):
-		return apiErrorWhiteboardFileNotFound, true
-	case errors.Is(err, whiteboardfiles.ErrFileTransferFailed), errors.Is(err, objectstorage.ErrObjectNotFound), errors.Is(err, objectstorage.ErrObjectAlreadyExists):
-		return apiErrorWhiteboardFileTransfer, true
-	case errors.Is(err, objectstorage.ErrStoreUnavailable), errors.Is(err, objectstorage.ErrProviderFailed):
-		return apiErrorWhiteboardStorageUnavailable, true
-	default:
-		return APIError{}, false
-	}
+var whiteboardFileRules = errorRules{
+	ruleFor(apiErrorWhiteboardInvalidFile, whiteboardfiles.ErrInvalidInput),
+	ruleFor(apiErrorForbidden, whiteboardfiles.ErrPermissionDenied),
+	ruleFor(apiErrorWhiteboardFileNotFound, whiteboardfiles.ErrFileNotFound),
+	ruleFor(apiErrorWhiteboardFileTransfer, whiteboardfiles.ErrFileTransferFailed, objectstorage.ErrObjectNotFound, objectstorage.ErrObjectAlreadyExists),
+	ruleFor(apiErrorWhiteboardStorageUnavailable, objectstorage.ErrStoreUnavailable, objectstorage.ErrProviderFailed),
 }

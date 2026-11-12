@@ -42,7 +42,7 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 		Description("Download a UTF-8 transcript with a Space title, UTC recording date, duration, detected language when known, and recording-relative speaker lines. Requires transcriptions:read.").
 		RespondsText(http.StatusOK, "TranscriptText").ResponseHeaders(APIHeaderContract{Name: "Content-Disposition", Type: "string", Required: true}).
 		Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).
-		MapErrors(transcriptDocumentAPIError).WriteWith(writeTranscriptText)
+		ErrorRules(transcriptArtifactRules, objectStorageRules, transcriptDocumentRules).WriteWith(writeTranscriptText)
 }
 
 // MarshalJSON lets the MCP tool return the text; HTTP writes it as text/plain.

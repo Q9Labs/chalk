@@ -106,7 +106,7 @@ func sfuSignalEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants
 		RequestBody("CloudflareSFUSignalRequest", sfuSignalRequest{}).
 		Responds(http.StatusOK, "CloudflareSFUSignalAPIResponse", sfuSignalResponse{}).
 		Errors(lifecycleWriteErrors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound, apiErrorMediaPlaneUnavailable, apiErrorMediaConnectionNotFound, apiErrorRateLimited)...).
-		MapErrors(episodeLifecycleEndpointAPIError)
+		ErrorRules(episodeLifecycleRules)
 }
 
 // sfuSignalRateLimit charges the quota each per-operation route charges: the
