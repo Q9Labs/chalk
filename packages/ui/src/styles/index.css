@@ -265,8 +265,8 @@
   --chalk-faint-text: #8b8c94;
   --chalk-soft-text: #3d3e45;
   --chalk-danger: #d93a3f;
-  --chalk-danger-pressed: #c93d42;
-  --chalk-danger-hover: #e04b50;
+  --chalk-danger-pressed: #b3363a;
+  --chalk-danger-hover: #c4373c;
   --chalk-danger-text: #bf272c;
   --chalk-positive: #268039;
   --chalk-warning: #8a6400;
@@ -1609,20 +1609,19 @@
   height: 16px;
   border-radius: 50%;
   background: var(--chalk-on-overlay);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transition: transform var(--chalk-motion-toggle);
+  transition:
+    transform var(--chalk-motion-toggle),
+    scale var(--chalk-motion-press);
 }
+/* The press uses the separate scale property, so it composes with any knob travel a caller sets. */
 .chalk-switch:active > span:first-child {
-  transform: scale(0.88);
+  scale: 0.88;
 }
 .chalk-switch[aria-checked="true"] {
   background: var(--chalk-positive);
 }
 .chalk-switch[aria-checked="true"] > span:first-child {
   transform: translateX(14px);
-}
-.chalk-switch[aria-checked="true"]:active > span:first-child {
-  transform: translateX(14px) scale(0.88);
 }
 /* The checkbox: an 18px box on a 6px radius that fills with text and draws its check on. */
 .chalk-checkbox {
@@ -1641,19 +1640,19 @@
   width: 18px;
   height: 18px;
   border-radius: var(--corner-md);
-  box-shadow: inset 0 0 0 1.5px var(--chalk-muted-text);
+  border: 1.5px solid var(--chalk-muted-text);
   color: var(--chalk-canvas);
   transition:
     background-color var(--chalk-motion-toggle),
-    box-shadow var(--chalk-motion-toggle),
+    border-color var(--chalk-motion-toggle),
     transform var(--chalk-motion-press);
 }
 .chalk-checkbox:active .chalk-checkbox-box {
   transform: scale(0.92);
 }
 .chalk-checkbox-box[data-checked] {
+  border-color: var(--chalk-text);
   background: var(--chalk-text);
-  box-shadow: inset 0 0 0 1.5px var(--chalk-text);
 }
 .chalk-checkbox-box svg {
   width: 14px;
@@ -1668,6 +1667,14 @@
 [data-chalk] .chalk-checkbox-box:focus-visible {
   outline: 2px solid var(--chalk-focus);
   outline-offset: 2px;
+}
+.chalk-checkbox-label {
+  display: grid;
+  gap: var(--space-0-5);
+}
+.chalk-checkbox-label small {
+  color: var(--chalk-muted-text);
+  font-size: var(--type-caption);
 }
 .chalk-checkbox[data-disabled] {
   opacity: 0.4;
