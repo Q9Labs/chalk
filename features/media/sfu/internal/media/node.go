@@ -38,9 +38,11 @@ var (
 	opusCapability = webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}
 	// A subscriber reports lost video packets with generic NACK, and the node
 	// resends them from the publisher's shared history (see subscription.retransmit).
+	// A receiver that sends no transport-wide feedback may send REMB, but only when the
+	// answer names goog-remb (see reportEstimator).
 	vp8Capability = webrtc.RTPCodecCapability{
 		MimeType: webrtc.MimeTypeVP8, ClockRate: 90000,
-		RTCPFeedback: []webrtc.RTCPFeedback{{Type: "nack"}, {Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}},
+		RTCPFeedback: []webrtc.RTCPFeedback{{Type: "nack"}, {Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}, {Type: "goog-remb"}},
 	}
 )
 

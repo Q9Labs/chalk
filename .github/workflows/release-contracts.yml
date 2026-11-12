@@ -48,6 +48,8 @@ jobs:
           version="$(apt-cache madison podman | awk '$3 ~ /^4[.]9[.]/{print $3; exit}')"
           test -n "$version"
           sudo apt-get install -y --allow-downgrades "podman=$version"
+      - name: Run the rendered Quadlet units through Podman's generator
+        run: bash infrastructure/managed-episode/scripts/test-quadlet-generator
       - name: Capture real storage behavior without cloud access
         shell: bash
         run: |

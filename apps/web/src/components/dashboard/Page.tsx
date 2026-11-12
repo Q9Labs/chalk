@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import { Icon, type IconName } from "../site/Icon";
 
-/** The frame the Developer, Sessions and Recordings pages share: an optional side nav beside a heading and the page's panels. */
-export function Page({ icon, title, intro, end, nav, crumb, children }: { readonly icon: IconName; readonly title: string; readonly intro: string; readonly end?: ReactNode; readonly nav?: ReactNode; readonly crumb?: ReactNode; readonly children: ReactNode }) {
+/** The frame the Developer and session pages share: an optional side nav beside a heading and the page's panels. */
+export function Page({ icon, title, intro, end, nav, crumb, children }: { readonly icon: IconName; readonly title: ReactNode; readonly intro: ReactNode; readonly end?: ReactNode; readonly nav?: ReactNode; readonly crumb?: ReactNode; readonly children: ReactNode }) {
   return (
     <div className="dev">
       <div className={nav ? "dshell" : "dshell wide"}>

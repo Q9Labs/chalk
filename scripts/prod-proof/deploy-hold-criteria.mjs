@@ -10,10 +10,13 @@ export function longestGaps(ticks, guest) {
         last.set(key, { bytes: remote.bytes, grewAt: t });
         continue;
       }
-      if (remote.bytes > seen.bytes) {
+      // A new peer connection starts its counters again, so any change to a positive value is data that arrived.
+      if (remote.bytes !== seen.bytes && remote.bytes > 0) {
         const gap = t - seen.grewAt;
         if (remote.source === "microphone" && gap > worst.ms) worst = { ms: gap, track: key, endedAtMs: t };
         last.set(key, { bytes: remote.bytes, grewAt: t });
+      } else {
+        last.set(key, { bytes: remote.bytes, grewAt: seen.grewAt });
       }
     }
   }
@@ -34,12 +37,16 @@ export function judgeCall(ticks, guestCount) {
     const lost = ticks.find((tick) => !tick.guests[guest].reachable || tick.guests[guest].status !== "live" || tick.guests[guest].errorCode);
     if (lost) failures.push(`${label} was ${lost.guests[guest].reachable ? lost.guests[guest].status : "unreachable"} ${lost.guests[guest].errorCode ?? ""} at +${Math.round((lost.t - ticks[0].t) / 1000)}s`.replace("  ", " "));
     const mic = (tick) => tick.guests[guest].remotes.filter((remote) => remote.source === "microphone");
-    const first = mic(lastWindow[0]);
     const lastMic = mic(lastWindow.at(-1));
     if (lastMic.length < guestCount - 1) failures.push(`${label} hears ${lastMic.length} of ${guestCount - 1} other guests at the end`);
     for (const remote of lastMic) {
-      const before = first.find((entry) => entry.participantId === remote.participantId);
-      if (!before || remote.bytes <= before.bytes) failures.push(`${label} receives no audio from one of the other guests in the last 5s`);
+      // Growth between two consecutive samples, so a counter that restarted on a new peer connection still counts once it grows.
+      const growing = lastWindow.slice(1).some((tick, i) => {
+        const before = mic(lastWindow[i]).find((entry) => entry.participantId === remote.participantId);
+        const now = mic(tick).find((entry) => entry.participantId === remote.participantId);
+        return before && now && now.bytes !== before.bytes && now.bytes > 0;
+      });
+      if (!growing) failures.push(`${label} receives no audio from one of the other guests in the last 5s`);
     }
   }
   return failures;

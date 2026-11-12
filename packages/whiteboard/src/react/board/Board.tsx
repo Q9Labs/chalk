@@ -312,6 +312,7 @@ export function Board({
   const offline = connectionStatus === "reconnecting";
   const smallViewport = useMediaQuery("(max-width: 640px)");
   const phone = phoneOverride ?? smallViewport;
+  const touch = useMediaQuery("(pointer: coarse)") || phone || presentation === "mobile";
   const [engine, setEngine] = useState<WhiteboardEngineHandle | null>(null);
   const toast = useBoardToast(engine);
   const [surface, setSurface] = useState<BoardSurface>(() => readStored(SURFACE_KEY, SURFACES, "chalkboard"));
@@ -640,10 +641,14 @@ export function Board({
     setTool("selection");
   };
 
-  const ink = surfaceInk(surface, colorScheme);
-  const surfaceVars: CSSProperties & { readonly "--board-selection": string } = { "--board-selection": selectionColor(surface, colorScheme) };
-  const followed = following ? nameOf(following) : null;
   const ready = engine !== null;
+  const ink = surfaceInk(surface, colorScheme);
+  const surfaceVars: CSSProperties & { readonly "--board-selection": string } = {
+    "--board-selection": selectionColor(surface, colorScheme),
+    // The placeholder paints the surface from the first frame, before the stylesheet is in.
+    backgroundColor: ready ? undefined : surfaceFill(surface, colorScheme),
+  };
+  const followed = following ? nameOf(following) : null;
   return (
     <div
       ref={root}
@@ -667,7 +672,7 @@ export function Board({
           Opening board
         </div>
       ) : null}
-      {primary && ready && empty ? <BoardHint canDraw={canDraw} mobile={presentation === "mobile"} /> : null}
+      {primary && ready && empty ? <BoardHint canDraw={canDraw} touch={touch} /> : null}
       {primary && tool === "note" && canDraw ? <div className="chalk-board-note-layer" aria-hidden="true" onPointerDown={placeNoteAt} /> : null}
       {primary ? <BoardCursors cursorsRef={cursors} cameraRef={camera.cameraRef} colorFor={colorFor} hidden={offline} renderAvatar={renderCursorAvatar} /> : null}
       {primary && ready ? (
@@ -711,29 +716,31 @@ export function Board({
               onClose={onClose}
             />
           </div>
-          <div className="chalk-board-zoom" role="group" aria-label="Zoom">
-            {phone ? null : (
-              <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
-                <BoardIcon name="minus" size={16} />
-              </button>
-            )}
-            <button type="button" aria-label={`Zoom ${Math.round(camera.zoom * 100)}%, reset to 100%`} className="chalk-board-zoom-value" onClick={() => zoomBy(1 / camera.cameraRef.current.zoom)}>
-              {Math.round(camera.zoom * 100)}%
-            </button>
-            {phone ? null : (
-              <button type="button" aria-label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
-                <BoardIcon name="plus" size={16} />
-              </button>
-            )}
-            {presentation === "web" || phone ? (
-              <>
-                <span className="chalk-board-zoom-rule" aria-hidden="true" />
-                <button type="button" aria-label="Fit to content" onClick={fit}>
-                  <BoardIcon name="fit" size={16} />
+          {phone && empty ? null : (
+            <div className="chalk-board-zoom" role="group" aria-label="Zoom">
+              {phone ? null : (
+                <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
+                  <BoardIcon name="minus" size={16} />
                 </button>
-              </>
-            ) : null}
-          </div>
+              )}
+              <button type="button" aria-label={`Zoom ${Math.round(camera.zoom * 100)}%, reset to 100%`} className="chalk-board-zoom-value" onClick={() => zoomBy(1 / camera.cameraRef.current.zoom)}>
+                {Math.round(camera.zoom * 100)}%
+              </button>
+              {phone ? null : (
+                <button type="button" aria-label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
+                  <BoardIcon name="plus" size={16} />
+                </button>
+              )}
+              {presentation === "web" || phone ? (
+                <>
+                  <span className="chalk-board-zoom-rule" aria-hidden="true" />
+                  <button type="button" aria-label="Fit to content" onClick={fit}>
+                    <BoardIcon name="fit" size={16} />
+                  </button>
+                </>
+              ) : null}
+            </div>
+          )}
           {canDraw ? (
             <BoardIsland
               tool={tool}
@@ -752,6 +759,7 @@ export function Board({
               place={place}
               onPlace={choosePlace}
               compact={compact}
+              idle={phone && empty}
               primaryToolsFirst={presentation === "mobile"}
             />
           ) : null}
@@ -765,7 +773,7 @@ export function Board({
   );
 }
 
-function BoardHint({ canDraw, mobile }: { readonly canDraw: boolean; readonly mobile: boolean }) {
+function BoardHint({ canDraw, touch }: { readonly canDraw: boolean; readonly touch: boolean }) {
   if (!canDraw)
     return (
       <div className="chalk-board-hint">
@@ -775,7 +783,7 @@ function BoardHint({ canDraw, mobile }: { readonly canDraw: boolean; readonly mo
   return (
     <div className="chalk-board-hint">
       <p>An empty board. Draw, type or add a sticky note.</p>
-      {mobile ? (
+      {touch ? (
         <p>Draw with one finger. Use two fingers to move or zoom.</p>
       ) : (
         <ul>
