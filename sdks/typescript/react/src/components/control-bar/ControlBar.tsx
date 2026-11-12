@@ -7,7 +7,6 @@ import { cn } from "../../utils/cn";
 import { HandIcon, VolumeHighIcon } from "../../utils/icons";
 import { DevicePopover } from "../device-popover/DevicePopover";
 import { CommandErrorAlert } from "../composite/CommandErrorAlert";
-import { CallLinkIcon } from "./CallLinkIcon";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
@@ -46,8 +45,6 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
     </ChalkTooltip>
   );
   const chat = has("chat") && (props.onToggleChat || props.displayOnly) ? iconButton("Chat", <ShellIcon name="chat" />, props.onToggleChat, props.isChatOpen, props.isChatOpen ? 0 : props.unreadChatCount) : null;
-  const copyLink = () => void navigator.clipboard.writeText(props.shareUrl ?? location.href).catch(() => props.onCopyError?.());
-  const linkLabel = props.onCallLinkToggle ? (props.callLinkOpen ? "Hide call link" : "Show call link") : "Copy call link";
   const reactions =
     has("reactions") && (props.onOpenReactions || props.displayOnly) ? (
       <ChalkTooltip
@@ -123,7 +120,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
         <ShareControl access={props.deviceAccess?.screen} disabled={props.mediaEnableDisabled && !props.isScreenSharing} startDisabled={props.mediaEnableDisabled} sharing={props.isScreenSharing ?? false} onToggle={props.onToggleScreenShare} onStart={props.onStartScreenShare} />
       ) : null}
       {reactions}
-      {(!reactions || props.reactionsDisabled) && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
+      {!reactions && has("handraise") ? iconButton(props.isHandRaised ? "Lower hand" : "Raise hand", <HandIcon />, props.onToggleHandRaise, props.isHandRaised) : null}
       {has("whiteboard") && (props.onToggleWhiteboard || props.displayOnly) ? <span className="chalk-shell-desktop">{iconButton("Board", <ShellIcon name="pen" />, props.onToggleWhiteboard, props.isWhiteboardOpen)}</span> : null}
 
       <span className="chalk-shell-phone">
@@ -206,20 +203,6 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
             </ChalkIconButton>
           )}
         />
-      ) : null}
-      <span className="chalk-shell-corner chalk-shell-people">
-        <ChalkTooltip
-          trigger={
-            <ChalkIconButton size="lg" data-call-link-trigger aria-label={linkLabel} aria-pressed={props.onCallLinkToggle ? (props.callLinkOpen ?? false) : undefined} onClick={props.onCallLinkToggle ?? copyLink}>
-              <CallLinkIcon />
-            </ChalkIconButton>
-          }
-        >
-          {linkLabel}
-        </ChalkTooltip>
-      </span>
-      {has("record") && (props.onToggleRecording || props.displayOnly) ? (
-        <span className="chalk-shell-corner chalk-shell-record chalk-shell-desktop">{iconButton(props.isRecording ? "Stop recording" : "Record", <ShellIcon name="rec" />, props.isRecordingPending ? undefined : props.onToggleRecording, props.isRecording)}</span>
       ) : null}
       <span className="chalk-shell-corner chalk-shell-chat">{chat}</span>
     </div>

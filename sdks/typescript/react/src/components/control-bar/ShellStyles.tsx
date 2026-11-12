@@ -226,17 +226,19 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   bottom: 0;
   pointer-events: auto;
 }
-.chalk-shell-people {
-  inset-inline-start: 20px;
+.chalk-shell-dock .chalk-icon-button {
+  transition:
+    transform 0.15s ease-out,
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    opacity 0.25s ease-out;
 }
-.chalk-shell-record {
-  inset-inline-start: 72px;
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"] {
+  background: var(--chalk-danger);
+  color: var(--chalk-on-overlay);
 }
-@media (min-width: 641px) and (max-width: 800px) {
-  .chalk-shell-record {
-    inset-inline-start: 20px;
-    bottom: 52px;
-  }
+.chalk-shell-record .chalk-icon-button[aria-pressed="true"]:hover {
+  background: var(--chalk-danger-hover);
 }
 .chalk-shell-chat {
   inset-inline-end: 20px;
@@ -339,11 +341,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-details-heading h2 {font-size:var(--type-body-lg);font-weight:600;line-height:1.3;margin:0;}
 .chalk-shell-details-sub {display:flex;align-items:center;gap:var(--space-1-5);margin:var(--space-0-5) 0 0;color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
 .chalk-shell-details-sub i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
-.chalk-shell-diagnostics-copy {margin:0 0 var(--space-2) var(--space-2);}
-.chalk-shell-diagnostics-copy .chalk-copy {display:inline-flex;width:auto;height:32px;padding:0 var(--space-3);gap:var(--space-1-5);border-radius:var(--corner-pill);background:var(--chalk-hover);font-weight:500;}
-.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-pressed);}
-.chalk-shell-diagnostics-copy .chalk-copy-label {font-size:var(--type-caption);}
-.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:14px;height:14px;}
+.chalk-shell-diagnostics-copy {display:flex;justify-content:flex-end;margin:calc(var(--space-1) * -1) var(--space-2) var(--space-2);}
+.chalk-shell-diagnostics-copy .chalk-copy {display:grid;place-items:center;width:32px;height:32px;border-radius:var(--corner-pill);color:var(--chalk-muted-text);transition:background-color 150ms ease-out,color 150ms ease-out;}
+.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-hover);color:var(--chalk-text);}
+.chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:16px;height:16px;}
 .chalk-shell-quality {
   display: inline-flex;
   align-items: flex-end;
@@ -453,7 +454,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 ${phoneRules(`
   .chalk-shell-details-heading {display:none;}
   .chalk-shell-detail-action,.chalk-invite-link[data-variant="menu"],.chalk-details-row {min-height:48px;}
-  .chalk-shell-diagnostics-copy .chalk-copy {height:44px;}
+  .chalk-shell-diagnostics-copy .chalk-copy {width:44px;height:44px;}
   .chalk-shell-dock {
     height: 52px;
     justify-content: space-between;
@@ -528,10 +529,17 @@ ${phoneRules(`
   padding: var(--space-2);
 }
 .chalk-shell-recording {
-  display: flex;
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-3) 0 var(--space-2-5);
+  border-radius: var(--corner-pill);
+  background: color-mix(in srgb, var(--chalk-danger) 14%, transparent);
+  color: var(--chalk-danger-text);
   font-size: var(--type-body-sm);
+  font-weight: 600;
 }
 .chalk-shell-recording i {
   width: 8px;
@@ -541,6 +549,11 @@ ${phoneRules(`
 }
 ${phoneRules(`
   .chalk-shell-recording {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .chalk-shell-recording span {
     display: none;
   }
 `)}
@@ -606,8 +619,12 @@ ${phoneRules(`
   place-items: center;
   transition: transform 0.12s ease-out;
 }
-.chalk-shell-emoji:hover {
+.chalk-shell-emoji:hover:not(:disabled) {
   background: var(--chalk-hover);
+}
+.chalk-shell-emoji:disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 .chalk-shell-emoji:active {
   transform: scale(0.9);
@@ -623,7 +640,7 @@ ${phoneRules(`
   line-height: 1;
   transform-origin: 50% 60%;
 }
-.chalk-shell-emoji:hover > span {
+.chalk-shell-emoji:hover:not(:disabled) > span {
   animation: var(--chalk-shell-emoji-move, chalk-shell-emoji-pop) 0.9s cubic-bezier(0.3, 1.3, 0.5, 1) infinite;
 }
 .chalk-shell-emoji[data-move="nod"] {--chalk-shell-emoji-move: chalk-shell-emoji-nod;}
@@ -664,6 +681,7 @@ ${phoneRules(`
 }
 .chalk-shell-raise {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
   height: 40px;
