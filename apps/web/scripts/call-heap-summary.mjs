@@ -1,12 +1,13 @@
 // Compute dominators over strong snapshot edges. Retained size is the dominated
 // subtree, not the sum of reachable objects (which double-counts shared objects).
-export function summarizeHeap(heap) {
+
+/** Index lookups into the snapshot's flat node and edge arrays, and the strong edges between nodes. */
+function readGraph(heap) {
   const meta = heap.snapshot.meta;
   const width = meta.node_fields.length;
   const edgeWidth = meta.edge_fields.length;
   const nodeField = (name) => meta.node_fields.indexOf(name);
   const edgeField = (name) => meta.edge_fields.indexOf(name);
-  const nodeTypes = meta.node_types[nodeField("type")];
   const edgeTypes = meta.edge_types[edgeField("type")];
   const count = heap.nodes.length / width;
   const outgoing = Array.from({ length: count }, () => []);
@@ -21,6 +22,11 @@ export function summarizeHeap(heap) {
       incoming[to].push(from);
     }
   }
+  return { count, width, nodeField, nodeTypes: meta.node_types[nodeField("type")], outgoing, incoming };
+}
+
+/** Nodes reachable from the root, last-visited first. */
+function reversePostorder({ count, outgoing }) {
   const seen = new Uint8Array(count);
   const postorder = [];
   const stack = [[0, 0]];
@@ -40,7 +46,11 @@ export function summarizeHeap(heap) {
       stack.push([child, 0]);
     }
   }
-  const order = postorder.reverse();
+  return postorder.reverse();
+}
+
+/** The immediate dominator of every reachable node, by iterating to a fixed point. */
+function dominators({ count, incoming }, order) {
   const rank = new Int32Array(count).fill(-1);
   order.forEach((node, index) => {
     rank[node] = index;
@@ -68,9 +78,20 @@ export function summarizeHeap(heap) {
       }
     }
   }
+  return dominator;
+}
+
+function retainedSizes(heap, { count, width, nodeField }, order, dominator) {
   const retained = new Float64Array(count);
   for (let node = 0; node < count; node++) retained[node] = heap.nodes[node * width + nodeField("self_size")];
   for (let index = order.length - 1; index > 0; index--) retained[dominator[order[index]]] += retained[order[index]];
+  return retained;
+}
+
+const COUNTED_TYPES = ["object", "closure", "array", "native"];
+
+/** Counts detached native nodes and groups objects by type and name. */
+function totalsByType(heap, { count, width, nodeField, nodeTypes }, retained) {
   const totals = new Map();
   let detachedNodes = 0;
   for (let node = 0; node < count; node++) {
@@ -78,7 +99,7 @@ export function summarizeHeap(heap) {
     const type = nodeTypes[heap.nodes[at + nodeField("type")]];
     const name = heap.strings[heap.nodes[at + nodeField("name")]];
     if (nodeField("detachedness") >= 0 && heap.nodes[at + nodeField("detachedness")] === 2 && type === "native") detachedNodes++;
-    if (!["object", "closure", "array", "native"].includes(type)) continue;
+    if (!COUNTED_TYPES.includes(type)) continue;
     const key = `${type}: ${name}`;
     const entry = totals.get(key) ?? { type: key, count: 0, shallowBytes: 0, largestRetainedBytes: 0 };
     entry.count++;
@@ -86,5 +107,13 @@ export function summarizeHeap(heap) {
     entry.largestRetainedBytes = Math.max(entry.largestRetainedBytes, retained[node]);
     totals.set(key, entry);
   }
+  return { detachedNodes, totals };
+}
+
+export function summarizeHeap(heap) {
+  const graph = readGraph(heap);
+  const order = reversePostorder(graph);
+  const retained = retainedSizes(heap, graph, order, dominators(graph, order));
+  const { detachedNodes, totals } = totalsByType(heap, graph, retained);
   return { detachedNodes, largestRetainedTypes: [...totals.values()].sort((a, b) => b.largestRetainedBytes - a.largestRetainedBytes).slice(0, 15) };
 }

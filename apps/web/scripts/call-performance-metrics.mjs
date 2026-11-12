@@ -3,24 +3,35 @@ import { percentile } from "../../../features/scorecard/stats.mjs";
 export const METRICS = ["videoDroppedFramePercent", "layoutShift", "frameP95Ms", "droppedFramePercent", "longTasks", "blockingMs", "interactionMs", "heapMiB", "domNodes", "firstCallMs", "jsGzipKiB", "cssGzipKiB"];
 export const BUNDLE_METRICS = ["jsGzipKiB", "cssGzipKiB"];
 
-export function validateBudgets(budgets) {
+function validateRun(budgets) {
   if (!/^[a-f0-9]{40}$/.test(budgets.baselineCommit)) throw new Error("Budget baseline must be a full commit SHA");
   if (!Number.isInteger(budgets.repeats) || budgets.repeats < 5) throw new Error("Budgets require at least five repetitions");
   if (!Number.isFinite(budgets.sampleMs) || budgets.sampleMs < 3000) throw new Error("Scenario windows must be at least 3000 ms");
-  for (const metric of [...METRICS, "routeJsGzipKiB", "routeCssGzipKiB"]) {
-    if (!Number.isFinite(budgets.limits[metric]) || budgets.limits[metric] < 0) throw new Error(`Missing/invalid budget: ${metric}`);
-  }
-  for (const name of ["laptop", "phone"]) {
-    const device = budgets.devices[name];
-    if (!device || !Number.isFinite(device.cpu) || device.cpu < 1 || !Number.isInteger(device.viewport.width) || !Number.isInteger(device.viewport.height) || typeof device.touch !== "boolean") throw new Error(`Invalid device profile: ${name}`);
-  }
-  for (const device of Object.values(budgets.scenarios ?? {})) {
+}
+
+function validDevice(device) {
+  return device && Number.isFinite(device.cpu) && device.cpu >= 1 && Number.isInteger(device.viewport.width) && Number.isInteger(device.viewport.height) && typeof device.touch === "boolean";
+}
+
+function validateScenarioLimits(scenarios) {
+  for (const device of Object.values(scenarios ?? {})) {
     for (const limits of Object.values(device)) {
       for (const [metric, value] of Object.entries(limits)) {
         if (!METRICS.includes(metric) || !Number.isFinite(value) || value < 0) throw new Error(`Invalid scenario budget: ${metric}`);
       }
     }
   }
+}
+
+export function validateBudgets(budgets) {
+  validateRun(budgets);
+  for (const metric of [...METRICS, "routeJsGzipKiB", "routeCssGzipKiB"]) {
+    if (!Number.isFinite(budgets.limits[metric]) || budgets.limits[metric] < 0) throw new Error(`Missing/invalid budget: ${metric}`);
+  }
+  for (const name of ["laptop", "phone"]) {
+    if (!validDevice(budgets.devices[name])) throw new Error(`Invalid device profile: ${name}`);
+  }
+  validateScenarioLimits(budgets.scenarios);
 }
 
 export function validateScenarioBudgets(budgets, scenarios) {
