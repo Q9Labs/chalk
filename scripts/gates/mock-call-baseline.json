@@ -1,0 +1,7 @@
+{
+  "apps/web": 2,
+  "packages/whiteboard": 7,
+  "sdks/typescript/client": 826,
+  "sdks/typescript/react": 35,
+  "sdks/typescript/react-native": 4
+}
