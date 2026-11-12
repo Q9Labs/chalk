@@ -14,7 +14,7 @@ import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";
 import { LanguagePicker } from "./LanguagePicker";
-import { rememberLanguage, type NewCallLanguage } from "./transcript-languages";
+import { rememberLanguage, type NewCallLanguage } from "./language-choice";
 import { CopyAction, ErrorPanel, Menu, MenuItem, MoreButton, Seg, Sk, SkeletonRows, useIntentKeys, useToast } from "./kit";
 
 const PENDING_TRANSCRIPTS = new Set(["pending", "processing", "preparing", "transcribing", "verifying", "retryable_failure"]);
