@@ -38,7 +38,11 @@ lane() {
 
 mkdir -p "$status_dir"
 origin=${CHALK_PROOF_PROOF_ORIGIN:?CHALK_PROOF_PROOF_ORIGIN is not set}
-if [ -n "${CHALK_PROOF_PROOF_ORIGIN_OWN:-}" ] && [ "${CHALK_PROOF_PROOF_ORIGIN_OWN##*:}" != "${origin##*:}" ]; then
+port_of() {
+  local url=${1%/}
+  echo "${url##*:}"
+}
+if [ -n "${CHALK_PROOF_PROOF_ORIGIN_OWN:-}" ] && [ "$(port_of "$CHALK_PROOF_PROOF_ORIGIN_OWN")" != "$(port_of "$origin")" ]; then
   shared=()
   own=()
   for proof in "$@"; do
