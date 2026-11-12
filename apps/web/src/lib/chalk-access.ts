@@ -33,11 +33,16 @@ export async function resumePublicSpace(client: ChalkPublicClient, marker: Reloa
   return { session, arrival, credential: publicSpaceCredential(arrival) };
 }
 
+/** Where this build's Space `space` connects: the API origin, the Sync URLs and the direct-path switch. */
+export function webSpaceCredential(space: string): PublicSpaceCredential {
+  const apiBaseURL = publicAPIBaseURL();
+  return { apiBaseURL, syncURL: publicSyncURL(apiBaseURL), ...publicSyncDirectURL(), ...publicDirectPathControl(), space };
+}
+
 function publicSpaceCredential(arrival: PublicSpaceArrival): PublicSpaceCredential {
   const space = arrival.space?.slug?.trim();
   if (!space) throw new Error("This Space is unavailable.");
-  const apiBaseURL = publicAPIBaseURL();
-  return { apiBaseURL, syncURL: publicSyncURL(apiBaseURL), ...publicSyncDirectURL(), ...publicDirectPathControl(), space };
+  return webSpaceCredential(space);
 }
 
 export function publicAPIBaseURL(): string {

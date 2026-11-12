@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Schema } from "effect";
 import { currentSessionId, lastFailedRequest, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
+import { apiUrls } from "@q9labsai/chalk-client/effect";
 import type { ChalkProps } from "@q9labsai/chalk-react";
+import { backoffMs } from "./backoff";
 
 const apiFetch = withRequestContext();
 export type ReportProblem = NonNullable<ChalkProps["onReportProblem"]>;
@@ -29,14 +31,14 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
     setRefused(false);
     if (!tenantId) return;
     const controller = new AbortController();
-    let retryDelay = 1000;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let activeProbe: AbortController | undefined;
     const retry = () => {
+      failures += 1;
       timer = setTimeout(() => {
         void probe();
-      }, retryDelay);
-      retryDelay = Math.min(retryDelay * 2, 60_000);
+      }, backoffMs(failures, 1000, 60_000));
     };
     const probe = async () => {
       clearTimeout(timer);
@@ -44,7 +46,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       const attempt = new AbortController();
       activeProbe = attempt;
       try {
-        const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports/availability`, { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
+        const response = await apiFetch(apiUrls.problemReportAvailability(baseURL, tenantId), { signal: AbortSignal.any([controller.signal, attempt.signal, AbortSignal.timeout(5000)]) });
         if (!response.ok) throw new Error("Availability probe failed");
         const enabled = parseAvailability(await response.json()).available;
         if (!controller.signal.aborted && !attempt.signal.aborted) setRefused(!enabled);
@@ -53,7 +55,7 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
       }
     };
     const online = () => {
-      retryDelay = 1000;
+      failures = 0;
       void probe();
     };
     window.addEventListener("online", online);
@@ -78,7 +80,7 @@ export function problemReporter({ baseURL, tenantId, mediaProof, connection }: {
     const credential = mediaProof();
     const snapshot = connection();
     if (!credential || !tenantId) throw new Error("Join the call before sending a report.");
-    const response = await apiFetch(`${baseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(tenantId)}/problem-reports`, {
+    const response = await apiFetch(apiUrls.problemReports(baseURL, tenantId), {
       method: "POST",
       signal: AbortSignal.timeout(12000),
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` },

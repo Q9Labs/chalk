@@ -120,7 +120,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     if (!reloadMarker) warmCall();
   }, [reloadMarker]);
   // Sync closes the socket of a call that ended, so the next call's socket is warmed while the visitor reads the leave screen.
-  const warmAfterCall = ended?.phase === "left" || ended?.phase === "failed" || entrance.phase === "failed";
+  const warmAfterCall = ended?.phase === "left" || ended?.phase === "failed";
   useEffect(() => {
     if (warmAfterCall) warmCall();
   }, [warmAfterCall]);

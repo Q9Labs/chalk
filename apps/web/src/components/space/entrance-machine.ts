@@ -6,8 +6,8 @@ import type { EntryFailure } from "./entry-failure";
 /** A visitor the host has not let in yet. */
 export type WaitingArrival = {
   readonly arrival: PublicSpaceArrival;
-  readonly inviteLink: string | undefined;
-  readonly spaceName: string | undefined;
+  readonly inviteLink?: string | undefined;
+  readonly spaceName?: string | undefined;
 };
 
 /** An admitted visitor: the access they hold and the Space it opens. */

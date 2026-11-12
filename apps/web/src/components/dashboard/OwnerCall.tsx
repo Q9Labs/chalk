@@ -1,5 +1,4 @@
 import { readReloadRejoin, reloadRejoinAccess, reloadRejoinPresence, reloadRejoinStorageKey, writeReloadRejoin, type GetAccess, type SpaceClient } from "@q9labsai/chalk-client";
-import { createSpaceClientForPlatform } from "@q9labsai/chalk-client/effect";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -14,7 +13,8 @@ import { ErrorPanel } from "./kit";
 import { createCallAction, readNewCallLanguage } from "./transcript-languages";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
-import { publicAPIBaseURL, publicDirectPathControl, publicSyncDirectURL } from "../../lib/chalk-access";
+import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
+import { createLocalSpaceClient } from "../../lib/local-space-client";
 const isOwnerReloadIntent = Schema.is(Schema.Struct({ ownerJoinKey: Schema.String.check(Schema.isUUID()), ownerUserId: Schema.String }));
 
 function readOwnerReload(spaceId: string, userId: string) {
@@ -173,23 +173,26 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     setStartError(null);
   }, [spaceId]);
   useEffect(() => {
-    const owned = createSpaceClientForPlatform({ space: spaceId, getAccess: owner.getAccess, baseUrl: apiBaseURL }, { syncUrl: import.meta.env.VITE_CHALK_SYNC_URL?.trim() || undefined, syncDirectUrl: publicSyncDirectURL().syncDirectURL, ...publicDirectPathControl() });
+    const owned = createLocalSpaceClient({ credential: webSpaceCredential(spaceId), getAccess: owner.getAccess });
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };
-    const unsubscribe = owned.subscribe(() => owner.observe(owned.getSnapshot()));
+    let leftCleanly = false;
+    const unsubscribe = owned.subscribe(() => {
+      const snapshot = owned.getSnapshot();
+      owner.observe(snapshot);
+      if (snapshot.connection.status === "left") leftCleanly = true;
+    });
     window.addEventListener("pagehide", pagehide);
     setClient(owned);
     return () => {
       unsubscribe();
       window.removeEventListener("pagehide", pagehide);
-      void owned
-        .leave()
-        .then(() => owner.clearReload())
-        .catch(() => undefined)
-        .finally(() => owned.dispose());
+      void owned.close().then(() => {
+        if (leftCleanly) owner.clearReload();
+      });
     };
-  }, [spaceId, owner, apiBaseURL]);
+  }, [spaceId, owner]);
   const leave = () => {
     void navigate({ to: "/dashboard/call/$spaceId", params: { spaceId } });
   };

@@ -34,7 +34,7 @@ export function LocalSpace({
   const { mode, setPreference } = useTheme();
   const { session, credential, arrival } = admission;
   const hostCanExtend = (arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600;
-  const client = useMemo(() => createLocalSpaceClient({ credential, session }), [credential, session]);
+  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess: session.getAccess, connectionAccess: session.connectionAccess }), [credential, session]);
   const release = useCallback(async () => {
     await client.close();
     await session.leave();
