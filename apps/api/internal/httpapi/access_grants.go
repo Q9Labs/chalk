@@ -2,16 +2,12 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/accessgrants"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -85,190 +81,12 @@ func issueAccessGrantEndpoint(
 	mediaResolver MediaPlaneResolver,
 	authorizer TenantAuthorizer,
 ) Endpoint[issueAccessGrantRequest, accessGrantResponse] {
+	issuer := accessGrantIssuer{refresh, mediaIssuer, mediaVerifier, active, generations, spacesService, tenantsService, mediaResolver, authorizer}
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant",
 		"issueAccessGrant",
 		decodeIssueAccessGrantRequest,
-		func(ctx context.Context, request issueAccessGrantRequest) (_ accessGrantResponse, failure error) {
-			stage := "tenant_authorization"
-			defer func() {
-				if failure != nil {
-					apiErr := episodeLifecycleRules.apiError(failure)
-					observability.LogAccessGrantFailure(ctx, stage, apiErr.Code)
-				}
-			}()
-			if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
-				return accessGrantResponse{}, err
-			}
-			stage = "request"
-			if refresh == nil || mediaIssuer == nil || mediaVerifier == nil || active == nil || generations == nil {
-				return accessGrantResponse{}, apiErrorServiceUnavailable
-			}
-			if request.Body.ParticipantGeneration <= 0 {
-				return accessGrantResponse{}, apiErrorInvalidRequest
-			}
-
-			key := synctokens.SubjectKey{TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID}
-			var (
-				subject accessgrants.Subject
-				join    mediaplane.Join
-				err     error
-			)
-			currentToken := strings.TrimSpace(request.Body.CurrentMediaToken)
-			replaceMediaConnection := request.Body.ReplaceMediaConnection
-			conditionalReplacement := replaceMediaConnection && request.Body.ExpectedMediaConnectionID != nil
-			if !replaceMediaConnection || conditionalReplacement {
-				stage = "media_token"
-				if currentToken == "" {
-					return accessGrantResponse{}, apiErrorMediaTokenRequired
-				}
-				subject, err = mediaVerifier.Verify(observability.ContextWithAccessGrantRefresh(ctx), currentToken)
-				if err != nil && !errors.Is(err, accessgrants.ErrExpired) {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-				replaceMediaConnection = replaceMediaConnection || errors.Is(err, accessgrants.ErrExpired)
-				if routeErr := accessgrants.RequireRouteSubject(subject, accessgrants.RouteSubject{
-					TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID,
-					ParticipantID: request.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration,
-					Provider: subject.Provider, ProviderSubject: subject.ProviderSubject,
-					ConnectionID: subject.ConnectionID,
-				}); routeErr != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(routeErr)
-				}
-				if subject.ParticipantGeneration != request.Body.ParticipantGeneration {
-					return accessGrantResponse{}, apiErrorParticipantGenerationMismatch
-				}
-			}
-			stage = "participant_authorization"
-			var isActive bool
-			if replaceMediaConnection {
-				isActive, err = generations.AuthorizeActiveParticipantGeneration(ctx, key, request.Body.ParticipantGeneration)
-			} else {
-				isActive, err = active.AuthorizeActiveParticipant(ctx, subject)
-			}
-			if err != nil {
-				return accessGrantResponse{}, accessGrantRefreshError(err)
-			}
-			if !isActive {
-				return accessGrantResponse{}, apiErrorForbidden
-			}
-			previous := subject
-			if conditionalReplacement {
-				expected := strings.TrimSpace(*request.Body.ExpectedMediaConnectionID)
-				if expected == "" {
-					return accessGrantResponse{}, apiErrorInvalidRequest
-				}
-				if subject.ConnectionID != expected {
-					return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
-				}
-				previous, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.Provider(subject.Provider), ClientPayload: map[string]any{"connectionId": expected}})
-				if err != nil {
-					return accessGrantResponse{}, err
-				}
-			}
-			replayReplacement := (replaceMediaConnection && !request.Body.ReplaceMediaConnection) || conditionalReplacement
-			if replayReplacement {
-				subject = previous
-				stage = "media_replay"
-				requestHash := accessgrants.RefreshRequestHash(currentToken)
-				stored, err := generations.LoadParticipantMediaRefresh(ctx, subject, requestHash)
-				if err != nil {
-					return accessGrantResponse{}, err
-				}
-				if stored != nil {
-					if !stored.CreatedAt.Add(accessgrants.RefreshReplayWindow).After(time.Now()) {
-						return accessGrantResponse{}, accessGrantRefreshError(accessgrants.ErrConnectionSuperseded)
-					}
-					cached, valid, err := decodeAccessGrantReplay(currentToken, stored.Ciphertext)
-					if err != nil {
-						return accessGrantResponse{}, err
-					}
-					if valid {
-						return cached, nil
-					}
-					// Expired cached credentials can renew on the winning connection.
-					subject, err = accessGrantSubjectForJoin(request, mediaplane.Join{Provider: mediaplane.Provider(subject.Provider), ClientPayload: cached.Media.ClientPayload})
-					if err != nil {
-						return accessGrantResponse{}, err
-					}
-					previous = subject
-					replaceMediaConnection = false
-				} else {
-					stage = "media_binding"
-					reservation := previous
-					if conditionalReplacement {
-						reservation.ConnectionID = fmt.Sprintf("replacement:%x", requestHash)
-						err = generations.ReserveParticipantMediaRefresh(ctx, previous, reservation, requestHash)
-					} else {
-						reservationID, idErr := utilities.NewID()
-						if idErr != nil {
-							return accessGrantResponse{}, idErr
-						}
-						reservation.ConnectionID = "replacement:" + reservationID.String()
-						err = generations.ReplaceParticipantMediaConnection(ctx, previous, reservation)
-					}
-					if err != nil {
-						return accessGrantResponse{}, accessGrantRefreshError(err)
-					}
-					original := previous
-					defer func() {
-						if failure == nil {
-							return
-						}
-						cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-						defer cancel()
-						if err := generations.ReplaceParticipantMediaConnection(cleanup, reservation, original); err != nil && !errors.Is(err, accessgrants.ErrConnectionSuperseded) {
-							failure = errors.Join(failure, fmt.Errorf("release media refresh reservation: %w", err))
-						}
-					}()
-					previous = reservation
-				}
-			}
-			stage = "media_connection"
-			if replaceMediaConnection {
-				join, err = createAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request)
-				if err == nil {
-					subject, err = accessGrantSubjectForJoin(request, join)
-				}
-			} else {
-				join, err = resumeAccessGrantJoin(ctx, spacesService, tenantsService, mediaResolver, request, subject)
-			}
-			if err != nil {
-				return accessGrantResponse{}, err
-			}
-
-			stage = "sync_credential"
-			syncCredential, err := refresh.IssueForParticipant(ctx, key)
-			if err != nil {
-				return accessGrantResponse{}, err
-			}
-			stage = "media_credential"
-			mediaCredential, err := mediaIssuer.Issue(observability.ContextWithAccessGrantClientProviders(ctx, request.MediaClients), subject)
-			if err != nil {
-				return accessGrantResponse{}, err
-			}
-			response := newAccessGrantResponse(subject, syncCredential, mediaCredential, join)
-			stage = "media_binding"
-			if replayReplacement {
-				body, err := json.Marshal(response)
-				if err != nil {
-					return accessGrantResponse{}, err
-				}
-				replay, err := accessgrants.SealRefreshReplay(currentToken, body)
-				if err != nil {
-					return accessGrantResponse{}, err
-				}
-				if err := generations.CompleteParticipantMediaRefresh(ctx, previous, subject, replay); err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-			} else if replaceMediaConnection {
-				if err := generations.BindParticipantMediaConnection(ctx, subject); err != nil {
-					return accessGrantResponse{}, accessGrantRefreshError(err)
-				}
-			}
-
-			return response, nil
-		},
+		issuer.issue,
 	).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
