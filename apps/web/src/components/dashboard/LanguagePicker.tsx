@@ -2,7 +2,8 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Keyb
 import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { Icon, type IconName } from "../site/Icon";
 import { usePhone } from "./kit";
-import { languageByCode, languageOptions, readRecentLanguages, searchLanguages, splitMatch, suggestedLanguages, type LanguageOption } from "./transcript-languages";
+import { readRecentLanguages } from "./language-choice";
+import { languageByCode, languageOptions, searchLanguages, splitMatch, suggestedLanguages, type LanguageOption } from "./transcript-languages";
 
 const POPOVER_WIDTH = 352;
 const SCREEN_MARGIN = 16;

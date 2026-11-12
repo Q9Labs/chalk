@@ -9,7 +9,7 @@ import { Icon } from "../site/Icon";
 import { useLoad } from "./use-dashboard";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
-import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";
+import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
 
 /** A call's shareable link: the row's own, or a bounded invite-only read. */

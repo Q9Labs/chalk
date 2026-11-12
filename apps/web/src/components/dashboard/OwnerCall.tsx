@@ -11,7 +11,7 @@ import { dashboardAccessFailure } from "../../lib/dashboard/owner-access";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./use-dashboard";
 import { ErrorPanel } from "./kit";
-import { createCallAction, readNewCallLanguage } from "./transcript-languages";
+import { createCallAction, readNewCallLanguage } from "./language-choice";
 
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, publicDirectPathControl, publicSyncDirectURL } from "../../lib/chalk-access";
