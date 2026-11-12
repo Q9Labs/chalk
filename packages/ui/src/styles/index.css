@@ -1313,15 +1313,6 @@
   padding-bottom: var(--chalk-reaction-toast-lift, 0px);
   justify-content: flex-end;
 }
-[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="bottom"]) .chalk-toasts {
-  --chalk-toast-lift: 160px;
-}
-[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="compact"]) .chalk-toasts {
-  --chalk-toast-lift: 182px;
-}
-[data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
-  --chalk-toast-lift: 242px;
-}
 .chalk-toast {
   display: flex;
   align-items: center;
