@@ -9,7 +9,8 @@ export interface ProbeEnv {
 
 export type JoinResult = { readonly ok: true; readonly ms: number } | { readonly ok: false; readonly stage: ProbeStage; readonly detail: string };
 export type ProbeStage = "create episode" | "admit participant" | "sync handshake";
-export type ProbeState = { readonly status: "up" | "down"; readonly failures: number };
+/** `pending` is a message that was decided but not yet delivered; it stays in the state until the webhook accepts it. */
+export type ProbeState = { readonly status: "up" | "down"; readonly failures: number; readonly pending?: string };
 
 /** A single failed cycle is not paged: two in a row (ten minutes) are. */
 export const FAILURES_BEFORE_PAGE = 2;
@@ -60,7 +61,7 @@ function field(value: unknown, key: string, stage: ProbeStage): string {
 }
 
 function isProbeState(value: unknown): value is ProbeState {
-  return typeof value === "object" && value !== null && "status" in value && "failures" in value && (value.status === "up" || value.status === "down") && typeof value.failures === "number";
+  return typeof value === "object" && value !== null && "status" in value && "failures" in value && (value.status === "up" || value.status === "down") && typeof value.failures === "number" && (!("pending" in value) || value.pending === undefined || typeof value.pending === "string");
 }
 
 function isWelcome(data: unknown): boolean {
@@ -119,15 +120,21 @@ export async function joinProbe(env: ProbeEnv, api: URL, sync: URL): Promise<Joi
   }
 }
 
-/** Runs the probe, keeps its state, and returns the one message to send when the state changed. */
-export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL): Promise<string | undefined> {
+/**
+ * Runs the probe, keeps its state, and delivers the one message the state change calls for.
+ * The message is stored as `pending` before delivery and cleared after it, so a failed delivery is retried on the next cycle instead of being lost.
+ */
+export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: (message: string) => Promise<void>): Promise<void> {
   if (!env.PROBE_STATE) throw new Error("PROBE_STATE must be bound when the join probe is configured");
   const stored = await env.PROBE_STATE.get(STATE_KEY, "json");
   const previous = isProbeState(stored) ? stored : null;
   const result = await joinProbe(env, api, sync);
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
+  const pending = message ?? previous?.pending;
+  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
+  console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");
+  if (!pending) return;
+  await deliver(pending);
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(next));
-  console.log("join probe state", JSON.stringify(next), message ? "message" : "silent");
-  return message;
 }

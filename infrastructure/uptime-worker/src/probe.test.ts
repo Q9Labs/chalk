@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FAILURES_BEFORE_PAGE, joinProbe, transition, type JoinResult, type ProbeState } from "./probe.ts";
+import { FAILURES_BEFORE_PAGE, joinProbe, runJoinProbe, transition, type JoinResult, type ProbeState } from "./probe.ts";
 
 const ok: JoinResult = { ok: true, ms: 120 };
 const failed: JoinResult = { ok: false, stage: "sync handshake", detail: "no welcome within 10 s" };
@@ -60,6 +60,31 @@ test("a rejected admission names its stage", async () => {
   try {
     const result = await joinProbe({ PROBE_API_KEY: "k", PROBE_TENANT_ID: "t", PROBE_SPACE_ID: "s" }, new URL("https://api.example"), new URL("https://sync.example"));
     assert.deepEqual(result, { ok: false, stage: "admit participant", detail: "HTTP 403" });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("a page whose delivery fails is kept and delivered on the next cycle", async () => {
+  const store = new Map<string, string>();
+  const kv = { get: async (key: string) => (store.has(key) ? JSON.parse(store.get(key) ?? "null") : null), put: async (key: string, value: string) => void store.set(key, value) } as unknown as KVNamespace;
+  const env = { PROBE_API_KEY: "k", PROBE_TENANT_ID: "t", PROBE_SPACE_ID: "s", PROBE_STATE: kv };
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(null, { status: 503 })) as typeof fetch;
+  const sent: string[] = [];
+  const failing = async () => {
+    throw new Error("webhook down");
+  };
+  try {
+    const cycle = (deliver: (message: string) => Promise<void>) => runJoinProbe(env, new URL("https://api.example"), new URL("https://sync.example"), deliver);
+    await cycle(async (message) => void sent.push(message));
+    assert.equal(sent.length, 0);
+    await assert.rejects(cycle(failing), /webhook down/);
+    await cycle(async (message) => void sent.push(message));
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /create episode/);
+    await cycle(async (message) => void sent.push(message));
+    assert.equal(sent.length, 1);
   } finally {
     globalThis.fetch = original;
   }
