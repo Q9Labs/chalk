@@ -372,7 +372,7 @@ func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpac
 }
 
 func TestPublicWriteNamingTheOwnSFUDefaultFollowsTheDefaultBackToCloudflare(t *testing.T) {
-	cf, own := MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU
+	cf, own := mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU
 	ownDefault := PlanePolicy{Platform: own, Allowed: allowAll(t)}
 	reverted := PlanePolicy{Platform: cf, Allowed: allowAll(t)}
 	service := NewServiceWithDefaultProvider(nil, own).WithPlanePolicy(ownDefault)
