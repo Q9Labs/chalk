@@ -117,7 +117,13 @@ it("snaps without a spring when the person prefers reduced motion", async () => 
   const { sheet } = await open();
   await pointer(grabber(), "pointerdown", 0, 0);
   await pointer(grabber(), "pointermove", 40, 500);
-  await pointer(grabber(), "pointerup", 40, 1000);
+  // The sheet gives its own transitions back on the next timer tick, so read it in the release's own tick:
+  // an awaited release lets a loaded machine run that timer first.
+  act(() => {
+    const release = new MouseEvent("pointerup", { bubbles: true, clientY: 40 });
+    Object.defineProperties(release, { pointerId: { value: 1 }, timeStamp: { value: 2000 } });
+    grabber().dispatchEvent(release);
+  });
   expect(sheet.style.transition).toBe("none");
 });
 
