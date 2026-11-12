@@ -789,6 +789,7 @@
 
 /* Notices sit in the band between the header and the controls under it, and an open reaction tray shrinks that band with padding, because a margin does not shrink a box held by both top and bottom. A call too short for the band's three notices folds them into the header instead (ToastStack's FOLD_BELOW_PX). */
 .chalk-toasts {
+  container: chalk-toasts / inline-size;
   --chalk-toast-top: 60px;
   --chalk-toast-lift: 92px;
   box-sizing: border-box;
@@ -807,13 +808,15 @@
 [data-chalk]:has(.chalk-board[data-primary] .chalk-board-island[data-place="expanded"]) .chalk-toasts {
   --chalk-toast-lift: 242px;
 }
+/* A notice is a grid of icon, message, action and dismiss. The icon, action and dismiss share the first line's 36px row, so a two-line notice keeps its close button beside the title. Spacing lives on the items, so a missing action or dismiss leaves no gap. */
 .chalk-toast {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2-5);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto;
+  align-items: start;
   flex-shrink: 0;
+  box-sizing: border-box;
   min-height: 48px;
-  max-width: min(480px, calc(100% - 32px));
+  max-width: min(560px, calc(100% - 32px));
   padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-3);
   background: var(--chalk-popover);
   border: 1px solid var(--chalk-line);
@@ -829,9 +832,28 @@
 .chalk-toast:not(:has(button)) {
   padding-right: var(--space-4);
 }
+.chalk-toast > [data-part="pill-button"] {
+  grid-column: 3;
+  margin-left: var(--space-2);
+}
+.chalk-toast > [data-part="toast-dismiss"] {
+  grid-column: 4;
+  margin-left: var(--space-1);
+}
+/* A narrow stack puts the action under the sentence, so the sentence keeps the width it needs to stay within two lines. */
+@container chalk-toasts (max-width: 520px) {
+  .chalk-toast > [data-part="pill-button"] {
+    grid-row: 2;
+    grid-column: 2;
+    justify-self: start;
+    margin: var(--space-0-5) 0 var(--space-1) var(--space-2-5);
+  }
+}
 /* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon and a thin border tint only. */
 .chalk-toast {
   --chalk-toast-accent: var(--chalk-muted-text);
+  /* Height of the action and close buttons; a one-line message centers on it. */
+  --chalk-toast-row: 36px;
   font-size: var(--type-body-sm);
 }
 .chalk-toast[data-type="success"] {
@@ -844,6 +866,8 @@
   --chalk-toast-accent: var(--chalk-danger-text);
 }
 .chalk-toast [data-part="toast-icon"] {
+  grid-column: 1;
+  margin-top: var(--space-1);
   display: grid;
   place-items: center;
   flex: none;
@@ -872,25 +896,31 @@
   width: 20px;
   height: 20px;
 }
+/* A notice says one thing in at most two lines. Long names, links and error tokens wrap inside it instead of widening it past the call. */
 .chalk-toast > [data-part="toast-message"] {
-  /* Long names, links and error tokens wrap inside the notice instead of widening it past the call. */
-  flex: 1 1 auto;
-  min-width: 0;
+  grid-column: 2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
   overflow-wrap: anywhere;
   text-wrap: pretty;
-  margin-right: var(--space-1);
+  /* Margins, not padding, so the clamp's clip falls right after the second line. */
+  margin: calc((var(--chalk-toast-row) - 1lh) / 2) 0 calc((var(--chalk-toast-row) - 1lh) / 2) var(--space-2-5);
   line-height: 1.35;
-  padding: var(--space-1) 0;
 }
-.chalk-toast[data-type="error"] {
-  max-width: min(560px, calc(100% - 32px));
-}
-/* On a phone a notice uses the width it has, so a sentence with an action stays within two lines. */
+/* On a phone a notice uses the width it has. */
 @container chalk-call (max-width: 640px) {
-  .chalk-toast,
-  .chalk-toast[data-type="error"] {
+  .chalk-toast {
     max-width: calc(100% - 16px);
   }
+}
+/* A stack mounted in the dock rises above the controls instead of covering them. */
+.chalk-frame-dock .chalk-toasts {
+  top: auto;
+  bottom: calc(100% + var(--space-3));
+  padding-bottom: 0;
 }
 /* The header's notice button stays when a phone hides the header's other controls. */
 .chalk-notice-button {
