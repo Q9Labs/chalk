@@ -1,0 +1,4 @@
+{
+  "ignoreRules": ["cjs-resolves-to-esm", "internal-resolution-error"],
+  "excludeEntrypoints": ["./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"]
+}

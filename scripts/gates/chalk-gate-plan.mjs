@@ -501,9 +501,7 @@ export function createGatePlan(files, options = {}) {
       "Affected package TypeScript resolution",
       publishableWorkspaces.length > 0,
       publishableWorkspaces.map((workspace) => workspace.name).join(", ") || "no affected public package",
-      publishableWorkspaces.length > 0
-        ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--ignore-rules", "cjs-resolves-to-esm", "internal-resolution-error", "--exclude-entrypoints", "./styles.css", "./src/styles.css", "./dist/styles/*", "./styles/*"]
-        : null,
+      publishableWorkspaces.length > 0 ? ["pnpm", ...publishableWorkspaces.flatMap((workspace) => ["--filter", workspace.name]), "exec", "attw", "--pack", "--config-path", path.join(options.repositoryRoot ?? repositoryRoot, ".attw.json")] : null,
     ),
   ];
 
