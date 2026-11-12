@@ -22,6 +22,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
+import ports from "./dev/ports.json" with { type: "json" };
 
 const repoRoot = new URL("..", import.meta.url);
 const scratchpadDir = path.join(repoRoot.pathname, "scratchpad");
@@ -193,7 +194,7 @@ async function ensureAndroidEmulator() {
 }
 
 function reverseAndroidPorts(serial) {
-  for (const port of ["8787", "8080", "8081", "4100"]) {
+  for (const port of [8787, ports.api, ports.metro, ports.sync]) {
     tryRun("adb", ["-s", serial, "reverse", `tcp:${port}`, `tcp:${port}`]);
   }
 }

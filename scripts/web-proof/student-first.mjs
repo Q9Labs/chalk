@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ChalkAPIError, createChalkServerClient } from "../../sdks/typescript/client/dist/server/index.js";
 import { sourceAliases } from "../../apps/web/vite.aliases.ts";
+import ports from "../dev/ports.json" with { type: "json" };
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const { chromium } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("playwright");
@@ -15,9 +16,9 @@ const localURL = (value) => {
   assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(url.hostname), "This proof only accepts local services");
   return url.origin;
 };
-const api = localURL(process.env.CHALK_PROOF_API_URL ?? "http://127.0.0.1:8080");
-const web = localURL(process.env.CHALK_PROOF_WEB_URL ?? "http://127.0.0.1:3070");
-const sync = new URL(process.env.CHALK_PROOF_SYNC_URL ?? "ws://127.0.0.1:4100/v1/sync");
+const api = localURL(process.env.CHALK_PROOF_API_URL ?? `http://127.0.0.1:${ports.api}`);
+const web = localURL(process.env.CHALK_PROOF_WEB_URL ?? `http://127.0.0.1:${ports.web}`);
+const sync = new URL(process.env.CHALK_PROOF_SYNC_URL ?? `ws://127.0.0.1:${ports.sync}/v1/sync`);
 localURL(sync.href);
 const directory = resolve(process.env.CHALK_STUDENT_FIRST_DIRECTORY ?? ".private/web-proof/student-first");
 const chalk = createChalkServerClient({
