@@ -6,52 +6,18 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"log/slog"
-	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pion/ice/v4"
-	"github.com/pion/webrtc/v4"
-
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-const (
-	opusPayloadType = 111
-	vp8PayloadType  = 96
-	rtxPayloadType  = 97
-)
-
-var (
-	opusCapability = webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}
-	// A subscriber reports lost video packets with generic NACK, and the node
-	// resends them from the publisher's shared history (see subscription.retransmit).
-	// A receiver that sends no transport-wide feedback may send REMB, but only when the
-	// answer names goog-remb (see reportEstimator).
-	vp8Capability = webrtc.RTPCodecCapability{
-		MimeType: webrtc.MimeTypeVP8, ClockRate: 90000,
-		RTCPFeedback: []webrtc.RTCPFeedback{{Type: "nack"}, {Type: "nack", Parameter: "pli"}, {Type: "ccm", Parameter: "fir"}, {Type: "goog-remb"}},
-	}
-)
-
-// Pion buffers each incoming stream until it is read, growing the buffer up to
-// a limit. Every stream the node receives is read promptly, so these limits only
-// bound a reader that stalls: a quarter second of the high camera layer.
-const (
-	rtpBufferLimit  = 128 << 10
-	rtcpBufferLimit = 32 << 10
-)
-
 // closeWait bounds how long Close waits for the node's goroutines.
 const closeWait = 5 * time.Second
-
-// iceTCPReadBuffer is the datagram queue each ICE-TCP connection may hold unread.
-const iceTCPReadBuffer = 32
 
 // Node is one SFU process. All its peers share one UDP socket.
 type Node struct {
@@ -59,15 +25,10 @@ type Node struct {
 	log         *slog.Logger
 	incarnation string
 	peers       *peerFactory
-	conn        *net.UDPConn
-	media       net.PacketConn // conn, or the batching wrapper around it
-	mux         io.Closer
-	tcpMux      io.Closer // nil when the node has no TCP listener
+	sockets     *mediaSockets
 	guard       *guard
 	pressure    hostPressure  // the control loop's
 	done        chan struct{} // closed by Close; stops the node's control loop
-	// receiveBuffer and sendBuffer are the UDP socket buffers the kernel granted, zero when unknown.
-	receiveBuffer, sendBuffer int
 
 	wg sync.WaitGroup
 
@@ -100,44 +61,16 @@ type Node struct {
 
 // NewNode binds the shared UDP socket and builds the Pion API.
 func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
-	// A call that shrinks to the threshold takes the class ceiling back, so a class at the threshold
-	// must fit it with a screen share, or its admitted media would outgrow its reservation. When
-	// admission caps an Episode at the threshold or below, no call ever crosses it and the check
-	// would only refuse a node that never needs it.
-	limits := &Node{cfg: cfg}
-	crossable := cfg.LargeCallParticipants > 0 && cfg.LargeCallParticipants < cfg.MaxEpisodeParticipants
-	if mandatory, ceiling := limits.mandatoryPackets(cfg.LargeCallParticipants, true), limits.episodeCeiling(cfg.LargeCallParticipants); crossable && mandatory > ceiling {
-		return nil, fmt.Errorf("SFU_LARGE_CALL_PARTICIPANTS: %d Participants need %d mandatory packets/s with a screen share but the Episode ceiling is %d", cfg.LargeCallParticipants, mandatory, ceiling)
+	if err := checkLargeCallFits(cfg); err != nil {
+		return nil, err
 	}
-	address, err := net.ResolveUDPAddr("udp4", cfg.UDPAddr)
+	sockets, err := openSockets(cfg, log)
 	if err != nil {
-		return nil, fmt.Errorf("resolve UDP address %q: %w", cfg.UDPAddr, err)
+		return nil, err
 	}
-	conn, err := net.ListenUDP("udp4", address)
+	peers, err := newPeerFactory(cfg, sockets.mux, sockets.tcpMux)
 	if err != nil {
-		return nil, fmt.Errorf("listen on UDP %q: %w", cfg.UDPAddr, err)
-	}
-	receiveBuffer := receiveSocketBuffer.size(conn, cfg.UDPReceiveBuffer, log)
-	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
-	media := newMediaConn(conn)
-	mux := webrtc.NewICEUDPMux(nil, media)
-	var tcpMux ice.TCPMux
-	if cfg.TCPAddr != "" {
-		listener, err := net.Listen("tcp4", cfg.TCPAddr)
-		if err != nil {
-			_ = mux.Close()
-			_ = conn.Close()
-			return nil, fmt.Errorf("listen on TCP %q: %w", cfg.TCPAddr, err)
-		}
-		tcpMux = webrtc.NewICETCPMux(nil, listener, iceTCPReadBuffer)
-	}
-	peers, err := newPeerFactory(cfg, mux, tcpMux)
-	if err != nil {
-		if tcpMux != nil {
-			_ = tcpMux.Close()
-		}
-		_ = mux.Close()
-		_ = conn.Close()
+		sockets.close()
 		return nil, err
 	}
 	n := &Node{
@@ -145,13 +78,8 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		log:           log,
 		incarnation:   randomHex(4),
 		peers:         peers,
-		conn:          conn,
-		media:         media,
-		mux:           mux,
-		tcpMux:        tcpMux,
+		sockets:       sockets,
 		guard:         newGuard(cfg.Guard, log),
-		receiveBuffer: receiveBuffer,
-		sendBuffer:    sendBuffer,
 		done:          make(chan struct{}),
 		sessions:      map[string]*Session{},
 		participants:  map[participantKey]*Session{},
@@ -171,6 +99,23 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	return n, nil
 }
 
+// checkLargeCallFits refuses a configuration whose largest crossable call outgrows its Episode
+// ceiling. A call that shrinks to the threshold takes the class ceiling back, so a class at the
+// threshold must fit it with a screen share, or its admitted media would outgrow its reservation.
+// When admission caps an Episode at the threshold or below, no call ever crosses it and the check
+// would only refuse a node that never needs it.
+func checkLargeCallFits(cfg config.Config) error {
+	if cfg.LargeCallParticipants <= 0 || cfg.LargeCallParticipants >= cfg.MaxEpisodeParticipants {
+		return nil
+	}
+	limits := &Node{cfg: cfg}
+	mandatory, ceiling := limits.mandatoryPackets(cfg.LargeCallParticipants, true), limits.episodeCeiling(cfg.LargeCallParticipants)
+	if mandatory > ceiling {
+		return fmt.Errorf("SFU_LARGE_CALL_PARTICIPANTS: %d Participants need %d mandatory packets/s with a screen share but the Episode ceiling is %d", cfg.LargeCallParticipants, mandatory, ceiling)
+	}
+	return nil
+}
+
 func randomHex(bytes int) string {
 	buffer := make([]byte, bytes)
 	if _, err := rand.Read(buffer); err != nil {
@@ -183,65 +128,7 @@ func randomHex(bytes int) string {
 func (n *Node) Incarnation() string { return n.incarnation }
 
 // UDPPort is the bound shared media port.
-func (n *Node) UDPPort() int { return n.conn.LocalAddr().(*net.UDPAddr).Port }
-
-// Budget reports the node's packet budget and the part live Episodes reserve.
-func (n *Node) Budget() (budget, reserved int) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return n.cfg.PacketBudget, n.reservedPackets()
-}
-
-// Host reports the host-health guard and the node's measured media for readiness.
-func (n *Node) Host() protocol.HostState {
-	health := n.guard.snapshot()
-	state := protocol.HostState{
-		AdmissionReason:       health.AdmissionReason,
-		QueueDelayP95Ms:       milliseconds(health.QueueDelayP95),
-		SchedulerLatencyP99Ms: milliseconds(health.SchedulerLatencyP99),
-		UDPReceiveBufferBytes: n.receiveBuffer,
-		UDPSendBufferBytes:    n.sendBuffer,
-	}
-	state.Goroutines, state.HeapInuseBytes = readRuntime()
-	if state.AdmissionReason == "" {
-		n.mu.Lock()
-		if n.retirementsFull() {
-			state.AdmissionReason = reasonRetirementsFull
-		}
-		n.mu.Unlock()
-	}
-	if rss, known := ResidentBytes(); known {
-		state.RSSBytes = &rss
-	}
-	if errs, known := readUDPErrors(udpStatsPath); known {
-		state.UDPReceiveBufferErrors, state.UDPSendBufferErrors = &errs.receive, &errs.send
-	}
-	if health.StealKnown {
-		steal := round2(health.StealPercent)
-		state.StealPercent = &steal
-	}
-	if stats := n.stats.Load(); stats != nil {
-		state.PacketsPerSecond = math.Round(stats.packets)
-	}
-	return state
-}
-
-// episodeState is the Episode's state as of the latest allocation.
-func (n *Node) episodeState(key episodeKey) protocol.EpisodeState {
-	if stats := n.stats.Load(); stats != nil {
-		return stats.episodes[key]
-	}
-	return protocol.EpisodeState{}
-}
-
-func milliseconds(d time.Duration) float64 { return round2(float64(d) / float64(time.Millisecond)) }
-
-// SessionCount is the number of live sessions.
-func (n *Node) SessionCount() int {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return len(n.sessions)
-}
+func (n *Node) UDPPort() int { return n.sockets.conn.LocalAddr().(*net.UDPAddr).Port }
 
 // EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
 func (n *Node) EndEpisode(tenantID, episodeID string) int {
@@ -345,9 +232,5 @@ func (n *Node) Close() {
 	case <-time.After(closeWait):
 		n.log.Error("media readers still running after close", "wait", closeWait)
 	}
-	if n.tcpMux != nil {
-		_ = n.tcpMux.Close()
-	}
-	_ = n.mux.Close()
-	_ = n.conn.Close()
+	n.sockets.close()
 }

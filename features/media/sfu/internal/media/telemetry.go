@@ -142,7 +142,7 @@ func (n *Node) Telemetry() Telemetry {
 		telemetry.UDPReceiveErrors, telemetry.UDPSendErrors, telemetry.UDPErrorsKnown = errs.receive, errs.send, true
 	}
 
-	if socket, ok := n.media.(interface {
+	if socket, ok := n.sockets.media.(interface {
 		counters() (refused, truncated, droppedAudio, droppedVideo uint64)
 	}); ok {
 		telemetry.UDPSendRefused, telemetry.UDPReceiveTruncated, telemetry.UDPDroppedAudio, telemetry.UDPDroppedVideo = socket.counters()

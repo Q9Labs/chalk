@@ -48,8 +48,8 @@ func newEgressTrack(pub *publication, transport *transport) *egressTrack {
 		codec = opusCapability
 	}
 	track := &egressTrack{id: pub.name, streamID: pub.session.id, codec: codec, kind: pub.kind, transport: transport}
-	if node := pub.session.node; node != nil && pub.video() {
-		track.video, _ = node.media.(interface{ markVideo(ssrc uint32, on bool) })
+	if node := pub.session.node; node != nil && node.sockets != nil && pub.video() {
+		track.video, _ = node.sockets.media.(interface{ markVideo(ssrc uint32, on bool) })
 	}
 	return track
 }
