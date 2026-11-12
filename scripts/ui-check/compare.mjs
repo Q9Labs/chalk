@@ -7,10 +7,12 @@ import { chromium } from "playwright";
 /** A pixel counts as changed when any color channel moves by more than this (of 255); it absorbs font antialiasing. */
 const CHANNEL_TOLERANCE = 24;
 const TILE = 20;
+/** Fewer changed pixels than this is rendering noise (a hover edge, one antialiased glyph), not a change. */
+const NOISE_PIXELS = 30;
 const MAX_REGIONS = 6;
 const REVIEW_WIDTH = 1600;
 
-async function compareInPage({ pairs, tolerance, tile, maxRegions, reviewWidth }) {
+async function compareInPage({ pairs, tolerance, tile, maxRegions, reviewWidth, noise }) {
   const load = (b64) =>
     new Promise((resolve, reject) => {
       const image = new Image();
@@ -49,6 +51,7 @@ async function compareInPage({ pairs, tolerance, tile, maxRegions, reviewWidth }
         }
       }
     }
+    if (changed < noise) changed = 0;
     // Neighboring changed tiles form one region.
     const seen = new Uint8Array(cols * rows);
     const regions = [];
@@ -93,7 +96,7 @@ async function compareInPage({ pairs, tolerance, tile, maxRegions, reviewWidth }
       regions.push({ x: minC * tile, y: minR * tile, w: Math.min(width, (maxC + 1) * tile) - minC * tile, h: Math.min(height, (maxR + 1) * tile) - minR * tile, pixels });
     }
     regions.sort((x, y) => y.pixels - x.pixels);
-    const top = regions.slice(0, maxRegions);
+    const top = changed === 0 ? [] : regions.slice(0, maxRegions);
     let strip = null;
     let review = null;
     if (changed > 0) {
@@ -141,7 +144,7 @@ export async function compareFrames({ headDir, baseDir, out, headFrames, baseFra
   const results = [];
   try {
     const page = await browser.newPage();
-    for (let start = 0; start < pairs.length; start += 8) results.push(...(await page.evaluate(compareInPage, { pairs: pairs.slice(start, start + 8), tolerance: CHANNEL_TOLERANCE, tile: TILE, maxRegions: MAX_REGIONS, reviewWidth: REVIEW_WIDTH })));
+    for (let start = 0; start < pairs.length; start += 8) results.push(...(await page.evaluate(compareInPage, { pairs: pairs.slice(start, start + 8), tolerance: CHANNEL_TOLERANCE, tile: TILE, maxRegions: MAX_REGIONS, reviewWidth: REVIEW_WIDTH, noise: NOISE_PIXELS })));
   } finally {
     await browser.close();
   }

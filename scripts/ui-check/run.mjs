@@ -6,7 +6,8 @@
 // Needs `pnpm install` and Playwright's Chromium. It checks the base ref out in a temporary worktree and installs it.
 // Exits 1 when the branch adds a layout finding or the vision review points at a break in a changed region.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -25,16 +26,25 @@ const repository = resolve(import.meta.dirname, "../..");
 const baseRef = option("base", "origin/master");
 const out = resolve(option("out", join(repository, "ui-check-report")));
 const only = option("only")?.split(",").filter(Boolean);
+// Master's frames depend only on master and on the check code, so a run can keep them in this directory and reuse them.
+const baseCache = option("base-cache") ? resolve(option("base-cache")) : undefined;
 const started = Date.now();
 
 function startHarness(root, port) {
+  const cacheDir = mkdtempSync(join(tmpdir(), "ui-check-vite-"));
   const server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", String(port), "--strictPort"], {
     cwd: join(root, "apps/web"),
     stdio: "ignore",
     detached: true,
-    env: { ...process.env, CHALK_CALL_HARNESS_CACHE_DIR: mkdtempSync(join(tmpdir(), "ui-check-vite-")) },
+    env: { ...process.env, CHALK_CALL_HARNESS_CACHE_DIR: cacheDir },
   });
-  return { origin: `http://127.0.0.1:${port}`, stop: () => process.kill(-server.pid, "SIGTERM") };
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    stop: () => {
+      process.kill(-server.pid, "SIGTERM");
+      rmSync(cacheDir, { recursive: true, force: true });
+    },
+  };
 }
 
 async function waitFor(origin) {
@@ -48,21 +58,37 @@ async function waitFor(origin) {
   throw new Error(`${origin} did not start`);
 }
 
-const baseRoot = mkdtempSync(join(tmpdir(), "ui-check-base-"));
+/** What decides master's frames: its commit, the check code that walked it, and the journeys chosen. */
+function baseKey() {
+  const sha = execFileSync("git", ["rev-parse", baseRef], { cwd: repository, encoding: "utf8" }).trim();
+  const code = createHash("sha256");
+  for (const file of ["capture.mjs", "journeys.mjs", "page-checks.mjs"]) code.update(readFileSync(join(import.meta.dirname, file)));
+  return `${sha}-${code.digest("hex").slice(0, 12)}-${only?.join(",") ?? "all"}`;
+}
+
+const dirs = { head: join(out, "head"), base: baseCache ?? join(out, "base"), diff: join(out, "diff") };
+const key = baseKey();
+const cacheHit = baseCache !== undefined && existsSync(join(dirs.base, "key.txt")) && readFileSync(join(dirs.base, "key.txt"), "utf8") === key;
+const baseRoot = cacheHit ? undefined : mkdtempSync(join(tmpdir(), "ui-check-base-"));
 const harnesses = [];
 try {
-  execFileSync("git", ["worktree", "add", "--detach", "--force", baseRoot, baseRef], { cwd: repository, stdio: "inherit" });
-  execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: baseRoot, stdio: "ignore" });
-  const head = startHarness(repository, 3181);
-  const base = startHarness(baseRoot, 3182);
-  harnesses.push(head, base);
-  await Promise.all([waitFor(head.origin), waitFor(base.origin)]);
-  // The first page load compiles the app, so load it once before the timed walk.
-  await Promise.all([fetch(`${head.origin}/src/call-states/main.tsx`), fetch(`${base.origin}/src/call-states/main.tsx`)]);
-
-  const dirs = { head: join(out, "head"), base: join(out, "base"), diff: join(out, "diff") };
   await mkdir(out, { recursive: true });
-  const [headRun, baseRun] = await Promise.all([capture({ origin: head.origin, out: dirs.head, only }), capture({ origin: base.origin, out: dirs.base, only })]);
+  if (baseRoot) {
+    if (baseCache && existsSync(dirs.base)) for (const name of readdirSync(dirs.base)) rmSync(join(dirs.base, name), { recursive: true, force: true });
+    execFileSync("git", ["worktree", "add", "--detach", "--force", baseRoot, baseRef], { cwd: repository, stdio: "inherit" });
+    execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: baseRoot, stdio: "ignore" });
+  }
+  const head = startHarness(repository, 3181);
+  const base = baseRoot ? startHarness(baseRoot, 3182) : undefined;
+  harnesses.push(head, ...(base ? [base] : []));
+  await Promise.all([waitFor(head.origin), ...(base ? [waitFor(base.origin)] : [])]);
+
+  // With master's frames cached, the machine is free for the branch alone.
+  const concurrency = base ? 3 : 5;
+  const headWalk = capture({ origin: head.origin, out: dirs.head, only, concurrency });
+  const baseWalk = base ? capture({ origin: base.origin, out: dirs.base, only, concurrency }) : Promise.resolve({ frames: JSON.parse(readFileSync(join(dirs.base, "frames.json"), "utf8")) });
+  const [headRun, baseRun] = await Promise.all([headWalk, baseWalk]);
+  if (base && baseCache) writeFileSync(join(dirs.base, "key.txt"), key);
   const findings = newFindings(headRun.frames, baseRun.frames);
   const comparisons = await compareFrames({ headDir: dirs.head, baseDir: dirs.base, out: dirs.diff, headFrames: headRun.frames, baseFrames: baseRun.frames });
   const frameInfo = new Map(headRun.frames.map((frame) => [frame.frame, frame]));
@@ -75,6 +101,7 @@ try {
   const blocking = findings.length > 0 || review.findings.some((finding) => finding.blocking);
   const report = {
     baseRef,
+    baseFrames: cacheHit ? "cached" : "walked",
     seconds: Math.round((Date.now() - started) / 1000),
     runs: planRuns(only).length,
     frames: headRun.frames.length,
@@ -90,6 +117,8 @@ try {
   process.exitCode = blocking ? 1 : 0;
 } finally {
   for (const harness of harnesses) harness.stop();
-  execFileSync("git", ["worktree", "remove", "--force", baseRoot], { cwd: repository, stdio: "ignore" });
-  rmSync(baseRoot, { recursive: true, force: true });
+  if (baseRoot) {
+    execFileSync("git", ["worktree", "remove", "--force", baseRoot], { cwd: repository, stdio: "ignore" });
+    rmSync(baseRoot, { recursive: true, force: true });
+  }
 }

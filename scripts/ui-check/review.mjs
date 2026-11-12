@@ -9,7 +9,7 @@ export const MAX_SCREENS = 10;
 /** Screens whose changed pixels are under this fraction are font or antialiasing noise, not worth a model call. */
 export const MIN_CHANGED_FRACTION = 0.0005;
 /** US dollars per million tokens for MODEL, from Anthropic's pricing page. Update with MODEL. */
-const PRICE_PER_MTOK = { input: Number(process.env.UI_CHECK_PRICE_IN ?? 5), output: Number(process.env.UI_CHECK_PRICE_OUT ?? 25) };
+const PRICE_PER_MTOK = { input: Number(process.env.UI_CHECK_PRICE_IN ?? 8), output: Number(process.env.UI_CHECK_PRICE_OUT ?? 40) };
 
 const SYSTEM = `You review screenshots of a video-call web app for visible breakage. Each image shows BEFORE on the left and AFTER on the right; red boxes mark pixels that changed. Judge only the AFTER picture, and only what the change touched.
 

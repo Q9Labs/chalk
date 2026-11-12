@@ -135,6 +135,23 @@ export function pageChecks(options) {
     if (outX || outY) add("child-clipped", `${describe(parent)} > ${describe(el)}`, `${describe(el)} sticks out of ${describe(parent)}, which cuts it off`);
   }
 
+  // child-clipped, for pictures: an image, canvas, svg or round avatar that a parent cuts off. Unlike the loop above this
+  // also looks inside aria-hidden subtrees, because decorative pictures are still seen by people.
+  for (const el of everything) {
+    const own = style(el);
+    if (own.position === "fixed") continue;
+    const box = el.getBoundingClientRect();
+    if (box.width < 16 || box.height < 16) continue;
+    const round = Number.parseFloat(own.borderTopLeftRadius) >= Math.min(box.width, box.height) / 2 - 1 && own.overflowX !== "visible";
+    if (!round && !["IMG", "CANVAS", "svg"].includes(el.tagName)) continue;
+    const rect = visibleRect(el);
+    // A picture that is entirely hidden (a remote cursor beyond the board's edge) is out of view, not cut off.
+    if (!rect) continue;
+    const lostX = box.width - rect.width;
+    const lostY = box.height - rect.height;
+    if (lostX > 4 || lostY > 4) add("child-clipped", `${describe(el)} picture`, `${describe(el)} is ${Math.round(box.width)}x${Math.round(box.height)} and a parent cuts off ${Math.round(Math.max(lostX, lostY))}px of it`);
+  }
+
   // control-overlap: two controls share screen area and neither sits inside the other.
   for (let i = 0; i < shownControls.length; i += 1) {
     for (let j = i + 1; j < shownControls.length; j += 1) {
