@@ -12,7 +12,7 @@ port =
 
 node_id = System.get_env("CHALK_SYNC_NODE_ID", "local-node")
 
-Application.put_env(:chalk_sync, :stateholder, ChalkSync.Stateholder.Postgres)
+Application.put_env(:chalk_sync, :database_workers, true)
 Application.put_env(:chalk_sync, :database_url, database_url)
 Application.put_env(:chalk_sync, :database_pool_size, 8)
 Application.put_env(:chalk_sync, :instance_id, node_id)

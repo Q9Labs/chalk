@@ -2,34 +2,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
   @moduledoc false
 
   alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.UUID
 
-  @operation_names Map.new(
-                     [
-                       :admit_participant,
-                       :deny_admission,
-                       :admission_request_expired,
-                       :mute_participant,
-                       :stop_participant_camera,
-                       :stop_participant_screen_share,
-                       :remove_participant,
-                       :start_recording,
-                       :stop_recording,
-                       :recording_capture_ready,
-                       :recording_capture_stopped,
-                       :recording_capture_failed,
-                       :participant_leave,
-                       :end_episode,
-                       :tenant_assign_roles,
-                       :tenant_set_deadline,
-                       :tenant_end_episode,
-                       :role_transition_cleanup,
-                       :role_transition_source_stop
-                     ],
-                     &{Atom.to_string(&1), &1}
-                   )
-                   |> Map.put("maximum_episode_duration_expired", :maximum_duration_expired)
   @sources %{"microphone" => :microphone, "camera" => :camera, "screen" => :screen}
   @statuses %{"pending" => :pending, "applied" => :applied, "failed" => :failed}
 
@@ -94,7 +70,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationRecord do
     }
   end
 
-  defp external_operation_name(name), do: Map.fetch!(@operation_names, name)
+  defp external_operation_name(name) do
+    case OperationTable.from_stored(name) do
+      {:ok, operation_name} -> operation_name
+      :error -> raise ArgumentError, "unknown stored operation name: #{inspect(name)}"
+    end
+  end
 
   defp failure_reason(nil), do: nil
 

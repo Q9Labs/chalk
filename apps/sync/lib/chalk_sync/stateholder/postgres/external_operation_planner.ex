@@ -2,9 +2,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   @moduledoc false
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.Decision
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.OperationDecision
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.CommandDecision
   alias ChalkSync.Stateholder.Postgres.CommandPersistence
@@ -12,7 +14,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
-  alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
@@ -30,7 +31,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     Transaction.configure(connection)
     control = Authority.lock_control(connection, identity.episode)
     policy = Authority.lock_episode(connection, identity.episode)
-    FaultHooks.external_operation(:after_acceptance_authority_lock, identity.episode, operation)
 
     case fetch_operation_receipt(connection, identity, operation) do
       {:ok, row} ->
@@ -69,7 +69,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     Transaction.configure(connection)
     control = Authority.lock_control(connection, episode)
     policy = Authority.lock_episode(connection, episode)
-    FaultHooks.external_operation(:after_acceptance_authority_lock, episode, operation)
 
     case fetch_internal_operation(connection, episode, operation) do
       {:ok, existing} when existing.request_fingerprint != operation.fingerprint ->
@@ -345,7 +344,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
 
     case Authority.lock_participant(connection, episode, target_id) do
       %{status: "active"} = target ->
-        sources = operation_sources(operation.name)
+        sources = OperationTable.sources(operation.name)
         {:ok, %{target: target, sources: sources}}
 
       _ ->
@@ -458,7 +457,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
            "space_id" => episode.space_id,
            "participant_count" => 10,
            "max_duration_seconds" =>
-             min(Recording.maximum_duration_seconds(), max_duration_seconds),
+             min(RecordingPlane.maximum_duration_seconds(), max_duration_seconds),
            "input_bitrate_bps" => 4_000_000,
            "policy_snapshot_version" => artifact_policy["schema_version"]
          }}
@@ -630,7 +629,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
       Scope.uuid(external.external_operation_id),
       external.request_key,
       external.request_fingerprint,
-      operation_name_string(external.name),
+      OperationTable.stored_name(external.name),
       Scope.nullable_dump(external.actor_participant_id),
       external.actor_generation,
       Scope.nullable_dump(external.target_participant_id),
@@ -650,9 +649,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
 
     insert_external_operation_journey_event(connection, external, observed)
   end
-
-  defp operation_name_string(:maximum_duration_expired), do: "maximum_episode_duration_expired"
-  defp operation_name_string(name), do: Atom.to_string(name)
 
   defp insert_external_operation_journey_event(_connection, _external, nil), do: :ok
 
@@ -853,13 +849,10 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     }
   end
 
-  defp operation_sources(:mute_participant), do: [:microphone]
-  defp operation_sources(:stop_participant_camera), do: [:camera]
-  defp operation_sources(:stop_participant_screen_share), do: [:screen]
-  defp operation_sources(:remove_participant), do: [:microphone, :camera, :screen]
-
-  defp operation_source(:mute_participant), do: "microphone"
-  defp operation_source(:stop_participant_camera), do: "camera"
-  defp operation_source(:stop_participant_screen_share), do: "screen"
-  defp operation_source(_name), do: nil
+  defp operation_source(name) do
+    case OperationTable.sources(name) do
+      [source] -> Atom.to_string(source)
+      _ -> nil
+    end
+  end
 end

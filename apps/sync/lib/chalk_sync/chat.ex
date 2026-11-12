@@ -1,7 +1,7 @@
 defmodule ChalkSync.Chat do
   @moduledoc "Durable Space chat commands and collaboration_v1 negotiation."
+  alias ChalkSync.Chat.Collaborators
   alias ChalkSync.Chat.Repository.Message
-  alias ChalkSync.Chat.Repository.Postgres, as: PostgresRepository
   alias ChalkSync.Fanout.Collaboration
   alias ChalkSync.Fanout.Collaboration.PostgresNotifications
   alias ChalkSync.Stateholder.Identity
@@ -16,8 +16,8 @@ defmodule ChalkSync.Chat do
   @spec negotiate(Identity.t(), map(), pid(), options()) :: {:ok, map()} | {:error, atom()}
   def negotiate(%Identity{} = identity, negotiation, socket, options)
       when is_pid(socket) and is_list(options) do
-    repository = repository(options)
-    fanout = fanout(options)
+    repository = Collaborators.repository(options)
+    fanout = Collaborators.fanout(options)
     {extension, chat_cursor} = negotiation(negotiation)
 
     with :ok <- valid_chat_cursor(chat_cursor),
@@ -56,7 +56,7 @@ defmodule ChalkSync.Chat do
         options
       )
       when is_binary(client_message_id) and is_binary(text) and is_list(options) do
-    repository = repository(options)
+    repository = Collaborators.repository(options)
     attachment_ids = Map.get(input, :attachment_ids, [])
 
     append_result =
@@ -71,7 +71,7 @@ defmodule ChalkSync.Chat do
     case append_result do
       {:ok, %{outcome: outcome, message: message}} ->
         if outcome == :committed do
-          Collaboration.publish_chat_head(fanout(options), identity.episode, %{
+          Collaboration.publish_chat_head(Collaborators.fanout(options), identity.episode, %{
             head_sequence: message.sequence,
             retained_floor_sequence: retained_floor(repository, identity)
           })
@@ -102,9 +102,13 @@ defmodule ChalkSync.Chat do
   end
 
   def react(%Identity{} = identity, input, options \\ []) do
-    case repository(options).react(identity, input) do
+    case Collaborators.repository(options).react(identity, input) do
       {:ok, state} ->
-        Collaboration.publish_chat_reactions(fanout(options), identity.episode, state)
+        Collaboration.publish_chat_reactions(
+          Collaborators.fanout(options),
+          identity.episode,
+          state
+        )
 
         {:ok,
          %{
@@ -137,7 +141,7 @@ defmodule ChalkSync.Chat do
         options
       )
       when is_binary(request_id) and is_integer(limit) and is_list(options) do
-    repository = repository(options)
+    repository = Collaborators.repository(options)
 
     with :ok <- validate_operation_id(request_id),
          {:ok, _profile} <- repository.authorize(identity, nil) do
@@ -170,14 +174,18 @@ defmodule ChalkSync.Chat do
         options
       )
       when is_binary(request_id) and is_binary(sequence) and is_list(options) do
-    repository = repository(options)
+    repository = Collaborators.repository(options)
 
     with :ok <- validate_operation_id(request_id),
          {:ok, result} <- repository.mark_read(identity, sequence) do
       receipt = receipt_frame(result.receipt)
 
       if result.outcome == :advanced do
-        Collaboration.publish_chat_read_receipt(fanout(options), identity.episode, receipt)
+        Collaboration.publish_chat_read_receipt(
+          Collaborators.fanout(options),
+          identity.episode,
+          receipt
+        )
       end
 
       {:ok,
@@ -222,7 +230,7 @@ defmodule ChalkSync.Chat do
   @spec unsubscribe(Identity.t(), pid(), options()) :: :ok
   def unsubscribe(%Identity{} = identity, socket, options)
       when is_pid(socket) and is_list(options) do
-    Collaboration.unsubscribe(fanout(options), identity.episode, socket)
+    Collaboration.unsubscribe(Collaborators.fanout(options), identity.episode, socket)
   end
 
   @spec handle_fanout_notification(String.t(), binary()) :: :ok | {:error, :invalid_payload}
@@ -355,21 +363,5 @@ defmodule ChalkSync.Chat do
       {:ok, head} -> head.retained_floor_sequence
       {:error, _reason} -> "1"
     end
-  end
-
-  defp repository(options) do
-    Keyword.get(
-      options,
-      :repository,
-      Application.get_env(:chalk_sync, :chat_repository, PostgresRepository)
-    )
-  end
-
-  defp fanout(options) do
-    Keyword.get(
-      options,
-      :fanout,
-      Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
-    )
   end
 end
