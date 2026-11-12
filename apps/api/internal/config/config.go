@@ -1,173 +1,15 @@
 package config
 
 import (
-	"cmp"
-	"crypto/ed25519"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
-	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
-	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
-)
-
-const (
-	APIAddress            = "CHALK_API_ADDR"
-	APICORSAllowedOrigins = "CHALK_API_CORS_ALLOWED_ORIGINS"
-	APIEnvironment        = "CHALK_API_ENV"
-	APIRateLimits         = "CHALK_API_RATE_LIMITS"
-	APITrustedProxyCIDRs  = "CHALK_API_TRUSTED_PROXY_CIDRS"
-	APIDirectURL          = "CHALK_API_DIRECT_URL"
-	APILogFormat          = "CHALK_API_LOG_FORMAT"
-	APILogLevel           = "CHALK_API_LOG_LEVEL"
-	APIOTLPEndpoint       = "CHALK_API_OTLP_ENDPOINT"
-	APIOTLPInsecure       = "CHALK_API_OTLP_INSECURE"
-	APIOperationLogs      = "CHALK_API_OPERATION_LOGS"
-	APIProfiler           = "CHALK_API_PROFILER"
-	APIRequestLogs        = "CHALK_API_REQUEST_LOGS"
-	APIRequestSampleRate  = "CHALK_API_REQUEST_SAMPLE_RATE"
-	APIService            = "CHALK_API_SERVICE"
-	APISlowRequestMS      = "CHALK_API_SLOW_REQUEST_MS"
-	APILocalSystemToken   = "CHALK_API_LOCAL_SYSTEM_TOKEN"
-	APIServiceID          = "CHALK_API_SERVICE_ID"
-	APIServiceSecrets     = "CHALK_API_SERVICE_SECRETS"
-	APIServiceScopes      = "CHALK_API_SERVICE_SCOPES"
-
-	OAuthIssuer            = "CHALK_OAUTH_ISSUER"
-	OAuthConsentURL        = "CHALK_OAUTH_CONSENT_URL"
-	OAuthExtraRedirectURIs = "CHALK_OAUTH_EXTRA_REDIRECT_URIS"
-
-	APIVersion                       = "CHALK_API_VERSION"
-	SyncTokenAudience                = "CHALK_SYNC_TOKEN_AUDIENCE"
-	SyncTokenIssuer                  = "CHALK_SYNC_TOKEN_ISSUER"
-	SyncTokenKeyID                   = "CHALK_SYNC_TOKEN_KEY_ID"
-	SyncTokenPrivateKey              = "CHALK_SYNC_TOKEN_PRIVATE_KEY"
-	MediaTokenVerificationKeys       = "CHALK_MEDIA_TOKEN_VERIFICATION_KEYS"
-	PublicInviteManagedTenantID      = "CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID"
-	PublicInviteDefaultMediaPlane    = "CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE"
-	PublicInviteWebOrigin            = "CHALK_PUBLIC_INVITE_WEB_ORIGIN"
-	PublicInviteKeyID                = "CHALK_PUBLIC_INVITE_KEY_ID"
-	PublicInvitePrivateKey           = "CHALK_PUBLIC_INVITE_PRIVATE_KEY"
-	PublicInviteVerificationKeys     = "CHALK_PUBLIC_INVITE_VERIFICATION_KEYS"
-	PublicInviteAutoLifecycleSeconds = "CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS"
-	PublicInviteSchedulerIntervalMS  = "CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS"
-	PublicInviteSchedulerBatch       = "CHALK_PUBLIC_INVITE_SCHEDULER_BATCH"
-
-	DatabaseURL                 = "CHALK_DATABASE_URL"
-	DatabaseMaxConns            = "CHALK_DATABASE_MAX_CONNS"
-	DatabaseMinConns            = "CHALK_DATABASE_MIN_CONNS"
-	DeadlineSchedulerIntervalMS = "CHALK_DEADLINE_SCHEDULER_INTERVAL_MS"
-	DeadlineSchedulerBatch      = "CHALK_DEADLINE_SCHEDULER_BATCH"
-
-	// Short aliases keep pool names concise at call sites while preserving the
-	// explicit Database wording in the canonical constants above.
-
-	RedisURL = "CHALK_REDIS_URL"
-
-	CloudflareAccountID         = "CHALK_CLOUDFLARE_ACCOUNT_ID"
-	CloudflareRealtimeAppID     = "CHALK_CLOUDFLARE_REALTIME_APP_ID"
-	CloudflareRealtimeAppSecret = "CHALK_CLOUDFLARE_REALTIME_APP_SECRET"
-	CloudflareRealtimeBaseURL   = "CHALK_CLOUDFLARE_REALTIME_BASE_URL"
-	CloudflareTurnKeyID         = "CHALK_CLOUDFLARE_TURN_KEY_ID"
-	CloudflareTurnAPIToken      = "CHALK_CLOUDFLARE_TURN_API_TOKEN"
-
-	CloudflareRealtimeRequestTimeoutMS = "CHALK_CLOUDFLARE_REALTIME_TIMEOUT_MS"
-
-	ChalkSFUEnabled             = "CHALK_SFU_ENABLED"
-	ChalkSFUCaptureEnabled      = "CHALK_SFU_CAPTURE_ENABLED"
-	ChalkSFUColocatedCapture    = "CHALK_SFU_COLOCATED_CAPTURE"
-	ChalkSFUColocatedGraceSecs  = "CHALK_SFU_COLOCATED_CAPTURE_GRACE_SECONDS"
-	ChalkSFUNodes               = "CHALK_SFU_NODES"
-	ChalkSFUApplicationID       = "CHALK_SFU_APPLICATION_ID"
-	ChalkSFUServerName          = "CHALK_SFU_SERVER_NAME"
-	ChalkSFUCAFile              = "CHALK_SFU_CA_FILE"
-	ChalkSFUClientCertFile      = "CHALK_SFU_CLIENT_CERT_FILE"
-	ChalkSFUClientKeyFile       = "CHALK_SFU_CLIENT_KEY_FILE"
-	ChalkSFUTimeoutMS           = "CHALK_SFU_TIMEOUT_MS"
-	ChalkSFUSTUNURLs            = "CHALK_SFU_STUN_URLS"
-	ChalkSFUCloudflareOverflow  = "CHALK_SFU_CLOUDFLARE_OVERFLOW"
-	ChalkSFUStandbyBudget       = "CHALK_SFU_STANDBY_PACKET_BUDGET"
-	ChalkSFUAllowedSpaces       = "CHALK_SFU_ALLOWED_SPACES"
-	ChalkSFUClientSunset        = "CHALK_SFU_CLIENT_SUNSET"
-	ChalkSFUUnifiedSignaling    = "CHALK_SFU_UNIFIED_SIGNALING"
-	ChalkSFUNewEpisodes         = "CHALK_SFU_NEW_EPISODES"
-	DefaultMediaPlane           = "CHALK_DEFAULT_MEDIA_PLANE"
-	NewSpaceMediaPlane          = "CHALK_NEW_SPACE_MEDIA_PLANE"
-	NewSpaceRecordingPolicy     = "CHALK_NEW_SPACE_RECORDING_POLICY"
-	NewSpaceTranscriptionPolicy = "CHALK_NEW_SPACE_TRANSCRIPTION_POLICY"
-
-	ProviderBridgeAddress           = "CHALK_PROVIDER_BRIDGE_ADDRESS"
-	ProviderBridgeServerCertFile    = "CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE"
-	ProviderBridgeServerKeyFile     = "CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE"
-	ProviderBridgeClientCAFile      = "CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE"
-	ProviderBridgeSPIFFETrustDomain = "CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN"
-
-	R2AccessKeyID                   = "CHALK_R2_ACCESS_KEY_ID"
-	R2AccountID                     = "CHALK_R2_ACCOUNT_ID"
-	R2Bucket                        = "CHALK_R2_BUCKET"
-	R2Endpoint                      = "CHALK_R2_ENDPOINT"
-	R2SecretAccessKey               = "CHALK_R2_SECRET_ACCESS_KEY"
-	R2RequestTimeoutMS              = "CHALK_R2_REQUEST_TIMEOUT_MS"
-	TranscriptionWorkloadAuthSecret = "CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET"
-	TranscriptionControlAudience    = "CHALK_TRANSCRIPTION_CONTROL_AUDIENCE"
-	TranscriptionDispatcherFunction = "CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME"
-	RecordingEnabled                = "CHALK_RECORDING_ENABLED"
-	RecordingBundleV2Enabled        = "CHALK_RECORDING_BUNDLE_V2_ENABLED"
-	RecordingKMSKeyID               = "CHALK_RECORDING_KMS_KEY_ID"
-	RecordingKMSRegion              = "CHALK_RECORDING_KMS_REGION"
-	RecordingKMSRequestTimeoutMS    = "CHALK_RECORDING_KMS_REQUEST_TIMEOUT_MS"
-	TranscriptionEnabled            = "CHALK_TRANSCRIPTION_ENABLED"
-	WhiteboardFilesEnabled          = "CHALK_WHITEBOARD_FILES_ENABLED"
-	WebhookEncryptionKey            = "CHALK_WEBHOOK_ENCRYPTION_KEY"
-	WebhookEncryptionKeyring        = "CHALK_WEBHOOK_ENCRYPTION_KEYRING"
-	WebhookEncryptionCurrentVersion = "CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION"
-
-	DefaultAPIAddress                       = ":8080"
-	DefaultDatabaseURL                      = "postgres://postgres:postgres@127.0.0.1:5432/chalk?sslmode=disable"
-	DefaultDBMaxConns                       = int32(10)
-	DefaultDBMinConns                       = int32(0)
-	DefaultDeadlineSchedulerIntervalMS      = int64(1000)
-	DefaultDeadlineSchedulerBatch           = int32(50)
-	DefaultPublicInviteSchedulerIntervalMS  = int64(60 * 1000)
-	DefaultPublicInviteSchedulerBatch       = int32(50)
-	DefaultPublicInviteAutoLifecycleSeconds = int32(60 * 60)
-
-	DefaultEnvironment                        = "local"
-	DefaultLogFormat                          = "json"
-	DefaultLogLevel                           = "info"
-	DefaultCloudflareRealtimeRequestTimeoutMS = int64(6000)
-	DefaultChalkSFUTimeoutMS                  = int64(6000)
-	// DefaultChalkSFUColocatedGraceSeconds is how long a capture waits for the healthy worker
-	// beside its SFU node before an on-demand fleet worker may take it.
-	DefaultChalkSFUColocatedGraceSeconds = int32(20)
-	// DefaultChalkSFUStandbyBudget is the packets/s a standby admits for new
-	// Episodes: half the primary's 32,000, because a standby is a smaller node.
-	DefaultChalkSFUStandbyBudget = 16000
-
-	DefaultRequestLogs                  = "off"
-	DefaultRequestSampleRate            = 0.01
-	DefaultR2RequestTimeoutMS           = int64(10000)
-	DefaultRecordingKMSRequestTimeoutMS = int64(10000)
-	DefaultTranscriptionControlAudience = "chalk-control-api"
-	DefaultRedisURL                     = "redis://127.0.0.1:6379/0"
-	DefaultServiceName                  = "chalk-api"
-	DefaultSlowRequestMS                = int64(250)
-	DefaultVersion                      = "dev"
-	DefaultCloudflareRealtimeTimeout    = time.Duration(DefaultCloudflareRealtimeRequestTimeoutMS) * time.Millisecond
-	DefaultR2Timeout                    = time.Duration(DefaultR2RequestTimeoutMS) * time.Millisecond
-	DefaultRecordingKMSTimeout          = time.Duration(DefaultRecordingKMSRequestTimeoutMS) * time.Millisecond
 )
 
 type APIConfig struct {
@@ -179,197 +21,6 @@ type APIConfig struct {
 	OAuth                          OAuthConfig
 
 	TrustedProxyCIDRs []string
-}
-
-// OAuthConfig turns on OAuth for the hosted MCP server. A zero Issuer keeps it off.
-type OAuthConfig struct {
-	Issuer            string
-	ConsentURL        string
-	ExtraRedirectURIs []string
-}
-
-type CapabilityConfig struct {
-	Recording       bool
-	Transcription   bool
-	WhiteboardFiles bool
-}
-
-type DatabaseConfig struct {
-	URL      string
-	MaxConns int32
-	MinConns int32
-}
-
-type RedisConfig struct {
-	URL string
-}
-
-type CloudflareRealtimeConfig struct {
-	AccountID         string
-	RealtimeAppID     string
-	RealtimeAppSecret string
-	RealtimeBaseURL   string
-	// TurnKeyID and TurnAPIToken are optional and set together. Without them
-	// clients get STUN only.
-	TurnKeyID    string
-	TurnAPIToken string
-
-	RequestTimeout time.Duration
-}
-
-// ChalkSFURole says whether placement prefers a node. A primary takes new
-// Episodes in configuration order; a standby takes one only when no primary can.
-type ChalkSFURole string
-
-const (
-	ChalkSFURolePrimary ChalkSFURole = "primary"
-	ChalkSFURoleStandby ChalkSFURole = "standby"
-)
-
-// ChalkSFUNode is one SFU node. ID is the stable name Episode bindings record;
-// ControlURL may change when the node's host changes. An empty Role is a primary.
-type ChalkSFUNode struct {
-	ID         string
-	ControlURL string
-	Role       ChalkSFURole
-}
-
-// ChalkSFUConfig points the API at Chalk's own SFU. It is off by default: while
-// Enabled is false the Space selector refuses chalk_sfu and no adapter exists.
-type ChalkSFUConfig struct {
-	Enabled bool
-	// CaptureEnabled lets the recorder reach the pool's nodes through the capture plane. It is
-	// off by default and needs Enabled. Starting a recording on the own SFU stays refused until
-	// the milestone's last step removes that check.
-	CaptureEnabled bool
-	// ColocatedCaptureGrace turns on the capture worker that runs beside each node. Zero is off,
-	// and then every capture goes to the on-demand fleet. A capture waits this long for the
-	// healthy worker of its node, then the fleet may take it. It needs CaptureEnabled.
-	ColocatedCaptureGrace time.Duration
-	// ApplicationID names the SFU pool and goes into each Episode binding, so it
-	// stays the same when hosts or certificates rotate.
-	ApplicationID string
-	// Nodes are the SFU nodes of the pool in placement order. A new Episode goes to
-	// the first ready primary with budget left for it, and to a standby only when no
-	// primary can take it. Its binding names the node, so adding a node needs no
-	// migration and never moves a live Episode.
-	Nodes          []ChalkSFUNode
-	ServerName     string
-	CAFile         string
-	ClientCertFile string
-	ClientKeyFile  string
-	STUNURLs       []string
-
-	// StandbyPacketBudget caps the packets/s a standby admits for new Episodes, below
-	// what the node itself reports. The node enforces its own budget as well.
-	StandbyPacketBudget int
-
-	// AllowedSpaces are the only Spaces that start Episodes on the own SFU while the
-	// rest of the deployment stays on Cloudflare. It is empty by default, even when
-	// Enabled is true. CHALK_SFU_ALLOWED_SPACES lists Space IDs, or * for all.
-	AllowedSpaces spaces.ChalkSFUAllowlist
-
-	// ClientSunset is the instant after which a client that does not declare the own
-	// SFU can no longer start an Episode in a Space on the allowlist: it gets
-	// media.client_unsupported instead of Cloudflare. The zero value means never.
-	// CHALK_SFU_CLIENT_SUNSET is an RFC 3339 instant.
-	ClientSunset time.Time
-
-	// UnifiedSignaling advertises the single-URL signalling route in each own-SFU join, so the
-	// SDK sends every signalling call to one URL and pays one CORS preflight. It is on by
-	// default. Turning it off sends clients back to the per-operation routes without a web
-	// deploy. CHALK_SFU_UNIFIED_SIGNALING.
-	UnifiedSignaling bool
-
-	// DirectSignalingURL is the origin of the direct door (TLS proxy on the host) for the
-	// signalling routes. Each own-SFU join advertises it as directSignalingUrl, so the SDK
-	// can skip the Tunnel and fall back to the regular API URL. Empty turns it off for new
-	// joins without a web deploy. CHALK_API_DIRECT_URL.
-	DirectSignalingURL string
-
-	// NewEpisodesPaused is the deploy-time floor of the kill switch, CHALK_SFU_NEW_EPISODES=off.
-	// Every new Episode then starts on Cloudflare, and Episodes already on the own SFU keep
-	// running there. Turning the own SFU off instead would also strand those live Episodes.
-	// The live switch (media-settings new-episodes) pauses on top of this floor, with no restart.
-	NewEpisodesPaused bool
-
-	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
-	// room. It is on by default. When it is off, creating that Episode fails with
-	// a retryable capacity error instead. Migration policy until M13 removes it.
-	CloudflareOverflow bool
-	RequestTimeout     time.Duration
-}
-
-type ProviderBridgeConfig struct {
-	Address           string
-	ServerCertFile    string
-	ServerKeyFile     string
-	ClientCAFile      string
-	SPIFFETrustDomain string
-	Enabled           bool
-}
-
-type R2Config struct {
-	AccessKeyID     string
-	AccountID       string
-	Bucket          string
-	Endpoint        string
-	SecretAccessKey string
-	RequestTimeout  time.Duration
-}
-
-type RecordingKMSConfig struct {
-	KeyID          string
-	Region         string
-	RequestTimeout time.Duration
-}
-
-type TranscriptionConfig struct {
-	WorkloadAuthSecret string
-	ControlAudience    string
-	DispatcherFunction string
-}
-
-type SyncTokenConfig struct {
-	Audience         string
-	Issuer           string
-	KeyID            string
-	PrivateKey       ed25519.PrivateKey
-	VerificationKeys map[string]ed25519.PublicKey
-}
-
-type PublicInviteConfig struct {
-	Enabled               bool
-	ManagedTenantID       string
-	DefaultMediaPlane     string
-	WebOrigin             publicinvites.WebOrigin
-	KeyID                 string
-	PrivateKey            ed25519.PrivateKey
-	VerificationKeys      map[string]ed25519.PublicKey
-	AutoLifecycleLifetime time.Duration
-	SchedulerInterval     time.Duration
-	SchedulerBatch        int32
-}
-
-type ObservabilityConfig struct {
-	Environment          string
-	LogFormat            string
-	LogLevel             string
-	OTLPEndpoint         string
-	OTLPInsecure         bool
-	OperationLogs        bool
-	Profiler             bool
-	RequestLogs          string
-	RequestSampleRate    float64
-	Service              string
-	SlowRequestThreshold time.Duration
-	Version              string
-}
-
-type WebhookConfig struct {
-	EncryptionKey     []byte
-	EncryptionKeys    map[byte][]byte
-	CurrentKeyVersion byte
 }
 
 type DeadlineSchedulerConfig struct {
@@ -407,1164 +58,217 @@ type Config struct {
 	Webhooks      WebhookConfig
 }
 
-const (
-	TenantMaxConcurrentRecordings = "CHALK_TENANT_MAX_CONCURRENT_RECORDINGS"
-	TenantDailyRecordingMinutes   = "CHALK_TENANT_DAILY_RECORDING_MINUTES"
-	TenantMaxLiveEpisodes         = "CHALK_TENANT_MAX_LIVE_EPISODES"
-)
-
+// Load reads the process environment into one validated Config. Each section
+// loads and validates itself; cross-section rules run last.
 func Load() (Config, error) {
-	admission, err := loadRecordingAdmission()
-	if err != nil {
+	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
+	cfg := Config{
+		ProblemReportsDiscordWebhookURL: strings.TrimSpace(os.Getenv("CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL")),
+		RecordingBundleV2Enabled:        envBool(RecordingBundleV2Enabled),
+		Redis:                           RedisConfig{URL: envOrDefault(RedisURL, DefaultRedisURL)},
+	}
+	for _, load := range []func(*Config, string) error{
+		loadLimits,
+		loadDatabase,
+		loadAPI,
+		loadCapabilities,
+		loadObservability,
+		loadIdentity,
+		loadMediaPlane,
+		loadRecordingStorage,
+		loadTranscription,
+	} {
+		if err := load(&cfg, environment); err != nil {
+			return Config{}, err
+		}
+	}
+	if err := cfg.validateCapabilityDependencies(); err != nil {
 		return Config{}, err
 	}
-	var limits tenantlimits.Config
+	return cfg, nil
+}
+
+func loadLimits(cfg *Config, _ string) error {
+	admission, err := loadRecordingAdmission()
+	if err != nil {
+		return err
+	}
+	cfg.RecordingAdmission = admission
 	for _, setting := range []struct {
 		name   string
 		target *int32
 	}{
-		{TenantMaxConcurrentRecordings, &limits.MaxConcurrentRecordings},
-		{TenantDailyRecordingMinutes, &limits.DailyRecordingMinutes},
-		{TenantMaxLiveEpisodes, &limits.MaxLiveEpisodes},
+		{TenantMaxConcurrentRecordings, &cfg.TenantLimits.MaxConcurrentRecordings},
+		{TenantDailyRecordingMinutes, &cfg.TenantLimits.DailyRecordingMinutes},
+		{TenantMaxLiveEpisodes, &cfg.TenantLimits.MaxLiveEpisodes},
 	} {
 		value, err := envInt32(setting.name, 0)
 		if err != nil {
-			return Config{}, err
+			return err
 		}
 		if value < 0 {
-			return Config{}, fmt.Errorf("%s must be non-negative", setting.name)
+			return fmt.Errorf("%s must be non-negative", setting.name)
 		}
 		*setting.target = value
 	}
+	return nil
+}
 
+func loadDatabase(cfg *Config, environment string) error {
 	maxConns, err := envInt32(DatabaseMaxConns, DefaultDBMaxConns)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-
 	minConns, err := envInt32(DatabaseMinConns, DefaultDBMinConns)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-
 	if maxConns <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", DatabaseMaxConns)
+		return fmt.Errorf("%s must be greater than zero", DatabaseMaxConns)
 	}
 	if minConns < 0 {
-		return Config{}, fmt.Errorf("%s must be non-negative", DatabaseMinConns)
+		return fmt.Errorf("%s must be non-negative", DatabaseMinConns)
 	}
 	if minConns > maxConns {
-		return Config{}, fmt.Errorf("%s cannot be greater than %s", DatabaseMinConns, DatabaseMaxConns)
+		return fmt.Errorf("%s cannot be greater than %s", DatabaseMinConns, DatabaseMaxConns)
 	}
-	deadlineSchedulerInterval, err := envMilliseconds(DeadlineSchedulerIntervalMS, DefaultDeadlineSchedulerIntervalMS)
+	interval, err := envMilliseconds(DeadlineSchedulerIntervalMS, DefaultDeadlineSchedulerIntervalMS)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-	deadlineSchedulerBatch, err := envInt32(DeadlineSchedulerBatch, DefaultDeadlineSchedulerBatch)
+	batch, err := envInt32(DeadlineSchedulerBatch, DefaultDeadlineSchedulerBatch)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-	if deadlineSchedulerInterval <= 0 || deadlineSchedulerBatch <= 0 {
-		return Config{}, fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
-	}
-	environment := envOrDefault(APIEnvironment, DefaultEnvironment)
-	rateLimits, err := envEnum(APIRateLimits, "on", "on", "off")
-	if err != nil {
-		return Config{}, err
-	}
-	if rateLimits == "off" && environment != DefaultEnvironment {
-		return Config{}, fmt.Errorf("%s=off is only allowed when %s=local", APIRateLimits, APIEnvironment)
+	if interval <= 0 || batch <= 0 {
+		return fmt.Errorf("deadline scheduler interval and batch must be greater than zero")
 	}
 	databaseURL := envOrDefault(DatabaseURL, DefaultDatabaseURL)
 	if err := validateDatabaseURL(environment, databaseURL); err != nil {
-		return Config{}, err
+		return err
 	}
+	cfg.Database = DatabaseConfig{URL: databaseURL, MaxConns: maxConns, MinConns: minConns}
+	cfg.DeadlineScheduler = DeadlineSchedulerConfig{Interval: interval, Batch: batch}
+	return nil
+}
 
-	capabilities, err := loadCapabilityConfig(environment)
+func loadAPI(cfg *Config, environment string) error {
+	rateLimits, err := envEnum(APIRateLimits, "on", "on", "off")
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-
-	logFormat, err := envEnum(APILogFormat, DefaultLogFormat, "json", "text")
-	if err != nil {
-		return Config{}, err
-	}
-	logLevel, err := envEnum(APILogLevel, DefaultLogLevel, "debug", "info", "warn", "error")
-	if err != nil {
-		return Config{}, err
-	}
-	otlpEndpoint := strings.TrimSpace(envOrDefault(APIOTLPEndpoint, ""))
-	otlpInsecure := envBool(APIOTLPInsecure)
-	if err := validateOTLPEndpoint(environment, otlpEndpoint, otlpInsecure); err != nil {
-		return Config{}, err
-	}
-	operationLogs := envBool(APIOperationLogs)
-	requestLogs, err := envRequestLogs(operationLogs)
-	if err != nil {
-		return Config{}, err
-	}
-	requestSampleRate, err := envFloat64(APIRequestSampleRate, DefaultRequestSampleRate)
-	if err != nil {
-		return Config{}, err
-	}
-	if requestSampleRate < 0 || requestSampleRate > 1 {
-		return Config{}, fmt.Errorf("%s must be between 0 and 1", APIRequestSampleRate)
-	}
-	slowRequestThreshold, err := envMilliseconds(APISlowRequestMS, DefaultSlowRequestMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if slowRequestThreshold < 0 {
-		return Config{}, fmt.Errorf("%s must be non-negative", APISlowRequestMS)
-	}
-
-	r2RequestTimeout, err := envMilliseconds(R2RequestTimeoutMS, DefaultR2RequestTimeoutMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if r2RequestTimeout <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", R2RequestTimeoutMS)
-	}
-	recordingKMSRequestTimeout, err := envMilliseconds(RecordingKMSRequestTimeoutMS, DefaultRecordingKMSRequestTimeoutMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if recordingKMSRequestTimeout <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", RecordingKMSRequestTimeoutMS)
-	}
-	cloudflareRealtimeRequestTimeout, err := envMilliseconds(CloudflareRealtimeRequestTimeoutMS, DefaultCloudflareRealtimeRequestTimeoutMS)
-	if err != nil {
-		return Config{}, err
-	}
-	if cloudflareRealtimeRequestTimeout <= 0 {
-		return Config{}, fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
+	if rateLimits == "off" && environment != DefaultEnvironment {
+		return fmt.Errorf("%s=off is only allowed when %s=local", APIRateLimits, APIEnvironment)
 	}
 	localSystemToken := strings.TrimSpace(envOrDefault(APILocalSystemToken, ""))
 	if environment != DefaultEnvironment && localSystemToken != "" {
-		return Config{}, fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
+		return fmt.Errorf("%s is only supported in local environments", APILocalSystemToken)
 	}
 	servicePrincipal, err := loadServicePrincipal(localSystemToken)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
 	oauth, err := loadOAuthConfig(environment)
 	if err != nil {
-		return Config{}, err
+		return err
 	}
-	syncToken, err := loadSyncTokenConfig(environment)
-	if err != nil {
-		return Config{}, err
+	cfg.API = APIConfig{
+		DisableAuthenticatedRateLimits: rateLimits == "off",
+		Address:                        envOrDefault(APIAddress, DefaultAPIAddress),
+		CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
+		LocalSystemToken:               localSystemToken,
+		ServicePrincipal:               servicePrincipal,
+		OAuth:                          oauth,
+		TrustedProxyCIDRs:              envList(APITrustedProxyCIDRs),
 	}
-	webhookConfig, err := loadWebhookEncryptionConfig(environment)
-	if err != nil {
-		return Config{}, err
-	}
-	providerBridge, err := loadProviderBridgeConfig(environment)
-	if err != nil {
-		return Config{}, err
-	}
+	return nil
+}
 
-	publicInvite, err := loadPublicInviteConfig(environment)
-	if err != nil {
-		return Config{}, err
-	}
-	realtimeBaseURL := strings.TrimRight(strings.TrimSpace(envOrDefault(CloudflareRealtimeBaseURL, "")), "/")
-	if realtimeBaseURL != "" {
-		if environment != DefaultEnvironment {
-			return Config{}, fmt.Errorf("%s is only supported in local environments", CloudflareRealtimeBaseURL)
-		}
-		parsed, parseErr := url.Parse(realtimeBaseURL)
-		host := parsed.Hostname()
-		ip := net.ParseIP(host)
-		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" || (host != "localhost" && (ip == nil || !ip.IsLoopback())) {
-			return Config{}, fmt.Errorf("%s must be an absolute localhost URL without query or fragment", CloudflareRealtimeBaseURL)
-		}
-	}
-	defaultMediaPlane, err := loadDefaultMediaPlane()
-	if err != nil {
-		return Config{}, err
-	}
-	cloudflareRealtime := CloudflareRealtimeConfig{
-		AccountID:         envOrDefault(CloudflareAccountID, ""),
-		RealtimeAppID:     envOrDefault(CloudflareRealtimeAppID, ""),
-		RealtimeAppSecret: envOrDefault(CloudflareRealtimeAppSecret, ""),
-		RealtimeBaseURL:   realtimeBaseURL,
-		TurnKeyID:         envOrDefault(CloudflareTurnKeyID, ""),
-		TurnAPIToken:      envOrDefault(CloudflareTurnAPIToken, ""),
+func loadCapabilities(cfg *Config, environment string) error {
+	capabilities, err := loadCapabilityConfig(environment)
+	cfg.Capabilities = capabilities
+	return err
+}
 
-		RequestTimeout: cloudflareRealtimeRequestTimeout,
+// loadIdentity reads the credentials that identify callers and workers.
+func loadIdentity(cfg *Config, environment string) error {
+	var err error
+	if cfg.SyncToken, err = loadSyncTokenConfig(environment); err != nil {
+		return err
 	}
-	chalkSFU, err := loadChalkSFUConfig()
-	if err != nil {
-		return Config{}, err
+	if cfg.Webhooks, err = loadWebhookEncryptionConfig(environment); err != nil {
+		return err
 	}
-	newSpace, err := loadNewSpaceDefaults(chalkSFU)
-	if err != nil {
-		return Config{}, err
+	if cfg.ProviderBridge, err = loadProviderBridgeConfig(environment); err != nil {
+		return err
 	}
-	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
-		return Config{}, err
+	cfg.PublicInvite, err = loadPublicInviteConfig(environment)
+	return err
+}
+
+// loadMediaPlane reads the media plane providers and checks them against each other.
+func loadMediaPlane(cfg *Config, environment string) error {
+	var err error
+	if cfg.CloudflareRealtime, err = loadCloudflareRealtimeConfig(environment); err != nil {
+		return err
 	}
-	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime, chalkSFU); err != nil {
-		return Config{}, err
+	if cfg.DefaultMediaPlane, err = loadDefaultMediaPlane(); err != nil {
+		return err
 	}
-	if err := validateProviderBridgeMediaPlaneProcessConfig(providerBridge, cloudflareRealtime); err != nil {
-		return Config{}, err
+	if cfg.ChalkSFU, err = loadChalkSFUConfig(); err != nil {
+		return err
 	}
-	r2Config := R2Config{
-		AccessKeyID:     envOrDefault(R2AccessKeyID, ""),
-		AccountID:       envOrDefault(R2AccountID, ""),
-		Bucket:          envOrDefault(R2Bucket, ""),
-		Endpoint:        envOrDefault(R2Endpoint, ""),
-		SecretAccessKey: envOrDefault(R2SecretAccessKey, ""),
-		RequestTimeout:  r2RequestTimeout,
+	if cfg.NewSpace, err = loadNewSpaceDefaults(cfg.ChalkSFU); err != nil {
+		return err
 	}
-	recorderFleetIssuer, err := loadRecorderFleetIssuerConfig()
-	if err != nil {
-		return Config{}, err
+	if err := validateTurnProcessConfig(cfg.CloudflareRealtime); err != nil {
+		return err
 	}
-	recordingKMS := RecordingKMSConfig{
-		KeyID:          strings.TrimSpace(envOrDefault(RecordingKMSKeyID, "")),
-		Region:         strings.TrimSpace(envOrDefault(RecordingKMSRegion, "")),
-		RequestTimeout: recordingKMSRequestTimeout,
+	if err := validateMediaPlaneProcessConfig(cfg.DefaultMediaPlane, cfg.CloudflareRealtime, cfg.ChalkSFU); err != nil {
+		return err
 	}
-	if capabilities.Recording {
-		if err := validateR2Config(r2Config, RecordingEnabled); err != nil {
-			return Config{}, err
-		}
-		if recordingKMS.KeyID == "" || recordingKMS.Region == "" {
-			return Config{}, fmt.Errorf("%s and %s must be set when %s=true", RecordingKMSKeyID, RecordingKMSRegion, RecordingEnabled)
-		}
+	return validateProviderBridgeMediaPlaneProcessConfig(cfg.ProviderBridge, cfg.CloudflareRealtime)
+}
+
+func loadRecordingStorage(cfg *Config, _ string) error {
+	var err error
+	if cfg.R2, err = loadR2Config(); err != nil {
+		return err
 	}
-	transcriptionConfig := TranscriptionConfig{
+	if cfg.RecordingKMS, err = loadRecordingKMSConfig(); err != nil {
+		return err
+	}
+	cfg.RecorderFleetIssuer, err = loadRecorderFleetIssuerConfig()
+	return err
+}
+
+func loadTranscription(cfg *Config, _ string) error {
+	cfg.Transcription = TranscriptionConfig{
 		WorkloadAuthSecret: envOrDefault(TranscriptionWorkloadAuthSecret, ""),
 		ControlAudience:    envOrDefault(TranscriptionControlAudience, DefaultTranscriptionControlAudience),
 		DispatcherFunction: envOrDefault(TranscriptionDispatcherFunction, ""),
 	}
-	if capabilities.Transcription {
-		if err := validateTranscriptionConfig(transcriptionConfig, r2Config); err != nil {
-			return Config{}, err
-		}
-	}
-	if capabilities.WhiteboardFiles {
-		if err := validateWhiteboardFilesConfig(syncToken, r2Config); err != nil {
-			return Config{}, err
-		}
-	}
-
-	return Config{
-		TenantLimits: limits,
-		API: APIConfig{
-			DisableAuthenticatedRateLimits: rateLimits == "off",
-			Address:                        envOrDefault(APIAddress, DefaultAPIAddress),
-			CORSAllowedOrigins:             envList(APICORSAllowedOrigins),
-			LocalSystemToken:               localSystemToken,
-			ServicePrincipal:               servicePrincipal,
-			OAuth:                          oauth,
-
-			TrustedProxyCIDRs: envList(APITrustedProxyCIDRs),
-		},
-		ProblemReportsDiscordWebhookURL: strings.TrimSpace(os.Getenv("CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL")),
-		Capabilities:                    capabilities,
-		CloudflareRealtime:              cloudflareRealtime,
-		ChalkSFU:                        chalkSFU,
-		DefaultMediaPlane:               defaultMediaPlane,
-		NewSpace:                        newSpace,
-		Database: DatabaseConfig{
-			URL:      databaseURL,
-			MaxConns: maxConns,
-			MinConns: minConns,
-		},
-		DeadlineScheduler: DeadlineSchedulerConfig{Interval: deadlineSchedulerInterval, Batch: deadlineSchedulerBatch},
-		Observability: ObservabilityConfig{
-			Environment:          environment,
-			LogFormat:            logFormat,
-			LogLevel:             logLevel,
-			OTLPEndpoint:         otlpEndpoint,
-			OTLPInsecure:         otlpInsecure,
-			OperationLogs:        operationLogs,
-			Profiler:             envBool(APIProfiler),
-			RequestLogs:          requestLogs,
-			RequestSampleRate:    requestSampleRate,
-			Service:              envOrDefault(APIService, DefaultServiceName),
-			SlowRequestThreshold: slowRequestThreshold,
-			Version:              envOrDefault(APIVersion, DefaultVersion),
-		},
-		PublicInvite:             publicInvite,
-		ProviderBridge:           providerBridge,
-		R2:                       r2Config,
-		RecordingKMS:             recordingKMS,
-		RecordingBundleV2Enabled: envBool(RecordingBundleV2Enabled),
-		RecorderFleetIssuer:      recorderFleetIssuer,
-		RecordingAdmission:       admission,
-		Redis: RedisConfig{
-			URL: envOrDefault(RedisURL, DefaultRedisURL),
-		},
-
-		SyncToken:     syncToken,
-		Transcription: transcriptionConfig,
-		Webhooks:      webhookConfig,
-	}, nil
-}
-
-// loadNewEpisodesPaused reads the kill switch. It is on unless set to off.
-func loadNewEpisodesPaused() (bool, error) {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(ChalkSFUNewEpisodes)))
-	switch value {
-	case "", "on", "true":
-		return false, nil
-	case "off", "false":
-		return true, nil
-	default:
-		return false, fmt.Errorf("%s must be on or off", ChalkSFUNewEpisodes)
-	}
-}
-
-// LoadPlanePolicy reads the plane policy from the environment the API runs with,
-// for the operator command, which does not load the whole configuration.
-func LoadPlanePolicy() (spaces.PlanePolicy, error) {
-	platform, err := loadDefaultMediaPlane()
-	if err != nil {
-		return spaces.PlanePolicy{}, err
-	}
-	allowed, err := spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces))
-	if err != nil {
-		return spaces.PlanePolicy{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
-	}
-	paused, err := loadNewEpisodesPaused()
-	if err != nil {
-		return spaces.PlanePolicy{}, err
-	}
-	return spaces.PlanePolicy{Platform: platform, Allowed: allowed, NewEpisodesPaused: paused}, nil
-}
-
-func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
-	value, ok := os.LookupEnv(DefaultMediaPlane)
-	if !ok || strings.TrimSpace(value) == "" {
-		return "", nil
-	}
-
-	provider, err := spaces.ParseMediaPlaneProvider(value)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
-	}
-	return provider, nil
-}
-
-// loadNewSpaceDefaults reads what a Create Space request gets for the fields it
-// omits. A new Space has a random ID that no allowlist can name in advance, so
-// the own SFU as the new-Space plane needs every Space allowed. Automatic capture
-// defaults on the own SFU need capture, or new Spaces would promise artifacts
-// that no node produces. An omitted policy is the database default, so it counts.
-func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
-	var defaults spaces.NewSpaceDefaults
-	if value := strings.TrimSpace(os.Getenv(NewSpaceMediaPlane)); value != "" {
-		provider, err := spaces.ParseMediaPlaneProvider(value)
-		if err != nil {
-			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceMediaPlane, err)
-		}
-		defaults.MediaPlane = provider
-	}
-	if value := strings.TrimSpace(os.Getenv(NewSpaceRecordingPolicy)); value != "" {
-		defaults.RecordingPolicy = artifactpolicy.RecordingMode(value)
-		if err := defaults.RecordingPolicy.Validate(); err != nil {
-			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceRecordingPolicy, err)
-		}
-	}
-	if value := strings.TrimSpace(os.Getenv(NewSpaceTranscriptionPolicy)); value != "" {
-		defaults.TranscriptionPolicy = artifactpolicy.TranscriptionMode(value)
-		if err := defaults.TranscriptionPolicy.Validate(); err != nil {
-			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceTranscriptionPolicy, err)
-		}
-	}
-	if defaults.MediaPlane != spaces.MediaPlaneProviderChalkSFU {
-		return defaults, nil
-	}
-	if !chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1 {
-		return spaces.NewSpaceDefaults{}, fmt.Errorf("%s=%s requires %s=true and %s=*", NewSpaceMediaPlane, defaults.MediaPlane, ChalkSFUEnabled, ChalkSFUAllowedSpaces)
-	}
-	recording := cmp.Or(defaults.RecordingPolicy, spaces.DatabaseDefaultRecordingPolicy)
-	transcription := cmp.Or(defaults.TranscriptionPolicy, spaces.DatabaseDefaultTranscriptionPolicy)
-	capturing := recording != artifactpolicy.RecordingDisabled || transcription != artifactpolicy.TranscriptionDisabled
-	if capturing && !chalkSFU.CaptureEnabled {
-		return spaces.NewSpaceDefaults{}, fmt.Errorf("new Spaces get recording %s and transcription %s (%s and %s default to %s and %s); unless both are disabled they need %s=true when %s=%s", recording, transcription, NewSpaceRecordingPolicy, NewSpaceTranscriptionPolicy, spaces.DatabaseDefaultRecordingPolicy, spaces.DatabaseDefaultTranscriptionPolicy, ChalkSFUCaptureEnabled, NewSpaceMediaPlane, defaults.MediaPlane)
-	}
-	return defaults, nil
-}
-
-func loadChalkSFUConfig() (ChalkSFUConfig, error) {
-	if !envBool(ChalkSFUEnabled) {
-		return ChalkSFUConfig{}, nil
-	}
-	timeout, err := envMilliseconds(ChalkSFUTimeoutMS, DefaultChalkSFUTimeoutMS)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	if timeout <= 0 {
-		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUTimeoutMS)
-	}
-	overflow, err := envStrictBool(ChalkSFUCloudflareOverflow, true)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	standbyBudget, err := envInt32(ChalkSFUStandbyBudget, DefaultChalkSFUStandbyBudget)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	if standbyBudget <= 0 {
-		return ChalkSFUConfig{}, fmt.Errorf("%s must be greater than zero", ChalkSFUStandbyBudget)
-	}
-	unifiedSignaling, err := envStrictBool(ChalkSFUUnifiedSignaling, true)
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	directURL, err := directSignalingURL(os.Getenv(APIDirectURL))
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	newEpisodesPaused, err := loadNewEpisodesPaused()
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	colocatedGrace, err := loadColocatedCaptureGrace()
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	config := ChalkSFUConfig{
-		ColocatedCaptureGrace: colocatedGrace,
-		Enabled:               true,
-		NewEpisodesPaused:     newEpisodesPaused,
-		UnifiedSignaling:      unifiedSignaling,
-		DirectSignalingURL:    directURL,
-		CaptureEnabled:        envBool(ChalkSFUCaptureEnabled),
-		CloudflareOverflow:    overflow,
-		ApplicationID:         strings.TrimSpace(envOrDefault(ChalkSFUApplicationID, "")),
-		ServerName:            strings.TrimSpace(envOrDefault(ChalkSFUServerName, "")),
-		CAFile:                strings.TrimSpace(envOrDefault(ChalkSFUCAFile, "")),
-		ClientCertFile:        strings.TrimSpace(envOrDefault(ChalkSFUClientCertFile, "")),
-		ClientKeyFile:         strings.TrimSpace(envOrDefault(ChalkSFUClientKeyFile, "")),
-		STUNURLs:              envList(ChalkSFUSTUNURLs),
-		RequestTimeout:        timeout,
-	}
-	required := []struct{ name, value string }{
-		{ChalkSFUApplicationID, config.ApplicationID},
-		{ChalkSFUNodes, strings.TrimSpace(envOrDefault(ChalkSFUNodes, ""))},
-		{ChalkSFUServerName, config.ServerName},
-		{ChalkSFUCAFile, config.CAFile},
-		{ChalkSFUClientCertFile, config.ClientCertFile},
-		{ChalkSFUClientKeyFile, config.ClientKeyFile},
-	}
-	for _, field := range required {
-		if field.value == "" {
-			return ChalkSFUConfig{}, fmt.Errorf("%s must be set when %s is on", field.name, ChalkSFUEnabled)
-		}
-	}
-	config.StandbyPacketBudget = int(standbyBudget)
-	nodes, err := parseChalkSFUNodes(envList(ChalkSFUNodes))
-	if err != nil {
-		return ChalkSFUConfig{}, err
-	}
-	config.Nodes = nodes
-	if config.AllowedSpaces, err = spaces.ParseChalkSFUAllowlist(envList(ChalkSFUAllowedSpaces)); err != nil {
-		return ChalkSFUConfig{}, fmt.Errorf("%s: %w", ChalkSFUAllowedSpaces, err)
-	}
-	if sunset := strings.TrimSpace(envOrDefault(ChalkSFUClientSunset, "")); sunset != "" {
-		if config.ClientSunset, err = time.Parse(time.RFC3339, sunset); err != nil {
-			return ChalkSFUConfig{}, fmt.Errorf("%s must be an RFC 3339 instant: %w", ChalkSFUClientSunset, err)
-		}
-	}
-	return config, nil
-}
-
-func loadColocatedCaptureGrace() (time.Duration, error) {
-	if !envBool(ChalkSFUColocatedCapture) {
-		return 0, nil
-	}
-	if !envBool(ChalkSFUCaptureEnabled) {
-		return 0, fmt.Errorf("%s needs %s=true", ChalkSFUColocatedCapture, ChalkSFUCaptureEnabled)
-	}
-	seconds, err := envInt32(ChalkSFUColocatedGraceSecs, DefaultChalkSFUColocatedGraceSeconds)
-	if err != nil {
-		return 0, err
-	}
-	if seconds <= 0 {
-		return 0, fmt.Errorf("%s must be greater than zero", ChalkSFUColocatedGraceSecs)
-	}
-	return time.Duration(seconds) * time.Second, nil
-}
-
-// parseChalkSFUNodes reads "id=https://host:port" and "standby:id=https://host:port"
-// entries; an entry without a role prefix is a primary. IDs must be unique and
-// valid binding node names, and every URL absolute https without query or fragment.
-func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
-	nodes := make([]ChalkSFUNode, 0, len(entries))
-	seen := map[string]bool{}
-	for _, entry := range entries {
-		id, controlURL, found := strings.Cut(entry, "=")
-		id, controlURL = strings.TrimSpace(id), strings.TrimSpace(controlURL)
-		role := ChalkSFURolePrimary
-		if prefix, rest, hasRole := strings.Cut(id, ":"); hasRole {
-			if ChalkSFURole(prefix) != ChalkSFURoleStandby && ChalkSFURole(prefix) != ChalkSFURolePrimary {
-				return nil, fmt.Errorf("%s entry %q has role %q, want primary or standby", ChalkSFUNodes, entry, prefix)
-			}
-			role, id = ChalkSFURole(prefix), rest
-		}
-		if !found || !mediaplane.ValidNodeID(id) {
-			return nil, fmt.Errorf("%s entry %q must be id=https://host:port with a lowercase id", ChalkSFUNodes, entry)
-		}
-		if seen[id] {
-			return nil, fmt.Errorf("%s names node %q twice", ChalkSFUNodes, id)
-		}
-		seen[id] = true
-		parsed, err := url.Parse(controlURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-			return nil, fmt.Errorf("%s node %q must have an absolute https URL without query or fragment", ChalkSFUNodes, id)
-		}
-		nodes = append(nodes, ChalkSFUNode{ID: id, ControlURL: controlURL, Role: role})
-	}
-	return nodes, nil
-}
-
-// validateMediaPlaneProcessConfig checks what a platform default needs to run. Cloudflare is
-// needed under either default: it is the default itself, or the fallback for an SDK that
-// cannot run the own SFU, for the kill switch and for Episodes already bound to it.
-func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig, chalkSFU ChalkSFUConfig) error {
-	if provider == "" {
-		return nil
-	}
-	if processConfig.RequestTimeout <= 0 {
-		return fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
-	}
-	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.Enabled {
-		return fmt.Errorf("%s=%s requires %s=true", DefaultMediaPlane, provider, ChalkSFUEnabled)
-	}
-	// A Space can turn recording or transcription on at any time, and an Episode on the own SFU
-	// has no capture path without this flag, so every inheriting Space would lose them.
-	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.CaptureEnabled {
-		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of an own-SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
-	}
-	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
-		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
-	}
-	if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
-		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
-	}
 	return nil
 }
 
-func validateTurnProcessConfig(processConfig CloudflareRealtimeConfig) error {
-	if (strings.TrimSpace(processConfig.TurnKeyID) == "") != (strings.TrimSpace(processConfig.TurnAPIToken) == "") {
-		return fmt.Errorf("%s and %s must be set together", CloudflareTurnKeyID, CloudflareTurnAPIToken)
+// validateCapabilityDependencies checks that each enabled capability has the
+// storage and credentials it needs.
+func (cfg Config) validateCapabilityDependencies() error {
+	if cfg.Capabilities.Recording {
+		if err := validateR2Config(cfg.R2, RecordingEnabled); err != nil {
+			return err
+		}
+		if cfg.RecordingKMS.KeyID == "" || cfg.RecordingKMS.Region == "" {
+			return fmt.Errorf("%s and %s must be set when %s=true", RecordingKMSKeyID, RecordingKMSRegion, RecordingEnabled)
+		}
+	}
+	if cfg.Capabilities.Transcription {
+		if err := validateTranscriptionConfig(cfg.Transcription, cfg.R2); err != nil {
+			return err
+		}
+	}
+	if cfg.Capabilities.WhiteboardFiles {
+		return validateWhiteboardFilesConfig(cfg.SyncToken, cfg.R2)
 	}
 	return nil
-}
-
-func validateProviderBridgeMediaPlaneProcessConfig(providerBridge ProviderBridgeConfig, processConfig CloudflareRealtimeConfig) error {
-	if !providerBridge.Enabled {
-		return nil
-	}
-	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
-		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppID)
-	}
-	if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
-		return fmt.Errorf("%s must be set when the ProviderBridge is enabled", CloudflareRealtimeAppSecret)
-	}
-	return nil
-}
-
-func loadCapabilityConfig(environment string) (CapabilityConfig, error) {
-	defaultEnabled := environment != DefaultEnvironment
-	transcription, err := envStrictBool(TranscriptionEnabled, defaultEnabled)
-	if err != nil {
-		return CapabilityConfig{}, err
-	}
-	recording, err := envStrictBool(RecordingEnabled, defaultEnabled)
-	if err != nil {
-		return CapabilityConfig{}, err
-	}
-	whiteboardFiles, err := envStrictBool(WhiteboardFilesEnabled, false)
-	if err != nil {
-		return CapabilityConfig{}, err
-	}
-	return CapabilityConfig{Recording: recording, Transcription: transcription, WhiteboardFiles: whiteboardFiles}, nil
-}
-
-func envBoundedInt32(name string, fallback int32, minimum int32, maximum int32) (int32, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer: %w", name, err)
-	}
-	if parsed < int64(minimum) || parsed > int64(maximum) {
-		return 0, fmt.Errorf("%s must be between %d and %d", name, minimum, maximum)
-	}
-	return int32(parsed), nil
-}
-
-func envBoundedMilliseconds(name string, fallback int64, minimum int64, maximum int64) (time.Duration, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || strings.TrimSpace(value) == "" {
-		return time.Duration(fallback) * time.Millisecond, nil
-	}
-
-	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer number of milliseconds: %w", name, err)
-	}
-	if parsed < minimum || parsed > maximum {
-		return 0, fmt.Errorf("%s must be between %d and %d milliseconds", name, minimum, maximum)
-	}
-	return time.Duration(parsed) * time.Millisecond, nil
-}
-
-func validateTranscriptionConfig(transcription TranscriptionConfig, r2 R2Config) error {
-	if len(transcription.WorkloadAuthSecret) < 32 {
-		return fmt.Errorf("%s must contain at least 32 bytes when %s=true", TranscriptionWorkloadAuthSecret, TranscriptionEnabled)
-	}
-	if strings.TrimSpace(transcription.DispatcherFunction) == "" {
-		return fmt.Errorf("%s must be set when %s=true", TranscriptionDispatcherFunction, TranscriptionEnabled)
-	}
-	if err := validateR2Config(r2, TranscriptionEnabled); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateWhiteboardFilesConfig(syncToken SyncTokenConfig, r2 R2Config) error {
-	if len(syncToken.PrivateKey) == 0 {
-		return fmt.Errorf("%s, %s, %s, and %s must be set when %s=true", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey, WhiteboardFilesEnabled)
-	}
-	return validateR2Config(r2, WhiteboardFilesEnabled)
-}
-
-func validateR2Config(r2 R2Config, capability string) error {
-	if strings.TrimSpace(r2.Bucket) == "" || (strings.TrimSpace(r2.AccountID) == "" && strings.TrimSpace(r2.Endpoint) == "") || strings.TrimSpace(r2.AccessKeyID) == "" || strings.TrimSpace(r2.SecretAccessKey) == "" {
-		return fmt.Errorf("%s, either %s or %s, %s, and %s must be set when %s=true", R2Bucket, R2AccountID, R2Endpoint, R2AccessKeyID, R2SecretAccessKey, capability)
-	}
-	return nil
-}
-
-func loadProviderBridgeConfig(environment string) (ProviderBridgeConfig, error) {
-	config := ProviderBridgeConfig{
-		Address:           strings.TrimSpace(envOrDefault(ProviderBridgeAddress, "")),
-		ServerCertFile:    strings.TrimSpace(envOrDefault(ProviderBridgeServerCertFile, "")),
-		ServerKeyFile:     strings.TrimSpace(envOrDefault(ProviderBridgeServerKeyFile, "")),
-		ClientCAFile:      strings.TrimSpace(envOrDefault(ProviderBridgeClientCAFile, "")),
-		SPIFFETrustDomain: strings.TrimSpace(envOrDefault(ProviderBridgeSPIFFETrustDomain, "")),
-	}
-	configured := 0
-	for _, value := range []string{config.Address, config.ServerCertFile, config.ServerKeyFile, config.ClientCAFile, config.SPIFFETrustDomain} {
-		if value != "" {
-			configured++
-		}
-	}
-	if configured == 0 {
-		if environment == DefaultEnvironment {
-			return config, nil
-		}
-		return ProviderBridgeConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set outside local environments", ProviderBridgeAddress, ProviderBridgeServerCertFile, ProviderBridgeServerKeyFile, ProviderBridgeClientCAFile, ProviderBridgeSPIFFETrustDomain)
-	}
-	if configured != 5 {
-		return ProviderBridgeConfig{}, fmt.Errorf("%s, %s, %s, %s, and %s must be set together", ProviderBridgeAddress, ProviderBridgeServerCertFile, ProviderBridgeServerKeyFile, ProviderBridgeClientCAFile, ProviderBridgeSPIFFETrustDomain)
-	}
-	if _, _, err := net.SplitHostPort(config.Address); err != nil {
-		return ProviderBridgeConfig{}, fmt.Errorf("%s must be a host:port listener address", ProviderBridgeAddress)
-	}
-	if !validSPIFFETrustDomain(config.SPIFFETrustDomain) {
-		return ProviderBridgeConfig{}, fmt.Errorf("%s must be a SPIFFE trust domain", ProviderBridgeSPIFFETrustDomain)
-	}
-	config.Enabled = true
-	return config, nil
-}
-
-func validSPIFFETrustDomain(value string) bool {
-	if len(value) == 0 || len(value) > 255 || value != strings.ToLower(value) || strings.HasPrefix(value, ".") || strings.HasSuffix(value, ".") {
-		return false
-	}
-	for _, label := range strings.Split(value, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, character := range label {
-			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func loadWebhookEncryptionKey(environment string) ([]byte, error) {
-	encoded := strings.TrimSpace(envOrDefault(WebhookEncryptionKey, ""))
-	if encoded != "" {
-		decoded, err := base64.StdEncoding.DecodeString(encoded)
-		if err == nil && len(decoded) == 32 {
-			return decoded, nil
-		}
-		return nil, fmt.Errorf("%s must be base64-encoded 32 bytes", WebhookEncryptionKey)
-	}
-	if environment == DefaultEnvironment {
-		return []byte("chalk-local-webhook-key-32-bytes"), nil
-	}
-	return nil, fmt.Errorf("%s must be set outside local environments", WebhookEncryptionKey)
-}
-
-func loadWebhookEncryptionConfig(environment string) (WebhookConfig, error) {
-	keyring := strings.TrimSpace(envOrDefault(WebhookEncryptionKeyring, ""))
-	if keyring == "" {
-		key, err := loadWebhookEncryptionKey(environment)
-		return WebhookConfig{EncryptionKey: key, EncryptionKeys: map[byte][]byte{1: key}, CurrentKeyVersion: 1}, err
-	}
-	current, err := strconv.Atoi(strings.TrimSpace(envOrDefault(WebhookEncryptionCurrentVersion, "")))
-	if err != nil || current < 1 || current > 255 {
-		return WebhookConfig{}, fmt.Errorf("%s must be an integer from 1 through 255", WebhookEncryptionCurrentVersion)
-	}
-	keys := make(map[byte][]byte)
-	for _, entry := range strings.Split(keyring, ",") {
-		versionAndKey := strings.SplitN(strings.TrimSpace(entry), ":", 2)
-		version, versionErr := strconv.Atoi(versionAndKey[0])
-		if len(versionAndKey) != 2 || versionErr != nil || version < 1 || version > 255 {
-			return WebhookConfig{}, fmt.Errorf("%s entries must use version:base64-key", WebhookEncryptionKeyring)
-		}
-		decoded, decodeErr := base64.StdEncoding.DecodeString(versionAndKey[1])
-		if decodeErr != nil || len(decoded) != 32 {
-			return WebhookConfig{}, fmt.Errorf("%s keys must be base64-encoded 32 bytes", WebhookEncryptionKeyring)
-		}
-		if _, duplicate := keys[byte(version)]; duplicate {
-			return WebhookConfig{}, fmt.Errorf("%s contains duplicate version %d", WebhookEncryptionKeyring, version)
-		}
-		keys[byte(version)] = decoded
-	}
-	if keys[byte(current)] == nil {
-		return WebhookConfig{}, fmt.Errorf("%s is absent from %s", WebhookEncryptionCurrentVersion, WebhookEncryptionKeyring)
-	}
-	return WebhookConfig{EncryptionKey: keys[byte(current)], EncryptionKeys: keys, CurrentKeyVersion: byte(current)}, nil
-}
-
-func loadSyncTokenConfig(environment string) (SyncTokenConfig, error) {
-	config := SyncTokenConfig{
-		Audience: strings.TrimSpace(envOrDefault(SyncTokenAudience, "")),
-		Issuer:   strings.TrimSpace(envOrDefault(SyncTokenIssuer, "")),
-		KeyID:    strings.TrimSpace(envOrDefault(SyncTokenKeyID, "")),
-	}
-	encodedKey := strings.TrimSpace(envOrDefault(SyncTokenPrivateKey, ""))
-	if config.Audience == "" && config.Issuer == "" && config.KeyID == "" && encodedKey == "" && environment == DefaultEnvironment {
-		return config, nil
-	}
-	if config.Audience == "" || config.Issuer == "" || config.KeyID == "" || encodedKey == "" {
-		return SyncTokenConfig{}, fmt.Errorf("%s, %s, %s, and %s must be set together", SyncTokenAudience, SyncTokenIssuer, SyncTokenKeyID, SyncTokenPrivateKey)
-	}
-	if config.Audience == "chalk-media" {
-		return SyncTokenConfig{}, fmt.Errorf("%s must differ from the participant media audience", SyncTokenAudience)
-	}
-	key, err := base64.RawURLEncoding.DecodeString(encodedKey)
-	if err != nil || len(key) != ed25519.PrivateKeySize {
-		return SyncTokenConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", SyncTokenPrivateKey)
-	}
-	config.PrivateKey = ed25519.PrivateKey(key)
-	currentPublicKey := append(ed25519.PublicKey(nil), config.PrivateKey.Public().(ed25519.PublicKey)...)
-	config.VerificationKeys = map[string]ed25519.PublicKey{config.KeyID: currentPublicKey}
-	encodedVerificationKeys := strings.TrimSpace(envOrDefault(MediaTokenVerificationKeys, ""))
-	if encodedVerificationKeys == "" {
-		return config, nil
-	}
-	var keyring map[string]string
-	if err := json.Unmarshal([]byte(encodedVerificationKeys), &keyring); err != nil || len(keyring) == 0 {
-		return SyncTokenConfig{}, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", MediaTokenVerificationKeys)
-	}
-	for keyID, encoded := range keyring {
-		keyID = strings.TrimSpace(keyID)
-		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encoded))
-		if keyID == "" || err != nil || len(publicKey) != ed25519.PublicKeySize {
-			return SyncTokenConfig{}, fmt.Errorf("%s contains an invalid Ed25519 public key", MediaTokenVerificationKeys)
-		}
-		config.VerificationKeys[keyID] = ed25519.PublicKey(publicKey)
-	}
-	configuredCurrent, ok := config.VerificationKeys[config.KeyID]
-	if !ok || !configuredCurrent.Equal(currentPublicKey) {
-		return SyncTokenConfig{}, fmt.Errorf("%s must contain the current %s public key", MediaTokenVerificationKeys, SyncTokenKeyID)
-	}
-	return config, nil
-}
-
-const (
-	publicInviteMaxSchedulerIntervalMS  = int64(24 * 60 * 60 * 1000)
-	publicInviteMaxSchedulerBatch       = int32(1000)
-	publicInviteMinAutoLifecycleSeconds = int32(60)
-	publicInviteMaxAutoLifecycleSeconds = int32(60 * 60)
-)
-
-var publicInviteUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
-	managedTenantID := strings.TrimSpace(envOrDefault(PublicInviteManagedTenantID, ""))
-	defaultMediaPlane := strings.TrimSpace(envOrDefault(PublicInviteDefaultMediaPlane, ""))
-	rawWebOrigin := strings.TrimSpace(envOrDefault(PublicInviteWebOrigin, ""))
-	keyID := strings.TrimSpace(envOrDefault(PublicInviteKeyID, ""))
-	encodedPrivateKey := strings.TrimSpace(envOrDefault(PublicInvitePrivateKey, ""))
-	encodedVerificationKeys := strings.TrimSpace(envOrDefault(PublicInviteVerificationKeys, ""))
-
-	coreConfigured := 0
-	for _, value := range []string{managedTenantID, defaultMediaPlane, rawWebOrigin, keyID, encodedPrivateKey, encodedVerificationKeys} {
-		if value != "" {
-			coreConfigured++
-		}
-	}
-	schedulerConfigured := 0
-	for _, name := range []string{PublicInviteSchedulerIntervalMS, PublicInviteSchedulerBatch} {
-		if strings.TrimSpace(envOrDefault(name, "")) != "" {
-			schedulerConfigured++
-		}
-	}
-	if coreConfigured == 0 && schedulerConfigured == 0 {
-		if environment == DefaultEnvironment {
-			return PublicInviteConfig{}, nil
-		}
-		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set outside local environments", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
-	}
-	if coreConfigured != 6 {
-		return PublicInviteConfig{}, fmt.Errorf("%s, %s, %s, %s, %s, and %s must be set together", PublicInviteManagedTenantID, PublicInviteDefaultMediaPlane, PublicInviteWebOrigin, PublicInviteKeyID, PublicInvitePrivateKey, PublicInviteVerificationKeys)
-	}
-	if schedulerConfigured == 1 {
-		return PublicInviteConfig{}, fmt.Errorf("%s and %s must be set together", PublicInviteSchedulerIntervalMS, PublicInviteSchedulerBatch)
-	}
-
-	canonicalTenantID := strings.ToLower(managedTenantID)
-	if !publicInviteUUIDPattern.MatchString(canonicalTenantID) {
-		return PublicInviteConfig{}, fmt.Errorf("%s must be a canonical UUID", PublicInviteManagedTenantID)
-	}
-	if !validPublicInviteMediaPlane(defaultMediaPlane) {
-		return PublicInviteConfig{}, fmt.Errorf("%s must be a non-empty ASCII media plane", PublicInviteDefaultMediaPlane)
-	}
-	webOrigin, err := parsePublicInviteWebOrigin(environment, rawWebOrigin)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
-	if err := validatePublicInviteKeyID(keyID); err != nil {
-		return PublicInviteConfig{}, fmt.Errorf("%s: %w", PublicInviteKeyID, err)
-	}
-	privateKeyBytes, err := base64.RawURLEncoding.DecodeString(encodedPrivateKey)
-	if err != nil || len(privateKeyBytes) != ed25519.PrivateKeySize {
-		return PublicInviteConfig{}, fmt.Errorf("%s must be an unpadded base64url Ed25519 private key", PublicInvitePrivateKey)
-	}
-	privateKey := append(ed25519.PrivateKey(nil), privateKeyBytes...)
-	currentPublicKey, ok := privateKey.Public().(ed25519.PublicKey)
-	if !ok || len(currentPublicKey) != ed25519.PublicKeySize {
-		return PublicInviteConfig{}, fmt.Errorf("%s is not a valid Ed25519 private key", PublicInvitePrivateKey)
-	}
-	verificationKeys, err := parsePublicInviteVerificationKeys(encodedVerificationKeys)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
-	configuredCurrent, ok := verificationKeys[keyID]
-	if !ok || !configuredCurrent.Equal(currentPublicKey) {
-		return PublicInviteConfig{}, fmt.Errorf("%s must contain the current %s public key", PublicInviteVerificationKeys, PublicInviteKeyID)
-	}
-	autoLifecycleSeconds, err := envBoundedInt32(PublicInviteAutoLifecycleSeconds, DefaultPublicInviteAutoLifecycleSeconds, publicInviteMinAutoLifecycleSeconds, publicInviteMaxAutoLifecycleSeconds)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
-	schedulerInterval, err := envBoundedMilliseconds(PublicInviteSchedulerIntervalMS, DefaultPublicInviteSchedulerIntervalMS, 1, publicInviteMaxSchedulerIntervalMS)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
-	schedulerBatch, err := envBoundedInt32(PublicInviteSchedulerBatch, DefaultPublicInviteSchedulerBatch, 1, publicInviteMaxSchedulerBatch)
-	if err != nil {
-		return PublicInviteConfig{}, err
-	}
-
-	return PublicInviteConfig{
-		Enabled:               true,
-		ManagedTenantID:       canonicalTenantID,
-		DefaultMediaPlane:     defaultMediaPlane,
-		WebOrigin:             webOrigin,
-		KeyID:                 keyID,
-		PrivateKey:            privateKey,
-		VerificationKeys:      verificationKeys,
-		AutoLifecycleLifetime: time.Duration(autoLifecycleSeconds) * time.Second,
-		SchedulerInterval:     schedulerInterval,
-		SchedulerBatch:        schedulerBatch,
-	}, nil
-}
-
-func parsePublicInviteWebOrigin(environment, raw string) (publicinvites.WebOrigin, error) {
-	origin, err := publicinvites.ParseWebOrigin(raw)
-	if err != nil {
-		return "", fmt.Errorf("%s: %w", PublicInviteWebOrigin, err)
-	}
-	if environment != DefaultEnvironment && !origin.Secure() {
-		return "", fmt.Errorf("%s must use https outside local environments", PublicInviteWebOrigin)
-	}
-	return origin, nil
-}
-
-func parsePublicInviteVerificationKeys(encoded string) (map[string]ed25519.PublicKey, error) {
-	var keyring map[string]string
-	if err := json.Unmarshal([]byte(encoded), &keyring); err != nil || len(keyring) == 0 {
-		return nil, fmt.Errorf("%s must be a non-empty JSON object of key IDs to unpadded base64url Ed25519 public keys", PublicInviteVerificationKeys)
-	}
-	verificationKeys := make(map[string]ed25519.PublicKey, len(keyring))
-	for keyID, encodedKey := range keyring {
-		keyID = strings.TrimSpace(keyID)
-		if err := validatePublicInviteKeyID(keyID); err != nil {
-			return nil, fmt.Errorf("%s contains an invalid key ID", PublicInviteVerificationKeys)
-		}
-		publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(encodedKey))
-		if err != nil || len(publicKey) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("%s contains an invalid Ed25519 public key", PublicInviteVerificationKeys)
-		}
-		verificationKeys[keyID] = append(ed25519.PublicKey(nil), publicKey...)
-	}
-	return verificationKeys, nil
-}
-
-func validatePublicInviteKeyID(keyID string) error {
-	if keyID == "" || len(keyID) > 32 {
-		return fmt.Errorf("key ID must be 1 through 32 bytes")
-	}
-	for _, character := range keyID {
-		if (character < 'A' || character > 'Z') &&
-			(character < 'a' || character > 'z') &&
-			(character < '0' || character > '9') && character != '_' && character != '-' {
-			return fmt.Errorf("key ID contains invalid characters")
-		}
-	}
-	return nil
-}
-
-func validPublicInviteMediaPlane(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, character := range value {
-		if character > 0x7f || character == ' ' || character == '\t' || character == '\r' || character == '\n' {
-			return false
-		}
-	}
-	return true
-}
-
-func validateOTLPEndpoint(environment string, endpoint string, insecure bool) error {
-	if endpoint == "" {
-		if insecure {
-			return fmt.Errorf("%s requires %s", APIOTLPInsecure, APIOTLPEndpoint)
-		}
-		return nil
-	}
-	if insecure && environment != DefaultEnvironment {
-		return fmt.Errorf("%s is only supported in local environments", APIOTLPInsecure)
-	}
-
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return fmt.Errorf("%s must be a valid URL: %w", APIOTLPEndpoint, err)
-	}
-	if parsed.Scheme == "" || parsed.Host == "" || parsed.Path != "" && parsed.Path != "/" {
-		return fmt.Errorf("%s must be an absolute base URL without a path", APIOTLPEndpoint)
-	}
-	if insecure {
-		if parsed.Scheme != "http" {
-			return fmt.Errorf("%s must use http when %s is enabled", APIOTLPEndpoint, APIOTLPInsecure)
-		}
-		return nil
-	}
-	if parsed.Scheme != "https" {
-		return fmt.Errorf("%s must use https unless %s is enabled locally", APIOTLPEndpoint, APIOTLPInsecure)
-	}
-	return nil
-}
-
-func validateDatabaseURL(environment string, databaseURL string) error {
-	if environment == DefaultEnvironment {
-		return nil
-	}
-	if strings.TrimSpace(databaseURL) == "" || databaseURL == DefaultDatabaseURL {
-		return fmt.Errorf("%s must be set outside local environments", DatabaseURL)
-	}
-
-	parsed, err := url.Parse(databaseURL)
-	if err != nil {
-		return fmt.Errorf("%s must be a valid URL: %w", DatabaseURL, err)
-	}
-
-	switch strings.ToLower(parsed.Query().Get("sslmode")) {
-	case "require", "verify-ca", "verify-full":
-		return nil
-	default:
-		return fmt.Errorf("%s must set sslmode=require, verify-ca, or verify-full outside local environments", DatabaseURL)
-	}
-}
-
-func envList(name string) []string {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return nil
-	}
-
-	parts := strings.Split(value, ",")
-	values := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			values = append(values, part)
-		}
-	}
-
-	return values
-}
-
-func envOrDefault(name string, fallback string) string {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return fallback
-	}
-
-	return value
-}
-
-func envInt32(name string, fallback int32) (int32, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer: %w", name, err)
-	}
-
-	return int32(parsed), nil
-}
-
-func envFloat64(name string, fallback float64) (float64, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be a number: %w", name, err)
-	}
-
-	return parsed, nil
-}
-
-func envMilliseconds(name string, fallback int64) (time.Duration, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return time.Duration(fallback) * time.Millisecond, nil
-	}
-
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an integer number of milliseconds: %w", name, err)
-	}
-
-	return time.Duration(parsed) * time.Millisecond, nil
-}
-
-func envEnum(name string, fallback string, allowed ...string) (string, error) {
-	value := strings.ToLower(strings.TrimSpace(envOrDefault(name, fallback)))
-	for _, option := range allowed {
-		if value == option {
-			return value, nil
-		}
-	}
-
-	return "", fmt.Errorf("%s must be one of: %s", name, strings.Join(allowed, ", "))
-}
-
-func envRequestLogs(operationLogs bool) (string, error) {
-	value, ok := os.LookupEnv(APIRequestLogs)
-	if !ok || value == "" {
-		if operationLogs {
-			return "all", nil
-		}
-		return DefaultRequestLogs, nil
-	}
-
-	return envEnum(APIRequestLogs, DefaultRequestLogs, "off", "errors", "slow", "sampled", "all")
-}
-
-func envBool(name string) bool {
-	value, ok := os.LookupEnv(name)
-	if !ok || value == "" {
-		return false
-	}
-
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-func envStrictBool(name string, fallback bool) (bool, error) {
-	value, ok := os.LookupEnv(name)
-	if !ok || strings.TrimSpace(value) == "" {
-		return fallback, nil
-	}
-
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "true":
-		return true, nil
-	case "false":
-		return false, nil
-	default:
-		return false, fmt.Errorf("%s must be true or false", name)
-	}
-}
-
-func loadOAuthConfig(environment string) (OAuthConfig, error) {
-	issuer := strings.TrimSpace(envOrDefault(OAuthIssuer, ""))
-	consent := strings.TrimSpace(envOrDefault(OAuthConsentURL, ""))
-	extra := envList(OAuthExtraRedirectURIs)
-	if issuer == "" {
-		if consent != "" || len(extra) > 0 {
-			return OAuthConfig{}, fmt.Errorf("%s is required when other OAuth settings are set", OAuthIssuer)
-		}
-		return OAuthConfig{}, nil
-	}
-	if err := validateOAuthURL(environment, OAuthIssuer, issuer, false); err != nil {
-		return OAuthConfig{}, err
-	}
-	if err := validateOAuthURL(environment, OAuthConsentURL, consent, true); err != nil {
-		return OAuthConfig{}, err
-	}
-	return OAuthConfig{Issuer: issuer, ConsentURL: consent, ExtraRedirectURIs: extra}, nil
-}
-
-// validateOAuthURL requires an absolute https URL, with no credentials or
-// fragment. The issuer is an origin; the consent URL may carry a path.
-func validateOAuthURL(environment, name, raw string, allowPath bool) error {
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" || parsed.RawQuery != "" {
-		return fmt.Errorf("%s must be an absolute URL without credentials, query or fragment", name)
-	}
-	if !allowPath && (parsed.Path != "" || strings.HasSuffix(raw, "/")) {
-		return fmt.Errorf("%s must be an origin without a path", name)
-	}
-	if parsed.Scheme != "https" && !(environment == DefaultEnvironment && parsed.Scheme == "http") {
-		return fmt.Errorf("%s must use https outside local environments", name)
-	}
-	return nil
-}
-
-// directSignalingURL accepts empty (off) or an https origin: the SDK appends the route path to it.
-func directSignalingURL(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", nil
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("%s must be an https origin without a path", APIDirectURL)
-	}
-	return "https://" + u.Host, nil
 }
