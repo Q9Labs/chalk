@@ -22,6 +22,7 @@ const taskIds = [
   "tests",
   "browser-tests",
   "dashboard-engine",
+  "dashboard-refresh",
   "build",
   "call-performance",
   "call-leaks",
