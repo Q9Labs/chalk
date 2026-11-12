@@ -6,11 +6,11 @@ A TLA+ model of how a device, Sync and an SFU keep one participant's microphone,
 - Turning media on is Sync's decision. The UI shows pending until Sync shows the source live.
 - After a reconnect, the device resends its offs and takes every on from Sync.
 
-The same model also holds a switchable variant, `current`, that reproduces how the SDK handles reconnects today. The check finds a counterexample for `current` and none for `decided`.
+The same model also holds a switchable variant, `current`, that reproduces how the SDK handled reconnects before the owed-off rule (`offDebt`) shipped. The check finds a counterexample for `current` and none for `decided`.
 
 ## Result
 
-Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The current SDK variant violates P2 and P4. `./run.sh` reproduces them.
+Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The `current` variant (the SDK before `offDebt`) violates P2 and P4. `./run.sh` reproduces them.
 
 | Property | Meaning                                                                                                            | `decided` | `current`    |
 | -------- | ------------------------------------------------------------------------------------------------------------------ | --------- | ------------ |
