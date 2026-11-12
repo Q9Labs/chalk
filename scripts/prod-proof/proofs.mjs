@@ -119,6 +119,13 @@ export function episodeEnd(run, path) {
     },
   };
 }
+// One Space with one Episode for a proof that needs no media, and the handle that ends it.
+export async function openEpisode(run) {
+  const space = await createSpace(run);
+  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
+  const path = `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`;
+  return { path, ending: episodeEnd(run, path) };
+}
 // A reused Space is not the run's own, so cleanup learns of an Episode created in it from the
 // ownership file, which this writes before the Episode is used.
 export async function trackEpisode(run, space, episode) {

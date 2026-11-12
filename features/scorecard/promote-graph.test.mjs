@@ -20,7 +20,7 @@ test("Promote moves the proof Spaces to chalk_sfu before it deploys", () => {
 test("Promote's production proof and its rerun run on chalk_sfu, and none runs on Cloudflare", () => {
   const proof = promote.jobs.proof;
   assert.equal(proof.with.media_plane, "chalk_sfu");
-  assert.equal(proof.with.proofs, "${{ inputs.capture_proofs && 'leave-own-sfu camera-share call-artifacts' || 'leave-own-sfu camera-share' }}");
+  assert.equal(proof.with.proofs, "${{ inputs.capture_proofs && 'leave-own-sfu camera-share chat-upload call-artifacts' || 'leave-own-sfu camera-share chat-upload' }}");
   assert.ok(needsOf(proof).includes("release"));
   const rerun = promote.jobs["scorecard-rerun"];
   assert.deepEqual([rerun.with.proofs, rerun.with.media_plane], ["leave-own-sfu", "chalk_sfu"]);

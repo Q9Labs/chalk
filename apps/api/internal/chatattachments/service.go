@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"strings"
 	"time"
@@ -213,12 +214,12 @@ func (s Service) Initiate(
 		},
 	})
 	if err != nil {
-		_ = s.repository.Fail(ctx, upload.UploadID, utilities.ID{})
+		s.failUpload(ctx, upload.UploadID, utilities.ID{})
 		return UploadInstructions{}, fmt.Errorf("create chat attachment upload url: %w", err)
 	}
 	headers, err := signedHeaders(signed.SignedHeader)
 	if err != nil {
-		_ = s.repository.Fail(ctx, upload.UploadID, utilities.ID{})
+		s.failUpload(ctx, upload.UploadID, utilities.ID{})
 		return UploadInstructions{}, err
 	}
 
@@ -334,8 +335,23 @@ func (s Service) objectDigestMatches(ctx context.Context, upload Upload) (bool, 
 
 func (s Service) rejectUpload(ctx context.Context, upload Upload) error {
 	_ = s.objects.DeleteObject(ctx, upload.ObjectKey)
-	_ = s.repository.Fail(ctx, upload.UploadID, upload.FinalizeClaimToken)
+	s.failUpload(ctx, upload.UploadID, upload.FinalizeClaimToken)
 	return ErrFileTransferFailed
+}
+
+// failUpload marks a pending upload failed. The caller already returns the
+// original error, so a failed mark is logged with the upload id and not returned.
+func (s Service) failUpload(ctx context.Context, uploadID, claimToken utilities.ID) {
+	err := s.repository.Fail(ctx, uploadID, claimToken)
+	if err == nil {
+		return
+	}
+	logger := slog.Default()
+	if s.telemetry != nil {
+		logger = s.telemetry.logger
+	}
+	logger.ErrorContext(ctx, "chat attachment upload could not be marked failed",
+		"event", "chat_attachment.fail_mark_failed", "upload_id", uploadID.String(), "error", err)
 }
 
 func (s Service) releaseFinalize(ctx context.Context, upload Upload) {

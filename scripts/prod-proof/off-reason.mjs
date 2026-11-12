@@ -3,12 +3,12 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { baselineEntry } from "./leave-baseline.mjs";
 import { evaluateOffReason } from "./off-reason-criteria.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { openEpisode, prepareIntegration } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
 
-async function loadSdk(run, name, entry) {
+export async function loadSdk(run, name, entry) {
   const outfile = `${run.directory}/off-reason-${name}.mjs`;
   await requireSDK("esbuild").build({ entryPoints: [entry], outfile, bundle: true, format: "esm", platform: "node", nodePaths: [new URL("../../sdks/typescript/client/node_modules", import.meta.url).pathname], logLevel: "silent" });
   return import(pathToFileURL(outfile).href);
@@ -39,7 +39,7 @@ const idleLifecycle = {
   },
 };
 
-async function connect(run, clients, sdk, url, token) {
+export async function connect(run, clients, sdk, url, token) {
   const { seen, webSocket } = wire(sdk);
   const client = sdk.createV1SyncClient({ url, token: async () => token, webSocket, lifecycle: idleLifecycle, page: null });
   clients.push(client);
@@ -97,11 +97,8 @@ export async function offReasonProof(run) {
   const candidateSdk = await loadSdk(run, "candidate", resolve(process.env.CHALK_PROOF_CANDIDATE_SDK_ENTRY ?? new URL("../../sdks/typescript/client/src/index.ts", import.meta.url).pathname));
   const baselineSdk = await loadSdk(run, "baseline", await baselineEntry(run));
   await prepareIntegration(run, false);
-  const space = await createSpace(run);
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`;
-  const ending = episodeEnd(run, path);
-  const { defaultSyncUrl } = await loadSdk(run, "urls", fileURLToPath(new URL("../../sdks/typescript/client/src/space-client/core.ts", import.meta.url)));
+  const { path, ending } = await openEpisode(run);
+  const { defaultSyncUrl } = await loadSdk(run, "urls", fileURLToPath(new URL("../../sdks/typescript/client/src/space-client/urls.ts", import.meta.url)));
   const url = defaultSyncUrl(run.config.api_url);
   const clients = [];
   try {
