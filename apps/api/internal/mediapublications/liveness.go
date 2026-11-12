@@ -331,7 +331,11 @@ func (s Service) ConfirmRemoteTrackFailures(ctx context.Context, input RemoteTra
 					continue
 				}
 			}
-			closeErr := s.RecordClosedPublication(ctx, candidate.closeInput)
+			// The publisher may have muted the microphone in place since the candidate was chosen: a held track
+			// reads as inactive on the node, so only a publication that is still enabled can be closed here.
+			closeInput := candidate.closeInput
+			closeInput.OnlyWhileEnabled = true
+			closeErr := s.RecordClosedPublication(ctx, closeInput)
 			if errors.Is(closeErr, ErrInvalidPublication) {
 				s.absenceEvidence.forget(candidate.key)
 				s.liveness.forget(candidate)
