@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -49,8 +50,9 @@ func timeArrivals(p *peer) *timedArrivals {
 	return a
 }
 
-// frameAssembler tells when a video frame is complete: its marker packet and every sequence number
-// from its first packet to the marker have arrived.
+// frameAssembler tells when a video frame is complete: the packet that starts the frame (VP8
+// start-of-partition, partition 0), the marker packet, and every sequence number between them have
+// arrived. Packets may come in any order, and a frame whose start never arrives is never complete.
 type frameAssembler struct {
 	parts    map[uint32]*frameParts
 	lastDone uint32
@@ -58,9 +60,9 @@ type frameAssembler struct {
 }
 
 type frameParts struct {
-	seqs      map[uint16]struct{}
-	low, high uint16
-	ended     bool
+	seqs         map[uint16]struct{}
+	start, high  uint16
+	started, end bool
 }
 
 // add takes one packet and reports whether it completed a frame newer than every frame counted before.
@@ -74,17 +76,18 @@ func (f *frameAssembler) add(packet *rtp.Packet) bool {
 	}
 	frame := f.parts[ts]
 	if frame == nil {
-		frame = &frameParts{seqs: map[uint16]struct{}{}, low: packet.SequenceNumber}
+		frame = &frameParts{seqs: map[uint16]struct{}{}}
 		f.parts[ts] = frame
 	}
-	if int16(packet.SequenceNumber-frame.low) < 0 {
-		frame.low = packet.SequenceNumber
+	var vp8 codecs.VP8Packet
+	if _, err := vp8.Unmarshal(packet.Payload); err == nil && vp8.S == 1 && vp8.PID == 0 {
+		frame.start, frame.started = packet.SequenceNumber, true
 	}
 	if packet.Marker {
-		frame.high, frame.ended = packet.SequenceNumber, true
+		frame.high, frame.end = packet.SequenceNumber, true
 	}
 	frame.seqs[packet.SequenceNumber] = struct{}{}
-	if !frame.ended || len(frame.seqs) != int(frame.high-frame.low)+1 {
+	if !frame.started || !frame.end || len(frame.seqs) != int(frame.high-frame.start)+1 {
 		return false
 	}
 	f.lastDone, f.any = ts, true
