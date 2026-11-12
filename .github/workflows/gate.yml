@@ -453,7 +453,7 @@ jobs:
 
       # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
       - name: Run the Sync ${{ matrix.part }} part of the correctness harness
-        run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness ${{ matrix.part }}
+        run: scripts/gates/with-postgres.sh -- apps/sync/scripts/reliability-correctness ${{ matrix.part }}
 
   # The required context. A part the planner did not select is skipped, which counts as passed.
   sync:
