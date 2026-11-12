@@ -1,14 +1,14 @@
-package publicinvites
+package weborigin
 
 import (
 	"errors"
 	"testing"
 )
 
-func TestParseWebOrigin(t *testing.T) {
+func TestParse(t *testing.T) {
 	for _, tc := range []struct {
 		raw    string
-		want   WebOrigin
+		want   Origin
 		secure bool
 		valid  bool
 	}{
@@ -23,12 +23,12 @@ func TestParseWebOrigin(t *testing.T) {
 		{"https://chalk.example?x=1", "", false, false},
 		{"https://chalk.example#x", "", false, false},
 	} {
-		got, err := ParseWebOrigin(tc.raw)
-		if tc.valid != (err == nil) || (err != nil && !errors.Is(err, ErrInvalidWebOrigin)) {
-			t.Fatalf("ParseWebOrigin(%q) error = %v, want valid=%v", tc.raw, err, tc.valid)
+		got, err := Parse(tc.raw)
+		if tc.valid != (err == nil) || (err != nil && !errors.Is(err, ErrInvalid)) {
+			t.Fatalf("Parse(%q) error = %v, want valid=%v", tc.raw, err, tc.valid)
 		}
 		if got != tc.want || (tc.valid && got.Secure() != tc.secure) {
-			t.Fatalf("ParseWebOrigin(%q) = %q secure=%v, want %q secure=%v", tc.raw, got, got.Secure(), tc.want, tc.secure)
+			t.Fatalf("Parse(%q) = %q secure=%v, want %q secure=%v", tc.raw, got, got.Secure(), tc.want, tc.secure)
 		}
 	}
 }

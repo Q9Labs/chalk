@@ -122,7 +122,7 @@ func newOAuthHarness(t *testing.T) *oauthHarness {
 		OAuth:            oauth,
 		TenantAuthz:      authorization.NewTenantPolicy(NewMembershipRepository(q, pool), NewTenantRepository(q)),
 		Tenants:          tenants.NewService(NewTenantRepository(q)),
-		Spaces:           spaces.NewService(NewSpaceRepository(q, pool)),
+		Spaces:           spaces.NewServiceWithDefaultProvider(NewSpaceRepository(q, pool), ""),
 		ServicePrincipal: authentication.ServiceCredential{ID: oauthTestService, Secrets: []string{oauthTestSecret}, Scopes: []authentication.Scope{authentication.ScopeTenantsRead, authentication.ScopeTenantsWrite}},
 	}
 	options.RateLimit.DisableAuthenticated = true

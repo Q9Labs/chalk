@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/weborigin"
+
 	"github.com/q9labs/chalk/apps/api/internal/config"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
-	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -45,7 +46,7 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 	if tenantService == nil {
 		return config.PublicInviteConfig{}, errors.New("local public invite Tenant service unavailable")
 	}
-	webOrigin, err := publicinvites.ParseWebOrigin(localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins))
+	webOrigin, err := weborigin.Parse(localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins))
 	if err != nil {
 		return config.PublicInviteConfig{}, fmt.Errorf("local public invite web origin: %w", err)
 	}

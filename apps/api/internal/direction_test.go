@@ -56,14 +56,15 @@ func TestToolCatalogImportsOnlyTheScopeList(t *testing.T) {
 // config and observability sit below the domain packages, but each still
 // imports some of them. The lists hold today's edges and can only shrink: a
 // new edge fails, and so does a listed edge that is gone, so the list is
-// edited down with the fix.
+// edited down with the fix. utilities and weborigin are leaf value types that
+// import nothing from the domain, so they are not edges.
 func TestLegacyDirectionDebtOnlyShrinks(t *testing.T) {
 	legacy := map[string][]string{
 		"config":        {"apikeys", "artifactpolicy", "authentication", "mediaplane", "recordingpipeline", "spaces", "tenantlimits", "tenants"},
 		"observability": {"accessgrants", "adapters/postgres/sqlc", "apikeys", "captureplane", "capturesignaling", "mediaplane", "mediaplaneproviders", "recordingpipeline", "spaces"},
 	}
 	for pkg, listed := range legacy {
-		actual := slices.DeleteFunc(goList(t, pkg, `{{join .Imports "\n"}}`), func(name string) bool { return name == "utilities" })
+		actual := slices.DeleteFunc(goList(t, pkg, `{{join .Imports "\n"}}`), func(name string) bool { return name == "utilities" || name == "weborigin" })
 		for _, name := range actual {
 			if !slices.Contains(listed, name) {
 				t.Errorf("%s imports %s, a new edge from below the domain; invert it", pkg, name)

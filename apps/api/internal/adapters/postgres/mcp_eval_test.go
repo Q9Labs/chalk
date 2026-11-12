@@ -62,7 +62,7 @@ func TestMCPEvalHost(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	q := sqlc.New(pool)
 	keys := apikeys.NewService(NewAPIKeyRepository(q, pool), apikeys.Config{})
-	spaceService := spaces.NewService(NewSpaceRepository(q, pool))
+	spaceService := spaces.NewServiceWithDefaultProvider(NewSpaceRepository(q, pool), "")
 	tenantService := tenants.NewService(NewTenantRepository(q))
 	binding, err := mediaplane.NewBinding("cf_sfu", mediaplane.BindingSourceDeploymentDefault, "eval-local")
 	if err != nil {

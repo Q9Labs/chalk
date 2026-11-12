@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
+	"github.com/q9labs/chalk/apps/api/internal/weborigin"
 )
 
 type PublicInviteConfig struct {
 	Enabled               bool
 	ManagedTenantID       string
 	DefaultMediaPlane     string
-	WebOrigin             publicinvites.WebOrigin
+	WebOrigin             weborigin.Origin
 	KeyID                 string
 	PrivateKey            ed25519.PrivateKey
 	VerificationKeys      map[string]ed25519.PublicKey
@@ -145,8 +145,8 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	}, nil
 }
 
-func parsePublicInviteWebOrigin(environment, raw string) (publicinvites.WebOrigin, error) {
-	origin, err := publicinvites.ParseWebOrigin(raw)
+func parsePublicInviteWebOrigin(environment, raw string) (weborigin.Origin, error) {
+	origin, err := weborigin.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", PublicInviteWebOrigin, err)
 	}

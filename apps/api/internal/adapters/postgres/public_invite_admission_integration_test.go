@@ -55,7 +55,7 @@ func TestDashboardCallPublicKnockReachesEpisodeAdmission(t *testing.T) {
 		}
 	}()
 	queries := sqlc.New(pool)
-	spaceService := spaces.NewService(NewSpaceRepository(queries, pool))
+	spaceService := spaces.NewServiceWithDefaultProvider(NewSpaceRepository(queries, pool), "")
 	space, err := spaceService.CreateSpace(ctx, spaces.CreateSpaceInput{
 		TenantID: tenantID, Name: "New call", Slug: "call-" + accountTenantIntegrationID(t).String(),
 		MediaPlane: "cf_sfu", AdmissionPolicy: json.RawMessage(`{"mode":"open"}`),
