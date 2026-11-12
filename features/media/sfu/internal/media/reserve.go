@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -177,7 +176,7 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	}
 	// reservations drops expired holds first, so everything read below is live.
 	joined, total := n.reservations(nil)
-	if record, ok := n.reserves[request.OperationID]; ok {
+	if record, ok := n.reserves.Get(request.OperationID); ok {
 		if record.digest != digest {
 			return protocol.ReserveEpisodeResponse{}, ErrOperationConflict
 		}
@@ -254,12 +253,7 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 	n.adoptCaptureLeases(key, hold, n.captureBound(shape))
 	n.settleHold(key, nil)
 	response := protocol.ReserveEpisodeResponse{NodeIncarnation: n.incarnation, ReservedPackets: reserved, ExpiresAt: expires}
-	n.reserves[request.OperationID] = reserveRecord{digest: digest, response: response}
-	n.reserveOrder = append(n.reserveOrder, request.OperationID)
-	if len(n.reserveOrder) > defaultReserveLimit {
-		delete(n.reserves, n.reserveOrder[0])
-		n.reserveOrder = slices.Delete(n.reserveOrder, 0, 1)
-	}
+	n.reserves.Remember(request.OperationID, reserveRecord{digest: digest, response: response})
 	return response, nil
 }
 

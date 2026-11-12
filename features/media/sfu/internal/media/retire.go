@@ -2,7 +2,6 @@ package media
 
 import (
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -58,7 +57,7 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 	}
 	// Source authority granted under an older allocation ends too: its lease lapses and the
 	// revision stays, so only a grant under a current allocation forwards again.
-	for source, authority := range n.sources {
+	for source, authority := range n.sources.All() {
 		if sourceEpisode(source) == key && authority.allocation < floor {
 			authority.lapse()
 		}
@@ -87,23 +86,24 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 func (n *Node) raiseRetirement(key episodeKey, generation int64) (floor int64, recorded bool) {
 	n.pruneRetired()
 	floor = generation
-	if known, ok := n.retired[key]; ok {
+	if known, ok := n.retired.Get(key); ok {
 		floor = max(floor, known.floor)
-		n.retiredOrder = slices.DeleteFunc(n.retiredOrder, func(queued episodeKey) bool { return queued == key })
-	} else if len(n.retiredOrder) >= retiredLimit {
+		n.retired.Delete(key)
+	} else if n.retired.Full() {
 		return generation, false
 	}
-	n.retired[key] = retirement{floor: floor, at: n.now()}
-	n.retiredOrder = append(n.retiredOrder, key)
+	n.retired.Put(key, retirement{floor: floor, at: n.now()})
 	return floor, true
 }
 
 // pruneRetired drops the floors past their TTL, oldest first. The caller holds n.mu.
 func (n *Node) pruneRetired() {
 	now := n.now()
-	for len(n.retiredOrder) > 0 && now.Sub(n.retired[n.retiredOrder[0]].at) > retiredTTL {
-		delete(n.retired, n.retiredOrder[0])
-		n.retiredOrder = n.retiredOrder[1:]
+	for key, known := range n.retired.All() {
+		if now.Sub(known.at) <= retiredTTL {
+			return
+		}
+		n.retired.Delete(key)
 	}
 }
 
@@ -111,14 +111,14 @@ func (n *Node) pruneRetired() {
 // The caller holds n.mu.
 func (n *Node) retirementsFull() bool {
 	n.pruneRetired()
-	return len(n.retiredOrder) >= retiredLimit
+	return n.retired.Full()
 }
 
 // refuseRetired reports ErrStaleGeneration for a caller whose allocation generation is below the
 // Episode's retirement floor. A caller that names none counts as generation 0, so once an Episode
 // has a floor only a caller that names a current generation is admitted. The caller holds n.mu.
 func (n *Node) refuseRetired(key episodeKey, allocation *int64) error {
-	retired, ok := n.retired[key]
+	retired, ok := n.retired.Get(key)
 	if !ok || n.now().Sub(retired.at) > retiredTTL {
 		return nil
 	}
@@ -144,7 +144,7 @@ func (n *Node) refuseUnrecorded(key episodeKey, allocation *int64) error {
 	if !n.retirementsFull() {
 		return nil
 	}
-	if _, floored := n.retired[key]; floored || allocation != nil && n.hostsEpisode(key) {
+	if _, floored := n.retired.Get(key); floored || allocation != nil && n.hostsEpisode(key) {
 		return nil
 	}
 	return n.refuse(RefusedRetirements, errRetirementsFull)

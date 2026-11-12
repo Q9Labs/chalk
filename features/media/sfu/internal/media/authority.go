@@ -91,7 +91,7 @@ func (n *Node) authorityFor(scope protocol.Scope, allocation int64, source strin
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := sourceKey{keyOf(scope), source}
-	if authority := n.sources[key]; authority != nil {
+	if authority, _ := n.sources.Get(key); authority != nil {
 		if allocation > authority.allocation {
 			authority.lapse()
 			authority.allocation = allocation
@@ -116,22 +116,20 @@ func (n *Node) addSource(key sourceKey, window *leaseWindow) *sourceAuthority {
 		window = closedWindow
 	}
 	authority.window.Store(window)
-	n.sources[key] = authority
-	n.sourceOrder = append(n.sourceOrder, key)
+	n.sources.Put(key, authority)
 	return authority
 }
 
 func sourceEpisode(key sourceKey) episodeKey { return episodeKey{key.tenant, key.episode} }
 
-func (n *Node) evictSource(index int) {
-	key := n.sourceOrder[index]
-	if revision := n.sources[key].revision; revision > n.sourceFloors[sourceEpisode(key)] {
-		n.sourceFloors[sourceEpisode(key)] = revision
+func (n *Node) evictSource(key sourceKey) {
+	authority, _ := n.sources.Get(key)
+	if authority.revision > n.sourceFloors[sourceEpisode(key)] {
+		n.sourceFloors[sourceEpisode(key)] = authority.revision
 	}
 	// Queued packets keep this authority, and a later revoke reaches only its replacement.
-	n.sources[key].window.Store(closedWindow)
-	delete(n.sources, key)
-	n.sourceOrder = slices.Delete(n.sourceOrder, index, index+1)
+	authority.window.Store(closedWindow)
+	n.sources.Delete(key)
 }
 
 // ControlSources applies grants and revokes in revision order. The whole batch is
@@ -201,7 +199,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 	added := 0
 	for index, control := range request.Controls {
 		keys[index] = sourceKey{participantKey{tenant: request.TenantID, episode: request.EpisodeID, participant: control.ParticipantID}, control.Source}
-		if !named[keys[index]] && n.sources[keys[index]] == nil {
+		if known, _ := n.sources.Get(keys[index]); !named[keys[index]] && known == nil {
 			added++
 		}
 		named[keys[index]] = true
@@ -217,7 +215,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 	lease := n.cfg.SourceLeaseTTL
 	changed := make([]*sourceAuthority, len(request.Controls))
 	for index, control := range request.Controls {
-		authority := n.sources[keys[index]]
+		authority, _ := n.sources.Get(keys[index])
 		if authority == nil {
 			// A control is the first word on this source: before it, the source had no grant.
 			authority = n.addSource(keys[index], closedWindow)
@@ -263,13 +261,13 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 // and never an entry whose Episode would need a floor when the floors are full.
 // The caller holds n.mu.
 func (n *Node) makeSourceRoom(count int, named map[sourceKey]bool) error {
-	excess := len(n.sources) + count - n.sourceLimit
+	excess := n.sources.Len() + count - n.sources.limit
 	if excess <= 0 {
 		return nil
 	}
-	victims := make([]int, 0, excess)
+	victims := make([]sourceKey, 0, excess)
 	floors := map[episodeKey]bool{} // Episodes these evictions give a first floor; revision 0 needs none
-	for index, key := range n.sourceOrder {
+	for key, authority := range n.sources.All() {
 		if len(victims) == excess {
 			break
 		}
@@ -277,19 +275,19 @@ func (n *Node) makeSourceRoom(count int, named map[sourceKey]bool) error {
 			continue
 		}
 		episode := sourceEpisode(key)
-		if _, floored := n.sourceFloors[episode]; !floored && !floors[episode] && n.sources[key].revision > 0 {
-			if len(n.sourceFloors)+len(floors) >= n.sourceLimit {
+		if _, floored := n.sourceFloors[episode]; !floored && !floors[episode] && authority.revision > 0 {
+			if len(n.sourceFloors)+len(floors) >= n.sources.limit {
 				continue
 			}
 			floors[episode] = true
 		}
-		victims = append(victims, index)
+		victims = append(victims, key)
 	}
 	if len(victims) < excess {
 		return fmt.Errorf("%w: the source table has no room for this batch's new sources", ErrCapacityExceeded)
 	}
-	for position := len(victims) - 1; position >= 0; position-- {
-		n.evictSource(victims[position])
+	for _, key := range victims {
+		n.evictSource(key)
 	}
 	return nil
 }

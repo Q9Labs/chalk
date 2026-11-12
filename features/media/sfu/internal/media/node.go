@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"math"
 	"net"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,29 +71,22 @@ type Node struct {
 
 	wg sync.WaitGroup
 
-	mu           sync.Mutex
-	draining     bool // refuses new Episodes; Undrain clears it
-	stopped      bool // refuses all work
-	sessions     map[string]*Session
-	participants map[participantKey]*Session
-	creates      map[string]createRecord
-	closedOrder  []string                 // create operation IDs whose session closed, oldest first
-	createLimit  int                      // bounds the create records kept for closed sessions
-	fences       map[participantKey]int64 // highest generation seen per Participant; outlives sessions
-	fenceOrder   []participantKey         // insertion order, oldest first
-	fenceLimit   int
-	retired      map[episodeKey]retirement      // Episodes retired at an allocation generation (see RetireEpisode)
-	retiredOrder []episodeKey                   // insertion order, oldest first
-	screens      map[episodeKey]*Session        // the session sharing a screen in each Episode
-	sources      map[sourceKey]*sourceAuthority // newest grant or revoke per source; outlives sessions
-	sourceOrder  []sourceKey                    // insertion order, oldest first
-	sourceLimit  int                            // bounds sources, and sourceFloors apart from it
-	sourceFloors map[episodeKey]int64           // highest revision of a source evicted per Episode
+	mu            sync.Mutex
+	draining      bool // refuses new Episodes; Undrain clears it
+	stopped       bool // refuses all work
+	sessions      map[string]*Session
+	participants  map[participantKey]*Session
+	creates       map[string]createRecord
+	closedCreates *orderedTable[string, struct{}]            // create operation IDs whose session closed; bounded
+	fences        *orderedTable[participantKey, int64]       // highest generation seen per Participant; outlives sessions
+	retired       *orderedTable[episodeKey, retirement]      // Episodes retired at an allocation generation (see RetireEpisode)
+	screens       map[episodeKey]*Session                    // the session sharing a screen in each Episode
+	sources       *orderedTable[sourceKey, *sourceAuthority] // newest grant or revoke per source; outlives sessions; its limit also bounds sourceFloors
+	sourceFloors  map[episodeKey]int64                       // highest revision of a source evicted per Episode
 
-	holds        map[episodeKey]*episodeHold // Episodes reserved ahead of their joins (see ReserveEpisode)
-	reserves     map[string]reserveRecord    // reserve results by operation ID, for replay
-	reserveOrder []string                    // reserve operation IDs, oldest first
-	now          func() time.Time            // the clock holds expire by; tests replace it
+	holds    map[episodeKey]*episodeHold          // Episodes reserved ahead of their joins (see ReserveEpisode)
+	reserves *orderedTable[string, reserveRecord] // reserve results by operation ID, for replay
+	now      func() time.Time                     // the clock holds expire by; tests replace it
 
 	// plans holds each Episode's latest plan change. Only the control loop touches it.
 	plans map[episodeKey]int64
@@ -167,19 +159,17 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		sessions:      map[string]*Session{},
 		participants:  map[participantKey]*Session{},
 		creates:       map[string]createRecord{},
-		fences:        map[participantKey]int64{},
+		closedCreates: newOrderedTable[string, struct{}](defaultClosedCreateLimit),
+		fences:        newOrderedTable[participantKey, int64](defaultFenceLimit),
 		screens:       map[episodeKey]*Session{},
-		sources:       map[sourceKey]*sourceAuthority{},
-		sourceLimit:   defaultSourceLimit,
+		sources:       newOrderedTable[sourceKey, *sourceAuthority](defaultSourceLimit),
 		sourceFloors:  map[episodeKey]int64{},
 		holds:         map[episodeKey]*episodeHold{},
-		reserves:      map[string]reserveRecord{},
+		reserves:      newOrderedTable[string, reserveRecord](defaultReserveLimit),
 		now:           time.Now,
 		plans:         map[episodeKey]int64{},
 		refusals:      map[string]uint64{},
-		fenceLimit:    defaultFenceLimit,
-		retired:       map[episodeKey]retirement{},
-		createLimit:   defaultClosedCreateLimit,
+		retired:       newOrderedTable[episodeKey, retirement](retiredLimit),
 	}
 	n.wg.Go(n.run)
 	return n, nil
@@ -497,7 +487,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	}
 	// The fence outlives the session, so a delayed create from an older generation stays refused
 	// after the newer session closes.
-	if scope.Generation < n.fences[key] {
+	if known, _ := n.fences.Get(key); scope.Generation < known {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
 	// The per-Participant fence cannot know a Participant that never ran on this node, so the
@@ -532,9 +522,8 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	}
 	// Only an admitted create may take another Participant's fence: a refused one must leave
 	// every fence in place, or a later stale create for that Participant could pass.
-	if evict >= 0 {
-		delete(n.fences, n.fenceOrder[evict])
-		n.fenceOrder = slices.Delete(n.fenceOrder, evict, evict+1)
+	if evict != nil {
+		n.fences.Delete(*evict)
 	}
 	n.sessions[session.id] = session
 	n.participants[key] = session
@@ -556,29 +545,28 @@ func (n *Node) hostsEpisode(key episodeKey) bool {
 	return false
 }
 
-// fenceVictim finds the fence a new Participant would take the place of, or -1 when the table
+// fenceVictim finds the fence a new Participant would take the place of, or nil when the table
 // has room or already knows the Participant. It picks the oldest fence of a Participant with no
 // live session, never one that has a live session: that fence is what keeps an older generation
 // from replacing the live one. When every fence belongs to a live session it refuses instead.
 // The caller holds n.mu and evicts only once the create is admitted.
-func (n *Node) fenceVictim(key participantKey) (int, error) {
-	if _, known := n.fences[key]; known || len(n.fences) < n.fenceLimit {
-		return -1, nil
+func (n *Node) fenceVictim(key participantKey) (*participantKey, error) {
+	if _, known := n.fences.Get(key); known || !n.fences.Full() {
+		return nil, nil
 	}
-	index := slices.IndexFunc(n.fenceOrder, func(candidate participantKey) bool { return n.participants[candidate] == nil })
-	if index < 0 {
-		return -1, fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
+	for candidate := range n.fences.All() {
+		if n.participants[candidate] == nil {
+			return &candidate, nil
+		}
 	}
-	return index, nil
+	return nil, fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
 }
 
 // raiseFence records the generation as the lowest the Participant may create again.
 // fenceVictim has already made room under the same lock.
 func (n *Node) raiseFence(key participantKey, generation int64) {
-	if _, known := n.fences[key]; !known {
-		n.fenceOrder = append(n.fenceOrder, key)
-	}
-	n.fences[key] = max(n.fences[key], generation)
+	known, _ := n.fences.Get(key)
+	n.fences.Put(key, max(known, generation))
 }
 
 func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
@@ -687,10 +675,8 @@ func (n *Node) remove(session *Session) {
 	// The create record outlives the session, so a delayed retry of the same create replays the
 	// closed connection ID instead of creating a second session. Closed records are bounded.
 	if record, ok := n.creates[session.createOperation]; ok && record.id == session.id {
-		n.closedOrder = append(n.closedOrder, session.createOperation)
-		if len(n.closedOrder) > n.createLimit {
-			delete(n.creates, n.closedOrder[0])
-			n.closedOrder = slices.Delete(n.closedOrder, 0, 1)
+		if forgotten, _, forgot := n.closedCreates.Remember(session.createOperation, struct{}{}); forgot {
+			delete(n.creates, forgotten)
 		}
 	}
 }

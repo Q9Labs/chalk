@@ -20,12 +20,14 @@ type operationRecord struct {
 // leaves no record, so a retry runs again. Reusing an ID for a different body is a conflict.
 // The caller holds the session's opMu.
 type replayTable struct {
-	records map[string]operationRecord
-	order   []string
+	records *orderedTable[string, operationRecord]
 }
 
 func (t *replayTable) lookup(operationID string, request any) (json.RawMessage, bool, error) {
-	record, ok := t.records[operationID]
+	if t.records == nil {
+		return nil, false, nil
+	}
+	record, ok := t.records.Get(operationID)
 	if !ok {
 		return nil, false, nil
 	}
@@ -49,14 +51,9 @@ func (t *replayTable) remember(operationID string, request any, response any) er
 		return fmt.Errorf("encode response for replay: %w", err)
 	}
 	if t.records == nil {
-		t.records = map[string]operationRecord{}
+		t.records = newOrderedTable[string, operationRecord](maxOperationRecords)
 	}
-	if len(t.order) >= maxOperationRecords {
-		delete(t.records, t.order[0])
-		t.order = t.order[1:]
-	}
-	t.records[operationID] = operationRecord{digest: digest, response: encoded}
-	t.order = append(t.order, operationID)
+	t.records.Remember(operationID, operationRecord{digest: digest, response: encoded})
 	return nil
 }
 
