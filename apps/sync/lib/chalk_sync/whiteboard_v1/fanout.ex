@@ -5,13 +5,15 @@ defmodule ChalkSync.WhiteboardV1.Fanout do
 
   require Logger
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Database
   alias ChalkSync.Stateholder.EpisodeKey
+  alias ChalkSync.WhiteboardV1.SQL
   alias ChalkSync.UUID
 
-  @head_channel "chalk_whiteboard_v1_heads"
-  @cursor_channel "chalk_whiteboard_v1_cursors"
-  @access_channel "chalk_whiteboard_v1_access"
+  @head_channel SQL.head_channel()
+  @cursor_channel GeneratedWhiteboardV1.metadata()["notifications"]["transientCursorChannel"]
+  @access_channel SQL.access_channel()
   @server __MODULE__
 
   def start_link(options \\ []) do
