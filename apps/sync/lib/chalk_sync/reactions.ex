@@ -2,6 +2,7 @@ defmodule ChalkSync.Reactions do
   @moduledoc "Transient reaction commands for collaboration_v1."
 
   alias ChalkSync.Admission
+  alias ChalkSync.Chat.Collaborators
   alias ChalkSync.Fanout.Collaboration
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.UUID
@@ -27,8 +28,8 @@ defmodule ChalkSync.Reactions do
       when is_binary(operation_id) and is_binary(reaction) and is_list(options) do
     with :ok <- validate_operation_id(operation_id),
          :ok <- validate_reaction(reaction, options),
-         {:ok, profile} <- repository(options).authorize(identity, "sendReaction"),
-         :ok <- Admission.admit_reaction(admission(options), identity),
+         {:ok, profile} <- Collaborators.repository(options).authorize(identity, "sendReaction"),
+         :ok <- Admission.admit_reaction(Collaborators.admission(options), identity),
          {:ok, event} <- publish(identity, profile.display_name, reaction, options) do
       {:ok,
        %{
@@ -61,7 +62,7 @@ defmodule ChalkSync.Reactions do
       "expires_at" => DateTime.to_iso8601(expires_at)
     }
 
-    case Collaboration.publish_reaction(fanout(options), identity.episode, event) do
+    case Collaboration.publish_reaction(Collaborators.fanout(options), identity.episode, event) do
       :ok -> {:ok, event}
       {:error, _reason} -> {:error, :dependency_unavailable}
     end
@@ -86,25 +87,6 @@ defmodule ChalkSync.Reactions do
 
   defp validate_operation_id(value),
     do: if(byte_size(value) in 16..64, do: :ok, else: {:error, :invalid_payload})
-
-  defp repository(options),
-    do:
-      Keyword.get(
-        options,
-        :repository,
-        Application.get_env(:chalk_sync, :chat_repository, ChalkSync.Chat.Repository.Postgres)
-      )
-
-  defp admission(options),
-    do: Keyword.get(options, :admission, Application.get_env(:chalk_sync, :admission, Admission))
-
-  defp fanout(options),
-    do:
-      Keyword.get(
-        options,
-        :fanout,
-        Application.get_env(:chalk_sync, :collaboration_fanout, Collaboration)
-      )
 
   defp error_code(reason)
        when reason in [

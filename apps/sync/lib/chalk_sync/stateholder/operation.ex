@@ -1,13 +1,12 @@
 defmodule ChalkSync.Stateholder.Operation do
   @moduledoc "Validated external-operation intent with a stable request fingerprint."
 
-  alias ChalkSync.CanonicalJSON
+  alias ChalkSync.Stateholder.Intake
   alias ChalkSync.Stateholder.ObservedContext
   alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.UUID
 
   @request_key ~r/\A[A-Za-z0-9_-]{16,128}\z/
-  @max_payload_bytes 16 * 1024
   @enforce_keys [:request_key, :name, :payload, :fingerprint, :normalized_bytes]
   defstruct [:request_key, :name, :payload, :fingerprint, :normalized_bytes, :observed_context]
 
@@ -30,22 +29,16 @@ defmodule ChalkSync.Stateholder.Operation do
   def new(request_key, name, payload) when is_binary(request_key) and is_map(payload) do
     with true <- Regex.match?(@request_key, request_key),
          {:ok, normalized_name} <- normalize_name(name),
-         :ok <- validate_payload(normalized_name, payload) do
-      normalized = %{"name" => Atom.to_string(normalized_name), "payload" => payload}
-      encoded = CanonicalJSON.encode!(normalized)
-
-      if byte_size(encoded) <= @max_payload_bytes do
-        {:ok,
-         %__MODULE__{
-           request_key: request_key,
-           name: normalized_name,
-           payload: payload,
-           fingerprint: :crypto.hash(:sha256, encoded),
-           normalized_bytes: byte_size(encoded)
-         }}
-      else
-        {:error, :payload_too_large}
-      end
+         :ok <- validate_payload(normalized_name, payload),
+         {:ok, fingerprint, bytes} <- Intake.fingerprint(normalized_name, payload) do
+      {:ok,
+       %__MODULE__{
+         request_key: request_key,
+         name: normalized_name,
+         payload: payload,
+         fingerprint: fingerprint,
+         normalized_bytes: bytes
+       }}
     else
       false -> {:error, :invalid_request_key}
       {:error, reason} -> {:error, reason}
