@@ -15,11 +15,24 @@ const LIVE = '[role="meter"], .chalk-invite-qr';
 /**
  * Runs in every page before its own scripts. A screen that changes by itself after a few seconds (the call's header and dock
  * hide when idle, a notice leaves, a reconnect banner appears) would show whatever the load of this machine allowed, so a timer
- * of 2.5 seconds or more never fires: the screen stays as it was when it settled.
+ * of 2.5 seconds or more never fires: the screen stays as it was when it settled. The clock is fixed here too, because Playwright's
+ * own fixed clock would replace this setTimeout.
  */
-const NO_LONG_TIMERS = `(() => {
+const FROZEN = `(() => {
   const set = window.setTimeout.bind(window);
+  window.__realSetTimeout = set;
   window.setTimeout = (handler, delay, ...rest) => set(handler, Number(delay) >= 2500 ? 2147483647 : delay, ...rest);
+  const Real = Date;
+  const now = ${FIXED_TIME.getTime()};
+  window.Date = class extends Real {
+    constructor(...args) {
+      if (args.length) super(...args);
+      else super(now);
+    }
+    static now() {
+      return now;
+    }
+  };
 })();`;
 
 /** Resolves when nothing in the page has changed for `quiet` ms (at most `cap` ms), fonts are loaded and every image is decoded. Live parts do not count. */
@@ -28,6 +41,8 @@ const settle = (page) =>
     async ({ live, quiet, cap }) => {
       await document.fonts.ready;
       await new Promise((resolve) => {
+        // The page's own setTimeout never fires for 2.5 s or more (FROZEN), so the cap needs the real one.
+        const wait = window.__realSetTimeout;
         let timer = 0;
         const finish = () => {
           observer.disconnect();
@@ -39,11 +54,11 @@ const settle = (page) =>
           const real = records.some((record) => !(record.target instanceof Element ? record.target : record.target.parentElement)?.closest(live));
           if (!real) return;
           clearTimeout(timer);
-          timer = setTimeout(finish, quiet);
+          timer = wait(finish, quiet);
         });
         observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
-        timer = setTimeout(finish, quiet);
-        const limit = setTimeout(finish, cap);
+        timer = wait(finish, quiet);
+        const limit = wait(finish, cap);
       });
       await Promise.all([...document.images].map((image) => image.decode().catch(() => undefined)));
     },
@@ -138,8 +153,7 @@ function contextFor(browser, contexts, size, scheme) {
           timezoneId: "UTC",
         })
         .then(async (context) => {
-          await context.addInitScript(NO_LONG_TIMERS);
-          await context.clock.setFixedTime(FIXED_TIME);
+          await context.addInitScript(FROZEN);
           return context;
         }),
     );
@@ -169,9 +183,8 @@ async function runOne({ context, origin, out, run }) {
       .waitFor({ timeout: 25_000 });
     await settle(page);
     const frame = async (step, label, extra = []) => {
-      // A sheet that animates with script is still sliding in when measured unless that animation is finished. CSS animations are
-      // already off (STILL); finishing them too removed the join toasts from the frame.
-      await page.evaluate(() => document.getAnimations().forEach((animation) => animation instanceof CSSAnimation || animation instanceof CSSTransition || animation.finish()));
+      // A sheet that animates with script (not CSS) is still sliding in when measured unless every animation is finished.
+      await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
       await settle(page);
       const findings = [...(await stableFindings(page)), ...extra];
       const shot = `${name}.${step}.png`;
