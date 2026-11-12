@@ -78,18 +78,6 @@ defmodule ChalkSync.Live.Projection do
     end
   end
 
-  @spec replace_latest(t(), keyword()) :: {:ok, t(), map()} | {:error, atom()}
-  def replace_latest(%__MODULE__{} = projection, options \\ []) do
-    with {:ok, replacement, frame} <-
-           replace(projection.stream, items(projection), options),
-         true <- replacement.projection_id != projection.projection_id do
-      {:ok, replacement, frame}
-    else
-      false -> {:error, :projection_id_reused}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
   @spec reconcile(t(), [map()], keyword()) :: {:ok, t(), [map()]} | {:error, atom()}
   def reconcile(%__MODULE__{} = projection, desired_items, options \\ [])
       when is_list(desired_items) do

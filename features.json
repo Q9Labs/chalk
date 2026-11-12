@@ -598,7 +598,6 @@
         "apps/sync/lib/chalk_sync/retention",
         "apps/sync/lib/chalk_sync/stateholder",
         "apps/sync/lib/chalk_sync/stateholder.ex",
-        "apps/sync/lib/chalk_sync/sync_breaker_v1",
         "apps/sync/lib/chalk_sync/telemetry.ex",
         "apps/sync/lib/chalk_sync/transport",
         "apps/sync/lib/chalk_sync/uuid.ex",

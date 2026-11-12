@@ -83,19 +83,6 @@ defmodule ChalkSync.Transport.OutboundQueue do
     end
   end
 
-  @spec peek(t()) ::
-          {:ok, entry()} | :empty | {:error, :not_owner | :closed | {:overflow, atom()}}
-  def peek(queue) do
-    with :ok <- owner_open?(queue),
-         {:ok, state} <- state(queue),
-         :ok <- expire_if_needed(queue, state) do
-      case :ets.first(queue.entries) do
-        :"$end_of_table" -> :empty
-        sequence -> {:ok, entry(sequence, queue)}
-      end
-    end
-  end
-
   @spec pop(t()) ::
           {:ok, entry()} | :empty | {:error, :not_owner | :closed | {:overflow, atom()}}
   def pop(queue) do
