@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -121,11 +120,6 @@ type rotateWebhookSecretResponse struct {
 	PreviousSecretExpiresAt *string `json:"previous_secret_expires_at"`
 }
 
-func mountWebhookRoutes(r chi.Router, service WebhookService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range webhookEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
 func webhookEndpoints(service WebhookService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{createWebhookEndpoint(service, authorizer), listWebhookEndpoints(service, authorizer), getWebhookEndpoint(service, authorizer), patchWebhookEndpoint(service, authorizer), deleteWebhookEndpoint(service, authorizer), rotateWebhookSecretEndpoint(service, authorizer), testWebhookEndpoint(service, authorizer), listWebhookDeliveriesEndpoint(service, authorizer), getWebhookDeliveryEndpoint(service, authorizer), redeliverWebhookEndpoint(service, authorizer)}
 }

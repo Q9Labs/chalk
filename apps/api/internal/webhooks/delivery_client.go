@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -72,7 +73,7 @@ func (c *DeliveryClient) Deliver(ctx context.Context, input DeliveryRequest) (De
 	}
 	publicCount := 0
 	for _, address := range addresses {
-		if !PublicAddress(address) {
+		if !utilities.PublicAddress(address) {
 			class := "blocked_address"
 			if publicCount > 0 || len(addresses) > 1 {
 				class = "mixed_dns_answer"

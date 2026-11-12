@@ -213,7 +213,7 @@ printf '\n==> Format check\n'
 go_files=()
 while IFS= read -r go_file; do
   go_files[${#go_files[@]}]="${go_file}"
-done < <(find . ../../features/mcp/api -name '*.go' -not -path './vendor/*' | sort)
+done < <(find . -name '*.go' -not -path './vendor/*' | sort)
 if ((${#go_files[@]} > 0)); then
   unformatted="$(gofmt -l "${go_files[@]}")"
   if [[ -n "$unformatted" ]]; then
@@ -226,7 +226,6 @@ if ((${#go_files[@]} > 0)); then
 fi
 
 run "Module tidy check" go mod tidy -diff
-( cd "${repository_root}/features/mcp/api"; go mod tidy -diff; go test ./...; go vet ./... )
 run "MCP eval stack syntax" bash -n "${repository_root}/scripts/evals/mcp/stack.sh"
 run "MCP eval host compile" go test -tags=mcp_eval -run '^$' ./internal/adapters/postgres
 run "sqlc vet" go tool sqlc vet

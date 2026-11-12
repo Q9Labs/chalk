@@ -3,12 +3,10 @@ package httpapi
 import (
 	"context"
 
-	"errors"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -113,12 +111,6 @@ type rotateAPIKeyRequest struct {
 	Body       rotateAPIKeyBody
 }
 
-func mountAPIKeyRoutes(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range apiKeyEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createAPIKeyEndpoint(service, authorizer),
@@ -129,14 +121,7 @@ func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer) []Route
 }
 
 func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
-		if service == nil {
-			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-
-			return apiKeyWithSecretResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if err := preventAPIKeyScopeEscalation(ctx, request.Body.Scopes, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
@@ -157,7 +142,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
-	}).
+	}).Permission(authorizer, writeAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
@@ -165,41 +150,28 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		RequestBody("CreateAPIKeyRequest", createAPIKeyBody{}).
 		Responds(http.StatusCreated, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
 		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeySecretNotReplayable)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[listAPIKeysRequest, apiKeyListResponse] {
-	return Get("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "listAPIKeys", decodeListAPIKeysRequest, func(ctx context.Context, request listAPIKeysRequest) (apiKeyListResponse, error) {
-		if service == nil {
-			return apiKeyListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readAPIKeysPermission); err != nil {
-			return apiKeyListResponse{}, err
-		}
+	return Get("/v1/tenants/{tenant_id}/api-keys", "listAPIKeys", decodeListAPIKeysRequest, func(ctx context.Context, request listAPIKeysRequest) (apiKeyListResponse, error) {
 
 		list, err := service.List(ctx, request.TenantID, request.Page)
 		if err != nil {
 			return apiKeyListResponse{}, err
 		}
 		return newAPIKeyListResponse(list)
-	}).
+	}).Needs(service).Permission(authorizer, readAPIKeysPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Middleware(noStoreAPIKeyResponse).
 		Responds(http.StatusOK, "APIKeyList", apiKeyListResponse{}).
 		Errors(apiKeyReadErrors(apiErrorInvalidPageSize, apiErrorInvalidCursor)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
-		if service == nil {
-			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-
-			return apiKeyWithSecretResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if err := preventAPIKeyTargetEscalation(ctx, service, request.apiKeyIDsRequest, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
@@ -213,7 +185,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
-	}).
+	}).Permission(authorizer, writeAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
@@ -221,31 +193,24 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 		RequestBody("RotateAPIKeyRequest", rotateAPIKeyBody{}).
 		Responds(http.StatusOK, "APIKeyWithSecret", apiKeyWithSecretResponse{}).
 		Errors(apiKeyWriteErrors(apiErrorInvalidRequest, apiErrorInvalidAPIKeyExpiry, apiErrorInvalidAPIKeyID, apiErrorInvalidRequestKey, apiErrorIdempotencyConflict, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive, apiErrorAPIKeySecretNotReplayable)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[apiKeyIDsRequest, noResponse] {
-	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
-		if service == nil {
-			return noResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteAPIKeysPermission); err != nil {
-
-			return noResponse{}, err
-		}
+	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
 		if err := preventAPIKeyTargetEscalation(ctx, service, request, false); err != nil {
 
 			return noResponse{}, err
 		}
 		return noResponse{}, service.Revoke(ctx, request.TenantID, request.APIKeyID)
-	}).
+	}).Permission(authorizer, deleteAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
 		Parameters(tenantIDParameter(), apiKeyIDParameter()).
 		RespondsNoBody(http.StatusNoContent).
 		Errors(apiKeyWriteErrors(apiErrorInvalidAPIKeyID, apiErrorAPIKeyNotFound, apiErrorAPIKeyInactive)...).
-		MapErrors(apiKeyAPIError)
+		ErrorRules(apiKeyRules)
 }
 
 func decodeCreateAPIKeyRequest(r *http.Request) (createAPIKeyRequest, error) {
@@ -350,27 +315,15 @@ func apiKeyWriteErrors(extra ...APIError) []APIError {
 	return append(apiKeyReadErrors(apiErrorRateLimited), extra...)
 }
 
-func apiKeyAPIError(err error) (APIError, bool) {
-	switch {
-	case errors.Is(err, apikeys.ErrInvalidTenantID):
-		return apiErrorInvalidTenantID, true
-	case errors.Is(err, apikeys.ErrInvalidAPIKeyID):
-		return apiErrorInvalidAPIKeyID, true
-	case errors.Is(err, apikeys.ErrInvalidExpiry):
-		return apiErrorInvalidAPIKeyExpiry, true
-	case errors.Is(err, apikeys.ErrInvalidName), errors.Is(err, apikeys.ErrInvalidScopes):
-		return apiErrorInvalidRequest, true
-	case errors.Is(err, apikeys.ErrInvalidRequestKey):
-		return apiErrorInvalidRequestKey, true
-	case errors.Is(err, apikeys.ErrIdempotencyConflict):
-		return apiErrorIdempotencyConflict, true
-	case errors.Is(err, apikeys.ErrAPIKeyNotFound):
-		return apiErrorAPIKeyNotFound, true
-	case errors.Is(err, apikeys.ErrAPIKeyRevoked), errors.Is(err, apikeys.ErrAPIKeyExpired):
-		return apiErrorAPIKeyInactive, true
-	default:
-		return authorizationAPIError(err), true
-	}
+var apiKeyRules = errorRules{
+	ruleFor(apiErrorInvalidTenantID, apikeys.ErrInvalidTenantID),
+	ruleFor(apiErrorInvalidAPIKeyID, apikeys.ErrInvalidAPIKeyID),
+	ruleFor(apiErrorInvalidAPIKeyExpiry, apikeys.ErrInvalidExpiry),
+	ruleFor(apiErrorInvalidRequest, apikeys.ErrInvalidName, apikeys.ErrInvalidScopes),
+	ruleFor(apiErrorInvalidRequestKey, apikeys.ErrInvalidRequestKey),
+	ruleFor(apiErrorIdempotencyConflict, apikeys.ErrIdempotencyConflict),
+	ruleFor(apiErrorAPIKeyNotFound, apikeys.ErrAPIKeyNotFound),
+	ruleFor(apiErrorAPIKeyInactive, apikeys.ErrAPIKeyRevoked, apikeys.ErrAPIKeyExpired),
 }
 
 func newAPIKeyResponse(key apikeys.Key) apiKeyResponse {

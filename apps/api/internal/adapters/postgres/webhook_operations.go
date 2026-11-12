@@ -25,7 +25,7 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 		return webhooks.DeliveryResult{}, err
 	}
 	hash := idempotencyHash(struct{ Endpoint string }{endpointID.String()})
-	if cached, ok, err := r.replayIdempotency(ctx, tx, tenantID, "endpoint.test", key, hash); err != nil {
+	if cached, ok, err := r.replayIdempotency(ctx, tx, tenantID, string(webhooks.EventEndpointTest), key, hash); err != nil {
 		return webhooks.DeliveryResult{}, err
 	} else if ok {
 		return cached.Delivery.domain(), nil
@@ -41,7 +41,7 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 		return webhooks.DeliveryResult{}, webhooks.ErrDeliveryNotRedeliverable
 	}
 	if metadata.ID.IsZero() || metadata.JourneyID.IsZero() {
-		metadata, err = webhookEventMetadata(ctx, tenantID, "endpoint.test", time.Now().UTC())
+		metadata, err = webhookEventMetadata(ctx, tenantID, webhooks.EventEndpointTest, time.Now().UTC())
 		if err != nil {
 			return webhooks.DeliveryResult{}, err
 		}
@@ -54,7 +54,7 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 		if err != nil {
 			return webhooks.DeliveryResult{}, err
 		}
-		if err := insertWebhookAPIRootJourneyEvent(ctx, tx, metadata.ParentJourneyEventID, metadata.JourneyID, "endpoint.test", metadata.ProducingTraceID, metadata.ProducingSpanID); err != nil {
+		if err := insertWebhookAPIRootJourneyEvent(ctx, tx, metadata.ParentJourneyEventID, metadata.JourneyID, webhooks.EventEndpointTest, metadata.ProducingTraceID, metadata.ProducingSpanID); err != nil {
 			return webhooks.DeliveryResult{}, err
 		}
 	}
@@ -62,7 +62,7 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 	if err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
-	event, err := queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{ID: uuid(metadata.ID), TenantID: uuid(tenantID), EventName: "endpoint.test", ApiVersion: webhooks.APIVersion, OccurredAt: timestamptz(&metadata.OccurredAt), Body: body, BodySha256: digest[:], SemanticTransitionKey: "endpoint.test:" + key, ResourceType: "webhook_endpoint", ResourceID: uuid(endpointID), JourneyID: uuid(metadata.JourneyID), ParentJourneyEventID: uuid(metadata.ParentJourneyEventID), ProducingTraceID: optionalText(metadata.ProducingTraceID), ProducingSpanID: optionalText(metadata.ProducingSpanID)})
+	event, err := queries.InsertWebhookEvent(ctx, sqlc.InsertWebhookEventParams{ID: uuid(metadata.ID), TenantID: uuid(tenantID), EventName: string(webhooks.EventEndpointTest), ApiVersion: webhooks.APIVersion, OccurredAt: timestamptz(&metadata.OccurredAt), Body: body, BodySha256: digest[:], SemanticTransitionKey: "endpoint.test:" + key, ResourceType: "webhook_endpoint", ResourceID: uuid(endpointID), JourneyID: uuid(metadata.JourneyID), ParentJourneyEventID: uuid(metadata.ParentJourneyEventID), ProducingTraceID: optionalText(metadata.ProducingTraceID), ProducingSpanID: optionalText(metadata.ProducingSpanID)})
 	if err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
@@ -82,21 +82,21 @@ func (r WebhookRepository) Test(ctx context.Context, tenantID, endpointID utilit
 	if err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
-	if err := insertWebhookJourneyEvent(ctx, tx, metadata.ID, metadata.JourneyID, 1, "webhook.event.committed", "committed", metadata.ParentJourneyEventID, metadata.ProducingTraceID, metadata.ProducingSpanID, map[string]any{"api_version": webhooks.APIVersion, "event_name": "endpoint.test"}); err != nil {
+	if err := insertWebhookJourneyEvent(ctx, tx, metadata.ID, metadata.JourneyID, 1, "webhook.event.committed", "committed", metadata.ParentJourneyEventID, metadata.ProducingTraceID, metadata.ProducingSpanID, map[string]any{"api_version": webhooks.APIVersion, "event_name": webhooks.EventEndpointTest}); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
-	if err := insertWebhookJourneyEvent(ctx, tx, queuedID, metadata.JourneyID, 2, "webhook.delivery.queued", "queued", metadata.ID, "", "", map[string]any{"api_version": webhooks.APIVersion, "delivery_id": deliveryID.String(), "event_name": "endpoint.test"}); err != nil {
+	if err := insertWebhookJourneyEvent(ctx, tx, queuedID, metadata.JourneyID, 2, "webhook.delivery.queued", "queued", metadata.ID, "", "", map[string]any{"api_version": webhooks.APIVersion, "delivery_id": deliveryID.String(), "event_name": webhooks.EventEndpointTest}); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
 	result := deliveryResult(delivery)
 
-	if err := r.storeIdempotency(ctx, tx, tenantID, "endpoint.test", key, hash, 201, deliveryID, webhookIdempotencyResponse{Delivery: cacheDelivery(result)}); err != nil {
+	if err := r.storeIdempotency(ctx, tx, tenantID, string(webhooks.EventEndpointTest), key, hash, 201, deliveryID, webhookIdempotencyResponse{Delivery: cacheDelivery(result)}); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return webhooks.DeliveryResult{}, err
 	}
-	webhooks.RecordEventMetrics(ctx, "endpoint.test", webhooks.APIVersion, 1)
+	webhooks.RecordEventMetrics(ctx, webhooks.EventEndpointTest, webhooks.APIVersion, 1)
 	return result, nil
 }
 
