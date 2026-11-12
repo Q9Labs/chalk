@@ -4,9 +4,7 @@ package media
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,10 +15,6 @@ import (
 	"time"
 
 	"github.com/pion/ice/v4"
-	"github.com/pion/interceptor"
-	"github.com/pion/rtcp"
-	"github.com/pion/sdp/v3"
-	"github.com/pion/transport/v5/packetio"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
@@ -104,19 +98,6 @@ type Node struct {
 	refusals map[string]uint64
 }
 
-// defaultFenceLimit bounds the generation fences. It is far above any MaxSessions, so a fence
-// is only ever evicted for a Participant that has no live session.
-const defaultFenceLimit = 1 << 14
-
-// defaultClosedCreateLimit bounds the create records kept after their session closed. A delayed
-// retry of a create then still returns the closed connection ID instead of a second session.
-const defaultClosedCreateLimit = 1 << 12
-
-type createRecord struct {
-	digest [sha256.Size]byte
-	id     string
-}
-
 // NewNode binds the shared UDP socket and builds the Pion API.
 func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	// A call that shrinks to the threshold takes the class ceiling back, so a class at the threshold
@@ -190,181 +171,12 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	return n, nil
 }
 
-// peerFactory builds each session's peer connection from settings every
-// session shares.
-type peerFactory struct {
-	engine   *webrtc.MediaEngine
-	registry *interceptor.Registry
-	settings webrtc.SettingEngine
-}
-
-// newPeer builds a peer connection whose RTCP stream buffers hand every
-// transport-wide feedback report to feedback. Each peer connection gets its own
-// API because the buffer factory is the only place Pion passes every stream's
-// RTCP through, and it has no other way to tell peer connections apart.
-func (f *peerFactory) newPeer(feedback *transport) (*webrtc.PeerConnection, error) {
-	settings := f.settings
-	settings.BufferFactory = func(packetType packetio.BufferPacketType, ssrc uint32) io.ReadWriteCloser {
-		buffer := boundedBuffer(packetType, ssrc)
-		if packetType != packetio.RTCPBufferPacket {
-			return buffer
-		}
-		return feedbackBuffer{packetBuffer: buffer, transport: feedback}
-	}
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(f.engine), webrtc.WithInterceptorRegistry(f.registry), webrtc.WithSettingEngine(settings))
-	return api.NewPeerConnection(webrtc.Configuration{})
-}
-
-// newPeerFactory negotiates only the codecs the node forwards: Opus and VP8.
-// Feedback is limited to the keyframe requests the node relays to the publisher.
-func newPeerFactory(cfg config.Config, mux ice.UDPMux, tcpMux ice.TCPMux) (*peerFactory, error) {
-	engine := &webrtc.MediaEngine{}
-	opus := webrtc.RTPCodecParameters{RTPCodecCapability: opusCapability, PayloadType: opusPayloadType}
-	vp8 := webrtc.RTPCodecParameters{RTPCodecCapability: vp8Capability, PayloadType: vp8PayloadType}
-	if err := engine.RegisterCodec(opus, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, fmt.Errorf("register Opus: %w", err)
-	}
-	if err := engine.RegisterCodec(vp8, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, fmt.Errorf("register VP8: %w", err)
-	}
-	// Repairs travel over RTX in both directions, so a resend never looks like
-	// fresh media to loss accounting and bandwidth probes can reuse it.
-	rtx := webrtc.RTPCodecParameters{
-		RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeRTX, ClockRate: 90000, SDPFmtpLine: fmt.Sprintf("apt=%d", vp8PayloadType)},
-		PayloadType:        rtxPayloadType,
-	}
-	if err := engine.RegisterCodec(rtx, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, fmt.Errorf("register RTX: %w", err)
-	}
-	// The node reads a microphone's audio level to keep a speaker's camera
-	// longest under congestion, and forwards it so subscribers see who speaks.
-	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.AudioLevelURI}, webrtc.RTPCodecTypeAudio); err != nil {
-		return nil, fmt.Errorf("register audio level header extension: %w", err)
-	}
-	for _, kind := range []webrtc.RTPCodecType{webrtc.RTPCodecTypeAudio, webrtc.RTPCodecTypeVideo} {
-		if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESMidURI}, kind); err != nil {
-			return nil, fmt.Errorf("register MID header extension: %w", err)
-		}
-	}
-	// A browser offers camera simulcast by RID. Negotiating the RID extension lets it
-	// send; the node forwards only the first RID whose packets arrive until layer routing lands.
-	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, fmt.Errorf("register RID header extension: %w", err)
-	}
-	// A simulcast publisher signals no SSRCs, so its RTX streams name their layer
-	// with the repaired RID. Without it the node drops every uplink repair.
-	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRepairRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
-		return nil, fmt.Errorf("register repaired RID header extension: %w", err)
-	}
-
-	registry := &interceptor.Registry{}
-	if err := webrtc.ConfigureRTCPReports(registry); err != nil {
-		return nil, fmt.Errorf("configure RTCP reports: %w", err)
-	}
-	// Publishers estimate their uplink from the node's transport-wide feedback.
-	// This also negotiates the transport sequence extension the node writes on
-	// egress for its own estimate of each subscriber.
-	if err := webrtc.ConfigureTWCCSender(engine, registry); err != nil {
-		return nil, fmt.Errorf("configure transport-wide feedback: %w", err)
-	}
-
-	settings := webrtc.SettingEngine{}
-	settings.SetICEUDPMux(mux)
-	settings.SetLite(true)
-	networkTypes := []webrtc.NetworkType{webrtc.NetworkTypeUDP4}
-	if tcpMux != nil {
-		settings.SetICETCPMux(tcpMux)
-		networkTypes = append(networkTypes, webrtc.NetworkTypeTCP4)
-	}
-	settings.SetNetworkTypes(networkTypes)
-	settings.SetIncludeLoopbackCandidate(cfg.IncludeLoopback)
-	settings.SetICETimeouts(5*time.Second, 15*time.Second, 2*time.Second)
-	if len(cfg.AnnounceIPs) > 0 {
-		settings.SetNAT1To1IPs(cfg.AnnounceIPs, webrtc.ICECandidateTypeHost)
-	}
-	if err := settings.SetAnsweringDTLSRole(webrtc.DTLSRoleServer); err != nil {
-		return nil, fmt.Errorf("set DTLS answering role: %w", err)
-	}
-	return &peerFactory{engine: engine, registry: registry, settings: settings}, nil
-}
-
-// boundedBuffer replaces Pion's per-stream buffer, which allows 1 MB of RTP, with a smaller limit.
-func boundedBuffer(packetType packetio.BufferPacketType, _ uint32) packetBuffer {
-	buffer := packetBuffer{packetio.NewBuffer()}
-	switch packetType {
-	case packetio.RTPBufferPacket:
-		buffer.SetLimitSize(rtpBufferLimit)
-	case packetio.RTCPBufferPacket:
-		buffer.SetLimitSize(rtcpBufferLimit)
-	}
-	return buffer
-}
-
-// packetBuffer adapts packetio.Buffer to the reader and writer shapes SRTP
-// expects, the same adapter Pion uses for its default buffer.
-type packetBuffer struct{ *packetio.Buffer }
-
-func (b packetBuffer) Read(p []byte) (int, error) {
-	n, _, err := b.Buffer.Read(p, nil)
-	return n, err
-}
-
-func (b packetBuffer) Write(p []byte) (int, error) { return b.Buffer.Write(p, nil) }
-
-func (b packetBuffer) ReadWithAttributes(p []byte, attributes packetio.Attributes) (int, packetio.Attributes, error) {
-	return b.Buffer.Read(p, attributes)
-}
-
-func (b packetBuffer) WriteWithAttributes(p []byte, attributes packetio.Attributes) (int, error) {
-	return b.Buffer.Write(p, attributes)
-}
-
-// feedbackBuffer is an RTCP stream buffer that also reads the transport-wide
-// feedback written to it. A receiver addresses each report to the SSRC of the
-// latest packet it got, which is the RTX SSRC while only probe padding flows,
-// and Pion reads no RTCP for an RTX SSRC. SRTP writes each RTCP packet of a
-// compound to the buffer of every stream it names, so the transport ignores the
-// copies.
-type feedbackBuffer struct {
-	packetBuffer
-	transport *transport
-}
-
-func (b feedbackBuffer) Write(p []byte) (int, error) {
-	b.read(p)
-	return b.packetBuffer.Write(p)
-}
-
-func (b feedbackBuffer) WriteWithAttributes(p []byte, attributes packetio.Attributes) (int, error) {
-	b.read(p)
-	return b.packetBuffer.WriteWithAttributes(p, attributes)
-}
-
-// read hands p to the transport when it is one transport-wide feedback report.
-func (b feedbackBuffer) read(p []byte) {
-	if len(p) < 4 || rtcp.PacketType(p[1]) != rtcp.TypeTransportSpecificFeedback || p[0]&0x1f != rtcp.FormatTCC {
-		return
-	}
-	var report rtcp.TransportLayerCC
-	if report.Unmarshal(p) == nil {
-		b.transport.onFeedback(&report)
-	}
-}
-
 func randomHex(bytes int) string {
 	buffer := make([]byte, bytes)
 	if _, err := rand.Read(buffer); err != nil {
 		panic(fmt.Sprintf("crypto/rand failed: %v", err))
 	}
 	return hex.EncodeToString(buffer)
-}
-
-// scopeDigest fingerprints a create, so a reused operation ID with another body conflicts. A
-// participant create digests as it did before session kinds, and a capture create never matches it.
-func scopeDigest(scope protocol.Scope, kind *SessionKind) [sha256.Size]byte {
-	encoded, _ := json.Marshal(scope)
-	encoded = append(encoded, kind.digestTag...)
-	return sha256.Sum256(encoded)
 }
 
 // Incarnation identifies this process boot. Connection IDs from another boot are gone.
@@ -429,169 +241,6 @@ func (n *Node) SessionCount() int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return len(n.sessions)
-}
-
-// Create makes the session of the given kind, or returns the session the same operation ID
-// already created. A newer generation fences the older session. allocation is the generation the
-// caller was issued under, or nil: one below the Episode's retirement floor (see RetireEpisode) is
-// stale.
-//
-// A ParticipantSession is a Participant's connection. A CaptureSession is a receive-only
-// connection for a recording or transcription: Scope.ParticipantID names the capture,
-// Scope.Generation is its capture epoch, a newer epoch replaces the older session, an older epoch
-// is refused, and it holds no Participant slot.
-func (n *Node) Create(operationID string, scope protocol.Scope, kind *SessionKind, allocation *int64) (protocol.CreateSessionResponse, error) {
-	if err := checkIdentifier("operationId", operationID); err != nil {
-		return protocol.CreateSessionResponse{}, err
-	}
-	if err := ValidateScope(scope); err != nil {
-		return protocol.CreateSessionResponse{}, err
-	}
-	response, fenced, err := n.register(operationID, scope, kind, allocation)
-	if fenced != nil {
-		fenced.CloseFor(CloseReplaced)
-	}
-	return response, err
-}
-
-func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionKind, allocation *int64) (protocol.CreateSessionResponse, *Session, error) {
-	digest := scopeDigest(scope, kind)
-	key := kind.key(scope)
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.expireHolds()
-	// A retired allocation takes no create, a replay of an earlier one included.
-	if err := n.refuseRetired(episodeOf(scope), allocation); err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
-	}
-	if err := n.refuseUnrecorded(episodeOf(scope), allocation); err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
-	}
-	// A draining node refuses only new Episodes: a live call on it keeps taking
-	// joins and reconnects, so it can run to its end before the restart. A held Episode is not
-	// new: its reserve passed the drain check.
-	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) && n.heldParticipants(episodeOf(scope)) == 0 {
-		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedDraining, ErrDraining)
-	}
-	if record, ok := n.creates[operationID]; ok {
-		if record.digest != digest {
-			return protocol.CreateSessionResponse{}, nil, ErrOperationConflict
-		}
-		return n.responseFor(record.id), nil, nil
-	}
-	// The fence outlives the session, so a delayed create from an older generation stays refused
-	// after the newer session closes.
-	if known, _ := n.fences.Get(key); scope.Generation < known {
-		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
-	}
-	// The per-Participant fence cannot know a Participant that never ran on this node, so the
-	// Episode's hold fences the first rejoin: an older generation than the reserve's is stale.
-	if held := n.holdOf(episodeOf(scope)); kind.participant && held != nil && scope.Generation < held.generation {
-		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
-	}
-	evict, err := n.fenceVictim(key)
-	if err != nil {
-		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedFences, err)
-	}
-	// A create with a new operation ID replaces the Participant's live session, also at the
-	// same generation: the API replaces a media connection that way, and its database has
-	// already superseded the old connection ID.
-	fenced := n.participants[key]
-	if n.sessionSlots(scope, kind, fenced) > n.cfg.MaxSessions {
-		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedSessions, ErrCapacityExceeded)
-	}
-	if err := kind.admit(n, scope, fenced); err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
-	}
-	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope, kind)
-	if err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
-	}
-	if allocation != nil {
-		session.allocation = *allocation
-	}
-	// Only an admitted create may take another Participant's fence: a refused one must leave
-	// every fence in place, or a later stale create for that Participant could pass.
-	if evict != nil {
-		n.fences.Delete(*evict)
-	}
-	n.enter(session)
-	n.participants[key] = session
-	n.raiseFence(key, scope.Generation)
-	n.creates[operationID] = createRecord{digest: digest, id: session.id}
-	n.settleHold(episodeOf(scope), fenced)
-	return n.responseFor(session.id), fenced, nil
-}
-
-// hostsEpisode reports whether a live Participant session belongs to the Episode. A capture does
-// not host one: a node holding only captures admits no new Participants of a draining node's Episode.
-// The caller holds n.mu.
-func (n *Node) hostsEpisode(key episodeKey) bool { return n.episodes[key].hosts() }
-
-// fenceVictim finds the fence a new Participant would take the place of, or nil when the table
-// has room or already knows the Participant. It picks the oldest fence of a Participant with no
-// live session, never one that has a live session: that fence is what keeps an older generation
-// from replacing the live one. When every fence belongs to a live session it refuses instead.
-// The caller holds n.mu and evicts only once the create is admitted.
-func (n *Node) fenceVictim(key participantKey) (*participantKey, error) {
-	if _, known := n.fences.Get(key); known || !n.fences.Full() {
-		return nil, nil
-	}
-	for candidate := range n.fences.All() {
-		if n.participants[candidate] == nil {
-			return &candidate, nil
-		}
-	}
-	return nil, fmt.Errorf("%w: every generation fence belongs to a live session", ErrCapacityExceeded)
-}
-
-// raiseFence records the generation as the lowest the Participant may create again.
-// fenceVictim has already made room under the same lock.
-func (n *Node) raiseFence(key participantKey, generation int64) {
-	known, _ := n.fences.Get(key)
-	n.fences.Put(key, max(known, generation))
-}
-
-func (n *Node) responseFor(id string) protocol.CreateSessionResponse {
-	return protocol.CreateSessionResponse{ConnectionID: id, NodeIncarnation: n.incarnation}
-}
-
-// claimScreen reserves the Episode's one screen share for the session. It returns a track error
-// code when another publication already holds it, including one of the same session, or when the
-// Episode's microphones and a screen share together would exceed its packet ceiling. The caller
-// may hold the session's own mutex: nothing takes it while holding n.mu.
-func (n *Node) claimScreen(s *Session) (code, message string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	key := episodeOf(s.scope)
-	if n.screenOf(key) != nil {
-		return protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
-	}
-	participants := n.episodes[key].count(true, nil, 0)
-	if n.mandatoryPackets(participants, true) > n.episodeCeiling(participants) {
-		_ = n.refuseFor(s.scope, RefusedScreenCeiling, nil)
-		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
-	}
-	n.record(key).screen = s
-	return "", ""
-}
-
-// refuseCamera counts a camera push over the Participant's reserved cameras. The caller may hold
-// the session's own mutex: nothing takes it while holding n.mu.
-func (n *Node) refuseCamera(s *Session) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	_ = n.refuseFor(s.scope, RefusedCameras, nil)
-}
-
-// releaseScreen frees the Episode's screen share when the session that holds it stops sharing.
-func (n *Node) releaseScreen(s *Session) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if key := episodeOf(s.scope); n.screenOf(key) == s {
-		n.episodes[key].screen = nil
-		n.tidy(key)
-	}
 }
 
 // EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
