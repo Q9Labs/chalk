@@ -29,12 +29,15 @@ interface Pending {
  */
 export class DeviceAccessStore {
   readonly #ports: DevicePorts | undefined;
+  readonly #loadCard: () => Promise<Pick<Awaited<ReturnType<typeof loadDeviceAccessCard>>, "resolveAccess">>;
   readonly #listeners = new Set<() => void>();
   readonly #pending = new Map<DeviceKind, Pending>();
   #snapshot: DeviceAccessSnapshot = { issues: {}, unavailable: false };
 
-  constructor(ports?: DevicePorts) {
+  /** `loadCard` is the card chunk download; only a test replaces it. */
+  constructor(ports?: DevicePorts, loadCard: () => Promise<Pick<Awaited<ReturnType<typeof loadDeviceAccessCard>>, "resolveAccess">> = loadDeviceAccessCard) {
     this.#ports = ports;
+    this.#loadCard = loadCard;
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -57,7 +60,7 @@ export class DeviceAccessStore {
     const pending = this.#entry(device);
     const attempt = ++pending.attempt;
     // The card chunk carries the resolver, so a failed download is known before any card opens.
-    const resolved = await loadDeviceAccessCard()
+    const resolved = await this.#loadCard()
       .then(({ resolveAccess }) => resolveAccess(this.#ports, device, failure))
       .catch(() => undefined);
     if (pending.attempt !== attempt || this.#listeners.size === 0) return;

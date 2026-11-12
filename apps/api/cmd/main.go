@@ -246,6 +246,11 @@ func run() error {
 	recordingPipelineRepository := postgres.NewRecordingPipelineRepositoryWithQueriesAndTransactor(operationQueries, pool, diagnostics.Queries).WithTenantLimits(cfg.TenantLimits).WithAdmissionLimits(cfg.RecordingAdmission)
 	recordingPipelineRepository = recordingPipelineRepository.WithTranscriptionEnabled(cfg.Capabilities.Transcription)
 	recordingPipelineRepository = recordingPipelineRepository.WithRecordingBundleV2Enabled(cfg.RecordingBundleV2Enabled)
+	colocatedGrace := time.Duration(0)
+	if ownCapture {
+		colocatedGrace = cfg.ChalkSFU.ColocatedCaptureGrace
+	}
+	recordingPipelineRepository = recordingPipelineRepository.WithColocatedCapture(colocatedGrace)
 	if cfg.Capabilities.Recording {
 		profile, err := recordingpresentation.NewComposite720PProfile()
 		if err != nil {
@@ -284,9 +289,19 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure recorder worker identity: %w", err)
 		}
-		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier, ownCapture)
+		fleet, err := newRecorderFleetComponents(cfg, operationQueries, verifier, ownCapture, colocatedGrace)
 		if err != nil {
 			return err
+		}
+		if colocatedGrace > 0 {
+			nodeIDs := make([]string, 0, len(cfg.ChalkSFU.Nodes))
+			for _, node := range cfg.ChalkSFU.Nodes {
+				nodeIDs = append(nodeIDs, node.ID)
+			}
+			registrations := postgres.NewRecordingFleetAuthorityRepository(operationQueries)
+			if err := registrations.EnsureColocatedCaptureWorkers(context.Background(), cfg.Observability.Environment, nodeIDs); err != nil {
+				return fmt.Errorf("register colocated capture workers: %w", err)
+			}
 		}
 		recorderWorkerVerifier = fleet.workerVerifier
 		recorderFleetController = fleet.service

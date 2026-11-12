@@ -6,7 +6,7 @@ Every profile first runs `doclint.mjs`. The pre-commit hook runs `pnpm gate:fast
 
 ## The Gate workflow
 
-`.github/workflows/gate.yml` runs on every pull request, merge queue group, week (Monday) and manual dispatch. `Select gate jobs` runs `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the same plan as the lanes to pick the jobs a change needs: the API gate, the Sync gate and root lane groups. Groups run as separate jobs, at most four at a time, so one run cannot hold the organisation's hosted-runner slots. `Root gate` passes only when every selected group passed; a job the planner skips counts as passed. When the planner cannot select jobs (for example the base does not resolve), every job and lane runs with `--full`. Weekly and manual runs always run everything.
+`.github/workflows/gate.yml` runs on every pull request, merge queue group, week (Monday) and manual dispatch. `Select gate jobs` runs `node scripts/gates/chalk-gate-plan.mjs --ci-jobs <base-ref>`, which uses the same plan as the lanes to pick the jobs a change needs: the API gate, the Sync gate and root lane groups. Groups run as separate jobs, at most eight at a time, so one run holds at most 10 of the organisation's 20 hosted-runner slots (four held the last groups of a full run waiting for 6 to 10 minutes while the slots were free). The SFU lane has its own group because it alone took 176 of the 408 seconds the checks group needed. `Root gate` passes only when every selected group passed, and `Sync gate` only when its two parts (the server tests and the client proofs against it) passed; a job the planner skips counts as passed. When the planner cannot select jobs (for example the base does not resolve), every job and lane runs with `--full`. Weekly and manual runs always run everything.
 
 **Pull request or queue.** `GATE_EVENT` carries the event name to the planner. A pull request selects by changed inputs only: a test file is not an input of the dashboard engine or the call lanes, and only `.github/workflows/gate.yml` and `.github/workflows/cache-warm.yml` count as gate behavior among the workflows, so an edit to another workflow runs the `workflow-graph` tests instead of the full gate. A merge queue group keeps the wider rules and runs the dashboard engine, the dashboard refresh proof and the call lanes for every change beyond documentation, so what a pull request skipped is proven before master receives the commit. The refresh proof waits out the real five-minute media-access lifetime, so it is its own lane: a pull request selects it only when it changes the refresh inputs (the web server, the dashboard source and its proofs, access grants), and the HTTP proof in `dashboard-engine` is what the pull request waits for. Local runs use the wider rules too.
 
@@ -38,6 +38,10 @@ Documentation-only changes keep the hygiene, secrets, feature-map, generated-out
 ## Design-token ratchet
 
 The `design-tokens` lane counts raw color, spacing, radius, font-size and shadow values in web, UI, SDK and mobile source against `design-tokens-baseline.json`. A new raw value fails. A removed value also fails until the baseline shrinks, so the removing change runs `pnpm exec q9gate accept-baseline design-tokens --message "shrink design-token baseline"` and commits the smaller file. A justified exception takes a `token-ratchet-ignore: <reason>` comment on the line or the line above.
+
+## Test policy checks
+
+The `ast-grep` lane rejects a test that mocks a module of this repository. The `mock-calls` lane counts assertions on mock calls per package against `mock-call-baseline.json` and fails when a count rises; `node scripts/gates/mock-calls.mjs --update` lowers the baseline after a drop. The policy is in [CODING_STANDARDS.md](../../CODING_STANDARDS.md).
 
 ## Heavy runs on Instabox
 

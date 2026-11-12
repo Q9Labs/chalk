@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, shareProvenGroups } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, shareProvenGroups } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -131,6 +131,12 @@ test("nothing is shared when master changed the Gate itself, or the plan failed"
 
 test("the checks group always runs", () => {
   assert.ok(shareProvenGroups(queueJobs, proof, noDrift).rootGroups.includes("checks"));
+});
+
+test("the SFU lane runs in its own group, so an SFU change does not lengthen the checks group", () => {
+  assert.ok(jobs(["features/media/sfu/server/main.go"], "pull_request").rootGroups.includes("sfu"));
+  assert.ok(!jobs(["apps/web/src/main.tsx"], "pull_request").rootGroups.includes("sfu"));
+  assert.equal(laneGroup("sfu"), "sfu");
 });
 
 test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {

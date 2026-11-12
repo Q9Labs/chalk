@@ -41,8 +41,9 @@ export function configureCameraEffectProvider(next: CameraEffectsAssets, createS
 export function loadCameraBackgroundControls() {
   return import("./camera-effect-operations");
 }
-function loadControlsOwning(tracks: readonly MediaStreamTrack[]) {
-  return loadCameraBackgroundControls().catch((error: unknown) => {
+/** A failed controls chunk must not leave the camera on: the caller owns the tracks until the controls load. */
+export function loadControlsOwning(tracks: readonly MediaStreamTrack[], load: typeof loadCameraBackgroundControls = loadCameraBackgroundControls) {
+  return load().catch((error: unknown) => {
     for (const track of tracks) track.stop();
     throw error;
   });
