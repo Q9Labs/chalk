@@ -101,6 +101,9 @@ export async function seedDashboard({ config, serviceToken }) {
         })),
       };
       artifacts[`/local-dashboard/tenants/${owner.id}/recordings/preview.wav`] = "preview-audio";
+      await sql(
+        `update transcriptions set artifact_size=${Buffer.byteLength(JSON.stringify(artifacts[`/local-dashboard/tenants/${owner.id}/recordings/transcript.json`]))} where tenant_id='${owner.id}' and episode_id='${episode.id}' and artifact_key='tenants/${owner.id}/recordings/transcript.json';`,
+      );
     }
   }
   const keys = await api(`/tenants/${owner.id}/api-keys?page_size=100`);
