@@ -669,6 +669,8 @@ install_runtime_files() {
   if [[ "$direct_user_commands" != true ]]; then
     chown -R "${runtime_user}:$(id -gn "$runtime_user")" "$runtime_quadlet_dir" "$runtime_systemd_dir"
   fi
+  # The API unit reads this file through Quadlet, which has no optional "-" prefix. A host that has not rebooted since the file was introduced has none yet.
+  [[ -s "${run_root}/boot.env" ]] || record_boot_end >/dev/null
   run_user_systemctl daemon-reload
 }
 

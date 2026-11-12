@@ -1402,7 +1402,9 @@ fi
 
 if group_enabled restore; then
   # A promoted runtime gives the user manager the container grace, not Ubuntu's 5 seconds.
-  grep -Fxq 'TimeoutStopSec=60' "${fixture_root}/systemd/user@.service.d/timeout.conf" || fail "user manager stop grace was not installed"
+  grep -Fxq 'TimeoutStopSec=130' "${fixture_root}/systemd/user@.service.d/timeout.conf" || fail "user manager stop grace was not installed"
+  # The API unit reads boot.env without an optional prefix, so a deploy must leave the file in place before the API starts.
+  [[ -s "${fixture_root}/run/boot.env" ]] || fail "deploy did not create boot.env for the API unit"
 
   # boot-end names how the previous boot ended: clean, killed or unknown.
   cat >"${fixture_root}/bin/journalctl" <<'JOURNAL'
