@@ -437,7 +437,15 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               action={{ label: "Cancel", onClick: () => void cancel(), disabled: preparing }}
             />
           ) : error ? (
-            <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={error.message} glyph={error.reason} action={error.retryable ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : { label: "Go to Chalk", onClick: () => globalThis.location.assign("/") }} />
+            <CallLimbo
+              theme={{ colorScheme: mode }}
+              spaceName={callName}
+              message={error.message}
+              glyph={error.reason}
+              // A refused or expired knock always offers a way home beside asking again.
+              action={error.retryable && !error.reason ? { label: error.retryLabel ?? "Ask again", onClick: askAgain } : { label: "Go to Chalk", onClick: () => globalThis.location.assign("/") }}
+              secondaryAction={error.retryable && error.reason ? { label: "Ask again", onClick: askAgain } : undefined}
+            />
           ) : stepOpen ? (
             <PreJoin
               spaceName={callName}
@@ -550,7 +558,7 @@ function neutralMessage(cause: unknown): EntryFailure {
   if (cause instanceof ArrivalUnavailableError) return { message: "Your request to join is no longer available. Open the invite link and join again.", retryable: false };
   if (cause instanceof MediaUnavailableError) return { message: "Calls are unavailable right now. Try again in a few minutes.", retryable: true };
   if (cause instanceof AdmissionError) {
-    if (cause.state === "rejected") return { message: "The host declined your request to join.", retryable: true, reason: "declined" };
+    if (cause.state === "rejected") return { message: "The host didn’t let you in", retryable: true, reason: "declined" };
     if (cause.state === "unavailable") return { message: "Your request to join expired or is no longer available.", retryable: true, reason: "expired" };
     return { message: "Your request to join is no longer active.", retryable: true };
   }

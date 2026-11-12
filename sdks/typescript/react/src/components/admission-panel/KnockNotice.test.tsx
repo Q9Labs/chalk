@@ -9,7 +9,8 @@ const requests = (...names: string[]): KnockRequest[] => names.map((displayName)
 it("groups two or more knocks into one summary and keeps one knock as a person", () => {
   expect(summarizeKnocks([])).toBeNull();
   expect(summarizeKnocks(requests("Rania"))).toMatchObject({ kind: "one", request: { displayName: "Rania" } });
-  expect(summarizeKnocks(requests("Rania", "Omar", "Lena", "Sam"))).toMatchObject({ kind: "several", count: 4, names: "Rania, Omar, Lena, Sam" });
+  expect(summarizeKnocks(requests("Rania", "Omar", "Lena", "Sam"))).toMatchObject({ kind: "several", count: 4, names: "Rania, Omar and 2 more" });
+  expect(summarizeKnocks(requests("Rania", "Omar"))).toMatchObject({ kind: "several", count: 2, names: "Rania and Omar" });
   expect(summarizeKnocks(requests("Rania", "Omar", "Lena", "Sam")).faces).toHaveLength(3);
 });
 
