@@ -145,5 +145,35 @@ class Rehearsal(Files):
             self.judge('x-new')
 
 
+class RollbackCommand(unittest.TestCase):
+    def record(self, number, release, states):
+        info = dict(channel='production-release', run_id=str(number), target_sha=str(number) * 40, release_id=release,
+                    manifest_artifact_id=str(number + 100), manifest_sha256='d' * 64)
+        return dict(id=number, payload=info), [dict(state=state) for state in states]
+
+    def run_command(self, records, pages_id=''):
+        statuses = {item['id']: states for item, states in records}
+        github = Mock()
+        github.request.side_effect = lambda route: [item for item, _ in records] if route.startswith('deployments?') else statuses[int(route.split('/')[1])]
+        with patch('builtins.print') as printed:
+            hotfix.rollback_command(github, Mock(pages_id=pages_id))
+        return printed.call_args.args[0]
+
+    def test_it_names_the_release_before_the_running_one_even_when_older_records_went_inactive(self):
+        line = self.run_command([self.record(3, 'new', ['success']), self.record(2, 'new', ['inactive', 'success']), self.record(1, 'old', ['inactive', 'success'])], 'pages-1')
+        self.assertIn('-f reuse_release_id=old', line)
+        self.assertIn('-f manifest_run_id=1 ', line)
+        self.assertIn('-f pages_rollback_id=pages-1', line)
+
+    def test_a_failed_record_is_never_a_target(self):
+        line = self.run_command([self.record(3, 'new', ['success']), self.record(2, 'bad', ['failure']), self.record(1, 'old', ['inactive', 'success'])])
+        self.assertIn('-f reuse_release_id=old', line)
+        self.assertIn('-f deploy_web=false', line)
+
+    def test_one_release_has_nothing_to_return_to(self):
+        with self.assertRaisesRegex(ValueError, 'no earlier'):
+            self.run_command([self.record(1, 'only', ['success'])])
+
+
 if __name__ == '__main__':
     unittest.main()

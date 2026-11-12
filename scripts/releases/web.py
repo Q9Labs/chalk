@@ -103,6 +103,15 @@ def current(project):
     return deployment['id']
 
 
+def previous(project):
+    """The newest successful production deployment before the live one: what a web rollback returns to."""
+    live = current(project)
+    for deployment in pages(project, '/deployments?env=production'):
+        if deployment['id'] != live and deployment['latest_stage']['status'] == 'success':
+            return deployment['id']
+    raise ValueError('no earlier successful Pages production deployment')
+
+
 def rollback(project, deployment_id, target='production'):
     subprocess.run(['node', str(ROOT / 'scripts/deploy/verify-vendor-store.mjs'), '--target', target], check=True)
     if current(project) != deployment_id:
@@ -133,7 +142,7 @@ def deploy(target, sha, run, member, project):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('build', 'deploy', 'current', 'rollback'))
+    parser.add_argument('command', choices=('build', 'deploy', 'current', 'previous', 'rollback'))
     parser.add_argument('--target', choices=('nightly', 'production'))
     parser.add_argument('--sha')
     parser.add_argument('--output', type=Path, default=Path('web-output'))
@@ -144,6 +153,8 @@ if __name__ == '__main__':
         build(args.target, args.sha, args.output, args.source_root)
     elif args.command == 'current':
         outputs({'pages_deployment_id': current(os.environ['PAGES_PROJECT'])})
+    elif args.command == 'previous':
+        print(previous(os.environ['PAGES_PROJECT']))
     elif args.command == 'rollback':
         rollback(os.environ['PAGES_PROJECT'], os.environ['PAGES_ROLLBACK_ID'], args.target)
     else:

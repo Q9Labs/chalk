@@ -119,11 +119,37 @@ def timings(github, args):
         summary.write(text)
 
 
+def rollback_command(github, args):
+    """The command that restores the production release before the one running. A newer record marks older ones inactive, so a record counts when it was ever healthy.
+    Run it once: it records the restored release as the newest."""
+    seen = []
+    for item in github.request('deployments?environment=production&task=production-release&per_page=30'):
+        info = payload(item)
+        statuses = github.request(f"deployments/{item['id']}/statuses?per_page=10")
+        if info.get('channel') != 'production-release' or not any(status['state'] == 'success' for status in statuses):
+            continue
+        if info['release_id'] not in [known['release_id'] for known in seen]:
+            seen.append(info)
+        if len(seen) == 2:
+            break
+    require(len(seen) == 2, 'production has no earlier retained release to return to; restore by hand')
+    running, previous = seen
+    inputs = dict(target_sha=previous['target_sha'], release_managed='false', deploy_managed='true', managed_environment='production',
+                  manifest_run_id=previous['run_id'], manifest_artifact_id=previous['manifest_artifact_id'],
+                  manifest_sha256=previous['manifest_sha256'], reuse_release_id=previous['release_id'],
+                  media_sha256=previous.get('media_sha256', ''), deploy_web='true' if args.pages_id else 'false')
+    if args.pages_id:
+        inputs['pages_rollback_id'] = args.pages_id
+    print(f"# production runs {running['release_id']}; this restores {previous['release_id']} (API and Sync" + (', and web)' if args.pages_id else '; add --pages-id for web)'))
+    print('gh workflow run ci.yml --ref master ' + ' '.join(f'-f {key}={value}' for key, value in inputs.items()))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'verdict', 'timings'))
+    parser.add_argument('command', choices=('plan', 'verdict', 'timings', 'rollback-command'))
+    parser.add_argument('--pages-id', default='')
     args = parser.parse_args()
     try:
-        globals()[args.command](GitHub(), args)
+        globals()[args.command.replace('-', '_')](GitHub(), args)
     except (ValueError, KeyError, subprocess.CalledProcessError) as error:
         sys.exit(f'Hotfix refused: {error}')
