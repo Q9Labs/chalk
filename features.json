@@ -148,7 +148,6 @@
       "name": "recording",
       "summary": "Captures an Episode and manages its recording artifacts, rendering, and retention.",
       "paths": [
-        ".github/workflows/recorder-infrastructure.yml",
         "apps/api/internal/adapters/aws/recorderarchive",
         "apps/api/internal/adapters/aws/recordingkms",
         "apps/api/internal/adapters/cloudflare/r2",
@@ -404,11 +403,9 @@
       "name": "release-and-deploy",
       "summary": "Builds, gates, publishes, and deploys Chalk services and packages.",
       "paths": [
-        ".github/workflows/boot-smoke.yml",
         ".github/workflows/cache-warm.yml",
         ".github/workflows/ci.yml",
         ".github/workflows/codeql.yml",
-        ".github/workflows/formal-sync-entry-leave.yml",
         ".github/workflows/gate.yml",
         ".github/workflows/nightly-cf-latency.yml",
         ".github/workflows/nightly.yml",

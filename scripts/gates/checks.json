@@ -208,7 +208,7 @@
       "blocks": "merge",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded. 12 Nov: 1 noise failure, `startup-failures.test.ts` counted a third socket because an earlier test's Sync client kept running; it failed 17 of 40 loaded file runs before and 0 of 40 after PR 1221."
     },
     {
       "id": "gate:browser-tests",
@@ -228,7 +228,7 @@
       "blocks": "merge",
       "minutes": null,
       "record": "caught",
-      "sample": "4 of 91 pull request runs failed: 1 real Pages Functions build error, 1 duplicate of types, 1 apt failure (noise), 1 unexplained."
+      "sample": "4 of 91 pull request runs failed: 1 real Pages Functions build error, 1 duplicate of types, 1 apt failure (noise), 1 unexplained. 12 Nov: 1 more noise failure in 4.9 s, a Hex registry 500 while fetching a package (Gate run 43200994606); the job now restores Mix dependencies from a cache keyed on the lockfile (PR 1210)."
     },
     {
       "id": "gate:dashboard-refresh",
@@ -391,7 +391,7 @@
       "blocks": "merge",
       "minutes": 5.1,
       "record": "caught",
-      "sample": "3 of 10 pull request runs failed (noise); 2 of 14 weekly runs were real catches."
+      "sample": "3 of 10 pull request runs failed (noise); 2 of 14 weekly runs were real catches. 12 Nov: 1 noise failure, `TestCaptureReadinessShutdownTriggers` (run 43192587605); 5 of 6,400 loaded subtest runs failed before and 0 of 6,400 after PR 1211."
     },
     {
       "id": "workflow:gate.yml#sync",
