@@ -177,19 +177,14 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     const pagehide = (event: PageTransitionEvent) => {
       if (!event.persisted) owner.saveReload(owned.getSnapshot());
     };
-    let leftCleanly = false;
-    const unsubscribe = owned.subscribe(() => {
-      const snapshot = owned.getSnapshot();
-      owner.observe(snapshot);
-      if (snapshot.connection.status === "left") leftCleanly = true;
-    });
+    const unsubscribe = owned.subscribe(() => owner.observe(owned.getSnapshot()));
     window.addEventListener("pagehide", pagehide);
     setClient(owned);
     return () => {
       unsubscribe();
       window.removeEventListener("pagehide", pagehide);
       void owned.close().then(() => {
-        if (leftCleanly) owner.clearReload();
+        if (owned.getSnapshot().connection.status === "left") owner.clearReload();
       });
     };
   }, [spaceId, owner]);

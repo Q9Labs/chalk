@@ -7,6 +7,7 @@ const APP_PROTOCOLS: ReadonlySet<string> = new Set(["chalk:", "ai.q9labs.chalk.m
 const SPACE_SLUG_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 const SPACE_INVITE_TOKEN_PATTERN = /^cspi1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u;
 const SPACE_INVITE_TOKEN_KEY = "spaceInviteToken";
+const NORMALIZED_CODE_PATTERN = /^(?:[a-z]{3}-[a-z]{4}-[a-z]{3}|[a-z]+(?:-[a-z]+){3})$/u;
 
 export type SpaceInviteLink = {
   readonly slug: string;
@@ -71,7 +72,7 @@ export function canonicalSpaceInviteLink(origin: string, slug: string, credentia
   const value = credential.trim();
   if (!value) throw new Error("The Space invite link was empty.");
 
-  const code = parseInviteCode(value);
+  const code = normalizedInviteCode(value);
   if (code) return buildInviteCodeLink(code, origin);
   let parsed: URL | undefined;
   try {
@@ -96,12 +97,23 @@ export function verifiedSpaceInviteLink(origin: string, slug: string, inviteLink
     throw new Error("The Space invite link was invalid.");
   }
   if (url.origin !== new URL(origin).origin) throw new Error("The Space invite link used an unexpected origin.");
-  const code = parseInviteCode(url.pathname.slice(1));
+  const code = normalizedInviteCode(url.pathname.slice(1));
   if (code && url.pathname === `/${code}` && !url.search && !url.hash) return value;
   if (url.pathname !== `/space/${encodeURIComponent(slug)}`) throw new Error("The Space invite link did not match the verified Space.");
 
   if (!readSpaceInviteToken(url.hash)?.startsWith("cspi1.")) throw new Error("The Space invite link did not contain a valid capability.");
   return value;
+}
+
+/**
+ * The code a credential or path already spells in its normalized form. It checks the shape only: the
+ * server has already accepted the credential, and the word list that `parseInviteCode` needs for typed
+ * input would otherwise load with every entrance.
+ */
+function normalizedInviteCode(value: string): string | undefined {
+  const lower = value.trim().toLowerCase();
+  if (/^[a-z]{10}$/u.test(lower)) return `${lower.slice(0, 3)}-${lower.slice(3, 7)}-${lower.slice(7)}`;
+  return NORMALIZED_CODE_PATTERN.test(lower) ? lower : undefined;
 }
 
 type InvitePath = { readonly segments: readonly string[]; readonly search: string; readonly hash: string };
