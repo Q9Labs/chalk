@@ -149,6 +149,43 @@ func TestALeaseLapsesWithoutRenewal(t *testing.T) {
 	}
 }
 
+// A lapse has no trail event, so the control loop's count is its only trace: one per window that ran
+// out, none for a window a revoke ended, and none twice for the same window.
+func TestALapsedLeaseCountsOnceAndARevokeNever(t *testing.T) {
+	n := leaseNode(t, 50*time.Millisecond)
+	scope := testScope("alice", 1)
+	n.newTestSession(t, scope)
+	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
+	apply(t, n, control("alice", "camera", protocol.SourceGrant, 1))
+	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 2))
+	waitLapses(t, n, 1)
+	time.Sleep(4 * allocationInterval) // The loop ticks again: the same window must not count twice.
+	if got := leaseLapses(n); got != 1 {
+		t.Fatalf("lease lapses = %d, want 1 for the microphone only", got)
+	}
+	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 3))
+	waitLapses(t, n, 2)
+}
+
+// leaseLapses reads the count the control loop last published, so a test never races the loop that writes it.
+func leaseLapses(n *Node) uint64 {
+	if stats := n.stats.Load(); stats != nil {
+		return stats.totals.counts.LeaseLapses
+	}
+	return 0
+}
+
+func waitLapses(t *testing.T, n *Node, want uint64) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for leaseLapses(n) < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("lease lapses = %d, want %d after the control loop ticked", leaseLapses(n), want)
+		}
+		time.Sleep(allocationInterval / 4)
+	}
+}
+
 // The table of source controls is bounded, and a full table of live sessions' sources
 // refuses a new control instead of forgetting a live revoke.
 func TestTheSourceTableNeverEvictsALiveSessionsSource(t *testing.T) {

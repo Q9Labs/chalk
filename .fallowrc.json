@@ -3,6 +3,7 @@
     "gate.config.ts",
     "features/scorecard/scorecard.mjs",
     "scripts/dev/share-audio-proof.mjs",
+    "scripts/diagnose-call/make-fixtures.mjs",
     "tools/formal/media-control/trace-diff.mjs",
     "tools/formal/sync-entry-leave/EntryLeave.view.mjs",
     "scripts/dev/multi-device-proof.mjs",

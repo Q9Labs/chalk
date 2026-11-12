@@ -1,6 +1,25 @@
 import type { operations } from "../generated/openapi-types";
 
 export type MediaConnectionReplacementCause = NonNullable<NonNullable<operations["addCloudflareSFUTracks"]["parameters"]["query"]>["replacement_cause"]>;
+/** Why the SDK closes tracks, sent with every close so the API can explain it. */
+export type MediaCloseReason = "user_mute" | "unpublish" | "replacement" | "leave" | "error";
+export function closeReasonOf(cause: LocalPublicationRetirementCause): MediaCloseReason {
+  switch (cause) {
+    case "user_pause":
+      return "user_mute";
+    case "moderation_pause":
+    case "forced_pause":
+    case "capture_cleanup":
+    case "consent_revoked":
+    case "discovery_absent":
+      return "unpublish";
+    case "sync_recovery_loss":
+    case "publish_failure":
+    case "enable_failure":
+    case "projection_mismatch":
+      return "error";
+  }
+}
 export type LocalPublicationRetirementCause = Exclude<MediaConnectionReplacementCause, "local_signaling_failure" | "remote_signaling_failure" | "dormant_connection" | "access_refresh" | "receive_stalled" | "section_budget">;
 
 export type ScreenShareSurface = "monitor" | "window" | "browser";

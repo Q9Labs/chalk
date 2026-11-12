@@ -10,6 +10,7 @@
         ".github/workflows/real-call-proof.yml",
         ".github/workflows/web-call-proof.yml",
         "apps/api/internal/httpapi/call_stats.go",
+        "apps/api/internal/httpapi/call_stats_test.go",
         "apps/api/internal/httpapi/episode_lifecycle.go",
         "apps/api/internal/httpapi/episode_lifecycle_transport.go",
         "apps/api/internal/httpapi/episode_live.go",
@@ -387,6 +388,7 @@
       "summary": "Collects and alerts on service health, journeys, and telemetry.",
       "paths": [
         "apps/sync/lib/chalk_sync/observability.ex",
+        "apps/sync/test/chalk_sync/observability_participant_event_test.exs",
         "apps/sync/test/chalk_sync/observability_session_test.exs",
         "docs/observability.md",
         "infrastructure/cloudflare-egress-alert",

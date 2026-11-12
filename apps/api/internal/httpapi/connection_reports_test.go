@@ -30,10 +30,12 @@ func TestConnectionReportLogNamesTheCredentialProvider(t *testing.T) {
 			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/report", nil))
 
 			var line struct {
-				Event    string `json:"event"`
-				Provider string `json:"provider"`
-				Trigger  string `json:"trigger"`
-				Level    string `json:"level"`
+				Event             string `json:"event"`
+				Provider          string `json:"provider"`
+				Trigger           string `json:"trigger"`
+				Level             string `json:"level"`
+				ProviderSessionID string `json:"provider_session_id"`
+				ConnectionID      string `json:"connection_id"`
 			}
 			for _, raw := range bytes.Split(bytes.TrimSpace(logs.Bytes()), []byte("\n")) {
 				var candidate struct {
@@ -44,6 +46,12 @@ func TestConnectionReportLogNamesTheCredentialProvider(t *testing.T) {
 						t.Fatalf("decode log line %s: %v", raw, err)
 					}
 				}
+			}
+			if line.ConnectionID != "connection" {
+				t.Fatalf("connection_id = %q, want the key the own SFU logs for the connection", line.ConnectionID)
+			}
+			if line.ProviderSessionID != "connection" {
+				t.Fatalf("provider_session_id = %q, want the media connection a call_stats row carries", line.ProviderSessionID)
 			}
 			if line.Provider != provider || line.Trigger != "audio_receive_stuck" || line.Level != "WARN" {
 				t.Fatalf("connection report log = %+v, want provider %q, trigger audio_receive_stuck, level WARN\n%s", line, provider, logs.String())
@@ -80,6 +88,47 @@ func TestConnectionReportAcceptsOnlyBoundedReceiverAndAccessRetryEvents(t *testi
 			}
 			if !tc.valid && err == nil {
 				t.Fatalf("decodeConnectionReport accepted %s", tc.event)
+			}
+		})
+	}
+}
+
+// A client that never binds an audio element reports bytes flowing; that is a diagnostic, not a failure.
+func TestUnboundAudioReportLogsAtInfoNotAsAFailure(t *testing.T) {
+	var logs bytes.Buffer
+	router := chi.NewRouter()
+	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
+	router.Post("/report", func(w http.ResponseWriter, r *http.Request) {
+		subject := accessgrants.Subject{Provider: accessgrants.ProviderChalkSFU, ConnectionID: "connection"}
+		_ = logConnectionReport(r.Context(), subject, connectionReport{Version: 1, Trigger: "audio_receive_unbound"})
+	})
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/report", nil))
+	if !bytes.Contains(logs.Bytes(), []byte(`"level":"INFO"`)) || bytes.Contains(logs.Bytes(), []byte(`"level":"WARN"`)) {
+		t.Fatalf("unbound audio report is not an info line: %s", logs.String())
+	}
+}
+
+func TestConnectionReportAcceptsTheDiagnosisRoundEventsAndRejectsUnknownElementStates(t *testing.T) {
+	cases := []struct {
+		name  string
+		body  string
+		valid bool
+	}{
+		{"unbound audio", `{"version":1,"trigger":"audio_receive_unbound","events":[{"event":"audio_receive_unbound","source":"microphone","receive_state":"bytes_flowing","element":"none","duration_ms":12000}]}`, true},
+		{"stuck audio with a playing element", `{"version":1,"trigger":"audio_receive_stuck","events":[{"event":"audio_receive_stuck","source":"microphone","receive_state":"track_received","element":"playing","duration_ms":12000}]}`, true},
+		{"unknown element state", `{"version":1,"trigger":"audio_receive_stuck","events":[{"event":"audio_receive_stuck","source":"microphone","receive_state":"track_received","element":"muted","duration_ms":12000}]}`, false},
+		{"time to ice", `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"ice_connected","duration_ms":800}]}`, true},
+		{"time to first audio", `{"version":1,"trigger":"audio_receive_summary","events":[{"event":"first_audio_bytes","source":"microphone","duration_ms":3000}]}`, true},
+		{"video stall", `{"version":1,"trigger":"video_receive_stalled","events":[{"event":"video_receive_stalled","source":"camera","duration_ms":8000}]}`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := decodeConnectionReport(httptest.NewRequest(http.MethodPost, "/v1/tenants/t/connection-reports", bytes.NewBufferString(tc.body)))
+			if tc.valid && err != nil {
+				t.Fatalf("rejected: %v", err)
+			}
+			if !tc.valid && err == nil {
+				t.Fatal("accepted")
 			}
 		})
 	}

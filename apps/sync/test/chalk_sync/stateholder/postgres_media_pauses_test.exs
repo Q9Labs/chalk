@@ -56,4 +56,27 @@ defmodule ChalkSync.Stateholder.PostgresMediaPausesTest do
     assert {:ok, pauses} = Postgres.media_pauses(fixture.episode)
     refute Map.has_key?(pauses, screen_key)
   end
+
+  test "a pause and its resume are both recorded, and a pause never resumed stays open", %{
+    connection: connection
+  } do
+    fixture = SyncPostgres.seed_episode(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    identity = hd(fixture.identities)
+
+    history =
+      &SyncPostgres.pause_history(connection, fixture.episode, identity.participant_id, &1)
+
+    assert :ok = Postgres.set_media_pause(identity, :camera, "publisher|camera")
+    assert :ok = Postgres.set_media_pause(identity, :camera, "publisher|camera-2")
+    assert :ok = Postgres.set_media_pause(identity, :microphone, "publisher|microphone")
+    assert [%{publication_id: "publisher|camera-2", resumed?: false}] = history.("camera")
+
+    assert :ok = Postgres.set_media_pause(identity, :camera, nil)
+    assert [%{resumed?: true}] = history.("camera")
+    assert [%{publication_id: "publisher|microphone", resumed?: false}] = history.("microphone")
+
+    assert :ok = Postgres.set_media_pause(identity, :camera, "publisher|camera-3")
+    assert [%{resumed?: true}, %{resumed?: false}] = history.("camera")
+  end
 end

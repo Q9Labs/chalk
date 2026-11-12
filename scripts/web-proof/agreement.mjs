@@ -143,7 +143,7 @@ function identityIssues(samples) {
   return samples.length < 2 || new Set(samples.map((sample) => sample.self)).size !== samples.length ? ["agreement requires at least two distinct participant identities"] : [];
 }
 
-export function agreementIssues(before, after, { checkCameraFrames = true } = {}) {
+function agreementIssues(before, after, { checkCameraFrames = true } = {}) {
   const issues = identityIssues(after);
   for (const owner of after) {
     if (!owner.self) issues.push("missing self identity");
@@ -182,18 +182,39 @@ export function truthIssues(samples) {
 }
 
 // SDK release guests have no React UI. Play the SDK's gated received tracks.
+/** Binds the sink the way AudioOutput does, or the SDK sees bytes with no element and cannot tell this guest from a listener who hears nothing. */
+function bindAudioSink(track, element) {
+  if (track.kind !== "audio") return;
+  element.chalkObservation?.detach();
+  element.chalkObservation = window.proofClient.media?.observeAudioElement?.(track, element);
+}
+
+function proofElement(remote) {
+  const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
+  return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
+}
+
+/** Puts one received track on its element and returns whether the element took a new track. */
+function attachProofTrack(remote, element) {
+  element.dataset.participantId = remote.participantId;
+  element.dataset.proofSource = remote.source;
+  const rebound = element.srcObject?.getTracks()[0] !== remote.track;
+  if (rebound) element.srcObject = new MediaStream([remote.track]);
+  if (element instanceof HTMLVideoElement) element.muted = true;
+  document.body.append(element);
+  if (rebound) bindAudioSink(remote.track, element);
+}
+
 export async function playProofMedia() {
-  function proofElement(remote) {
-    const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
-    return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
-  }
   for (const remote of window.proofClient.getSnapshot().media.remote) {
     const element = proofElement(remote);
-    element.dataset.participantId = remote.participantId;
-    element.dataset.proofSource = remote.source;
-    if (element.srcObject?.getTracks()[0] !== remote.track) element.srcObject = new MediaStream([remote.track]);
-    if (element instanceof HTMLVideoElement) element.muted = true;
-    document.body.append(element);
-    await element.play();
+    attachProofTrack(remote, element);
+    await element.play().then(
+      () => element.chalkObservation?.played(undefined),
+      (cause) => {
+        element.chalkObservation?.played(cause);
+        throw cause;
+      },
+    );
   }
 }

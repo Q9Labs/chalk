@@ -127,8 +127,10 @@ func run() error {
 	logger := diagnostics.Logger()
 	slog.SetDefault(logger)
 	launchTelemetry := observability.NewLaunchTelemetry(logger)
+	lifecycleMarker := observability.DefaultLifecycleMarkerPath()
 	logger.Info("api starting",
 		"event", "api.starting",
+		"previous_exit", string(observability.RecordStart(lifecycleMarker)),
 		"address", cfg.API.Address,
 		"log_format", cfg.Observability.LogFormat,
 		"log_level", cfg.Observability.LogLevel,
@@ -864,6 +866,7 @@ func run() error {
 		logger.Info("provider bridge shutdown complete", "event", "provider_bridge.shutdown_complete")
 	}
 
+	observability.RecordCleanStop(lifecycleMarker)
 	logger.Info("api shutdown complete",
 		"event", "api.shutdown_complete",
 		"duration_ms", float64(time.Since(shutdownStartedAt).Microseconds())/1000,

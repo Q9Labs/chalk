@@ -26,6 +26,9 @@ type addTracksAttempt struct {
 	// timeout on a dead session reads differently from one on a live session. Age is -1 when unknown.
 	sessionAgeMs      int64
 	sessionNegotiated bool
+	// sessionTrackCount is how many tracks the provider reports on the session after a rejected
+	// call, read once with a short deadline; -1 when the call succeeded or the read failed.
+	sessionTrackCount int
 }
 
 // logAddTracksCall records one structured line per add-tracks attempt so a single
@@ -71,6 +74,7 @@ func logAddTracksCall(ctx context.Context, input mediaplane.TracksRequest, track
 		"retry", retry,
 		"session_age_ms", attempt.sessionAgeMs,
 		"session_negotiated", attempt.sessionNegotiated,
+		"session_track_count", attempt.sessionTrackCount,
 	)
 }
 

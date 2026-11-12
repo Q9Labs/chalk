@@ -43,6 +43,9 @@ type sfuCloseTracksRequest struct {
 	SessionDescription *mediaplane.SessionDescription `json:"session_description,omitempty"`
 	Tracks             []sfuCloseTrackRequest         `json:"tracks"`
 	Force              bool                           `json:"force"`
+	// Reason says why the client closes the tracks, so a close is explainable. It is one of
+	// observability.MediaCloseReasons and optional for older clients.
+	Reason string `json:"reason,omitempty"`
 }
 
 type sfuCloseTrackRequest struct {
@@ -798,6 +801,7 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	if err != nil {
 		return mediaplane.CloseTracksResponse{}, err
 	}
+	observability.LogMediaTrackClose(ctx, request.Body.Reason, len(request.Body.Tracks), request.Body.ReceiveOnly, request.Body.Force)
 	tracks := make([]mediaplane.CloseTrack, 0, len(request.Body.Tracks))
 	for _, track := range request.Body.Tracks {
 		tracks = append(tracks, mediaplane.CloseTrack{Mid: track.Mid, Source: track.Source, PublicationID: track.PublicationID})

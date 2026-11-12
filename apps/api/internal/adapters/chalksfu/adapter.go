@@ -29,8 +29,10 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -40,6 +42,8 @@ const (
 )
 
 var ErrMissingConfig = errors.New("missing chalk sfu config")
+
+var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/adapters/chalksfu")
 
 // turnMintFailures counts joins that went out without TURN. A client that can
 // reach only TCP 443 cannot connect media after one, so it is the signal to watch.
@@ -202,7 +206,21 @@ func newOperationID() (string, error) {
 // and 504 replies retry with the same body, so the operation ID inside it makes
 // the retry safe. Any other status is the answer. A transport error's text holds the
 // node's control URL and IP, so only its cause leaves this function.
-func (a *Adapter) call(ctx context.Context, path string, request, response any) error {
+func (a *Adapter) call(ctx context.Context, path string, request, response any) (err error) {
+	// One span covers the call and its retries, as the Cloudflare adapter's does, so a trace names the plane
+	// that served it. The node continues the trace under this span through the traceparent header.
+	ctx, span := tracer.Start(ctx, "mediaplane.chalk_sfu."+operationOf(path), trace.WithSpanKind(trace.SpanKindClient))
+	span.SetAttributes(attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU)), attribute.String("chalk.provider.operation", operationOf(path)), attribute.String("http.request.method", http.MethodPost))
+	defer func() {
+		if err != nil && !errors.Is(err, context.Canceled) {
+			span.RecordError(spanError(err))
+			span.SetStatus(codes.Error, "Chalk SFU request failed")
+			if upstream, ok := mediaplane.UpstreamOf(err); ok {
+				span.SetAttributes(attribute.Int("http.response.status_code", upstream.UpstreamStatus()))
+			}
+		}
+		span.End()
+	}()
 	body, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("%w: encode request", mediaplane.ErrProviderFailed)
@@ -219,6 +237,7 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 			}
 		}
 		status, payload, err := a.send(ctx, endpoint, body)
+		span.SetAttributes(attribute.Int("chalk.provider.attempts", attempt))
 		switch {
 		case err != nil:
 			cause := mediaplane.ClassifyTransportCause(ctx, err)
@@ -256,17 +275,32 @@ func (a *Adapter) call(ctx context.Context, path string, request, response any) 
 
 // failureAttributes labels one failure. The operation is the route with a session ID cut out.
 func failureAttributes(path, stage string, detail ...attribute.KeyValue) []attribute.KeyValue {
+	attributes := []attribute.KeyValue{
+		attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU)),
+		attribute.String("chalk.provider.operation", operationOf(path)),
+		attribute.String("chalk.provider.failure_stage", stage),
+	}
+	return append(attributes, detail...)
+}
+
+// operationOf is the route with a session ID cut out, a bounded name for spans and metrics.
+func operationOf(path string) string {
 	operation := strings.TrimPrefix(path, "/v1/")
 	if rest, ok := strings.CutPrefix(operation, "sessions/"); ok {
 		_, action, _ := strings.Cut(rest, "/")
 		operation = "sessions/" + action
 	}
-	attributes := []attribute.KeyValue{
-		attribute.String("chalk.media_plane.provider", string(mediaplane.ProviderChalkSFU)),
-		attribute.String("chalk.provider.operation", operation),
-		attribute.String("chalk.provider.failure_stage", stage),
+	return operation
+}
+
+// spanError keeps the typed cause and drops the text, which can carry node addresses.
+func spanError(err error) error {
+	for _, kind := range []error{mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderUnauthorized, mediaplane.ErrProviderRateLimited, mediaplane.ErrConnectionNotFound, mediaplane.ErrInvalidSignalRequest, mediaplane.ErrUnsupportedOperation} {
+		if errors.Is(err, kind) {
+			return kind
+		}
 	}
-	return append(attributes, detail...)
+	return mediaplane.ErrProviderFailed
 }
 
 func recordFailure(ctx context.Context, attributes []attribute.KeyValue) {

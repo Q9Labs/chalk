@@ -170,6 +170,7 @@ export function createCloudflareSFUHTTPTransport(options: CloudflareSFUHTTPTrans
         tracks: input.tracks.map((track) => ({ mid: track.mid, source: track.source, publication_id: track.publicationId })),
         force: input.force,
         ...(input.receiveOnly ? { receive_only: true } : {}),
+        ...(input.reason ? { reason: input.reason } : {}),
       }),
     updateTracks: async (input) =>
       request<CloudflareSFUTracksResponse>("tracks_update", {

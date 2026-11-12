@@ -132,17 +132,25 @@ export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     samples: Schema.Array(
       Schema.Struct({
+        available_incoming_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+        available_outgoing_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
         connection_type: Schema.Literals(["udp", "tcp", "turn", "unknown"]),
         elapsed_ms: Schema.Number,
         freeze_count: Schema.optional(Schema.NullOr(Schema.Number)),
         freeze_ms: Schema.optional(Schema.NullOr(Schema.Number)),
+        jitter_buffer_delay_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
+        quality_limitation: Schema.optional(Schema.Literals(["cpu", "bandwidth", "other"])),
         recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_frames_dropped: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_hidden_videos: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_nack_count: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_pli_count: Schema.optional(Schema.NullOr(Schema.Number)),
+        relay_offered: Schema.optional(Schema.NullOr(Schema.Boolean)),
         relay_protocol: Schema.optional(Schema.Literals(["udp", "tcp", "tls"])),
         remote_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
         rtt_ms: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -150,6 +158,8 @@ export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
         send_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         send_layer: Schema.optional(Schema.Literals(["h", "m", "l"])),
         send_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
+        send_nack_count: Schema.optional(Schema.NullOr(Schema.Number)),
+        send_pli_count: Schema.optional(Schema.NullOr(Schema.Number)),
         window_ms: Schema.Number,
       }),
     ).check(Schema.isMinLength(1), Schema.isMaxLength(30)),
@@ -217,6 +227,7 @@ export const CloudflareSFUCloseTracksRequestSchema = /* @__PURE__ */ (() =>
   Schema.Struct({
     connection_id: Schema.String.check(Schema.isMinLength(1)),
     force: Schema.Boolean,
+    reason: Schema.optional(Schema.Literals(["user_mute", "unpublish", "replacement", "leave", "error"])),
     receive_only: Schema.optional(Schema.Boolean),
     session_description: Schema.optional(
       Schema.NullOr(
@@ -345,6 +356,7 @@ export const CloudflareSFUSignalRequestSchema = /* @__PURE__ */ (() =>
     force: Schema.optional(Schema.Boolean),
     op: Schema.Literals(["publications", "subscriptions", "tracks", "tracks_close", "tracks_update", "renegotiate"]),
     pull_published_audio: Schema.optional(Schema.Boolean),
+    reason: Schema.optional(Schema.Literals(["user_mute", "unpublish", "replacement", "leave", "error"])),
     receive_only: Schema.optional(Schema.Boolean),
     replacement_cause: Schema.optional(
       Schema.Literals([
@@ -546,6 +558,7 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         ),
         duration_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         elapsed_ms: Schema.Number,
+        element: Schema.optional(Schema.Literals(["none", "bound", "playing"])),
         element_state: Schema.optional(Schema.Literals(["paused", "playing"])),
         event: Schema.Literals([
           "space_join_span",
@@ -567,6 +580,10 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
           "media_http_error",
           "media_projection_mismatch",
           "audio_receive_stuck",
+          "audio_receive_unbound",
+          "video_receive_stalled",
+          "ice_connected",
+          "first_audio_bytes",
           "audio_receive_summary",
           "receivers_closed",
           "access_retry",
@@ -600,14 +617,14 @@ export const ConnectionReportRequestSchema = /* @__PURE__ */ (() =>
         ),
         receive_state: Schema.optional(Schema.Literals(["announced", "pull_requested", "pull_failed", "pull_succeeded", "track_received", "bytes_flowing", "element_bound", "playing"])),
         receivers_stopped: Schema.optional(Schema.NullOr(Schema.Number)),
-        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen_audio"])),
+        source: Schema.optional(Schema.Literals(["microphone", "camera", "screen", "screen_audio"])),
         state: Schema.optional(Schema.Literals(["idle", "joining", "live", "reconnecting", "leaving", "left", "failed"])),
         step: Schema.optional(Schema.Literals(["join", "acquire_initial_media", "access_initialize", "create_media_client", "create_sync_client", "start_media", "start_sync", "wait_for_sync_live", "confirm_entered"])),
         track_state: Schema.optional(Schema.Literals(["live", "muted", "ended"])),
         upload_failure: Schema.optional(Schema.Literals(["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"])),
       }),
     ).check(Schema.isMinLength(1), Schema.isMaxLength(64)),
-    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "upload_failed"]),
+    trigger: Schema.Literals(["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary", "upload_failed"]),
     version: Schema.Literal(1),
   }))();
 export type ConnectionReportRequest = typeof ConnectionReportRequestSchema.Type;

@@ -9,8 +9,12 @@ export const CALL_STATS_WINDOW_MS = 10_000;
 export const CALL_STATS_UPLOAD_SAMPLES = 6;
 /** The API rejects larger batches. */
 export const CALL_STATS_MAX_BATCH = 30;
-/** The API rejects a window longer than this and drops the whole batch, so a longer gap (a stalled tab, a sleeping device) is skipped. */
+/** The first window is short and uploads at once, so the start of a call is not dark for a minute. */
+export const CALL_STATS_FIRST_WINDOW_MS = 5_000;
+/** The API rejects a window longer than this and drops the whole batch, so a longer window reports this length. Its rates still use the real length. */
 export const CALL_STATS_MAX_WINDOW_MS = 60_000;
+/** A background tab's timers run about once a minute, so a window up to this long is still one window. A longer gap (a sleeping device) is skipped. */
+export const CALL_STATS_GAP_MS = 300_000;
 /** Per-call cap: about an hour of samples. Later windows are dropped. */
 export const CALL_STATS_CALL_CAP = 360;
 /** The call menu charts this many of the latest windows (about a minute), kept apart from the upload buffer. */
@@ -40,7 +44,7 @@ export type CallStatsCollector = {
 
 type Upload = (request: CallStatsRequest) => Promise<void>;
 /** What the viewer and the SFU did to remote video. Planes that report no subscription state leave out `pausedVideos`. */
-export type CallStatsDelivery = { readonly pausedVideos?: number; readonly hiddenVideos: number };
+export type CallStatsDelivery = { readonly pausedVideos?: number; readonly stalledVideos?: number; readonly hiddenVideos: number };
 
 export function createCallStatsCollector(options: { readonly upload: Upload; readonly now?: () => number }): CallStatsCollector {
   const now = options.now ?? (() => Date.now());
@@ -50,9 +54,10 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
   let produced = 0;
   let uploading: Promise<void> | null = null;
   let baseline: Baseline | null = null;
-  const gauges: Windowed = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges() };
+  const gauges: Windowed = { rtt: newGauges(), sendJitter: newGauges(), recvJitter: newGauges(), availableIn: newGauges(), availableOut: newGauges(), limitation: "none", stalled: newStalls() };
   let latest: RTCStatsReport | null = null;
   let delivery: CallStatsDelivery | undefined;
+  let firstUploaded = false;
 
   const closeWindow = (at: number): void => {
     if (!baseline || !latest) return;
@@ -61,7 +66,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
     const sample = summarise(latest, baseline, windowMs, at - startedAt, gauges, delivery);
     baseline = readBaseline(latest, at);
     resetGauges(gauges);
-    if (windowMs > CALL_STATS_MAX_WINDOW_MS) return;
+    if (windowMs > CALL_STATS_GAP_MS) return;
     history = Object.freeze([...history, sample].slice(-CALL_STATS_HISTORY));
     if (produced >= CALL_STATS_CALL_CAP) return;
     produced++;
@@ -89,9 +94,12 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
       latest = report;
       delivery = observed;
       baseline ??= readBaseline(report, at);
-      addGauges(report, gauges);
-      if (at - baseline.at >= CALL_STATS_WINDOW_MS) closeWindow(at);
-      if (buffer.length >= CALL_STATS_UPLOAD_SAMPLES) void send(options.upload);
+      addGauges(report, gauges, delivery?.stalledVideos ?? 0, at);
+      if (at - baseline.at >= (produced === 0 ? CALL_STATS_FIRST_WINDOW_MS : CALL_STATS_WINDOW_MS)) closeWindow(at);
+      if (buffer.length >= CALL_STATS_UPLOAD_SAMPLES || (!firstUploaded && buffer.length > 0)) {
+        firstUploaded = true;
+        void send(options.upload);
+      }
     },
     async flush(upload) {
       closeWindow(now());
@@ -104,40 +112,92 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
       latest = null;
       delivery = undefined;
       resetGauges(gauges);
+      gauges.stalled = newStalls();
     },
   };
 }
 
-type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges };
+type StallClock = { stalledMs: number; onsets: number; videos: number; at: number | null };
+type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges; availableIn: Gauges; availableOut: Gauges; limitation: QualityLimitation; stalled: StallClock };
+type QualityLimitation = "none" | NonNullable<CallStatsSample["quality_limitation"]>;
+const LIMITATION_ORDER: readonly QualityLimitation[] = ["none", "other", "bandwidth", "cpu"];
+const COUNT_MAX = 1_000_000;
+
+function newStalls(): StallClock {
+  return { stalledMs: 0, onsets: 0, videos: 0, at: null };
+}
 
 function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number, elapsedMs: number, gauges: Windowed, delivery: CallStatsDelivery | undefined): CallStatsSample {
-  const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
-  const recvLost = delta("inbound-rtp", "packetsLost");
   const pair = selectedPair(report);
   const local = pair ? (report.get(String(pair.localCandidateId)) as Stat | undefined) : undefined;
   const remote = pair ? (report.get(String(pair.remoteCandidateId)) as Stat | undefined) : undefined;
   // Absent measurements stay undefined, which JSON leaves out of the upload.
   return {
     elapsed_ms: Math.min(Math.round(elapsedMs), MAX_ELAPSED_MS),
-    window_ms: Math.round(windowMs),
+    window_ms: Math.min(Math.round(windowMs), CALL_STATS_MAX_WINDOW_MS),
     connection_type: connectionType(local),
     local_candidate_type: candidateType(local),
     remote_candidate_type: candidateType(remote),
     relay_protocol: relayProtocol(local),
+    relay_offered: relayOffered(report),
     rtt_ms: scaled(mean(gauges.rtt), 1000, 60000),
+    available_incoming_kbps: scaled(mean(gauges.availableIn), 1 / 1000, 100000),
+    available_outgoing_kbps: scaled(mean(gauges.availableOut), 1 / 1000, 100000),
+    ...sendFields(report, baseline, windowMs, gauges),
+    ...receiveFields(report, baseline, windowMs, gauges, delivery),
+  };
+}
+
+function sendFields(report: RTCStatsReport, baseline: Baseline, windowMs: number, gauges: Windowed): Partial<CallStatsSample> {
+  const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
+  return {
     send_bitrate_kbps: scaled(delta("outbound-rtp", "bytesSent"), 8 / windowMs, 100000),
     send_loss_pct: lossPct(delta("remote-inbound-rtp", "packetsLost"), delta("outbound-rtp", "packetsSent")),
     send_jitter_ms: scaled(mean(gauges.sendJitter), 1000, 60000),
     send_layer: sendLayer(report, baseline),
+    send_nack_count: scaled(delta("outbound-rtp", "nackCount"), 1, COUNT_MAX),
+    send_pli_count: scaled(delta("outbound-rtp", "pliCount", "video"), 1, COUNT_MAX),
+    quality_limitation: gauges.limitation === "none" ? undefined : gauges.limitation,
+  };
+}
+
+function receiveFields(report: RTCStatsReport, baseline: Baseline, windowMs: number, gauges: Windowed, delivery: CallStatsDelivery | undefined): Partial<CallStatsSample> {
+  const delta = (type: string, field: string, kind?: string): number | null => sumDelta(report, baseline, type, field, kind);
+  const recvLost = delta("inbound-rtp", "packetsLost");
+  return {
     recv_bitrate_kbps: scaled(delta("inbound-rtp", "bytesReceived"), 8 / windowMs, 100000),
     recv_loss_pct: lossPct(recvLost, sum(recvLost, delta("inbound-rtp", "packetsReceived"))),
     recv_jitter_ms: scaled(mean(gauges.recvJitter), 1000, 60000),
     recv_height: scaled(recvHeight(report), 1, 4320),
-    freeze_count: scaled(delta("inbound-rtp", "freezeCount", "video"), 1, 10000),
-    freeze_ms: scaled(delta("inbound-rtp", "totalFreezesDuration", "video"), 1000, 600000),
+    jitter_buffer_delay_ms: scaled(ratio(delta("inbound-rtp", "jitterBufferDelay"), delta("inbound-rtp", "jitterBufferEmittedCount")), 1000, 60000),
+    recv_nack_count: scaled(delta("inbound-rtp", "nackCount"), 1, COUNT_MAX),
+    recv_pli_count: scaled(delta("inbound-rtp", "pliCount", "video"), 1, COUNT_MAX),
+    recv_frames_dropped: scaled(delta("inbound-rtp", "framesDropped", "video"), 1, COUNT_MAX),
+    ...freezeFields(delta("inbound-rtp", "freezeCount", "video"), delta("inbound-rtp", "totalFreezesDuration", "video"), gauges.stalled),
     recv_paused_videos: scaled(delivery?.pausedVideos ?? null, 1, 64),
     recv_hidden_videos: scaled(delivery?.hiddenVideos ?? null, 1, 64),
   };
+}
+
+/**
+ * The browser counts a freeze only when frames resume after a gap, so a receiver that gets nothing reads 0. A live, visible
+ * video whose decoded frames stopped (the client's stall check) adds its stall to the browser's own count.
+ */
+function freezeFields(browserCount: number | null, browserSeconds: number | null, stalls: StallClock): Partial<CallStatsSample> {
+  const stalled = stalls.onsets > 0 || stalls.stalledMs > 0;
+  return {
+    freeze_count: scaled(browserCount === null && !stalled ? null : (browserCount ?? 0) + stalls.onsets, 1, 10000),
+    freeze_ms: scaled(browserSeconds === null && !stalled ? null : (browserSeconds ?? 0) * 1000 + stalls.stalledMs, 1, 600000),
+  };
+}
+
+function ratio(numerator: number | null, denominator: number | null): number | null {
+  return numerator === null || denominator === null || denominator <= 0 ? null : numerator / denominator;
+}
+
+function relayOffered(report: RTCStatsReport): boolean | undefined {
+  const candidates = stats(report, "local-candidate");
+  return candidates.length === 0 ? undefined : candidates.some((candidate) => candidate.candidateType === "relay");
 }
 
 /** `value * factor` as a whole number within `0..max`; undefined when nothing was measured. */
@@ -166,16 +226,16 @@ function readBaseline(report: RTCStatsReport, at: number): Baseline {
   return { at, counters };
 }
 
-const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount"] as const;
+const COUNTER_FIELDS = ["packetsSent", "packetsLost", "packetsReceived", "bytesSent", "bytesReceived", "totalFreezesDuration", "freezeCount", "jitterBufferDelay", "jitterBufferEmittedCount", "nackCount", "pliCount", "framesDropped"] as const;
 
-/** Sum of per-stream growth since the window began. Streams that vanished or restarted count as zero. */
+/** Sum of per-stream growth since the window began. A stream that began inside the window counts from zero; one that vanished or restarted counts as zero. */
 function sumDelta(report: RTCStatsReport, baseline: Baseline, type: string, field: string, kind?: string): number | null {
   let total = 0;
   let seen = false;
   for (const stat of stats(report, type, kind)) {
     const current = stat[field];
-    const before = baseline.counters.get(`${String(stat.id)}:${field}`);
-    if (typeof current !== "number" || before === undefined) continue;
+    if (typeof current !== "number") continue;
+    const before = baseline.counters.get(`${String(stat.id)}:${field}`) ?? 0;
     seen = true;
     total += Math.max(0, current - before);
   }
@@ -196,11 +256,14 @@ function newGauges(): Gauges {
   return { sum: 0, count: 0 };
 }
 
-function resetGauges(gauges: Record<string, Gauges>): void {
-  for (const gauge of Object.values(gauges)) {
+function resetGauges(gauges: Windowed): void {
+  for (const gauge of [gauges.rtt, gauges.sendJitter, gauges.recvJitter, gauges.availableIn, gauges.availableOut]) {
     gauge.sum = 0;
     gauge.count = 0;
   }
+  gauges.limitation = "none";
+  gauges.stalled.stalledMs = 0;
+  gauges.stalled.onsets = 0;
 }
 
 function addGauge(gauge: Gauges, value: unknown): void {
@@ -209,11 +272,27 @@ function addGauge(gauge: Gauges, value: unknown): void {
   gauge.count++;
 }
 
-function addGauges(report: RTCStatsReport, gauges: Windowed): void {
+function addGauges(report: RTCStatsReport, gauges: Windowed, stalledVideos: number, at: number): void {
   const pair = selectedPair(report);
   addGauge(gauges.rtt, pair?.currentRoundTripTime);
+  addGauge(gauges.availableIn, pair?.availableIncomingBitrate);
+  addGauge(gauges.availableOut, pair?.availableOutgoingBitrate);
+  addStall(gauges.stalled, stalledVideos, at);
+  for (const stat of stats(report, "outbound-rtp", "video")) gauges.limitation = worseLimitation(gauges.limitation, stat.qualityLimitationReason);
   for (const stat of stats(report, "remote-inbound-rtp")) addGauge(gauges.sendJitter, stat.jitter);
   for (const stat of stats(report, "inbound-rtp")) addGauge(gauges.recvJitter, stat.jitter);
+}
+
+function addStall(stalls: StallClock, videos: number, at: number): void {
+  if (stalls.at !== null) stalls.stalledMs += Math.min(videos, stalls.videos) * (at - stalls.at);
+  if (videos > stalls.videos) stalls.onsets += videos - stalls.videos;
+  stalls.videos = videos;
+  stalls.at = at;
+}
+
+function worseLimitation(current: QualityLimitation, reported: unknown): QualityLimitation {
+  const next = LIMITATION_ORDER.find((reason) => reason === reported);
+  return next && LIMITATION_ORDER.indexOf(next) > LIMITATION_ORDER.indexOf(current) ? next : current;
 }
 
 function mean(gauge: Gauges): number | null {
@@ -251,8 +330,8 @@ function relayProtocol(local: Stat | undefined): CallStatsSample["relay_protocol
 function sendLayer(report: RTCStatsReport, baseline: Baseline): CallStatsSample["send_layer"] | undefined {
   const active = new Set<string>();
   for (const stat of stats(report, "outbound-rtp", "video")) {
-    const before = baseline.counters.get(`${String(stat.id)}:bytesSent`);
-    if (typeof stat.rid !== "string" || typeof stat.bytesSent !== "number" || before === undefined) continue;
+    const before = baseline.counters.get(`${String(stat.id)}:bytesSent`) ?? 0;
+    if (typeof stat.rid !== "string" || typeof stat.bytesSent !== "number") continue;
     if (stat.bytesSent > before) active.add(stat.rid);
   }
   return RID_ORDER.find((rid) => active.has(rid));

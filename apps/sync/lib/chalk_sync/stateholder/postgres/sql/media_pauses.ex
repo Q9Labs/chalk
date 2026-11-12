@@ -43,6 +43,26 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.MediaPauses do
     """
   end
 
+  # A pause opens one history row; a repeated pause keeps the first paused_at and updates the publication.
+  def open_history do
+    """
+    insert into sync_media_pause_history (
+      tenant_id, space_id, episode_id, participant_id, source, publication_id
+    ) values ($1, $2, $3, $4, $5, $6)
+    on conflict (tenant_id, episode_id, participant_id, source) where resumed_at is null
+    do update set publication_id = excluded.publication_id
+    """
+  end
+
+  def close_history do
+    """
+    update sync_media_pause_history
+    set resumed_at = now()
+    where tenant_id = $1 and space_id = $2 and episode_id = $3
+      and participant_id = $4 and source = $5 and resumed_at is null
+    """
+  end
+
   def list_stops do
     """
     select stop.participant_id, stop.source, stop.revision

@@ -17,6 +17,7 @@ function element(track: MediaStreamTrack, paused = true): HTMLAudioElement {
 
 function harness() {
   const events: ConnectionReportTransportEvent[] = [];
+  const timings: ConnectionReportTransportEvent[] = [];
   const tracks: CloudflareSFURemoteTrack[] = [];
   const rows = new Map<string, object>();
   const getStats = vi.fn(async () => rows as unknown as RTCStatsReport);
@@ -26,12 +27,13 @@ function harness() {
     setInterval: (callback: () => void, ms: number) => setInterval(callback, ms),
     clearInterval: (timer: ReturnType<typeof setInterval>) => clearInterval(timer),
     connection: () => connection,
+    connectionStartedAt: () => 0,
     tracks: () => tracks,
-    onEvent: (event: ConnectionReportTransportEvent) => events.push(event),
+    onEvent: (event: ConnectionReportTransportEvent) => (event.event === "first_audio_bytes" ? timings : events).push(event),
   };
   const tracker = new AudioReceiveHealth(options);
   const bytes = (track: MediaStreamTrack, count: number, extra = {}) => rows.set(track.id, { type: "inbound-rtp", kind: "audio", trackIdentifier: track.id, bytesReceived: count, ...extra });
-  return { tracker, events, tracks, rows, getStats, options, bytes };
+  return { tracker, events, timings, tracks, rows, getStats, options, bytes };
 }
 
 describe("AudioReceiveHealth", () => {
@@ -41,6 +43,23 @@ describe("AudioReceiveHealth", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("reports time to first audio once per peer connection, at the first sample that finds bytes", async () => {
+    const h = harness();
+    const p = remote();
+    h.tracks.push(p);
+    h.tracker.roster([p]);
+    h.tracker.pullSucceeded([p.publicationId]);
+    h.tracker.start();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.timings).toEqual([]);
+    h.bytes(p.track, 100);
+    await vi.advanceTimersByTimeAsync(5000);
+    h.bytes(p.track, 200);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.timings).toEqual([{ event: "first_audio_bytes", source: "microphone", duration_ms: 10000 }]);
+    h.tracker.dispose();
   });
 
   it("reports element_bound when unpaused playback never started despite growing bytes", async () => {
@@ -57,7 +76,7 @@ describe("AudioReceiveHealth", () => {
       audio.currentTime = i;
       await vi.advanceTimersByTimeAsync(5000);
     }
-    expect(h.events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "element_bound", element_state: "playing", duration_ms: 15000 }));
+    expect(h.events).toContainEqual(expect.objectContaining({ event: "audio_receive_stuck", receive_state: "element_bound", element: "bound", element_state: "playing", duration_ms: 15000 }));
     h.tracker.dispose();
   });
 
@@ -140,7 +159,8 @@ describe("AudioReceiveHealth", () => {
       await h.tracker.sample();
     }
     expect(h.events.find((e) => e.event === "audio_receive_summary")?.receive_counts).toEqual({ [state]: 1 });
-    const stuck = h.events.filter((e) => e.event === "audio_receive_stuck");
+    // Bytes with no audio element ever bound is a client that never plays audio, not a listener who cannot hear.
+    const stuck = h.events.filter((e) => e.event === (state === "bytes_flowing" ? "audio_receive_unbound" : "audio_receive_stuck"));
     expect(stuck).toHaveLength(state === "playing" ? 0 : 1);
     if (state !== "playing") expect(stuck[0]?.receive_state).toBe(state);
     if (state === "pull_failed") expect(stuck[0]).toMatchObject({ media_error_kind: "network", media_error_step: "sfu_tracks" });
@@ -162,7 +182,7 @@ describe("AudioReceiveHealth", () => {
     vi.setSystemTime(10001);
     h.bytes(p.track, 3);
     await h.tracker.sample();
-    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "element_bound", duration_ms: 10001, track_state: "live", element_state: "paused", play_result: "NotAllowedError" }]);
+    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "element_bound", element: "bound", duration_ms: 10001, track_state: "live", element_state: "paused", play_result: "NotAllowedError" }]);
     vi.setSystemTime(20000);
     await h.tracker.sample();
     expect(h.events).toHaveLength(1);
@@ -281,7 +301,7 @@ describe("AudioReceiveHealth", () => {
     await vi.advanceTimersByTimeAsync(10000);
     expect(h.events).toEqual([]);
     await vi.advanceTimersByTimeAsync(5000);
-    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "announced", duration_ms: 15000 }]);
+    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "announced", element: "none", duration_ms: 15000 }]);
   });
 
   it("ignores pending stats when replacement starts before the peer changes", async () => {
@@ -427,7 +447,7 @@ describe("AudioReceiveHealth", () => {
     h.bytes(p.track, 2);
     vi.setSystemTime(11000);
     await h.tracker.sample();
-    expect(h.events[0]).toMatchObject({ receive_state: "bytes_flowing" });
+    expect(h.events[0]).toMatchObject({ event: "audio_receive_unbound", receive_state: "bytes_flowing", element: "none" });
     expect(h.events[0]?.element_state).toBeUndefined();
   });
 

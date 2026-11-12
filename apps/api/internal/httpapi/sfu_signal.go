@@ -36,6 +36,7 @@ type sfuSignalRequest struct {
 	ReceiveOnly              bool                           `json:"receive_only,omitempty"`
 	AllowPartialRemoteTracks bool                           `json:"allow_partial_remote_tracks,omitempty"`
 	ReplacementCause         string                         `json:"replacement_cause,omitempty"`
+	CloseReason              string                         `json:"reason,omitempty"`
 	// PullPublishedAudio is the tracks operation's combined join pull: it carries no tracks.
 	PullPublishedAudio bool `json:"pull_published_audio,omitempty"`
 }
@@ -47,6 +48,8 @@ func SFUSignalFieldEnum(fieldName string) []string {
 		return []string{sfuSignalOpPublications, sfuSignalOpSubscriptions, sfuSignalOpTracks, sfuSignalOpTracksClose, sfuSignalOpTracksUpdate, sfuSignalOpRenegotiate}
 	case "replacement_cause":
 		return observability.MediaReplacementCauses()
+	case "reason":
+		return observability.MediaCloseReasons()
 	default:
 		return nil
 	}
@@ -137,7 +140,7 @@ func signalSFU(ctx context.Context, request sfuSignalEndpointRequest, spaces Spa
 	case sfuSignalOpTracksClose:
 		return nilOnError(signalSFUCloseTracks(ctx, sfuCloseTracksEndpointRequest{
 			TenantID: request.TenantID, SpaceID: request.SpaceID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
-			Body: sfuCloseTracksRequest{ReceiveOnly: body.ReceiveOnly, ConnectionID: body.ConnectionID, SessionDescription: body.SessionDescription, Tracks: body.CloseTracks, Force: body.Force},
+			Body: sfuCloseTracksRequest{ReceiveOnly: body.ReceiveOnly, ConnectionID: body.ConnectionID, SessionDescription: body.SessionDescription, Tracks: body.CloseTracks, Force: body.Force, Reason: body.CloseReason},
 		}, spaces, episodeLookup, tenants, media, publications))
 	case sfuSignalOpTracksUpdate:
 		return nilOnError(signalSFUUpdateTracks(ctx, sfuUpdateTracksEndpointRequest{

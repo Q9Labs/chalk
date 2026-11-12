@@ -50,6 +50,7 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 	}
 	attrs := []any{"event", "http.failure", "method", method, "route", route, "code", code, "error", detail}
 	attrs = append(attrs, UpstreamAttrs(err)...)
+	attrs = append(attrs, requestMediaAttrs(ctx)...)
 	logger.ErrorContext(ctx, "http endpoint failed", attrs...)
 }
 
@@ -135,6 +136,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := context.WithValue(r.Context(), requestLoggerContextKey{}, logger)
+			ctx = context.WithValue(ctx, requestMediaKey{}, &requestMediaHolder{})
 			// When wrapped around ServeMux, the child chi router would otherwise
 			// create a context only its cloned request can see. Share one so the
 			// outer request log retains the matched pattern after dispatch.
@@ -179,6 +181,7 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				attrs = append(attrs, "error_code", recorder.errorCode)
 			}
 			attrs = append(attrs, recorder.upstream...)
+			attrs = append(attrs, requestMediaAttrs(r.Context())...)
 			switch {
 			case recorder.status >= http.StatusInternalServerError:
 				logger.ErrorContext(r.Context(), "http request", attrs...)
