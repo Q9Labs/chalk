@@ -65,11 +65,7 @@ func (c *ControlPlaneClient) ReserveRenderObject(ctx context.Context, input reco
 	if err := input.Validate(); err != nil {
 		return recordingrender.ReservedObject{}, ErrInvalidControlPlaneRequest
 	}
-	payload := struct {
-		recorderprotocol.RenderAuthority
-		Purpose              string `json:"purpose"`
-		ReservationRequestID string `json:"reservation_request_id"`
-	}{RenderAuthority: renderAuthorityBody(input.Authority), Purpose: string(input.Purpose), ReservationRequestID: input.ReservationRequestID.String()}
+	payload := recorderprotocol.RenderObjectReserveRequest{RenderAuthority: renderAuthorityBody(input.Authority), Purpose: string(input.Purpose), ReservationRequestID: input.ReservationRequestID.String()}
 	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsReserve.Path(), payload)
 	if err != nil {
 		return recordingrender.ReservedObject{}, err
@@ -89,15 +85,7 @@ func (c *ControlPlaneClient) FinalizeRenderObject(ctx context.Context, input rec
 	if err := input.Validate(); err != nil {
 		return recordingrender.FinalizedObject{}, ErrInvalidControlPlaneRequest
 	}
-	payload := struct {
-		recorderprotocol.RenderAuthority
-		AllocationID   string `json:"allocation_id"`
-		Purpose        string `json:"purpose"`
-		ContentType    string `json:"content_type"`
-		ByteSize       int64  `json:"byte_size"`
-		SHA256         string `json:"sha256"`
-		DurationMillis *int64 `json:"duration_ms"`
-	}{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), Purpose: string(input.Purpose), ContentType: input.ContentType, ByteSize: input.ByteSize, SHA256: hex.EncodeToString(input.SHA256), DurationMillis: input.DurationMillis}
+	payload := recorderprotocol.RenderObjectFinalizeRequest{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), Purpose: string(input.Purpose), ContentType: input.ContentType, ByteSize: input.ByteSize, SHA256: hex.EncodeToString(input.SHA256), DurationMillis: input.DurationMillis}
 	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsFinalize.Path(), payload)
 	if err != nil {
 		return recordingrender.FinalizedObject{}, err
@@ -113,11 +101,7 @@ func (c *ControlPlaneClient) CommitRenderObject(ctx context.Context, input recor
 	if err := input.Validate(); err != nil {
 		return recordingrender.CommittedObject{}, ErrInvalidControlPlaneRequest
 	}
-	payload := struct {
-		recorderprotocol.RenderAuthority
-		AllocationID string `json:"allocation_id"`
-		UploadToken  string `json:"upload_token"`
-	}{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), UploadToken: input.UploadToken}
+	payload := recorderprotocol.RenderObjectCommitRequest{RenderAuthority: renderAuthorityBody(input.Authority), AllocationID: input.AllocationID.String(), UploadToken: input.UploadToken}
 	body, _, err := c.doRenderFinish(ctx, recorderprotocol.RouteRenderObjectsCommit.Path(), payload)
 	if err != nil {
 		return recordingrender.CommittedObject{}, err
