@@ -328,16 +328,15 @@ export interface RetryInput {
 
 export interface ControlApi {
   claim(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<ClaimResponse>;
-  heartbeat(input: { assignment: TranscriptionAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  heartbeatFinalize?(input: { assignment: FinalizeAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  heartbeat(input: { assignment: Pick<TranscriptionAssignment, "jobId" | "attempt" | "leaseToken">; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
   retry(input: RetryInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
   complete(input: CompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  claimFinalize?(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<FinalizeClaimResponse>;
-  completeFinalize?(input: FinalizeCompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  retryFinalize?(input: { jobId: string; attempt: number; leaseToken: string; errorCode: string; retryAt?: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  claimCleanup?(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }>;
-  completeCleanup?(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
-  retryCleanup?(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  claimFinalize(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<FinalizeClaimResponse>;
+  completeFinalize(input: FinalizeCompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  retryFinalize(input: { jobId: string; attempt: number; leaseToken: string; errorCode: string; retryAt?: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  claimCleanup(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }>;
+  completeCleanup(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
+  retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void>;
 }
 
 export interface DispatcherContext {
@@ -346,10 +345,22 @@ export interface DispatcherContext {
 
 export interface DispatcherEvent {
   source?: "wake" | "reconcile" | "finalize" | "cleanup" | "eventbridge.scheduler";
-  kind?: string;
   journeyId?: string;
   traceparent?: string;
   tracestate?: string;
+}
+
+export interface DispatcherDependencies {
+  config: ReleaseConfig;
+  control: ControlApi;
+  codeswitch?: TranscriptionProvider;
+  primary?: TranscriptionProvider;
+  fallback?: TranscriptionProvider;
+  fetch: typeof fetch;
+  logger?: DispatcherLogger;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
 }
 
 export interface DispatcherLogger {

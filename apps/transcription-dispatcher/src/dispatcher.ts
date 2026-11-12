@@ -1,105 +1,58 @@
-import { createHash, randomUUID } from "node:crypto";
-import { AssignmentError, ControlApiError, ProviderError, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
+import { createHash } from "node:crypto";
+import { AssignmentError, ControlApiError, ProviderError, isTerminalFailure, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
 import { isReasonWord } from "./provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
 import { validateSpeakerTurnManifest } from "./urls.js";
 import { conditionalPutJson, fetchAudioChunk } from "./storage.js";
-import { runCleanupDispatcher } from "./cleanup.js";
-import { runFinalizeDispatcher } from "./finalizer.js";
-import type { ControlApi, DispatcherContext, DispatcherEvent, DispatcherLogger, DispatcherContext as LambdaContext, JourneyContext, ReleaseConfig, TranscriptionAssignment, TranscriptionProvider } from "./types.js";
+import { cleanupQueue } from "./cleanup.js";
+import { finalizeQueue } from "./finalizer.js";
+import { drainQueue, journeyFor, loggerOf, reportRetry, splitBudget } from "./queue.js";
+import type { JobQueue, RunSummary } from "./queue.js";
+import type { ControlApi, DispatcherContext, DispatcherDependencies, DispatcherEvent, DispatcherLogger, JourneyContext, TranscriptionAssignment } from "./types.js";
 
-export interface DispatcherDependencies {
-  config: ReleaseConfig;
-  control: ControlApi;
-  codeswitch?: TranscriptionProvider;
-  primary?: TranscriptionProvider;
-  fallback?: TranscriptionProvider;
-  fetch: typeof fetch;
-  logger?: DispatcherLogger;
-  now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
-  random?: () => number;
+type DispatcherSource = NonNullable<DispatcherEvent["source"]>;
+
+// A wake-up from the API names one queue; the minute scheduler reconciles all of them, sharing one claim budget.
+const QUEUES_BY_SOURCE = {
+  wake: ["transcription"],
+  finalize: ["finalize"],
+  cleanup: ["cleanup"],
+  reconcile: ["transcription", "finalize", "cleanup"],
+  "eventbridge.scheduler": ["transcription", "finalize", "cleanup"],
+} as const satisfies Record<DispatcherSource, readonly ("transcription" | "finalize" | "cleanup")[]>;
+
+export async function runDispatcher(event: DispatcherEvent = {}, context: DispatcherContext, dependencies: DispatcherDependencies): Promise<RunSummary> {
+  const journey = journeyFor(event);
+  const queues = QUEUES_BY_SOURCE[event.source ?? "wake"];
+  const budgets = splitBudget(Math.min(dependencies.config.maxBatch, dependencies.config.concurrency), queues.length);
+  const results = await Promise.all(
+    queues.map((name, index) => {
+      const limit = budgets[index] ?? 0;
+      if (name === "transcription") return drainQueue(transcriptionQueue(context, dependencies), limit, journey, context, dependencies);
+      if (name === "finalize") return drainQueue(finalizeQueue(context, dependencies), limit, journey, context, dependencies);
+      return drainQueue(cleanupQueue(dependencies), limit, journey, context, dependencies);
+    }),
+  );
+  return results.reduce((total, result) => ({ claimed: total.claimed + result.claimed, completed: total.completed + result.completed, failed: total.failed + result.failed }));
 }
 
-const DEFAULT_LOGGER: DispatcherLogger = {
-  info: () => undefined,
-  warn: () => undefined,
-};
-
-export async function runDispatcher(event: DispatcherEvent = {}, context: DispatcherContext, dependencies: DispatcherDependencies, maxClaims?: number): Promise<{ claimed: number; completed: number; failed: number }> {
-  if (event.source === "cleanup") return runCleanupDispatcher(event, context, dependencies, maxClaims);
-  if (event.source === "finalize") return runFinalizeDispatcher(event, context, dependencies, maxClaims);
-  if (event.source === "reconcile" || event.source === "eventbridge.scheduler" || (event.kind === "transcription-reconcile" && event.source !== "wake")) return runReconcileDispatcher(event, context, dependencies);
-  const logger = dependencies.logger ?? DEFAULT_LOGGER;
+function transcriptionQueue(context: DispatcherContext, dependencies: DispatcherDependencies): JobQueue<TranscriptionAssignment> {
+  const logger = loggerOf(dependencies);
   const now = dependencies.now ?? Date.now;
-  const contextHeaders: JourneyContext = {
-    journeyId: event.journeyId || randomUUID(),
-    ...(event.traceparent === undefined ? {} : { traceparent: event.traceparent }),
-    ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
+  const { circuitFailureThreshold, circuitCooldownMs } = dependencies.config.provider;
+  const fixedCircuit = new InvocationCircuit(circuitFailureThreshold, circuitCooldownMs);
+  const autoCircuit = new InvocationCircuit(circuitFailureThreshold, circuitCooldownMs);
+  return {
+    logPrefix: "dispatcher",
+    claim: async (limit, journey) => (await dependencies.control.claim({ limit, context: journey })).assignments,
+    process: (assignment, journey) => processAssignment(assignment, journey, context, dependencies, assignment.transcriptLanguage?.mode === "fixed" ? fixedCircuit : autoCircuit, now),
+    release: (assignment, journey) => safeRetry(dependencies.control, assignment, journey, "timeout_reserve", false, logger),
   };
-  const circuit = new InvocationCircuit(dependencies.config.provider.circuitFailureThreshold, dependencies.config.provider.circuitCooldownMs);
-  const autoCircuit = new InvocationCircuit(dependencies.config.provider.circuitFailureThreshold, dependencies.config.provider.circuitCooldownMs);
-  let claimed = 0;
-  let completed = 0;
-  let failed = 0;
-  const assignments: TranscriptionAssignment[] = [];
-  const configuredLimit = Math.min(dependencies.config.maxBatch, dependencies.config.concurrency, 50);
-  const limit = Math.min(configuredLimit, maxClaims ?? configuredLimit);
-  if (limit <= 0) return { claimed, completed, failed };
-  if (context.getRemainingTimeInMillis() <= dependencies.config.timeoutReserveMs) {
-    logger.info("dispatcher_timeout_reserve_reached");
-    return { claimed, completed, failed };
-  }
-  const claim = await dependencies.control.claim({ limit, context: contextHeaders });
-  assignments.push(...claim.assignments);
-  claimed = assignments.length;
-  logger.info("dispatcher_claimed", { count: claimed, source: event.source ?? "wake" });
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, assignments.length) }, async () => {
-    while (cursor < assignments.length) {
-      const assignment = assignments[cursor];
-      cursor += 1;
-      if (!assignment) return;
-      if (context.getRemainingTimeInMillis() <= dependencies.config.timeoutReserveMs) {
-        await safeRetry(dependencies.control, assignment, contextHeaders, "timeout_reserve", false, logger);
-        failed += 1;
-        continue;
-      }
-      const result = await processAssignment(assignment, contextHeaders, context, dependencies, assignment.transcriptLanguage?.mode === "fixed" ? circuit : autoCircuit, now);
-      if (result === "completed") completed += 1;
-      else failed += 1;
-    }
-  });
-  await Promise.all(workers);
-  return { claimed, completed, failed };
-}
-
-/**
- * The minute scheduler emits one reconcile event. Keep that event useful for
- * every durable queue while sharing one bounded claim/concurrency budget.
- */
-async function runReconcileDispatcher(event: DispatcherEvent, context: DispatcherContext, dependencies: DispatcherDependencies): Promise<{ claimed: number; completed: number; failed: number }> {
-  const total = Math.min(dependencies.config.maxBatch, dependencies.config.concurrency, 50);
-  const budget = allocateReconcileBudget(total);
-  const tasks = [] as Array<Promise<{ claimed: number; completed: number; failed: number }>>;
-  if (budget.transcription > 0) tasks.push(runDispatcher({ ...event, source: "wake" }, context, dependencies, budget.transcription));
-  if (budget.finalize > 0 && dependencies.control.claimFinalize && dependencies.control.completeFinalize && dependencies.control.retryFinalize) tasks.push(runFinalizeDispatcher(event, context, dependencies, budget.finalize));
-  if (budget.cleanup > 0 && dependencies.control.claimCleanup && dependencies.control.completeCleanup && dependencies.control.retryCleanup) tasks.push(runCleanupDispatcher(event, context, dependencies, budget.cleanup));
-  const results = await Promise.all(tasks);
-  return results.reduce((totalResult, result) => ({ claimed: totalResult.claimed + result.claimed, completed: totalResult.completed + result.completed, failed: totalResult.failed + result.failed }), { claimed: 0, completed: 0, failed: 0 });
-}
-
-function allocateReconcileBudget(total: number): { transcription: number; finalize: number; cleanup: number } {
-  if (total <= 0) return { transcription: 0, finalize: 0, cleanup: 0 };
-  if (total === 1) return { transcription: 1, finalize: 0, cleanup: 0 };
-  if (total === 2) return { transcription: 1, finalize: 1, cleanup: 0 };
-  const each = Math.floor(total / 3);
-  return { transcription: each + (total % 3), finalize: each, cleanup: each };
 }
 
 async function processAssignment(assignment: TranscriptionAssignment, journey: JourneyContext, context: DispatcherContext, dependencies: DispatcherDependencies, circuit: InvocationCircuit, now: () => number): Promise<"completed" | "failed"> {
-  const logger = dependencies.logger ?? DEFAULT_LOGGER;
+  const logger = loggerOf(dependencies);
   try {
     await dependencies.control.heartbeat({ assignment, context: journey });
     const chunkDurationSeconds = (assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs) / 1_000;
@@ -206,7 +159,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
 // The error code is stored only by the control plane, so a terminal failure needs this line to have a reason anywhere else.
 export async function reportAssignmentFailure(error: unknown, assignment: TranscriptionAssignment, journey: JourneyContext, control: Pick<ControlApi, "retry">, logger: DispatcherLogger): Promise<void> {
   const kind = providerFailureKind(error);
-  const terminal = kind === "nonretryable" || kind === "schema";
+  const terminal = isTerminalFailure(error);
   if (error instanceof ProviderError && error.kind === "schema") logger.warn("provider_schema_invalid", { ...providerSchemaFields(error) });
   const errorCode = safeErrorCode(error);
   logger.warn("dispatcher_assignment_failed", {
@@ -235,9 +188,9 @@ function failureReason(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-async function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger, retryAt?: string): Promise<void> {
-  try {
-    await control.retry({
+function safeRetry(control: Pick<ControlApi, "retry">, assignment: TranscriptionAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger, retryAt?: string): Promise<void> {
+  return reportRetry(logger, "dispatcher", () =>
+    control.retry({
       jobId: assignment.jobId,
       attempt: assignment.attempt,
       leaseToken: assignment.leaseToken,
@@ -245,12 +198,10 @@ async function safeRetry(control: Pick<ControlApi, "retry">, assignment: Transcr
       terminal,
       ...(retryAt === undefined ? {} : { retryAt }),
       context,
-    });
-  } catch (retryError) {
-    logger.warn("dispatcher_retry_report_failed", { error: safeErrorCode(retryError) });
-  }
+    }),
+  );
 }
 
-export function createLambdaHandler(dependencies: Omit<DispatcherDependencies, "config"> & { config: ReleaseConfig }) {
-  return (event: DispatcherEvent, context: LambdaContext): Promise<{ claimed: number; completed: number; failed: number }> => runDispatcher(event, context, dependencies);
+export function createLambdaHandler(dependencies: DispatcherDependencies) {
+  return (event: DispatcherEvent, context: DispatcherContext): Promise<RunSummary> => runDispatcher(event, context, dependencies);
 }
