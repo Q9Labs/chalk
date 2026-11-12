@@ -22,56 +22,94 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 	if captureJobID.IsZero() {
 		return recordingpipeline.Reservation{}, recordingpipeline.ErrInvalidJobID
 	}
+	var err error
 	if input.ID.IsZero() {
-		var err error
-		input.ID, err = utilities.NewID()
-		if err != nil {
+		if input.ID, err = utilities.NewID(); err != nil {
 			return recordingpipeline.Reservation{}, err
 		}
 	}
 	if input.RecordingID.IsZero() {
-		var err error
-		input.RecordingID, err = utilities.NewID()
-		if err != nil {
+		if input.RecordingID, err = utilities.NewID(); err != nil {
 			return recordingpipeline.Reservation{}, err
 		}
 	}
 	fingerprint := recordingpipeline.ReservationFingerprint(input)
-	if existing, err := r.queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{
-		TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey,
-	}); err == nil {
-		if !bytes.Equal(existing, fingerprint[:]) {
-			return recordingpipeline.Reservation{}, recordingpipeline.ErrReservationConflict
-		}
-		row, getErr := r.queries.GetRecordingReservation(ctx, sqlc.GetRecordingReservationParams{
-			TenantID: uuid(input.TenantID), ID: uuid(input.ID),
-		})
-		if getErr == nil {
-			return mapGetReservation(row), nil
-		}
-		// The key is authoritative; the request may have supplied a fresh ID.
-		rowByKey, keyErr := r.queries.GetRecordingReservationByKey(ctx, sqlc.GetRecordingReservationByKeyParams{
-			TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey, RequestFingerprint: fingerprint[:],
-		})
-		if keyErr == nil {
-			return mapReservationByKey(rowByKey), nil
-		}
-		return recordingpipeline.Reservation{}, fmt.Errorf("get idempotent recording reservation: %w", getErr)
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return recordingpipeline.Reservation{}, fmt.Errorf("check recording reservation idempotency: %w", err)
+	if existing, found, err := r.storedReservation(ctx, input, fingerprint); err != nil || found {
+		return existing, err
 	}
+	if r.transactor == nil {
+		return recordingpipeline.Reservation{}, errors.New("recording reservation admission requires a transaction")
+	}
+	params := r.reservationParams(input, fingerprint, captureJobID)
+	var row sqlc.CreateRecordingReservationRow
+	capacityUnavailable := false
+	err = r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
+		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
+			return fmt.Errorf("lock recording capacity: %w", err)
+		}
+		if err := r.checkTenantRecordingLimit(ctx, tx, queries, input); err != nil {
+			return err
+		}
+		var err error
+		row, err = queries.CreateRecordingReservation(ctx, params)
+		if err != nil {
+			capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
+			return err
+		}
+		return r.insertRecordingPresentationBaseline(ctx, queries, input)
+	})
+	if capacityUnavailable {
+		return recordingpipeline.Reservation{}, recordingpipeline.ErrRecordingCapacityUnavailable
+	}
+	if err != nil {
+		if uniqueConstraintViolation(err, "recording_reservations_tenant_id_idempotency_key_key") {
+			return r.reserveReplay(ctx, input, fingerprint)
+		}
+		return recordingpipeline.Reservation{}, fmt.Errorf("reserve recording capacity: %w", err)
+	}
+	slog.InfoContext(ctx, "Recording Capture preparation consumption", "event", "recording.preparation.consumed", "consumed", row.PreparationConsumed)
+	return mapReservation(row), nil
+}
+
+// storedReservation returns the reservation a repeated request already made. The key is authoritative:
+// the request may have supplied a fresh ID.
+func (r RecordingPipelineRepository) storedReservation(ctx context.Context, input recordingpipeline.ReservationInput, fingerprint [32]byte) (recordingpipeline.Reservation, bool, error) {
+	existing, err := r.queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{
+		TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return recordingpipeline.Reservation{}, false, nil
+	}
+	if err != nil {
+		return recordingpipeline.Reservation{}, false, fmt.Errorf("check recording reservation idempotency: %w", err)
+	}
+	if !bytes.Equal(existing, fingerprint[:]) {
+		return recordingpipeline.Reservation{}, false, recordingpipeline.ErrReservationConflict
+	}
+	row, getErr := r.queries.GetRecordingReservation(ctx, sqlc.GetRecordingReservationParams{
+		TenantID: uuid(input.TenantID), ID: uuid(input.ID),
+	})
+	if getErr == nil {
+		return mapGetReservation(row), true, nil
+	}
+	rowByKey, keyErr := r.queries.GetRecordingReservationByKey(ctx, sqlc.GetRecordingReservationByKeyParams{
+		TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey, RequestFingerprint: fingerprint[:],
+	})
+	if keyErr == nil {
+		return mapReservationByKey(rowByKey), true, nil
+	}
+	return recordingpipeline.Reservation{}, false, fmt.Errorf("get idempotent recording reservation: %w", getErr)
+}
+
+func (r RecordingPipelineRepository) reservationParams(input recordingpipeline.ReservationInput, fingerprint [32]byte, captureJobID utilities.ID) sqlc.CreateRecordingReservationParams {
 	start := r.now().UTC()
+	availableAt := time.Unix(0, 0).UTC()
 	if input.StartsAt != nil {
 		start = input.StartsAt.UTC()
-	}
-	availableAt := start
-	if input.StartsAt != nil {
 		availableAt = start.Add(-recordingpipeline.CapturePrewarm)
-	} else {
-		availableAt = time.Unix(0, 0).UTC()
 	}
 	limits := r.admissionLimits.WithDefaults()
-	params := sqlc.CreateRecordingReservationParams{
+	return sqlc.CreateRecordingReservationParams{
 		RecordingCap: int32(limits.RecordingCap), ParticipantCap: int32(limits.ParticipantCap), BitrateCapBps: limits.BitrateCapBPS(),
 		EpisodeCount:          1,
 		ParticipantCount:      int32(input.ParticipantCount),
@@ -93,50 +131,30 @@ func (r RecordingPipelineRepository) Reserve(ctx context.Context, input recordin
 		AvailableAt:           timestamptzValue(availableAt),
 		AttemptLimit:          recordingpipeline.DefaultCaptureAttemptLimit,
 	}
-	if r.transactor == nil {
-		return recordingpipeline.Reservation{}, errors.New("recording reservation admission requires a transaction")
+}
+
+// checkTenantRecordingLimit refuses a new reservation once the tenant has used its concurrent or daily
+// recording allowance. Replays remain successful even when the tenant has used its last slot.
+func (r RecordingPipelineRepository) checkTenantRecordingLimit(ctx context.Context, tx pgx.Tx, queries recordingPipelineQuerier, input recordingpipeline.ReservationInput) error {
+	if !r.tenantLimits.AppliesTo(input.TenantID) || (r.tenantLimits.MaxConcurrentRecordings <= 0 && r.tenantLimits.DailyRecordingMinutes <= 0) {
+		return nil
 	}
-	var row sqlc.CreateRecordingReservationRow
-	capacityUnavailable := false
-	err := r.transaction(ctx, func(tx pgx.Tx, queries recordingPipelineQuerier) error {
-		if _, err := queries.LockRecordingCapacity(ctx); err != nil {
-			return fmt.Errorf("lock recording capacity: %w", err)
-		}
-		if r.tenantLimits.AppliesTo(input.TenantID) && (r.tenantLimits.MaxConcurrentRecordings > 0 || r.tenantLimits.DailyRecordingMinutes > 0) {
-			// Replays remain successful even when the tenant has used its last slot.
-			_, err := queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey})
-			if errors.Is(err, pgx.ErrNoRows) {
-				now := r.now().UTC()
-				usage, err := sqlc.New(tx).GetTenantRecordingUsage(ctx, sqlc.GetTenantRecordingUsageParams{TenantID: uuid(input.TenantID), ObservedAt: timestamptzValue(now), DayStart: timestamptzValue(now.Truncate(24 * time.Hour))})
-				if err != nil {
-					return fmt.Errorf("read tenant recording usage: %w", err)
-				}
-				if (r.tenantLimits.MaxConcurrentRecordings > 0 && usage.ActiveCount >= int64(r.tenantLimits.MaxConcurrentRecordings)) || (r.tenantLimits.DailyRecordingMinutes > 0 && usage.RecordingSeconds >= float64(r.tenantLimits.DailyRecordingMinutes)*60) {
-					return tenantlimits.ErrRecordingLimitReached
-				}
-			} else if err != nil {
-				return fmt.Errorf("check tenant recording replay: %w", err)
-			}
-		}
-		var err error
-		row, err = queries.CreateRecordingReservation(ctx, params)
-		if err != nil {
-			capacityUnavailable = errors.Is(err, pgx.ErrNoRows)
-			return err
-		}
-		return r.insertRecordingPresentationBaseline(ctx, queries, input)
-	})
-	if capacityUnavailable {
-		return recordingpipeline.Reservation{}, recordingpipeline.ErrRecordingCapacityUnavailable
+	_, err := queries.GetRecordingReservationFingerprint(ctx, sqlc.GetRecordingReservationFingerprintParams{TenantID: uuid(input.TenantID), IdempotencyKey: input.IdempotencyKey})
+	if err == nil {
+		return nil
 	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check tenant recording replay: %w", err)
+	}
+	now := r.now().UTC()
+	usage, err := sqlc.New(tx).GetTenantRecordingUsage(ctx, sqlc.GetTenantRecordingUsageParams{TenantID: uuid(input.TenantID), ObservedAt: timestamptzValue(now), DayStart: timestamptzValue(now.Truncate(24 * time.Hour))})
 	if err != nil {
-		if uniqueConstraintViolation(err, "recording_reservations_tenant_id_idempotency_key_key") {
-			return r.reserveReplay(ctx, input, fingerprint)
-		}
-		return recordingpipeline.Reservation{}, fmt.Errorf("reserve recording capacity: %w", err)
+		return fmt.Errorf("read tenant recording usage: %w", err)
 	}
-	slog.InfoContext(ctx, "Recording Capture preparation consumption", "event", "recording.preparation.consumed", "consumed", row.PreparationConsumed)
-	return mapReservation(row), nil
+	if (r.tenantLimits.MaxConcurrentRecordings > 0 && usage.ActiveCount >= int64(r.tenantLimits.MaxConcurrentRecordings)) || (r.tenantLimits.DailyRecordingMinutes > 0 && usage.RecordingSeconds >= float64(r.tenantLimits.DailyRecordingMinutes)*60) {
+		return tenantlimits.ErrRecordingLimitReached
+	}
+	return nil
 }
 
 func (r RecordingPipelineRepository) GetReservation(ctx context.Context, tenantID, reservationID utilities.ID) (recordingpipeline.Reservation, error) {

@@ -92,47 +92,7 @@ func (r EpisodeLifecycleRepository) SetDeadline(ctx context.Context, input episo
 func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Context, batch int32) (episodes.DeadlineCycle, error) {
 	cycle := newDeadlineCycle()
 	err := r.transaction(ctx, func(queries *sqlc.Queries, tx pgx.Tx) error {
-		err := claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
-			func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimDueEpisodeDeadlinesRow, error) {
-				due, err := queries.ClaimDueEpisodeDeadlines(ctx, sqlc.ClaimDueEpisodeDeadlinesParams{ExcludedEpisodeIds: excluded, BatchSize: limit})
-				if err != nil {
-					return nil, fmt.Errorf("claim due episode deadlines: %w", err)
-				}
-				return due, nil
-			},
-			func(row sqlc.ClaimDueEpisodeDeadlinesRow) pgtype.UUID { return row.EpisodeID },
-			func(row sqlc.ClaimDueEpisodeDeadlinesRow) error {
-				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
-				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
-				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
-				request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
-				if err != nil {
-					return err
-				}
-				enqueued := false
-				done, err := cycle.step(ctx, tx, deadlinePhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
-					// The claim holds the control row; take the Episode next and recheck it is still the claimed deadline.
-					episode, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID)
-					if err != nil {
-						return err
-					}
-					if episode.Status != episodes.EpisodeStatusActive || episode.DeadlineGeneration != row.DeadlineGeneration {
-						return nil
-					}
-					_, err = createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
-						TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
-						OperationName: episodes.OperationMaximumDurationExpired, Request: request,
-						DeadlineGeneration: row.DeadlineGeneration, JourneyName: "episode.maximum_duration_expired", Payload: request.Payload(),
-					})
-					enqueued = err == nil
-					return err
-				})
-				if done && enqueued {
-					cycle.result.Enqueued++
-				}
-				return err
-			})
-		if err != nil {
+		if err := enqueueMaximumDurations(ctx, queries, tx, cycle, batch); err != nil {
 			return err
 		}
 		presenceFloor, err := lockPresenceRecoveryFloor(ctx, tx)
@@ -144,59 +104,7 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 			return err
 		}
 		cycle.result.Enqueued += departures
-		return claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
-			func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimEmptyEpisodeLingersRow, error) {
-				empty, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{
-					PresenceRecoverAfter: presenceFloor, ExcludedEpisodeIds: excluded, BatchSize: limit,
-				})
-				if err != nil {
-					return nil, fmt.Errorf("claim empty episode lingers: %w", err)
-				}
-				return empty, nil
-			},
-			func(row sqlc.ClaimEmptyEpisodeLingersRow) pgtype.UUID { return row.EpisodeID },
-			func(row sqlc.ClaimEmptyEpisodeLingersRow) error {
-				tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
-				spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
-				episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
-				if cycle.fencedByPresence(episodeID) {
-					return nil
-				}
-				ended := false
-				done, err := cycle.step(ctx, tx, emptyLingerPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
-					// The claim holds the control row; take the Episode next, as the recheck below expects.
-					if _, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID); err != nil {
-						return err
-					}
-					window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
-						TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
-						PresenceRecoverAfter: presenceFloor,
-					})
-					if err != nil {
-						return fmt.Errorf("recheck empty episode linger: %w", err)
-					}
-					if !window.Due {
-						return nil
-					}
-					request, err := episodes.NewLingerRequest(tenantID, spaceID, episodeID, timestamp(window.EmptySince), int(window.FailedAttempts))
-					if err != nil {
-						return err
-					}
-					if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
-						TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
-						OperationName: episodes.OperationTenantEndEpisode, Request: request,
-						JourneyName: "episode.linger_expired", Payload: request.Payload(),
-					}); err != nil {
-						return err
-					}
-					ended = true
-					return nil
-				})
-				if done && ended {
-					cycle.result.Enqueued++
-				}
-				return err
-			})
+		return enqueueEmptyEpisodeLingers(ctx, queries, tx, cycle, batch, presenceFloor)
 	})
 	if err != nil {
 		return episodes.DeadlineCycle{}, err
@@ -218,6 +126,113 @@ func (r EpisodeLifecycleRepository) EnqueueDueEpisodeDeadlines(ctx context.Conte
 		}
 	}
 	return cycle.result, err
+}
+
+func enqueueMaximumDurations(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, cycle *deadlineCycle, batch int32) error {
+	return claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
+		func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimDueEpisodeDeadlinesRow, error) {
+			due, err := queries.ClaimDueEpisodeDeadlines(ctx, sqlc.ClaimDueEpisodeDeadlinesParams{ExcludedEpisodeIds: excluded, BatchSize: limit})
+			if err != nil {
+				return nil, fmt.Errorf("claim due episode deadlines: %w", err)
+			}
+			return due, nil
+		},
+		func(row sqlc.ClaimDueEpisodeDeadlinesRow) pgtype.UUID { return row.EpisodeID },
+		func(row sqlc.ClaimDueEpisodeDeadlinesRow) error {
+			return enqueueMaximumDuration(ctx, tx, cycle, row)
+		})
+}
+
+func enqueueMaximumDuration(ctx context.Context, tx pgx.Tx, cycle *deadlineCycle, row sqlc.ClaimDueEpisodeDeadlinesRow) error {
+	tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
+	spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
+	episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
+	request, err := episodes.NewMaximumDurationRequest(tenantID, spaceID, episodeID, row.DeadlineGeneration)
+	if err != nil {
+		return err
+	}
+	enqueued := false
+	done, err := cycle.step(ctx, tx, deadlinePhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// The claim holds the control row; take the Episode next and recheck it is still the claimed deadline.
+		episode, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID)
+		if err != nil {
+			return err
+		}
+		if episode.Status != episodes.EpisodeStatusActive || episode.DeadlineGeneration != row.DeadlineGeneration {
+			return nil
+		}
+		_, err = createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+			OperationName: episodes.OperationMaximumDurationExpired, Request: request,
+			DeadlineGeneration: row.DeadlineGeneration, JourneyName: "episode.maximum_duration_expired", Payload: request.Payload(),
+		})
+		enqueued = err == nil
+		return err
+	})
+	if done && enqueued {
+		cycle.result.Enqueued++
+	}
+	return err
+}
+
+func enqueueEmptyEpisodeLingers(ctx context.Context, queries *sqlc.Queries, tx pgx.Tx, cycle *deadlineCycle, batch int32, presenceFloor pgtype.Timestamptz) error {
+	return claimInPages(func() int32 { return batch - int32(cycle.result.Enqueued) },
+		func(excluded []pgtype.UUID, limit int32) ([]sqlc.ClaimEmptyEpisodeLingersRow, error) {
+			empty, err := queries.ClaimEmptyEpisodeLingers(ctx, sqlc.ClaimEmptyEpisodeLingersParams{
+				PresenceRecoverAfter: presenceFloor, ExcludedEpisodeIds: excluded, BatchSize: limit,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("claim empty episode lingers: %w", err)
+			}
+			return empty, nil
+		},
+		func(row sqlc.ClaimEmptyEpisodeLingersRow) pgtype.UUID { return row.EpisodeID },
+		func(row sqlc.ClaimEmptyEpisodeLingersRow) error {
+			return enqueueEmptyEpisodeLinger(ctx, tx, cycle, row, presenceFloor)
+		})
+}
+
+func enqueueEmptyEpisodeLinger(ctx context.Context, tx pgx.Tx, cycle *deadlineCycle, row sqlc.ClaimEmptyEpisodeLingersRow, presenceFloor pgtype.Timestamptz) error {
+	tenantID := utilities.IDFromBytes(row.TenantID.Bytes)
+	spaceID := utilities.IDFromBytes(row.SpaceID.Bytes)
+	episodeID := utilities.IDFromBytes(row.EpisodeID.Bytes)
+	if cycle.fencedByPresence(episodeID) {
+		return nil
+	}
+	ended := false
+	done, err := cycle.step(ctx, tx, emptyLingerPhase, tenantID, episodeID, func(queries *sqlc.Queries, tx pgx.Tx) error {
+		// The claim holds the control row; take the Episode next, as the recheck below expects.
+		if _, err := lockLifecycleEpisode(ctx, queries, tenantID, spaceID, episodeID); err != nil {
+			return err
+		}
+		window, err := queries.EpisodeLingerStillDue(ctx, sqlc.EpisodeLingerStillDueParams{
+			TenantID: row.TenantID, SpaceID: row.SpaceID, EpisodeID: row.EpisodeID,
+			PresenceRecoverAfter: presenceFloor,
+		})
+		if err != nil {
+			return fmt.Errorf("recheck empty episode linger: %w", err)
+		}
+		if !window.Due {
+			return nil
+		}
+		request, err := episodes.NewLingerRequest(tenantID, spaceID, episodeID, timestamp(window.EmptySince), int(window.FailedAttempts))
+		if err != nil {
+			return err
+		}
+		if _, err := createEndReadyOperation(ctx, queries, tx, tenantExternalOperationInput{
+			TenantID: tenantID, SpaceID: spaceID, EpisodeID: episodeID,
+			OperationName: episodes.OperationTenantEndEpisode, Request: request,
+			JourneyName: "episode.linger_expired", Payload: request.Payload(),
+		}); err != nil {
+			return err
+		}
+		ended = true
+		return nil
+	})
+	if done && ended {
+		cycle.result.Enqueued++
+	}
+	return err
 }
 
 var _ episodes.Repository = EpisodeLifecycleRepository{}
