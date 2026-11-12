@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm run build:node",
     "build:node": "vite build --config vite.node.config.ts",
-    "fixture": "node ./dist/node/compose-fixture.js",
+    "fixture": "vite build --config vite.node.config.ts --mode fixture && node ./dist/fixture/compose-fixture.js",
     "check-types": "tsc-rs --noEmit",
     "lint": "pnpm exec oxfmt --check . && pnpm run check-types"
   },

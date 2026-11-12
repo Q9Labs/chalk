@@ -9,38 +9,39 @@ const source = (path: string): string => fileURLToPath(new URL(path, import.meta
 const nativeExternals = ["@napi-rs/canvas", "happy-dom"];
 const excalidrawRoot = dirname(createRequire(source("../../packages/whiteboard/package.json")).resolve("@excalidraw/excalidraw"));
 
-export default defineConfig({
+// `--mode fixture` builds only the dev and benchmark fixture generator, so the shipped bundle never carries it.
+export default defineConfig(({ mode }) => ({
   build: {
     ssr: true,
-    outDir: "dist/node",
+    outDir: mode === "fixture" ? "dist/fixture" : "dist/node",
     emptyOutDir: true,
     rollupOptions: {
       external: nativeExternals,
-      input: {
-        compose: "src/compose-cli.ts",
-        "compose-fixture": "src/compose-fixture.ts",
-      },
+      input: mode === "fixture" ? { "compose-fixture": "src/compose-fixture.ts" } : { compose: "src/compose-cli.ts" },
       output: {
         entryFileNames: "[name].js",
       },
     },
   },
-  plugins: [
-    {
-      // The compositor paints text without a browser, so it carries its own fonts.
-      name: "compose-fonts",
-      async closeBundle() {
-        const fonts = source("dist/node/fonts");
-        await mkdir(join(fonts, "Figtree"), { recursive: true });
-        for (const file of await readdir(source("src/compose/font-assets"))) {
-          if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
-        }
-        for (const [folder] of EXCALIDRAW_FONTS) {
-          await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });
-        }
-      },
-    },
-  ],
+  plugins:
+    mode === "fixture"
+      ? []
+      : [
+          {
+            // The compositor paints text without a browser, so it carries its own fonts.
+            name: "compose-fonts",
+            async closeBundle() {
+              const fonts = source("dist/node/fonts");
+              await mkdir(join(fonts, "Figtree"), { recursive: true });
+              for (const file of await readdir(source("src/compose/font-assets"))) {
+                if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
+              }
+              for (const [folder] of EXCALIDRAW_FONTS) {
+                await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });
+              }
+            },
+          },
+        ],
   resolve: {
     alias: {
       "@q9labsai/recording-presentation": source("../../packages/recording-presentation/src/index.ts"),
@@ -55,4 +56,4 @@ export default defineConfig({
     noExternal: true,
     external: nativeExternals,
   },
-});
+}));

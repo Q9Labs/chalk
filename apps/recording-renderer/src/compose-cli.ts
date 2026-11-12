@@ -34,21 +34,12 @@ interface ComposeResultV1 {
   readonly height: number;
   readonly fps: number;
   readonly frame_count: number;
-  readonly overlay_count: number;
-  readonly segment_count: number;
-  readonly dense_keyframe_source_count: number;
-  readonly plan_wall_ms: number;
-  readonly paint_wall_ms: number;
-  readonly composite_wall_ms: number;
-  readonly mux_wall_ms: number;
-  readonly wall_duration_ms: number;
 }
 
 const running = new Set<ChildProcess>();
 
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
-  const started = performance.now();
   const request = await readComposeRequest(args.requestPath);
   await Promise.all([validateResultPath(args.resultPath, request.workspaceDirectory), validateResultPath(args.outputPath, request.workspaceDirectory)]);
   const inputs = await loadVerifiedRenderInputs(request);
@@ -56,18 +47,13 @@ async function main(): Promise<void> {
   const workDirectory = join(inputs.workspaceDirectory, "compose");
   await mkdir(workDirectory, { mode: 0o700 });
   try {
-    const planStarted = performance.now();
     const spans = buildSceneSpans(inputs.timeline, inputs.media, output.fps, output);
     const segments = groupVideoSegments(spans);
     const frameCount = frameCountFor(inputs.timeline.clock.durationMs, output.fps);
-    const planWallMs = performance.now() - planStarted;
 
-    const paintStarted = performance.now();
     const overlays = await paintOverlays(spans, inputs, output, workDirectory);
-    const paintWallMs = performance.now() - paintStarted;
 
-    const compositeStarted = performance.now();
-    const { sources, denseCount } = await seekableSources(args.ffmpegPath, inputs, segments, output, workDirectory);
+    const sources = await seekableSources(args.ffmpegPath, inputs, segments, output, workDirectory);
     const segmentPaths: string[] = [];
     for (const [index, segment] of segments.entries()) {
       const listPath = join(workDirectory, `overlays-${index}.ffconcat`);
@@ -80,13 +66,10 @@ async function main(): Promise<void> {
       await runFFmpeg(args.ffmpegPath, segmentArgs(segment, sources, listPath, segmentPath, output), `segment ${index}`);
       segmentPaths.push(segmentPath);
     }
-    const compositeWallMs = performance.now() - compositeStarted;
 
-    const muxStarted = performance.now();
     const segmentListPath = join(workDirectory, "segments.ffconcat");
     await writeFile(segmentListPath, segmentListFor(segmentPaths), { mode: 0o600 });
     await runFFmpeg(args.ffmpegPath, muxArgs(segmentListPath, inputs.mixPath, args.outputPath, frameCount, output), "mux");
-    const muxWallMs = performance.now() - muxStarted;
 
     const result: ComposeResultV1 = {
       schema_version: COMPOSE_RESULT_VERSION,
@@ -98,14 +81,6 @@ async function main(): Promise<void> {
       height: output.height,
       fps: output.fps,
       frame_count: frameCount,
-      overlay_count: overlays.size,
-      segment_count: segments.length,
-      dense_keyframe_source_count: denseCount,
-      plan_wall_ms: Math.round(planWallMs),
-      paint_wall_ms: Math.round(paintWallMs),
-      composite_wall_ms: Math.round(compositeWallMs),
-      mux_wall_ms: Math.round(muxWallMs),
-      wall_duration_ms: Math.round(performance.now() - started),
     };
     await writeFile(args.resultPath, `${JSON.stringify(result)}\n`, { flag: "wx", mode: 0o600 });
   } finally {
@@ -154,7 +129,7 @@ async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: 
  * Video sources as recorded, except tracks whose sparse keyframes would make
  * the segments' seeks decode more than a one-off re-encode costs.
  */
-async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs, segments: readonly VideoSegment[], output: ComposeOutput, workDirectory: string): Promise<{ readonly sources: ReadonlyMap<string, PlannedSource>; readonly denseCount: number }> {
+async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs, segments: readonly VideoSegment[], output: ComposeOutput, workDirectory: string): Promise<ReadonlyMap<string, PlannedSource>> {
   const sources = new Map<string, PlannedSource>();
   let denseCount = 0;
   for (const source of inputs.media.sources) {
@@ -165,7 +140,7 @@ async function seekableSources(ffmpegPath: string, inputs: VerifiedRenderInputs,
     sources.set(source.sourceId, prepared.source);
     if (prepared.densified) denseCount++;
   }
-  return { sources, denseCount };
+  return sources;
 }
 
 async function prepareSeekableSource(
