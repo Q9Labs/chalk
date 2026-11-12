@@ -43,12 +43,14 @@ describe("public Space session", () => {
     expect(refreshedNotices).toBe(1);
   });
 
-  it("asks to replace the media connection on a retry", async () => {
+  it("forwards the media-replacement flag the client asked for, whatever the reason", async () => {
     const { client, refreshes } = fakeClient();
     const session = createPublicSpaceSession(client, { arrivalHandle: "handle-1", access: opaqueAccessGrant(1) });
 
+    await session.getAccess({ space: "s", reason: "refresh", replaceMediaConnection: true });
+    await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: false });
     await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: true });
-    expect(refreshes).toEqual([expect.objectContaining({ replaceMediaConnection: true })]);
+    expect(refreshes.map((request) => request.replaceMediaConnection)).toEqual([true, false, true]);
   });
 
   it("reports a failed refresh and keeps the old token", async () => {

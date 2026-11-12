@@ -112,7 +112,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const settle = useCallback(
     (event: EntranceEvent) => {
       if (send(event) && active.current) return;
-      if (event.type === "admitted") void event.joined.session.leave().catch(() => undefined);
+      releaseAdmission(event);
     },
     [send],
   );
@@ -216,7 +216,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           return;
         }
         const event = await arrivalEvent(client, answer, { inviteLink: waiting.inviteLink ?? "", spaceName: waiting.spaceName }, (handle) => reArrive(client, handle, displayName, inviteCode ?? readSpaceInviteToken(globalThis.location?.hash ?? "")));
-        settle(event);
+        // Building the event can make another request, and a Cancel and a new Join may have happened meanwhile: this answer then belongs to an arrival that is gone.
+        if (cancelled) releaseAdmission(event);
+        else settle(event);
       } catch (cause) {
         if (!cancelled) settle({ type: "failed", failure: entryFailure(cause) });
       }
@@ -405,6 +407,11 @@ function resumeFailure(cause: unknown): EntryFailure {
 }
 
 /** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
+/** Gives back an admission the entrance no longer wants. Any other event holds nothing to give back. */
+function releaseAdmission(event: EntranceEvent): void {
+  if (event.type === "admitted") void event.joined.session.leave().catch(() => undefined);
+}
+
 async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
   if (!inviteToken) throw new Error(neutralSpaceError);
   return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });

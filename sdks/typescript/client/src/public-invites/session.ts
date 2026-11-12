@@ -66,7 +66,7 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
 
   return {
     connectionAccess,
-    getAccess: ({ reason, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection: reason === "retry", signal }),
+    getAccess: ({ reason, replaceMediaConnection, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection, signal }),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
