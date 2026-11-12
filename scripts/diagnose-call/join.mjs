@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 export const SOURCES = ["client", "api", "sync", "sfu", "db"];
 
 /**

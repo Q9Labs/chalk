@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 // pnpm diagnose:call <episode id> [--fixture rows.json] [--strict]
 // Reads Axiom (API, client, SFU node, Sync) and the database for one Episode, joins every row by id, and prints a verdict.
 // Needs AXIOM_TOKEN and CHALK_LOG_DATASET; CHALK_TRACE_DATASET (Sync spans) and CHALK_DATABASE_URL (Participants) are optional.

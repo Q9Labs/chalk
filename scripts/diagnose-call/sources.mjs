@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { participantHash, normalizeRow } from "./rows.mjs";

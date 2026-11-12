@@ -119,7 +119,7 @@ export function createCallStatsCollector(options: { readonly upload: Upload; rea
 
 type StallClock = { stalledMs: number; onsets: number; videos: number; at: number | null };
 type Windowed = { rtt: Gauges; sendJitter: Gauges; recvJitter: Gauges; availableIn: Gauges; availableOut: Gauges; limitation: QualityLimitation; stalled: StallClock };
-type QualityLimitation = NonNullable<CallStatsSample["quality_limitation"]>;
+type QualityLimitation = "none" | NonNullable<CallStatsSample["quality_limitation"]>;
 const LIMITATION_ORDER: readonly QualityLimitation[] = ["none", "other", "bandwidth", "cpu"];
 const COUNT_MAX = 1_000_000;
 

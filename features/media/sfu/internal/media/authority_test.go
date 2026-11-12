@@ -158,18 +158,31 @@ func TestALapsedLeaseCountsOnceAndARevokeNever(t *testing.T) {
 	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 1))
 	apply(t, n, control("alice", "camera", protocol.SourceGrant, 1))
 	apply(t, n, control("alice", "camera", protocol.SourceRevoke, 2))
-	time.Sleep(80 * time.Millisecond)
-	for range 3 {
-		n.countLeaseLapses(monotonic())
-	}
-	if got := n.totals.counts.LeaseLapses; got != 1 {
+	waitLapses(t, n, 1)
+	time.Sleep(4 * allocationInterval) // The loop ticks again: the same window must not count twice.
+	if got := leaseLapses(n); got != 1 {
 		t.Fatalf("lease lapses = %d, want 1 for the microphone only", got)
 	}
 	apply(t, n, control("alice", "microphone", protocol.SourceGrant, 3))
-	time.Sleep(80 * time.Millisecond)
-	n.countLeaseLapses(monotonic())
-	if got := n.totals.counts.LeaseLapses; got != 2 {
-		t.Fatalf("lease lapses = %d, want 2 after the microphone's second window ran out", got)
+	waitLapses(t, n, 2)
+}
+
+// leaseLapses reads the count the control loop last published, so a test never races the loop that writes it.
+func leaseLapses(n *Node) uint64 {
+	if stats := n.stats.Load(); stats != nil {
+		return stats.totals.counts.LeaseLapses
+	}
+	return 0
+}
+
+func waitLapses(t *testing.T, n *Node, want uint64) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for leaseLapses(n) < want {
+		if time.Now().After(deadline) {
+			t.Fatalf("lease lapses = %d, want %d after the control loop ticked", leaseLapses(n), want)
+		}
+		time.Sleep(allocationInterval / 4)
 	}
 }
 

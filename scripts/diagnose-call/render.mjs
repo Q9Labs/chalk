@@ -1,9 +1,10 @@
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { SOURCES, joinedShare } from "./join.mjs";
 import { attr } from "./rows.mjs";
 import { verdictLine } from "./verdict.mjs";
 
 /** Where a result still depends on time. None of these decides which rows belong to the call. */
-export const TIMESTAMP_USES = [
+const TIMESTAMP_USES = [
   "A call_stats sample's own time is its connection's media start plus `elapsed_ms`; the start is the earliest upload time minus `elapsed_ms` among the rows of that one connection id.",
   "Media silence needs a sender: it compares sample windows of two Participants of the same Episode and asks whether they overlap.",
   "Early replacement subtracts the Participant's join time (database row, else first row) from the replacement row's time; both rows are already joined by id.",

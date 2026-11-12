@@ -2450,7 +2450,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
    * last moment the closing upload can still leave.
    */
   #flushCallStatsOnPageExit(): () => void {
-    if (typeof document === "undefined") return () => undefined;
+    if (typeof document === "undefined" || typeof globalThis.addEventListener !== "function") return () => undefined;
     const flush = () => {
       if (this.#stopped) return;
       const transport = this.#transport;

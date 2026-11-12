@@ -175,37 +175,56 @@ func TestTrailNamesALeaseThatRanOutAndTheSubscriptionItPaused(t *testing.T) {
 	if _, err := bob.AddTracks(context.Background(), pullRequest(bob, alice, "mic-0")); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(80 * time.Millisecond)
-	for range 3 {
-		node.countLeaseLapses(monotonic())
-	}
+	waitLapses(t, node, 1)
+	time.Sleep(4 * allocationInterval) // The loop ticks again: the same window must not log twice.
 	lost := trail.events("sfu.source.lease_lost")
 	if len(lost) != 1 || lost[0]["cause"] != "ttl_lapsed" || lost[0]["source"] != "microphone" {
 		t.Fatalf("lease_lost = %v, want one ttl_lapsed line for the microphone", lost)
 	}
 	requireIDs(t, lost[0], protocol.Scope{TenantID: alice.scope.TenantID, EpisodeID: alice.scope.EpisodeID, ParticipantID: alice.scope.ParticipantID})
 
-	var sub *subscription
-	for _, s := range bob.subscribed {
-		sub = s
-	}
-	sub.traceUnauthorized(true)
-	sub.traceUnauthorized(true)
-	var paused []map[string]string
-	for _, line := range trail.events("sfu.subscription.paused") {
-		if line["reason"] == protocol.PauseSourceUnauthorized {
-			paused = append(paused, line)
+	sourcePauses := func() []map[string]string {
+		var found []map[string]string
+		for _, line := range trail.events("sfu.subscription.paused") {
+			if line["reason"] == protocol.PauseSourceUnauthorized {
+				found = append(found, line)
+			}
 		}
+		return found
 	}
+	eventually(t, "the loop to log the source_unauthorized pause", 2*time.Second, func() bool { return len(sourcePauses()) > 0 })
+	time.Sleep(4 * allocationInterval) // The loop ticks again: the same pause must not log twice.
+	paused := sourcePauses()
 	if len(paused) != 1 {
 		t.Fatalf("paused = %v, want one source_unauthorized pause", paused)
 	}
 	requireIDs(t, paused[0], bob.scope)
-	sub.traceUnauthorized(false)
-	resumed := trail.events("sfu.subscription.resumed")
-	if len(resumed) != 1 || resumed[0]["was"] != protocol.PauseSourceUnauthorized {
-		t.Fatalf("resumed = %v, want one resume from source_unauthorized", resumed)
+}
+
+// A lapsed lease pauses the viewer's subscription and a renewing grant ends the pause; the control loop logs both.
+func TestTrailNamesTheResumeAfterALapsedSourceIsGrantedAgain(t *testing.T) {
+	trail := &trailLog{}
+	node := newLoggedTestNode(t, func(cfg *config.Config) { cfg.SourceLeaseTTL = 400 * time.Millisecond }, trail)
+	alice := node.newTestSession(t, testScope("alice", 1))
+	bob := node.newTestSession(t, testScope("bob", 3))
+	apply(t, node, control("alice", "microphone", protocol.SourceGrant, 1))
+	publish(t, alice, "mic", 1)
+	if _, err := bob.AddTracks(context.Background(), pullRequest(bob, alice, "mic-0")); err != nil {
+		t.Fatal(err)
 	}
+	unauthorized := func(event string) []map[string]string {
+		var found []map[string]string
+		for _, line := range trail.events(event) {
+			if line["reason"] == protocol.PauseSourceUnauthorized || line["was"] == protocol.PauseSourceUnauthorized {
+				found = append(found, line)
+			}
+		}
+		return found
+	}
+	eventually(t, "the loop to log the source_unauthorized pause", 3*time.Second, func() bool { return len(unauthorized("sfu.subscription.paused")) > 0 })
+	apply(t, node, control("alice", "microphone", protocol.SourceGrant, 2))
+	eventually(t, "the loop to log the resume", 3*time.Second, func() bool { return len(unauthorized("sfu.subscription.resumed")) > 0 })
+	requireIDs(t, unauthorized("sfu.subscription.resumed")[0], bob.scope)
 }
 
 // A line never holds SDP, an address, a candidate or a name: the trail is safe to store beside the API's logs.

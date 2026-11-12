@@ -238,11 +238,7 @@ export class AudioReceiveHealth {
     snapshot.track_state = trackState(track);
     const flowing = updateBytes(entry, track, inbound.get(track.id));
     const observation = boundElement(this.#elements.get(track), track);
-    if (observation) {
-      snapshot.element = observation.playing ? "playing" : "bound";
-      snapshot.element_state = observation.element.paused ? "paused" : "playing";
-      snapshot.play_result = observation.result;
-    }
+    if (observation) describeElement(snapshot, observation);
     if (track.readyState !== "live") return snapshot;
     // Playback of a live track with growing bytes outranks the pull record: a pull stage that was never recorded must not hide audio the element is playing.
     if (entry.pull !== "pull_succeeded" && !(flowing && observation?.playing === true)) return snapshot;
@@ -310,6 +306,12 @@ async function readStats(connection: RTCPeerConnection | null): Promise<RTCStats
   } catch {
     return undefined;
   }
+}
+
+function describeElement(snapshot: Snapshot, observation: Observation): void {
+  snapshot.element = observation.playing ? "playing" : "bound";
+  snapshot.element_state = observation.element.paused ? "paused" : "playing";
+  snapshot.play_result = observation.result;
 }
 
 function boundElement(observations: Set<Observation> | undefined, track: MediaStreamTrack): Observation | undefined {

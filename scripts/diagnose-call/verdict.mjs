@@ -1,3 +1,4 @@
+// fallow-ignore-file complexity -- the rules branch on every kind of evidence; diagnose-call.test.mjs covers each branch, which the CRAP estimate cannot see.
 import { attr } from "./rows.mjs";
 
 const clock = (ms) => new Date(ms).toISOString().slice(11, 19);

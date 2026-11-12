@@ -80,7 +80,10 @@ it.each(["microphone", "screen_audio"] as const)("suppresses disabled %s project
     await h.client.refreshRemotePublications();
     expect(h.client.getSnapshot().remoteTracks).toEqual([]);
     await vi.advanceTimersByTimeAsync(60000);
-    expect(events).toEqual([{ event: "audio_receive_summary", receive_counts: { projection_off: 1 } }]);
+    expect(events).toEqual([
+      { event: "ice_connected", duration_ms: 0 },
+      { event: "audio_receive_summary", receive_counts: { projection_off: 1 } },
+    ]);
     h.client.remotePublicationsChanged([{ ...projection, enabled: true }]);
     await vi.advanceTimersByTimeAsync(15000);
     expect(events.filter((event) => event.event === "audio_receive_stuck")).toEqual([]);
@@ -4375,7 +4378,8 @@ it("sends the closing call stats through the transport that was live at leave, e
       return new Map([["O", { id: "O", type: "outbound-rtp", kind: "video", rid: "h", packetsSent: seconds * 100, bytesSent: seconds * 125_000 }]]);
     });
     await vi.advanceTimersByTimeAsync(70_000);
-    expect(uploads).toEqual([{ samples: 6, closing: false }]);
+    // The first sample uploads at once, so the periodic upload still in flight at leave is that one.
+    expect(uploads).toEqual([{ samples: 1, closing: false }]);
 
     h.client.stop();
     finishPeriodic();

@@ -29,23 +29,24 @@ export class VideoDecodeStallDetector {
   #sampledAt: number | undefined;
 
   sample(now: number, videos: readonly DecodedVideo[]): readonly { readonly publicationId: string; readonly stalledMs: number }[] {
-    if (this.#sampledAt !== undefined && (now - this.#sampledAt > MAX_SAMPLE_GAP_MS || now < this.#sampledAt)) this.#progress.clear();
-    this.#sampledAt = now;
-    const listed = new Set(videos.map((video) => video.publicationId));
-    for (const id of this.#progress.keys()) if (!listed.has(id)) this.#progress.delete(id);
+    this.#forgetUnlisted(now, new Set(videos.map((video) => video.publicationId)));
     const stalled: { publicationId: string; stalledMs: number }[] = [];
     for (const video of videos) {
       const known = this.#progress.get(video.publicationId);
       if (!known || known.trackId !== video.trackId || video.framesDecoded !== known.framesDecoded) {
         this.#progress.set(video.publicationId, { trackId: video.trackId, framesDecoded: video.framesDecoded, advancedAt: now, reported: false });
-        continue;
-      }
-      if (!known.reported && now - known.advancedAt >= VIDEO_DECODE_STALL_MS) {
+      } else if (!known.reported && now - known.advancedAt >= VIDEO_DECODE_STALL_MS) {
         known.reported = true;
         stalled.push({ publicationId: video.publicationId, stalledMs: now - known.advancedAt });
       }
     }
     return stalled;
+  }
+
+  #forgetUnlisted(now: number, listed: ReadonlySet<string>): void {
+    if (this.#sampledAt !== undefined && (now - this.#sampledAt > MAX_SAMPLE_GAP_MS || now < this.#sampledAt)) this.#progress.clear();
+    this.#sampledAt = now;
+    for (const id of this.#progress.keys()) if (!listed.has(id)) this.#progress.delete(id);
   }
 
   /** How many videos are stalled now: reported and not yet decoding again. */

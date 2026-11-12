@@ -6,7 +6,7 @@ import { render } from "./render.mjs";
 import { normalizeRow } from "./rows.mjs";
 import { verdictLine } from "./verdict.mjs";
 
-import { EPISODE, T0, api, at, callStats, dormantReplacementCall, earlyReplacementCall, failedJoinCall, flow, hashOf, healthyCall, node, scenarios, starvedViewerCall } from "./scenarios.mjs";
+import { EPISODE, T0, api, at, callStats, dormantReplacementCall, flow, hashOf, scenarios, starvedViewerCall } from "./scenarios.mjs";
 
 const verdictOf = (rows) =>
   diagnoseRows(

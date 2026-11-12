@@ -159,7 +159,8 @@ describe("AudioReceiveHealth", () => {
       await h.tracker.sample();
     }
     expect(h.events.find((e) => e.event === "audio_receive_summary")?.receive_counts).toEqual({ [state]: 1 });
-    const stuck = h.events.filter((e) => e.event === "audio_receive_stuck");
+    // Bytes with no audio element ever bound is a client that never plays audio, not a listener who cannot hear.
+    const stuck = h.events.filter((e) => e.event === (state === "bytes_flowing" ? "audio_receive_unbound" : "audio_receive_stuck"));
     expect(stuck).toHaveLength(state === "playing" ? 0 : 1);
     if (state !== "playing") expect(stuck[0]?.receive_state).toBe(state);
     if (state === "pull_failed") expect(stuck[0]).toMatchObject({ media_error_kind: "network", media_error_step: "sfu_tracks" });
@@ -300,7 +301,7 @@ describe("AudioReceiveHealth", () => {
     await vi.advanceTimersByTimeAsync(10000);
     expect(h.events).toEqual([]);
     await vi.advanceTimersByTimeAsync(5000);
-    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "announced", duration_ms: 15000 }]);
+    expect(h.events).toEqual([{ event: "audio_receive_stuck", source: "microphone", receive_state: "announced", element: "none", duration_ms: 15000 }]);
   });
 
   it("ignores pending stats when replacement starts before the peer changes", async () => {

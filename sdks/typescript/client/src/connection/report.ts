@@ -181,7 +181,7 @@ export class ConnectionReporter {
     const summary = trigger === "audio_receive_summary";
     const now = this.#options.now();
     if (!summary && !reserveParticipantReport(access, now)) return;
-    const events = summary ? this.#events.filter((event) => isAudioReceive(event) && !this.#sentTimings.has(event)) : this.#events.slice();
+    const events = this.#eventsFor(summary);
     const report = boundedReport(trigger, events);
     if (!report) return;
     if (summary) {
@@ -189,6 +189,9 @@ export class ConnectionReporter {
       for (const event of events) if (isTiming(event)) this.#sentTimings.add(event);
     }
     this.#enqueue({ access, report, attempts: 0 });
+  }
+  #eventsFor(summary: boolean): ReportEvent[] {
+    return summary ? this.#events.filter((event) => isAudioReceive(event) && !this.#sentTimings.has(event)) : this.#events.slice();
   }
   #enqueue(pending: PendingReport): void {
     if (this.#controller) {

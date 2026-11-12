@@ -3,8 +3,8 @@ import { participantHash } from "./rows.mjs";
 
 export const EPISODE = "9feb0ff6-1111-4222-8333-444455556666";
 export const T0 = Date.parse("2026-11-11T10:00:00Z");
-export const publisher = "participant-publisher";
-export const viewer = "participant-viewer";
+const publisher = "participant-publisher";
+const viewer = "participant-viewer";
 export const hashOf = { publisher: participantHash(publisher), viewer: participantHash(viewer) };
 
 export const at = (seconds) => new Date(T0 + seconds * 1000).toISOString();
@@ -17,7 +17,7 @@ export const api = (seconds, event, who, attributes = {}) => ({
 });
 
 /** An SFU node event: it names the connection and the raw Participant id, never a hash. */
-export const node = (seconds, event, who, connection, attributes = {}) => ({
+const node = (seconds, event, who, connection, attributes = {}) => ({
   _time: at(seconds),
   "service.name": "chalk-sfu",
   attributes: { event, episode_id: EPISODE, participant_id: who === "publisher" ? publisher : viewer, connection_id: connection, ...attributes },
@@ -56,16 +56,16 @@ export function starvedViewerCall() {
   ];
 }
 
-export function failedJoinCall() {
+function failedJoinCall() {
   const journey = "journey-1";
   return [api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: journey }), api(5, "http.failure", "viewer", { error_code: "episode.full", journey_id: journey })];
 }
 
-export function earlyReplacementCall() {
+function earlyReplacementCall() {
   return [api(1, "http.request", "viewer", {}), api(13, "media.connection_replacement", "viewer", { replacement_cause: "access_refresh" })];
 }
 
-export function healthyCall() {
+function healthyCall() {
   return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 1400, recv_height: 720 }))];
 }
 
