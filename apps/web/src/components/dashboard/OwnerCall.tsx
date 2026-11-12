@@ -1,12 +1,9 @@
-import { readReloadRejoin, reloadRejoinAccess, reloadRejoinPresence, reloadRejoinStorageKey, writeReloadRejoin, type GetAccess, type SpaceClient } from "@q9labsai/chalk-client";
+import type { SpaceClient } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Schema } from "effect";
 
-import type { OwnerAccessDTO } from "../../lib/dashboard/contracts";
-import { act, clearOwnerSeats, DashboardRequestError, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
-import { dashboardAccessFailure } from "../../lib/dashboard/owner-access";
+import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/client";
 import { SiteRoot, useSiteTheme } from "../site/theme";
 import { useLoad, useSession } from "./AppShell";
 import { ErrorPanel } from "./kit";
@@ -15,146 +12,7 @@ import { createCallAction, readNewCallLanguage } from "./transcript-languages";
 import { problemReporter, reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired } from "../../lib/problem-reports";
 import { publicAPIBaseURL, webSpaceCredential } from "../../lib/chalk-access";
 import { createLocalSpaceClient } from "../../lib/local-space-client";
-const isOwnerReloadIntent = Schema.is(Schema.Struct({ ownerJoinKey: Schema.String.check(Schema.isUUID()), ownerUserId: Schema.String }));
-
-function readOwnerReload(spaceId: string, userId: string) {
-  try {
-    const encoded = window.sessionStorage.getItem(reloadRejoinStorageKey);
-    const marker = readReloadRejoin(window.sessionStorage, spaceId);
-    const saved: unknown = encoded ? JSON.parse(encoded) : null;
-    return marker && isOwnerReloadIntent(saved) && saved.ownerUserId === userId ? { episodeId: marker.episodeId, joinKey: saved.ownerJoinKey } : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Owner access for one call: `join` admits the owner, `refresh-access` renews the same seat. */
-function ownerAccess(spaceId: string, userId: string) {
-  const joinStorageKey = `chalk.owner-join:${userId}:${spaceId}`;
-  let joinKey = intentKey();
-  let hasStoredJoinKey = false;
-  try {
-    const storedJoinKey = window.sessionStorage.getItem(joinStorageKey);
-    hasStoredJoinKey = storedJoinKey !== null;
-    joinKey = storedJoinKey ?? joinKey;
-    window.sessionStorage.setItem(joinStorageKey, joinKey);
-  } catch {
-    // The pending-seat lease still covers browsers with tab storage disabled.
-  }
-  const episodeStorageKey = `${joinStorageKey}:episode`;
-  let joined = false;
-  let current: OwnerAccessDTO["access"] | undefined;
-  let ownerSeat: string | undefined;
-  let deadlineCeiling: string | undefined;
-  const listeners = new Set<() => void>();
-  let recovery: ReturnType<typeof readOwnerReload> | undefined;
-  let restoring: Promise<void> | undefined;
-  const clearReload = () => {
-    try {
-      window.sessionStorage.removeItem(reloadRejoinStorageKey);
-      if (joined) {
-        window.sessionStorage.removeItem(joinStorageKey);
-        window.sessionStorage.removeItem(episodeStorageKey);
-      }
-    } catch {
-      // Storage may be disabled; intentional leave must still work.
-    }
-    if (ownerSeat) {
-      ownerSeat = undefined;
-      void clearOwnerSeats().catch(() => console.warn(JSON.stringify({ event: "dashboard.seat_cleanup_failed" })));
-    }
-  };
-  const rotateJoinKey = () => {
-    joinKey = intentKey();
-    try {
-      window.sessionStorage.setItem(joinStorageKey, joinKey);
-      window.sessionStorage.removeItem(episodeStorageKey);
-    } catch {
-      /* The old seat is terminal even without tab storage. */
-    }
-  };
-  const join = () => act("call", { action: "join", spaceId, idempotencyKey: joinKey });
-  const restore = async () => {
-    if (recovery === undefined) recovery = readOwnerReload(spaceId, userId);
-    const saved = recovery;
-    let pendingEpisode: string | null = null;
-    try {
-      pendingEpisode = window.sessionStorage.getItem(episodeStorageKey);
-    } catch {
-      /* Tab storage is optional. */
-    }
-    if (!saved && !pendingEpisode && !hasStoredJoinKey) return;
-    const page = await readPage("call", { spaceId });
-    if (saved && page.live?.id === saved.episodeId) joinKey = saved.joinKey;
-    else if (!pendingEpisode || page.live?.id !== pendingEpisode) rotateJoinKey();
-  };
-  const requestAccess = async ({ reason, replaceMediaConnection }: Parameters<GetAccess>[0]) => {
-    await (restoring ??= restore().catch((error) => {
-      restoring = undefined;
-      throw error;
-    }));
-    const {
-      access,
-      ownerSeat: sealedSeat,
-      deadlineCeiling: ceiling,
-    } = reason === "join"
-      ? // A Leave can commit while its acknowledgement is lost; its seat then refuses the retained key.
-        await join().catch((error: unknown) => {
-          if (!(error instanceof DashboardRequestError && error.code === "participant_not_active")) throw error;
-          rotateJoinKey();
-          return join();
-        })
-      : // Without the current token the server replaces the media connection.
-        await act("call", { action: "refresh-access", spaceId, joinKey, ...(ownerSeat ? { ownerSeat } : {}), ...(!replaceMediaConnection && current ? { currentMediaToken: current.media.token } : {}) });
-    current = access;
-    ownerSeat = sealedSeat;
-    deadlineCeiling = ceiling;
-    try {
-      window.sessionStorage.setItem(joinStorageKey, joinKey);
-      window.sessionStorage.setItem(episodeStorageKey, access.subject.episode_id);
-    } catch {
-      /* The lease still covers pending admission. */
-    }
-    for (const listener of listeners) listener();
-    return access;
-  };
-  const getAccess: GetAccess = (input) => requestAccess(input).catch(dashboardAccessFailure);
-  const saveReload = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
-    if (!current || (snapshot.connection.status !== "live" && snapshot.connection.status !== "reconnecting") || snapshot.connection.episodeEnded || snapshot.connection.removedByHost) return;
-    const marker = {
-      ...reloadRejoinAccess(current),
-      space: spaceId,
-      tenantId: current.subject.tenant_id,
-      ...reloadRejoinPresence(snapshot, ""),
-      ownerJoinKey: joinKey,
-      ownerUserId: userId,
-    };
-    try {
-      writeReloadRejoin(window.sessionStorage, marker);
-    } catch {
-      // Reload recovery is unavailable with tab storage disabled.
-    }
-  };
-  const observe = (snapshot: ReturnType<SpaceClient["getSnapshot"]>) => {
-    if (snapshot.connection.status === "live" || snapshot.connection.status === "reconnecting") joined = true;
-  };
-  return {
-    getAccess,
-    saveReload,
-    clearReload,
-    observe,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    reportAccess: () => current,
-    deadlineCeiling: () => deadlineCeiling,
-    reportCredential: () => current?.media.token,
-  };
-}
-
+import { ownerAccess } from "./owner-seat";
 /** The call screen for the call's owner, through the React SDK's own call UI. */
 export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
   const { profile, failure, retry } = useSession();
@@ -183,11 +41,7 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
     return () => {
       unsubscribe();
       window.removeEventListener("pagehide", pagehide);
-      void owned.close().then(() => {
-        // A leave the server never acknowledged also ends in `left`, but the seat may still be live: keep the join key so a return reuses it.
-        const { status, lastError } = owned.getSnapshot().connection;
-        if (status === "left" && !lastError) owner.clearReload();
-      });
+      void owned.close().then(() => owner.afterClose(owned.getSnapshot().connection));
     };
   }, [spaceId, owner]);
   const leave = () => {
