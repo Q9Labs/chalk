@@ -149,6 +149,25 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.assert_blocked(lambda: release.select(self.github(held(), latency='failed'), None), 'failed')
         release.select(self.github(held()), None)
 
+    def promoted_sha(self, github):
+        release.auto_promote(github, None)
+        line = [line for line in self.output.read_text().splitlines() if line.startswith('sha=')][-1]
+        return line.removeprefix('sha=')
+
+    def test_automatic_promotion_names_a_held_cut_whose_gates_all_passed(self):
+        self.assertEqual(self.promoted_sha(self.github(held())), SHA)
+
+    def test_automatic_promotion_waits_for_the_latency_verdict_and_never_takes_an_override(self):
+        self.assertEqual(self.promoted_sha(self.github(held(), latency=None)), '')
+        self.assertEqual(self.promoted_sha(self.github(held(), latency='failed')), '')
+        self.assertEqual(self.promoted_sha(self.github(held(), scorecard='gated-breach')), '')
+        with patch.dict(os.environ, SCORECARD_OVERRIDE='accepted by a person'):
+            self.assertEqual(self.promoted_sha(self.github(held(), scorecard='gated-breach')), '')
+
+    def test_automatic_promotion_skips_what_production_already_runs(self):
+        self.previous['target_sha'] = SHA
+        self.assertEqual(self.promoted_sha(self.github(held())), '')
+
     def test_a_failed_proof_keeps_its_own_result_whatever_the_latency_says(self):
         self.assert_blocked(lambda: release.select(self.github(held('failed')), None), 'failed')
         self.assert_blocked(lambda: release.select(self.github(held(None), latency=None), None), None)
