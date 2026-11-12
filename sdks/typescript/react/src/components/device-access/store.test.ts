@@ -4,10 +4,6 @@ import { isDeviceAccessFailure } from "./model";
 import type { DevicePorts, Listenable } from "./ports";
 import { DeviceAccessStore } from "./store";
 
-// The store gets its resolver through the card chunk, which pulls in the whole UI kit; the tests load the resolver alone.
-const loadCard = vi.hoisted(() => vi.fn(() => import("./resolve")));
-vi.mock("./load-card", () => ({ loadDeviceAccessCard: loadCard }));
-
 class FakeTarget implements Listenable {
   readonly #listeners = new Map<string, Set<() => void>>();
   addEventListener(type: string, listener: () => void) {
@@ -38,6 +34,16 @@ class FakePermission extends FakeTarget {
 
 const ARM = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
+// The real loader carries the whole UI kit; the tests load the resolver alone, and one test makes the download fail.
+let failNextDownload = false;
+const loadResolver = async () => {
+  if (failNextDownload) {
+    failNextDownload = false;
+    throw new Error("chunk");
+  }
+  return import("./resolve");
+};
+
 function setup(options: { permission?: string; devices?: string[]; userAgent?: string; askable?: boolean } = {}) {
   const permission = new FakePermission(options.permission ?? "denied");
   const mediaDevices = Object.assign(new FakeTarget(), { present: options.devices ?? [], enumerateDevices: async () => (mediaDevices.present ?? []).map((kind) => ({ kind })) });
@@ -48,7 +54,7 @@ function setup(options: { permission?: string; devices?: string[]; userAgent?: s
     window,
     userAgent: options.userAgent ?? ARM,
   };
-  const store = new DeviceAccessStore(ports);
+  const store = new DeviceAccessStore(ports, loadResolver);
   const stop = store.subscribe(() => {});
   return { store, permission, mediaDevices, window, stop };
 }
@@ -74,12 +80,15 @@ describe("DeviceAccessStore", () => {
 
   it("retries when the person allowed the site between reading the permission and watching it", async () => {
     let queries = 0;
-    const store = new DeviceAccessStore({
-      permissions: { query: async () => Object.assign(new FakeTarget(), { state: ++queries === 1 ? "denied" : "granted" }) },
-      mediaDevices: undefined,
-      window: new FakeTarget(),
-      userAgent: ARM,
-    });
+    const store = new DeviceAccessStore(
+      {
+        permissions: { query: async () => Object.assign(new FakeTarget(), { state: ++queries === 1 ? "denied" : "granted" }) },
+        mediaDevices: undefined,
+        window: new FakeTarget(),
+        userAgent: ARM,
+      },
+      loadResolver,
+    );
     store.subscribe(() => {});
     const retry = vi.fn(async () => {});
     await store.report("microphone", failure("media.permission_denied"), retry);
@@ -174,7 +183,7 @@ describe("DeviceAccessStore", () => {
 
   it("marks the card unavailable when its code does not download, and recovers on the next report", async () => {
     const { store } = setup();
-    loadCard.mockRejectedValueOnce(new Error("chunk"));
+    failNextDownload = true;
     await store.report("microphone", failure("media.permission_denied"), async () => {});
     expect(store.getSnapshot()).toMatchObject({ issues: {}, unavailable: true });
     await store.report("microphone", failure("media.permission_denied"), async () => {});

@@ -213,6 +213,8 @@ def builds_fresh_artifacts():
 
 
 def require_gate(github, args):
+    # The deploy tooling comes from the workflow revision and runs with release credentials, so only master may run it.
+    require(os.environ.get('GITHUB_REF') == 'refs/heads/master', 'run the Release workflow from master')
     if os.environ.get('ENFORCE_ENTRY_OWNERSHIP') == 'true':
         require(os.environ.get('RELEASE_MANAGED') == 'true' and not os.environ.get('MANIFEST_RUN_ID'),
                 'entry enforcement requires a fresh managed manifest, not reuse of an existing artifact')
@@ -224,6 +226,7 @@ def require_gate(github, args):
     # A called workflow sees its caller's event. Scheduled nightly plans its cut on the latest push Gate, so its child
     # applies the same rule; an unfinished 01:17 scheduled Gate must not fail a cut that the plan already accepted.
     push_only = os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+    require(github.is_on_master(target), f'{target} is not on master; merge it first')
     github.wait_for_gate(target, push_only=push_only)
     require(github.has_green_gate(target, push_only=push_only),
             f'{target} has no successful {"push " if push_only else ""}Gate run on master. Pull request Gate runs do not count: '
@@ -325,6 +328,11 @@ def select(github, args):
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
     audit = promotion_override(github, info)
     previous = previous_production(github)
+    try:
+        ancestor(previous['target_sha'], info['target_sha'])
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"the held nightly {info['target_sha']} does not contain production's {previous['target_sha']} "
+                         '(a hotfix is live); cut a new nightly first') from error
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
     if audit:
         result['scorecard_override'] = audit

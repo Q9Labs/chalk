@@ -181,6 +181,16 @@
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:mock-calls",
+      "owner": "TypeScript",
+      "catches": "A new assertion that our own wiring called a mock, which proves nothing a user sees.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New lane (PR 1214); no failure history yet."
+    },
+    {
       "id": "gate:react-tokens",
       "owner": "Design system",
       "catches": "A React SDK component that reaches past the design tokens.",
@@ -392,6 +402,126 @@
       "minutes": 5.1,
       "record": "caught",
       "sample": "3 of 10 pull request runs failed (noise); 2 of 14 weekly runs were real catches. 12 Nov: 1 noise failure, `TestCaptureReadinessShutdownTriggers` (run 43192587605); 5 of 6,400 loaded subtest runs failed before and 0 of 6,400 after PR 1211."
+    },
+    {
+      "id": "workflow:gate.yml#sync-parts",
+      "owner": "Sync",
+      "catches": "Sync server or client tests and reliability checks failing, run as two jobs side by side.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Split from the Sync job (PR 1210); no failure history of its own yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#plan",
+      "owner": "Release",
+      "catches": "A hotfix request for a commit that is not on master or whose push Gate did not pass.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#retain",
+      "owner": "Release",
+      "catches": "A hotfix that would lose the release now running as its rollback baseline.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#release",
+      "owner": "Release",
+      "catches": "A hotfix release that fails to build or deploy.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#smoke",
+      "owner": "Release",
+      "catches": "A hotfix that breaks a real call in production.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#rollback",
+      "owner": "Release",
+      "catches": "A failed hotfix that is not rolled back to the previous release.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#result",
+      "owner": "Release",
+      "catches": "A hotfix run whose outcome is not reported.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#plan",
+      "owner": "Release",
+      "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",
+      "runs": ["weekly"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#deploy-current",
+      "owner": "Release",
+      "catches": "The newest passed cut failing to deploy on nightly.",
+      "runs": ["weekly"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#roll-back",
+      "owner": "Release",
+      "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
+      "runs": ["weekly"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#roll-forward",
+      "owner": "Release",
+      "catches": "Rolling forward again after a rollback failing.",
+      "runs": ["weekly"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#result",
+      "owner": "Release",
+      "catches": "A rehearsal whose outcome is not reported.",
+      "runs": ["weekly"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet."
     },
     {
       "id": "workflow:gate.yml#sync",

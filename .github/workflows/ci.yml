@@ -413,7 +413,7 @@ jobs:
           metadata_file="${RUNNER_TEMP}/${COMPONENT}-metadata.json"
           docker buildx build \
             --platform linux/arm64 \
-            --provenance=mode=max \
+            --provenance=false \
             --build-context "$source_context" \
             --build-context mcp_source=features/mcp/api \
             --cache-from "type=gha,scope=chalk-${COMPONENT}" \
@@ -433,7 +433,7 @@ jobs:
           if [[ "$COMPONENT" == api && "${{ needs.plan-managed.outputs.recorder_control }}" == true ]]; then
             control_metadata="${RUNNER_TEMP}/recorder-control-metadata.json"
             docker buildx build \
-              --platform linux/arm64 --provenance=mode=max \
+              --platform linux/arm64 --provenance=false \
               --build-context api_source=apps/api \
               --build-context mcp_source=features/mcp/api \
               --cache-from type=gha,scope=chalk-recorder-control \
@@ -1003,6 +1003,11 @@ jobs:
       media_sha256: ${{ steps.prepare.outputs.media_sha256 }}
       run_id: ${{ github.run_id }}
     steps:
+      - name: Refuse a workflow revision that is not master before any deploy job can start
+        # Every deploy depends on this job, and a reuse deploy does not wait for require-gate, so the check sits here as well.
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         with:

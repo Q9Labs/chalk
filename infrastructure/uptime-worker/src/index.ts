@@ -1,4 +1,6 @@
-export interface Env {
+import { runJoinProbe, type ProbeEnv } from "./probe";
+
+export interface Env extends ProbeEnv {
   CHALK_ENVIRONMENT?: "production" | "nightly";
   API_BASE_URL?: string;
   API_MONITOR_BASE_URL?: string;
@@ -18,12 +20,24 @@ function baseURL(value: string): URL {
 
 async function check(name: string, url: URL): Promise<CheckResult> {
   try {
-    const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Chalk-Uptime/1.0" } });
+    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), headers: { "User-Agent": "Chalk-Uptime/1.0" } });
     await response.body?.cancel();
     return { name, healthy: response.status === 200, status: response.status };
   } catch {
     return { name, healthy: false };
   }
+}
+
+async function notify(webhook: URL, content: string): Promise<void> {
+  const response = await fetch(webhook, {
+    method: "POST",
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
+  });
+  await response.body?.cancel();
+  if (!response.ok) throw new Error(`Discord alert delivery failed (HTTP ${response.status})`);
 }
 
 export async function runMonitorCycle(env: Env): Promise<{ readonly checked: number; readonly failed: number }> {
@@ -38,18 +52,15 @@ export async function runMonitorCycle(env: Env): Promise<{ readonly checked: num
   const results = await Promise.all([check("API health", new URL("/healthz", api)), check("API readiness", new URL("/readyz", api)), check("Sync health", new URL("/healthz", sync)), check("Sync readiness", new URL("/readyz", sync))]);
   const failures = results.filter((result) => !result.healthy);
   if (failures.length > 0) {
-    const response = await fetch(webhook, {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(10_000),
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content: `Chalk uptime check failed\n${failures.map((failure) => `${failure.name}: ${failure.status === undefined ? "unreachable or timed out" : `HTTP ${failure.status}`}`).join("\n")}\nAn engineer must investigate. This check does not identify an affected Tenant or prove recovery.`,
-        allowed_mentions: { parse: [] },
-      }),
-    });
-    await response.body?.cancel();
-    if (!response.ok) throw new Error(`Discord alert delivery failed (HTTP ${response.status})`);
+    await notify(
+      webhook,
+      `Chalk uptime check failed\n${failures.map((failure) => `${failure.name}: ${failure.status === undefined ? "unreachable or timed out" : `HTTP ${failure.status}`}`).join("\n")}\nAn engineer must investigate. This check does not identify an affected Tenant or prove recovery.`,
+    );
+  }
+  // The join probe stays off until its Space, key and state binding are configured, so deploying this code changes nothing by itself.
+  if (env.PROBE_SPACE_ID) {
+    const message = await runJoinProbe(env, api, sync);
+    if (message) await notify(webhook, message);
   }
   return { checked: results.length, failed: failures.length };
 }
@@ -63,7 +74,8 @@ export default {
     if (!env.OPS_MANUAL_RUN_TOKEN || request.headers.get("authorization") !== `Bearer ${env.OPS_MANUAL_RUN_TOKEN}`) return Response.json({ error: "unauthorized" }, { status: 401 });
     try {
       return Response.json(await runMonitorCycle(env));
-    } catch {
+    } catch (error) {
+      console.error("uptime cycle failed", error instanceof Error ? error.message : "unknown error");
       return Response.json({ error: "Uptime check or alert delivery failed" }, { status: 502 });
     }
   },
