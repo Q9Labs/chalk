@@ -7314,6 +7314,47 @@ describe("own-SFU subscription state", () => {
     );
   });
 
+  it("replaces the connection once when a publish in flight fails on the same dead session", async () => {
+    let replacements = 0;
+    await withTimedHarness(
+      async (h) => {
+        let gone = false;
+        h.transport.listSubscriptions = async () => {
+          if (gone) throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
+          return [];
+        };
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        const failPublish = Promise.withResolvers<void>();
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        h.transport.addTracks = async (input) => {
+          if (input.connectionId !== "own-connection-1") return addTracks(input);
+          await failPublish.promise;
+          throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
+        };
+        h.client.prepareLocalTrack("camera", new FakeTrack("local-camera", "video") as unknown as MediaStreamTrack);
+        const enabling = h.client.setLocalPublicationTarget({ operationId: "cam-on", participantId: "participant-1", source: "camera", enabled: true }).catch(() => undefined);
+        await vi.advanceTimersByTimeAsync(0);
+        gone = true;
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(12_000);
+        // The read found the session gone while the publish still held the SDP queue, so nothing was replaced yet.
+        expect(replacements).toBe(0);
+        failPublish.resolve();
+        await enabling;
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(replacements).toBe(1);
+      },
+      {
+        bootstrap: { ...own, capabilities: { ...own.capabilities, keepsIdleSession: true } },
+        replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`),
+      },
+    );
+  });
+
   it("restarts stall detection when the SFU resumes a paused camera, so a keyframe wait is no stall", async () => {
     await withTimedHarness(
       async (h) => {

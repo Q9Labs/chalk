@@ -2082,11 +2082,16 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // The SFU answers 404 or 410 once it has dropped this session, and ICE cannot bring a dropped session back. Replace now,
   // instead of waiting for the browser to give up on the path and for the ICE restart on the dead session to fail.
+  // It queues behind any publish in flight, whose own failure replaces the connection; then there is nothing left to replace.
   #replaceGoneConnection(): void {
     const generation = this.#generation;
-    if (this.#replacementAttemptedGeneration === generation) return;
-    void this.#replaceMediaConnectionForRecovery(generation, "remote_signaling_failure")
-      .then(() => this.#republishPreparedTracksAfterRecovery(generation))
+    const connection = this.#connection;
+    void this.#serializeSDP(async () => {
+      if (generation !== this.#generation || this.#stopped || connection !== this.#connection || this.#replacementAttemptedGeneration === generation) return false;
+      await this.#replaceMediaConnectionForRecovery(generation, "remote_signaling_failure");
+      return true;
+    })
+      .then((replaced) => (replaced ? this.#republishPreparedTracksAfterRecovery(generation) : undefined))
       .catch((error: unknown) => {
         if (generation === this.#generation && !this.#stopped) this.#reportError(error);
       });
