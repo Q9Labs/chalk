@@ -7,10 +7,10 @@ import { JOURNEYS, SCHEMES, SIZES } from "./journeys.mjs";
 import { MIN_TARGET, pageChecks } from "./page-checks.mjs";
 
 const FIXED_TIME = new Date("2026-01-15T10:00:00Z");
-const STILL = "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}";
+const STILL = "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}.chalk-board-cursors{visibility:hidden!important}";
 const PER_CHECK = 25;
-/** Parts of a screen that move on their own (the live input meter) or hold this server's address (the invite QR code), and remote board cursors that drift, are painted over in every screenshot. */
-const LIVE = '[role="meter"], .chalk-invite-qr, .chalk-board-cursor, .chalk-board-cursor *';
+/** Parts of a screen that move on their own (the live input meter) or hold this server's address (the invite QR code) are painted over in every screenshot. Remote board cursors roam by the clock, so STILL hides their layer. */
+const LIVE = '[role="meter"], .chalk-invite-qr';
 
 /**
  * Runs in every page before its own scripts. A screen that changes by itself after a few seconds (the call's header and dock

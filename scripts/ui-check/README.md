@@ -8,7 +8,7 @@ The workflow is `.github/workflows/ui-check.yml`. Its job is named **UI check** 
 
 The call-state harness (`apps/web/vite.call-states.config.ts`) renders the real call and pre-join screens with fake camera tracks and a stubbed Space client. `journeys.mjs` lists the journeys: pre-join; calls of 1, 2, 4, 9 and 30 Participants; chat, people, details, settings, share, reactions and the phone More sheet; the board; screen share; mute and camera toggles; long names; reconnecting; leave. `capture.mjs` walks each one at phone (390 wide), tablet (820) and desktop (1440), in light and dark (the tablet in dark only). Chalk has no right-to-left language, so there is no right-to-left pass.
 
-Every run uses a fixed clock, reduced motion, finished animations and loaded fonts. A screenshot is taken only after two shots a moment apart match, and the live microphone meter and the invite QR code are masked.
+Every run walks a static build of the harness (no dev server, so module loading takes no time that varies with load), with a fixed clock, finished animations and loaded fonts. A timer of 2.5 seconds or more never fires, so nothing hides or leaves by itself. The page must stay quiet for 300 ms before a frame is taken, and a screenshot is taken only after two shots a moment apart match. The live microphone meter and the invite QR code are masked, and the remote board cursors, which roam by the clock, are hidden.
 
 ## What fails
 
@@ -25,7 +25,7 @@ The `report` job posts one sticky comment (marked `<!-- chalk-ui-check -->`) wit
 node scripts/ui-check/run.mjs --base origin/master
 ```
 
-This checks the base ref out in a temporary worktree, installs it and walks both sides, so it needs about 6 minutes and a machine with 4 cores; use Instabox, not a laptop. `--only chat,call-9` walks the journeys whose id starts with those prefixes. The report goes to the `ui-check-report` folder: the comment text, the full findings as JSON, and the screenshots.
+This checks the base ref out in a temporary worktree, installs it and walks both sides, so it needs about 4 minutes and a machine with 4 cores; use Instabox, not a laptop. `--only chat,call-9` walks the journeys whose id starts with those prefixes. The report goes to the `ui-check-report` folder: the comment text, the full findings as JSON, and the screenshots.
 
 `--base-cache DIR` keeps the base walk in `DIR`. A later run reuses it when the base commit and the check code are the same, which is how the pull request run walks only the branch.
 
