@@ -2311,6 +2311,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#replacementAttemptedGeneration = generation;
     const replaceMediaConnection = this.#replaceMediaConnection;
     const promise = Promise.resolve().then(async () => {
+      // A restart that ran while this was queued already adopted a binding; asking again would replace that one.
+      this.#requireGeneration(generation);
       const bootstrap = await replaceMediaConnection();
       this.#requireGeneration(generation);
       validateBootstrap(bootstrap);

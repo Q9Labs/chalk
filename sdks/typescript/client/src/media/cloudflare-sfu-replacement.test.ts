@@ -46,6 +46,41 @@ it("does not publish a microphone muted during remote connection replacement", a
   );
 });
 
+it("does not ask for a replacement after a restart adopted a binding while the request was queued", async () => {
+  // The replacement is requested a few microtasks after a signaling failure. Restart at every step of that window.
+  let restartedInWindow = 0;
+  for (let hops = 0; hops < 40; hops++) {
+    const replaceMediaConnection = vi.fn(async () => bootstrap(`replacement-${replaceMediaConnection.mock.calls.length}`));
+    await withTimedHarness(
+      async (h) => {
+        await h.client.start(fakeStream());
+        await vi.advanceTimersByTimeAsync(0);
+        h.transport.snapshot = publicationSnapshot(1, 1, "remote|camera");
+        const addTracks = h.transport.addTracks.bind(h.transport);
+        vi.spyOn(h.transport, "addTracks").mockImplementation(async (input) => {
+          if (input.connectionId === "connection-1") {
+            throw new CloudflareSFUError("receiver expired", "signaling_failed", { status: 410, retryableConnection: true });
+          }
+          return addTracks(input);
+        });
+
+        const pulling = h.client.refreshRemotePublications().catch(() => undefined);
+        for (let hop = 0; hop < hops; hop++) await Promise.resolve();
+        const callsBeforeRestart = replaceMediaConnection.mock.calls.length;
+        const restarting = h.client.restart(bootstrap("restarted")).catch(() => undefined);
+        await vi.advanceTimersByTimeAsync(0);
+        await Promise.all([pulling, restarting]);
+        await vi.advanceTimersByTimeAsync(0);
+
+        if (callsBeforeRestart === 0) restartedInWindow++;
+        expect(replaceMediaConnection).toHaveBeenCalledTimes(callsBeforeRestart);
+      },
+      { replaceMediaConnection },
+    );
+  }
+  expect(restartedInWindow).toBeGreaterThan(0);
+});
+
 function remoteMicrophoneRoster(sequence: number, trackName?: string): CloudflareSFUPublicationSnapshot {
   const publications = trackName ? [{ participantId: "participant-2", source: "microphone" as const, publicationId: versionedPublicationID("remote-1", "0", trackName) }] : [];
   return { incarnation: 1, sequence, publications };
