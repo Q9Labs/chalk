@@ -580,21 +580,21 @@ Motion confirms state changes and spatial relationships. It never performs decor
 
 Each role is one custom property in the shared styles, holding a duration and a curve, so a component writes `transition: opacity var(--chalk-motion-enter)` and never a raw timing. `expo` is `cubic-bezier(0.16, 1, 0.3, 1)` and `move` is `cubic-bezier(0.2, 0.8, 0.2, 1)`.
 
-| Motion                   | Token                                         | Duration         | Curve          |
-| ------------------------ | --------------------------------------------- | ---------------- | -------------- |
-| Hover and press          | `--chalk-motion-press`                        | `150ms`          | ease-out       |
-| Tooltip                  | `--chalk-motion-tooltip`                      | `120ms`          | ease-out       |
-| Switch and checkbox      | `--chalk-motion-toggle`                       | `180ms`          | expo           |
-| Menu and popover in, out | `--chalk-motion-enter`, `--chalk-motion-exit` | `180ms`, `160ms` | expo, ease-out |
-| Toast in, toast out      | `--chalk-motion-toast`, `--chalk-motion-exit` | `200ms`, `160ms` | expo, ease-out |
-| Panel card               | `--chalk-motion-card`                         | `200ms`          | expo           |
-| Phone sheet              | `--chalk-motion-sheet`                        | `240ms`          | expo           |
-| Copy icon morph          | `--chalk-motion-copy`                         | `200ms`          | expo           |
-| Stage move               | `--chalk-motion-move`                         | `220ms`          | move           |
-| Segmented control thumb  |                                               | `180ms`          | expo           |
+| Motion                   | Token                                         | Duration         | Curve                                 |
+| ------------------------ | --------------------------------------------- | ---------------- | ------------------------------------- |
+| Hover and press          | `--chalk-motion-press`                        | `150ms`          | ease-out                              |
+| Tooltip                  | `--chalk-motion-tooltip`                      | `120ms`          | ease-out                              |
+| Switch and checkbox      | `--chalk-motion-toggle`                       | `180ms`          | expo                                  |
+| Menu and popover in, out | `--chalk-motion-enter`, `--chalk-motion-exit` | `180ms`, `160ms` | expo, ease-out                        |
+| Toast in, toast out      | `--chalk-motion-toast`, `--chalk-motion-exit` | `200ms`, `160ms` | expo, ease-out                        |
+| Panel card               | `--chalk-motion-card`                         | `200ms`          | expo                                  |
+| Phone sheet              | `--chalk-motion-sheet`                        | `240ms`          | expo                                  |
+| Copy icon morph          | `--chalk-motion-copy`                         | `200ms`          | expo                                  |
+| Stage move               | `--chalk-motion-move`                         | `220ms`          | move                                  |
+| Segmented control thumb  |                                               | `180ms`          | expo                                  |
 | Jump highlight           |                                               | `1600ms`         | ease-out (fades in, holds, fades out) |
-| Chrome idle fade         |                                               | `250ms`          | ease-out       |
-| Limbo veil               |                                               | `300ms`          | ease-out       |
+| Chrome idle fade         |                                               | `250ms`          | ease-out                              |
+| Limbo veil               |                                               | `300ms`          | ease-out                              |
 
 - Animate transform and opacity only. Never animate width, height, top, left, or a box shadow. The one filter in the call is the static limbo blur.
 - Every change on the stage moves: a layout switch, someone joining or leaving, a share starting or stopping, a panel opening or closing, and the strip moving between below and beside. Each tile is keyed by its person or share and is placed in its final box at once. It then plays a transform from its old box to the new one (translate and scale) over `220ms`. The video element is never re-created or re-parented during the move. A new tile fades in from `97%` scale over `220ms`, and a leaving tile fades out over `160ms`.
