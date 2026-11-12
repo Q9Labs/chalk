@@ -381,12 +381,17 @@ jobs:
       - name: Run the API gate
         run: apps/api/scripts/gate.sh
 
-  sync:
-    name: Sync gate
+  # The Sync server tests and the client proofs against it take about three minutes each, so they run side by side.
+  sync-parts:
+    name: Sync ${{ matrix.part }}
     needs: changes
     if: ${{ !cancelled() && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [server, clients]
     env:
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
@@ -441,10 +446,24 @@ jobs:
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
 
       - name: Install Chromium for the browser reconnection proof
+        if: matrix.part == 'clients'
         uses: ./.github/actions/setup-playwright
         with:
           browsers: chromium
 
       # The correctness harness uses one isolated PostgreSQL database for the Sync and SDK proofs.
-      - name: Run the Sync gate and correctness harness
-        run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness
+      - name: Run the Sync ${{ matrix.part }} part of the correctness harness
+        run: scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness ${{ matrix.part }}
+
+  # The required context. A part the planner did not select is skipped, which counts as passed.
+  sync:
+    name: Sync gate
+    needs: sync-parts
+    if: always()
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    steps:
+      - name: Require every Sync part to pass
+        run: |
+          echo "Sync parts: ${{ needs.sync-parts.result }}"
+          [[ "${{ needs.sync-parts.result }}" == "success" || "${{ needs.sync-parts.result }}" == "skipped" ]]
