@@ -2,77 +2,32 @@
 
 ## Live-class checks
 
-Run these checks before treating a class as healthy. Record times in **PKT**.
-The [in-class response checklist](../../docs/proofs/class-checklist/README.md#in-class-response-28-october-2026-failures)
-has the short recovery steps; these cases are not claimed as automated passes.
+Operator checks before treating a class as healthy. Record times in PKT. They are not automated.
 
-1. **W33 — media recovery exhaustion:** confirm audio/video in both directions even when chat and the board work. For missing audio, mute then unmute; if still broken, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
-2. **W34 — slow media start / failed join:** watch camera/microphone startup through the join result. If it fails, check permissions and device selection, use **Report a problem** when available, and rejoin once. If that fails, use the agreed fallback.
-3. **W35 — local mic on / remote muted:** compare the local mic button with a classmate's mute badge and received audio, including on iPad. Mute then unmute; if still silent, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
+1. **W33, media recovery exhaustion:** confirm audio and video in both directions even when chat and the board work. For missing audio, mute then unmute; if still broken, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
+2. **W34, slow media start or failed join:** watch camera and microphone startup through the join result. If it fails, check permissions and device selection, use **Report a problem** when available, and rejoin once. If that fails, use the agreed fallback.
+3. **W35, local mic on but remote muted:** compare the local mic button with a classmate's mute badge and received audio, including on iPad. Mute then unmute; if still silent, use **Report a problem** when available and rejoin once. If that fails, use the agreed fallback.
 
-For every unresolved failure, include the Episode ID, PKT time and device/browser
-in the report. Do not infer a browser or network cause from the symptom alone.
+For every unresolved failure, report the Episode ID, PKT time and device or browser. Do not infer a browser or network cause from the symptom alone.
 
 ## Automated local proof
 
-`tests/class-checklist.e2e.ts` automates C1–C7 from the class go/no-go checklist.
-It uses the real web app, local API, PostgreSQL-backed Sync/whiteboard and the
-approved **development** Cloudflare SFU. Camera, microphone and moving display
-capture are deterministic sources; admission, networking, media transport,
-decoding, rendering and user actions are not mocked. Teacher, Student and Admin
-are independent browser contexts/processes, using the web app's invite roles
-(creator/guests); this is not a test of TH's role integration or account login.
+`tests/class-checklist.e2e.ts` automates C1 to C7 of the class go/no-go checklist against the real web app, local API, PostgreSQL-backed Sync and the development Cloudflare SFU. Only camera, microphone and display sources are synthetic; admission, transport, decoding and rendering are not mocked. It does not test TH's role integration or account login.
 
-Run on a disposable Instabox with root dependencies, Go, Elixir dependencies,
-Chromium (`pnpm exec e2e-web install chromium --with-deps` and
-`pnpm exec playwright install --with-deps chromium`), Xvfb and Docker available:
+Run on a disposable Instabox with root dependencies, Go, Elixir dependencies, Chromium, Xvfb, Docker, and passwordless `sudo` with `setpriv`, `iptables` and `ip6tables` (C5 uses them to drop the student's traffic, including the SFU UDP that DevTools cannot block; rules are removed in `finally`):
 
 ```sh
 GOTOOLCHAIN=auto CHALK_CLASS_SFU_FILE="$HOME/class-sfu.json" CHALK_CLASS_RUN=1 xvfb-run -a pnpm test:class-checklist
 ```
 
-Supply the private JSON file over SSH, never in Git: `environment` must be
-`development`, `source` must be `chalk-local-dev`, and `appId`/`appSecret` must
-come from the approved local-development SFU item. The supervisor passes the
-credentials only to local services and owns cleanup on success and failure.
-Never point this command at production or nightly.
+The JSON file is supplied over SSH, never in Git: `environment` is `development`, `source` is `chalk-local-dev`, plus `appId`/`appSecret` from the local-development SFU item. Never point this at production or nightly. Append `--grep '^C1:'` for a short diagnosis.
 
-There was no existing slow split. `CHALK_CLASS_CHECKLIST=1` selects only this
-suite and extends its per-test timeout to eleven minutes; ordinary `test:e2e`
-still selects the existing call and board suites. A sixth fresh-call control uses the same native-browser media assertions before
-any outage; failed media runs also save bounded sender/receiver audio evidence.
-No model assertions or cache
-entries are used. Retries remain disabled. Each fresh invocation starts its own
-local stack and writes case outcomes/timings and screenshots under
-`.private/class-checklist/run-<CHALK_CLASS_RUN>/`. A setup failure before a case
-starts is **blocked**, not passed; a dependent C6 is not run if C5 fails.
+Judgment worth keeping:
 
-Every roster convergence and media toggle also runs the shared participant
-agreement invariant: local controls, each peer's badges, per-sender playback
-energy, and advancing decoded video must agree. The fast packed-consumer gate
-uses the same invariant; its full PR matrix adds independent Sync/media faults
-in Chromium and iPad-profile WebKit. Recovery proof deadlines read the SDK's
-actual recovery defaults rather than racing them with a shorter fixed wait.
+- A setup failure before a case starts is **blocked**, not passed. C6 does not run if C5 fails.
+- C2 and C7 share one eight-minute background interval, with the student's camera off and its tab hidden by another window. This tests real background behaviour, not an accelerated clock, and it does not claim intensive timer throttling of an active WebRTC connection.
+- C4 uses Chromium offline emulation. Nothing here exercises a physical Wi-Fi adapter or a particular ISP, and C8 and PC/ISP comparisons stay outside this suite.
+- Recovery deadlines read the SDK's actual recovery defaults instead of a shorter fixed wait.
+- C6 checks distinguishable tones and advancing decoded video, not speech recognition.
 
-C2 and C7 share one eight-minute background interval. C5 and C6 share a recovered
-call, so a failing 60-second recovery does not prevent the media check after a
-successful 140-second recovery. The student is muted with its camera off during background; another tab
-in its own window hides it. CDP `noDefaults` avoids forcing it visible. This
-tests real background behaviour, not a synthetic freeze or an accelerated
-clock. It does not claim an active WebRTC connection enters intensive timer
-throttling. C4 uses Chromium network-offline emulation. C5 additionally drops
-the student's IPv4/IPv6 non-loopback traffic and local stack TCP traffic with a Linux
-process-group firewall rule, including SFU/UDP traffic that DevTools does not
-block. It needs passwordless `sudo`, `setpriv`, `iptables` and `ip6tables`; rules are removed in `finally`.
-Neither test exercises a physical Wi-Fi adapter or a particular ISP.
-C6 uses distinguishable tones rather than speech
-recognition; it checks audio received both ways and advancing decoded video
-and restarted-share frames. C8/PC/ISP comparisons remain outside this suite.
-
-The harness supplies `/space` explicitly because the local launcher's route
-scanner does not recognize the current pathless layout. It also starts an
-isolated PostgreSQL container and waits for the final server (not the temporary
-entrypoint server) before handing it to the supervisor. The container and its
-anonymous data volume are removed in `finally`. No product code is changed for
-either startup workaround. Use e2e's normal `--grep` flag for a short diagnosis,
-for example append `--grep '^C1:'` to the command above.
+Results and screenshots go to `.private/class-checklist/run-<CHALK_CLASS_RUN>/`.

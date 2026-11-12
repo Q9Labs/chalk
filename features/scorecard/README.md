@@ -1,184 +1,37 @@
 # Performance scorecard
 
-Every iteration should show what improved and what regressed. A run writes one scorecard per media plane, and `scorecard diff` compares it with a baseline using the budgets in `perf/budgets.json`.
+Every iteration should show what improved and what regressed. A run writes one `chalk.scorecard/v1` file per media plane, and `scorecard diff` compares it with a baseline using the budgets in `perf/budgets.json`. `schema.mjs` owns the shape and the metric registry (`METRICS`, one unit per id). `scorecard.mjs build --help`-style flags and the input adapters in `adapters/` define which report becomes which metrics. A scorecard uses `chalk_sfu` as its plane when the metrics do not depend on one, such as bundle sizes.
 
 ## Budgets
 
-`perf/budgets.json` has three parts:
+`perf/budgets.json` is the only budget file: `_comment` records one reason per change, `callRun` holds the web call check settings, and `budgets` maps a metric id to `{ max_p50?, max_p95?, min_p50?, tolerancePct, gate }`. Pass-rate metrics use `min_p50` because higher is better. `gate: true` fails a result over the limit; `gate: false` only warns. A metric from a real node starts with `gate: false` and flips in its own pull request once seven nightly values from at least three nights have a run-to-run spread below `tolerancePct`. Deterministic metrics such as bundle sizes start gated. The `chalk_sfu.action.*` entries gate from the start with a loose ceiling (twice the worst early p95) and tighten by the same rule. See [the budget doc](../../docs/performance-budget.md#changing-a-budget).
 
-- `_comment`: the history of budget changes, one reason per change.
-- `callRun`: the settings the web call performance check uses (devices, repeats, leak budgets).
-- `budgets`: one entry per metric id, `{ max_p50?, max_p95?, tolerancePct, gate }`. An entry needs at least one limit.
+`scorecard.mjs diff --current a.json --baseline b.json` prints ❌ for over budget, ⚠️ for worse than `tolerancePct` against the baseline but within budget, and ✅ for more than 5% better. With `--fail-on-gate`, only a ❌ on a gated entry fails.
 
-`gate: true` means a result over the limit fails the check. `gate: false` only warns. A metric starts with `gate: false` when it comes from a real node, and flips to true in its own pull request once seven nightly values from at least three different nights have a run-to-run spread below its `tolerancePct`. Deterministic pull request metrics, such as bundle sizes, start with `gate: true`. The `chalk_sfu.action.*` entries are the exception: they gate with a loose ceiling of twice the worst p95 in the earliest evidence, and the same rule later tightens them. [The budget doc](../../docs/performance-budget.md#changing-a-budget) has the details.
+## Tiers
 
-The web call check bounds the median of its repeated runs, so its entries use `max_p50`. `web.<device>.<scenario>.<metric>` is one scenario on one device, and `web.route.*` is the pre-join route bundle.
+- **Pull request.** `pr-tier.sh` runs inside the existing Gate jobs and adds no job. It scores call bundle sizes and the SFU loopback and impairment tests against the latest successful master push (`scorecard-web` and `scorecard-sfu` artifacts) and updates one sticky comment.
+- **Nightly.** `nightly.sh` runs in the `scorecard` job of `Cut nightly`, even when the cut fails or is held. It compares the run's `chalk_sfu` latency card with the median of the last seven nightly runs, appends to `history.jsonl` on the `scorecard-history` branch, regenerates the trends file, and keeps one open `Scorecard regression` issue while a gated metric is over budget. Nightly measures staging only, never the production node.
+- **Nightly gate.** The cut's `proof` job runs the real-call proof on `chalk_sfu`, then `latency` runs `pnpm prod:latency --planes chalk_sfu` against the nightly API. A failed latency run, a gated `chalk_sfu.action.*` p95 over its ceiling, or a missing or empty card blocks promotion without touching the deploy or release record. `evaluate.mjs` reads `perf/budgets.json` from the scored SHA with `git show` and saves a SHA-and-run-bound `passed`, `gated-breach` or `missing` verdict. Every gated `chalk_sfu.action.*` metric is required evidence, so a card that lacks one with samples is `missing`, never a pass. A Cloudflare card alone cannot replace a missing own-SFU card.
+- **Cloudflare latency (warn-only).** `.github/workflows/nightly-cf-latency.yml` runs the same kit on `cf_sfu` after a successful `Cut nightly`. It holds neither the nightly environment lock nor any cut job, so it cannot delay a cut or change the conclusion the Android release reads. Its card uploads as `warn-scorecard-nightly-cf_sfu` (which the gate's `scorecard-nightly-*` download never matches), and `SCORECARD_WARN_ONLY=true` stops `nightly.sh` from touching the regression issue. Every `cf_sfu` budget is `gate: false`. `nightly-graph.test.mjs` and `cf-sfu-card.test.mjs` pin this. Every place that shows the card also shows `plane-note.mjs`, because the two planes are not yet a fair comparison from the CI region.
+- **Promote.** After the production proof passes, the Leave run is scored against the nightly median. These jobs run only after `proof` and nothing needs them, so a failure cannot start `rollback`. A gated breach triggers one rerun of the Leave proof, and `scorecard-final` fails only if the rerun still breaches, then opens or updates the regression issue. Promote checks the nightly own-SFU proof and scorecard verdicts at selection and approval recheck. `scorecard_override` takes a written reason (non-empty) to accept failed, skipped or missing proof, gated breaches or missing evidence, and records it in the run summary and release record. SHA mismatches and invalid release artifacts still block.
 
-`budgets.mjs` converts between this file and the device and scenario view the check uses.
+## Latency diagnostics
 
-## Scorecard files
+The latency kit also writes `latency-diagnostics-<plane>.json` next to the card. It is a sidecar, never in the card, because readers that shipped earlier reject a card with an unknown field. The gate, diff, history and baseline never open it; only the `own-sfu.mjs` run summary reads it, and a missing or invalid sidecar becomes one line of text (`diagnostics.test.mjs` pins this). `perf/budgets.json` has no entries for it.
 
-`scorecard.mjs build` turns reports that other tools already write into one `chalk.scorecard/v1` file. Each flag names one input:
+- `rtt.sfu_ms` and `rtt.sync_ms` show distance from the runner to the plane under test. The kit sends nothing on the Sync socket, so it cannot disturb the SDK's liveness checks.
+- `stages` (named in `stages.mjs`) splits each action into pieces between wire events. A stage counts from the last stage reached, so a step the SDK skips is null and its time moves to the next one. Retired stage ids stay valid in older sidecars (`RETIRED_STAGE_IDS`).
+- `audio` holds `media.network_jitter_one_way_ms`, an estimate from the listener's WebRTC stats: half of each guest's SFU round trip plus the jitter buffer's average wait. It assumes a symmetric path, is not mouth to ear, and lives only in the sidecar.
+- `ice` records the selected candidate pair type and request/response counters of the joining guest, read after the join's measured stages and never inside a measured interval. Requests far above responses on the winning pair mean early ICE checks were lost, and `relay` means TURN carries the media. No address or candidate id is kept.
+- Both guests run on one host, so readings use `performance.timeOrigin + performance.now()`. `scripts/prod-proof/latency-trace.mjs` is an init script only the latency kit installs; the product SDK carries no trace code, and a failed trace read nulls that action's stage fields without dropping the cycle.
 
-| Flag            | Input                                                                                    | Metrics                                                                                                        |
-| --------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `--web`         | the report of `apps/web/scripts/check-call-performance.mjs`                              | `web.*`                                                                                                        |
-| `--sfu-tests`   | `go test -json` of `features/media/sfu` (the gate writes it when `SFU_TEST_JSON` is set) | `sfu.loopback.pass`, `sfu.impairment.pass`                                                                     |
-| `--sfu-live`    | the file the live smoke test appends to through `SFU_LIVE_SAMPLES`                       | `sfu.loss_pct`, `sfu.stalls_per_class_hour`, `sfu.admission_refusals`                                          |
-| `--sfu-load`    | a node load summary (shape below)                                                        | `sfu.cpu_work_pct_per_class`, `sfu.pps_*_per_class`, `sfu.egress_mbit_s_per_class`, `sfu.freeze_ms_per_minute` |
-| `--proof-join`  | the result file of `scripts/web-proof/join-startup.mjs`                                  | `proof.join_startup.*`                                                                                         |
-| `--proof-leave` | the Leave proof result                                                                   | `proof.leave_median_ms`                                                                                        |
-| `--device`      | the device lane's file (shape below)                                                     | `device.*`                                                                                                     |
-| `--action`      | a scorecard the latency kit wrote                                                        | `action.*`                                                                                                     |
+## Staging contention
 
-The metric ids and their units are in `schema.mjs` (`METRICS`). A pass value is the share of runs that passed, from 0 to 1. Its budget uses `min_p50`, because higher is better.
+Shared staging measurements run under the Git-ref lease in the [SFU lane protocol](../media/sfu/README.md#shared-staging-node). Only nightly's own-SFU caller grants `contents:write`; a direct staging dispatch without write access fails closed at lease acquisition. Cleanup by run ID always runs without the lease, so a busy lease never strands Episodes or Spaces, and any deletion failure fails the job. Lease labels and times are public, so use non-sensitive labels.
 
-`scorecard.mjs diff --current a.json --baseline b.json` prints the delta table. ❌ means over a budget, ⚠️ means more than the metric's `tolerancePct` worse than the baseline but within budget, and ✅ means more than 5% better. A ❌ on an entry with `gate: false` is a warning; with `--fail-on-gate`, a ❌ on a `gate: true` entry fails the command.
+The measurement reads API-log windows before and after the kit (`staging-logs.mjs` owns the dataset configuration, with `CHALK_AXIOM_STAGING_LOG_DATASET` and the read-only `CHALK_AXIOM_QUERY_TOKEN`). It counts distinct foreign Episode and provider-session IDs and excludes its own by `episode_id`. Node gauges (`staging-metrics.mjs`) come from a second read-only Axiom source via `CHALK_AXIOM_STAGING_METRICS_DATASET`, `CHALK_AXIOM_METRICS_BASE_URL` and the `CHALK_AXIOM_METRICS_QUERY_TOKEN` secret, which only the latency step sees and the kit's own environment never does. Public cards hold counts only, never Episode or connection IDs, dataset names or incarnation IDs.
 
-A scorecard uses `chalk_sfu` as its media plane when the metrics do not depend on one, such as bundle sizes.
+The optional `contention` block records each signal as `{ value, source }`. Missing tokens, failed queries and incomplete responses leave signals `"unavailable"`, never zero, and node coverage in all three phases is required, so unavailable steal cannot yield an isolated card. A successful query with no `chalk_sfu` events sets `zero_chalk_sfu_events.value: true`, which may mean an idle node or a logging gap. The collector rejects responses reaching its conservative 1,000-point or 1,000-series policy cap, which is not a claimed endpoint limit. Quiet API logs do not prove an already-connected silent foreign session is absent, so boundary session gauges add a check.
 
-### Node load summary
-
-The SFU node reports its steal and packet rate, but not its CPU busy time, per-direction packet rates, or egress. The load harness writes these as one JSON file:
-
-```json
-{ "samples": [{ "classes": 3, "cpuBusyPercent": 42, "stealPercent": 6, "ppsIn": 3000, "ppsOut": 9000, "egressMbitPerSecond": 30, "freezeMsPerMinute": 120 }] }
-```
-
-A class is one call of three Participants. Each sample is one reading; the adapter divides by `classes` and reports p50 and p95 over the samples.
-
-### Device file
-
-The device lane writes one file per run, with one entry per scenario and one run per attempt:
-
-```json
-{
-  "scenarios": [
-    {
-      "name": "network_switch",
-      "runs": [
-        { "passed": true, "ms": 820 },
-        { "passed": false, "ms": null }
-      ]
-    }
-  ]
-}
-```
-
-`name` is `network_switch` (reconnect after a network switch, id `device.reconnect_ms`), `background_resume` (time to media after 30 to 60 s in the background, id `device.background_resume_ms`) or `ice_restart` (id `device.ice_restart_ms`). `ms` is the time of a passing run and is `null` for a failed one. Every scenario also gives `device.<name>.pass`. The run's tier is `manual`, its `client.kind` is `sdk`, and the platform goes in `--browser`, for example `ios/26.1`.
-
-## The pull request tier
-
-`pr-tier.sh` runs inside the existing Gate jobs and adds no job of its own. The `build` group scores the call bundle sizes and the `checks` group scores the SFU loopback and impairment tests, the latter only when the SFU gate lane ran. Each compares with the scorecard of the latest successful master push run (the `scorecard-web` and `scorecard-sfu` artifacts), writes the table to the run summary and updates its section of one sticky pull request comment.
-
-## The nightly tier
-
-`nightly.sh` runs at the end of the `Cut nightly` workflow, in its own `scorecard` job, which runs even when the cut fails or is held. It compares the scorecards of the run (the `chalk_sfu` latency card) with the median of the last seven nightly runs, appends it to `history.jsonl` on the `scorecard-history` branch, regenerates the trends file (the last 14 nightly values of every metric) and keeps one open `Scorecard regression` issue while a gated metric is over its budget. The nightly run measures staging only and never the production node.
-
-The `proof` job of the same workflow is the gate of the cut: it runs after `release` and calls the real-call proof workflow with `media_plane: chalk_sfu` and the `camera-share`, `call-artifacts` and `long-call` proofs. The `latency` job runs after it, when the cut deployed, and calls the same workflow with `media_plane: chalk_sfu`, `latency: true` and `latency_only: true`: `pnpm prod:latency --planes chalk_sfu` (20 cycles) against the nightly API for the cut's revision, in headless Chromium on the GitHub-hosted runner. The latency kit writes the `chalk_sfu` scorecard, `own-sfu.mjs` lists every metric against its budget in the job summary, and the card goes up as the `scorecard-nightly-chalk_sfu` artifact for the `scorecard` job to compare and append like any other card. The job fails when the latency run fails, when a gated `chalk_sfu.action.*` p95 is over its ceiling, or when the card is missing or has no metrics. A failure turns the job red, blocks promotion, and leaves the deploy, the release record and the cut alone. The artifact lives 3 days, which is enough: the seven-values-over-three-nights window reads `history.jsonl` on the `scorecard-history` branch, not the artifacts. The latency kit cleans up its own Spaces and Episodes, and the proof's cleanup step removes them again when the run is cut short.
-
-The `Nightly Cloudflare latency` workflow (`.github/workflows/nightly-cf-latency.yml`, currently disabled while the own SFU is the only focus) runs the same latency kit on `cf_sfu` from the same GitHub-hosted runner, so Cloudflare's `action.*` metrics have current nightly values. It starts on `workflow_run` when `Cut nightly` completes successfully, finds the revision that cut deployed from its `nightly-attempt` deployment record (a run that planned no cut has none, so nothing runs), and calls the real-call proof workflow with `media_plane: cf_sfu`, `latency: true` and `latency_only: true`. It takes the kit's default 20 cycles (the `chalk_sfu` run takes 60) under a 35-minute job cap and the 25-minute step cap. Cloudflare traffic still reaches the nightly API, whose logs the own-SFU proof reads to count foreign Episodes, so the run takes the staging lease with `--wait 0`: when a cut holds the lease it skips the measurement and writes no card, and it never queues behind a cut. It receives no log-query token. A hard `timeout` of 24 minutes lets the lease wrapper stop the kit and release the lease inside the step cap.
-
-It is warn-only and outside the gate because it is a separate workflow: it holds neither the `chalk-environment-nightly` lock nor any of the cut's jobs, so it cannot delay or change the next cut's plan, and it cannot change the conclusion of `Cut nightly`, which the Android release reads. Its card is uploaded as `warn-scorecard-nightly-cf_sfu`, which the gate's `scorecard-nightly-*` download never matches. A `history` job in the same workflow adds that card with `SCORECARD_WARN_ONLY=true`, so `nightly.sh` never opens, edits or closes the regression issue and exits 0 even when the history push stays rejected. `features/scorecard/nightly-graph.test.mjs` parses the workflows and pins this. Every sample and every card names its plane (`mediaPlane` on the card, and `plane` on each cycle in the kit's private evidence). The `cf_sfu` budgets are all `gate: false`, so its card warns and cannot change a verdict (`features/scorecard/cf-sfu-card.test.mjs` runs `evaluate.mjs` with and without it). Every place that shows the card also shows the note from `features/scorecard/plane-note.mjs`: from Iowa, Cloudflare media goes to a nearby point of presence and ours goes to Singapore, so the two planes are not a fair comparison yet.
-
-Before recording the cut, `evaluate.mjs` reads `perf/budgets.json` from the scored SHA using `git show` and saves a SHA-and-run-bound `passed`, `gated-breach` or `missing` verdict with the budget revision, gated metric names and missing evidence. Every deployed nightly cut runs the own-SFU proof, so a Cloudflare card alone cannot replace a missing own-SFU card. The own-SFU cards together must also measure every `chalk_sfu.action.*` metric with `gate: true` in those budgets, with at least one sample; the latency kit records all of them every cycle, so one that is absent or has no samples is named in the missing evidence (`chalk_sfu.action.leave_ms`) instead of passing. Missing, empty, wrong-revision or contended cards cannot produce a passing verdict. The history job retains its regression issue behavior and exits nonzero on a gated breach. Nightly records the own-SFU proof and scorecard verdict separately; Promote checks both at selection and approval recheck, honoring the existing `scorecard_override` reason for failed proof, gated breaches or named missing evidence. Warn-only budgets remain warnings.
-
-### Latency diagnostics
-
-The latency kit also records where an action's time goes. These numbers live in a sidecar file, `latency-diagnostics-<plane>.json`, next to the scorecard and in the same artifact, and never in the card: readers that shipped before this change reject a card with a field they do not know, so the card keeps the shape they know. The gate, the diff, the history and the baseline never open the sidecar. Only the run summary of `own-sfu.mjs` reads it, and it never throws: a missing or invalid sidecar becomes one line of text (`features/scorecard/diagnostics.test.mjs` runs `evaluate.mjs`, `diff --fail-on-gate`, `append`, `baseline` and `own-sfu.mjs` with good and hostile sidecars beside the card and expects the same verdicts and exit codes). `perf/budgets.json` has no entry for them. The nightly staging collector (`staging-latency.mjs`) copies the sidecar of the kept attempt into `.private/latency-scorecard` beside the saved card, which is the folder the run summary and the upload read.
-
-- `rtt.sfu_ms` is the selected ICE candidate pair's `currentRoundTripTime` on the acting guest's peer connections (the lowest if there are several); a pair with no current reading stays missing. `rtt.sync_ms` is the median round trip of the SDK's own Sync `ping` and the `pong` that answers it, read from the trace after the cycle: the kit sends nothing on the Sync socket, so it cannot touch the SDK's liveness checks. A cycle in which no SDK ping was answered has none. Both come from the runner (a GitHub-hosted runner in Iowa for the nightly), so they show the distance to the plane under test.
-- `stages` splits each action (`mic_on`, `mic_off`, `camera_on`, `camera_off`, `screen_start`, `screen_stop`, `join`) into the pieces between wire events: the Sync command leaving, the roster frame reaching the receiver, the receiver's `listPublications`, pull (`tracks`) and `renegotiate` replies, then the first new frame or packet (turn on), or until the receiver holds no live track (turn off: the receiver makes no `tracks/close` or `renegotiate` call, only the sender closes on the SFU, shown as `sfu_close`). `join.sync_entered` is empty while Sync's entry rollout is in compatibility mode, because Sync then negotiates no entry confirmation and sends no `entered_ack`. The retired ids (`close_tracks` and `renegotiate` of the three turn-off groups) stay valid in a sidecar written earlier (`RETIRED_STAGE_IDS`), but nothing records or prints them. `features/scorecard/stages.mjs` names every stage and says what it covers; the card prints those descriptions. A stage counts from the last stage reached, so a step the SDK skips is null and its time moves to the next one. `sync_ack`, `sfu_publish`, `sfu_close` and the join SFU steps run beside the chain and count from the call.
-- `audio` holds `media.network_jitter_one_way_ms`: one-way network time plus listener jitter-buffer delay, with capture, encode, SFU forwarding and playout excluded. It is an estimate from the listener's WebRTC stats during the settle pause after the actions: the mean of half the SFU round trip of each guest (`media.network_ms`) plus the jitter buffer's average wait (`media.jitter_buffer_ms`). The network part assumes the path delay is the same in both directions, and when only one guest's round trip was read it stands in for the other. The jitter buffer is the listener's only audio-side delay in the total. `media.playout_ms` is the inbound stream's own `totalPlayoutDelay / totalSamplesCount`, reported beside it and never added; the kit reads `inbound-rtp` rows only, so the device's `media-playout` stats are not read and no playout-path delay is claimed. It is not mouth to ear, and it lives only in the sidecar: no card metric is named `media.*` and `perf/budgets.json` has no entry for it. A true glass-to-glass probe is a follow-up.
-- `ice` is the selected ICE candidate pair of the joining guest's first peer connection (the connection `join.ice_connected` times). The page trace only marks the connection with a unique token when it connects; the kit reads the pair after the join's measured stages are done and before the next measured action, never inside a measured interval, so the reading cannot move a gated sample. `read_after_ms` says how long after connecting it was read. The counters only grow, so `requestsSent` against `responsesReceived` on the selected pair still shows early lost checks, and checks sent between connect and the read are counted too (see `read_after_ms`). the local and remote candidate type (`host`, `srflx`, `prflx` or `relay`) and the pair's `requestsSent` and `responsesReceived` as `requests_sent` and `responses_received`, each null when the browser gives no usable reading. The summary counts cycles by pair type and gives p50 and p95 of `requests_sent - responses_received`. `requestsSent` well above `responsesReceived` on the winning pair means the first ICE checks were lost (the race with the SFU getting the remote credentials), and a `relay` pair means TURN carries the media. No address or candidate id is kept.
-- Both guests run on one host, so every reading is `performance.timeOrigin + performance.now()` and the two pages share a clock to within the browser's resolution (about 0.1 ms). A reading before the previous one counts as zero.
-- `scripts/prod-proof/latency-trace.mjs` records the events from inside the page as an init script that only the latency kit installs, the way `scripts/prod-proof/leave-observation.mjs` observes Leave. The product SDK carries no trace code, and the trace changes no frame or request. A failed trace read leaves that action's stage fields null and the cycle still counts.
-
-### Staging contention
-
-Shared staging measurements run under the Git-ref lease described in the
-[SFU lane protocol](../media/sfu/README.md#shared-staging-node). Only nightly's
-own-SFU caller grants `contents:write`; other reusable proof callers retain
-their existing permissions. A direct staging dispatch without write access
-fails closed at lease acquisition. The first lease attempt is immediate, then
-retries once with a bounded 30-minute wait. The camera-share proof also waits up to 30 minutes. That is longer than the warn-only Cloudflare latency run can own the lease (its 25-minute step cap plus a 60-second TTL), so a manual cut that arrives during that run waits for it instead of failing.
-
-Cleanup by run ID always runs without taking the lease, even when another lane
-holds it. The cleanup only ends that proof's Episodes and archives its Spaces;
-any deletion failure fails the job. A busy lease must never strand resources.
-
-The measurement reads API-log windows before and after the latency kit and
-queries its complete measurement window after a 30-second ingestion allowance.
-`staging-logs.mjs` owns dataset configuration in one place:
-`CHALK_AXIOM_STAGING_LOG_DATASET` is the nightly environment variable, and
-`CHALK_AXIOM_QUERY_TOKEN` is the existing read-only query credential, scoped to
-that dataset. The collector selects `chalk_sfu` provider events, counts distinct
-foreign Episode and provider-session IDs, and excludes its own Episodes by
-`episode_id`. The latency kit writes those IDs only into private, encrypted
-evidence. Public cards contain counts, never Episode or connection IDs or
-dataset names. Lease labels and times are public: use non-sensitive labels.
-
-The optional `contention` block records each signal as `{ value, source }`;
-unavailable signals have `value: "unavailable"`, never an invented zero.
-`lease_holder_before` and its acquisition/expiry times come from the Git ref.
-`foreign_episodes_seen`, `foreign_sessions_seen`, before/after event counts,
-measurement event count and own-Episode event count come from API logs.
-Node gauges use a second, read-only Axiom MPL source. Configure nightly's
-`CHALK_AXIOM_STAGING_METRICS_DATASET` and `CHALK_AXIOM_METRICS_BASE_URL` variables
-for the metrics dataset's edge deployment. The existing
-`CHALK_AXIOM_METRICS_QUERY_TOKEN` repository secret is exposed only to the
-own-SFU latency step, and is removed from the latency kit's environment.
-Dataset configuration lives in `staging-logs.mjs` for both collectors.
-
-`staging-metrics.mjs` filters `service.name=chalk-sfu` and
-`deployment.environment.name=staging`. It queries maximum gauge values per
-incarnation before, during and after measurement. `chalk.sfu.host.cpu.steal`
-is a ratio and becomes `steal_max` in percent. Distinct `service.instance.id`
-tags supply incarnation changes; `chalk.sfu.draining` supplies drain state.
-Only boundary `chalk.sfu.sessions` readings count as foreign sessions, because
-in-window sessions include the kit's own. Incarnation IDs never enter a card.
-Before starting the kit, the collector refreshes sessions over the latest
-30-second window after the three historical gauge queries finish. A positive,
-empty or failed refresh prevents the workload from starting.
-
-Missing tokens, failed queries, empty readings and incomplete responses leave
-node signals **unavailable**, never zero. Node coverage in all three phases is
-required; unavailable steal cannot produce an isolated card.
-API observation spans the preflight boundary through workload completion, so
-joins while the metrics queries run are not lost. Failures retain fixed,
-redacted reason codes in the job log and step summary, never raw exceptions.
-The observed metrics-v2 response has no pagination or completeness field. The collector
-rejects unexpected response metadata and results reaching its conservative
-1,000-point or 1,000-series cap; that cap is a collector policy, not a claimed
-MPL endpoint limit. Queries use `align using max`, so normal responses hold one
-peak per incarnation. A sanitized live wire shape is retained in
-`fixtures/axiom-metrics-shape.json` for the fake-response tests.
-
-A successful API query with no `chalk_sfu` events sets
-`zero_chalk_sfu_events.value: true`: it may mean an idle node or a logging gap,
-not measured zero load. Missing/partial log windows (including a full 1,000-row
-page, a continuation token, or more matching rows than returned), no own-Episode coverage,
-a lost lease, or observed foreign Episodes make a card `contended: true`.
-Quiet API logs do not prove that an already connected, silent foreign session
-is absent; boundary session gauges provide an additional check.
-
-After a contended attempt, the job waits up to 10 minutes for a quiet API-log
-window and retries the measurement once under the lease. Each measurement is
-bounded to 20 minutes. It never adds load while its pre-measurement log window
-is busy or unreadable. Both attempts remain in encrypted evidence; only the
-selected final card is published. A contended final card (including an empty
-one on lease timeout) is prominently labelled in summaries and scorecard
-comments, fails the measurement job, and remains in history for diagnosis.
-It is excluded from baselines and trends, does not open a performance-regression
-issue, and cannot close an existing issue as though it were a clean result.
-Budgets are unchanged; an uncontended gated breach still fails the latency kit.
-
-## The Promote tier
-
-After the production proof passes, the Promote workflow scores the Leave run of that Promote against the nightly median. These jobs run only after `proof`, and no other job needs them or reads their result, so a failure cannot start `rollback`; it only turns the Promote run red.
-
-1. `scorecard` scores the first proof. A gated metric over its budget starts one rerun of the Leave proof.
-2. `scorecard-rerun` runs the Leave proof once more.
-3. `scorecard-final` fails the run only when a gated metric is still over its budget in the rerun, and opens or updates the `Scorecard regression` issue. An issue left open from an earlier run never blocks.
-
-The `scorecard_override` input of the Promote workflow takes a written reason. Empty or whitespace-only reasons do not override a check; there are no other length, format or user-role rules beyond normal dispatch permissions and production approval. The same input accepts failed, skipped or missing nightly own-SFU proof, gated nightly scorecard breaches and missing scorecard evidence, recording the accepted results, metrics, missing items, reason and actor in the run summary and retained production release record. SHA mismatches and invalid release artifacts still block. For the production proof, the gate still shows the table and records the reason in the run summary and as a comment on the open regression issue. Per-budget `gate: false` remains warn-only.
+Partial log windows, no own-Episode coverage, a lost lease, or observed foreign Episodes make a card `contended: true`. After a contended attempt the job waits for a quiet window and retries once under the lease, never adding load while the pre-measurement window is busy. Both attempts stay in encrypted evidence and only the final card is published. A contended final card is labelled in summaries, fails the measurement job, stays in history for diagnosis, and is excluded from baselines and trends. It never opens a regression issue and cannot close one as though clean. Budgets are unchanged.

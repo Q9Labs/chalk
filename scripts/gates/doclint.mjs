@@ -71,8 +71,7 @@ for (const file of docs) {
   let fence;
   for (const [index, line] of lines.entries()) {
     const number = index + 1;
-    // The one historical budget provenance sentence is intentional, not runner guidance.
-    if (/testbox/i.test(line) && !(file === "docs/performance-budget.md" && line === "The budgets were measured on Testbox's 8-core box. An Instabox timing is not a budget result until the budgets are re-measured there.")) fail(file, number, "retired runner reference");
+    if (/testbox/i.test(line)) fail(file, number, "retired runner reference");
     const commands = line.replace(/--(?:dir|filter|filter-prod)\s+\S+\s+/g, "");
     for (const match of commands.matchAll(/\bpnpm\s+(?:(?:--[\w-]+(?:=\S+)?|-[rws])\s+)*(?:(run)\s+)?([a-zA-Z][\w:.-]*)/g)) {
       const [, run, command] = match;

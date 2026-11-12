@@ -1,26 +1,7 @@
 # Public invite words
 
-The frozen 1,024-entry dictionary in `words.txt` is adapted from the Electronic Frontier
-Foundation's [Short Wordlist 1](https://www.eff.org/files/2016/09/08/eff_short_wordlist_1.txt)
-and [long wordlist](https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt),
-with common concrete nouns added. Credit: Electronic Frontier Foundation, 2016.
-Licensed under [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/).
-Changes: removed sensitive, negative, obscure and easily confused words; added common nouns;
-sorted the resulting list. Before release, replaced 174 entries flagged as sensitive,
-negative, obscure, or easily confused with 148 approved candidates and 26 additional
-EFF words. The additional words are common positive or neutral terms of 3–6 letters;
-they exclude numbers, brands, sound-alike alternatives, and sensitive subject matter.
-The dictionary stays alphabetically sorted with exactly 1,024 unique entries. This is an English-language editorial selection, not a guarantee
-against every possible interpretation of a random phrase in every dialect.
+The frozen 1,024-entry dictionary in `words.txt` is adapted from the Electronic Frontier Foundation's [Short Wordlist 1](https://www.eff.org/files/2016/09/08/eff_short_wordlist_1.txt) and [long wordlist](https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt), with common concrete nouns added. Credit: Electronic Frontier Foundation, 2016. Licensed under [CC BY 3.0 US](https://creativecommons.org/licenses/by/3.0/us/).
 
-Each word consumes ten SHA-256 bits, without modulo bias. Four words provide 40 bits;
-three provide 30 bits. The previous ten letters provide about 47 bits (10 log2 26,
-slightly less with its byte-modulo mapping). These are bearer credentials, not passwords;
-existing guest-entry limits, disable controls, and rotation still apply.
+Changes: removed sensitive, negative, obscure and easily confused words; added common positive or neutral nouns of 3 to 6 letters (no numbers, brands, sound-alikes or sensitive subjects); sorted. The list stays alphabetically sorted with exactly 1,024 unique entries. It is an English editorial selection, not a guarantee against every interpretation of a random phrase in every dialect.
 
-To choose three words **before this migration ships**, change `InviteWordCount` from 4 to 3
-in `code.go`, then run `node scripts/codegen/invite-words.mjs --write`. This changes SQL's
-`generate_series(0, 3)` to `(0, 2)` and the SDK's generated count. Routing already accepts
-three- and four-word paths. Tests use the default four-word examples and need updating.
-After release, freeze this dictionary and migration: changing count or vocabulary requires
-a new migration and a compatibility plan for links already issued.
+Each word consumes ten SHA-256 bits with no modulo bias, so `InviteWordCount` words give `10 × count` bits. These are bearer credentials, not passwords, so guest-entry limits, disable controls and rotation still apply. Changing the count (`code.go`) or vocabulary requires `node scripts/codegen/invite-words.mjs --write` to regenerate the SQL and SDK, and, once links are issued, a new migration and a compatibility plan.

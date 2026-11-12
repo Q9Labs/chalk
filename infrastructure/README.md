@@ -29,30 +29,9 @@ telemetry, alerting, and end-to-end proof requirements.
 
 ## Recorder infrastructure
 
-The recorder pools are declared under [`recorder/`](recorder/). Capture and
-render have separate policies and scoped DigitalOcean identities; the recorder
-README describes the configurable pool defaults and capacity. OpenTofu owns
-immutable pool tags, outbound-only firewalls, image/release contracts, and the
-zero-idle capacity bounds. The external recorder reconciler owns Droplet
-creation, prewarm, desired capacity, fencing, and replacement. The root
-configuration also declares the private temporary R2 lifecycle and Singapore
-AWS KMS recording KEK. The KMS policy grants data-key operations only to the
-control-plane role with the fixed environment and required recording context;
-recorder nodes receive neither KMS nor provider credentials.
+The recorder pools are declared under [`recorder/`](recorder/); its README explains the policies. OpenTofu owns immutable pool tags, outbound-only firewalls, image and release contracts, and the zero-idle capacity bounds. The external recorder reconciler owns Droplet creation, prewarm, desired capacity, fencing and replacement. The KMS policy grants data-key operations only to the control-plane role with the fixed environment and required recording context; recorder nodes receive neither KMS nor provider credentials.
 
-Run `pnpm run recorder:gate` for backend-disabled OpenTofu format/validation,
-capacity-contract tests, and the fail-closed credential check. The command does
-not apply infrastructure. A mutation requires a redacted nightly-evidence
-digest, separate short-lived DigitalOcean tokens, a scoped Cloudflare token,
-the control-plane role ARN, immutable image digests, and external one-time
-bootstrap endpoints. Production R2 adoption additionally requires an explicit
-existing bucket name, private inventory import ID, and a no-delete/no-
-replacement plan digest; a default name can never create a replacement. The
-external reconciler must provide a signed, one-time bootstrap assertion bound
-to environment, role, release, intended Droplet, region, and boot generation;
-OpenTofu only records that contract and never receives or stores the assertion.
-Protected environment configuration holds these values, never tracked tfvars,
-cloud-init assertions, plans, or logs.
+`pnpm run recorder:gate` runs backend-disabled validation and the fail-closed credential check, and never applies infrastructure. A mutation takes values from protected environment configuration, never tracked tfvars, cloud-init, plans or logs. Production R2 adoption needs an explicit existing bucket name, so a default name can never create a replacement. The reconciler's signed one-time bootstrap assertion is never received or stored by OpenTofu.
 
 ## Asset CDN
 
@@ -63,59 +42,9 @@ domain:
 https://assets.chalkmeet.com
 ```
 
-Current bucket:
+The bucket is `chalk-assets`, with public paths under `ui/`. Hashed media files (`ui/backgrounds/`, `ui/sounds/`, names carry a sha256 prefix) are served `public, max-age=31536000, immutable`. The unversioned `ui` manifest is served `public, max-age=300, stale-while-revalidate=86400`. R2 CORS allows `GET` and `HEAD` from any origin.
 
-```text
-chalk-assets
-```
-
-Public asset paths use this prefix:
-
-```text
-ui/
-```
-
-The package surface should stay metadata-only. `@q9labsai/chalk-assets` exports
-CDN URLs, filenames, MIME types, byte sizes, and hash prefixes;
-`@q9labsai/chalk-ui/assets` re-exports that surface for compatibility. Neither
-package should bundle background or sound binaries into npm packages.
-
-### Paths
-
-```text
-ui/backgrounds/<semantic-name>.<sha256-prefix>.avif
-ui/backgrounds/<semantic-name>.<sha256-prefix>.webp
-ui/sounds/<semantic-name>.<sha256-prefix>.opus
-ui/sounds/<semantic-name>.<sha256-prefix>.mp3
-ui/manifest.json
-```
-
-### Cache Contract
-
-Hashed media files:
-
-```http
-Cache-Control: public, max-age=31536000, immutable
-```
-
-Unversioned manifest:
-
-```http
-Cache-Control: public, max-age=300, stale-while-revalidate=86400
-Content-Type: application/json; charset=utf-8
-```
-
-### Browser Reads
-
-R2 CORS is configured for browser access:
-
-```text
-Allowed origins: *
-Allowed methods: GET, HEAD
-Allowed headers: *
-Exposed headers: ETag, Content-Length, Content-Type, Cache-Control
-Max age: 86400
-```
+`@q9labsai/chalk-assets` stays metadata-only (URLs, filenames, MIME types, sizes, hash prefixes); neither it nor `@q9labsai/chalk-ui/assets` bundles binaries.
 
 ### Update Flow
 

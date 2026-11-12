@@ -24,17 +24,10 @@ pnpm --filter @q9labsai/chalk-client exec playwright install chromium
 node scripts/integration-smoke/run.mjs
 ```
 
-Optional: `CHALK_API_URL` (defaults to `https://api.chalkmeet.com`),
-`CHALK_SMOKE_MEDIA_PLANE` (defaults to `cf_sfu`), `CHALK_SMOKE_PORT` (9415).
+Optional: `CHALK_API_URL`, `CHALK_SMOKE_MEDIA_PLANE`, `CHALK_SMOKE_PORT` (defaults in `run.mjs`).
 API and Sync must use the managed `api.*` / `sync.*` hostname convention.
 
-The script creates a one-hour Tenant-scoped key, registers a local receiver, creates
-an Automatic Recording Space, and admits two Participants in two isolated Chromium
-processes with fake microphones/cameras. It waits for both remote-media views and
-`recording.started`, records 60 seconds, ends the Episode, requests an Export, verifies
-the Episode and Recording Event signatures using raw bytes, and checks the MP4 download.
-Events are deduplicated by ID in memory; this receiver is a smoke test, not a durable
-production inbox. It does not test Transcript processing.
+The script drives two isolated Chromium processes with fake media through an Automatic Recording Space, records 60 seconds, requests an Export, verifies Episode and Recording Event signatures on raw bytes, and checks the MP4 download. The receiver is a smoke test, not a durable inbox. It does not test Transcript processing.
 
 It revokes its key, deletes its endpoint, closes both browsers/receiver, and archives
 its Space on success or failure. The archived Space and artifacts remain under the
