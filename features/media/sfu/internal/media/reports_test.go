@@ -12,7 +12,7 @@ func TestReportEstimatorStepsDownOnHeavyLossAndUpOnLight(t *testing.T) {
 	if want := reportStart * 0.75; r.ceiling != want {
 		t.Fatalf("ceiling %v after 50%% loss, want %v", r.ceiling, want)
 	}
-	if !r.lossy(now + int64(time.Second)) || r.lossy(now+int64(3*time.Second)) {
+	if !r.lossy(now+int64(time.Second)) || r.lossy(now+int64(3*time.Second)) {
 		t.Fatal("heavy loss should count as proof of a full path for two seconds")
 	}
 	r.onLoss(0.5, now+int64(100*time.Millisecond))
