@@ -1,6 +1,6 @@
 import { canonicalSpaceInviteLink, DEFAULT_INVITE_ORIGIN, entranceStep, verifiedSpaceInviteLink, type ChalkPublicClient, type PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { admitPublicSpace } from "../../lib/chalk-access";
-import type { EntranceEvent, WaitingArrival } from "./entrance-machine";
+import type { ArrivalOutcome, WaitingArrival } from "./entrance-machine";
 import { declinedFailure, neutralSpaceError } from "./entry-failure";
 
 /** What asking to enter a Space returned: the server's answer and the link that now names the Space. */
@@ -28,8 +28,8 @@ export async function leaveArrival(client: ChalkPublicClient, arrival: PublicSpa
   if (arrival.arrival_handle) await client.leave({ arrivalHandle: arrival.arrival_handle });
 }
 
-/** Turns the server's answer about an arrival into the entrance event it causes. */
-export async function arrivalEvent(client: ChalkPublicClient, arrival: PublicSpaceArrival, link: Pick<ArrivedSpace, "inviteLink" | "spaceName">, again: (arrivalHandle: string) => Promise<PublicSpaceArrival>): Promise<EntranceEvent> {
+/** Turns the server's answer about an arrival into what the entrance does next. */
+export async function arrivalEvent(client: ChalkPublicClient, arrival: PublicSpaceArrival, link: Pick<ArrivedSpace, "inviteLink" | "spaceName">, again: (arrivalHandle: string) => Promise<PublicSpaceArrival>): Promise<ArrivalOutcome> {
   const step = entranceStep(arrival);
   switch (step.state) {
     case "declined":

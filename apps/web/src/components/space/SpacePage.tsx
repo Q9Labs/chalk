@@ -10,7 +10,7 @@ import type * as CallSurface from "./SpaceCall";
 import { PreJoin } from "./pre-join/PreJoin";
 import { reportCredentialExpiredReason, useProblemReports, useReportCredentialExpired, type ReportProblem } from "../../lib/problem-reports";
 import { arriveAtSpace, arrivalEvent, leaveArrival } from "./arrival";
-import { canStart, entranceReducer, initialEntrance, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
+import { canStart, entranceReducer, initialEntrance, pendingRelease, type ArrivalOutcome, type EndedCall, type Entrance, type EntranceEvent } from "./entrance-machine";
 import { entryFailure, neutralSpaceError, type EntryFailure } from "./entry-failure";
 type WebJoinSettings = Required<Pick<JoinOptions, "displayName" | "microphone" | "camera">> & Pick<JoinOptions, "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
 const displayNameStorageKey = "chalk.display-name";
@@ -108,11 +108,11 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       if (left.phase === "ended") void left.call.release().catch(() => undefined);
     };
   }, [client, latest]);
-  /** Applies an arrival's outcome. An admission the entrance no longer wants (it was cancelled or the page closed) is given back. */
+  /** Applies the outcome of arrival `attempt`. An admission the entrance no longer wants (a later arrival replaced it, or the page closed) is given back. */
   const settle = useCallback(
-    (event: EntranceEvent) => {
-      if (send(event) && active.current) return;
-      releaseAdmission(event);
+    (attempt: number, outcome: ArrivalOutcome) => {
+      if (send({ ...outcome, attempt }) && active.current) return;
+      releaseAdmission(outcome);
     },
     [send],
   );
@@ -127,14 +127,15 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   useEffect(() => {
     if (resumeAttempted.current || !reloadMarker) return;
     resumeAttempted.current = true;
+    const { attempt } = latest.current;
     setDisplayName(reloadMarker.displayName);
     setEntranceSettings({ displayName: reloadMarker.displayName, ...devicesOff });
     void loadCallSurface().catch(() => undefined);
     resumePublicSpace(client, reloadMarker, slug).then(
-      (admission) => settle({ type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } }),
-      (cause: unknown) => settle({ type: "failed", failure: resumeFailure(cause) }),
+      (admission) => settle(attempt, { type: "admitted", joined: { ...admission, spaceName: admission.arrival.space?.name } }),
+      (cause: unknown) => settle(attempt, { type: "failed", failure: resumeFailure(cause) }),
     );
-  }, [client, reloadMarker, settle, slug]);
+  }, [client, latest, reloadMarker, settle, slug]);
   const start = useCallback(
     (settings: WebJoinSettings = defaultJoinOptions, fromStep = false) => {
       const normalizedDisplayName = settings.displayName.trim();
@@ -149,17 +150,19 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
         /* Joining works with storage disabled. */
       }
       if ((slug || inviteCode) && !inviteToken) {
-        send({ type: "failed", failure: { message: neutralSpaceError, retryable: false } });
+        send({ type: "failed", attempt: previous.attempt, failure: { message: neutralSpaceError, retryable: false } });
         return;
       }
       send({ type: "started", fromStep });
+      let { attempt } = latest.current;
       warmCall();
       void loadCallSurface().catch(() => undefined);
       void (async () => {
-        if (previous.phase === "ended") {
-          await previous.call.release();
-          if (!active.current) return;
-          send({ type: "rejoinReleased" });
+        const release = pendingRelease(previous);
+        if (release) {
+          await release();
+          if (!active.current || !send({ type: "rejoinReleased", attempt })) return;
+          attempt = latest.current.attempt;
         }
         const arrived = await arriveAtSpace(client, { displayName: normalizedDisplayName, slug, inviteToken });
         try {
@@ -173,9 +176,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           return;
         }
         setCallName(arrived.spaceName);
-        settle(await arrivalEvent(client, arrived.arrival, arrived, (arrivalHandle) => reArrive(client, arrivalHandle, normalizedDisplayName, inviteToken)));
+        settle(attempt, await arrivalEvent(client, arrived.arrival, arrived, (arrivalHandle) => reArrive(client, arrivalHandle, normalizedDisplayName, inviteToken)));
       })().catch((cause: unknown) => {
-        if (active.current) send({ type: "failed", failure: entryFailure(cause) });
+        if (active.current) send({ type: "failed", attempt, failure: entryFailure(cause) });
       });
     },
     [client, defaultJoinOptions, inviteCode, latest, navigatePublicSpace, send, settle, slug],
@@ -201,6 +204,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
     void listedRememberedDevices(rememberedDevices).then((devices) => start({ ...devices, displayName: automaticName }));
   }, [automaticName, reloadMarker, rememberedDevices, start]);
   const waiting = entrance.phase === "waiting" && !entrance.cancelling ? entrance.waiting : undefined;
+  const waitingAttempt = entrance.attempt;
   useEffect(() => {
     const arrival = waiting?.arrival;
     const arrivalHandle = arrival?.arrival_handle;
@@ -215,12 +219,10 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           timer = globalThis.setTimeout(poll, arrivalRetryDelayMs(answer.retry_after));
           return;
         }
-        const event = await arrivalEvent(client, answer, { inviteLink: waiting.inviteLink ?? "", spaceName: waiting.spaceName }, (handle) => reArrive(client, handle, displayName, inviteCode ?? readSpaceInviteToken(globalThis.location?.hash ?? "")));
-        // Building the event can make another request, and a Cancel and a new Join may have happened meanwhile: this answer then belongs to an arrival that is gone.
-        if (cancelled) releaseAdmission(event);
-        else settle(event);
+        // Building the outcome can make another request, and a Cancel and a new Join may have happened meanwhile: the stamp then marks this answer as stale and settle gives it back.
+        settle(waitingAttempt, await arrivalEvent(client, answer, { inviteLink: waiting.inviteLink ?? "", spaceName: waiting.spaceName }, (handle) => reArrive(client, handle, displayName, inviteCode ?? readSpaceInviteToken(globalThis.location?.hash ?? ""))));
       } catch (cause) {
-        if (!cancelled) settle({ type: "failed", failure: entryFailure(cause) });
+        if (!cancelled) settle(waitingAttempt, { type: "failed", failure: entryFailure(cause) });
       }
     };
     timer = globalThis.setTimeout(poll, arrivalRetryDelayMs(arrival.retry_after));
@@ -228,7 +230,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       cancelled = true;
       if (timer !== undefined) globalThis.clearTimeout(timer);
     };
-  }, [client, displayName, inviteCode, settle, waiting]);
+  }, [client, displayName, inviteCode, settle, waiting, waitingAttempt]);
   const cancel = useCallback(async () => {
     const left = latest.current;
     if (left.phase !== "waiting" || !send({ type: "cancelRequested" })) return;
@@ -236,26 +238,27 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
       await leaveArrival(client, left.waiting.arrival);
     } catch (cause) {
       if (!isTerminalArrivalError(cause)) {
-        if (active.current) send({ type: "failed", failure: entryFailure(cause) });
+        if (active.current) send({ type: "failed", attempt: left.attempt, failure: entryFailure(cause) });
         return;
       }
     }
-    if (active.current) send({ type: "cancelled" });
+    if (active.current) send({ type: "cancelled", attempt: left.attempt });
   }, [client, latest, send]);
   useEffect(() => {
     if (entrance.phase !== "admitted" || entrance.callUi === "ready") return;
-    const { joined } = entrance;
+    const { joined, attempt } = entrance;
     let cancelled = false;
     void loadCallSurface().then(
       (surface) => {
         if (cancelled || !active.current) return;
         setCallSurface(surface);
-        send({ type: "callUiReady" });
+        send({ type: "callUiReady", attempt });
       },
       (cause: unknown) => {
         if (cancelled || !active.current) return;
-        send({ type: "failed", failure: entryFailure(cause) });
-        void joined.session.leave().then(
+        const release = () => joined.session.leave();
+        send({ type: "callUiFailed", attempt, failure: entryFailure(cause), release });
+        void release().then(
           () => reloadAfterChunkLoadFailure(cause),
           () => undefined,
         );
@@ -268,14 +271,15 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
   const onEnded = useCallback(
     (call: EndedCall) => {
       if (!send({ type: "callEnded", call })) return;
-      call.release().catch(() => send({ type: "failed", failure: { message: "Couldn’t leave the call. Try Home again.", retryable: true } }));
+      const { attempt } = latest.current;
+      call.release().catch(() => send({ type: "failed", attempt, failure: { message: "Couldn’t leave the call. Try Home again.", retryable: true } }));
     },
-    [send],
+    [latest, send],
   );
   const settings = entranceSettings ?? defaultJoinOptions;
   const renderSurface = () => {
     if (entrance.phase === "ended" && callSurface) {
-      const { call, rejoining, failure } = entrance;
+      const { call, rejoining, failure, attempt } = entrance;
       const { StatusSurface } = callSurface;
       return (
         <main className="relative h-full">
@@ -294,7 +298,7 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
               void call
                 .release()
                 .then(() => globalThis.location.assign("/"))
-                .catch(() => send({ type: "failed", failure: { message: "Couldn’t leave the call. Try again.", retryable: true } }));
+                .catch(() => send({ type: "failed", attempt, failure: { message: "Couldn’t leave the call. Try again.", retryable: true } }));
             }}
           />
           {failure ? (
@@ -344,7 +348,9 @@ function SpaceEntry({ slug, inviteCode, navigatePublicSpace = replacePublicSpace
           />
         );
       case "failed":
-        return <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={current.failure.message} glyph={current.failure.reason} action={current.failure.retryable ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start() } : undefined} />;
+        return (
+          <CallLimbo theme={{ colorScheme: mode }} spaceName={callName} message={current.failure.message} glyph={current.failure.reason} action={current.failure.retryable ? { label: current.failure.retryLabel ?? "Ask again", onClick: () => start(), disabled: current.restarting } : undefined} />
+        );
       case "idle":
       case "arriving":
       case "admitted":
@@ -406,12 +412,12 @@ function resumeFailure(cause: unknown): EntryFailure {
   return { message: "Could not return to the Episode. Check your access before joining again.", retryable: true };
 }
 
-/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
-/** Gives back an admission the entrance no longer wants. Any other event holds nothing to give back. */
-function releaseAdmission(event: EntranceEvent): void {
-  if (event.type === "admitted") void event.joined.session.leave().catch(() => undefined);
+/** Gives back an admission the entrance no longer wants. Any other outcome holds nothing to give back. */
+function releaseAdmission(outcome: ArrivalOutcome): void {
+  if (outcome.type === "admitted") void outcome.joined.session.leave().catch(() => undefined);
 }
 
+/** A visitor who was let in without access asks the same invite again with the same handle, which returns the access. */
 async function reArrive(client: ChalkPublicClient, arrivalHandle: string, displayName: string, inviteToken: string | undefined): Promise<PublicSpaceArrival> {
   if (!inviteToken) throw new Error(neutralSpaceError);
   return client.arrive({ spaceInviteToken: inviteToken, displayName: displayName.trim() }, { arrivalHandle });
