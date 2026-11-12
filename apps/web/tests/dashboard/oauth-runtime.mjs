@@ -100,6 +100,7 @@ const upstream = createServer(async (request, response) => {
           logo_key: null,
           website: null,
           transcription_ceiling: "on_demand",
+          recording_render_mode: "on_demand",
           transcription_default_mode: "on_demand",
           transcript_language: "auto",
           provider_policy_version: "test",

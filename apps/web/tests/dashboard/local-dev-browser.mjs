@@ -51,11 +51,11 @@ try {
   assert.equal(past.recordings[0].transcripts[0].status, "complete");
   await page.goto(`${origin}/dashboard/call/${product.id}/session/${episode.id}`);
   await page.getByRole("heading", { name: "Who joined" }).waitFor({ timeout: 60000 });
-  await page.getByText("Let's walk through the new onboarding flow and agree on the next steps.", { exact: true }).waitFor({ timeout: 60000 });
+  await page.getByRole("button", { name: /Play from 00:00, Ada Fixture: Let's walk through/ }).waitFor({ timeout: 60000 });
   await page.locator("video").evaluate(async (video) => {
     await video.play();
   });
-  await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0);
+  await page.waitForFunction(() => document.querySelector("video")?.currentTime > 0, null, { timeout: 15000 });
   await page.screenshot({ path: resolve(output, "session.png"), fullPage: true });
   results.push("session-transcript-and-playback");
   const developer = await get("/dashboard-api/developer");
