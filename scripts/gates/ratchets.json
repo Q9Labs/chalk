@@ -1,7 +1,7 @@
 {
   "files": {
     "apps/api/cmd/codegen/main.go": 1259,
-    "apps/api/cmd/main.go": 1060,
+    "apps/api/cmd/main.go": 1073,
     "apps/api/cmd/media-provider-inventory/inventory.go": 318,
     "apps/api/cmd/media-provider-inventory/inventory_test.go": 315,
     "apps/api/cmd/media-settings/main.go": 372,
@@ -257,7 +257,7 @@
     "features/media/sfu/tests/live_soak_test.go": 338,
     "features/media/sfu/tests/live_support_test.go": 378,
     "features/media/sfu/tests/loopback_test.go": 659,
-    "features/scorecard/nightly-graph.test.mjs": 332,
+    "features/scorecard/nightly-graph.test.mjs": 362,
     "infrastructure/observability/production-alerts/collector.go": 740,
     "infrastructure/observability/production-alerts/collector_test.go": 424,
     "packages/assets/src/index.ts": 323,
@@ -360,7 +360,7 @@
     "tools/sdk-web-consumer-e2e/scripts/run.mjs": 484
   },
   "copies": {
-    "copy.provider_names": 436,
+    "copy.provider_names": 438,
     "copy.port_8443": 40,
     "copy.pnpm_version": 3,
     "copy.excalidraw_pin": 16,

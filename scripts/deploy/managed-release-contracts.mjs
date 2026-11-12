@@ -92,7 +92,7 @@ export function parseControllerResult(output, expectedReleaseId, expectedRequest
   return result;
 }
 
-export function isApprovedRunCommand(commands) {
+function isApprovedRunCommand(commands) {
   if (!Array.isArray(commands)) return false;
   return sha256(JSON.stringify(commands)) === approvedRunCommandSha256;
 }

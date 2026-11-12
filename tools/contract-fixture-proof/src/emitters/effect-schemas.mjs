@@ -626,4 +626,3 @@ function errorClassName(code) {
 
   return name.endsWith("Error") ? name : `${name}Error`;
 }
-

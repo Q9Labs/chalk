@@ -5,4 +5,3 @@ export function parseJson(value, context) {
     throw new Error(`${context}: ${errorMessage(error)}`);
   }
 }
-

@@ -424,7 +424,18 @@ export function createGatePlan(files, options = {}) {
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs", "scripts/gates/references.test.mjs", "scripts/gates/ratchets.test.mjs", "scripts/gates/analysis.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", [
+      "node",
+      "scripts/test/run.mjs",
+      "node",
+      "--test",
+      "scripts/test/no-network.test.mjs",
+      "scripts/gates/chalk-gate-plan.test.mjs",
+      "scripts/gates/feature-map.test.mjs",
+      "scripts/gates/references.test.mjs",
+      "scripts/gates/ratchets.test.mjs",
+      "scripts/gates/analysis.test.mjs",
+    ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
     task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),

@@ -6,7 +6,7 @@ import { repositoryRoot } from "./repository.mjs";
 /** Public packages that version on their own. Every other public package moves with the Chalk release version. */
 const independentPackageNames = new Set(["@q9labsai/recording-presentation"]);
 
-export function deriveReleasePackages(workspaces) {
+function deriveReleasePackages(workspaces) {
   const byName = new Map(workspaces.map((workspace) => [workspace.manifest.name, workspace]));
   const publicWorkspaces = workspaces.filter(({ manifest }) => manifest.private !== true);
   for (const { manifest } of publicWorkspaces) {

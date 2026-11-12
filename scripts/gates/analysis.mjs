@@ -33,7 +33,7 @@ function run(command, args, { cwd = repositoryRoot, okStatuses = [0] } = {}) {
 }
 
 /** Functions above the limit: { "path function": complexity } for Go, and { "path": [complexity, ...] } for TypeScript, whose functions have no stable name. */
-export function measureComplexity() {
+function measureComplexity() {
   const found = {};
   for (const module of goModules) {
     for (const line of run("go", ["run", gocyclo, "-over", String(maxComplexity), "-ignore", "_test\\.go$", "."], { cwd: join(repositoryRoot, module), okStatuses: [0, 1] }).split("\n")) {
@@ -50,7 +50,7 @@ export function measureComplexity() {
 }
 
 /** Unreachable Go functions, as { "module/path function": true }. */
-export function measureDeadCode() {
+function measureDeadCode() {
   const found = {};
   for (const module of goModules) {
     let report;
@@ -69,7 +69,7 @@ export function measureDeadCode() {
 }
 
 /** The clone count that jscpd finds in source files. */
-export function measureDuplication() {
+function measureDuplication() {
   const output = mkdtempSync(join(tmpdir(), "jscpd-"));
   try {
     run("pnpm", ["dlx", jscpd, "--min-lines", "12", "--min-tokens", "100", "--reporters", "json", "--output", output, "--ignore", jscpdIgnore.join(","), "."]);
@@ -118,6 +118,7 @@ if (import.meta.main) {
     process.exitCode = 1;
   } else if (process.argv.includes("--write")) {
     writeFileSync(baselineFile, `${JSON.stringify({ ...baselines, [name]: current }, null, 2)}\n`);
+    execFileSync("pnpm", ["exec", "oxfmt", baselineFile], { cwd: repositoryRoot, stdio: "inherit" });
     console.log(`${name} baseline lowered to the current numbers.`);
   } else {
     console.log(`${name} holds the baseline.`);

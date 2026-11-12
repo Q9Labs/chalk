@@ -332,342 +332,110 @@
     "features/media/sfu/internal/media/session.go (*Session).push": 17,
     "features/media/sfu/internal/media/authority.go (*Node).applySourceControls": 17,
     "features/media/sfu/internal/media/vp8.go parseVP8": 16,
-    "sdks/typescript/react/src/components/call-limbo/CallLimbo.tsx": [
-      41
-    ],
-    "sdks/typescript/react/src/components/atomic/ReactionBubble.tsx": [
-      30
-    ],
-    "sdks/typescript/react/src/components/atomic/VolumeSlider.tsx": [
-      21
-    ],
-    "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx": [
-      68
-    ],
-    "sdks/typescript/react/src/components/space-header/SpaceHeader.tsx": [
-      37
-    ],
-    "sdks/typescript/react/src/components/space-header/useCallShortcuts.ts": [
-      38
-    ],
-    "sdks/typescript/react/src/components/space-header/CallDetails.tsx": [
-      27
-    ],
-    "sdks/typescript/react/src/components/space-header/call-network.ts": [
-      25
-    ],
-    "sdks/typescript/react/src/components/participants-panel/ParticipantsPanel.tsx": [
-      28,
-      27
-    ],
-    "sdks/typescript/react/src/components/participants-panel/participant-options-menu.tsx": [
-      38
-    ],
-    "sdks/typescript/react/src/components/participants-panel/participant-row.tsx": [
-      37
-    ],
-    "apps/web/tests/dashboard-ui/refresh-checks.mjs": [
-      24
-    ],
-    "sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts": [
-      21
-    ],
-    "sdks/typescript/react/src/components/control-bar/control-bar-button.tsx": [
-      33
-    ],
-    "apps/web/tests/dashboard-ui/recording-checks.mjs": [
-      36
-    ],
-    "apps/web/tests/dashboard-ui/developer-checks.mjs": [
-      25
-    ],
-    "sdks/typescript/react/src/components/control-bar/ControlBar.tsx": [
-      63
-    ],
-    "apps/web/tests/dashboard-ui/connect-checks.mjs": [
-      34
-    ],
-    "sdks/typescript/react/src/components/device-popover/DevicePopover.tsx": [
-      63
-    ],
-    "apps/web/tests/dashboard-ui/fixture-server.mjs": [
-      119,
-      56,
-      24
-    ],
-    "apps/web/src/lib/dashboard/tracking.ts": [
-      25,
-      23
-    ],
-    "sdks/typescript/react/src/components/space-view/SpaceView.tsx": [
-      100
-    ],
-    "sdks/typescript/react/src/components/toast-stack/call-events.tsx": [
-      42
-    ],
-    "sdks/typescript/react/src/components/stage/stage-layout.ts": [
-      32
-    ],
-    "sdks/typescript/react/src/components/stage/SpaceStage.tsx": [
-      24
-    ],
-    "sdks/typescript/react/src/components/stage/Stage.tsx": [
-      23
-    ],
-    "apps/web/src/call-states/fixtures.ts": [
-      25
-    ],
-    "sdks/typescript/react/src/components/chalk/StatusSurface.tsx": [
-      33
-    ],
-    "sdks/typescript/react/src/components/chalk/Chalk.tsx": [
-      35
-    ],
-    "sdks/typescript/react/src/components/composite/ScreenShareView.tsx": [
-      45
-    ],
-    "sdks/typescript/react/src/components/composite/ChatPanel.tsx": [
-      34
-    ],
-    "sdks/typescript/react/src/components/composite/ReactionPicker.tsx": [
-      41
-    ],
-    "sdks/typescript/react/src/components/composite/MessageBubble.tsx": [
-      52
-    ],
-    "sdks/typescript/client/src/sync/v1-client.ts": [
-      39,
-      22
-    ],
-    "apps/web/src/components/space/SpacePage.tsx": [
-      28,
-      25
-    ],
-    "apps/web/src/components/space/pre-join/PreJoin.tsx": [
-      24
-    ],
-    "sdks/typescript/client/src/sync/v1-reducer.ts": [
-      22
-    ],
-    "apps/web/src/components/dashboard/SessionViewer.tsx": [
-      37
-    ],
-    "apps/web/src/components/dashboard/SessionsPage.tsx": [
-      34
-    ],
-    "apps/web/src/components/dashboard/LanguagePicker.tsx": [
-      24
-    ],
-    "sdks/typescript/client/src/whiteboard/v1-client.ts": [
-      29
-    ],
-    "apps/web/src/components/dashboard/DeveloperPage.tsx": [
-      27
-    ],
-    "apps/web/src/components/dashboard/RecordingsPage.tsx": [
-      39
-    ],
-    "apps/web/src/components/dashboard/CallPage.tsx": [
-      50
-    ],
-    "apps/web/src/components/landing/CallPreview.tsx": [
-      25
-    ],
-    "apps/web/src/components/landing/Dither.tsx": [
-      27
-    ],
-    "apps/web/server/application.ts": [
-      31,
-      24
-    ],
-    "apps/web/server/engine.ts": [
-      35
-    ],
-    "apps/web/server/developer.ts": [
-      21
-    ],
-    "sdks/typescript/client/src/media/cloudflare-sfu.test.ts": [
-      22
-    ],
-    "apps/web/scripts/call-performance-metrics.mjs": [
-      23
-    ],
-    "apps/web/scripts/call-leak-check.mjs": [
-      25,
-      21
-    ],
-    "apps/web/scripts/check-call-performance.mjs": [
-      33
-    ],
-    "apps/web/scripts/call-heap-summary.mjs": [
-      21
-    ],
-    "apps/transcription-dispatcher/src/provider-utils.ts": [
-      21
-    ],
-    "apps/transcription-dispatcher/src/config.ts": [
-      28
-    ],
-    "apps/transcription-dispatcher/src/dispatcher.ts": [
-      27
-    ],
-    "apps/transcription-dispatcher/src/providers.ts": [
-      24
-    ],
-    "apps/transcription-dispatcher/src/urls.ts": [
-      40,
-      36,
-      24,
-      23
-    ],
-    "apps/transcription-dispatcher/src/control-api.ts": [
-      45
-    ],
-    "apps/transcription-dispatcher/src/secrets.ts": [
-      28
-    ],
-    "apps/transcription-dispatcher/src/finalizer-merge.ts": [
-      38,
-      35,
-      29
-    ],
-    "packages/whiteboard/src/collab/engine.ts": [
-      25
-    ],
-    "packages/whiteboard/src/react/board/Board.tsx": [
-      43,
-      28,
-      21
-    ],
-    "packages/whiteboard/src/react/board/BoardCursors.tsx": [
-      28
-    ],
-    "packages/whiteboard/src/react/board/BoardMenu.tsx": [
-      23
-    ],
-    "packages/whiteboard/src/embedded/controller.ts": [
-      44,
-      38
-    ],
-    "features/scorecard/staging-latency.mjs": [
-      32
-    ],
-    "scripts/recorder/analyze-media.mjs": [
-      54
-    ],
-    "features/scorecard/diagnostics.mjs": [
-      28
-    ],
-    "features/scorecard/contention.mjs": [
-      62
-    ],
-    "features/scorecard/schema.mjs": [
-      42,
-      24
-    ],
-    "features/scorecard/staging-logs.mjs": [
-      37
-    ],
-    "features/scorecard/staging-metrics.mjs": [
-      56
-    ],
-    "features/scorecard/scorecard.mjs": [
-      23
-    ],
-    "tools/contract-fixture-proof/src/emitters/effect-schemas.mjs": [
-      23,
-      22
-    ],
-    "scripts/dev/cli.mjs": [
-      53
-    ],
-    "tools/contract-fixture-proof/src/emitters/sync-contract.mjs": [
-      59
-    ],
-    "tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs": [
-      79
-    ],
-    "scripts/dev/receive-partial-report.mjs": [
-      37
-    ],
-    "scripts/dev/config.mjs": [
-      31,
-      24
-    ],
-    "scripts/dev/supervisor.mjs": [
-      26,
-      24
-    ],
-    "scripts/dev/media-smoke-core.mjs": [
-      33
-    ],
-    "scripts/dev/chalk-resources.mjs": [
-      22
-    ],
-    "scripts/deploy/deploy-web-release.mjs": [
-      21
-    ],
-    "sdks/typescript/react-native/src/toasts/notices.ts": [
-      36
-    ],
-    "scripts/web-proof/join-startup.mjs": [
-      26
-    ],
-    "sdks/typescript/react-native/src/frame/CallFrame.tsx": [
-      27
-    ],
-    "scripts/prod-proof/own-sfu-spaces-run.test.mjs": [
-      21
-    ],
-    "sdks/typescript/react-native/src/primitives/IconButton.tsx": [
-      25
-    ],
-    "sdks/typescript/react-native/src/callkit/resolve-space-callkit-options.ts": [
-      22
-    ],
-    "scripts/prod-proof/long-call-criteria.mjs": [
-      32
-    ],
-    "sdks/typescript/react/src/test-support/preview-client.ts": [
-      34
-    ],
-    "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts": [
-      35
-    ],
-    "sdks/typescript/react/src/selectors/space-selectors.ts": [
-      30
-    ],
-    "sdks/typescript/react/src/internal/sound-cues.ts": [
-      25
-    ],
-    "scripts/design-tokens/codemod.mjs": [
-      32
-    ],
-    "infrastructure/listener-audio-alert/listener-audio-check.mjs": [
-      25
-    ],
-    "scripts/gates/chalk-gate-plan.mjs": [
-      114
-    ],
-    "scripts/gates/zod-exception.mjs": [
-      41
-    ],
-    "scripts/gates/references.mjs": [
-      24
-    ],
-    "scripts/gates/feature-map.mjs": [
-      33
-    ],
-    "sdks/typescript/client/src/generated/sync.ts": [
-      48,
-      36,
-      27,
-      24
-    ],
-    "sdks/typescript/client/src/generated/whiteboard-v1.ts": [
-      78,
-      44
-    ],
+    "sdks/typescript/react/src/components/call-limbo/CallLimbo.tsx": [41],
+    "sdks/typescript/react/src/components/atomic/ReactionBubble.tsx": [30],
+    "sdks/typescript/react/src/components/atomic/VolumeSlider.tsx": [21],
+    "sdks/typescript/react/src/components/participant-tile/ParticipantTile.tsx": [68],
+    "sdks/typescript/react/src/components/space-header/SpaceHeader.tsx": [37],
+    "sdks/typescript/react/src/components/space-header/useCallShortcuts.ts": [38],
+    "sdks/typescript/react/src/components/space-header/CallDetails.tsx": [27],
+    "sdks/typescript/react/src/components/space-header/call-network.ts": [25],
+    "sdks/typescript/react/src/components/participants-panel/ParticipantsPanel.tsx": [28, 27],
+    "sdks/typescript/react/src/components/participants-panel/participant-options-menu.tsx": [38],
+    "sdks/typescript/react/src/components/participants-panel/participant-row.tsx": [37],
+    "apps/web/tests/dashboard-ui/refresh-checks.mjs": [24],
+    "sdks/typescript/react/src/components/control-bar/control-bar-behavior.ts": [21],
+    "sdks/typescript/react/src/components/control-bar/control-bar-button.tsx": [33],
+    "apps/web/tests/dashboard-ui/recording-checks.mjs": [36],
+    "apps/web/tests/dashboard-ui/developer-checks.mjs": [25],
+    "sdks/typescript/react/src/components/control-bar/ControlBar.tsx": [63],
+    "apps/web/tests/dashboard-ui/connect-checks.mjs": [34],
+    "sdks/typescript/react/src/components/device-popover/DevicePopover.tsx": [63],
+    "apps/web/tests/dashboard-ui/fixture-server.mjs": [119, 56, 24],
+    "apps/web/src/lib/dashboard/tracking.ts": [25, 23],
+    "sdks/typescript/react/src/components/space-view/SpaceView.tsx": [100],
+    "sdks/typescript/react/src/components/toast-stack/call-events.tsx": [42],
+    "sdks/typescript/react/src/components/stage/stage-layout.ts": [32],
+    "sdks/typescript/react/src/components/stage/SpaceStage.tsx": [24],
+    "sdks/typescript/react/src/components/stage/Stage.tsx": [23],
+    "apps/web/src/call-states/fixtures.ts": [25],
+    "sdks/typescript/react/src/components/chalk/StatusSurface.tsx": [33],
+    "sdks/typescript/react/src/components/chalk/Chalk.tsx": [35],
+    "sdks/typescript/react/src/components/composite/ScreenShareView.tsx": [45],
+    "sdks/typescript/react/src/components/composite/ChatPanel.tsx": [34],
+    "sdks/typescript/react/src/components/composite/ReactionPicker.tsx": [41],
+    "sdks/typescript/react/src/components/composite/MessageBubble.tsx": [52],
+    "sdks/typescript/client/src/sync/v1-client.ts": [39, 22],
+    "apps/web/src/components/space/SpacePage.tsx": [28, 25],
+    "apps/web/src/components/space/pre-join/PreJoin.tsx": [24],
+    "sdks/typescript/client/src/sync/v1-reducer.ts": [22],
+    "apps/web/src/components/dashboard/SessionViewer.tsx": [37],
+    "apps/web/src/components/dashboard/SessionsPage.tsx": [34],
+    "apps/web/src/components/dashboard/LanguagePicker.tsx": [24],
+    "sdks/typescript/client/src/whiteboard/v1-client.ts": [29],
+    "apps/web/src/components/dashboard/DeveloperPage.tsx": [27],
+    "apps/web/src/components/dashboard/RecordingsPage.tsx": [39],
+    "apps/web/src/components/dashboard/CallPage.tsx": [50],
+    "apps/web/src/components/landing/CallPreview.tsx": [25],
+    "apps/web/src/components/landing/Dither.tsx": [27],
+    "apps/web/server/application.ts": [31, 24],
+    "apps/web/server/engine.ts": [35],
+    "apps/web/server/developer.ts": [21],
+    "sdks/typescript/client/src/media/cloudflare-sfu.test.ts": [22],
+    "apps/web/scripts/call-performance-metrics.mjs": [23],
+    "apps/web/scripts/call-leak-check.mjs": [25, 21],
+    "apps/web/scripts/check-call-performance.mjs": [33],
+    "apps/web/scripts/call-heap-summary.mjs": [21],
+    "apps/transcription-dispatcher/src/provider-utils.ts": [21],
+    "apps/transcription-dispatcher/src/config.ts": [28],
+    "apps/transcription-dispatcher/src/dispatcher.ts": [27],
+    "apps/transcription-dispatcher/src/providers.ts": [24],
+    "apps/transcription-dispatcher/src/urls.ts": [40, 36, 24, 23],
+    "apps/transcription-dispatcher/src/control-api.ts": [45],
+    "apps/transcription-dispatcher/src/secrets.ts": [28],
+    "apps/transcription-dispatcher/src/finalizer-merge.ts": [38, 35, 29],
+    "packages/whiteboard/src/collab/engine.ts": [25],
+    "packages/whiteboard/src/react/board/Board.tsx": [43, 28, 21],
+    "packages/whiteboard/src/react/board/BoardCursors.tsx": [28],
+    "packages/whiteboard/src/react/board/BoardMenu.tsx": [23],
+    "packages/whiteboard/src/embedded/controller.ts": [44, 38],
+    "features/scorecard/staging-latency.mjs": [32],
+    "scripts/recorder/analyze-media.mjs": [54],
+    "features/scorecard/diagnostics.mjs": [28],
+    "features/scorecard/contention.mjs": [62],
+    "features/scorecard/schema.mjs": [42, 24],
+    "features/scorecard/staging-logs.mjs": [37],
+    "features/scorecard/staging-metrics.mjs": [56],
+    "features/scorecard/scorecard.mjs": [23],
+    "tools/contract-fixture-proof/src/emitters/effect-schemas.mjs": [23, 22],
+    "scripts/dev/cli.mjs": [53],
+    "tools/contract-fixture-proof/src/emitters/sync-contract.mjs": [59],
+    "tools/contract-fixture-proof/src/emitters/whiteboard-contract.mjs": [79],
+    "scripts/dev/receive-partial-report.mjs": [37],
+    "scripts/dev/config.mjs": [31, 24],
+    "scripts/dev/supervisor.mjs": [26, 24],
+    "scripts/dev/media-smoke-core.mjs": [33],
+    "scripts/dev/chalk-resources.mjs": [22],
+    "scripts/deploy/deploy-web-release.mjs": [21],
+    "sdks/typescript/react-native/src/toasts/notices.ts": [36],
+    "scripts/web-proof/join-startup.mjs": [26],
+    "sdks/typescript/react-native/src/frame/CallFrame.tsx": [27],
+    "scripts/prod-proof/own-sfu-spaces-run.test.mjs": [21],
+    "sdks/typescript/react-native/src/primitives/IconButton.tsx": [25],
+    "sdks/typescript/react-native/src/callkit/resolve-space-callkit-options.ts": [22],
+    "scripts/prod-proof/long-call-criteria.mjs": [32],
+    "sdks/typescript/react/src/test-support/preview-client.ts": [34],
+    "sdks/typescript/react/src/pre-join/usePreJoinDevices.ts": [35],
+    "sdks/typescript/react/src/selectors/space-selectors.ts": [30],
+    "sdks/typescript/react/src/internal/sound-cues.ts": [25],
+    "scripts/design-tokens/codemod.mjs": [32],
+    "infrastructure/listener-audio-alert/listener-audio-check.mjs": [25],
+    "scripts/gates/chalk-gate-plan.mjs": [114],
+    "scripts/gates/zod-exception.mjs": [41],
+    "scripts/gates/references.mjs": [24],
+    "scripts/gates/feature-map.mjs": [33],
+    "sdks/typescript/client/src/generated/sync.ts": [48, 36, 27, 24],
+    "sdks/typescript/client/src/generated/whiteboard-v1.ts": [78, 44],
     "features/media/sfu/internal/media/subscription.go (*subscription).handleFeedback": 16
   },
   "dead-code": {

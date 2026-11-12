@@ -355,7 +355,6 @@ function packageArchive(artifactDirectory, releasePackage) {
   return archives[0];
 }
 
-
 function validateArchive(archivePath) {
   runCommand("pnpm", ["exec", "publint", "run", archivePath], { label: `publint ${path.basename(archivePath)}` });
   runCommand("pnpm", ["exec", "attw", archivePath, "--config-path", path.join(repositoryRoot, ".attw.json")], { label: `attw ${path.basename(archivePath)}` });

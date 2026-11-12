@@ -91,7 +91,9 @@ try {
     const rows = joins.filter((row) => row.arm === arm);
     const times = rows.map((row) => row.joinMs).sort((a, b) => a - b);
     const paths = (key) => [...new Set(rows.map((row) => row[key].join("+") || "none"))].join(" | ");
-    console.log(`${arm}: ${rows.length} joins, median ${times.length ? median(times) : null} ms, min ${times[0]} ms, max ${times.at(-1)} ms; sync on [${paths("sync")}]; signalling on [${paths("signalling")}]; ?direct kept after Join: ${rows.filter((row) => row.kept === "off").length}/${rows.length}`);
+    console.log(
+      `${arm}: ${rows.length} joins, median ${times.length ? median(times) : null} ms, min ${times[0]} ms, max ${times.at(-1)} ms; sync on [${paths("sync")}]; signalling on [${paths("signalling")}]; ?direct kept after Join: ${rows.filter((row) => row.kept === "off").length}/${rows.length}`,
+    );
   }
 } catch (error) {
   failed = true;

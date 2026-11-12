@@ -46,7 +46,7 @@ function git(args) {
   }
 }
 
-export function longFiles() {
+function longFiles() {
   const sizes = {};
   for (const file of git(["ls-files", "-z"]).split("\0").filter(Boolean)) {
     if (!sourceFile.test(file) || generatedFile.test(file)) continue;
@@ -56,11 +56,17 @@ export function longFiles() {
   return sizes;
 }
 
-export function copyCounts() {
+function copyCounts() {
   return Object.fromEntries(
     Object.entries(copies).map(([name, { regex, paths }]) => {
       const output = git(["grep", "-E", "-c", regex, "--", ...paths, ...generatedExclusions]);
-      return [name, output.split("\n").filter(Boolean).reduce((sum, line) => sum + Number(line.slice(line.lastIndexOf(":") + 1)), 0)];
+      return [
+        name,
+        output
+          .split("\n")
+          .filter(Boolean)
+          .reduce((sum, line) => sum + Number(line.slice(line.lastIndexOf(":") + 1)), 0),
+      ];
     }),
   );
 }

@@ -16,8 +16,10 @@ const stemImportExtensions = new Set([".py", ".ts", ".tsx", ".js", ".cjs"]);
 
 const isTest = (file) => /\.test\.|\/test_|_test\.|\.spec\./.test(file);
 
-export function trackedFiles(root = repositoryRoot) {
-  return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 }).split("\0").filter(Boolean);
+function trackedFiles(root = repositoryRoot) {
+  return execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 })
+    .split("\0")
+    .filter(Boolean);
 }
 
 function readText(file, root) {

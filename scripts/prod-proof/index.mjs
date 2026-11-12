@@ -70,7 +70,6 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     "long-call": () => longCallProof(run, receiver),
     "deploy-hold": () => deployHoldProof(run, receiver),
     "toggle-offers": () => toggleOffersProof(run, receiver),
-    "deploy-hold": () => deployHoldProof(run, receiver),
     leave: () => leaveProof(run),
     "leave-own-sfu": () => leaveOwnSfuProof(run),
     "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
