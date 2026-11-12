@@ -29,11 +29,8 @@ type entrancePreparationResponse struct {
 
 func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, entrancePreparationResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return entrancePreparationResponse{}, err
-		}
 		return prepareEntrance(ctx, preparer, request.TenantID, request.SpaceID)
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Permission(authorizer, readSpacesPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError).
 		Middleware(noStoreResponses)
@@ -54,15 +51,12 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 		}
 		return body, nil
 	}, func(ctx context.Context, body entranceInviteBody) (entrancePreparationResponse, error) {
-		if invites == nil {
-			return entrancePreparationResponse{}, apiErrorServiceUnavailable
-		}
 		invite, _, err := invites.ResolveInviteToken(ctx, strings.TrimSpace(body.SpaceInviteToken))
 		if err != nil {
 			return entrancePreparationResponse{}, err
 		}
 		return prepareEntrance(ctx, preparer, invite.TenantID, invite.SpaceID)
-	}).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
+	}).Needs(invites).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
 		RequestBody("EntranceInvite", entranceInviteBody{}).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(apiErrorInvalidPublicInviteToken, apiErrorPublicInviteUnavailable, apiErrorSpaceNotFound, apiErrorServiceUnavailable, apiErrorInternal, apiErrorRateLimited).
 		MapErrors(publicInviteEndpointAPIError)

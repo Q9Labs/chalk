@@ -80,12 +80,6 @@ func membershipEndpoints(service MembershipService, authorizer TenantAuthorizer)
 
 func createMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[createMembershipEndpointRequest, membershipResponse] {
 	return Post("/v1/tenants/{tenant_id}/memberships", "createMembership", decodeCreateMembershipRequest, func(ctx context.Context, request createMembershipEndpointRequest) (membershipResponse, error) {
-		if service == nil {
-			return membershipResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeMembershipsPermission); err != nil {
-			return membershipResponse{}, err
-		}
 
 		input, err := request.Body.input(request.TenantID)
 		if err != nil {
@@ -96,7 +90,7 @@ func createMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 			return membershipResponse{}, err
 		}
 		return newMembershipResponse(membership), nil
-	}).
+	}).Needs(service).Permission(authorizer, writeMembershipsPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter()).
@@ -118,19 +112,13 @@ func createMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 
 func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[listMembershipsRequest, membershipListResponse] {
 	return Get("/v1/tenants/{tenant_id}/memberships", "listMemberships", decodeListMembershipsRequest, func(ctx context.Context, request listMembershipsRequest) (membershipListResponse, error) {
-		if service == nil {
-			return membershipListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readMembershipsPermission); err != nil {
-			return membershipListResponse{}, err
-		}
 
 		list, err := service.ListTenantMemberships(ctx, request.TenantID, request.Page)
 		if err != nil {
 			return membershipListResponse{}, err
 		}
 		return newMembershipListResponse(list)
-	}).
+	}).Needs(service).Permission(authorizer, readMembershipsPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Responds(http.StatusOK, "MembershipList", membershipListResponse{}).
@@ -148,19 +136,13 @@ func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthori
 
 func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[updateMembershipEndpointRequest, membershipResponse] {
 	return Patch("/v1/tenants/{tenant_id}/memberships/{membership_id}", "updateMembership", decodeUpdateMembershipRequest, func(ctx context.Context, request updateMembershipEndpointRequest) (membershipResponse, error) {
-		if service == nil {
-			return membershipResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeMembershipsPermission); err != nil {
-			return membershipResponse{}, err
-		}
 
 		membership, err := service.UpdateTenantMembership(ctx, request.TenantID, request.MembershipID, request.Body.input())
 		if err != nil {
 			return membershipResponse{}, err
 		}
 		return newMembershipResponse(membership), nil
-	}).
+	}).Needs(service).Permission(authorizer, writeMembershipsPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), membershipIDParameter()).

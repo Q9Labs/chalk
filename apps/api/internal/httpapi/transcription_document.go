@@ -44,23 +44,16 @@ type transcriptDocumentCueIdentity struct {
 
 func transcriptDocumentEndpoint(service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptDocumentResponse] {
 	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
-		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
+		transcript, document, err := readTranscriptDocument(ctx, service, objects, request)
 		if err != nil {
 			return transcriptDocumentResponse{}, err
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
-	}).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+	}).Needs(service, objects).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
 }
 
-func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
-	if service == nil || objects == nil {
-		return transcripts.Transcript{}, transcripts.Document{}, apiErrorServiceUnavailable
-	}
-	if err := authorizeTenant(ctx, authorizer, request.TenantID, authorization.TenantPermission{Scope: authentication.ScopeTranscriptionsRead, MinimumRole: memberships.RoleObserver}); err != nil {
-		return transcripts.Transcript{}, transcripts.Document{}, err
-	}
-
+func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {
 	transcript, err := service.Get(ctx, request.TenantID, request.TranscriptID)
 	if err != nil {
 		return transcripts.Transcript{}, transcripts.Document{}, err

@@ -55,9 +55,6 @@ func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[down
 			if !ok {
 				return whiteboardFileDownloadResponse{}, apiErrorUnauthenticated
 			}
-			if service == nil {
-				return whiteboardFileDownloadResponse{}, apiErrorServiceUnavailable
-			}
 			result, err := service.Download(ctx, subject, request.FileID)
 			if err != nil {
 				return whiteboardFileDownloadResponse{}, err
@@ -68,6 +65,7 @@ func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[down
 			}, nil
 		},
 	).
+		Needs(service).
 		Auth(APIAuthParticipantSync).
 		Parameters(whiteboardFileIDParameter()).
 		Responds(http.StatusOK, "WhiteboardFileDownload", whiteboardFileDownloadResponse{}).

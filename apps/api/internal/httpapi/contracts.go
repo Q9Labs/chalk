@@ -1,6 +1,9 @@
 package httpapi
 
-import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
+import (
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
+	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+)
 
 // apiPrefix is where the public API mounts; every route Path starts with it.
 const apiPrefix = "/v1"
@@ -46,11 +49,14 @@ type APIParameterContract struct {
 }
 
 type APIRouteContract struct {
-	Description    string
-	OperationID    string
-	Method         string
-	Path           string
-	Auth           APIAuth
+	Description string
+	OperationID string
+	Method      string
+	Path        string
+	Auth        APIAuth
+	// Permission is what the caller needs on the Tenant in the path; nil when the
+	// route checks none.
+	Permission     *authorization.TenantPermission
 	RateLimit      ratelimit.Policy
 	BodyLimitBytes int64
 	Parameters     []APIParameterContract

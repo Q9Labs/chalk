@@ -61,12 +61,6 @@ func decodeListSpaceLiveEpisodesRequest(r *http.Request) (listSpaceLiveEpisodesR
 
 func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceLiveEpisodesRequest, spaceLiveEpisodeListResponse] {
 	return Get("/v1/tenants/{tenant_id}/live-episodes", "listSpaceLiveEpisodes", decodeListSpaceLiveEpisodesRequest, func(ctx context.Context, request listSpaceLiveEpisodesRequest) (spaceLiveEpisodeListResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
-			return spaceLiveEpisodeListResponse{}, err
-		}
-		if service == nil {
-			return spaceLiveEpisodeListResponse{}, apiErrorServiceUnavailable
-		}
 		list, err := service.ListSpaceLiveEpisodes(ctx, request.TenantID, request.SpaceIDs)
 		if err != nil {
 			return spaceLiveEpisodeListResponse{}, err
@@ -84,7 +78,7 @@ func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer T
 			result.Spaces = append(result.Spaces, item)
 		}
 		return result, nil
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
+	}).Permission(authorizer, readEpisodesPermission).Needs(service).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "space_ids", In: "query", Type: "string", Required: true}).
 		Responds(http.StatusOK, "SpaceLiveEpisodeList", spaceLiveEpisodeListResponse{}).
 		Errors(lifecycleReadErrors(apiErrorInvalidSpaceIDs, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(func(err error) (APIError, bool) {

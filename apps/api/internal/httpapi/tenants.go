@@ -125,9 +125,6 @@ func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []Route
 
 func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, tenantResponse] {
 	return Post("/v1/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsWrite)
 		if err != nil {
 			return tenantResponse{}, err
@@ -141,7 +138,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("CreateTenantRequest", createTenantRequest{}).
@@ -163,9 +160,6 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 
 func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
 	return Get("/v1/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
-		if service == nil {
-			return tenantListResponse{}, apiErrorServiceUnavailable
-		}
 
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
 		if err != nil {
@@ -187,7 +181,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 		}
 
 		return response, nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(
@@ -209,21 +203,13 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 
 func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, tenantResponse] {
 	return Get("/v1/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
-
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
-			return tenantResponse{}, err
-		}
-
 		tenant, err := service.GetTenant(ctx, request.TenantID)
 		if err != nil {
 			return tenantResponse{}, err
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Permission(authorizer, readTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
@@ -242,21 +228,13 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 
 func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[updateTenantEndpointRequest, tenantResponse] {
 	return Patch("/v1/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
-
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTenantPermission); err != nil {
-			return tenantResponse{}, err
-		}
-
 		tenant, err := service.UpdateTenant(ctx, request.TenantID, request.Body.input())
 		if err != nil {
 			return tenantResponse{}, err
 		}
 
 		return newTenantResponse(tenant), nil
-	}).
+	}).Permission(authorizer, writeTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: "tenant_id", In: "path", Type: "string", Required: true}).
@@ -495,9 +473,6 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 		}
 		return findServiceTenantRequest{ExternalID: externalID}, nil
 	}, func(ctx context.Context, request findServiceTenantRequest) (tenantResponse, error) {
-		if service == nil {
-			return tenantResponse{}, apiErrorServiceUnavailable
-		}
 		serviceID, err := authorizeTenantCollection(ctx, authentication.ScopeTenantsRead)
 		if err != nil {
 			return tenantResponse{}, err
@@ -510,7 +485,7 @@ func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenant
 			return tenantResponse{}, err
 		}
 		return newTenantResponse(tenant), nil
-	}).Auth(APIAuthSessionOrBearer).
+	}).Needs(service).Auth(APIAuthSessionOrBearer).
 		Description("The calling service is responsible for the request-supplied external_id and end-user identity; Tenant ownership is derived only from the authenticated service identity.").
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: "external_id", In: "query", Type: "string", Required: true, MinLength: 1, MaxLength: 512, CodePointLength: true}).

@@ -32,9 +32,6 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 			return cancelParticipantJoinRequest{Route: route}, nil
 		},
 		func(ctx context.Context, request cancelParticipantJoinRequest) (cancelParticipantJoinResponse, error) {
-			if service == nil {
-				return cancelParticipantJoinResponse{}, apiErrorServiceUnavailable
-			}
 			subject, ok := accessgrants.SubjectFromContext(ctx)
 			if !ok {
 				return cancelParticipantJoinResponse{}, apiErrorUnauthenticated
@@ -48,7 +45,7 @@ func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier Part
 				ParticipantID: subject.ParticipantID, ParticipantGeneration: subject.ParticipantGeneration, MediaConnectionID: subject.ConnectionID,
 			})
 			return cancelParticipantJoinResponse{Cancelled: cancelled}, err
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
+		}).Needs(service).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier)).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantJoinCancellation", cancelParticipantJoinResponse{}).
 		Errors(apiErrorInvalidRequest, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID,

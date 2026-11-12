@@ -34,18 +34,12 @@ type recordingCaptureSlotResponse struct {
 // Slots held for other Tenants are counted without identifiers.
 func getRecordingCapturePoolEndpoint(service RecordingCapturePoolService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, recordingCapturePoolResponse] {
 	return Get("/v1/tenants/{tenant_id}/recording-capture-pool", "getRecordingCapturePool", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (recordingCapturePoolResponse, error) {
-		if service == nil {
-			return recordingCapturePoolResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
-			return recordingCapturePoolResponse{}, err
-		}
 		pool, err := service.GetCapturePool(ctx, request.TenantID)
 		if err != nil {
 			return recordingCapturePoolResponse{}, err
 		}
 		return newRecordingCapturePoolResponse(pool), nil
-	}).
+	}).Needs(service).Permission(authorizer, readRecordingsPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter()).
 		Responds(http.StatusOK, "RecordingCapturePool", recordingCapturePoolResponse{}).

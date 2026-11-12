@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/ratelimit"
+	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
 type RouteEndpoint interface {
@@ -33,6 +36,10 @@ type Endpoint[Request any, Response any] struct {
 	// operations from one URL uses it so each operation keeps its own policy.
 	limitFor func(Request) (ratelimit.Policy, bool)
 	limits   RateLimitOptions
+	// needs are the services the route cannot run without, and authorizer
+	// enforces contract.Permission. Both answer 503 when absent.
+	needs      []any
+	authorizer TenantAuthorizer
 }
 
 func Get[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
@@ -79,6 +86,25 @@ func (e Endpoint[Request, Response]) Auth(auth APIAuth) Endpoint[Request, Respon
 
 func (e Endpoint[Request, Response]) UserAuth() Endpoint[Request, Response] {
 	return e.Auth(APIAuthSessionOrBearer)
+}
+
+// Needs lists the services the route cannot run without. When one is nil, the
+// route answers 503 once the request decodes and passes its rate limit.
+func (e Endpoint[Request, Response]) Needs(services ...any) Endpoint[Request, Response] {
+	e.needs = append(e.needs, services...)
+	return e
+}
+
+// Permission makes the route require permission on the Tenant named by its
+// {tenant_id} path parameter. The route checks it after the request decodes,
+// so the contract and the enforcement are the same declaration.
+func (e Endpoint[Request, Response]) Permission(authorizer TenantAuthorizer, permission authorization.TenantPermission) Endpoint[Request, Response] {
+	if !strings.Contains(e.contract.Path, "{tenant_id}") {
+		panic("httpapi: " + e.contract.OperationID + " declares a Tenant permission but its path has no {tenant_id}")
+	}
+	e.authorizer = authorizer
+	e.contract.Permission = &permission
+	return e
 }
 
 func (e Endpoint[Request, Response]) RateLimit(policy ratelimit.Policy) Endpoint[Request, Response] {
@@ -205,13 +231,54 @@ func (e Endpoint[Request, Response]) ServeHTTP(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	response, err := e.handle(r.Context(), request)
+	var tenantID utilities.ID
+	if e.contract.Permission != nil {
+		if tenantID, err = tenantIDRequest(r); err != nil {
+			e.writeFailure(w, r, err)
+			return
+		}
+	}
+	response, err := e.guarded(r.Context(), tenantID, request)
 	if err != nil {
 		e.writeFailure(w, r, err)
 		return
 	}
 
 	e.writeResponse(w, r, response)
+}
+
+// guarded runs the handler once guard passes. The MCP tools call it too,
+// because they use the same endpoints.
+func (e Endpoint[Request, Response]) guarded(ctx context.Context, tenantID utilities.ID, request Request) (Response, error) {
+	if err := e.guard(ctx, tenantID); err != nil {
+		var none Response
+		return none, err
+	}
+	return e.handle(ctx, request)
+}
+
+// guard rejects a call whose services are missing or whose caller lacks the
+// declared permission on tenantID.
+func (e Endpoint[Request, Response]) guard(ctx context.Context, tenantID utilities.ID) error {
+	for _, service := range e.needs {
+		if missingService(service) {
+			return apiErrorServiceUnavailable
+		}
+	}
+	if e.contract.Permission == nil {
+		return nil
+	}
+	return authorizeTenant(ctx, e.authorizer, tenantID, *e.contract.Permission)
+}
+
+// missingService reports a nil service, including a nil function value, which
+// an interface comparison does not see.
+func missingService(service any) bool {
+	if service == nil {
+		return true
+	}
+	value := reflect.ValueOf(service)
+	return value.Kind() == reflect.Func && value.IsNil()
 }
 
 func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http.Request, err error) {

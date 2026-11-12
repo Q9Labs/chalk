@@ -236,7 +236,7 @@ func mcpInvoke[Request, Response any](b *mcpRequest, endpoint Endpoint[Request, 
 	if traced, ok := any(request).(interface{ withTrace(context.Context) Request }); ok {
 		request = traced.withTrace(ctx)
 	}
-	response, err := endpoint.handle(ctx, request)
+	response, err := endpoint.guarded(ctx, b.tenant, request)
 	outcome := "ok"
 	if err != nil {
 		outcome = endpoint.apiError(err).Code

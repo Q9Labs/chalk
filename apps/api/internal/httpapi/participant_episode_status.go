@@ -25,9 +25,6 @@ func participantEpisodeStatusEndpoint(service EpisodeLookup, verifier Participan
 			if subject.TenantID != route.TenantID || subject.SpaceID != route.SpaceID || subject.EpisodeID != route.EpisodeID || subject.ParticipantID != route.ParticipantID {
 				return participantEpisodeStatusResponse{}, apiErrorForbidden
 			}
-			if service == nil {
-				return participantEpisodeStatusResponse{}, apiErrorServiceUnavailable
-			}
 			episode, err := service.GetEpisode(ctx, subject.TenantID, subject.SpaceID, subject.EpisodeID)
 			if err != nil {
 				return participantEpisodeStatusResponse{}, err
@@ -38,7 +35,7 @@ func participantEpisodeStatusEndpoint(service EpisodeLookup, verifier Participan
 			default:
 				return participantEpisodeStatusResponse{}, apiErrorServiceUnavailable
 			}
-		}).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier), noStoreParticipantEpisodeStatus).RateLimit(authenticatedReadRateLimit).
+		}).Needs(service).Auth(APIAuthParticipantMedia).Middleware(requireParticipantMediaCredential(verifier), noStoreParticipantEpisodeStatus).RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), episodeIDParameter(), participantIDParameter()).
 		Responds(http.StatusOK, "ParticipantEpisodeStatus", participantEpisodeStatusResponse{}).
 		Errors(lifecycleReadErrors(apiErrorRateLimited, apiErrorInvalidSpaceID, apiErrorInvalidEpisodeID, apiErrorInvalidParticipantID, apiErrorEpisodeNotFound)...).

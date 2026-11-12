@@ -103,15 +103,12 @@ func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLooku
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsRead); err != nil {
 			return mcpConsentResponse{}, err
 		}
-		if service == nil {
-			return mcpConsentResponse{}, apiErrorServiceUnavailable
-		}
 		pending, err := service.ConsentRequest(ctx, request.Request)
 		if err != nil {
 			return mcpConsentResponse{}, err
 		}
 		return mcpConsentResponse{ClientName: pending.ClientName, RedirectHost: mcpauth.DisplayHost(pending.RedirectURI), Scope: pending.Scope, ExpiresAt: pending.ExpiresAt}, nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		RequestBody("MCPConsentLookup", mcpConsentLookupBody{}).
@@ -126,9 +123,6 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 		if err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
-		if service == nil {
-			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
-		}
 		tenantID, err := utilities.ParseID(request.TenantID)
 		if err != nil {
 			return mcpConsentRedirectResponse{}, apiErrorInvalidTenantID
@@ -142,7 +136,7 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 			return mcpConsentRedirectResponse{}, err
 		}
 		return mcpConsentRedirectResponse{RedirectURL: redirect}, nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("MCPConsentApproval", mcpConsentApproveBody{}).
@@ -156,15 +150,12 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite); err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
-		if service == nil {
-			return mcpConsentRedirectResponse{}, apiErrorServiceUnavailable
-		}
 		redirect, err := service.Deny(ctx, request.Request)
 		if err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
 		return mcpConsentRedirectResponse{RedirectURL: redirect}, nil
-	}).
+	}).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("MCPConsentLookup", mcpConsentLookupBody{}).
@@ -175,12 +166,6 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 
 func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[listMCPConnectionsRequest, mcpConnectionListResponse] {
 	return Get("/v1/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeListMCPConnectionsRequest, func(ctx context.Context, request listMCPConnectionsRequest) (mcpConnectionListResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
-			return mcpConnectionListResponse{}, err
-		}
-		if service == nil {
-			return mcpConnectionListResponse{}, apiErrorServiceUnavailable
-		}
 		list, err := service.ListGrants(ctx, request.TenantID, request.Page)
 		if err != nil {
 			return mcpConnectionListResponse{}, err
@@ -194,7 +179,7 @@ func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthor
 			response.Data = append(response.Data, mcpConnectionResponse{ID: grant.ID.String(), ClientName: grant.ClientName, Scope: grant.Scope, LastUsedAt: grant.LastUsedAt, CreatedAt: grant.CreatedAt})
 		}
 		return response, nil
-	}).
+	}).Permission(authorizer, readTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedReadRateLimit).
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
@@ -212,14 +197,8 @@ func revokeMCPConnectionEndpoint(service MCPOAuthService, authorizer TenantAutho
 		connectionID, err := routeID(r, "connection_id", apiErrorMCPConnectionNotFound)
 		return mcpConnectionIDsRequest{TenantID: tenantID, ConnectionID: connectionID}, err
 	}, func(ctx context.Context, request mcpConnectionIDsRequest) (noResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeTenantPermission); err != nil {
-			return noResponse{}, err
-		}
-		if service == nil {
-			return noResponse{}, apiErrorServiceUnavailable
-		}
 		return noResponse{}, service.RevokeGrant(ctx, request.TenantID, request.ConnectionID)
-	}).
+	}).Permission(authorizer, writeTenantPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), APIParameterContract{Name: "connection_id", In: "path", Type: "string", Required: true}).

@@ -54,15 +54,9 @@ func recordingPreparationEndpoints(service RecordingPreparationService, authoriz
 
 func getRecordingPreparationEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, preparationResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "getSpaceRecordingPreparation", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (preparationResponse, error) {
-		if service == nil {
-			return preparationResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return preparationResponse{}, err
-		}
 		preparation, err := service.Get(ctx, request.TenantID, request.SpaceID)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthSessionOrBearer).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorPreparationNotFound, apiErrorInvalidPreparation)...).
@@ -71,15 +65,9 @@ func getRecordingPreparationEndpoint(service RecordingPreparationService, author
 
 func prepareRecordingEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
 	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "prepareSpaceRecording", decodePreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
-		if service == nil {
-			return preparationResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, input.TenantID, writeSpacesPermission); err != nil {
-			return preparationResponse{}, err
-		}
 		preparation, err := service.Prepare(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("PrepareRecordingRequest", preparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationConflict, apiErrorPreparationPolicy)...).
@@ -88,15 +76,9 @@ func prepareRecordingEndpoint(service RecordingPreparationService, authorizer Te
 
 func cancelRecordingPreparationEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation/cancel", "cancelSpaceRecordingPreparation", decodeCancelPreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
-		if service == nil {
-			return preparationResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, input.TenantID, writeSpacesPermission); err != nil {
-			return preparationResponse{}, err
-		}
 		preparation, err := service.Cancel(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("CancelRecordingPreparationRequest", cancelPreparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationNotFound, apiErrorPreparationConflict)...).

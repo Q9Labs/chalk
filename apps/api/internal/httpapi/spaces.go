@@ -146,12 +146,6 @@ func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEn
 
 func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[createSpaceEndpointRequest, spaceResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces", "createSpace", decodeCreateSpaceRequest, func(ctx context.Context, request createSpaceEndpointRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
 
 		input, err := request.Body.toCreateInput(request.TenantID, createdByUserID(ctx), request.RequestKey)
 		if err != nil {
@@ -162,7 +156,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), idempotencyKeyParameter()).
@@ -174,12 +168,6 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
-		if service == nil {
-			return spaceListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return spaceListResponse{}, err
-		}
 
 		var list spaces.SpaceList
 		var err error
@@ -196,7 +184,7 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 			return spaceListResponse{}, err
 		}
 		return newSpaceListResponse(ctx, service, request.TenantID, list)
-	}).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Responds(http.StatusOK, "SpaceList", spaceListResponse{}).
 		Parameters(append([]APIParameterContract{tenantIDParameter(), {Name: "archived", In: "query", Type: "boolean", Required: false}}, paginationParameters()...)...).
@@ -206,19 +194,13 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 
 func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}", "getSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
 
 		space, err := service.GetSpace(ctx, request.TenantID, request.SpaceID)
 		if err != nil {
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "Space", spaceResponse{}).
@@ -228,12 +210,6 @@ func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoin
 
 func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[updateSpaceEndpointRequest, spaceResponse] {
 	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}", "updateSpace", decodeUpdateSpaceRequest, func(ctx context.Context, request updateSpaceEndpointRequest) (spaceResponse, error) {
-		if service == nil {
-			return spaceResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-			return spaceResponse{}, err
-		}
 
 		input, err := request.Body.toUpdateInput()
 		if err != nil {
@@ -244,7 +220,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 			return spaceResponse{}, err
 		}
 		return singleSpaceResponse(ctx, service, request.TenantID, space)
-	}).
+	}).Needs(service).Permission(authorizer, writeSpacesPermission).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).

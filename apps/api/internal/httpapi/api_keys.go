@@ -123,13 +123,6 @@ func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer) []Route
 
 func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
-		if service == nil {
-			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-
-			return apiKeyWithSecretResponse{}, err
-		}
 		if err := preventAPIKeyScopeEscalation(ctx, request.Body.Scopes, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
@@ -150,7 +143,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
-	}).
+	}).Permission(authorizer, writeAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
@@ -163,19 +156,13 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 
 func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[listAPIKeysRequest, apiKeyListResponse] {
 	return Get("/v1/tenants/{tenant_id}/api-keys", "listAPIKeys", decodeListAPIKeysRequest, func(ctx context.Context, request listAPIKeysRequest) (apiKeyListResponse, error) {
-		if service == nil {
-			return apiKeyListResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readAPIKeysPermission); err != nil {
-			return apiKeyListResponse{}, err
-		}
 
 		list, err := service.List(ctx, request.TenantID, request.Page)
 		if err != nil {
 			return apiKeyListResponse{}, err
 		}
 		return newAPIKeyListResponse(list)
-	}).
+	}).Needs(service).Permission(authorizer, readAPIKeysPermission).
 		Auth(APIAuthSessionOrBearer).
 		Parameters(append([]APIParameterContract{tenantIDParameter()}, paginationParameters()...)...).
 		Middleware(noStoreAPIKeyResponse).
@@ -186,13 +173,6 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 
 func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
 	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
-		if service == nil {
-			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeAPIKeysPermission); err != nil {
-
-			return apiKeyWithSecretResponse{}, err
-		}
 		if err := preventAPIKeyTargetEscalation(ctx, service, request.apiKeyIDsRequest, true); err != nil {
 
 			return apiKeyWithSecretResponse{}, err
@@ -206,7 +186,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 			return apiKeyWithSecretResponse{}, apiErrorAPIKeySecretNotReplayable
 		}
 		return newAPIKeyWithSecretResponse(result.Key, result.RawKey, result.Replayed), nil
-	}).
+	}).Permission(authorizer, writeAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).
@@ -219,19 +199,12 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 
 func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[apiKeyIDsRequest, noResponse] {
 	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
-		if service == nil {
-			return noResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, deleteAPIKeysPermission); err != nil {
-
-			return noResponse{}, err
-		}
 		if err := preventAPIKeyTargetEscalation(ctx, service, request, false); err != nil {
 
 			return noResponse{}, err
 		}
 		return noResponse{}, service.Revoke(ctx, request.TenantID, request.APIKeyID)
-	}).
+	}).Permission(authorizer, deleteAPIKeysPermission).Needs(service).
 		Auth(APIAuthSessionOrBearer).
 		RateLimit(authenticatedWriteRateLimit).
 		Middleware(noStoreAPIKeyResponse).

@@ -36,11 +36,6 @@ var (
 	apiErrorMediaProofRejected       = APIError{Status: http.StatusUnauthorized, Code: "access.media_proof_rejected", Message: "Media proof was rejected"}
 )
 
-var (
-	publicInviteReadEpisodesPermission  = authorization.TenantPermission{Scope: authentication.ScopeEpisodesRead, MinimumRole: memberships.RoleObserver}
-	publicInviteWriteEpisodesPermission = authorization.TenantPermission{Scope: authentication.ScopeEpisodesWrite, MinimumRole: memberships.RoleCollaborator}
-)
-
 const (
 	publicInviteTokenHeader  = "X-Chalk-Arrival-Handle"
 	publicClientHeader       = "X-Chalk-Client"
@@ -219,31 +214,18 @@ func publicInvitePublicEndpoints(service PublicInviteService, origin func(http.H
 
 func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer) Endpoint[publicInvitePathRequest, publicInviteResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "getSpacePublicInvite", decodePublicInvitePath, func(ctx context.Context, request publicInvitePathRequest) (publicInviteResponse, error) {
-		if service == nil {
-			return publicInviteResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return publicInviteResponse{}, err
-		}
 		invite, err := service.GetInvite(ctx, request.TenantID, request.SpaceID, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicInviteResponse{}, err
 		}
 		return newPublicInviteResponse(invite), nil
-	}).UserAuth().RateLimit(authenticatedReadRateLimit).
+	}).Needs(service).Permission(authorizer, readSpacesPermission).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "SpacePublicInvite", publicInviteResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.get"))
 }
 
 func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[updatePublicInviteRequest, publicInviteResponse] {
 	endpoint := Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "updateSpacePublicInvite", decodeUpdatePublicInviteRequest, func(ctx context.Context, request updatePublicInviteRequest) (publicInviteResponse, error) {
-		if service == nil {
-			return publicInviteResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-
-			return publicInviteResponse{}, err
-		}
 		invite, err := service.UpdateInvite(ctx, publicinvites.UpdateSpacePublicInviteInput{TenantID: request.TenantID, SpaceID: request.SpaceID, Enabled: request.Body.Enabled, ActorID: principalUserID(ctx)})
 		if err != nil {
 
@@ -251,7 +233,7 @@ func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 		}
 
 		return newPublicInviteResponse(invite), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).Permission(authorizer, writeSpacesPermission).Needs(service).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("UpdateSpacePublicInviteRequest", struct {
 		Enabled bool `json:"enabled"`
 	}{}).Responds(http.StatusOK, "SpacePublicInvite", publicInviteResponse{}).
@@ -264,13 +246,6 @@ func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 
 func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[rotatePublicInviteRequest, publicInviteResponse] {
 	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "rotateSpacePublicInvite", decodeRotatePublicInviteRequest, func(ctx context.Context, request rotatePublicInviteRequest) (publicInviteResponse, error) {
-		if service == nil {
-			return publicInviteResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeSpacesPermission); err != nil {
-
-			return publicInviteResponse{}, err
-		}
 		invite, err := service.RotateInvite(ctx, publicinvites.RotateSpacePublicInviteInput{TenantID: request.TenantID, SpaceID: request.SpaceID, ActorID: principalUserID(ctx), RequestKey: request.RequestKey})
 		if err != nil {
 
@@ -278,7 +253,7 @@ func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 		}
 
 		return newPublicInviteResponse(invite), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).Permission(authorizer, writeSpacesPermission).Needs(service).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), idempotencyKeyParameter()).Responds(http.StatusCreated, "SpacePublicInvite", publicInviteResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.rotate"))
 	if origin != nil {
@@ -289,18 +264,12 @@ func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 
 func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer TenantAuthorizer) Endpoint[listPublicAdmissionRequestsRequest, publicAdmissionRequestPageResponse] {
 	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests", "listSpacePublicAdmissionRequests", decodeListPublicAdmissionRequestsRequest, func(ctx context.Context, request listPublicAdmissionRequestsRequest) (publicAdmissionRequestPageResponse, error) {
-		if service == nil {
-			return publicAdmissionRequestPageResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, publicInviteReadEpisodesPermission); err != nil {
-			return publicAdmissionRequestPageResponse{}, err
-		}
 		page, err := service.ListAdmissionRequests(ctx, publicinvites.ListPublicAdmissionRequestsInput{TenantID: request.TenantID, SpaceID: request.SpaceID, State: request.State, PageSize: 50})
 		if err != nil {
 			return publicAdmissionRequestPageResponse{}, err
 		}
 		return newPublicAdmissionRequestPageResponse(page), nil
-	}).UserAuth().RateLimit(authenticatedReadRateLimit).
+	}).Needs(service).Permission(authorizer, readEpisodesPermission).UserAuth().RateLimit(authenticatedReadRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), APIParameterContract{Name: "state", In: "query", Type: "string", Required: false, Enum: []string{"pending"}}).
 		Responds(http.StatusOK, "PublicAdmissionRequestPage", publicAdmissionRequestPageResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_list"))
@@ -316,13 +285,6 @@ func denyPublicAdmissionRequestEndpoint(service PublicInviteService, authorizer 
 
 func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler, action, operationID string, decision publicinvites.AdmissionDecision) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
 	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, operationID, decodeDecidePublicAdmissionRequest, func(ctx context.Context, request decidePublicAdmissionRequestRequest) (publicAdmissionRequestResponse, error) {
-		if service == nil {
-			return publicAdmissionRequestResponse{}, apiErrorServiceUnavailable
-		}
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, publicInviteWriteEpisodesPermission); err != nil {
-
-			return publicAdmissionRequestResponse{}, err
-		}
 		input := publicinvites.DecidePublicAdmissionRequestInput{TenantID: request.TenantID, SpaceID: request.SpaceID, RequestHandle: request.RequestHandle, RequestKey: request.RequestKey, ActorID: principalUserID(ctx)}
 		var (
 			admission publicinvites.AdmissionRequest
@@ -339,7 +301,7 @@ func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorize
 		}
 
 		return newPublicAdmissionRequestResponse(admission), nil
-	}).UserAuth().RateLimit(authenticatedWriteRateLimit).
+	}).Permission(authorizer, writeEpisodesPermission).Needs(service).UserAuth().RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter(), requestHandleParameter(), idempotencyKeyParameter()).Responds(http.StatusOK, "PublicAdmissionRequest", publicAdmissionRequestResponse{}).
 		Errors(publicInviteManagementErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("management.admission_"+string(decision)))
 	if origin != nil {
@@ -350,15 +312,12 @@ func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorize
 
 func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteArrivalRequest, publicSpaceCreatedResponse] {
 	endpoint := Post("/v1/public/spaces", "createPublicSpace", decodePublicSpaceCreateRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceCreatedResponse, error) {
-		if service == nil {
-			return publicSpaceCreatedResponse{}, apiErrorServiceUnavailable
-		}
 		created, err := service.CreatePublicSpace(ctx, publicinvites.CreatePublicSpaceInput{DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, Native: request.Native, LegacyInviteLink: request.LegacyInviteLink, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicSpaceCreatedResponse{}, err
 		}
 		return newPublicSpaceCreatedResponse(created), nil
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).RateLimit(authenticatedWriteRateLimit).
 		Parameters(idempotencyKeyParameter(), mediaProvidersParameter()).RequestBody("CreatePublicSpaceRequest", struct {
 		DisplayName string `json:"display_name"`
 	}{}).Responds(http.StatusCreated, "PublicSpaceCreated", publicSpaceCreatedResponse{}).
@@ -371,15 +330,12 @@ func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Han
 
 func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteArrivalRequest, publicSpaceArrivalResponse] {
 	endpoint := Post("/v1/public/space-invite-arrivals", "arriveBySpacePublicInvite", decodePublicInviteArrivalRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceArrivalResponse, error) {
-		if service == nil {
-			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
-		}
 		arrival, err := service.Arrive(ctx, publicinvites.PublicInviteArrivalInput{Token: request.Body.SpaceInviteToken, DisplayName: request.Body.DisplayName, RequestKey: request.RequestKey, ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, AccountAuthorized: request.AccountAuthorized, Native: request.Native, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).RateLimit(authenticatedWriteRateLimit).
 		Parameters(idempotencyKeyParameter(), APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: false}, mediaProvidersParameter()).RequestBody("SpacePublicInviteArrivalRequest", struct {
 		SpaceInviteToken string `json:"space_invite_token"`
 		DisplayName      string `json:"display_name"`
@@ -393,30 +349,24 @@ func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.
 
 func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[publicInviteStatusRequest, publicSpaceArrivalResponse] {
 	return Get("/v1/public/space-invite-arrival", "getSpacePublicInviteArrival", decodePublicInviteStatusRequest, func(ctx context.Context, request publicInviteStatusRequest) (publicSpaceArrivalResponse, error) {
-		if service == nil {
-			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
-		}
 		arrival, err := service.Status(ctx, publicinvites.PublicInviteArrivalStatusInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaClients: request.MediaClients}, func() error { return chargeWriteBudget(ctx) })
 		if err != nil {
 			return publicSpaceArrivalResponse{}, err
 		}
 		return newPublicSpaceArrivalResponse(arrival), nil
-	}).RateLimit(authenticatedReadRateLimit).
+	}).Needs(service).RateLimit(authenticatedReadRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}, mediaProvidersParameter()).Responds(http.StatusOK, "PublicSpaceArrival", publicSpaceArrivalResponse{}).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(noStoreResponses, publicInviteTelemetry("public.status"))
 }
 
 func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteRefreshRequest, publicAccessGrantResponse] {
 	endpoint := Post("/v1/public/space-invite-arrival/access-grants", "refreshSpacePublicInviteAccess", decodePublicInviteRefreshRequest, func(ctx context.Context, request publicInviteRefreshRequest) (publicAccessGrantResponse, error) {
-		if service == nil {
-			return publicAccessGrantResponse{}, apiErrorServiceUnavailable
-		}
 		grant, err := service.RefreshAccess(ctx, publicinvites.PublicInviteRefreshInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native, MediaProof: request.MediaProof, ReplaceMediaConnection: request.ReplaceMediaConnection, MediaClients: request.MediaClients})
 		if err != nil {
 			return publicAccessGrantResponse{}, err
 		}
 		return newPublicAccessGrantResponse(grant), nil
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}, mediaProvidersParameter()).RequestBody("RefreshSpacePublicInviteAccessRequest", struct {
 		MediaProof             string `json:"media_proof"`
 		ReplaceMediaConnection bool   `json:"replace_media_connection"`
@@ -430,11 +380,8 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 
 func leavePublicInviteArrivalEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteLeaveRequest, struct{}] {
 	endpoint := Delete("/v1/public/space-invite-arrival", "leaveSpacePublicInviteArrival", decodePublicInviteLeaveRequest, func(ctx context.Context, request publicInviteLeaveRequest) (struct{}, error) {
-		if service == nil {
-			return struct{}{}, apiErrorServiceUnavailable
-		}
 		return struct{}{}, service.Leave(ctx, publicinvites.PublicInviteLeaveInput{ArrivalHandle: request.ArrivalHandle, GuestCredential: request.GuestCredential, AccountID: request.AccountID, Native: request.Native})
-	}).RateLimit(authenticatedWriteRateLimit).
+	}).Needs(service).RateLimit(authenticatedWriteRateLimit).
 		Parameters(APIParameterContract{Name: publicInviteTokenHeader, In: "header", Type: "string", Required: true}).RespondsNoBody(http.StatusNoContent).WriteWith(writePublicLeave).
 		Errors(publicInvitePublicErrors()...).MapErrors(publicInviteEndpointAPIError).Middleware(publicInviteTelemetry("public.leave"))
 	if origin != nil {

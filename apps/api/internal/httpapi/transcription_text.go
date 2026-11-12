@@ -25,10 +25,7 @@ type transcriptTextResponse struct {
 
 func transcriptTextEndpoint(service TranscriptArtifactService, objects RecordingObjectService, metadata TranscriptTextMetadataService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptTextResponse] {
 	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/text", "getTranscriptText", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptTextResponse, error) {
-		if metadata == nil {
-			return transcriptTextResponse{}, apiErrorServiceUnavailable
-		}
-		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
+		transcript, document, err := readTranscriptDocument(ctx, service, objects, request)
 		if err != nil {
 			return transcriptTextResponse{}, err
 		}
@@ -41,7 +38,7 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 			text:        transcripts.FormatText(document, info),
 			disposition: transcriptTextDisposition(info.SpaceTitle, info.StartedAt),
 		}, nil
-	}).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).
+	}).Needs(service, objects, metadata).Permission(authorizer, readTranscriptionsPermission).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).
 		Description("Download a UTF-8 transcript with a Space title, UTC recording date, duration, detected language when known, and recording-relative speaker lines. Requires transcriptions:read.").
 		RespondsText(http.StatusOK, "TranscriptText").ResponseHeaders(APIHeaderContract{Name: "Content-Disposition", Type: "string", Required: true}).
 		Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).

@@ -96,9 +96,6 @@ func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[init
 			if !ok {
 				return chatAttachmentUploadResponse{}, apiErrorUnauthenticated
 			}
-			if service == nil {
-				return chatAttachmentUploadResponse{}, apiErrorServiceUnavailable
-			}
 			result, err := service.Initiate(ctx, chatattachments.InitiateInput{
 				Subject: subject, ClientAttachmentID: request.Body.ClientAttachmentID,
 				FileName: request.Body.FileName, MIMEType: request.Body.MIMEType,
@@ -114,6 +111,7 @@ func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[init
 			}, nil
 		},
 	).
+		Needs(service).
 		Auth(APIAuthParticipantSync).
 		RateLimit(authenticatedWriteRateLimit).
 		RequestBody("InitiateChatAttachmentUploadRequest", initiateChatAttachmentBody{}).
@@ -132,9 +130,6 @@ func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[fina
 			if !ok {
 				return chatAttachmentResponse{}, apiErrorUnauthenticated
 			}
-			if service == nil {
-				return chatAttachmentResponse{}, apiErrorServiceUnavailable
-			}
 			attachment, err := service.Finalize(ctx, subject, request.UploadID)
 			if err != nil {
 				return chatAttachmentResponse{}, err
@@ -142,6 +137,7 @@ func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[fina
 			return newChatAttachmentResponse(attachment), nil
 		},
 	).
+		Needs(service).
 		Auth(APIAuthParticipantSync).
 		RateLimit(authenticatedWriteRateLimit).
 		Parameters(chatUploadIDParameter()).
@@ -160,9 +156,6 @@ func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[down
 			if !ok {
 				return chatAttachmentDownloadResponse{}, apiErrorUnauthenticated
 			}
-			if service == nil {
-				return chatAttachmentDownloadResponse{}, apiErrorServiceUnavailable
-			}
 			result, err := service.Download(ctx, subject, request.AttachmentID)
 			if err != nil {
 				return chatAttachmentDownloadResponse{}, err
@@ -173,6 +166,7 @@ func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[down
 			}, nil
 		},
 	).
+		Needs(service).
 		Auth(APIAuthParticipantSync).
 		Parameters(chatAttachmentIDParameter()).
 		Responds(http.StatusOK, "ChatAttachmentDownload", chatAttachmentDownloadResponse{}).
