@@ -52,17 +52,6 @@ type RecorderCapturePlanService interface {
 
 var _ RecorderWorkerService = recordingpipeline.Service{}
 
-// NewRecorderWorkerRouter creates the private router used by recorder worker
-// traffic. It intentionally does not install the public CORS, system-token,
-// or user-authentication middleware from NewRouter.
-func NewRecorderWorkerRouter(service RecorderWorkerService, verifier RecorderWorkerVerifier, plans ...RecorderCapturePlanService) http.Handler {
-	controls := RecorderWorkerControlServices{}
-	if len(plans) > 0 {
-		controls.CapturePlans = plans[0]
-	}
-	return NewRecorderWorkerRouterWithControls(service, verifier, controls)
-}
-
 type RecorderWorkerControlServices struct {
 	Logger             *slog.Logger
 	CapturePlans       RecorderCapturePlanService
@@ -78,6 +67,9 @@ type RecorderFleetWorkerService interface {
 	RecordWorkerObservation(context.Context, recorderfleetauthority.WorkerObservation) (recorderfleet.NodeObservation, error)
 }
 
+// NewRecorderWorkerRouterWithControls creates the private router used by recorder
+// worker traffic. It intentionally does not install the public CORS,
+// system-token, or user-authentication middleware from NewRouter.
 func NewRecorderWorkerRouterWithControls(service RecorderWorkerService, verifier RecorderWorkerVerifier, controls RecorderWorkerControlServices) http.Handler {
 	r := chi.NewRouter()
 	mountRecorderWorkerRoutesWithControls(r, service, verifier, controls)

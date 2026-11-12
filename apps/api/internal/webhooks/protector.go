@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -24,18 +23,7 @@ type AESGCMProtector struct {
 }
 
 func NewAESGCMProtector(key []byte) (*AESGCMProtector, error) {
-	if len(key) != 32 {
-		return nil, errors.New("webhook encryption key must be 32 bytes")
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("create webhook cipher: %w", err)
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("create webhook authenticated cipher: %w", err)
-	}
-	return &AESGCMProtector{currentVersion: 1, keys: map[byte]cipher.AEAD{1: aead}, random: rand.Reader}, nil
+	return NewAESGCMKeyring(1, map[byte][]byte{1: key})
 }
 
 func NewAESGCMKeyring(currentVersion byte, keys map[byte][]byte) (*AESGCMProtector, error) {
@@ -104,12 +92,4 @@ func URLScope(tenantID, endpointID, targetRevisionID utilities.ID) string {
 }
 func IdempotencyScope(tenantID utilities.ID, operation, key string) string {
 	return "webhook/tenant/" + tenantID.String() + "/idempotency/" + operation + "/" + key
-}
-
-func DecodeEncryptionKey(value string) ([]byte, error) {
-	key, err := base64.StdEncoding.DecodeString(value)
-	if err != nil || len(key) != 32 {
-		return nil, errors.New("webhook encryption key must be base64-encoded 32 bytes")
-	}
-	return key, nil
 }

@@ -33,15 +33,6 @@ type EpisodeSnapshot struct {
 	StartedAt, EndedAt   *time.Time
 	CreatedAt, UpdatedAt time.Time
 }
-type ParticipantSnapshot struct {
-	ID                 string
-	IdentityID         *string
-	SpaceID, EpisodeID string
-	Name               *string
-	Status             string
-	JoinedAt           time.Time
-	LeftAt             *time.Time
-}
 type ArtifactFailure struct {
 	Code string `json:"code"`
 }
@@ -91,19 +82,6 @@ type episodeObject struct {
 	EndedAt   *string `json:"ended_at"`
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
-}
-type participantData struct {
-	Object participantObject `json:"object"`
-}
-type participantObject struct {
-	ID         string  `json:"id"`
-	IdentityID *string `json:"identity_id"`
-	SpaceID    string  `json:"space_id"`
-	EpisodeID  string  `json:"episode_id"`
-	Name       *string `json:"name"`
-	Status     string  `json:"status"`
-	JoinedAt   string  `json:"joined_at"`
-	LeftAt     *string `json:"left_at"`
 }
 type testData struct {
 	Object struct {
@@ -196,23 +174,6 @@ func EncodeEpisodeEvent(metadata EventMetadata, snapshot EpisodeSnapshot) ([]byt
 		return nil, [32]byte{}, errors.New("invalid episode.ended snapshot")
 	}
 	data := episodeData{Object: episodeObject{snapshot.ID, snapshot.SpaceID, snapshot.Status, optionalTimestamp(snapshot.StartedAt), optionalTimestamp(snapshot.EndedAt), timestamp(snapshot.CreatedAt), timestamp(snapshot.UpdatedAt)}}
-	return encodeEvent(metadata, data)
-}
-
-func EncodeParticipantEvent(metadata EventMetadata, snapshot ParticipantSnapshot) ([]byte, [32]byte, error) {
-	if !metadata.Name.isOneOf(EventParticipantJoined, EventParticipantLeft) {
-		return nil, [32]byte{}, ErrInvalidEventType
-	}
-	if !validUUIDv4(snapshot.ID) || !validUUIDv4(snapshot.SpaceID) || !validUUIDv4(snapshot.EpisodeID) || snapshot.JoinedAt.IsZero() || (snapshot.IdentityID != nil && !validUUIDv4(*snapshot.IdentityID)) {
-		return nil, [32]byte{}, errors.New("invalid participant identity")
-	}
-	if metadata.Name == EventParticipantJoined && (snapshot.Status != "active" || snapshot.LeftAt != nil) {
-		return nil, [32]byte{}, errors.New("invalid participant.joined snapshot")
-	}
-	if metadata.Name == EventParticipantLeft && (snapshot.Status != "left" || zeroTime(snapshot.LeftAt)) {
-		return nil, [32]byte{}, errors.New("invalid participant.left snapshot")
-	}
-	data := participantData{Object: participantObject{snapshot.ID, snapshot.IdentityID, snapshot.SpaceID, snapshot.EpisodeID, snapshot.Name, snapshot.Status, timestamp(snapshot.JoinedAt), optionalTimestamp(snapshot.LeftAt)}}
 	return encodeEvent(metadata, data)
 }
 

@@ -270,10 +270,6 @@ type SpaceList struct {
 	Page   pagination.Page
 }
 
-func NewService(repository Repository) Service {
-	return Service{repository: repository}
-}
-
 func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaPlaneProvider) Service {
 	return Service{repository: repository, planes: PlanePolicy{Platform: defaultProvider}}
 }

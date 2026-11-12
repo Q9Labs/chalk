@@ -160,7 +160,7 @@ func TestPublicUpdateCannotSelectTheOwnSFU(t *testing.T) {
 func TestClearingASpacePlaneWorksWithoutAPlatformDefault(t *testing.T) {
 	tenantID, spaceID := ids(t)
 	repository := &updatingRepository{}
-	service := NewService(repository).WithPlanePolicy(PlanePolicy{Allowed: allowAll(t)})
+	service := Service{repository: repository}.WithPlanePolicy(PlanePolicy{Allowed: allowAll(t)})
 
 	if _, err := service.UpdateSpace(context.Background(), tenantID, spaceID, UpdateSpaceInput{MediaPlane: utilities.OptionalString{Set: true}}); err != nil {
 		t.Fatalf("clearing with CHALK_DEFAULT_MEDIA_PLANE unset: %v", err)

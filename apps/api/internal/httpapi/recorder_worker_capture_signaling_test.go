@@ -107,9 +107,10 @@ func TestRecorderCaptureSignalingRejectsRenderWorkerAndUnconfiguredRoute(t *test
 		t.Fatalf("render signaling status=%d called=%v body=%s", response.Code, called, response.Body.String())
 	}
 
-	unconfigured := NewRecorderWorkerRouter(
+	unconfigured := NewRecorderWorkerRouterWithControls(
 		recorderWorkerServiceStub{},
 		recorderWorkerRouteVerifierStub{identity: workeridentity.Identity{WorkerID: workerID, Role: workeridentity.RoleCapture}},
+		RecorderWorkerControlServices{},
 	)
 	response = httptest.NewRecorder()
 	unconfigured.ServeHTTP(response, recorderWorkerRequest(http.MethodPost, "/internal/v1/recorder/capture/create", "{"+recorderCaptureSignalingTestAuthority()+"}"))

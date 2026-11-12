@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -27,10 +26,6 @@ type DeadlineScheduler struct {
 	// goroutine touches it.
 	failureStreaks map[failureKey]failureStreak
 	pass           uint64
-
-	mu          sync.RWMutex
-	lastSuccess time.Time
-	lastError   error
 }
 
 type failureKey struct{ tenantID, episodeID utilities.ID }
@@ -46,11 +41,6 @@ const streakRetentionPasses = 1000
 
 // wholePass keys a failure that has no Episode, such as a lost connection.
 var wholePass failureKey
-
-type DeadlineSchedulerHealth struct {
-	LastSuccess time.Time
-	LastError   error
-}
 
 func NewDeadlineScheduler(repository DeadlineSchedulerRepository, interval time.Duration, batch int32) *DeadlineScheduler {
 	if interval <= 0 {
@@ -70,7 +60,6 @@ func (s *DeadlineScheduler) Run(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		if err := s.runCycle(ctx); err != nil && ctx.Err() == nil {
-			s.record(time.Time{}, err)
 			s.pass++
 			slog.ErrorContext(ctx, "deadline scheduler cycle failed", "event", "episode.deadline_scheduler.failed",
 				"reason", "cycle_error", "consecutive_failures", s.extendStreak(wholePass), "error", err)
@@ -83,19 +72,12 @@ func (s *DeadlineScheduler) Run(ctx context.Context) error {
 	}
 }
 
-func (s *DeadlineScheduler) Health() DeadlineSchedulerHealth {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return DeadlineSchedulerHealth{LastSuccess: s.lastSuccess, LastError: s.lastError}
-}
-
 func (s *DeadlineScheduler) runCycle(ctx context.Context) error {
 	for {
 		cycle, err := s.repository.EnqueueDueEpisodeDeadlines(ctx, s.batch)
 		if err != nil {
 			return err
 		}
-		s.record(time.Now().UTC(), nil)
 		delete(s.failureStreaks, wholePass)
 		s.observe(ctx, cycle)
 		if cycle.Enqueued > 0 {
@@ -142,13 +124,4 @@ func (s *DeadlineScheduler) extendStreak(key failureKey) int {
 	streak.lastPass = s.pass
 	s.failureStreaks[key] = streak
 	return streak.count
-}
-
-func (s *DeadlineScheduler) record(success time.Time, err error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !success.IsZero() {
-		s.lastSuccess = success
-	}
-	s.lastError = err
 }
