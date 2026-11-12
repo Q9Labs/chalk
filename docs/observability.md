@@ -74,7 +74,7 @@ expiry error cannot hide already committed job recovery. The aggregate
 `recording.pipeline_maintenance.completed` event remains unchanged. These events
 use the caller's context and introduce no durable journey event or lifecycle change.
 The focused diagnostics regression checks that private job fields stay out of logs.
-Go compilation and vet cover the event wiring; no database fixture is required.
+Go compilation and vet check types and call signatures, not transaction behavior.
 
 ### Recording stopped callbacks
 
