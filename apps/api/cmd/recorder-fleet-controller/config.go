@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/adapters/aws/recorderarchive"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/digitalocean"
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleet"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
@@ -26,6 +27,8 @@ type commandConfig struct {
 	JournalPath           string
 	ReconcileInterval     time.Duration
 	BootstrapNameVerified bool
+	// ArchiveCDN is nil when archive links come straight from S3.
+	ArchiveCDN *recorderarchive.CDN
 }
 
 type rawCommandConfig struct {
@@ -58,6 +61,9 @@ type rawCommandConfig struct {
 	archiveKey        string
 	archiveSHA256     string
 	archiveRegion     string
+	archiveCDNURL     string
+	archiveCDNKeyID   string
+	archiveCDNKey     string
 	imageDigest       string
 	bakedServerName   string
 	nameImageDigest   string
@@ -104,6 +110,9 @@ func loadCommandConfig(args []string, getenv func(string) string) (commandConfig
 		archiveKey:        getenv("CHALK_RECORDER_FLEET_ARCHIVE_KEY"),
 		archiveSHA256:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_SHA256"),
 		archiveRegion:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_REGION"),
+		archiveCDNURL:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_URL"),
+		archiveCDNKeyID:   getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_KEY_PAIR_ID"),
+		archiveCDNKey:     getenv("CHALK_RECORDER_FLEET_ARCHIVE_CDN_PRIVATE_KEY_BASE64"),
 		imageDigest:       getenv("CHALK_RECORDER_FLEET_IMAGE_DIGEST"),
 		bakedServerName:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_SERVER_NAME"),
 		nameImageDigest:   getenv("CHALK_RECORDER_FLEET_BOOTSTRAP_NAME_IMAGE_DIGEST"),
@@ -259,13 +268,29 @@ func (raw rawCommandConfig) build() (commandConfig, error) {
 		Role: key.Role, SlotsPerNode: slotsPerNode, OwnerTag: fleetConfig.OwnerTag, ProjectID: trim(raw.projectID),
 		VPCUUID: trim(raw.vpcUUID), GPU: fleetConfig.Release.GPU, SSHKeyIDs: sshKeyIDs,
 	}
+	archiveCDN, err := parseArchiveCDN(trim(raw.archiveCDNURL), trim(raw.archiveCDNKeyID), trim(raw.archiveCDNKey))
+	if err != nil {
+		return commandConfig{}, err
+	}
 	return commandConfig{
-		Fleet: fleetConfig, Provider: providerConfig, ControlPlaneURL: trim(raw.controlPlaneURL),
+		ArchiveCDN: archiveCDN,
+		Fleet:      fleetConfig, Provider: providerConfig, ControlPlaneURL: trim(raw.controlPlaneURL),
 		ControllerCert: trim(raw.controllerCert), ControllerKey: trim(raw.controllerKey),
 		ServerCA: trim(raw.serverCA), ServerName: trim(raw.serverName),
 		SPIFFETrustDomain: trim(raw.spiffeTrustDomain), JournalPath: trim(raw.journalPath),
 		ReconcileInterval: reconcileInterval, BootstrapNameVerified: claimsPresent,
 	}, nil
+}
+
+// parseArchiveCDN accepts all three CDN settings or none; a partial set would silently fall back to S3 and its transfer cost.
+func parseArchiveCDN(baseURL, keyPairID, privateKeyBase64 string) (*recorderarchive.CDN, error) {
+	if baseURL == "" && keyPairID == "" && privateKeyBase64 == "" {
+		return nil, nil
+	}
+	if baseURL == "" || keyPairID == "" || privateKeyBase64 == "" {
+		return nil, fmt.Errorf("%w: archive CDN needs URL, key pair ID and private key together", recorderfleet.ErrInvalidConfig)
+	}
+	return recorderarchive.NewCDN(baseURL, keyPairID, privateKeyBase64)
 }
 
 func envOrDefault(getenv func(string) string, key, fallback string) string {

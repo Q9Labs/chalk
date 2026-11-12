@@ -173,6 +173,7 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2/feature/cloudfront/sign v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/q9labs/chalk/features/mcp/api v0.0.0
 )
