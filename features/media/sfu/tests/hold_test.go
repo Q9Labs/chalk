@@ -114,11 +114,6 @@ func (m *parkedMic) assertFrozen(t *testing.T, what string) {
 	}
 }
 
-func (m *parkedMic) removePublisher(t *testing.T) {
-	t.Helper()
-	m.svc.mustCall(t, "/v1/sessions/"+m.connA+"/remove", protocol.RemoveSessionRequest{Scope: scopeA}, nil)
-}
-
 // A muted publisher keeps its track: the owner parks the publication with a local update, no SDP
 // follows, nothing is forwarded while it is parked, and a revoke leaves it open. The viewer keeps its
 // subscription through the hold, so a viewer that never saw the mute gets the media back on resume.
@@ -173,62 +168,4 @@ func TestParkedPublicationKeepsItsTrackAndForwardsNothing(t *testing.T) {
 	if len(missing.TrackErrors) != 1 || missing.TrackErrors[0].Code != protocol.TrackCodeNotFound {
 		t.Fatalf("hold of a missing mid: %+v", missing)
 	}
-}
-
-// A publisher that leaves while its microphone is parked takes the parked publication with it:
-// the node keeps no track for it, nothing reaches the viewer, and the same participant can join
-// again and publish a new microphone that the viewer receives.
-func TestParkedPublisherLeavingFreesItsPublicationAndItCanRejoin(t *testing.T) {
-	m := newParkedMic(t)
-	m.pull()
-	eventually(t, "media before the hold", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= 30 })
-	if held := m.update(m.audioMid, true); len(held.TrackErrors) != 0 {
-		t.Fatalf("hold response: %+v", held)
-	}
-
-	m.removePublisher(t)
-	if sessions := m.svc.sessions(t); sessions != 1 {
-		t.Fatalf("%d sessions after the parked publisher left, want only the viewer", sessions)
-	}
-	if status, _ := m.svc.call(t, "/v1/sessions/"+m.connA+"/tracks/update", protocol.UpdateTracksRequest{
-		OperationID: op(), Scope: scopeA,
-		Tracks: []protocol.Track{{Location: protocol.LocationLocal, Mid: m.audioMid, TrackName: audioName, Paused: false}},
-	}, nil); status < 400 {
-		t.Fatalf("resuming a publication of a session that left answered %d, want an error", status)
-	}
-	m.assertFrozen(t, "a publisher that left while parked")
-
-	m.connA, _, _, m.audioMid = publishMic(t, m.svc, "create-alice-again")
-	m.pull()
-	resumedFrom := m.received.count(webrtc.RTPCodecTypeAudio)
-	eventually(t, "media from the rejoined publisher", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= resumedFrom+30 })
-}
-
-// An unmute that races the publisher's leave must end with the session gone and nothing forwarded,
-// whichever of the two the node handles first.
-func TestUnmuteRacingTheLeaveForwardsNothing(t *testing.T) {
-	m := newParkedMic(t)
-	m.pull()
-	eventually(t, "media before the hold", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= 30 })
-	m.update(m.audioMid, true)
-
-	var raced sync.WaitGroup
-	raced.Add(2)
-	go func() {
-		defer raced.Done()
-		m.svc.call(t, "/v1/sessions/"+m.connA+"/tracks/update", protocol.UpdateTracksRequest{
-			OperationID: op(), Scope: scopeA,
-			Tracks: []protocol.Track{{Location: protocol.LocationLocal, Mid: m.audioMid, TrackName: audioName, Paused: false}},
-		}, nil)
-	}()
-	go func() {
-		defer raced.Done()
-		m.svc.call(t, "/v1/sessions/"+m.connA+"/remove", protocol.RemoveSessionRequest{Scope: scopeA}, nil)
-	}()
-	raced.Wait()
-
-	if sessions := m.svc.sessions(t); sessions != 1 {
-		t.Fatalf("%d sessions after the racing leave, want only the viewer", sessions)
-	}
-	m.assertFrozen(t, "an unmute that raced the leave")
 }

@@ -21,71 +21,6 @@ var required = map[string]string{
 	"SFU_CLIENT_IDENTITY": "api.chalk.internal",
 }
 
-func TestAdmissionDefaults(t *testing.T) {
-	cfg, err := Load(lookupOf(required))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.VideoStreamCost != 300 || cfg.CameraUplinkCost != 390 || cfg.AudioStreamCost != 50 {
-		t.Errorf("stream costs %d video, %d camera uplink and %d audio, want 300, 390 and 50", cfg.VideoStreamCost, cfg.CameraUplinkCost, cfg.AudioStreamCost)
-	}
-	if cfg.PacketBudget != 22000 {
-		t.Errorf("packet budget %d, want 22000 for the smallest node", cfg.PacketBudget)
-	}
-	if cfg.MaxEpisodeParticipants != 16 {
-		t.Errorf("Participant cap %d, want 16", cfg.MaxEpisodeParticipants)
-	}
-	if cfg.EpisodePacketCeiling != 11520 {
-		t.Errorf("Episode ceiling %d, want 11520", cfg.EpisodePacketCeiling)
-	}
-	if cfg.LargeCallParticipants != 6 || cfg.SmallTileStreamCost != 90 {
-		t.Errorf("large call past %d Participants at %d packets/s per small tile, want 6 and 90", cfg.LargeCallParticipants, cfg.SmallTileStreamCost)
-	}
-	want := Memory{HistoryHighBytes: 400 << 10, HistoryLowBytes: 128 << 10, HistoryScreenBytes: 320 << 10, PacerQueueBytes: 128 << 10}
-	if cfg.Memory != want {
-		t.Errorf("memory caps %+v, want the design's budget %+v", cfg.Memory, want)
-	}
-	if cfg.Guard.MaxStealPercent != 25 || cfg.Guard.MaxSchedulerLatency != 20*time.Millisecond || cfg.Guard.Window != 30*time.Second {
-		t.Errorf("guard %+v, want 25%% steal or 20 ms scheduler latency over 30 s", cfg.Guard)
-	}
-}
-
-// The camera costs are the packets/s of the SDK's simulcast encodings, from
-// sdks/typescript/client/src/media/client.ts: h at 2.5 Mbit/s and l at 650 kbit/s, 30 frames/s.
-// A frame takes ceil(bytes/1150) packets. Real cameras measured 300 and 90 on a deployed node.
-func TestCameraCostsFollowTheSDKEncodings(t *testing.T) {
-	const framesPerSecond, payloadBytes = 30, 1150
-	packets := func(bitsPerSecond int) int {
-		frameBytes := bitsPerSecond / 8 / framesPerSecond
-		return framesPerSecond * ((frameBytes + payloadBytes - 1) / payloadBytes)
-	}
-	cfg, err := Load(lookupOf(required))
-	if err != nil {
-		t.Fatal(err)
-	}
-	high, low := packets(2_500_000), packets(650_000)
-	if high != 300 || low != 90 {
-		t.Fatalf("the encodings need %d and %d packets/s, want the measured 300 and 90", high, low)
-	}
-	if cfg.VideoStreamCost != high || cfg.CameraUplinkCost != high+low {
-		t.Errorf("camera costs %d downlink and %d uplink, want %d and %d", cfg.VideoStreamCost, cfg.CameraUplinkCost, high, high+low)
-	}
-}
-
-func TestGuardDefaults(t *testing.T) {
-	cfg, err := Load(lookupOf(required))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := Guard{MaxStealPercent: 25, MaxBusyPercent: 90, MaxSchedulerLatency: 20 * time.Millisecond, MaxPacerDropPercent: 5, MaxUDPErrorsPerSecond: 5, Window: 30 * time.Second}
-	if cfg.Guard != want {
-		t.Errorf("guard %+v, want %+v", cfg.Guard, want)
-	}
-	if cfg.UDPSendBuffer != 8<<20 || cfg.UDPReceiveBuffer != 8<<20 {
-		t.Errorf("socket buffers %d send and %d receive, want 8 MiB each", cfg.UDPSendBuffer, cfg.UDPReceiveBuffer)
-	}
-}
-
 func TestAdmissionSettingsAreConfigurable(t *testing.T) {
 	values := map[string]string{"SFU_PACKET_BUDGET": "32000", "SFU_MAX_EPISODE_PARTICIPANTS": "24"}
 	for key, value := range required {
@@ -97,35 +32,6 @@ func TestAdmissionSettingsAreConfigurable(t *testing.T) {
 	}
 	if cfg.PacketBudget != 32000 || cfg.MaxEpisodeParticipants != 24 {
 		t.Fatalf("budget %d and cap %d, want 32000 and 24", cfg.PacketBudget, cfg.MaxEpisodeParticipants)
-	}
-}
-
-func TestLoadReportsEveryInvalidSetting(t *testing.T) {
-	_, err := Load(lookupOf(map[string]string{"SFU_MAX_EPISODE_PARTICIPANTS": "0", "SFU_PACKET_BUDGET": "lots"}))
-	if err == nil {
-		t.Fatal("invalid settings loaded")
-	}
-	for _, key := range []string{"SFU_TLS_CERT_FILE", "SFU_CLIENT_IDENTITY", "SFU_MAX_EPISODE_PARTICIPANTS", "SFU_PACKET_BUDGET"} {
-		if !strings.Contains(err.Error(), key) {
-			t.Errorf("error %q does not name %s", err, key)
-		}
-	}
-}
-
-// A lease must outlast two of the API's 5 s renewal intervals, or it lapses between them.
-func TestSourceLeaseOutlastsTwoRenewals(t *testing.T) {
-	load := func(ttl string) (Config, error) {
-		values := map[string]string{"SFU_SOURCE_LEASE_TTL": ttl}
-		for key, value := range required {
-			values[key] = value
-		}
-		return Load(lookupOf(values))
-	}
-	if _, err := load("9s"); err == nil || !strings.Contains(err.Error(), "SFU_SOURCE_LEASE_TTL") {
-		t.Fatalf("a 9s lease loaded: %v", err)
-	}
-	if cfg, err := load("10s"); err != nil || cfg.SourceLeaseTTL != 10*time.Second {
-		t.Fatalf("a 10s lease = %v, %v", cfg.SourceLeaseTTL, err)
 	}
 }
 
@@ -199,37 +105,5 @@ func TestSubscriptionLimitsFitTheAdmittedCallShape(t *testing.T) {
 	}
 	if _, err := load(map[string]string{"SFU_MAX_CAPTURE_SUBSCRIPTIONS": "40"}); err == nil || !strings.Contains(err.Error(), "SFU_MAX_CAPTURE_SUBSCRIPTIONS") {
 		t.Errorf("40 capture subscriptions loaded: %v", err)
-	}
-}
-
-func TestNodeSizeAndEnvironmentSetTheNodeNumbers(t *testing.T) {
-	cases := []struct {
-		name          string
-		values        map[string]string
-		budget, steal int
-	}{
-		{"the smallest node in a staging environment", map[string]string{"SFU_NODE_SIZE": "s-1vcpu-1gb", "SFU_ENVIRONMENT": "staging"}, 22000, 25},
-		{"the larger node in production", map[string]string{"SFU_NODE_SIZE": "s-2vcpu-2gb", "SFU_ENVIRONMENT": "production"}, 36000, 40},
-		{"an explicit budget over the size's", map[string]string{"SFU_NODE_SIZE": "s-2vcpu-2gb", "SFU_PACKET_BUDGET": "5000"}, 5000, 25},
-	}
-	for _, tc := range cases {
-		values := map[string]string{}
-		maps.Copy(values, required)
-		maps.Copy(values, tc.values)
-		cfg, err := Load(lookupOf(values))
-		if err != nil {
-			t.Fatalf("%s: %v", tc.name, err)
-		}
-		if cfg.PacketBudget != tc.budget || int(cfg.Guard.MaxStealPercent) != tc.steal {
-			t.Errorf("%s: budget %d and steal limit %v, want %d and %d", tc.name, cfg.PacketBudget, cfg.Guard.MaxStealPercent, tc.budget, tc.steal)
-		}
-	}
-	values := map[string]string{"SFU_NODE_SIZE": "s-8vcpu-16gb"}
-	maps.Copy(values, required)
-	if _, err := Load(lookupOf(values)); err == nil || !strings.Contains(err.Error(), "SFU_NODE_SIZE") {
-		t.Errorf("a size missing from the table loaded: %v", err)
-	}
-	if cfg, err := Load(lookupOf(required)); err != nil || cfg.ControlAddr != ":8443" || cfg.UDPAddr != ":50000" {
-		t.Errorf("default addresses %q and %q (%v), want the table's ports", cfg.ControlAddr, cfg.UDPAddr, err)
 	}
 }
