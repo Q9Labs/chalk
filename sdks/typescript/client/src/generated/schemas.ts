@@ -139,6 +139,7 @@ export const CallStatsRequestSchema = /* @__PURE__ */ (() =>
         local_candidate_type: Schema.optional(Schema.Literals(["host", "srflx", "prflx", "relay"])),
         recv_bitrate_kbps: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_height: Schema.optional(Schema.NullOr(Schema.Number)),
+        recv_hidden_videos: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_jitter_ms: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_loss_pct: Schema.optional(Schema.NullOr(Schema.Number)),
         recv_paused_videos: Schema.optional(Schema.NullOr(Schema.Number)),

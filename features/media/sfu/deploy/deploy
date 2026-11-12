@@ -119,6 +119,9 @@ for key in sorted(have.keys() - want):
         ufw("delete", *existing.split())
         print("host firewall: removed", existing)
 PY
+# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
+# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
+ufw allow 50000/tcp > /dev/null
 RECONCILE
 [[ "$mode" == --firewall-only ]] && exit 0
 

@@ -20,6 +20,8 @@ runtime_user="${CHALK_RUNTIME_USER:-chalk}"
 systemd_root="${CHALK_CONTROLLER_SYSTEMD_ROOT:-/etc/systemd/system}"
 systemctl_bin="${CHALK_SYSTEMCTL_BIN:-systemctl}"
 loginctl_bin="${CHALK_LOGINCTL_BIN:-loginctl}"
+journalctl_bin="${CHALK_JOURNALCTL_BIN:-journalctl}"
+boot_id_file="${CHALK_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}"
 runtime_dir_root="${CHALK_RUNTIME_DIR_ROOT:-/run/user}"
 user_manager_attempts="${CHALK_USER_MANAGER_ATTEMPTS:-30}"
 podman_bin="${CHALK_PODMAN_BIN:-podman}"
@@ -62,6 +64,7 @@ usage:
   chalk-deployment-controller --version
   chalk-deployment-controller deploy --request PATH --manifest PATH --source-root PATH
   chalk-deployment-controller restore
+  chalk-deployment-controller boot-end
 USAGE
 }
 
@@ -691,6 +694,10 @@ install_restore_unit() {
   require_regular_file "$source_unit"
   mkdir -p "$systemd_root"
   atomic_install 0644 "$source_unit" "${systemd_root}/chalk-runtime-restore.service"
+  # Ubuntu ships a 5 second stop timeout for user managers; the containers need their own grace (up to 40 seconds).
+  require_regular_file "$(dirname "$source_unit")/chalk-user-manager-grace.conf"
+  mkdir -p "${systemd_root}/user@.service.d"
+  atomic_install 0644 "$(dirname "$source_unit")/chalk-user-manager-grace.conf" "${systemd_root}/user@.service.d/timeout.conf"
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-error.log" || fail "root systemd daemon reload failed"
   "$systemctl_bin" enable chalk-runtime-restore.service >/dev/null 2>"${stage_root}/systemd-enable-error.log" || fail "root restore unit enable failed"
 }
@@ -715,6 +722,7 @@ snapshot_installed_runtime() {
   snapshot_installed_file "${controller_install_dir}/chalk-deployment-controller" "${snapshot_root}/chalk-deployment-controller"
   snapshot_installed_file "${controller_install_dir}/environments.json" "${snapshot_root}/environments.json"
   snapshot_installed_file "${systemd_root}/chalk-runtime-restore.service" "${snapshot_root}/chalk-runtime-restore.service"
+  snapshot_installed_file "${systemd_root}/user@.service.d/timeout.conf" "${snapshot_root}/user-manager-timeout.conf"
   if "$systemctl_bin" is-enabled chalk-runtime-restore.service >/dev/null 2>&1; then
     : >"${snapshot_root}/restore-unit-enabled"
   fi
@@ -741,6 +749,7 @@ restore_installed_runtime() {
   restore_installed_file 0755 "${snapshot_root}/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
   restore_installed_file 0644 "${snapshot_root}/environments.json" "${controller_install_dir}/environments.json"
   restore_installed_file 0644 "${snapshot_root}/chalk-runtime-restore.service" "${systemd_root}/chalk-runtime-restore.service"
+  restore_installed_file 0644 "${snapshot_root}/user-manager-timeout.conf" "${systemd_root}/user@.service.d/timeout.conf"
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-rollback-error.log" || fail "root systemd daemon reload failed during rollback"
   if [[ -f "${snapshot_root}/restore-unit-enabled" ]]; then
     "$systemctl_bin" enable chalk-runtime-restore.service >/dev/null 2>"${stage_root}/systemd-rollback-enable-error.log" || fail "root restore unit enable failed during rollback"
@@ -1709,6 +1718,35 @@ parse_deploy_args() {
   is_absolute_path "$source_root" || fail "source root path must be absolute"
 }
 
+# Say how the previous boot ended, so the API can log it next to api.starting (Axiom has no host logs).
+# killed: the user manager SIGKILLed the containers after the last API start, or the API never logged api.shutdown_complete last.
+boot_end_class() {
+  local last started
+  last="$("$journalctl_bin" -b -1 -q -o cat -t chalk-api -g 'api[.](starting|shutdown_complete)' 2>/dev/null | tail -n 1)" || last=""
+  [[ -n "$last" ]] || { printf unknown; return; }
+  started="$("$journalctl_bin" -b -1 -q -o short-unix -t chalk-api -g 'api[.]starting' 2>/dev/null | tail -n 1 | cut -d. -f1)" || started=""
+  [[ "$started" =~ ^[0-9]+$ ]] || started=""
+  if "$journalctl_bin" -b -1 -q -o cat ${started:+--since "@${started}"} -g 'user@[0-9]+[.]service: Killing process .* SIGKILL' -n 1 2>/dev/null | grep -q .; then
+    printf killed
+  elif [[ "$last" == *api.shutdown_complete* ]]; then
+    printf clean
+  else
+    printf killed
+  fi
+}
+
+record_boot_end() {
+  local end boot_id output
+  end="$(boot_end_class)"
+  boot_id="$(tr -d '\n' <"$boot_id_file" 2>/dev/null || true)"
+  mkdir -p "$run_root"
+  output="$(mktemp "${run_root}/boot.env.XXXXXX")"
+  printf 'CHALK_HOST_BOOT_ID=%s\nCHALK_PREVIOUS_BOOT_END=%s\n' "$boot_id" "$end" >"$output"
+  chmod 0644 "$output"
+  /bin/mv -f "$output" "${run_root}/boot.env"
+  printf '{"event":"host.previous_boot_end","previous_boot_end":"%s","boot_id":"%s"}\n' "$end" "$boot_id"
+}
+
 main() {
   require_command jq
   case "${1:-}" in
@@ -1723,6 +1761,10 @@ main() {
       reject_symlink_components "$state_root"
       validate_state_paths
       with_lock deploy
+      ;;
+    boot-end)
+      [[ $# == 1 ]] || { usage; exit 2; }
+      record_boot_end
       ;;
     restore)
       [[ $# == 1 ]] || { usage; exit 2; }

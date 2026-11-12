@@ -1,5 +1,6 @@
 // Turns the page traces of one action into stage durations (see features/scorecard/stages.mjs for what each stage covers).
 // Pure functions over events {t, k, d} with t in ms on the host clock; the latency kit records them with latency-trace.mjs.
+import { PATH_RECEIVE_KEYS } from "../../features/scorecard/diagnostics.mjs";
 import { AUDIO_KEYS, RTT_KEYS, STAGE_GROUPS } from "../../features/scorecard/stages.mjs";
 import { iceSummary } from "./latency-ice.mjs";
 import { summarize } from "./latency-stats.mjs";
@@ -171,6 +172,8 @@ export function diagnosticsOf(cycles) {
   };
   const audio = traced.flatMap((trace) => (trace.audio ? [trace.audio] : []));
   const ice = iceSummary(traced.map((trace) => trace.ice));
+  const paths = traced.flatMap((trace) => (trace.path ? [trace.path] : []));
+  const path = paths.length ? { mode: paths[0].mode, cycles: paths.length, joined: paths.filter((cycle) => cycle.joined).length, receive: block(paths, PATH_RECEIVE_KEYS) } : undefined;
   const stageIds = STAGE_GROUPS.flatMap((group) => group.stages.map((stage) => `${group.id}.${stage.id}`));
   return {
     rtt: block(
@@ -183,5 +186,6 @@ export function diagnosticsOf(cycles) {
     ),
     ...(audio.length ? { audio: block(audio, AUDIO_KEYS) } : {}),
     ...(ice ? { ice } : {}),
+    ...(path ? { path } : {}),
   };
 }
