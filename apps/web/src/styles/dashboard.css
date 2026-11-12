@@ -3034,7 +3034,7 @@
   z-index: -1;
   border-radius: var(--corner-xl);
   background: var(--chalk-hover);
-  box-shadow: inset 0 0 0 1px var(--chalk-line-strong);
+  box-shadow: var(--ring-line-inset);
   opacity: 0;
   pointer-events: none;
   animation: dash-jumped 1600ms ease-out;
