@@ -1,15 +1,15 @@
-import { announce, ChalkText, FaceAvatar, fixed, Icon, IconButton, Menu, MenuItem, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
-import { setStringAsync } from "expo-clipboard";
-import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ChalkText, FaceAvatar, fixed, Icon, PillButton, useDeviceLayout, usePressAnimation, useTheme, useToastClearance, useToasts } from "@q9labsai/chalk-react-native/ui";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { shareLink } from "../lib/share";
 import type { SpaceRoute } from "../lib/space-link";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { ClipboardCard, type ClipboardState } from "./ClipboardCard";
 import { JoinSheet } from "./JoinSheet";
-import { formatJoinedAt, type RecentCall, type RecentCalls } from "./recent-calls";
+import type { RecentCall, RecentCalls } from "./recent-calls";
+import { RecentCallMenu, type OpenMenu } from "./RecentCallMenu";
+import { RecentCallsList } from "./RecentCallsList";
 import { YouSheet } from "./YouSheet";
 import { space, corners } from "@q9labsai/chalk-react-native";
 
@@ -26,7 +26,6 @@ type HomeScreenProps = {
 };
 
 type OpenSheet = "you" | "join" | null;
-type OpenMenu = { readonly call: RecentCall; readonly anchorRef: RefObject<View | null> };
 
 /** The root's bottom padding under the foot, and the gap a notice keeps above the foot's top edge. */
 const FOOT_BOTTOM = 12;
@@ -82,18 +81,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
       <View style={styles.top}>
         <YouButton name={name} onPress={() => setSheet("you")} pressableRef={youRef} />
       </View>
-      <ScrollView contentContainerStyle={styles.bodyContent} showsVerticalScrollIndicator={false} style={styles.body}>
-        <ChalkText accessibilityRole="header" style={styles.section} tone="textMuted" variant="button">
-          Recent calls
-        </ChalkText>
-        {recentCalls.calls.length > 0 ? (
-          recentCalls.calls.map((call) => <RecentCallRow call={call} key={call.link} menuOpen={menu?.call.link === call.link} onJoin={onJoinRecent} onOpenMenu={openMenu} />)
-        ) : (
-          <ChalkText style={styles.empty} tone="textMuted">
-            Calls you join show up here.
-          </ChalkText>
-        )}
-      </ScrollView>
+      <RecentCallsList calls={recentCalls.calls} menuLink={menu?.call.link} onJoin={onJoinRecent} onOpenMenu={openMenu} />
       <View onLayout={(event) => setToastBottom(FOOT_BOTTOM + event.nativeEvent.layout.height + TOAST_GAP)} style={styles.foot}>
         {clipboard.offer ? <ClipboardCard offer={clipboard.offer} onDismiss={clipboard.dismiss} onJoin={onJoin} onNotALink={() => toasts.show({ kind: "error", dismissible: true, message: "That isn’t a Chalk call link." })} /> : null}
         <PillButton icon="plus" label="Start a call" onPress={onStartCall} size="big" testID="home.start" variant="primary" />
@@ -101,31 +89,7 @@ export function HomeScreen({ name, onSaveName, preferences, recentCalls, onStart
       </View>
       <YouSheet name={name} onClose={() => setSheet(null)} onSaveName={saveName} open={sheet === "you"} preferences={preferences} returnFocusRef={youRef} />
       <JoinSheet onClose={() => setSheet(null)} onJoin={joinFromSheet} open={sheet === "join"} returnFocusRef={joinRef} />
-      <Menu accessibilityLabel="Call options" anchorRef={menu?.anchorRef ?? youRef} onClose={() => setMenu(null)} open={menu !== null} testID="menu.recent">
-        {menu ? (
-          <>
-            <MenuItem
-              icon="copy"
-              label="Copy link"
-              onPress={() => {
-                setMenu(null);
-                void setStringAsync(menu.call.link).then(() => announce("Link copied"));
-              }}
-              testID="menu.recent.copy"
-            />
-            <MenuItem
-              icon="iosShare"
-              label="Share link"
-              onPress={() => {
-                setMenu(null);
-                shareLink(menu.call.link);
-              }}
-              testID="menu.recent.share"
-            />
-            <MenuItem danger icon="trash" label="Remove from recent calls" onPress={() => remove(menu.call)} testID="menu.recent.remove" />
-          </>
-        ) : null}
-      </Menu>
+      <RecentCallMenu fallbackAnchor={youRef} menu={menu} onClose={() => setMenu(null)} onRemove={remove} />
     </View>
   );
 }
@@ -154,57 +118,9 @@ function YouButton({ name, onPress, pressableRef }: { readonly name: string | nu
   );
 }
 
-type RecentCallRowProps = {
-  readonly call: RecentCall;
-  readonly menuOpen: boolean;
-  readonly onJoin: (call: RecentCall) => void;
-  readonly onOpenMenu: (call: RecentCall, anchorRef: RefObject<View | null>) => void;
-};
-
-/** `.crow`: join again by tapping the row; the "..." button opens its options. */
-const RecentCallRow = memo(function RecentCallRow({ call, menuOpen, onJoin, onOpenMenu }: RecentCallRowProps): React.JSX.Element {
-  const { colors } = useTheme();
-  const moreRef = useRef<View>(null);
-  const when = formatJoinedAt(call.joinedAt);
-  const faces = call.people.length > 0 ? call.people.slice(0, 3) : [call.name];
-  return (
-    <View style={styles.row}>
-      <Pressable accessibilityLabel={`Join ${call.name}, ${when}`} accessibilityRole="button" onPress={() => onJoin(call)} style={({ pressed }) => [styles.rowMain, pressed ? { backgroundColor: colors.raised } : null]} testID={`home.recent.${call.link}`}>
-        <View style={styles.faces}>
-          {faces.map((person, index) => (
-            <View key={`${person}-${index}`} style={[styles.face, index > 0 ? styles.faceOverlap : null, { boxShadow: `0px 0px 0px 2px ${colors.canvas}` }]}>
-              <FaceAvatar name={person} size={28} />
-            </View>
-          ))}
-        </View>
-        <View style={styles.rowText}>
-          <ChalkText numberOfLines={1} variant="sheetTitle">
-            {call.name}
-          </ChalkText>
-          <ChalkText tone="textMuted" variant="meta">
-            {when}
-          </ChalkText>
-        </View>
-      </Pressable>
-      <IconButton accessibilityLabel={`Options for ${call.name}`} expanded={menuOpen} icon="more" onPress={() => onOpenMenu(call, moreRef)} ref={moreRef} size={44} testID="home.recent.more" tone="ghost" />
-    </View>
-  );
-});
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   top: { height: 56, flexDirection: "row", alignItems: "center" },
   you: { flexDirection: "row", alignItems: "center", gap: space[2], height: 44, paddingLeft: space["1-5"], paddingRight: space[3], marginLeft: -space["1-5"], borderRadius: corners.pill },
-  body: { flex: 1, marginHorizontal: -space[2] },
-  bodyContent: { paddingHorizontal: space[2] },
-  section: { paddingTop: space[3], paddingHorizontal: space[1], paddingBottom: space["1-5"] },
-  empty: { paddingVertical: space[2], paddingHorizontal: space[1] },
-  row: { flexDirection: "row", alignItems: "center", gap: space[1], borderRadius: corners["2xl"] },
-  rowMain: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 64, paddingHorizontal: space[2], borderRadius: corners["2xl"] },
-  faces: { width: 52, flexDirection: "row" },
-  face: { width: 28, height: 28, borderRadius: corners.pill },
-  faceOverlap: { marginLeft: -space[3] },
-  // token-ratchet-ignore: 1px optical nudge between two text lines, below the smallest spacing step
-  rowText: { flex: 1, minWidth: 0, gap: 1 },
   foot: { gap: space["2-5"], paddingTop: space[3] },
 });

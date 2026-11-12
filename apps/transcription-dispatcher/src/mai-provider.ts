@@ -14,14 +14,22 @@ interface Options {
   policy: ProviderPolicy;
 }
 
+function checkRequest(request: ProviderRequest, policy: ProviderPolicy): void {
+  if (request.transcriptLanguage?.mode === "fixed") throw new ProviderError("MAI requires Auto language mode", "nonretryable");
+  if (request.contentType !== "audio/flac" || !request.audio.length || request.audio.length > policy.maxAudioBytes) throw providerSchemaError("invalid MAI audio source", "audio", "bounded renderer FLAC", undefined);
+}
+
+function exceedsOutputBounds(policy: ProviderPolicy, output: { readonly segments: number; readonly words: number; readonly text: string }): boolean {
+  return output.segments > policy.maxSegments || output.words > policy.maxWords || output.text.length > policy.maxTextChars;
+}
+
 export class MaiTranscribeProvider implements TranscriptionProvider {
   readonly name = "openrouter" as const;
   constructor(private readonly options: Options) {}
 
   async transcribe(request: ProviderRequest): Promise<ProviderResult> {
     const { policy } = this.options;
-    if (request.transcriptLanguage?.mode === "fixed") throw new ProviderError("MAI requires Auto language mode", "nonretryable");
-    if (request.contentType !== "audio/flac" || !request.audio.length || request.audio.length > policy.maxAudioBytes) throw providerSchemaError("invalid MAI audio source", "audio", "bounded renderer FLAC", undefined);
+    checkRequest(request, policy);
     const prepared = await prepareSpeechAudio(request.audio, policy.maxAudioSeconds);
     const segments: ProviderResult["segments"] = [];
     const words: NonNullable<ProviderResult["words"]> = [];
@@ -38,7 +46,7 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
       segments.push(...done.result.segments);
       words.push(...(done.result.words ?? []));
       speechMs += Math.round(batch.durationSeconds * 1000);
-      if (segments.length > policy.maxSegments || words.length > policy.maxWords || texts.join(" ").length > policy.maxTextChars) throw providerSchemaError("MAI chunk exceeded output bounds", "result", "bounded chunk transcript", undefined);
+      if (exceedsOutputBounds(policy, { segments: segments.length, words: words.length, text: texts.join(" ") })) throw providerSchemaError("MAI chunk exceeded output bounds", "result", "bounded chunk transcript", undefined);
     }
     return { provider: this.name, model: MODEL, versionContract: VERSION, text: texts.join(" "), segments, words, ...(language ? { language } : {}), durationMs: speechMs, providerReportedCostUsd: cost, quality: { segmentCount: segments.length, wordCount: words.length } };
   }

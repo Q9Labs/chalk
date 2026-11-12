@@ -182,15 +182,16 @@ export function parseArguments(values: readonly string[]): FixtureArguments {
   if (outputDirectory === undefined || !isAbsolute(outputDirectory)) throw new TypeError(usage);
   const colorScheme = options.get("--color-scheme") ?? "light";
   if (colorScheme !== "light" && colorScheme !== "dark") throw new TypeError(usage);
-  const durationMs = Number(options.get("--duration-ms") ?? 120_000);
+  const number = (key: string, fallback: number) => Number(options.get(key) ?? fallback);
+  const durationMs = number("--duration-ms", 120_000);
   if (!Number.isSafeInteger(durationMs) || durationMs < 10_000) throw new TypeError("--duration-ms must be at least 10000");
   const mediaDirectory = options.get("--media");
   return {
     outputDirectory,
-    width: Number(options.get("--width") ?? 1_280),
-    height: Number(options.get("--height") ?? 720),
+    width: number("--width", 1_280),
+    height: number("--height", 720),
     durationMs,
-    fps: Number(options.get("--fps") ?? 15),
+    fps: number("--fps", 15),
     colorScheme,
     ...(mediaDirectory === undefined ? {} : { mediaDirectory }),
   };

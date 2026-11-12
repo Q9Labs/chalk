@@ -40,7 +40,6 @@ export interface Scene {
   readonly spaceName: string;
   readonly logoAssetId?: string;
   readonly colorScheme: "light" | "dark";
-  readonly generatedAvatars: boolean;
   readonly tiles: readonly SceneTile[];
   readonly reactions: readonly SceneReaction[];
 }
@@ -191,7 +190,6 @@ export function sceneFor(snapshot: RecordingPresentationSnapshotV1, available: (
     spaceName: snapshot.space.name,
     ...(snapshot.space.logoAssetId === undefined ? {} : { logoAssetId: snapshot.space.logoAssetId }),
     colorScheme: snapshot.profile.theme.colorScheme,
-    generatedAvatars: snapshot.profile.theme.generatedAvatars,
     tiles,
     reactions,
   };

@@ -128,7 +128,7 @@ export class RecorderControlApiClient implements ControlApi {
     try {
       response = await this.options.fetch(`${this.options.baseUrl}${path}`, {
         method,
-        headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer.sign({ method, path, body: JSON.stringify(body), context }) },
+        headers: { "content-type": "application/json", ...contextHeaders(context), ...this.options.signer({ method, path, body: JSON.stringify(body), context }) },
         body: JSON.stringify(body),
         ...(signal === undefined ? {} : { signal }),
       });

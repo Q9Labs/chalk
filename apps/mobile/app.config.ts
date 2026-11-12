@@ -8,6 +8,41 @@ const ICON_PLATE = "#16181c";
 // The call's typeface, embedded at build time so the first frame already uses it.
 const FIGTREE_WEIGHTS = ["Regular", "Medium", "SemiBold", "Bold"] as const;
 
+const ANDROID_PERMISSIONS = [
+  "android.permission.ACCESS_NETWORK_STATE",
+  "android.permission.BLUETOOTH",
+  "android.permission.CAMERA",
+  "android.permission.FOREGROUND_SERVICE",
+  "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
+  "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+  "android.permission.INTERNET",
+  "android.permission.MODIFY_AUDIO_SETTINGS",
+  "android.permission.POST_NOTIFICATIONS",
+  "android.permission.RECORD_AUDIO",
+  "android.permission.VIBRATE",
+  "android.permission.WAKE_LOCK",
+];
+
+/** Android verifies these hosts as app links: the `/space` path, and the short and four-word call codes. */
+function androidIntentFilters(hosts: readonly string[]) {
+  return [
+    {
+      action: "VIEW",
+      autoVerify: true,
+      category: ["BROWSABLE", "DEFAULT"],
+      data: hosts.map((host) => ({ scheme: "https", host, pathPrefix: "/space" })),
+    },
+    {
+      action: "VIEW",
+      autoVerify: true,
+      category: ["BROWSABLE", "DEFAULT"],
+      // Keep the simple short-code rule on the same data element: Android below API 31
+      // ignores the advanced four-word rule without claiming every URL on these hosts.
+      data: hosts.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })),
+    },
+  ];
+}
+
 export type MobileExpoExtra = {
   readonly buildProfile: string;
   readonly apiBaseURL?: string;
@@ -60,37 +95,9 @@ export function createExpoConfig(buildProfile = process.env.EAS_BUILD_PROFILE ??
         package: release.android.package_name,
         versionCode: release.android.version_code,
         adaptiveIcon: { foregroundImage: "./assets/adaptive-icon.png", monochromeImage: "./assets/adaptive-icon-monochrome.png", backgroundColor: ICON_PLATE },
-        intentFilters: [
-          {
-            action: "VIEW",
-            autoVerify: true,
-            category: ["BROWSABLE", "DEFAULT"],
-            data: [...androidWebHosts.flatMap((host) => [{ scheme: "https", host, pathPrefix: "/space" }])],
-          },
-          {
-            action: "VIEW",
-            autoVerify: true,
-            category: ["BROWSABLE", "DEFAULT"],
-            // Keep the simple short-code rule on the same data element: Android below API 31
-            // ignores the advanced four-word rule without claiming every URL on these hosts.
-            data: androidWebHosts.map((host) => ({ scheme: "https", host, pathPattern: "/...-....-...", pathAdvancedPattern: "/[a-z]+-[a-z]+-[a-z]+-[a-z]+" })),
-          },
-        ],
+        intentFilters: androidIntentFilters(androidWebHosts),
         blockedPermissions: ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
-        permissions: [
-          "android.permission.ACCESS_NETWORK_STATE",
-          "android.permission.BLUETOOTH",
-          "android.permission.CAMERA",
-          "android.permission.FOREGROUND_SERVICE",
-          "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
-          "android.permission.FOREGROUND_SERVICE_MICROPHONE",
-          "android.permission.INTERNET",
-          "android.permission.MODIFY_AUDIO_SETTINGS",
-          "android.permission.POST_NOTIFICATIONS",
-          "android.permission.RECORD_AUDIO",
-          "android.permission.VIBRATE",
-          "android.permission.WAKE_LOCK",
-        ],
+        permissions: ANDROID_PERMISSIONS,
       },
       extra,
     },
