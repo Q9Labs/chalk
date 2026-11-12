@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -28,10 +27,6 @@ type recordingCaptureSlotResponse struct {
 	EpisodeID      string `json:"episode_id"`
 	ClaimedAt      string `json:"claimed_at"`
 	LeaseExpiresAt string `json:"lease_expires_at"`
-}
-
-func mountRecordingCapturePoolRoute(r chi.Router, service RecordingCapturePoolService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	getRecordingCapturePoolEndpoint(service, authorizer).Mount(r, limits)
 }
 
 // getRecordingCapturePoolEndpoint answers why a Recording has not started: the

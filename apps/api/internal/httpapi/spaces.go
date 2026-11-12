@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -132,12 +131,6 @@ type updateSpaceEndpointRequest struct {
 	TenantID utilities.ID
 	SpaceID  utilities.ID
 	Body     updateSpaceRequest
-}
-
-func mountSpaceRoutes(r chi.Router, service SpaceService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range spaceEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEndpoint {

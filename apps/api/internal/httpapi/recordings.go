@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
@@ -131,12 +130,6 @@ type createRecordingDownloadURLEndpointRequest struct {
 type requestRecordingExportEndpointRequest struct {
 	TenantID    utilities.ID
 	RecordingID utilities.ID
-}
-
-func mountRecordingRoutes(r chi.Router, service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range recordingEndpoints(service, exports, downloads, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func recordingEndpoints(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {

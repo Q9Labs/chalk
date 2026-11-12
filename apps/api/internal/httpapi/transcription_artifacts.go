@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -62,12 +61,6 @@ type requestTranscriptBody struct {
 	IdempotencyKey string   `json:"idempotency_key"`
 	Language       string   `json:"language,omitempty"`
 	Languages      []string `json:"languages,omitempty"`
-}
-
-func mountTranscriptArtifactRoutes(r chi.Router, service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range transcriptArtifactEndpoints(service, objects, downloads, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func transcriptArtifactEndpoints(service TranscriptArtifactService, objects RecordingObjectService, downloads RecordingDownloadService, authorizer TenantAuthorizer) []RouteEndpoint {

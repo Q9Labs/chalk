@@ -27,10 +27,6 @@ type entrancePreparationResponse struct {
 	Prepared bool `json:"prepared"`
 }
 
-func recordingEntranceEndpoints(preparer RecordingEntrancePreparer, invites EntranceInviteResolver, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) []RouteEndpoint {
-	return []RouteEndpoint{recordingEntranceEndpoint(preparer, authorizer), publicRecordingEntranceEndpoint(preparer, invites, origin)}
-}
-
 func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, entrancePreparationResponse] {
 	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {

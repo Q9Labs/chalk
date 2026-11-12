@@ -77,12 +77,6 @@ type chatAttachmentDownloadResponse struct {
 
 type chatSubjectContextKey struct{}
 
-func mountChatAttachmentRoutes(r chi.Router, service ChatAttachmentService, verifier ChatParticipantVerifier, limits RateLimitOptions) {
-	for _, endpoint := range chatAttachmentEndpoints(service, verifier) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func chatAttachmentEndpoints(service ChatAttachmentService, verifier ChatParticipantVerifier) []RouteEndpoint {
 	auth := requireChatParticipant(verifier)
 	return []RouteEndpoint{

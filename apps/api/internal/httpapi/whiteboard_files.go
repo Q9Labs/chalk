@@ -38,12 +38,6 @@ type whiteboardFileDownloadResponse struct {
 
 type whiteboardSubjectContextKey struct{}
 
-func mountWhiteboardFileRoutes(r chi.Router, service WhiteboardFileService, verifier WhiteboardParticipantVerifier, limits RateLimitOptions) {
-	for _, endpoint := range whiteboardFileEndpoints(service, verifier) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardParticipantVerifier) []RouteEndpoint {
 	auth := requireWhiteboardParticipant(verifier)
 	return []RouteEndpoint{

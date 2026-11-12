@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mcpauth"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -82,12 +81,6 @@ func mcpOAuthConnectionEndpoints(service MCPOAuthService, authorizer TenantAutho
 		denyMCPConsentEndpoint(service),
 		listMCPConnectionsEndpoint(service, authorizer),
 		revokeMCPConnectionEndpoint(service, authorizer),
-	}
-}
-
-func mountMCPOAuthConnectionRoutes(r chi.Router, service MCPOAuthService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range mcpOAuthConnectionEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
 	}
 }
 

@@ -196,29 +196,6 @@ type publicInviteLeaveRequest struct {
 	Native          bool
 }
 
-func mountPublicInviteRoutes(r chi.Router, options Options) {
-
-	r.Group(func(r chi.Router) {
-		r.Use(requireTenantAuthentication(options.APIKeyAuthentication, options.RateLimit.ClientIP))
-		for _, endpoint := range publicInviteManagementEndpoints(options.PublicInvites, options.TenantAuthz, requirePublicOrigin(options.CORS.AllowedOrigins)) {
-			endpoint.Mount(r, options.RateLimit)
-		}
-	})
-
-	r.Group(func(r chi.Router) {
-		r.Use(rejectTenantAPIKeyCredential)
-		r.Use(rejectNativePublicCookies)
-		publicRecordingEntranceEndpoint(options.RecordingEntrance, options.EntranceInvites, requirePublicOrigin(options.CORS.AllowedOrigins)).Mount(r, options.RateLimit)
-		for _, endpoint := range publicInvitePublicEndpoints(options.PublicInvites, requirePublicOrigin(options.CORS.AllowedOrigins)) {
-			endpoint.Mount(r, options.RateLimit)
-		}
-	})
-}
-
-func publicInviteEndpoints(service PublicInviteService, authorizer TenantAuthorizer) []RouteEndpoint {
-	return append(publicInviteManagementEndpoints(service, authorizer, nil), publicInvitePublicEndpoints(service, nil)...)
-}
-
 func publicInviteManagementEndpoints(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) []RouteEndpoint {
 	return []RouteEndpoint{
 		getSpacePublicInviteEndpoint(service, authorizer),
