@@ -1,5 +1,6 @@
 import { ChalkWhiteboardV1Error, type ChalkWhiteboardV1Failure, type ChalkWhiteboardV1FileTransport } from "./types";
 import { withRequestContext } from "../session";
+import { apiUrls } from "../urls";
 
 export type ChalkWhiteboardV1FileDownloadTransportOptions = {
   readonly baseUrl: string;
@@ -9,13 +10,10 @@ export type ChalkWhiteboardV1FileDownloadTransportOptions = {
 
 export function createChalkWhiteboardV1FileDownloadTransport(options: ChalkWhiteboardV1FileDownloadTransportOptions): ChalkWhiteboardV1FileTransport {
   const fetchImplementation = withRequestContext(options.fetch);
-  let baseUrlEnd = options.baseUrl.length;
-  while (baseUrlEnd > 0 && options.baseUrl[baseUrlEnd - 1] === "/") baseUrlEnd -= 1;
-  const baseUrl = options.baseUrl.slice(0, baseUrlEnd);
 
   return {
     getDownloadUrl: async (fileId) => {
-      const response = await authorizedFetch(fetchImplementation, options.token, `${baseUrl}/v1/whiteboard/files/${encodeURIComponent(fileId)}/download`, { method: "GET" });
+      const response = await authorizedFetch(fetchImplementation, options.token, apiUrls.whiteboardFileDownload(options.baseUrl, fileId), { method: "GET" });
       if (!response.ok) throw await responseError(response, "get_file_download");
       const value: unknown = await response.json();
       if (!isDownloadResponse(value)) {

@@ -8,7 +8,8 @@ import { makeConnectionPlatformLayer, type ConnectionChatFileFactoryInput, type 
 import { createBrowserMediaDevices } from "./media-devices";
 import { withRequestContext } from "../session";
 import { mediaBootstrap } from "../access/media-bootstrap";
-import { directOrigin, directSyncUrl, type DirectPathMode } from "../direct-path";
+import { directOrigin, type DirectPathMode } from "../direct-path";
+import { apiUrls, directSyncUrl, whiteboardUrl } from "../urls";
 const apiFetch = withRequestContext();
 export function createDefaultConnectionDependencies(options: { readonly apiBaseURL: string; readonly syncURL: string; readonly syncDirectURL?: string | null; readonly directPath?: DirectPathMode; readonly whiteboardURL?: string | null }): ConnectionDependencies {
   return {
@@ -26,7 +27,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
           return () => globalThis.window?.removeEventListener("online", listener);
         },
         send: async (grant, report, signal, traceparent) => {
-          const response = await apiFetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${encodeURIComponent(grant.subject.tenantId)}/connection-reports`, {
+          const response = await apiFetch(apiUrls.connectionReports(options.apiBaseURL, grant.subject.tenantId), {
             method: "POST",
             headers: { Authorization: `Bearer ${grant.media.token}`, "Content-Type": "application/json", traceparent },
             body: JSON.stringify(report),
@@ -41,9 +42,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     },
     mediaDevices: createBrowserMediaDevices(),
     getEpisodeStatus: async (access, signal) => {
-      const { tenantId, spaceId, episodeId, participantId } = access.subject;
-      const path = [tenantId, spaceId, episodeId, participantId].map(encodeURIComponent);
-      const response = await apiFetch(`${options.apiBaseURL.replace(/\/$/, "")}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/episode-status`, {
+      const response = await apiFetch(apiUrls.episodeStatus(options.apiBaseURL, access.subject), {
         headers: { Authorization: `Bearer ${access.media.token}` },
         signal,
         cache: "no-store",
@@ -55,12 +54,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
       throw new TypeError("Invalid Episode status");
     },
     cancelPendingAdmission: async (access, signal) => {
-      const { tenantId, spaceId, episodeId, participantId } = access.subject;
-      const path = [tenantId, spaceId, episodeId, participantId].map(encodeURIComponent);
-      let baseEnd = options.apiBaseURL.length;
-      while (baseEnd > 0 && options.apiBaseURL[baseEnd - 1] === "/") baseEnd--;
-      const baseURL = options.apiBaseURL.slice(0, baseEnd);
-      const response = await apiFetch(`${baseURL}/v1/tenants/${path[0]}/spaces/${path[1]}/episodes/${path[2]}/participants/${path[3]}/cancel-join`, {
+      const response = await apiFetch(apiUrls.cancelJoin(options.apiBaseURL, access.subject), {
         method: "POST",
         headers: { Authorization: `Bearer ${access.media.token}` },
         signal,
@@ -72,7 +66,7 @@ export function createDefaultConnectionDependencies(options: { readonly apiBaseU
     createMediaClient: (input) => createMediaClient(options.apiBaseURL, options.directPath ?? "auto", input),
     createSyncClient: (input) => createSyncClient(options.syncURL, options.syncDirectURL, options.directPath ?? "auto", input),
     createChatFileTransport: (input) => createChatFileTransport(options.apiBaseURL, input),
-    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardURL(options.syncURL), input),
+    createWhiteboardClient: options.whiteboardURL === null ? undefined : (input) => createWhiteboardClient(options.apiBaseURL, options.whiteboardURL ?? whiteboardUrl(options.syncURL), input),
     subscribeForeground: subscribeBrowserForeground,
     createId: createBrowserId,
   };
@@ -213,11 +207,4 @@ function createWhiteboardClient(apiBaseURL: string, url: string, input: Connecti
       input.onSummary(summary);
     },
   });
-}
-function whiteboardURL(syncURL: string): string {
-  const url = new URL(syncURL);
-  url.pathname = "/v1/whiteboard";
-  url.search = "";
-  url.hash = "";
-  return url.toString();
 }

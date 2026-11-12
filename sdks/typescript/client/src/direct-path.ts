@@ -43,8 +43,3 @@ export function directOrigin(value: unknown): URL | null {
     return null;
   }
 }
-
-/** The direct Sync URL on the host a grant advertises. */
-export function directSyncUrl(origin: URL): string {
-  return `wss://${origin.host}/v1/sync`;
-}
