@@ -5,7 +5,7 @@ export const DISPLAY_NAME_MAX_LENGTH = 40;
 
 const DISPLAY_NAME_STORAGE_KEY = "chalk.mobile.onboarding.v1";
 
-export function parseDisplayName(value: string | null): string | null {
+function parseDisplayName(value: string | null): string | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as { displayName?: unknown };

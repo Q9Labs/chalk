@@ -54,7 +54,7 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
   };
 }
 
-export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
+function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
   if (config.codeswitchProvider === "mai" && !config.openRouterToken) throw new ConfigError("OpenRouter token is required for MAI");
   if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
     throw new ConfigError("nightly requires its own control API URL and audience");

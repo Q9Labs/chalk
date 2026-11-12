@@ -247,7 +247,6 @@
       "paths": [
         "apps/api/internal/chatattachments",
         "apps/api/internal/httpapi/chat_attachments.go",
-        "apps/mobile/src/lib/chat-files.ts",
         "apps/sync/lib/chalk_sync/chat",
         "apps/sync/lib/chalk_sync/reactions.ex",
         "apps/sync/test/chalk_sync/chat",
@@ -287,6 +286,7 @@
         "apps/api/internal/httpapi/public_invite_media_error_test.go",
         "apps/api/internal/httpapi/spaces.go",
         "apps/mobile/src/home",
+        "apps/mobile/src/lib/arrived-call.ts",
         "apps/mobile/src/lib/spaces.ts",
         "apps/mobile/src/space",
         "apps/web/src/components/space",

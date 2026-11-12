@@ -10,9 +10,11 @@ const base = {
 describe("secretParameterNames", () => {
   it("asks SSM only for the providers the release switches on", () => {
     expect(secretParameterNames(base)).toEqual({ workloadAuth: "/chalk/workload" });
-    expect(
-      secretParameterNames({ ...base, DEEPINFRA_ENABLED: "true", DEEPINFRA_TOKEN_PARAMETER_ARN: "/chalk/deepinfra", CODESWITCH_PROVIDER: "mai", OPENROUTER_TOKEN_PARAMETER_ARN: "/chalk/openrouter" }),
-    ).toEqual({ workloadAuth: "/chalk/workload", deepInfraToken: "/chalk/deepinfra", openRouterToken: "/chalk/openrouter" });
+    expect(secretParameterNames({ ...base, DEEPINFRA_ENABLED: "true", DEEPINFRA_TOKEN_PARAMETER_ARN: "/chalk/deepinfra", CODESWITCH_PROVIDER: "mai", OPENROUTER_TOKEN_PARAMETER_ARN: "/chalk/openrouter" })).toEqual({
+      workloadAuth: "/chalk/workload",
+      deepInfraToken: "/chalk/deepinfra",
+      openRouterToken: "/chalk/openrouter",
+    });
   });
 
   it("fails on a switch that is on without its parameter, or a provider that is not release-qualified", () => {
