@@ -37,7 +37,7 @@ jobs:
   changes:
     name: Select gate jobs
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       api: ${{ steps.select.outputs.api }}
       sync: ${{ steps.select.outputs.sync }}
@@ -275,7 +275,7 @@ jobs:
     needs: [changes, root-lanes]
     if: always()
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Check out source
         id: checkout
