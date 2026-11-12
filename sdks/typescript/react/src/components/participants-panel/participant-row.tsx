@@ -10,8 +10,7 @@ import { useNarrowCall } from "../../internal/call-width";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
 
-// The menu opens on a click, so its code and styles load then.
-// The menu downloads when a row with an options button mounts, so "Edit name" and the rest open with their content on the first frame.
+// The menu downloads on intent (hover, focus or press of its button), so "Edit name" and the rest open with their content on the first frame without growing the panel's first load.
 const { Component: ParticipantOptionsMenu, preload: preloadOptionsMenu } = preloadable(() => import("./participant-options-menu").then((module) => module.ParticipantOptionsMenu));
 
 export function ParticipantRow({
@@ -178,7 +177,7 @@ export function ParticipantRow({
       {showMenuButton && !isEditing ? (
         phone ? (
           <>
-            <button ref={() => void preloadOptionsMenu()} type="button" className="call-person-options" aria-label={optionsLabel} aria-expanded={menuOpen} onClick={onMenuToggle}>
+            <button onPointerEnter={() => void preloadOptionsMenu()} onPointerDown={() => void preloadOptionsMenu()} onFocus={() => void preloadOptionsMenu()} type="button" className="call-person-options" aria-label={optionsLabel} aria-expanded={menuOpen} onClick={onMenuToggle}>
               <MoreIcon />
             </button>
             <ChalkSheet open={menuOpen} onOpenChange={(open) => (open ? onMenuToggle() : onMenuClose())} title={optionsLabel}>
@@ -203,7 +202,7 @@ export function ParticipantRow({
               else onMenuClose();
             }}
           >
-            <Popover.Trigger ref={() => void preloadOptionsMenu()} className="call-person-options" aria-label={optionsLabel}>
+            <Popover.Trigger onPointerEnter={() => void preloadOptionsMenu()} onPointerDown={() => void preloadOptionsMenu()} onFocus={() => void preloadOptionsMenu()} className="call-person-options" aria-label={optionsLabel}>
               <MoreIcon />
             </Popover.Trigger>
             <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
