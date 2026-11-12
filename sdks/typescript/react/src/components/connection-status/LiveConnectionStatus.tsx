@@ -26,7 +26,7 @@ export function LiveConnectionStatus({ phase, onRejoin, onLeave, onReportProblem
   const messagesOnly = offline.pending.every((action) => action.kind === "chat_message");
   const pending = count ? `${count} ${messagesOnly ? (count === 1 ? "message" : "messages") : count === 1 ? "action" : "actions"}` : null;
   if (phase.kind === "live") return null;
-  if (phase.kind === "failed") return <ConnectionStatus phase="failed" since={null} errorCode={connection.lastError?.code} onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />;
+  if (phase.kind === "failed") return <ConnectionStatus phase="failed" since={null} onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />;
   if (phase.kind === "reconnected") return <ConnectionStatus phase="reconnected" since={null} awayMs={phase.awayMs} />;
   return <ConnectionStatus phase={online ? "reconnecting" : "offline"} since={phase.since} pending={pending} />;
 }
