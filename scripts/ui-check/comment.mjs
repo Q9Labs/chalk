@@ -12,6 +12,7 @@ const CHECK_NAMES = {
   "tap-target": "tap target too small",
   "dead-control": "control does nothing",
   "control-unreachable": "control unreachable",
+  "never-ready": "never finished loading",
   "console-error": "console error",
   "journey-failed": "journey failed",
 };
