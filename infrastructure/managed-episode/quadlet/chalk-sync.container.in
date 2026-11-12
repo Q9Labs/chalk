@@ -3,6 +3,8 @@ Description=Chalk production SyncEngine
 After=network-online.target chalk-api.service
 Requires=chalk-api.service
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Container]
 Image=__SYNC_IMAGE_REFERENCE__
@@ -38,8 +40,6 @@ PodmanArgs=--stop-timeout=15
 [Service]
 Restart=on-failure
 RestartSec=2s
-StartLimitIntervalSec=60
-StartLimitBurst=5
 TimeoutStartSec=120
 TimeoutStopSec=25
 

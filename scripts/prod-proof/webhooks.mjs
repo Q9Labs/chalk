@@ -3,11 +3,22 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { check, save, waitFor, maskCredentials, saveOwnership } from "./runtime.mjs";
+import { check, save, waitFor, maskCredentials, saveOwnership, ProofError } from "./runtime.mjs";
 import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
+// proof_origin is registered in the Tenant's CORS origins, so its port cannot be picked per run. A port already in use means two
+// proofs were given the same origin: say so by name instead of failing with an unknown error.
+async function listen(server, origin) {
+  server.listen(Number(origin.port), "127.0.0.1");
+  try {
+    await once(server, "listening");
+  } catch (error) {
+    if (error.code !== "EADDRINUSE") throw error;
+    throw new ProofError("proof-origin-busy", `Port ${origin.port} of proof_origin is in use; give each proof that runs at the same time its own proof_origin`);
+  }
+}
 export async function proofServer(run) {
   const origin = new URL(run.config.proof_origin);
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
@@ -20,8 +31,7 @@ export async function proofServer(run) {
     }
     response.writeHead(200, { "Content-Type": "text/html" }).end(pages[path]);
   });
-  server.listen(Number(origin.port), "127.0.0.1");
-  await once(server, "listening");
+  await listen(server, origin);
   run.resources.push({
     kind: "proof-http-server",
     force: () => {

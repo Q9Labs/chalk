@@ -52,12 +52,20 @@ function makeClient(getAccess: SpaceClientOptions["getAccess"], syncStartupTimeo
       ...(syncStartupTimeoutMs === null ? {} : { syncStartupTimeoutMs }),
       onConnectionDiagnostic,
       dependencies: {
-        createSyncClient: (input) => createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() }),
+        createSyncClient: (input) => trackSync(createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: new InMemoryV1PendingTargetStore() })),
       },
     },
   );
 }
+// client.dispose() only detaches the observers; the Sync client it joined with keeps its heartbeat and reconnect timers. A
+// later test's fake clock would then run the earlier test's timers and dial the later test's socket stub.
+const startedSync: Array<{ stop(): void }> = [];
+function trackSync<T extends { stop(): void }>(sync: T): T {
+  startedSync.push(sync);
+  return sync;
+}
 afterEach(() => {
+  for (const sync of startedSync.splice(0)) sync.stop();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -80,7 +88,7 @@ describe("public client startup failure contract", () => {
         dependencies: {
           cancelPendingAdmission: async () => false,
           createSyncClient: (input) => {
-            const sync = createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: store });
+            const sync = trackSync(createV1SyncClient({ url: "ws://sync.test/v1/sync", token: input.token, mediaPlane: input.media, pendingStore: store }));
             vi.spyOn(sync, "leave").mockRejectedValue(new Error("lost Leave acknowledgement"));
             return sync;
           },

@@ -39,8 +39,8 @@ export type CallStatsCollector = {
 };
 
 type Upload = (request: CallStatsRequest) => Promise<void>;
-/** What the SFU reported about remote video delivery. Planes that report nothing leave it out. */
-export type CallStatsDelivery = { readonly pausedVideos: number };
+/** What the viewer and the SFU did to remote video. Planes that report no subscription state leave out `pausedVideos`. */
+export type CallStatsDelivery = { readonly pausedVideos?: number; readonly hiddenVideos: number };
 
 export function createCallStatsCollector(options: { readonly upload: Upload; readonly now?: () => number }): CallStatsCollector {
   const now = options.now ?? (() => Date.now());
@@ -136,6 +136,7 @@ function summarise(report: RTCStatsReport, baseline: Baseline, windowMs: number,
     freeze_count: scaled(delta("inbound-rtp", "freezeCount", "video"), 1, 10000),
     freeze_ms: scaled(delta("inbound-rtp", "totalFreezesDuration", "video"), 1000, 600000),
     recv_paused_videos: scaled(delivery?.pausedVideos ?? null, 1, 64),
+    recv_hidden_videos: scaled(delivery?.hiddenVideos ?? null, 1, 64),
   };
 }
 
