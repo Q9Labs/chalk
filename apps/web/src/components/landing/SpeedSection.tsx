@@ -5,9 +5,9 @@ import { Icon } from "../site/Icon";
 import { Dither } from "./Dither";
 
 const BUDGETS = [
-  { value: "<1s", line: "Click to first frame, at p50. Under 2.5 s at p95." },
-  { value: "<100ms", line: "Mute, hands and chat, at p95 in the same region." },
-  { value: "<200ms", line: "Camera to screen, glass to glass in the same region." },
+  { value: "<1s", line: "From pressing Join to seeing the call, usually. Almost always under 2.5 seconds." },
+  { value: "<100ms", line: "For mute, raised hands and chat to reach everyone in the same region." },
+  { value: "<200ms", line: "From your camera to their screen, in the same region." },
 ] as const;
 
 export function SpeedSection() {
@@ -38,7 +38,7 @@ export function SpeedSection() {
           <h2 className="h2" id="speed-title">
             Press Join. You’re in.
           </h2>
-          <p className="sub">No installs and no waiting room. The way in is designed to feel instant, so the first thing anyone sees is a face.</p>
+          <p className="sub">Open the link in any browser and you’re in, with nothing to install. If the host has Ask to join on, you’re in as soon as they let you in.</p>
           <ul className="budgets">
             {BUDGETS.map((budget) => (
               <li key={budget.value}>
