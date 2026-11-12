@@ -321,4 +321,4 @@ async function mergeRuns(files) {
   console.log(JSON.stringify({ machines: files.length, ...summarizeFleet(calls) }, null, 2));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+if (import.meta.main) await main();

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isMain } from "../script-entry.mjs";
 
 const fixCommand = "pnpm install --frozen-lockfile";
 
@@ -58,7 +57,7 @@ function checkInstall(root) {
   return installMismatches(rootLockedVersions(readFileSync(join(root, "pnpm-lock.yaml"), "utf8")), readInstalledVersion);
 }
 
-if (isMain(import.meta)) {
+if (import.meta.main) {
   const problems = checkInstall(process.cwd());
   if (problems.length > 0) {
     console.error(`Installed dependencies do not match pnpm-lock.yaml:\n${problems.map((problem) => `  - ${problem}`).join("\n")}\nRun \`${fixCommand}\` and retry.`);

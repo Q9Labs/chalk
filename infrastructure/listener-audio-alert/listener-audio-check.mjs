@@ -138,7 +138,7 @@ export async function run({ env, fetchImpl = fetch, now = new Date(), log = cons
   return drill ? 0 : 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.main) {
   try {
     process.exitCode = await run({ env: process.env });
   } catch (error) {

@@ -620,7 +620,7 @@ function selectCiJobs(base) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const [flag, base] = process.argv.slice(2);
   if (flag !== "--ci-jobs" || !base) {
     console.error("Usage: chalk-gate-plan.mjs --ci-jobs <base-ref|--full>");

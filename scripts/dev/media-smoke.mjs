@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 
 export * from "./media-smoke-core.mjs";
 export { createMediaSmokeInitScript } from "./media-smoke-page.mjs";
@@ -16,7 +15,7 @@ async function main() {
   if (report.result !== "passed") process.exitCode = 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   main().catch((error) => {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;

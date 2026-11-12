@@ -172,7 +172,7 @@ function encodeManifest(manifestBytes) {
   return manifestBase64;
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = import.meta.main;
 if (isMain) {
   runManagedRelease({ arguments_: process.argv.slice(2) }).catch((error) => {
     console.error(errorMessage(error));

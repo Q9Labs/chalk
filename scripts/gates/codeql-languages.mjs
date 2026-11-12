@@ -3,7 +3,6 @@
 // `--full` prints every language, which the weekly run uses.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 export const languages = ["actions", "go", "javascript-typescript", "python"];
 
@@ -36,7 +35,7 @@ function changedFiles(base) {
   return output.split("\0").filter(Boolean);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const [argument] = process.argv.slice(2);
   let selected = languages;
   if (argument !== "--full") {

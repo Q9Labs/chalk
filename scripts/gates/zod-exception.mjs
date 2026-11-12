@@ -1,6 +1,5 @@
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { loadAll } from "js-yaml";
 
 const label = (key) => key.split("(")[0];
@@ -68,7 +67,7 @@ function checkZodException(source) {
   }
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   try {
     const [lockfile, reportFile] = process.argv.slice(2);
     checkZodException(readFileSync(lockfile, "utf8"));

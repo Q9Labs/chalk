@@ -216,4 +216,4 @@ function main(args) {
   process.exitCode = 2;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main(process.argv.slice(2));
+if (import.meta.main) main(process.argv.slice(2));

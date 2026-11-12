@@ -2,8 +2,6 @@
 
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -12,7 +10,7 @@ export function implicitAnyIsForbidden(options) {
   return options.noImplicitAny ?? options.strict ?? false;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { encoding: "utf8" })
     .split("\0")
     .filter((file) => /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
