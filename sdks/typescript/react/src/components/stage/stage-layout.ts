@@ -210,11 +210,12 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
     const height = options.content || phone ? box.height : width / aspect;
     return { frames: [{ id: primaryId, role: "primary", page: 0, x: (box.width - width) / 2, y: (box.height - height) / 2, width, height }], pageCount: 1, perPage: 0, overflowCount: stripIds.length };
   }
+  // The second face floats at the bottom right, clear of the top-right menu on the big tile.
   if (phone && stripIds.length === 1 && !options.content) {
     return {
       frames: [
         { id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...box },
-        { id: stripIds[0] ?? "", role: "strip", page: 0, x: box.width - 108, y: 12, width: 96, height: 128 },
+        { id: stripIds[0] ?? "", role: "strip", page: 0, x: box.width - 108, y: box.height - 140, width: 96, height: 128 },
       ],
       pageCount: 1,
       perPage: 1,
@@ -230,7 +231,8 @@ export function fitSpotlight(box: StageBox, primaryId: string, stripIds: readonl
   const beside = options.content ? besideMain.width * besideMain.height > belowMain.width * belowMain.height * 1.005 : !phone && Math.abs(Math.log(besideMain.width / besideMain.height / WIDESCREEN)) < Math.abs(Math.log(belowMain.width / belowMain.height / WIDESCREEN));
   const main = { width: beside ? besideMain.width : box.width, height: beside ? box.height : belowMain.height };
   const remaining = { width: beside ? box.width - main.width - options.gap : box.width, height: beside ? box.height : box.height - main.height - options.gap };
-  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: slim ? 52 : phone ? 72 : 96, maxPerPage }, options.wideIds);
+  // A side column is one tile wide, so double-width content there would fold every person into +N.
+  const people = fitGrid(remaining, stripIds, { ...DEFAULT_GRID_OPTIONS, minTileWidth: phone ? 88 : 150, minTileHeight: slim ? 52 : phone ? 72 : 96, maxPerPage }, beside ? [] : options.wideIds);
   return {
     ...people,
     frames: [{ id: primaryId, role: "primary", page: 0, x: 0, y: 0, ...main }, ...people.frames.map((frame) => ({ ...frame, role: "strip" as const, x: frame.x + (beside ? main.width + options.gap : 0), y: frame.y + (beside ? 0 : main.height + options.gap) }))],

@@ -33,7 +33,8 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       isSpeaking: localFromSync?.presence.speaking ?? false,
       isActiveSpeaker: localFromSync?.presence.activeSpeaker ?? false,
       isVideoEnabled: localMedia.camera.state === "enabled",
-      isScreenSharing: localMedia.screen.state === "enabled" || localMedia.screen.state === "requesting",
+      // The share tile waits for a picked source, so a cancelled browser picker never reflows the stage.
+      isScreenSharing: localMedia.screen.state === "enabled",
       isHandRaised: localFromSync?.handRaised,
       videoTrack: localMedia.camera.track,
       screenShareTrack: localMedia.screen.track,
