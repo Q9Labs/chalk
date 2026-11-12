@@ -5,6 +5,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
@@ -157,7 +158,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   test "recovery delivers Bring before an already queued newer owner view" do
     owner = UUID.generate()
-    state = %{recovering_state() | view_negotiated: true, view_owner_negotiated: true}
+    state = %{recovering_state() | extensions: extensions(view: :owner)}
 
     bring =
       Map.merge(server_view(UUID.generate()), %{
@@ -190,7 +191,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     count = GeneratedWhiteboardV1.limits()["snapshotPageMaxItems"] + 1
     elements = Enum.map(1..count, fn index -> Map.put(element(), "id", "element-#{index}") end)
     Process.put(:whiteboard_snapshot_elements, elements)
-    state = %{recovering_state() | view_negotiated: true}
+    state = %{recovering_state() | extensions: extensions(view: :basic)}
     Process.delete(:whiteboard_snapshot_elements)
     assert length(state.snapshot.remaining) == 1
 
@@ -253,7 +254,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   end
 
   test "reads drawing access again later, so a missed notification is repaired" do
-    state = %{live_access_state() | draw_policy_negotiated: true}
+    state = %{live_access_state() | extensions: extensions(draw_policy: true)}
 
     assert {:push, {:text, encoded}, read} =
              SocketWhiteboardV1.handle_info(:whiteboard_v1_access_changed, state)
@@ -319,7 +320,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
   test "names the policy cap when an Episode has used up its policy changes" do
     Process.put(:whiteboard_draw_policy_failure, {:error, :draw_policy_limit})
-    state = %{live_access_state() | draw_policy_negotiated: true}
+    state = %{live_access_state() | extensions: extensions(draw_policy: true)}
 
     frame = %{
       "type" => "set_draw_policy",
@@ -339,7 +340,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   end
 
   test "recovery replays only the latest person's Bring, with ordinary cached views" do
-    state = %{recovering_state() | view_negotiated: true}
+    state = %{recovering_state() | extensions: extensions(view: :basic)}
     first = server_view("30000000-0000-4000-8000-000000000003")
 
     latest =
@@ -372,7 +373,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   end
 
   test "owner overload closes explicitly and accepted retries echo the same input id" do
-    state = %{live_view_state() | view_owner_negotiated: true}
+    state = %{live_view_state() | extensions: extensions(view: :owner)}
     {:ok, owner, _, _} = ViewOwner.join(state.identity.episode, state.identity.participant_id)
     state = %{state | view_owner: owner}
     frame = Map.merge(view_frame(false), %{"input_id" => "#{UUID.generate()}:1", "move" => true})
@@ -396,7 +397,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     state = live_view_state()
     frame = server_view(state.identity.participant_id)
     assert {:ok, ^state} = SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, state)
-    owner = %{state | view_owner_negotiated: true}
+    owner = %{state | extensions: extensions(view: :owner)}
 
     assert {:push, {:text, encoded}, ^owner} =
              SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, owner)
@@ -1166,13 +1167,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       "bring" => true
     }
 
-    assert {:ok, _state} = receive_frame(view, %{live | identity: guest, view_negotiated: true})
+    assert {:ok, _state} = receive_frame(view, %{live | identity: guest, extensions: extensions(view: :basic)})
     refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
 
-    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: false})
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, extensions: extensions()})
     refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
 
-    assert {:ok, _state} = receive_frame(view, %{live | identity: host, view_negotiated: true})
+    assert {:ok, _state} = receive_frame(view, %{live | identity: host, extensions: extensions(view: :basic)})
 
     assert_received {:whiteboard_v1_frame,
                      %{"type" => "view", "bring" => true, "width" => 800} = frame}
@@ -1183,7 +1184,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert {:push, {:text, pushed}, _state} =
              SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, %{
                other
-               | view_negotiated: true
+               | extensions: extensions(view: :basic)
              })
 
     assert JSON.decode!(pushed)["display_name"] == "Ada"
@@ -1279,9 +1280,11 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         revision: 4,
         display_name: "Ada",
         identity: %{identity() | capabilities: ["drawWhiteboard", "manageWhiteboard"]},
-        view_negotiated: true
+        extensions: extensions(view: :basic)
     }
   end
+
+  defp extensions(changes \\ []), do: struct!(Extensions.none(), changes)
 
   defp view_frame(bring),
     do: %{
@@ -1341,12 +1344,14 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       welcome = JSON.decode!(wire)
       assert welcome["presenting"] == false
       assert Map.has_key?(welcome, "presenter_id") == @hello_presenter
-      assert live.presenter_negotiated == @hello_presenter
       assert Map.has_key?(welcome, "view_owner_id") == @hello_owner
-      assert live.view_negotiated
-      assert live.view_origins_negotiated
-      assert live.view_owner_negotiated == @hello_owner
-      assert live.draw_policy_negotiated == @hello_policy
+
+      assert live.extensions == %Extensions{
+               presentation: if(@hello_presenter, do: :presenter, else: :basic),
+               view: if(@hello_owner, do: :owner, else: :origins),
+               draw_policy: @hello_policy
+             }
+
       assert Process.alive?(live.view_owner)
       assert is_integer(live.connected_at)
       assert_received :whiteboard_v1_access_changed
@@ -1401,7 +1406,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         live = %{
           state
           | identity: %{state.identity | episode: episode},
-            view_negotiated: true,
+            extensions: extensions(view: :basic),
             view_owner: owner,
             view_owner_ref: Process.monitor(owner)
         }
@@ -1438,7 +1443,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       | identity: %{live.identity | participant_id: "60000000-0000-4000-8000-000000000006"}
     }
 
-    peer = %{live | view_origins_negotiated: true}
+    peer = %{live | extensions: extensions(view: :origins)}
 
     assert {:push, {:text, versioned}, _} =
              SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, frame}, peer)
@@ -1513,7 +1518,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        extensions: extensions(presentation: :basic)
     }
 
     assert {:push, {:text, encoded}, repaired} =
@@ -1531,7 +1536,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
 
     assert repaired.revision == 5
 
-    legacy = %{state | presentation_negotiated: false}
+    legacy = %{state | extensions: extensions()}
 
     assert {:push, {:text, legacy_encoded}, _legacy_repair} =
              SocketWhiteboardV1.handle_info(
@@ -1557,7 +1562,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        extensions: extensions(presentation: :basic)
     }
 
     assert {:push, {:text, first}, replaying} =
@@ -1586,7 +1591,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        extensions: extensions(presentation: :basic)
     }
 
     later = %{
@@ -1625,7 +1630,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        extensions: extensions(presentation: :basic)
     }
 
     assert {:push, {:text, encoded}, waiting} =
@@ -1670,7 +1675,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: true
+        extensions: extensions(presentation: :basic)
     }
 
     assert {:push, {:text, _reset}, waiting} =
@@ -1822,7 +1827,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
         identity: identity(),
         scene_id: @scene_id,
         revision: 4,
-        presentation_negotiated: false
+        extensions: extensions()
     }
 
     assert {:push, {:text, encoded}, _reset} =
