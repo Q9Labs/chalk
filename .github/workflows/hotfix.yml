@@ -104,7 +104,7 @@ jobs:
       deploy_managed: true
       deploy_web: true
       orchestrated: true
-      web_artifact: '{"artifact_id":"13802711997","sha256":"a33a76456ad4f21fabb89d570eee4ba0aaecf0799baf739f4feb4d7ca42a8c8c"}'
+      web_artifact: '{"artifact_id":"13802711997","sha256":"d3350f3f294a0226dfa4c2df680e9f012fd1e4327ce7ce7c300680d425de6ba2"}'
       manifest_run_id: "42899890683"
       manifest_artifact_id: "13802657642"
       manifest_sha256: d16e1589f8cd5912006e97874ef9b6d0cf3319954e5b2db6b5463510349e56ca
