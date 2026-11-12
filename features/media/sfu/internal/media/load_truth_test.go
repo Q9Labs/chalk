@@ -208,8 +208,8 @@ func TestUDPBufferErrorsCloseAdmissionAndNameTheReason(t *testing.T) {
 			// The node's own socket leaves its counters alone, so steal's absence does not matter:
 			// 20 datagrams a second for a full window is above the 5 a second threshold.
 			runWindow(node, 31, func() { test.step(&host.errors) })
-			if reason := node.guard.closedReason(); reason != reasonUDPBufferErrors {
-				t.Fatalf("admission reason %q, want %q", reason, reasonUDPBufferErrors)
+			if reason := node.guard.closedReason(); reason != RefusedUDPErrors {
+				t.Fatalf("admission reason %q, want %q", reason, RefusedUDPErrors)
 			}
 			_, err := node.Create("create-new", episodeScope("new", "bob"), ParticipantSession, nil)
 			if !errors.Is(err, errAdmissionClosed) {
@@ -239,7 +239,7 @@ func TestPacerDropsCloseAdmission(t *testing.T) {
 		node.guard.observePacer(load)
 	})
 	health := node.guard.snapshot()
-	if health.AdmissionReason != reasonPacerDrops || math.Abs(health.PacerDropPercent-10) > 0.5 {
+	if health.AdmissionReason != RefusedPacerDrops || math.Abs(health.PacerDropPercent-10) > 0.5 {
 		t.Fatalf("health %+v, want pacer_drops near 10%%", health)
 	}
 	// A handful of drops among plenty of video is noise.
@@ -267,8 +267,8 @@ func TestBusyCPUClosesAdmission(t *testing.T) {
 		host.times.total += 100
 		host.times.idle += 5
 	})
-	if reason := node.guard.closedReason(); reason != reasonCPUBusy {
-		t.Fatalf("admission reason %q at 95%% busy, want %q", reason, reasonCPUBusy)
+	if reason := node.guard.closedReason(); reason != RefusedCPUBusy {
+		t.Fatalf("admission reason %q at 95%% busy, want %q", reason, RefusedCPUBusy)
 	}
 }
 

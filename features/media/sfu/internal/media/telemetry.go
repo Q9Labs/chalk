@@ -21,11 +21,11 @@ const (
 	RefusedCaptureLimit     = "capture_limit"
 	RefusedHolds            = "holds"
 	RefusedRetirements      = "retirements"
-	RefusedCPUSteal         = reasonCPUSteal
-	RefusedCPUBusy          = reasonCPUBusy
-	RefusedSchedulerLatency = reasonSchedulerLatency
-	RefusedPacerDrops       = reasonPacerDrops
-	RefusedUDPErrors        = reasonUDPBufferErrors
+	RefusedCPUSteal         = "cpu_steal"
+	RefusedCPUBusy          = "cpu_busy"
+	RefusedSchedulerLatency = "scheduler_latency"
+	RefusedPacerDrops       = "pacer_drops"
+	RefusedUDPErrors        = "udp_buffer_errors"
 )
 
 // Ingress kinds split what publishers send by media.
