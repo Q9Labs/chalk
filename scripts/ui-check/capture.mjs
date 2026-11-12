@@ -10,7 +10,7 @@ const FIXED_TIME = new Date("2026-01-15T10:00:00Z");
 const STILL = "*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}";
 const PER_CHECK = 25;
 /** Parts of a screen that move on their own (the live input meter) or hold this server's address (the invite QR code), and remote board cursors that drift, are painted over in every screenshot. */
-const LIVE = '[role="meter"], .chalk-invite-qr, .chalk-board-cursor';
+const LIVE = '[role="meter"], .chalk-invite-qr, .chalk-board-cursor, .chalk-board-cursor *';
 
 async function pool(items, size, work) {
   const queue = [...items];
