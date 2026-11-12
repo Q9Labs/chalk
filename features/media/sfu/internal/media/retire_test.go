@@ -348,7 +348,7 @@ func TestOnlyASessionOfTheHoldsAllocationSettlesIt(t *testing.T) {
 				t.Fatal(err)
 			}
 			f.node.mu.Lock()
-			_, held := f.node.holds[episodeKey{"tenant", "one"}]
+			held := f.node.holdOf(episodeKey{"tenant", "one"}) != nil
 			f.node.mu.Unlock()
 			if held != test.wantHeld {
 				t.Fatalf("hold kept = %v, want %v", held, test.wantHeld)
