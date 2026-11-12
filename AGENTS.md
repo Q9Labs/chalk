@@ -13,6 +13,7 @@ Put shared behavior in packages first, then wire it into apps. Don't fix SDK beh
 - The Elixir Sync server uses Postgres as the durable authority; local coordinators, queues, presence, and SDK replicas are disposable. Preserve the tenant-and-Episode authority and transaction boundaries, bound retained work and data, and treat socket loss as presence rather than a durable lifecycle event. Protocol v1 is the production surface. Read the [Sync README](apps/sync/README.md) before changing its protocol, lifecycle, or deployment behavior.
 - After changing a contract, route, migration, or other generator input, run `pnpm run regen`. Use `pnpm run check:generated` to find stale output. See [contract codegen](docs/contract-codegen.md).
 - For observability or service-monitoring changes, follow [observability](docs/observability.md). Preserve journey and trace context, keep sensitive data out of telemetry, and update the journey ledger and observability proof when a user-visible lifecycle changes.
+- When production breaks, restore service first by the [incident runbook](docs/operators/incident.md): rollback or fix forward, the hotfix workflow, and the kill switches.
 
 ## Verification
 
