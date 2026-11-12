@@ -80,8 +80,12 @@ func TestCaptureReadinessShutdownTriggers(t *testing.T) {
 						refresh, grace := make(chan time.Time, 1), make(chan time.Time, 1)
 						graceStarted := make(chan time.Duration, 2)
 						reporter := &ReadinessReporter{
-							control: reports, refreshInterval: time.Hour, requestTimeout: 10 * time.Millisecond,
-							shutdownGrace: 50 * time.Millisecond, after: func(delay time.Duration) <-chan time.Time {
+							// The request timeout starts before the reporter samples process resources, and the stub above
+							// fails a request whose context has expired. A few milliseconds is not enough on a loaded
+							// runner: the first report then fails, the daemon never starts and no attempt runs. The grace
+							// is only the value the injected timer is asked for, so it costs no wall time.
+							control: reports, refreshInterval: time.Hour, requestTimeout: time.Second,
+							shutdownGrace: 2 * time.Second, after: func(delay time.Duration) <-chan time.Time {
 								if delay == time.Hour {
 									return refresh
 								}

@@ -65,6 +65,7 @@ type connectionReportEvent struct {
 	ReceiveCounts    *connectionReportReceiveCounts `json:"receive_counts,omitempty"`
 	ReceiversStopped *int64                         `json:"receivers_stopped,omitempty"`
 	BundleTagHeld    *bool                          `json:"bundle_tag_held,omitempty"`
+	UploadFailure    string                         `json:"upload_failure,omitempty"`
 }
 
 type connectionReportReceiveCounts struct {
@@ -90,9 +91,11 @@ func ConnectionReportFieldEnum(field string) []string {
 	case "granted_audio", "granted_video":
 		return []string{"granted", "not_granted", "unknown"}
 	case "trigger":
-		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary"}
+		return []string{"join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "audio_receive_summary", "upload_failed"}
 	case "event":
-		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "ice_connected", "first_audio_bytes", "audio_receive_summary", "receivers_closed", "access_retry"}
+		return []string{"space_join_span", "state_changed", "connection_failed", "sync_connect_failed", "sync_dial_timeout", "access_refreshed", "access_refresh_failed", "recovery_attempt", "recovery_succeeded", "recovery_exhausted", "cleanup_completed", "cleanup_unconfirmed", "sync_socket_open", "sync_socket_close", "sync_heartbeat_gap", "media_state", "media_http_error", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_unbound", "video_receive_stalled", "ice_connected", "first_audio_bytes", "audio_receive_summary", "receivers_closed", "access_retry", "chat_upload_failed"}
+	case "upload_failure":
+		return []string{"initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"}
 	case "source":
 		return []string{"microphone", "camera", "screen", "screen_audio"}
 	case "receive_state":
@@ -154,7 +157,10 @@ func decodeConnectionReport(r *http.Request) (connectionReport, error) {
 			return report, rejectConnectionReport(r, "event_order")
 		}
 		previous = event.ElapsedMS
-		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "element": event.Element, "play_result": event.PlayResult} {
+		if event.UploadFailure != "" && event.Event != "chat_upload_failed" {
+			return report, rejectConnectionReport(r, "upload_failure_event")
+		}
+		for field, value := range map[string]string{"receive_state": event.ReceiveState, "track_state": event.TrackState, "element_state": event.ElementState, "element": event.Element, "play_result": event.PlayResult, "upload_failure": event.UploadFailure} {
 			if value != "" && !slices.Contains(ConnectionReportFieldEnum(field), value) {
 				return report, rejectConnectionReport(r, field+"_label")
 			}

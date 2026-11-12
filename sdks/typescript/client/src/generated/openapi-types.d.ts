@@ -1744,7 +1744,8 @@ export interface components {
           | "first_audio_bytes"
           | "audio_receive_summary"
           | "receivers_closed"
-          | "access_retry";
+          | "access_retry"
+          | "chat_upload_failed";
         /** @enum {string} */
         granted_audio?: "granted" | "not_granted" | "unknown";
         /** @enum {string} */
@@ -1787,9 +1788,11 @@ export interface components {
         step?: "join" | "acquire_initial_media" | "access_initialize" | "create_media_client" | "create_sync_client" | "start_media" | "start_sync" | "wait_for_sync_live" | "confirm_entered";
         /** @enum {string} */
         track_state?: "live" | "muted" | "ended";
+        /** @enum {string} */
+        upload_failure?: "initiate_failed" | "storage_unreachable" | "storage_rejected" | "finalize_failed";
       }[];
       /** @enum {string} */
-      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch" | "audio_receive_stuck" | "audio_receive_unbound" | "video_receive_stalled" | "audio_receive_summary";
+      trigger: "join_failed" | "connection_lost" | "recovery_exhausted" | "media_projection_mismatch" | "audio_receive_stuck" | "audio_receive_unbound" | "video_receive_stalled" | "audio_receive_summary" | "upload_failed";
       /** @enum {integer} */
       version: 1;
     };

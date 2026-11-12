@@ -56,6 +56,14 @@ const settled = async () => {
 };
 
 describe("automatic connection reports", () => {
+  it("reports a blocked chat upload with its failure kind and storage status", async () => {
+    const test = fixture();
+    const reporter = test.create();
+    reporter.recordTransport({ event: "chat_upload_failed", upload_failure: "storage_rejected", http_status: 403 });
+    await settled();
+    expect(test.sent).toEqual([{ version: 1, trigger: "upload_failed", events: [{ event: "chat_upload_failed", elapsed_ms: 0, upload_failure: "storage_rejected", http_status: 403 }] }]);
+  });
+
   it("uploads stuck receive facts without identities or private text", async () => {
     const test = fixture();
     const reporter = test.create();

@@ -45,6 +45,8 @@ function transportTrigger(event: ConnectionReportTransportEvent["event"]): Conne
     case "video_receive_stalled":
     case "audio_receive_summary":
       return event;
+    case "chat_upload_failed":
+      return "upload_failed";
     default:
       return null;
   }
@@ -135,6 +137,7 @@ export class ConnectionReporter {
       ...(event.close_code == null ? {} : { close_code: event.close_code }),
       ...(event.http_status == null ? {} : { http_status: event.http_status }),
       source: event.source,
+      ...(event.upload_failure ? { upload_failure: event.upload_failure } : {}),
       publication_state: event.publication_state,
       projection_state: event.projection_state,
       outcome: event.outcome,

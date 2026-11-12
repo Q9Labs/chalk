@@ -412,7 +412,7 @@ func (a *Adapter) metadata() map[string]string {
 // subscription's delivery state, so the SDK reads that before it repulls. It
 // restarts ICE in place, so the SDK tries that before it replaces the session.
 func (a *Adapter) join(episodeRef, participantRef, connectionID string, iceServers []mediaplane.ICEServer) mediaplane.Join {
-	capabilities := map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": advertiseMuteInPlace}
+	capabilities := map[string]any{"serverLayerAdaptation": true, "subscriptionState": true, "iceRestart": true, "pullPublished": true, "unifiedSignaling": a.unifiedSignaling, "muteInPlace": true}
 	if a.directSignalingURL != "" {
 		capabilities["directSignalingUrl"] = a.directSignalingURL
 	}
@@ -536,11 +536,6 @@ func (a *Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest)
 func (a *Adapter) RestartICE(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	return a.AddTracks(ctx, mediaplane.TracksRequest{ConnectionID: input.ConnectionID, Scope: input.Scope, SessionDescription: input.SessionDescription})
 }
-
-// advertiseMuteInPlace stays false until a mute is proven on an Orb that runs the own SFU. The
-// node and the hold endpoint are in place, so turning it on is this one value; while it is off,
-// no client parks a publication and a mute closes it as before.
-const advertiseMuteInPlace = false
 
 // HoldsPublications marks that the node parks a participant's own publication in place.
 func (a *Adapter) HoldsPublications() {}

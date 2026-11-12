@@ -73,6 +73,10 @@ func TestConnectionReportAcceptsOnlyBoundedReceiverAndAccessRetryEvents(t *testi
 		{"receiver count on another event", `{"event":"access_retry","elapsed_ms":5,"receivers_stopped":1}`, false},
 		{"bundle flag on another event", `{"event":"media_state","elapsed_ms":5,"bundle_tag_held":false}`, false},
 		{"unknown event", `{"event":"receivers_dropped","elapsed_ms":5}`, false},
+		{"storage block", `{"event":"chat_upload_failed","elapsed_ms":5,"upload_failure":"storage_unreachable"}`, true},
+		{"storage status", `{"event":"chat_upload_failed","elapsed_ms":5,"upload_failure":"storage_rejected","http_status":403}`, true},
+		{"unknown upload failure", `{"event":"chat_upload_failed","elapsed_ms":5,"upload_failure":"cors"}`, false},
+		{"upload failure on another event", `{"event":"access_retry","elapsed_ms":5,"upload_failure":"initiate_failed"}`, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

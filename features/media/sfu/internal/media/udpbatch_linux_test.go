@@ -4,7 +4,6 @@ package media
 
 import (
 	"encoding/binary"
-	"errors"
 	"net"
 	"net/netip"
 	"testing"
@@ -110,7 +109,7 @@ func TestBatchConnPlansOneTrainPerRunOfEqualSizeDatagrams(t *testing.T) {
 	cases := []struct {
 		name  string
 		gso   bool
-		input []queued
+		input []*queued
 		runs  []int // datagrams per message, in message order
 	}{
 		{"a frame is one train", true, queueOf(a, 1100, 1100, 1100, 300), []int{4}},
@@ -159,10 +158,10 @@ func TestBatchConnKeepsTrainsUnderTheGSOPayloadLimit(t *testing.T) {
 	}
 }
 
-func queueOf(peer netip.AddrPort, sizes ...int) []queued {
-	out := make([]queued, len(sizes))
+func queueOf(peer netip.AddrPort, sizes ...int) []*queued {
+	out := make([]*queued, len(sizes))
 	for i, size := range sizes {
-		out[i].addr, out[i].n = peer, size
+		out[i] = &queued{addr: peer, n: size}
 	}
 	return out
 }
@@ -207,7 +206,7 @@ func TestBatchConnDropsAndCountsTruncatedDatagrams(t *testing.T) {
 	if err != nil || n != 300 {
 		t.Fatalf("read %d bytes, %v, want the 300-byte datagram after the oversized one was dropped", n, err)
 	}
-	if _, truncated := conn.counters(); truncated != 1 {
+	if _, truncated, _, _ := conn.counters(); truncated != 1 {
 		t.Fatalf("%d truncated datagrams counted, want 1", truncated)
 	}
 }
@@ -233,104 +232,6 @@ func TestBatchConnReadFailsAfterClose(t *testing.T) {
 	case <-conn.done:
 	default:
 		t.Fatal("Close left the writer running")
-	}
-}
-
-// A burst larger than the queue still arrives complete and in order.
-// A caller that finds the queue full waits without holding mu, which the writer needs to
-// take the queue, and Close wakes it.
-func TestBatchConnWaitsForQueueSpaceWithoutHoldingTheLock(t *testing.T) {
-	conn := newTestBatchConn(t, true)
-	peer := listenLoopback(t)
-	addr := peer.LocalAddr().(*net.UDPAddr).AddrPort()
-	conn.mu.Lock()
-	conn.count = batchRing
-	conn.mu.Unlock()
-
-	written := make(chan error, 1)
-	go func() {
-		_, err := conn.WriteToAddrPort(datagram(0, 1, 300), addr)
-		written <- err
-	}()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if conn.mu.TryLock() { // a waiter that held mu would make this fail forever
-			conn.mu.Unlock()
-			select {
-			case err := <-written:
-				t.Fatalf("a write returned %v while the queue was full", err)
-			case <-time.After(50 * time.Millisecond):
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the waiting write holds mu")
-		}
-		time.Sleep(time.Millisecond)
-	}
-
-	conn.mu.Lock()
-	conn.count = 0
-	conn.space.Broadcast()
-	conn.mu.Unlock()
-	if err := <-written; err != nil {
-		t.Fatal(err)
-	}
-	buf := make([]byte, 2048)
-	_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
-	if n, _, err := peer.ReadFromUDPAddrPort(buf); err != nil || n != 300 {
-		t.Fatalf("queued datagram: %d bytes, %v", n, err)
-	}
-
-	conn.mu.Lock()
-	conn.count = batchRing
-	conn.mu.Unlock()
-	go func() {
-		_, err := conn.WriteToAddrPort(datagram(0, 2, 300), addr)
-		written <- err
-	}()
-	time.Sleep(50 * time.Millisecond)
-	_ = conn.Close()
-	select {
-	case err := <-written:
-		if !errors.Is(err, net.ErrClosed) {
-			t.Fatalf("a write woken by Close returned %v, want net.ErrClosed", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Close did not wake the waiting write")
-	}
-}
-
-func TestBatchConnKeepsOrderWhenTheQueueOverflows(t *testing.T) {
-	conn := newTestBatchConn(t, true)
-	peer := listenLoopback(t)
-	_ = peer.SetReadBuffer(4 << 20)
-	addr := peer.LocalAddr().(*net.UDPAddr).AddrPort()
-	const total = 3*batchRing + 5
-	// The peer reads while the writes go on: the whole run would overflow its receive buffer.
-	failed := make(chan error, 1)
-	go func() {
-		for i := range total {
-			if _, err := conn.WriteToAddrPort(datagram(0, uint32(i), 300+i%7), addr); err != nil {
-				failed <- err
-				return
-			}
-		}
-		failed <- nil
-	}()
-	defer func() {
-		_ = conn.Close() // a failed read leaves the writer waiting on a full queue
-		if err := <-failed; err != nil && !errors.Is(err, net.ErrClosed) {
-			t.Error(err)
-		}
-	}()
-	buf := make([]byte, 2048)
-	for i := range total {
-		_ = peer.SetReadDeadline(time.Now().Add(5 * time.Second))
-		n, _, err := peer.ReadFromUDPAddrPort(buf)
-		if err != nil || n != 300+i%7 || binary.BigEndian.Uint32(buf[4:]) != uint32(i) {
-			t.Fatalf("datagram %d: %d bytes seq %d, %v", i, n, binary.BigEndian.Uint32(buf[4:]), err)
-		}
 	}
 }
 
@@ -372,6 +273,7 @@ func benchmarkSend(b *testing.B, mode string) {
 	target := sink.LocalAddr().(*net.UDPAddr).AddrPort()
 	payload := make([]byte, 1100)
 	var send func([]byte)
+	var dropped func() int64
 	switch mode {
 	case "plain":
 		conn := listenLoopback(b)
@@ -379,6 +281,7 @@ func benchmarkSend(b *testing.B, mode string) {
 	default:
 		conn := newTestBatchConn(b, mode == "segmented")
 		send = func(p []byte) { _, _ = conn.WriteToAddrPort(p, target) }
+		dropped = func() int64 { return conn.droppedAudio.Load() + conn.droppedVideo.Load() }
 	}
 	b.SetBytes(int64(len(payload)))
 	b.ResetTimer()
@@ -387,6 +290,10 @@ func benchmarkSend(b *testing.B, mode string) {
 		if i%8 == 7 {
 			time.Sleep(time.Microsecond)
 		}
+	}
+	if dropped != nil {
+		// The loop outruns the socket, so the share dropped says how much of the speed is waiting avoided.
+		b.ReportMetric(float64(dropped())/float64(b.N), "dropped/op")
 	}
 }
 

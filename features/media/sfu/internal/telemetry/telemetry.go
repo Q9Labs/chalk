@@ -150,6 +150,7 @@ func Register(meter metric.Meter, read Read) error {
 	udpErrors := counter("chalk.sfu.host.udp.receive_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full receive buffer.")
 	udpSendErrors := counter("chalk.sfu.host.udp.send_buffer_errors", "{datagram}", "Host UDP datagrams dropped for a full send buffer.")
 	sendRefused := counter("chalk.sfu.udp.send_refused", "{datagram}", "Datagrams the kernel refused to send on the media socket.")
+	sendDropped := counter("chalk.sfu.udp.send_dropped", "{datagram}", "Datagrams the media socket's send rings dropped for a stalled socket, by class.")
 	receiveTruncated := counter("chalk.sfu.udp.receive_truncated", "{datagram}", "Datagrams cut short by the media socket's read buffer and dropped.")
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("create telemetry instruments: %w", err)
@@ -191,6 +192,8 @@ func Register(meter metric.Meter, read Read) error {
 			o.ObserveInt64(refusals, count(refused), metric.WithAttributes(attribute.String(keyReason, reason)))
 		}
 		o.ObserveInt64(sendRefused, count(t.UDPSendRefused))
+		o.ObserveInt64(sendDropped, count(t.UDPDroppedAudio), metric.WithAttributes(attribute.String(keyReason, "audio_ring_full")))
+		o.ObserveInt64(sendDropped, count(t.UDPDroppedVideo), metric.WithAttributes(attribute.String(keyReason, "video_ring_full")))
 		o.ObserveInt64(receiveTruncated, count(t.UDPReceiveTruncated))
 		if t.UDPErrorsKnown {
 			o.ObserveInt64(udpErrors, count(t.UDPReceiveErrors))
@@ -205,7 +208,7 @@ func Register(meter metric.Meter, read Read) error {
 		return nil
 	}, sessions, episodes, draining, admission, budget, reserved, packetRate, bitrate, queueDelay, scheduler,
 		steal, busy, paused, plannerPaused, capped, pausedCameras, rss, cpu, packets, bytes, drops, cut, nacks, keyframes, rtx,
-		switches, lapses, unauthorized, refusals, udpErrors, udpSendErrors, sendRefused, receiveTruncated)
+		switches, lapses, unauthorized, refusals, udpErrors, udpSendErrors, sendRefused, sendDropped, receiveTruncated)
 	if err != nil {
 		return fmt.Errorf("register telemetry callback: %w", err)
 	}

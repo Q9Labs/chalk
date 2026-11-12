@@ -10,6 +10,7 @@ pnpm prod:proof smoke
 pnpm prod:proof camera-share --force-layer-switch
 CHALK_PROOF_MEDIA_PLANE=chalk_sfu pnpm prod:proof call-artifacts
 pnpm prod:proof offreason                    # Node only: no browser, media or ffmpeg
+pnpm prod:proof chat-upload                  # Node only: a chat upload from an origin on no list, through the storage bucket's CORS rule
 ```
 
 Run from the repository root. You need `op` (local configuration only), FFmpeg (`ffmpeg`, `ffprobe`), ImageMagick (`magick`), and macOS `say` or Linux `espeak` for generated voices. Playwright and esbuild come from the client SDK workspace.
