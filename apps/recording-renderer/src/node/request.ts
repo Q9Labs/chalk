@@ -1,11 +1,8 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, sep } from "node:path";
 
+import { FRAME_RENDER_REQUEST_VERSION, MAXIMUM_RECORDING_DURATION_MS, MAXIMUM_RENDER_FPS, MAXIMUM_RENDER_HEIGHT, MAXIMUM_RENDER_WIDTH } from "../generated/render-contract.js";
 import { exactKeys, integerField as validatedIntegerField, literalField, objectValue, patternedStringField as validatedPatternedStringField, stringField as validatedStringField } from "../validation.js";
-
-const FRAME_RENDER_REQUEST_VERSION = "recording-frame-render-request.v1";
-
-const MAXIMUM_RECORDING_DURATION_MS = 4 * 60 * 60 * 1_000;
 
 const MAXIMUM_REQUEST_BYTES = 64 << 10;
 
@@ -35,9 +32,9 @@ export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 
   const presentationPath = absolutePathField(request, "presentation_path");
   const assetDirectory = absolutePathField(request, "asset_directory");
   const decodedMediaPath = absolutePathField(request, "decoded_media_path");
-  const width = requestIntegerField(request, "width", 2, 3_840);
-  const height = requestIntegerField(request, "height", 2, 2_160);
-  const fps = requestIntegerField(request, "fps", 1, 60);
+  const width = requestIntegerField(request, "width", 2, MAXIMUM_RENDER_WIDTH);
+  const height = requestIntegerField(request, "height", 2, MAXIMUM_RENDER_HEIGHT);
+  const fps = requestIntegerField(request, "fps", 1, MAXIMUM_RENDER_FPS);
   const durationMs = requestIntegerField(request, "duration_ms", 1, MAXIMUM_RECORDING_DURATION_MS);
   if (width % 2 !== 0 || height % 2 !== 0) throw new TypeError("frame render dimensions must be even");
   return {
