@@ -79,10 +79,11 @@ export type ClientMediaPlane = {
    */
   readonly prepareLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   /**
-   * Undoes what `prepareLocalPublicationTarget` resumed ahead of the grant: the publication is parked again
-   * the way a user mute parks it. The caller runs it when the target will not be executed (a refusal, a
-   * retryable refusal, a timeout, a disconnect). It waits for a resume still in flight, and does nothing when
-   * nothing was resumed ahead or `setLocalPublicationTarget` has taken it over.
+   * Undoes what `prepareLocalPublicationTarget` resumed ahead of the grant. The caller runs it, without waiting
+   * for the head start, when the target will not be executed (a refusal, a retryable refusal, a timeout, a
+   * disconnect). The plane silences the track locally at once, then parks the publication again the way a user
+   * mute parks it, once any resume request has settled (also an unanswered one). It does nothing when nothing
+   * was resumed ahead or `setLocalPublicationTarget` has taken it over.
    */
   readonly cancelPreparedLocalPublicationTarget?: (target: MediaPlaneTarget) => Promise<void>;
   readonly setLocalPublicationTarget: (target: MediaPlaneTarget) => Promise<MediaPlaneResult>;

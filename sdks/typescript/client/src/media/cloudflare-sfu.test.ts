@@ -5215,8 +5215,8 @@ it("keeps the microphone parked then closed when the retries run out", async () 
 });
 
 // A caller that uses the Sync client without a SpaceClient has no failure cleanup of its own, so the target parks the resume itself.
-async function directParkedMicrophone() {
-  const { harness, microphone, target } = await parkedMicrophoneAndCamera(["microphone"]);
+async function directParkedMicrophone(muted: readonly ("microphone" | "camera")[] = ["microphone"]) {
+  const { harness, microphone, camera, target } = await parkedMicrophoneAndCamera(muted);
   const frames: Extract<SyncV1ClientFrame, { readonly type: "live_target" }>[] = [];
   const timers: { readonly milliseconds: number; readonly run: () => void }[] = [];
   const coordinator = new V1LiveTargetCoordinator({
@@ -5234,7 +5234,7 @@ async function directParkedMicrophone() {
     },
   });
   const refuse = (outcome: "terminal_failure" | "retryable_failure") => coordinator.receive({ ...frames[0]!, type: "live_target_result", outcome, error_code: "capability_denied" });
-  return { harness, microphone, target, coordinator, timers, refuse, resumes: () => harness.transport.updateInputs.flatMap((input) => input.tracks).filter((track) => track.location === "local" && track.paused === false) };
+  return { harness, microphone, camera, target, coordinator, timers, refuse, resumes: () => harness.transport.updateInputs.flatMap((input) => input.tracks).filter((track) => track.location === "local" && track.paused === false) };
 }
 
 it("parks a microphone the head start resumed when a refusal reaches the coordinator directly", async () => {
@@ -5281,6 +5281,29 @@ it.each(["still in flight", "response lost"] as const)("silences and parks a mic
     expect(transport.closeInputs).toHaveLength(0);
   } finally {
     gate.resolve();
+    coordinator.disconnect("test_cleanup");
+    harness.client.stop();
+  }
+});
+
+it("sends nothing ahead for a parked camera, so a refusal through the coordinator finds nothing to undo", async () => {
+  const { harness, camera, coordinator, refuse, resumes } = await directParkedMicrophone(["camera"]);
+  try {
+    const { transport } = harness;
+    const enabling = coordinator.send("set_camera_enabled", "camera", true);
+    const refused = expect(enabling).rejects.toMatchObject({ code: "terminal_failure" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(resumes()).toHaveLength(0);
+    expect(camera.enabled).toBe(false);
+
+    refuse("terminal_failure");
+    await refused;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(resumes()).toHaveLength(0);
+    expect(camera.enabled).toBe(false);
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true"]);
+    expect(transport.closeInputs).toHaveLength(0);
+  } finally {
     coordinator.disconnect("test_cleanup");
     harness.client.stop();
   }
@@ -5378,7 +5401,7 @@ it.each(["returns before", "returns after"] as const)("a granted unmute settles 
   }
 });
 
-// Every source has its own head start and its own parked publication, so two sources unmuted within one Sync round trip each find theirs.
+// Only the microphone goes ahead of Sync's result. A camera unmute waits for it, as on the base, so the camera is never silenced by a cancel.
 async function parkedMicrophoneAndCamera(muted: readonly ("microphone" | "camera")[]) {
   const harness = createHarness({ bootstrap: muteInPlaceBootstrap });
   const microphone = new FakeTrack("mic", "audio");
@@ -5387,50 +5410,53 @@ async function parkedMicrophoneAndCamera(muted: readonly ("microphone" | "camera
   for (const source of muted) await harness.client.setLocalSourceIntent(source, false, "user_pause");
   for (const source of muted) await harness.client.setLocalSourceIntent(source, true);
   const target = (source: "microphone" | "camera") => ({ operationId: `unmute-${source}`, participantId: "participant-1", source, enabled: true }) as const;
-  const resumes = () => harness.transport.updateInputs.flatMap((input) => input.tracks).filter((track) => track.location === "local" && track.paused === false);
+  const resumes = (source?: "microphone" | "camera") => harness.transport.updateInputs.flatMap((input) => input.tracks).filter((track) => track.location === "local" && track.paused === false && (!source || track.source === source));
   return { harness, microphone, camera, target, resumes };
 }
 
-it("a muted microphone and camera unmuted within one Sync round trip each resume their own publication, with no new one", async () => {
-  const { harness, microphone, camera, target, resumes } = await parkedMicrophoneAndCamera(["microphone", "camera"]);
+it("a parked camera does not go ahead of Sync's result, and its unmute then resumes it once with no new publication", async () => {
+  const { harness, camera, target, resumes } = await parkedMicrophoneAndCamera(["camera"]);
   try {
     const { client, transport } = harness;
-    const addsBefore = { microphone: localAddCount(harness, "microphone"), camera: localAddCount(harness, "camera") };
-    await Promise.all([client.prepareLocalPublicationTarget(target("microphone")), client.prepareLocalPublicationTarget(target("camera"))]);
-    expect(resumes()).toHaveLength(2);
-    const results = await Promise.all([client.setLocalPublicationTarget(target("microphone")), client.setLocalPublicationTarget(target("camera"))]);
-    expect(results).toMatchObject([{ outcome: "confirmed" }, { outcome: "confirmed" }]);
-    expect({ microphone: localAddCount(harness, "microphone"), camera: localAddCount(harness, "camera") }).toEqual(addsBefore);
-    expect(resumes()).toHaveLength(2);
+    const addsBefore = localAddCount(harness, "camera");
+    await client.prepareLocalPublicationTarget(target("camera"));
+    expect(resumes()).toHaveLength(0);
+    expect(camera.enabled).toBe(false);
+    await client.cancelPreparedLocalPublicationTarget(target("camera"));
+    expect(resumes()).toHaveLength(0);
+
+    await expect(client.setLocalPublicationTarget(target("camera"))).resolves.toMatchObject({ outcome: "confirmed" });
+    expect(resumes("camera")).toHaveLength(1);
+    expect(localAddCount(harness, "camera")).toBe(addsBefore);
     expect(transport.closeInputs).toHaveLength(0);
-    expect(client.getSnapshot().localTracks.filter((track) => track.enabled)).toHaveLength(2);
-    expect([microphone.enabled, camera.enabled]).toEqual([true, true]);
+    expect(camera.enabled).toBe(true);
+    expect(client.getSnapshot().localTracks.find((track) => track.source === "camera")).toMatchObject({ enabled: true });
   } finally {
     harness.client.stop();
   }
 });
 
-it("a source's unmute does not wait for another source's head start", async () => {
-  const { harness, target } = await parkedMicrophoneAndCamera(["microphone", "camera"]);
-  const gate = Promise.withResolvers<void>();
-  const reached = Promise.withResolvers<void>();
+it("a microphone unmute and its refusal leave a parked camera alone", async () => {
+  const { harness, microphone, camera, target, resumes } = await parkedMicrophoneAndCamera(["microphone", "camera"]);
   try {
     const { client, transport } = harness;
-    const update = transport.updateTracks.bind(transport);
-    transport.updateTracks = async (input) => {
-      if (input.tracks.some((track) => track.source === "camera" && track.paused === false)) {
-        reached.resolve();
-        await gate.promise;
-      }
-      return update(input);
-    };
     await client.prepareLocalPublicationTarget(target("microphone"));
-    const cameraHeadStart = client.prepareLocalPublicationTarget(target("camera"));
-    await reached.promise;
-    expect(await settledWithin(client.setLocalPublicationTarget(target("microphone")), 500)).toBe(true);
-    expect(await settledWithin(cameraHeadStart, 20)).toBe(false);
+    await client.prepareLocalPublicationTarget(target("camera"));
+    expect(resumes("microphone")).toHaveLength(1);
+    expect(resumes("camera")).toHaveLength(0);
+    expect(microphone.enabled).toBe(true);
+
+    await client.cancelPreparedLocalPublicationTarget(target("microphone"));
+    expect(microphone.enabled).toBe(false);
+    expect(
+      transport.updateInputs
+        .flatMap((input) => input.tracks)
+        .filter((track) => track.source === "camera" && track.location === "local")
+        .map((track) => track.paused),
+    ).toEqual([true]);
+    expect(transport.closeInputs).toHaveLength(0);
+    expect(camera.enabled).toBe(false);
   } finally {
-    gate.resolve();
     harness.client.stop();
   }
 });

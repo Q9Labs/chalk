@@ -144,12 +144,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
-  // The steps of a parked track's unmute that run before Sync answers (resume, park again), in order, one chain per source. It never rejects.
+  // The steps of a parked microphone's unmute that run before Sync answers (resume, park again), in order. It never rejects.
+  // Only the microphone goes ahead, so the maps below never hold another source.
   readonly #headStarts = new Map<MediaPublicationSource, Promise<void>>();
   // A head start the caller has cancelled, by operation: a step still queued must not start, and one under way must stop short of the request.
   readonly #headStartCancelled = new Map<string, { cancelled: boolean }>();
   readonly #resumesInFlight = new WeakMap<OwnedLocalPublication, Promise<unknown>>();
-  // The publication each source's head start tried to resume, set before the request goes out, until that source's enable has used it.
+  // The publication the microphone's head start tried to resume, set before the request goes out, until the enable has used it.
   // A lost response leaves the node's state unknown, so an attempt counts as a resume.
   readonly #resumedAhead = new Map<MediaPublicationSource, OwnedLocalPublication>();
   #viewerLayerUpdating = false;
@@ -591,9 +592,10 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   /**
    * Runs what an enable can do while Sync still decides it, so the grant does not wait behind that round trip.
-   * A parked track (mute in place) is resumed on the SFU at once. The node's source lease authorizes what it
-   * forwards: a closed lease forwards nothing, and a role change, a removal and the end of the Episode revoke it.
-   * Until Sync's first result, a resumed track may forward under a standing lease; the caller then either runs
+   * A parked microphone (mute in place) is resumed on the SFU at once; no other source goes ahead, so a camera
+   * unmute waits for the result. The node's source lease authorizes what the microphone forwards: a closed lease
+   * forwards nothing, and a role change, a removal and the end of the Episode revoke it.
+   * Until Sync's first result, the resumed microphone may forward under a standing lease; the caller then either runs
    * `setLocalPublicationTarget` or undoes the resume with `cancelPreparedLocalPublicationTarget`. Otherwise this
    * swaps a connection that never carried media for a fresh one, adds no transceiver and sends no offer. A fresh
    * publish never goes ahead, because a new publication needs the grant. `setLocalPublicationTarget` redoes
@@ -603,7 +605,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     if (!target.enabled || this.#locallyPausedSources.has(target.source)) return;
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind !== "state") return;
-    if (this.#heldPublication(target.source) && !this.#replacement) {
+    if (target.source === "microphone" && this.#heldPublication(target.source) && !this.#replacement) {
       const head = { cancelled: false };
       this.#headStartCancelled.set(target.operationId, head);
       return this.#enqueueHeadStart(target.source, () => this.#resumeHeldAheadOfGrant(resolved.value, head)).finally(() => {
@@ -1153,8 +1155,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     publication.detachedAt = null;
     return true;
   }
-  // Resumes a parked track on the SFU before Sync answers. It leaves the track's own state (enabled, published ID) to the
-  // grant-gated enable, so nothing local shows the source on until Sync has granted it. A failed resume is left to that enable.
+  // Resumes the parked microphone on the SFU before Sync answers. It leaves the track's own state (enabled, published ID) to the
+  // grant-gated enable, so nothing local shows the microphone on until Sync has granted it. A failed resume is left to that enable.
   async #resumeHeldAheadOfGrant(state: LocalTrackState, head: { readonly cancelled: boolean }): Promise<void> {
     const held = this.#heldPublication(state.source);
     if (!held || head.cancelled || this.#locallyPausedSources.has(state.source)) return;
