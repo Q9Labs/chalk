@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/recorderprotocol"
 	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 	"github.com/q9labs/chalk/apps/api/internal/workerresources"
 )
@@ -45,22 +46,6 @@ type WorkerReadinessReceipt struct {
 	UpdatedAt  time.Time
 }
 
-type readinessRequest struct {
-	AdmissionOpen bool                    `json:"admission_open"`
-	ReadyCapacity int                     `json:"ready_capacity"`
-	Reason        string                  `json:"reason"`
-	Resources     *workerresources.Sample `json:"resources,omitempty"`
-}
-
-type readinessResponse struct {
-	Role          string `json:"role"`
-	AdmissionOpen bool   `json:"admission_open"`
-	ReadyCapacity int    `json:"ready_capacity"`
-	Reason        string `json:"reason"`
-	ObservedAt    string `json:"observed_at"`
-	UpdatedAt     string `json:"updated_at"`
-}
-
 // ReportReadiness publishes through the same mTLS control-plane client used by
 // worker claims. The worker omits its wall clock; the API returns the database
 // receipt time that becomes authoritative for claim liveness.
@@ -68,16 +53,16 @@ func (c *ControlPlaneClient) ReportReadiness(ctx context.Context, readiness Work
 	if err := validateWorkerReadiness(readiness); err != nil {
 		return WorkerReadinessReceipt{}, err
 	}
-	body, status, err := c.do(ctx, http.MethodPost, "/internal/v1/recorder/pool-health", readinessRequest(readiness), ControlPlaneResponseLimit)
+	body, status, err := c.do(ctx, http.MethodPost, recorderprotocol.RoutePoolHealth.Path(), poolHealthRequest(readiness), ControlPlaneResponseLimit)
 	if err != nil && status == http.StatusBadRequest && readiness.Resources != nil {
 		// Older control planes reject unknown JSON fields rather than ignoring them.
 		readiness.Resources = nil
-		body, _, err = c.do(ctx, http.MethodPost, "/internal/v1/recorder/pool-health", readinessRequest(readiness), ControlPlaneResponseLimit)
+		body, _, err = c.do(ctx, http.MethodPost, recorderprotocol.RoutePoolHealth.Path(), poolHealthRequest(readiness), ControlPlaneResponseLimit)
 	}
 	if err != nil {
 		return WorkerReadinessReceipt{}, err
 	}
-	var response readinessResponse
+	var response recorderprotocol.PoolHealthResponse
 	if err := decodeBoundedJSON(body, &response, ControlPlaneResponseLimit); err != nil {
 		return WorkerReadinessReceipt{}, ProtocolError{Err: err}
 	}
@@ -291,3 +276,7 @@ func (r *ReadinessReporter) publish(ctx context.Context, ready bool) (WorkerRead
 }
 
 var _ ReadinessControl = (*ControlPlaneClient)(nil)
+
+func poolHealthRequest(readiness WorkerReadiness) recorderprotocol.PoolHealthRequest {
+	return recorderprotocol.PoolHealthRequest{AdmissionOpen: readiness.AdmissionOpen, ReadyCapacity: readiness.ReadyCapacity, Reason: readiness.Reason, Resources: readiness.Resources}
+}

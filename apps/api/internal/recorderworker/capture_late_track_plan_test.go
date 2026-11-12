@@ -222,7 +222,7 @@ func TestLateCaptureTrackFirstPacketKeepsTheTimeThePeerBoundIt(t *testing.T) {
 	events := make(chan captureRuntimeEvent, 4)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	stop, err := startCaptureReaderAt(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events, boundAt)
+	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events, boundAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestEarlyCaptureTrackFirstPacketKeepsItsReadTime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	before := time.Now()
-	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events)
+	stop, err := startCaptureReader(ctx, &capturePlanWatchPeer{}, "1", inner, 50*time.Millisecond, 0, events, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
