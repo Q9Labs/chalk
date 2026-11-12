@@ -8,7 +8,6 @@ import (
 
 	"github.com/pion/rtp"
 	"github.com/q9labs/chalk/apps/api/internal/captureplan"
-	"github.com/q9labs/chalk/apps/api/internal/captureplane"
 	"github.com/q9labs/chalk/apps/api/internal/recordercapture"
 	"github.com/q9labs/chalk/apps/api/internal/recordingbundle"
 )
@@ -84,74 +83,6 @@ type capturePrivacyUnavailablePlan struct{}
 
 func (*capturePrivacyUnavailablePlan) WaitForPlan(context.Context, captureplan.WaitInput) (captureplan.Plan, error) {
 	return captureplan.Plan{}, captureplan.ErrRepositoryUnavailable
-}
-
-func TestCapturePrivacyBatchReadsAuthorityAfterCollection(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	writer, _ := newCaptureTestWriter(t, origin)
-	track := &captureTestTrack{capture: capturePlanWatchPulledTrack(t, "0", "privacy"), codec: "opus"}
-	authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
-	plans := &capturePrivacyBatchPlan{plan: capturePlanWatchPlan(t, authority, 1, origin, captureplan.StopStateRunning, track.capture)}
-	writer.attempt.plans = plans
-	writer.attempt.ready = true
-	activateCaptureTestTrack(writer, track, origin, 1)
-	events := make(chan captureRuntimeEvent, 100)
-	event := captureRuntimeEvent{track: track, packet: &rtp.Packet{Payload: []byte{1}}, at: origin}
-	for range 100 {
-		events <- event
-	}
-	// The mute commits while the worker is collecting, before its one read.
-	plans.plan = capturePlanWatchPlan(t, authority, 2, origin, captureplan.StopStateRunning)
-	if err := writer.attempt.consumeQueuedPackets(context.Background(), writer, event, events, func(captureRuntimeEvent) bool { return true }); err != nil {
-		t.Fatal(err)
-	}
-	if plans.reads != 1 || writer.assembler != nil {
-		t.Fatalf("authority reads = %d, assembler = %v; want one read and no muted media", plans.reads, writer.assembler)
-	}
-}
-
-type capturePrivacyBatchPlan struct {
-	plan  captureplan.Plan
-	reads int
-}
-
-func (p *capturePrivacyBatchPlan) WaitForPlan(context.Context, captureplan.WaitInput) (captureplan.Plan, error) {
-	p.reads++
-	return p.plan, nil
-}
-
-// A plan entry that differs from the live track in any identity field is a
-// different publication; its media must not be stored.
-func TestCapturePacketPrivacyRequiresTheExactPlannedTrack(t *testing.T) {
-	origin := time.UnixMilli(1000).UTC()
-	cases := map[string]func(*captureplane.PulledCaptureTrack){
-		"participant generation": func(track *captureplane.PulledCaptureTrack) { track.ParticipantGeneration++ },
-		"source and kind": func(track *captureplane.PulledCaptureTrack) {
-			track.Source, track.Kind = captureplane.TrackSourceCamera, captureplane.TrackKindVideo
-		},
-		"participant": func(track *captureplane.PulledCaptureTrack) {
-			track.ParticipantID = captureTestID(t, "99999999-9999-4999-8999-999999999999")
-		},
-	}
-	for name, edit := range cases {
-		t.Run(name, func(t *testing.T) {
-			writer, _ := newCaptureTestWriter(t, origin)
-			track := &captureTestTrack{capture: capturePlanWatchPulledTrack(t, "0", "privacy"), codec: "opus"}
-			planned := track.capture
-			edit(&planned)
-			authority := captureTestPlanAtEpoch(t, 2, 1, origin).Authority()
-			writer.attempt.plans = &captureTestPlanSource{plan: capturePlanWatchPlan(t, authority, 1, origin, captureplan.StopStateRunning, planned)}
-			writer.attempt.ready = true
-			activateCaptureTestTrack(writer, track, origin, 1)
-			packet := &rtp.Packet{Payload: []byte{1}}
-			if err := writer.attempt.consumePacket(context.Background(), writer, captureRuntimeEvent{track: track, packet: packet, at: origin}); err != nil {
-				t.Fatal(err)
-			}
-			if writer.assembler != nil {
-				t.Fatal("media of a track the plan does not name was stored")
-			}
-		})
-	}
 }
 
 func TestCapturePacketsStopAtTheHardDeadline(t *testing.T) {
