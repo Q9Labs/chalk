@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
+export { repositoryRoot };
 
-export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs", "features"];
 
 // This directory contains data-only snapshots, not source packages; its generated identifier stays out of the map.

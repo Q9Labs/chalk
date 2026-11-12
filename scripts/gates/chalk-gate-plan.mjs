@@ -4,9 +4,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
