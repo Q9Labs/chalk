@@ -5,12 +5,14 @@
 //
 // Needs `pnpm install` and Playwright's Chromium. It checks the base ref out in a temporary worktree and installs it.
 // Exits 1 when the branch adds a layout finding or the vision review points at a break in a changed region.
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+import { serveBuild } from "../../apps/web/scripts/call-performance-server.mjs";
 import { capture, planRuns } from "./capture.mjs";
 import { compareFrames } from "./compare.mjs";
 import { renderComment } from "./comment.mjs";
@@ -29,33 +31,46 @@ const only = option("only")?.split(",").filter(Boolean);
 // Master's frames depend only on master and on the check code, so a run can keep them in this directory and reuse them.
 const baseCache = option("base-cache") ? resolve(option("base-cache")) : undefined;
 const started = Date.now();
+const run = promisify(execFile);
 
-function startHarness(root, port) {
-  const cacheDir = mkdtempSync(join(tmpdir(), "ui-check-vite-"));
-  const server = spawn("pnpm", ["exec", "vite", "--config", "vite.call-states.config.ts", "--port", String(port), "--strictPort"], {
-    cwd: join(root, "apps/web"),
-    stdio: "ignore",
-    detached: true,
-    env: { ...process.env, CHALK_CALL_HARNESS_CACHE_DIR: cacheDir },
-  });
+// Written into apps/web of the tree it builds, because that tree may be an older base, and its import must resolve next to that tree's own harness config.
+const BUILD_CONFIG = `import { fileURLToPath } from "node:url";
+import { mergeConfig } from "vite";
+import callStates from "./vite.call-states.config";
+
+export default mergeConfig(callStates, {
+  build: {
+    outDir: process.env.UI_CHECK_BUILD_DIR,
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        "call-states": fileURLToPath(new URL("./call-states.html", import.meta.url)),
+        "pre-join-states": fileURLToPath(new URL("./pre-join-states.html", import.meta.url)),
+      },
+    },
+  },
+});
+`;
+
+/** Builds the harness of the tree at `root` and serves the build; the build is static, so it loads fast and the same every time. */
+async function startHarness(root) {
+  const dir = mkdtempSync(join(tmpdir(), "ui-check-build-"));
+  const web = join(root, "apps/web");
+  const config = join(web, "vite.ui-check-build.config.ts");
+  writeFileSync(config, BUILD_CONFIG);
+  try {
+    await run("pnpm", ["exec", "vite", "build", "--config", config], { cwd: web, env: { ...process.env, UI_CHECK_BUILD_DIR: dir } });
+  } finally {
+    rmSync(config, { force: true });
+  }
+  const server = await serveBuild(dir);
   return {
-    origin: `http://127.0.0.1:${port}`,
+    origin: `http://127.0.0.1:${server.address().port}`,
     stop: () => {
-      process.kill(-server.pid, "SIGTERM");
-      rmSync(cacheDir, { recursive: true, force: true });
+      server.close();
+      rmSync(dir, { recursive: true, force: true });
     },
   };
-}
-
-async function waitFor(origin) {
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(`${origin}/call-states.html`)).ok) return;
-    } catch {}
-    await new Promise((done) => setTimeout(done, 300));
-  }
-  throw new Error(`${origin} did not start`);
 }
 
 /** What decides master's frames: its commit, the check code that walked it, and the journeys chosen. */
@@ -78,10 +93,8 @@ try {
     execFileSync("git", ["worktree", "add", "--detach", "--force", baseRoot, baseRef], { cwd: repository, stdio: "inherit" });
     execFileSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], { cwd: baseRoot, stdio: "ignore" });
   }
-  const head = startHarness(repository, 3181);
-  const base = baseRoot ? startHarness(baseRoot, 3182) : undefined;
+  const [head, base] = await Promise.all([startHarness(repository), baseRoot ? startHarness(baseRoot) : undefined]);
   harnesses.push(head, ...(base ? [base] : []));
-  await Promise.all([waitFor(head.origin), ...(base ? [waitFor(base.origin)] : [])]);
 
   // With master's frames cached, the machine is free for the branch alone.
   const concurrency = base ? 3 : 5;

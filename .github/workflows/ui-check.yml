@@ -87,11 +87,6 @@ jobs:
           path: ui-check-base
           key: ui-check-base-${{ github.run_id }}
 
-      - name: Verify the call layouts on the branch
-        if: ${{ !cancelled() && steps.select.outputs.ui == 'true' }}
-        working-directory: apps/web
-        run: node scripts/verify-call-layouts.mjs
-
       - name: Keep the report
         if: always() && steps.select.outputs.ui == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

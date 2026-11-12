@@ -12,6 +12,44 @@ const PER_CHECK = 25;
 /** Parts of a screen that move on their own (the live input meter) or hold this server's address (the invite QR code), and remote board cursors that drift, are painted over in every screenshot. */
 const LIVE = '[role="meter"], .chalk-invite-qr, .chalk-board-cursor, .chalk-board-cursor *';
 
+/**
+ * Runs in every page before its own scripts. A screen that changes by itself after a few seconds (the call's header and dock
+ * hide when idle, a notice leaves, a reconnect banner appears) would show whatever the load of this machine allowed, so a timer
+ * of 2.5 seconds or more never fires: the screen stays as it was when it settled.
+ */
+const NO_LONG_TIMERS = `(() => {
+  const set = window.setTimeout.bind(window);
+  window.setTimeout = (handler, delay, ...rest) => set(handler, Number(delay) >= 2500 ? 2147483647 : delay, ...rest);
+})();`;
+
+/** Resolves when nothing in the page has changed for `quiet` ms (at most `cap` ms), fonts are loaded and every image is decoded. Live parts do not count. */
+const settle = (page) =>
+  page.evaluate(
+    async ({ live, quiet, cap }) => {
+      await document.fonts.ready;
+      await new Promise((resolve) => {
+        let timer = 0;
+        const finish = () => {
+          observer.disconnect();
+          clearTimeout(timer);
+          clearTimeout(limit);
+          resolve(undefined);
+        };
+        const observer = new MutationObserver((records) => {
+          const real = records.some((record) => !(record.target instanceof Element ? record.target : record.target.parentElement)?.closest(live));
+          if (!real) return;
+          clearTimeout(timer);
+          timer = setTimeout(finish, quiet);
+        });
+        observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+        timer = setTimeout(finish, quiet);
+        const limit = setTimeout(finish, cap);
+      });
+      await Promise.all([...document.images].map((image) => image.decode().catch(() => undefined)));
+    },
+    { live: LIVE, quiet: 300, cap: 3000 },
+  );
+
 async function pool(items, size, work) {
   const queue = [...items];
   await Promise.all(
@@ -100,6 +138,7 @@ function contextFor(browser, contexts, size, scheme) {
           timezoneId: "UTC",
         })
         .then(async (context) => {
+          await context.addInitScript(NO_LONG_TIMERS);
           await context.clock.setFixedTime(FIXED_TIME);
           return context;
         }),
@@ -120,9 +159,7 @@ async function runOne({ context, origin, out, run }) {
   });
   const frames = [];
   try {
-    const t0 = Date.now();
     await page.goto(`${origin}/${journey.page ?? "call-states.html"}?state=${journey.state}`, { waitUntil: "load" });
-    if (process.env.UI_CHECK_TIMING) console.error(`timing ${name} goto ${Date.now() - t0}ms`);
     await page.addStyleTag({ content: STILL });
     await page.evaluate(() => document.fonts.ready);
     // A call page is ready once its dock shows; heavy layouts such as 30 tiles can take seconds to get there under load.
@@ -130,11 +167,11 @@ async function runOne({ context, origin, out, run }) {
       .locator(journey.ready ?? (journey.page ? "button" : 'button[aria-label="Leave call"]'))
       .first()
       .waitFor({ timeout: 25_000 });
-    await page.waitForTimeout(600);
+    await settle(page);
     const frame = async (step, label, extra = []) => {
       // A sheet that animates with script (not CSS) is still sliding in when measured unless every animation is finished.
       await page.evaluate(() => document.getAnimations().forEach((animation) => animation.finish()));
-      await page.waitForTimeout(100);
+      await settle(page);
       const findings = [...(await stableFindings(page)), ...extra];
       const shot = `${name}.${step}.png`;
       await settledScreenshot(page, join(out, shot));
@@ -186,14 +223,7 @@ async function runOne({ context, origin, out, run }) {
 export async function capture({ origin, out, only, concurrency }) {
   await mkdir(out, { recursive: true });
   const browser = await chromium.launch();
-  // The dev server compiles each module on first request; one visit to each page type first keeps that cost out of the walk.
-  for (const page of ["call-states.html?state=duo", "call-states.html?state=shell-host", "pre-join-states.html?state=prejoin-default"]) {
-    const warm = await browser.newPage();
-    await warm.goto(`${origin}/${page}`, { waitUntil: "load" });
-    await warm.waitForTimeout(1500);
-    await warm.close();
-  }
-  // One browser context per size and theme, shared by every journey, keeps the app's modules cached after the first load.
+  // One browser context per size and theme is shared by every journey.
   const contexts = new Map();
   const frames = [];
   try {
