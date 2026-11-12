@@ -3,7 +3,7 @@ import { useMediaQuery } from "../../internal/useMediaQuery";
 import { ChalkMenu, ChalkMenuItem, ChalkSheet } from "../chalk-ui";
 import { StageIcon } from "../stage/StageIcon";
 
-type TileAction = { readonly label: string; readonly run: () => void };
+export type TileAction = { readonly label: string; readonly run: () => void };
 
 /** A tile's More menu. On a phone or a touch screen it opens as a sheet, like the people-row options, so it does not cover the tiles beside it. */
 export function TileOptions({ name, actions }: { readonly name: string; readonly actions: readonly TileAction[] }) {
@@ -33,21 +33,28 @@ export function TileOptions({ name, actions }: { readonly name: string; readonly
   return (
     <>
       {trigger}
-      <ChalkSheet open={open} onOpenChange={setOpen} title={`Options for ${name}`}>
-        {actions.map((action) => (
-          <button
-            key={action.label}
-            type="button"
-            className="chalk-menu-item"
-            onClick={() => {
-              setOpen(false);
-              action.run();
-            }}
-          >
-            {action.label}
-          </button>
-        ))}
-      </ChalkSheet>
+      <TileOptionsSheet name={name} actions={actions} open={open} onOpenChange={setOpen} />
     </>
+  );
+}
+
+/** The tile's options as a phone sheet. A phone opens it from a tap on the tile itself, so the stage carries no row of identical buttons. */
+export function TileOptionsSheet({ name, actions, open, onOpenChange }: { readonly name: string; readonly actions: readonly TileAction[]; readonly open: boolean; readonly onOpenChange: (open: boolean) => void }) {
+  return (
+    <ChalkSheet open={open} onOpenChange={onOpenChange} title={`Options for ${name}`}>
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          className="chalk-menu-item"
+          onClick={() => {
+            onOpenChange(false);
+            action.run();
+          }}
+        >
+          {action.label}
+        </button>
+      ))}
+    </ChalkSheet>
   );
 }
