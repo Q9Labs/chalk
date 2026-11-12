@@ -7286,6 +7286,34 @@ describe("own-SFU subscription state", () => {
     );
   });
 
+  it("replaces the connection at once when the subscription read finds the SFU session gone", async () => {
+    let replacements = 0;
+    await withTimedHarness(
+      async (h) => {
+        let gone = false;
+        h.transport.listSubscriptions = async () => {
+          if (gone) throw new CloudflareSFUError("session gone", "signaling_failed", { status: 404, retryableConnection: true });
+          return [];
+        };
+        await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+        await reviewSubscribe(h);
+        let flowing = true;
+        sampleMedia(h, () => flowing);
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(replacements).toBe(0);
+        gone = true;
+        flowing = false;
+        await vi.advanceTimersByTimeAsync(12_000);
+        // The ICE restart wait (2 s after "disconnected") never ran: the 404 alone proves the session is dead.
+        expect(replacements).toBe(1);
+        expect(h.peers).toHaveLength(2);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(replacements).toBe(1);
+      },
+      { bootstrap: own, replaceMediaConnection: async () => bootstrap(`replacement-${++replacements}`) },
+    );
+  });
+
   it("restarts stall detection when the SFU resumes a paused camera, so a keyframe wait is no stall", async () => {
     await withTimedHarness(
       async (h) => {
