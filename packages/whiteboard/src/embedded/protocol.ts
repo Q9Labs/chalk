@@ -1,10 +1,11 @@
+import { EXCALIDRAW_VERSION, RENDERER_BUILD_ID } from "../pins";
 import type { WhoCanDraw } from "../react/board/board-draw-policy";
 import type { WhiteboardView, WhiteboardViewBounds } from "../collab/view";
 import type { WhiteboardCommit, WhiteboardWireElement } from "../collab/wire";
 
 export const CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION = 1 as const;
-export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = "0.18.1" as const;
-export const CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID = "chalk-excalidraw-0.18.1-r1" as const;
+export const CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION = EXCALIDRAW_VERSION;
+export const CHALK_EMBEDDED_WHITEBOARD_RENDERER_BUILD_ID = RENDERER_BUILD_ID;
 export const CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES = 32 * 1024 * 1024;
 
 export type ChalkEmbeddedWhiteboardTheme = "light" | "dark";

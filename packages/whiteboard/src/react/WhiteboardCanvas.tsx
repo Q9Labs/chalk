@@ -8,8 +8,8 @@ import { MathEditor } from "./MathEditor";
 import { appendOrReplaceMathElement, createMathImageAsset, getChalkMathData, getSelectedMathElement } from "./math-elements";
 import { renderLatexToSvg } from "./mathjax-renderer";
 import { getWhiteboardAssets, resolveExcalidrawAssetPath } from "../assets";
+import { EXCALIDRAW_CDN_CSS } from "../pins";
 
-const DEFAULT_EXCALIDRAW_CSS = "https://cdn.jsdelivr.net/npm/@excalidraw/excalidraw@0.18.1/dist/prod/index.css";
 const DEFAULT_LATEX = String.raw`E = mc^2`;
 
 type ExcalidrawModule = typeof import("@excalidraw/excalidraw");
@@ -160,7 +160,7 @@ function useWhiteboardCanvasConfiguration(props: WhiteboardCanvasProps): Whitebo
     canDraw,
     headless: props.headless === true,
     classNames,
-    excalidrawCssPath: valueOr(props.excalidrawCssPath, getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS),
+    excalidrawCssPath: valueOr(props.excalidrawCssPath, getWhiteboardAssets()?.excalidrawCssPath ?? EXCALIDRAW_CDN_CSS),
     icons: valueOr(props.icons, {}),
     isCollaborating: Boolean(props.collab),
     isVisible: valueOr(props.isVisible, true),
@@ -176,7 +176,7 @@ function valueOr<T>(value: T | undefined, fallback: T): T {
 const STYLESHEET_ID = "chalk-excalidraw-styles";
 
 /** Starts loading the board's stylesheet before anyone opens the board, so the board opens without waiting for it. */
-export function preloadWhiteboardStylesheet(href: string = getWhiteboardAssets()?.excalidrawCssPath ?? DEFAULT_EXCALIDRAW_CSS): void {
+export function preloadWhiteboardStylesheet(href: string = getWhiteboardAssets()?.excalidrawCssPath ?? EXCALIDRAW_CDN_CSS): void {
   if (typeof document !== "undefined") boardStylesheet(href);
 }
 
