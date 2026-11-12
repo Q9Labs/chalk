@@ -102,7 +102,10 @@ function openPause(events, run) {
   for (const row of [...events].sort((a, b) => a.time - b.time)) {
     if (row.time <= run.to && SUBSCRIPTION_EVENTS.includes(row.event)) last.set(SUBSCRIPTION_KEY.map((name) => attr(row, name) ?? "").join("/"), row);
   }
-  return [...last.values()].filter((row) => row.event === "sfu.subscription.paused").sort((a, b) => a.time - b.time).at(-1);
+  return [...last.values()]
+    .filter((row) => row.event === "sfu.subscription.paused")
+    .sort((a, b) => a.time - b.time)
+    .at(-1);
 }
 
 function silenceCause(rows, run) {

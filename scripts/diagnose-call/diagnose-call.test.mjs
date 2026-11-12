@@ -68,7 +68,11 @@ test("a node that paused the subscription for congestion is the network, for the
 });
 
 test("a pause counts only while no later resume of the same subscription has ended it", () => {
-  const event = (seconds, name, mid) => ({ _time: at(seconds), "service.name": "chalk-sfu", attributes: { event: name, episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", publisher_id: "publisher", source: "camera", media_kind: "video", mid, reason: "viewer" } });
+  const event = (seconds, name, mid) => ({
+    _time: at(seconds),
+    "service.name": "chalk-sfu",
+    attributes: { event: name, episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", publisher_id: "publisher", source: "camera", media_kind: "video", mid, reason: "viewer" },
+  });
   const base = dormantReplacementCall().filter((row) => !String(row.attributes.event).startsWith("media."));
   const cause = (...events) => verdictOf([...base, ...events]).findings.find((finding) => finding.kind === "media_silence")?.cause ?? "";
   assert.match(cause(event(100, "sfu.subscription.paused", "0")), /paused the subscription/u);
