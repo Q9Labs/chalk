@@ -20,7 +20,19 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
-const workflowGraphRoots = [".github/workflows", "features/scorecard"];
+// The workflow-graph lane selects on these paths, and its tests read only paths under them (chalk-gate-plan.test.mjs checks that).
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/staging-sfu"];
+export const workflowGraphTests = [
+  "features/scorecard/promote-graph.test.mjs",
+  "features/scorecard/nightly-graph.test.mjs",
+  "features/scorecard/lease-arguments.test.mjs",
+];
+// The staging-lease tests that read the workflow files. The SFU lane runs the whole file, but a workflow-only change skips that lane.
+const workflowLeaseTests = [
+  "DeployLeaseTests",
+  "LeaseTests.test_cut_outwaits_a_cloudflare_latency_run_that_owns_the_lease_for_its_whole_step",
+  "LeaseTests.test_workflow_cleanup_deletes_own_resources_while_another_lane_holds_lease",
+];
 const dependencyFields = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // API config tests and the recorder tests read env and Terraform files here, and the Sync gate runs the managed-episode
 // proof validator. No workspace reads them, so they select those gates instead of a full gate.
@@ -433,13 +445,9 @@ export function createGatePlan(files, options = {}) {
     task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
-      "node",
-      "scripts/test/run.mjs",
-      "node",
-      "--test",
-      "features/scorecard/promote-graph.test.mjs",
-      "features/scorecard/nightly-graph.test.mjs",
-      "features/scorecard/lease-arguments.test.mjs",
+      "bash",
+      "-c",
+      `set -e; node scripts/test/run.mjs node --test ${workflowGraphTests.join(" ")}; python3 scripts/staging-sfu/test_staging_lock.py ${workflowLeaseTests.join(" ")}`,
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
