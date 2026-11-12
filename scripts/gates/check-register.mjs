@@ -77,10 +77,7 @@ export function findProblems(entries = readRegister()) {
   const planned = createGatePlan(["README.md"], { full: true }).tasks.map((task) => task.id);
   const gateEntries = entries.filter((entry) => entry.id.startsWith("gate:"));
   const config = readFileSync(path.join(root, "gate.config.ts"), "utf8");
-  const builtins = [
-    ...[...config.matchAll(/lanes\.(?!custom\b)([A-Za-z]+)\(/g)].map((match) => match[1].replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)),
-    ...[...config.matchAll(/^\s*id: "([a-z-]+)"/gm)].map((match) => match[1]),
-  ];
+  const builtins = [...[...config.matchAll(/lanes\.(?!custom\b)([A-Za-z]+)\(/g)].map((match) => match[1].replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)), ...[...config.matchAll(/^\s*id: "([a-z-]+)"/gm)].map((match) => match[1])];
   for (const id of [...planned, ...builtins]) if (!ids.includes(`gate:${id}`)) problems.push(`gate:${id}: no register entry.`);
   for (const entry of gateEntries) {
     const id = entry.id.slice("gate:".length);
