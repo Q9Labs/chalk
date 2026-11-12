@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -181,8 +182,8 @@ func TestResourceAttributesFromTheEnvironmentStayOnTheNode(t *testing.T) {
 // closed enum, a number or a restricted id may leave. A field a peer controls has no source.
 func TestEveryExportedFieldDeclaresASafeSource(t *testing.T) {
 	safe := map[media.FieldSource]bool{media.ServerAssigned: true, media.Enum: true, media.Number: true, media.RestrictedID: true}
-	for _, event := range ExportedEvents() {
-		for _, field := range ExportedFields(event) {
+	for event, extra := range media.EventFields {
+		for _, field := range append(slices.Clone(media.IDFields), extra...) {
 			kind, declared := media.FieldSources[field]
 			switch {
 			case !declared:

@@ -175,16 +175,6 @@ func watchDelivery(t *testing.T, svc *service, viewer *participant) func() []del
 	}
 }
 
-// firstSample finds the first sample at or after from that satisfies match.
-func firstSample(samples []delivery, from time.Time, match func(delivery) bool) (delivery, bool) {
-	for _, sample := range samples {
-		if !sample.at.Before(from) && match(sample) {
-			return sample, true
-		}
-	}
-	return delivery{}, false
-}
-
 type constrainedCall struct {
 	svc      *service
 	viewer   *participant

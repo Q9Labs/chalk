@@ -33,8 +33,6 @@ type link struct {
 	busyUntil  time.Time
 	pending    []datagram
 	wake       chan struct{}
-	inDropped  int
-	outDropped int
 }
 
 type datagram struct {
@@ -73,12 +71,6 @@ func (l *link) shape(rate float64, queueBytes int, delay time.Duration, inLoss, 
 	l.rate, l.queueBytes, l.delay, l.inLoss, l.outLoss = rate, queueBytes, delay, inLoss, outLoss
 }
 
-func (l *link) dropped() (in, out int) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.inDropped, l.outDropped
-}
-
 func (l *link) receive() {
 	defer close(l.wake)
 	buffer := make([]byte, 1500)
@@ -90,7 +82,6 @@ func (l *link) receive() {
 		now := time.Now()
 		l.mu.Lock()
 		if l.inLoss > 0 && l.random.Float64() < l.inLoss {
-			l.inDropped++
 			l.mu.Unlock()
 			continue
 		}
@@ -101,7 +92,6 @@ func (l *link) receive() {
 				backlog = l.rate / 8 * l.busyUntil.Sub(now).Seconds()
 			}
 			if int(backlog)+n > l.queueBytes {
-				l.inDropped++
 				l.mu.Unlock()
 				continue
 			}
@@ -158,9 +148,6 @@ func (l *link) ReadFrom(p []byte) (int, net.Addr, error) {
 func (l *link) WriteTo(p []byte, addr net.Addr) (int, error) {
 	l.mu.Lock()
 	drop := l.outLoss > 0 && l.random.Float64() < l.outLoss
-	if drop {
-		l.outDropped++
-	}
 	l.mu.Unlock()
 	if drop {
 		return len(p), nil

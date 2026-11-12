@@ -536,18 +536,6 @@ func (s *subscription) detach() bool {
 	return true
 }
 
-// release ends the subscription and forgets it in its owner's session, as the owner's close
-// of its MID does, so the owner can pull the same publication again. The owner's next offer
-// carries the stopped transceiver.
-func (s *subscription) release() {
-	s.owner.mu.Lock()
-	if s.owner.subscribed[s.mid] == s {
-		delete(s.owner.subscribed, s.mid)
-	}
-	s.owner.mu.Unlock()
-	s.close()
-}
-
 // close detaches the subscription and stops its transceiver and sender. That ends the RTCP
 // reader, unbinds the egress track from the sender and frees the sender's SRTP stream. It is idempotent.
 func (s *subscription) close() {
