@@ -98,6 +98,18 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-split[data-active="true"] .chalk-shell-caret {
   color: inherit;
 }
+/* The inverted pill keeps its glyph in the canvas colour, so both halves darken the light fill instead of taking the dock's hover. */
+.chalk-shell-split[data-active="true"] button:hover,
+.chalk-shell-split[data-active="true"] .chalk-shell-caret[aria-expanded="true"] {
+  background: color-mix(in oklab, var(--chalk-text) 88%, var(--chalk-canvas));
+}
+.chalk-shell-split[data-active="true"] button:active {
+  background: color-mix(in oklab, var(--chalk-text) 80%, var(--chalk-canvas));
+}
+/* A pointer press, or a menu it opened handing focus back, draws no ring; the next key press brings it back. */
+[data-chalk] .chalk-shell-dock[data-input="pointer"] :focus-visible {
+  outline: none;
+}
 .chalk-shell-split[data-off="true"] .chalk-shell-main {
   color: var(--chalk-danger-text);
 }
