@@ -528,6 +528,51 @@ it.each(["microphone", "camera"] as const)("registry recovery republishes a with
   });
 });
 
+it("registry recovery republishes a microphone the registry lists as paused while the SDK is sending it", async () => {
+  await withTimedHarness(async (h) => {
+    await h.client.start(fakeStream(new FakeTrack("mic", "audio")));
+    await vi.advanceTimersByTimeAsync(0);
+    const oldId = h.client.getSnapshot().localTracks.find((track) => track.source === "microphone")!.publicationId!;
+    const addsBefore = localAddCount(h, "microphone");
+    h.transport.localPublications.set(oldId, { ...h.transport.localPublications.get(oldId)!, paused: true });
+
+    await h.client.refreshRemotePublications();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const live = [...h.transport.localPublications.values()].filter((publication) => publication.source === "microphone");
+    expect(live).toHaveLength(1);
+    expect(live[0]!.publicationId).not.toBe(oldId);
+    expect(localAddCount(h, "microphone")).toBe(addsBefore + 1);
+  });
+});
+
+it("keeps the remote microphone a publisher mutes in place and takes it back on the unmute with no pull", async () => {
+  vi.useFakeTimers();
+  const h = createHarness();
+  try {
+    await h.client.start(fakeStream());
+    const publication = { participantId: "participant-2", source: "microphone" as const, publicationId: "remote-connection|microphone" };
+    h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
+    await h.client.refreshRemotePublications();
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    const pulls = vi.spyOn(h.transport, "addTracks");
+    const closes = vi.spyOn(h.transport, "closeTracks");
+
+    h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [{ ...publication, paused: true }] };
+    await h.client.refreshRemotePublications();
+    h.transport.snapshot = { incarnation: 1, sequence: 3, publications: [publication] };
+    await h.client.refreshRemotePublications();
+
+    expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
+    expect(pulls).not.toHaveBeenCalled();
+    expect(closes).not.toHaveBeenCalled();
+    expect(h.peers).toHaveLength(1);
+  } finally {
+    h.client.stop();
+    vi.useRealTimers();
+  }
+});
+
 it.each(["microphone", "camera"] as const)("resuming a paused %s never reattaches a registry-withdrawn publication", async (source) => {
   await withTimedHarness(async (h) => {
     await h.client.start(source === "microphone" ? fakeStream(new FakeTrack("mic", "audio")) : fakeStream(new FakeTrack("mic", "audio"), new FakeTrack("camera", "video")));
