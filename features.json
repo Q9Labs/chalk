@@ -490,7 +490,6 @@
         "apps/api/internal/accessgrants",
         "apps/api/internal/adapters/postgres",
         "apps/api/internal/adapters/redis",
-        "apps/api/internal/apitest",
         "apps/api/internal/artifactpolicy",
         "apps/api/internal/authentication",
         "apps/api/internal/edjwt",
