@@ -25,6 +25,7 @@ import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
 import { failedMediaNotice } from "../control-bar/control-bar-behavior";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
+import { reconnectedToast } from "../connection-status/ConnectionStatus";
 import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
 import { useConnectionPhase } from "../connection-status/use-connection-phase";
 import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
@@ -327,6 +328,7 @@ export function SpaceView({
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
     ...mediaToast,
+    ...(connectionPhase.kind === "reconnected" ? [reconnectedToast(connectionPhase.awayMs)] : []),
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
   ];
   const dismissToast = (id: string) => {

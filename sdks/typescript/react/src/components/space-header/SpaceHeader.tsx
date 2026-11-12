@@ -118,11 +118,11 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
               onClick={() => changeOpen(true)}
             >
               <span dir="auto">{spaceName}</span>
+              <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
+                {timer}
+              </span>
               {chevron}
             </button>
-            <span data-part="call-timer" data-recording={recording || undefined} className="chalk-call-timer" style={timerStyle}>
-              {timer}
-            </span>
             <ChalkSheet variant="details" open={open} onOpenChange={changeOpen} title={inviteOpen ? "Your call is ready" : spaceName} accessibleLabel="Call details">
               {content}
             </ChalkSheet>

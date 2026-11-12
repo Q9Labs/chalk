@@ -1,3 +1,4 @@
+import type { Toast } from "../toast-stack/ToastStack";
 import { useState } from "react";
 import { ConnectionRing } from "./ConnectionRing";
 import { RECONNECT_NOTICE_MS } from "./use-connection-phase";
@@ -33,6 +34,11 @@ export function reconnectingCopy(phase: "reconnecting" | "offline", seconds: num
  * dock stays usable, so this is one calm card, one confirmation, or (after a failure) one card with a way back.
  * The veil lifts over 300ms when the call comes back, so the picture sharpens instead of snapping.
  */
+/** The return confirmation joins the bottom notices, so it never drops in over a face at the top of the call. */
+export function reconnectedToast(awayMs: number): Toast {
+  return { id: "connection-back", type: "success", duration: Infinity, message: `Back in the call · Away ${Math.max(1, Math.round(awayMs / 1000))} s` };
+}
+
 export function ConnectionStatus({ phase, since, awayMs = 0, pending, onRejoin, onLeave, onReportProblem }: ConnectionStatusProps) {
   const waiting = phase === "reconnecting" || phase === "offline";
   const cardDue = useTrueFor(waiting, RECONNECT_NOTICE_MS);
@@ -57,17 +63,6 @@ export function ConnectionStatus({ phase, since, awayMs = 0, pending, onRejoin, 
             </span>
           </h3>
           <p>{copy.detail}</p>
-        </div>
-      ) : null}
-      {phase === "reconnected" ? (
-        <div role="status" data-part="connection-status" className="chalk-connection-toast">
-          <span className="chalk-connection-toast-ok" aria-hidden="true">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m5 12 5 5 9-10" />
-            </svg>
-          </span>
-          Back in the call
-          <small>Away {Math.max(1, Math.round(awayMs / 1000))} s</small>
         </div>
       ) : null}
       {phase === "failed" ? (
@@ -133,8 +128,5 @@ const STATUS_CSS = `.chalk-connection-dim {position:absolute;inset:0;z-index:40;
 .chalk-connection-links {display:grid;justify-items:center;margin-top:var(--space-1);color:var(--chalk-muted-text);font-size:var(--type-caption);}
 .chalk-connection-links button {text-decoration:underline;text-underline-offset:3px;}
 @media (prefers-reduced-motion: reduce) {.chalk-connection-dim,.chalk-connection-dim[data-lifting],.chalk-connection-card {animation-duration:.01s;}}
-.chalk-connection-toast {position:absolute;z-index:42;left:50%;top:var(--space-2);transform:translateX(-50%);display:inline-flex;align-items:center;gap:var(--space-2-5);height:40px;padding:0 var(--space-4) 0 var(--space-2-5);border-radius:var(--corner-pill);background:var(--chalk-popover);border:1px solid var(--chalk-line-strong);box-shadow:var(--chalk-shadow);color:var(--chalk-text);font-size:var(--type-body-sm);font-weight:600;white-space:nowrap;pointer-events:none;}
-.chalk-connection-toast-ok {width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--chalk-tint-positive);color:var(--chalk-positive);}
-.chalk-connection-toast small {color:var(--chalk-muted-text);font-weight:400;font-size:var(--type-body-sm);}
 [data-connection-lost] [data-part="dock-region"] button:not([aria-label="Leave call"]) {opacity:.38;pointer-events:none;}
 `;

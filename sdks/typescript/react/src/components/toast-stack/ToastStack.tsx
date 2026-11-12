@@ -159,6 +159,7 @@ const PHONE_CSS = `
 const STACK_CSS = `.chalk-toasts .chalk-toast {max-width:min(560px, calc(100% - 32px));}
 .chalk-toasts [data-part="toast-message"] {text-wrap:pretty;}
 [data-chalk]:has(.chalk-sheet[data-open]:not([data-variant="reactions"])) .chalk-toasts {z-index:40;}
-@media (max-width: 640px) {${PHONE_CSS}}
-@container chalk-call (max-width: 640px) {${PHONE_CSS}}
+[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {--chalk-toast-lift:200px;}
+@media (max-width: 640px) {${PHONE_CSS}[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {--chalk-toast-lift:254px;}}
+@container chalk-call (max-width: 640px) {${PHONE_CSS}[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {--chalk-toast-lift:254px;}}
 `;

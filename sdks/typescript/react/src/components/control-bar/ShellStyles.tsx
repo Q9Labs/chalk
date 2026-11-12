@@ -106,6 +106,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-split[data-active="true"] button:active {
   background: color-mix(in oklab, var(--chalk-text) 80%, var(--chalk-canvas));
 }
+.chalk-menu.chalk-shell-leave-menu {
+  width: 240px;
+  min-width: 0;
+}
 /* A pointer press, or a menu it opened handing focus back, draws no ring; the next key press brings it back. */
 [data-chalk] .chalk-shell-dock[data-input="pointer"] :focus-visible {
   outline: none;

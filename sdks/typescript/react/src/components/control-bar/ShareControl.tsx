@@ -117,22 +117,21 @@ export function ShareControl({
                 </span>
               </Menu.Item>
             ))}
-            {surface === "browser" ? (
-              <>
-                <Menu.Separator className="chalk-shell-menu-separator" />
-                <Menu.CheckboxItem className="chalk-menu-item" checked={audio} onCheckedChange={setAudio} closeOnClick={false}>
-                  <span className="chalk-shell-device-label">
-                    <span>Share tab audio</span>
-                    <small>Works when you share a browser tab</small>
+            {/* The switch always follows the sources, so tab audio can be set before a tab is picked. */}
+            <>
+              <Menu.Separator className="chalk-shell-menu-separator" />
+              <Menu.CheckboxItem className="chalk-menu-item" checked={audio} onCheckedChange={setAudio} closeOnClick={false}>
+                <span className="chalk-shell-device-label">
+                  <span>Share tab audio</span>
+                  <small>Works when you share a browser tab</small>
+                </span>
+                <span className="chalk-shell-menu-switch" aria-hidden="true">
+                  <span className="chalk-switch" aria-checked={audio}>
+                    <span />
                   </span>
-                  <span className="chalk-shell-menu-switch" aria-hidden="true">
-                    <span className="chalk-switch" aria-checked={audio}>
-                      <span />
-                    </span>
-                  </span>
-                </Menu.CheckboxItem>
-              </>
-            ) : null}
+                </span>
+              </Menu.CheckboxItem>
+            </>
           </>
         )}
       </ChalkMenu>
