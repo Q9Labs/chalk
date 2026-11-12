@@ -1,4 +1,4 @@
-import { whisperLanguageCodes, type TranscriptLanguage, type WhisperLanguage } from "@chalk/transcript-language";
+import { whisperLanguageCodes, type WhisperLanguage } from "@chalk/transcript-language";
 
 /** The country whose flag stands for each language: the one with the most speakers, or the one that holds it as its own. Tibetan and Yiddish have none, so they show their code. */
 const flagCountry: Record<WhisperLanguage, string | null> = {
@@ -138,10 +138,6 @@ export function languageByCode(code: WhisperLanguage): LanguageOption {
   const found = byCode.get(code);
   if (!found) throw new Error(`Unknown transcript language ${code}`);
   return found;
-}
-
-export function languageName(value: TranscriptLanguage): string {
-  return value === "auto" ? "Auto-detect" : languageByCode(value).name;
 }
 
 export type SearchHit = { readonly option: LanguageOption; readonly rank: "best" | "contains" };
