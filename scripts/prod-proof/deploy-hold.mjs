@@ -14,7 +14,11 @@ const startedFile = process.env.DEPLOY_HOLD_STARTED_FILE;
 const doneFile = process.env.DEPLOY_HOLD_DONE_FILE;
 const maxHoldMs = Number(process.env.DEPLOY_HOLD_MAX_MS ?? 25 * 60_000);
 
-const exists = (path) => access(path).then(() => true, () => false);
+const exists = (path) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 
 /**
  * Holds several calls open while an operator deploys the API host, then judges each call: how many were live, how many survived and the longest media gap.
@@ -58,7 +62,10 @@ export async function deployHoldProof(run, receiver) {
   }
   const results = [];
   for (const call of joined) {
-    const live = await run.apiRequest("GET", `${run.tenantPath}/spaces/${call.space.id}/episodes/${call.episode.id}`).then((episode) => episode.status, (error) => `unreadable: ${error.message}`);
+    const live = await run.apiRequest("GET", `${run.tenantPath}/spaces/${call.space.id}/episodes/${call.episode.id}`).then(
+      (episode) => episode.status,
+      (error) => `unreadable: ${error.message}`,
+    );
     const failures = judgeCall(call.ticks, guestsPerCall);
     if (live !== "active") failures.push(`Episode status is ${live}`);
     const gaps = Array.from({ length: guestsPerCall }, (_, guest) => longestGaps(call.ticks, guest));
