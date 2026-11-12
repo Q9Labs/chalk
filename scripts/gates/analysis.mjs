@@ -32,7 +32,7 @@ function run(command, args, { cwd = repositoryRoot, okStatuses = [0] } = {}) {
   }
 }
 
-/** Functions above the limit, as { "path function": complexity }. */
+/** Functions above the limit: { "path function": complexity } for Go, and { "path": [complexity, ...] } for TypeScript, whose functions have no stable name. */
 export function measureComplexity() {
   const found = {};
   for (const module of goModules) {
@@ -43,9 +43,8 @@ export function measureComplexity() {
   }
   const report = JSON.parse(run("pnpm", ["exec", "oxlint", "-A", "all", "-D", "complexity", "--format", "json", "."], { okStatuses: [0, 1] }));
   for (const diagnostic of report.diagnostics ?? []) {
-    const match = /(?:Function|Method|Arrow function|Async function|Async arrow function|Generator function|Constructor)\s*(?:'([^']*)')?.*?complexity of (\d+)/i.exec(diagnostic.message);
-    if (!match || Number(match[2]) <= maxComplexity) continue;
-    found[`${diagnostic.filename} ${match[1] ?? `line ${diagnostic.labels?.[0]?.span?.line ?? 0}`}`] = Number(match[2]);
+    const complexity = Number(/complexity of (\d+)/i.exec(diagnostic.message)?.[1]);
+    if (complexity > maxComplexity) found[diagnostic.filename] = [...(found[diagnostic.filename] ?? []), complexity].sort((a, b) => b - a);
   }
   return found;
 }
@@ -54,7 +53,14 @@ export function measureComplexity() {
 export function measureDeadCode() {
   const found = {};
   for (const module of goModules) {
-    for (const line of run("go", ["run", deadcode, "-test", "./..."], { cwd: join(repositoryRoot, module) }).split("\n")) {
+    let report;
+    try {
+      report = run("go", ["run", deadcode, "-test", "./..."], { cwd: join(repositoryRoot, module) });
+    } catch (error) {
+      if (error.message.includes("no main packages")) continue;
+      throw error;
+    }
+    for (const line of report.split("\n")) {
       const match = /^\s*(\S+\.go):\d+:\d+: unreachable func: (\S+)/.exec(line);
       if (match) found[`${module}/${match[1]} ${match[2]}`] = true;
     }
@@ -77,9 +83,11 @@ const checks = {
   complexity: {
     measure: measureComplexity,
     rises: (baseline, current) =>
-      Object.entries(current)
-        .filter(([key, value]) => value > (baseline[key] ?? maxComplexity))
-        .map(([key, value]) => `${key} has complexity ${value}${baseline[key] ? `, up from ${baseline[key]}` : `, above the limit of ${maxComplexity}`}. Split it by branch.`),
+      Object.entries(current).flatMap(([key, value]) => {
+        if (!Array.isArray(value)) return value > (baseline[key] ?? maxComplexity) ? [`${key} has complexity ${value}${baseline[key] ? `, up from ${baseline[key]}` : `, above the limit of ${maxComplexity}`}. Split it by branch.`] : [];
+        const allowed = baseline[key] ?? [];
+        return value.some((complexity, index) => complexity > (allowed[index] ?? maxComplexity)) ? [`${key} has functions of complexity ${value.join(", ")}; the baseline allows ${allowed.join(", ") || "none"}. Split the new or worse one by branch.`] : [];
+      }),
   },
   "dead-code": {
     measure: measureDeadCode,

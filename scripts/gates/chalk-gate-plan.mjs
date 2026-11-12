@@ -424,7 +424,7 @@ export function createGatePlan(files, options = {}) {
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs", "scripts/gates/references.test.mjs", "scripts/gates/ratchets.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs", "scripts/gates/references.test.mjs", "scripts/gates/ratchets.test.mjs", "scripts/gates/analysis.test.mjs"]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
     task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
@@ -441,6 +441,9 @@ export function createGatePlan(files, options = {}) {
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
     task("format", "Formatting", Boolean(formatCommand), full ? fullReason : `${formattedFiles.length} changed formattable file(s)`, formatCommand),
     task("fallow", "Changed-code analysis", full || sourceFiles.length > 0 || fallowConfigChanged, full ? fullReason : fallowConfigChanged ? ".fallowrc.json changed" : `${sourceFiles.length} source file(s) changed`, fallowCommand),
+    task("complexity", "No function above cyclomatic 15 beyond the baseline", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "complexity"]),
+    task("dead-code", "No new unreachable Go function", full || sourceFiles.some((file) => file.endsWith(".go")), full ? fullReason : "Go source changed", ["node", "scripts/gates/analysis.mjs", "dead-code"]),
+    task("duplication", "Clone count does not rise", full || sourceFiles.length > 0, full ? fullReason : `${sourceFiles.length} source file(s) changed`, ["node", "scripts/gates/analysis.mjs", "duplication"]),
     task("ast-grep", "Structural security and quality rules", Boolean(astGrepCommand), full ? fullReason : `${astGrepFiles.length} relevant file(s) changed`, astGrepCommand),
     task("boundaries", "Workspace import boundaries", full || dependencyChange || sourceFiles.some((file) => [".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"].includes(path.extname(file))), full ? fullReason : "JavaScript/TypeScript source or dependency inputs changed", [
       "pnpm",
