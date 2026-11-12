@@ -341,6 +341,9 @@ export type SpaceClient = {
   readonly offline: OfflineController;
   readonly join: (options?: JoinOptions) => Promise<void>;
   readonly leave: () => Promise<void>;
+  /** Frees the camera, microphone and connections. Leaves first unless already left, logs a failed leave, and does nothing the second time. */
+  readonly close: () => Promise<void>;
+  /** Frees the same resources without leaving. Use `close` unless the participant is already gone. */
   readonly dispose: () => void;
   readonly subscribe: (listener: () => void) => () => void;
   readonly getSnapshot: () => SpaceSnapshot;

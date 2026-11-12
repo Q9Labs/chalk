@@ -1,4 +1,4 @@
-import { reloadRejoinStorageKey, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
+import { reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { PreparedPublicSpace, PublicSpaceCredential, SpaceAccessCleanupOptions } from "../../lib/chalk-access";
@@ -71,9 +71,8 @@ export function LocalSpace({
     [client, onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
   );
   useEffect(() => {
-    if (connection.episodeEnded) releaseFromLifecycle("episode-ended");
-    else if (connection.removedByHost) releaseFromLifecycle("removed");
-    else if (connection.status === "failed") releaseFromLifecycle(connection.lastError?.code === "episode.ended" ? "episode-ended" : "failed", connection.lastError);
+    const exit = sessionExit(connection);
+    if (exit) releaseFromLifecycle(exit, connection.status === "failed" ? connection.lastError : undefined);
   }, [connection, releaseFromLifecycle]);
 
   useEffect(() => {
@@ -97,9 +96,7 @@ export function LocalSpace({
         writeReloadRejoin(globalThis.sessionStorage, {
           ...reloadMarker(),
           space: globalThis.location.pathname.split("/").at(-1) ?? credential.space,
-          displayName: snapshot.self.displayName ?? displayName,
-          microphone: snapshot.media.local.microphone.state === "enabled",
-          camera: snapshot.media.local.camera.state === "enabled",
+          ...reloadRejoinPresence(snapshot, displayName),
         });
       } catch {
         // Without a recoverable tab marker, retain the existing release behavior.
@@ -130,8 +127,7 @@ export function LocalSpace({
         inviteLink={inviteLink}
         onEpisodeEnded={() => releaseFromLifecycle("episode-ended")}
         onLeft={() => {
-          const latest = client.getSnapshot().connection;
-          releaseFromLifecycle(latest.episodeEnded ? "episode-ended" : latest.removedByHost ? "removed" : "left");
+          releaseFromLifecycle(sessionExit(client.getSnapshot().connection) ?? "left");
         }}
         onJoined={() => {
           intentionallyLeft.current = false;

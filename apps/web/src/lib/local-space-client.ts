@@ -24,28 +24,17 @@ export function createLocalSpaceClient({ credential, getAccess, connectionAccess
   );
   return client;
 }
-/** Releasing is safe from both the public client's leave callback and React unmount cleanup. */
-export function createLocalSpaceRelease(client: Pick<SpaceClient, "leave" | "dispose">, cleanup: () => Promise<void>): () => Promise<void> {
+/** Releasing is safe from both the public client's leave callback and React unmount cleanup. A failed `cleanup` can be tried again. */
+export function createLocalSpaceRelease(client: Pick<SpaceClient, "close">, cleanup: () => Promise<void>): () => Promise<void> {
   let releasePromise: Promise<void> | undefined;
   return () => {
-    if (releasePromise) return releasePromise;
-    releasePromise = releaseOnce(client, cleanup).catch((cause: unknown) => {
-      releasePromise = undefined;
-      throw cause;
-    });
+    releasePromise ??= client
+      .close()
+      .then(cleanup)
+      .catch((cause: unknown) => {
+        releasePromise = undefined;
+        throw cause;
+      });
     return releasePromise;
   };
-}
-async function releaseOnce(client: Pick<SpaceClient, "leave" | "dispose">, cleanup: () => Promise<void>): Promise<void> {
-  try {
-    await client.leave();
-  } catch {
-    // Arrival cleanup still has to run when transport shutdown is already in progress.
-  }
-  try {
-    client.dispose();
-  } catch {
-    // Cleanup remains authoritative when the SDK disposal hook is already closed.
-  }
-  await cleanup();
 }
