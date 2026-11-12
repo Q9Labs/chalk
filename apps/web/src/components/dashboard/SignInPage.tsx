@@ -48,6 +48,10 @@ export function SignInPage({ returnTo, failed }: { readonly returnTo?: string; r
               </button>
             ))}
           </div>
+          <p className="sinote">
+            <Icon name="link" />
+            <span>To join a call, open its link. You don’t need an account.</span>
+          </p>
           {busyName ? (
             <p className="siwait" role="status">
               <span className="spin" aria-hidden="true" />
@@ -58,10 +62,6 @@ export function SignInPage({ returnTo, failed }: { readonly returnTo?: string; r
             By continuing, you agree to the <a href="/terms">Terms</a> and the <a href="/privacy">Privacy Policy</a>.
           </p>
         </div>
-        <p className="sinote">
-          <Icon name="link" />
-          <span>To join a call, open its link. You don’t need an account.</span>
-        </p>
       </main>
     </>
   );

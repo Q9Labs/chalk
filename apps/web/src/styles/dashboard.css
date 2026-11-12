@@ -1,14 +1,8 @@
-/* Brand colors of the sign-in provider buttons. Google and Apple set these, so they are not part of the palette. */
+/* Brand colors of the sign-in provider buttons, from Google's light button. Google and Apple set these, so they are not part of the palette. */
 :root {
-  --provider-google-dark-bg: #131314;
-  --provider-google-dark-hover: #1f1f21;
-  --provider-google-dark-outline: inset 0 0 0 1px #8e918f;
-  --provider-google-dark-text: #e3e3e3;
-  --provider-google-light-outline: inset 0 0 0 1px #747775;
-  --provider-google-light-text: #1f1f1f;
-  --provider-google-light-hover: #f2f2f2;
-  --provider-apple-dark-hover: #ededed;
-  --provider-apple-light-hover: #1c1c1e;
+  --provider-outline: inset 0 0 0 1px #747775;
+  --provider-text: #1f1f1f;
+  --provider-hover: #f2f2f2;
 }
 
 /* Tints and the faint mark for dots and rules (never text, which stays at 4.5:1), derived from the call's own colors so both themes follow. */
@@ -487,10 +481,18 @@
   opacity: 0.5;
 }
 
+/* Both providers use the same white pill with a grey hairline in both themes: Google's light button and Apple's white-outline button, so the pair reads as one set and only the mark and typeface differ, as each brand asks. */
+.site .dash .pbtn:is(.g, .a) {
+  background: var(--site-white);
+  box-shadow: var(--provider-outline);
+  color: var(--provider-text);
+}
+
+.site .dash .pbtn:is(.g, .a):hover:not(:disabled) {
+  background: var(--provider-hover);
+}
+
 .site .dash .pbtn.g {
-  background: var(--provider-google-dark-bg);
-  box-shadow: var(--provider-google-dark-outline);
-  color: var(--provider-google-dark-text);
   font:
     500 var(--type-body) Roboto,
     Figtree,
@@ -498,42 +500,12 @@
     sans-serif;
 }
 
-.site .dash .pbtn.g:hover:not(:disabled) {
-  background: var(--provider-google-dark-hover);
-}
-
-.site[data-chalk-theme="light"] .dash .pbtn.g {
-  background: var(--site-white);
-  box-shadow: var(--provider-google-light-outline);
-  color: var(--provider-google-light-text);
-}
-
-.site[data-chalk-theme="light"] .dash .pbtn.g:hover:not(:disabled) {
-  background: var(--provider-google-light-hover);
-}
-
-/* Each provider keeps its own typeface, as its brand rules ask, at one shared size and weight so the pair reads as a set. */
 .site .dash .pbtn.a {
-  background: var(--site-white);
-  color: var(--site-black);
   font:
     500 var(--type-body) -apple-system,
     BlinkMacSystemFont,
     system-ui,
     sans-serif;
-}
-
-.site .dash .pbtn.a:hover:not(:disabled) {
-  background: var(--provider-apple-dark-hover);
-}
-
-.site[data-chalk-theme="light"] .dash .pbtn.a {
-  background: var(--site-black);
-  color: var(--site-white);
-}
-
-.site[data-chalk-theme="light"] .dash .pbtn.a:hover:not(:disabled) {
-  background: var(--provider-apple-light-hover);
 }
 
 .site .dash .siwait {
@@ -1097,14 +1069,14 @@
   text-underline-offset: 2px;
 }
 
+/* The guest hint answers "do I need this?" right under the buttons it is about. */
 .site .dash .sinote {
-  margin-top: var(--space-14);
-  width: 360px;
-  max-width: 100%;
+  margin-top: var(--space-4);
   font-size: var(--type-body);
-  color: var(--chalk-muted-text);
+  color: var(--chalk-soft-text);
   display: flex;
   gap: var(--space-2-5);
+  text-align: start;
 }
 
 .site .dash .sinote svg.site-icon {
