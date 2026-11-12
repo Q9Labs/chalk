@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
 
@@ -20,16 +21,10 @@ var (
 	ErrPermissionDenied   = errors.New("whiteboard file permission denied")
 	ErrFileNotFound       = errors.New("whiteboard file not found")
 	ErrFileTransferFailed = errors.New("whiteboard file transfer failed")
-	ErrCleanupLeaseLost   = errors.New("whiteboard file cleanup lease lost")
 )
 
-type Subject struct {
-	TenantID              utilities.ID
-	SpaceID               utilities.ID
-	EpisodeID             utilities.ID
-	ParticipantID         utilities.ID
-	ParticipantGeneration int64
-}
+// Subject is the Participant a Sync credential names.
+type Subject = synctokens.Subject
 
 type Upload struct {
 	UploadID   utilities.ID
@@ -67,7 +62,7 @@ func NewService(repository Repository, objects ObjectStore) Service {
 }
 
 func (s Service) Download(ctx context.Context, subject Subject, fileID string) (Download, error) {
-	if s.repository == nil || s.objects == nil || invalidSubject(subject) || !validFileID(fileID) {
+	if s.repository == nil || s.objects == nil || !subject.IsComplete() || !validFileID(fileID) {
 		return Download{}, ErrInvalidInput
 	}
 	file, err := s.repository.ReadyFile(ctx, subject, fileID)
@@ -79,11 +74,6 @@ func (s Service) Download(ctx context.Context, subject Subject, fileID string) (
 		return Download{}, fmt.Errorf("create whiteboard download url: %w", err)
 	}
 	return Download{URL: signed.URL, ExpiresAt: signed.ExpiresAt}, nil
-}
-
-func invalidSubject(subject Subject) bool {
-	return subject.TenantID.IsZero() || subject.SpaceID.IsZero() || subject.EpisodeID.IsZero() ||
-		subject.ParticipantID.IsZero() || subject.ParticipantGeneration <= 0
 }
 
 func validFileID(value string) bool {

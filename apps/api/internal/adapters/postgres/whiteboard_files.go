@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/q9labs/chalk/apps/api/internal/adapters/postgres/sqlc"
+	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/whiteboardfiles"
 )
@@ -46,7 +47,7 @@ func (r WhiteboardFileRepository) ReadyFile(ctx context.Context, subject whitebo
 	)
 }
 
-func (r WhiteboardFileRepository) ClaimCleanup(ctx context.Context, input whiteboardfiles.CleanupClaimInput) ([]whiteboardfiles.CleanupClaim, error) {
+func (r WhiteboardFileRepository) ClaimCleanup(ctx context.Context, input objectcleanup.ClaimInput) ([]whiteboardfiles.CleanupClaim, error) {
 	token, err := utilities.NewID()
 	if err != nil {
 		return nil, fmt.Errorf("generate whiteboard cleanup token: %w", err)
@@ -83,7 +84,7 @@ func (r WhiteboardFileRepository) CompleteCleanup(ctx context.Context, claim whi
 		return fmt.Errorf("complete whiteboard file cleanup: %w", err)
 	}
 	if rows != 1 {
-		return whiteboardfiles.ErrCleanupLeaseLost
+		return objectcleanup.ErrLeaseLost
 	}
 	return nil
 }
@@ -115,4 +116,4 @@ func mapWhiteboardUpload(
 }
 
 var _ whiteboardfiles.Repository = WhiteboardFileRepository{}
-var _ whiteboardfiles.CleanupRepository = WhiteboardFileRepository{}
+var _ objectcleanup.Repository[whiteboardfiles.CleanupClaim] = WhiteboardFileRepository{}

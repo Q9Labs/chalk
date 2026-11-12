@@ -44,6 +44,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
 	"github.com/q9labs/chalk/apps/api/internal/mediapublications"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
+	"github.com/q9labs/chalk/apps/api/internal/objectcleanup"
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
@@ -363,11 +364,11 @@ func run() error {
 	var transcriptionStorage *objectstorage.Service
 	var chatAttachmentService httpapi.ChatAttachmentService
 	var chatParticipantVerifier httpapi.ChatParticipantVerifier
-	var chatCleanupScheduler *chatattachments.CleanupScheduler
+	var chatCleanupScheduler *objectcleanup.Scheduler
 	var recordingSourceCleanupScheduler *transcripts.LocalCleanupScheduler
 	var whiteboardFileService httpapi.WhiteboardFileService
 	var whiteboardParticipantVerifier httpapi.WhiteboardParticipantVerifier
-	var whiteboardCleanupScheduler *whiteboardfiles.CleanupScheduler
+	var whiteboardCleanupScheduler *objectcleanup.Scheduler
 	if r2Configured(cfg.R2) {
 		store, err := r2adapter.NewStore(cfg.R2)
 		if err != nil {
@@ -380,22 +381,20 @@ func run() error {
 		transcriptionStorage = &storage
 		chatRepository := postgres.NewChatAttachmentRepository(pool)
 		chatCleanupWorker := chatattachments.NewCleanupWorker(chatRepository, storage)
-		chatCleanupScheduler = chatattachments.NewCleanupScheduler(chatCleanupWorker, 0, logger)
+		chatCleanupScheduler = objectcleanup.NewScheduler(chatCleanupWorker, 0, logger)
 		if syncParticipantVerifierConfigured {
 			chatService := chatattachments.NewService(chatRepository, storage)
-			chatVerifier := chatattachments.NewParticipantVerifier(syncParticipantVerifier)
 			chatAttachmentService = chatService
-			chatParticipantVerifier = chatVerifier
+			chatParticipantVerifier = syncParticipantVerifier
 		}
 		if cfg.Capabilities.WhiteboardFiles {
 			whiteboardRepository := postgres.NewWhiteboardFileRepository(pool)
 			whiteboardCleanupWorker := whiteboardfiles.NewCleanupWorker(whiteboardRepository, storage)
-			whiteboardCleanupScheduler = whiteboardfiles.NewCleanupScheduler(whiteboardCleanupWorker, 0, logger)
+			whiteboardCleanupScheduler = objectcleanup.NewScheduler(whiteboardCleanupWorker, 0, logger)
 			if syncParticipantVerifierConfigured {
 				service := whiteboardfiles.NewService(whiteboardRepository, storage)
-				verifier := whiteboardfiles.NewParticipantVerifier(syncParticipantVerifier)
 				whiteboardFileService = service
-				whiteboardParticipantVerifier = verifier
+				whiteboardParticipantVerifier = syncParticipantVerifier
 			}
 		}
 	}
