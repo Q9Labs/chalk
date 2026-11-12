@@ -17,14 +17,13 @@
 //                                    pair may be direct, so this does not show TURN carried the media.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
 
 import { createMediaSmokeInitScript } from "./media-smoke-page.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const { chromium } = createRequire(join(root, "sdks/typescript/client/package.json"))("playwright");
+const { chromium } = createRequire(join(repositoryRoot, "sdks/typescript/client/package.json"))("playwright");
 
 const [manifestPath, mode = "default", reportPath] = process.argv.slice(2);
 if (!manifestPath) throw new Error("Usage: node scripts/dev/turn-proof.mjs <ready-runtime-manifest.json> [relay-udp|relay-tcp|relay-tls|default] [report.json]");

@@ -23,15 +23,15 @@ import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { resolveDevConfig } from "./config.mjs";
 import { createChalkSupervisor } from "./chalk.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const root = resolve(import.meta.dirname, "../..");
-const { build } = createRequire(resolve(root, "tools/sdk-web-consumer-e2e/package.json"))("esbuild");
-const { chromium } = createRequire(resolve(root, "sdks/typescript/client/package.json"))("playwright");
+const { build } = createRequire(resolve(repositoryRoot, "tools/sdk-web-consumer-e2e/package.json"))("esbuild");
+const { chromium } = createRequire(resolve(repositoryRoot, "sdks/typescript/client/package.json"))("playwright");
 const scenario = process.env.CHALK_OFF_SCENARIO || "lost-off";
 const blockMediaClose = process.env.CHALK_OFF_BLOCK_MEDIA_CLOSE === "1";
 assert.ok(["lost-off", "toggle", "first-publish"].includes(scenario), `unknown scenario ${scenario}`);
 const sdkRef = process.env.CHALK_OFF_SDK_REF || null;
-const output = resolve(root, process.env.CHALK_OFF_OUTPUT || "artifacts/media-off-resend");
+const output = resolve(repositoryRoot, process.env.CHALK_OFF_OUTPUT || "artifacts/media-off-resend");
 await mkdir(output, { recursive: true });
 const credentials = JSON.parse(await readFile(process.env.CHALK_DEVELOPMENT_CREDENTIALS || "/root/chalk-development.json", "utf8"));
 assert.equal(credentials.environment, "development");
@@ -39,23 +39,23 @@ assert.equal(credentials.source, "chalk-local-dev");
 assert.ok(credentials.appId && credentials.appSecret);
 
 // The browser SDK comes from a git ref when asked; the server stack always runs from the working tree.
-let sdkRoot = resolve(root, "sdks/typescript/client");
+let sdkRoot = resolve(repositoryRoot, "sdks/typescript/client");
 if (sdkRef) {
   const extracted = await mkdtemp(resolve(tmpdir(), "media-off-sdk-"));
-  const archive = execFileSync("git", ["archive", sdkRef, "sdks/typescript/client"], { cwd: root, maxBuffer: 200 * 1024 * 1024 });
+  const archive = execFileSync("git", ["archive", sdkRef, "sdks/typescript/client"], { cwd: repositoryRoot, maxBuffer: 200 * 1024 * 1024 });
   execFileSync("tar", ["-xf", "-", "-C", extracted], { input: archive });
   sdkRoot = resolve(extracted, "sdks/typescript/client");
 }
-const sdkRevision = sdkRef ? execFileSync("git", ["rev-parse", sdkRef], { cwd: root, encoding: "utf8" }).trim() : `${execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim()} (working tree)`;
+const sdkRevision = sdkRef ? execFileSync("git", ["rev-parse", sdkRef], { cwd: repositoryRoot, encoding: "utf8" }).trim() : `${execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim()} (working tree)`;
 
 let systemToken, tenant, space;
-const config = resolveDevConfig({ root, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "600000", CHALK_DEV_WEB_PORT: "4871" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
+const config = resolveDevConfig({ root: repositoryRoot, env: { ...process.env, CHALK_DEV_READINESS_TIMEOUT_MS: "600000", CHALK_DEV_WEB_PORT: "4871" }, requiredTools: ["node", "pnpm", "go", "elixir", "erl", "docker", "openssl"], secretResolver: async () => credentials });
 config.webJoinPath = "/";
 config.databaseName = process.env.CHALK_OFF_DB || "chalk_off_resend_proof";
 assert.match(config.databaseName, /^[a-z_]+$/u);
 const services = [
-  { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${root}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
-  { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${root}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
+  { id: "api", command: "go", expectedCommand: null, args: ["run", "./cmd"], cwd: `${repositoryRoot}/apps/api`, readiness: { url: `${config.urls.api}/readyz` } },
+  { id: "sync", command: "mix", expectedCommand: null, args: ["run", "--no-halt"], cwd: `${repositoryRoot}/apps/sync`, dependsOn: ["api"], readiness: { url: `${config.urls.sync}/readyz` } },
 ];
 const localFetch = async (input, init) => {
   const url = new URL(input);
@@ -70,7 +70,7 @@ const localFetch = async (input, init) => {
   return response;
 };
 const runtime = createChalkSupervisor(config, { serviceSpecs: services, adapters: { fetchImpl: localFetch }, output: () => undefined });
-const report = { started: new Date().toISOString(), scenario, sdkRevision, serverRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), timeline: [], assertions: [], passed: false };
+const report = { started: new Date().toISOString(), scenario, sdkRevision, serverRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim(), timeline: [], assertions: [], passed: false };
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const t0 = Date.now();
 const note = (event, detail = {}) => {
@@ -86,14 +86,14 @@ const save = () => writeFile(`${output}/report.json`, JSON.stringify(report, nul
 let http;
 const browsers = [];
 try {
-  await build({ entryPoints: [resolve(root, "sdks/typescript/client/src/server/index.ts")], bundle: true, outfile: `${output}/server-client.mjs`, platform: "node", format: "esm" });
+  await build({ entryPoints: [resolve(repositoryRoot, "sdks/typescript/client/src/server/index.ts")], bundle: true, outfile: `${output}/server-client.mjs`, platform: "node", format: "esm" });
   const { createChalkServerClient, getAccessRefreshState } = await import(pathToFileURL(`${output}/server-client.mjs`).href);
   const instrument = await readFile(resolve(import.meta.dirname, "media-off-resend-instrument.js"), "utf8");
   const pageBundle = (
     await build({
       entryPoints: [resolve(import.meta.dirname, "media-off-resend-page.js")],
       alias: { "@q9labsai/chalk-client/effect": `${sdkRoot}/src/effect.ts`, "@q9labsai/chalk-client": `${sdkRoot}/src/index.ts` },
-      nodePaths: [resolve(root, "node_modules"), resolve(root, "sdks/typescript/client/node_modules")],
+      nodePaths: [resolve(repositoryRoot, "node_modules"), resolve(repositoryRoot, "sdks/typescript/client/node_modules")],
       bundle: true,
       write: false,
       platform: "browser",
