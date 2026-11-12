@@ -424,8 +424,10 @@ export function createGatePlan(files, options = {}) {
   const reactTokens = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react", "packages/ui/src/styles"]));
   const nativeQuality = full || dependencyChange || nonDocumentationFiles.some((file) => startsWithAny(file, ["sdks/typescript/react-native"]));
   const tasks = [
-    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs"]),
+    task("self-test", "Test network isolation and gate selection", true, "always required", ["node", "scripts/test/run.mjs", "node", "--test", "scripts/test/no-network.test.mjs", "scripts/gates/chalk-gate-plan.test.mjs", "scripts/gates/feature-map.test.mjs", "scripts/gates/references.test.mjs", "scripts/gates/ratchets.test.mjs"]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
+    task("references", "Every script has a caller and every workflow path exists", true, "always required", ["node", "scripts/gates/references.mjs"]),
+    task("ratchets", "File size and copy counts do not rise", true, "always required", ["node", "scripts/gates/ratchets.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
       "node",
       "scripts/test/run.mjs",
@@ -624,7 +626,7 @@ function selectCiJobs(base) {
 }
 
 // Format is always on so documentation-only changes are still checked.
-export const alwaysTaskIds = new Set(["self-test", "feature-map", "hygiene", "secrets", "generated", "format"]);
+export const alwaysTaskIds = new Set(["self-test", "feature-map", "references", "ratchets", "hygiene", "secrets", "generated", "format"]);
 export const gateTaskIds = createGatePlan([], { full: true, workspaces: [] }).tasks.map((planned) => planned.id);
 
 if (import.meta.main) {

@@ -29,6 +29,13 @@ function ignoredPaths(root, paths) {
   return new Set(result.stdout.split("\0").filter(Boolean));
 }
 
+function trackedRootFiles(root) {
+  if (!fs.existsSync(path.join(root, ".git"))) return [];
+  const result = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
+  if (result.error) throw result.error;
+  return result.stdout.split("\0").filter((file) => file && !file.includes("/"));
+}
+
 function listDirectories(root, scanRoots, excludedSubtrees) {
   const directories = [];
   const files = [];
@@ -150,6 +157,10 @@ export function validateFeatureMap(featureMap, options = {}) {
   }
   for (const file of scan.files) {
     if (ownersFor(file).size === 0) errors.push(`Unclaimed source file: ${file}. Add this file to features.json.`);
+  }
+  for (const file of trackedRootFiles(root)) {
+    const owners = ownersFor(file);
+    if (owners.size !== 1) errors.push(`Root file ${file} needs exactly one owner in features.json, found ${owners.size}.`);
   }
 
   return { errors, directoryCount: scan.directories.length };
