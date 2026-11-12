@@ -342,19 +342,17 @@ def select(github, args):
     summarize_override(audit)
 
 
-def deployed_held_cut(github):
-    """The SHA of the newest held cut, while staging still runs it."""
-    held = held_candidates(github.deployments('nightly'))
-    require(held, 'no held nightly')
-    sha = payload(held[0])['target_sha']
+def deployed_cut(github):
+    """The SHA staging runs now: the newest nightly write. A cut that fails its proofs still deploys and moves the
+    write, so a held cut is not a condition for measuring what staging runs."""
     marker = github.deployments('nightly', 'nightly-write')
-    require(marker and marker[0].get('sha') == sha, f'staging does not run the newest held nightly {sha}')
-    return sha
+    require(marker, 'staging has no nightly write')
+    return marker[0]['sha']
 
 
 def latency_target(github, args):
     try:
-        outputs({'sha': deployed_held_cut(github)})
+        outputs({'sha': deployed_cut(github)})
     except ValueError as error:
         outputs({'sha': ''})
         with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
@@ -363,7 +361,7 @@ def latency_target(github, args):
 
 def record_latency(github, args):
     sha = env('TARGET_SHA')
-    require(deployed_held_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
+    require(deployed_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
     scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
     if scorecard:
         require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),

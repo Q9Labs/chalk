@@ -164,22 +164,22 @@ class OwnSfuPromotionTests(unittest.TestCase):
         release.select(api, None)
         api.deployments.assert_any_call('nightly', 'nightly-latency', sha=SHA)
 
-    def test_latency_target_is_the_newest_held_cut_only_while_staging_runs_it(self):
-        item = held()
+    def test_latency_target_is_the_cut_staging_runs_even_when_that_cut_failed_its_proofs(self):
         api = Mock(spec=GitHub)
-        marker = [dict(sha=SHA)]
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [item] if task == 'nightly-cut' else marker
-        self.assertEqual(release.deployed_held_cut(api), SHA)
-        marker[0] = dict(sha=OTHER_SHA)
-        with self.assertRaises(ValueError):
-            release.deployed_held_cut(api)
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [] if task == 'nightly-cut' else [dict(sha=OTHER_SHA)]
+        release.latency_target(api, None)
+        self.assertIn(f'sha={OTHER_SHA}\n', self.output.read_text())
+
+    def test_latency_target_is_empty_when_staging_has_no_nightly_write(self):
+        api = Mock(spec=GitHub)
+        api.deployments.return_value = []
         release.latency_target(api, None)
         self.assertIn('sha=\n', self.output.read_text())
 
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
         api = Mock(spec=GitHub)
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [held()] if task == 'nightly-cut' else [dict(sha=SHA)]
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [dict(sha=SHA)]
         api.record_latency.return_value = 5
         environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
         with patch.dict(os.environ, environment):
@@ -199,7 +199,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
 
     def test_record_latency_refuses_a_sha_staging_no_longer_runs(self):
         api = Mock(spec=GitHub)
-        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [held(sha=OTHER_SHA)] if task == 'nightly-cut' else [dict(sha=OTHER_SHA)]
+        api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: [dict(sha=OTHER_SHA)]
         with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)
