@@ -2,7 +2,9 @@ import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
 import { CookieTable, LegalEntries, LegalSections, type CookieRow, type LegalEntry, type LegalSection } from "./legal-parts";
 import { PRIVACY_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
 import { THEME_COOKIE_NAME } from "../../lib/theme";
-import { Logo } from "@q9labsai/chalk-react";
+import { SiteFooter } from "../site/SiteFooter";
+import { SiteNav } from "../site/SiteNav";
+import { SiteRoot } from "../site/theme";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";
 
@@ -75,27 +77,24 @@ const TERMS_SECTIONS: readonly LegalSection[] = [
   },
 ];
 
+/** Privacy and Terms live in the site's own shell, so they share its bar, footer and saved theme. */
 export function LegalPage({ kind }: { kind: LegalPageKind }) {
   return (
-    <div className="legal-page">
-      <header className="legal-header">
-        <a href="/" className="legal-brand" aria-label="Chalk home">
-          <Logo accessibilityLabel={null} color="currentColor" height={30} variant="wordmark" />
-        </a>
-        <nav className="legal-nav" aria-label="Legal navigation">
-          <a href="/privacy" className={kind !== "terms" ? "is-active" : ""}>
+    <SiteRoot>
+      <SiteNav />
+      <main className="legal-main">
+        <nav className="legal-nav" aria-label="Legal">
+          <a href="/privacy" aria-current={kind === "privacy" ? "page" : undefined}>
             Privacy
           </a>
-          <a href="/terms" className={kind === "terms" ? "is-active" : ""}>
+          <a href="/terms" aria-current={kind === "terms" ? "page" : undefined}>
             Terms
           </a>
         </nav>
-      </header>
-
-      <main className="legal-main">
         <article className="legal-document">{kind === "privacy" ? <PrivacyPolicy /> : kind === "privacy-previous" ? <PreviousPrivacyPolicy /> : <TermsOfService />}</article>
       </main>
-    </div>
+      <SiteFooter />
+    </SiteRoot>
   );
 }
 
@@ -167,7 +166,7 @@ function PrivacyPolicy() {
     <>
       <h1>Privacy Policy</h1>
       <p className="legal-effective-date">Effective {PRIVACY_EFFECTIVE_DATE_LABEL}</p>
-      <section id="whats-changing" aria-labelledby="privacy-changes-heading">
+      <section id="whats-changing" className="legal-notice" aria-labelledby="privacy-changes-heading">
         <h2 id="privacy-changes-heading">What's changing</h2>
         <p>We are clarifying mobile guest data, sign-in cookies, participation records, recording and transcription, diagnostic logs, problem reports, and our providers and international transfer safeguards.</p>
         <p>
