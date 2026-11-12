@@ -1,6 +1,6 @@
 # Chalk Gate on q9gate
 
-`pnpm gate` runs tracker generation checks, then `q9gate run` with Chalk's checks declared as custom lanes in `gate.config.ts`; `pnpm gate:full` adds `--full`. Locally each gate runs single-threaded (`GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, q9gate concurrency 1) so it fits a small machine; an already-set variable replaces the default. `gate.report.json` records every selected and skipped lane.
+`pnpm gate` runs tracker generation checks, then `q9gate run` with Chalk's checks declared as custom lanes in `gate.config.ts`; `pnpm gate:full` adds `--full`. Locally each gate runs single-threaded (`GOMAXPROCS=1`, `VITEST_MAX_WORKERS=1`, `ERL_FLAGS='+S 1:1'`, q9gate concurrency 1) so it fits a small machine; an already-set variable replaces the default. "gate.report.json" records every selected and skipped lane.
 
 Every profile first runs `doclint.mjs`. The pre-commit hook runs `pnpm gate:fast` (doc checks, tracker check, and the `scope`, `format`, `hygiene` and `secrets` lanes on staged files). The `generated` lane is too slow for the hook, so run `pnpm run check:generated` yourself after editing a generator input. A run with nothing in scope fails in the `scope` lane; set `GATE_ALLOW_EMPTY=1` only when that is intended.
 
