@@ -19,7 +19,7 @@ const { Component: CallDetails, preload: preloadDetails } = preloadable(() => im
 const ConnectionNotice = lazy(() => import("../connection-notice/ConnectionNotice").then((module) => ({ default: module.ConnectionNotice })));
 
 export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
-  const { spaceName, duration = 0, isRecording = false, layout = "focus", onLayoutChange, className } = props;
+  const { spaceName, duration = 0, layout = "focus", onLayoutChange, className } = props;
   const remaining = props.timeLeft != null && props.timeLeft <= 600 ? props.timeLeft : null;
   const timer = remaining === null ? formatDuration(duration) : `${formatDuration(remaining)} left`;
   const timerStyle = remaining === null ? undefined : { color: remaining <= 60 ? "var(--chalk-danger-text)" : "var(--chalk-warning)" };
@@ -130,12 +130,6 @@ export const SpaceHeader = React.memo<SpaceHeaderProps>((props) => {
           </ChalkPopover>
         )}
         {phone ? null : noticeSlot}
-        {isRecording ? (
-          <span className="chalk-shell-recording" role="status" aria-label="This call is being recorded">
-            <i aria-hidden="true" />
-            <span>Recording</span>
-          </span>
-        ) : null}
       </div>
       {phone ? noticeSlot : null}
       {props.notices}
