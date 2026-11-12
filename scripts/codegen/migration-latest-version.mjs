@@ -1,8 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { repositoryRoot } from "../lib/repository.mjs";
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const migrationsDirectory = path.join(repositoryRoot, "apps/api/db/migrations");
 const embedPath = path.join(migrationsDirectory, "embed.go");
 const latestVersionPattern = /^(const LatestVersion int64 = )(\d+)$/m;
