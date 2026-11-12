@@ -43,7 +43,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationClaims do
 
   defp read_operation_row(episode, id) do
     case Postgrex.query(
-           Database.connection(episode, 1),
+           Database.alternate_connection(episode),
            SQL.read_operation(),
            Scope.episode(episode) ++ [id],
            timeout: 1_000

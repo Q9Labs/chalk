@@ -6,10 +6,11 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
   alias ChalkSync.Chat.Repository.SQL
   alias ChalkSync.Contract.GeneratedV1
   alias ChalkSync.Database
+  alias ChalkSync.Database.TransactionSettings
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.UUID
 
-  @transaction_timeout_ms 3_000
+  @transaction_timeout_ms TransactionSettings.transaction_timeout_ms()
   @limits GeneratedV1.limits()
   @page_encoded_bytes @limits["chatPageEncodedBytes"]
   @correlation_reserved_bytes @limits["correlationReservedBytes"]
@@ -31,6 +32,13 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
   def read(%EpisodeKey{}, _request), do: {:error, :invalid_payload}
 
   defp read_transaction(episode, direction, cursor, limit) do
+    Database.guard(
+      fn -> run_read(episode, direction, cursor, limit) end,
+      {:error, :dependency_unavailable}
+    )
+  end
+
+  defp run_read(episode, direction, cursor, limit) do
     case Postgrex.transaction(
            Database.connection(episode),
            fn connection ->
@@ -44,10 +52,6 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
       {:error, {:error, reason}} -> {:error, reason}
       {:error, _reason} -> {:error, :dependency_unavailable}
     end
-  rescue
-    _exception -> {:error, :dependency_unavailable}
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
   end
 
   defp read_in_transaction(connection, episode, direction, cursor, limit) do
@@ -206,7 +210,7 @@ defmodule ChalkSync.Chat.Repository.Postgres.Page do
   end
 
   defp configure_transaction(connection) do
-    Postgrex.query!(connection, SQL.transaction_settings(), [])
+    Postgrex.query!(connection, TransactionSettings.sql(:default), [])
   end
 
   defp space_params(episode) do

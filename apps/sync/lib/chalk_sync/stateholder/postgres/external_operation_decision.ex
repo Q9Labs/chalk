@@ -91,13 +91,13 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationDecision do
         [Scope.uuid(identity.participant_id), operation.request_key]
 
     case Postgrex.query(
-           Database.connection(identity.episode, 1),
+           Database.alternate_connection(identity.episode),
            SQL.select_operation_receipt(),
            params,
            timeout: 1_000
          ) do
       {:ok, %{rows: [row]}} ->
-        connection = Database.connection(identity.episode, 1)
+        connection = Database.alternate_connection(identity.episode)
         {:ok, from_receipt(connection, identity, operation, row)}
 
       {:ok, %{rows: []}} ->
@@ -114,7 +114,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationDecision do
     params = Scope.episode(episode) ++ [Atom.to_string(operation.name), operation.request_key]
 
     case Postgrex.query(
-           Database.connection(episode, 1),
+           Database.alternate_connection(episode),
            SQL.select_internal_operation(),
            params,
            timeout: 1_000
