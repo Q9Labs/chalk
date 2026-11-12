@@ -113,12 +113,6 @@ type updateTenantEndpointRequest struct {
 	Body     updateTenantRequest
 }
 
-func mountTenantRoutes(r chi.Router, service TenantService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range tenantEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
-}
-
 func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []RouteEndpoint {
 	return []RouteEndpoint{
 		createTenantEndpoint(service),

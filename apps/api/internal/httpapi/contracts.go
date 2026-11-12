@@ -59,33 +59,13 @@ type APIRouteContract struct {
 	Errors         []APIError
 }
 
+// PreviewRouteContracts lists the contract of every public route by building the
+// router's route groups without services.
 func PreviewRouteContracts() []APIRouteContract {
-	endpoints := make([]RouteEndpoint, 0)
-	endpoints = append(endpoints, problemReportEndpoints(nil, nil, RateLimitOptions{})...)
-	endpoints = append(endpoints, cancelParticipantJoinEndpoint(nil, nil))
-	endpoints = append(endpoints, participantEpisodeStatusEndpoint(nil, nil))
-	endpoints = append(endpoints, connectionReportEndpoint(nil))
-	endpoints = append(endpoints, callStatsEndpoint(nil))
-	endpoints = append(endpoints, tenantEndpoints(nil, nil)...)
-
-	endpoints = append(endpoints, membershipEndpoints(nil, nil)...)
-
-	endpoints = append(endpoints, spaceEndpoints(nil, nil)...)
-	endpoints = append(endpoints, recordingPreparationEndpoints(nil, nil)...)
-	endpoints = append(endpoints, recordingEntranceEndpoints(nil, nil, nil, nil)...)
-	endpoints = append(endpoints, apiKeyEndpoints(nil, nil)...)
-	endpoints = append(endpoints, mcpOAuthConnectionEndpoints(nil, nil)...)
-	endpoints = append(endpoints, episodeLifecycleEndpoints(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)...)
-	endpoints = append(endpoints, sfuSignalingEndpoints(nil, nil, nil, nil, nil)...)
-	endpoints = append(endpoints, chatAttachmentEndpoints(nil, nil)...)
-	endpoints = append(endpoints, whiteboardFileEndpoints(nil, nil)...)
-	endpoints = append(endpoints, recordingEndpoints(nil, nil, nil, nil)...)
-	endpoints = append(endpoints, getRecordingCapturePoolEndpoint(nil, nil))
-	endpoints = append(endpoints, transcriptArtifactEndpoints(nil, nil, nil, nil)...)
-	endpoints = append(endpoints, transcriptTextEndpoint(nil, nil, nil, nil))
-
-	endpoints = append(endpoints, webhookEndpoints(nil, nil)...)
-	endpoints = append(endpoints, publicInviteEndpoints(nil, nil)...)
+	var endpoints []RouteEndpoint
+	for _, group := range v1RouteGroups(Options{}) {
+		endpoints = append(endpoints, group.endpoints...)
+	}
 	return routeContracts(endpoints)
 }
 

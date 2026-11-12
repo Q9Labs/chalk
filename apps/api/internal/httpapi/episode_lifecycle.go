@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
@@ -221,12 +220,6 @@ type externalOperationResponse struct {
 	DeadlineGeneration          *int64  `json:"deadline_generation,omitempty"`
 	Status                      string  `json:"status"`
 	CreatedAt                   string  `json:"created_at"`
-}
-
-func mountEpisodeLifecycleRoutes(r chi.Router, spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range episodeLifecycleEndpoints(spacesService, tenantsService, lifecycle, tokens, refresh, mediaTokens, mediaVerifier, active, generations, media, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService TenantService, lifecycle EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, mediaVerifier ParticipantMediaVerifier, active ActiveParticipantAuthorizer, generations ParticipantGenerationAuthorizer, media MediaPlaneResolver, authorizer TenantAuthorizer) []RouteEndpoint {

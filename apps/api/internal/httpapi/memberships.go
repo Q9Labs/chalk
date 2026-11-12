@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/authorization"
 	"github.com/q9labs/chalk/apps/api/internal/memberships"
@@ -69,12 +68,6 @@ type updateMembershipEndpointRequest struct {
 	TenantID     utilities.ID
 	MembershipID utilities.ID
 	Body         updateMembershipRequest
-}
-
-func mountMembershipRoutes(r chi.Router, service MembershipService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range membershipEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func membershipEndpoints(service MembershipService, authorizer TenantAuthorizer) []RouteEndpoint {

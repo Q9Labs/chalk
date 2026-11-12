@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/apikeys"
 
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
@@ -111,12 +110,6 @@ type rotateAPIKeyRequest struct {
 	apiKeyIDsRequest
 	RequestKey string
 	Body       rotateAPIKeyBody
-}
-
-func mountAPIKeyRoutes(r chi.Router, service APIKeyService, authorizer TenantAuthorizer, limits RateLimitOptions) {
-	for _, endpoint := range apiKeyEndpoints(service, authorizer) {
-		endpoint.Mount(r, limits)
-	}
 }
 
 func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer) []RouteEndpoint {
