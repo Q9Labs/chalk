@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
+import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
@@ -350,7 +350,14 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
-    onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
+    onToggleRecording: () => {
+      const action = recordingStatus === "recording" ? "stop" : "start";
+      void run(() =>
+        (action === "stop" ? client.recording.stop() : client.recording.start()).catch((cause: unknown) => {
+          throw recordingFailure(cause, action);
+        }),
+      );
+    },
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
