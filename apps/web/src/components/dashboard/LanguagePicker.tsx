@@ -11,7 +11,6 @@ const POPOVER_HEIGHT = 400;
 
 /** What a row stands for. `null` is "use the account default". */
 type Choice = TranscriptLanguage | null;
-
 type Row = { readonly key: string; readonly choice: Choice; readonly option: LanguageOption | null; readonly note?: string };
 type Section = { readonly title: string | null; readonly rows: readonly Row[] };
 

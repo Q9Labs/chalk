@@ -11,11 +11,7 @@ export const CHALK_EMBEDDED_WHITEBOARD_MAX_MESSAGE_BYTES = 32 * 1024 * 1024;
 export const CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS = 2_048;
 
 export type ChalkEmbeddedWhiteboardTheme = "light" | "dark";
-export type ChalkEmbeddedWhiteboardViewport = {
-  readonly width: number;
-  readonly height: number;
-  readonly scale: number;
-};
+export type ChalkEmbeddedWhiteboardViewport = { readonly width: number; readonly height: number; readonly scale: number };
 
 export type ChalkEmbeddedWhiteboardOperationResult = { readonly requestId: string; readonly ok: true; readonly result?: unknown } | { readonly requestId: string; readonly ok: false; readonly error: { readonly code: string; readonly message: string; readonly recoverable: boolean } };
 
