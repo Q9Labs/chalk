@@ -111,7 +111,8 @@
   font-weight: 600;
 }
 
-.legal-document a {
+/* `.site a` drops underlines for the site's chrome, so prose links name the site scope to keep theirs. */
+.site .legal-document a {
   color: var(--chalk-text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
