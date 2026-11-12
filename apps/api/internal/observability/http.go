@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,15 +48,77 @@ func LogHTTPError(ctx context.Context, method, route, code string, err error) {
 	if len(detail) > 256 {
 		detail = detail[:256]
 	}
-	logger.ErrorContext(ctx, "http endpoint failed", "event", "http.failure",
-		"method", method, "route", route, "code", code, "error", detail)
+	attrs := []any{"event", "http.failure", "method", method, "route", route, "code", code, "error", detail}
+	attrs = append(attrs, UpstreamAttrs(err)...)
+	logger.ErrorContext(ctx, "http endpoint failed", attrs...)
+}
+
+// UpstreamAttrs returns the status and code a provider answered with. The
+// public response may carry a different status, so this is where a refusal
+// such as a 403 behind a 502 stays visible. A provider code that is not a short
+// lowercase token is replaced, because the provider controls it.
+func UpstreamAttrs(err error) []any {
+	upstream, ok := mediaplane.UpstreamOf(err)
+	if !ok {
+		return nil
+	}
+	code := upstream.UpstreamCode()
+	if !upstreamCodePattern.MatchString(code) {
+		code = "unsafe"
+	}
+	return []any{"upstream_status", upstream.UpstreamStatus(), "upstream_code", code}
+}
+
+var upstreamCodePattern = regexp.MustCompile(`^[a-z0-9_.-]{1,64}$`)
+
+// failureRecorder is implemented by the request logger's response writer.
+type failureRecorder interface {
+	recordErrorCode(code string)
+	recordUpstream(attrs []any)
+}
+
+// RecordErrorCode tells the request log which API error code the response
+// carries, so a 4xx names the rule that refused it. Writers that do not belong
+// to the request logger are skipped.
+func RecordErrorCode(w http.ResponseWriter, code string) {
+	if recorder, ok := findFailureRecorder(w); ok {
+		recorder.recordErrorCode(code)
+	}
+}
+
+// RecordUpstream adds the provider's status and code behind err to the request log.
+func RecordUpstream(w http.ResponseWriter, err error) {
+	if attrs := UpstreamAttrs(err); attrs != nil {
+		if recorder, ok := findFailureRecorder(w); ok {
+			recorder.recordUpstream(attrs)
+		}
+	}
+}
+
+func findFailureRecorder(w http.ResponseWriter) (failureRecorder, bool) {
+	for w != nil {
+		if recorder, ok := w.(failureRecorder); ok {
+			return recorder, true
+		}
+		unwrapper, ok := w.(interface{ Unwrap() http.ResponseWriter })
+		if !ok {
+			return nil, false
+		}
+		w = unwrapper.Unwrap()
+	}
+	return nil, false
 }
 
 type responseRecorder struct {
 	http.ResponseWriter
-	status int
-	bytes  int
+	status    int
+	bytes     int
+	errorCode string
+	upstream  []any
 }
+
+func (r *responseRecorder) recordErrorCode(code string) { r.errorCode = code }
+func (r *responseRecorder) recordUpstream(attrs []any)  { r.upstream = attrs }
 
 type RequestLogConfig struct {
 	Mode          RequestLogMode
@@ -93,6 +156,8 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				route = "unmatched"
 			}
 
+			tagRequestSpans(r.Context(), route)
+
 			if !shouldLogRequest(config, recorder.status, duration) {
 				return
 			}
@@ -107,6 +172,13 @@ func RequestMiddleware(logger *slog.Logger, configs ...RequestLogConfig) func(ht
 				"duration_ms", milliseconds(duration),
 				"outcome", requestOutcome(recorder.status),
 			}
+			if tenantID := requestTenantID(r.Context()); tenantID != "" {
+				attrs = append(attrs, "tenant_id", tenantID)
+			}
+			if recorder.errorCode != "" {
+				attrs = append(attrs, "error_code", recorder.errorCode)
+			}
+			attrs = append(attrs, recorder.upstream...)
 			switch {
 			case recorder.status >= http.StatusInternalServerError:
 				logger.ErrorContext(r.Context(), "http request", attrs...)

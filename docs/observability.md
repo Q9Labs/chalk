@@ -128,6 +128,42 @@ later reconnects. The whiteboard client sends the same baggage member beside its
 presenter-view extensions, then retries without baggage after a 1009 close from
 an older server.
 
+### Follow a failed request
+
+Every API response names its request in the `x-chalk-journey-id` header, which CORS
+exposes to browsers. The same ID is `journey_id` on the request log line, on every log
+and span started under the request, and on the journey ledger rows the request
+writes. The client never sends one: a ledger lifecycle is keyed by its journey ID, so
+an ID shared by a whole session would merge unrelated joins and recordings. A session
+is followed by `session.id`; one failure is followed by its journey ID.
+
+The SDK keeps the journey ID and status of the latest failed API response
+(`lastFailedRequest`), and web problem-report diagnostics print it as
+`Last failed request: <journey id> (HTTP <status>)` beside the session ID.
+Connection reports and call stats carry the session ID only, because they describe a
+device, not one request.
+
+```apl
+| where journey_id == "<journey-id>" and event == "http.request"
+```
+
+That `http.request` line carries `route` (the matched pattern, `unmatched` when none),
+`status`, `tenant_id` when the route has one, and `error_code`, the public API code of
+any failed response, so a 403 or 409 on join names the rule that refused it. Lines
+for responses without an API error body have no `error_code`. When a provider's refusal
+sits behind another public status, the line also carries `upstream_status` and
+`upstream_code`, as does the `http.failure` line of a 5xx: a 403 from the own SFU
+that the API turns into a 502 still shows its 403 and the SFU's code. A code that is not
+a short lowercase token is logged as `unsafe`, and provider message text never is.
+
+The server span and the `journey.phase.http` span carry `http.route` and, when the
+route has a valid `{tenant_id}`, `tenant.id`. Group latency by `http.route`, never
+by the URL path.
+
+The API injects W3C `traceparent` into its calls to the own SFU and into webhook
+deliveries, so a receiver that traces sees the delivery attempt as its parent.
+`baggage` is not forwarded: the session ID stays inside Chalk's services.
+
 ### Measure client readiness for the own SFU
 
 `chalk.api.access_grant.issuance` has bounded tags `outcome`, `reason`, and
