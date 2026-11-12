@@ -181,34 +181,27 @@ export function truthIssues(samples) {
   ]);
 }
 
-// SDK release guests have no React UI. Play the SDK's gated received tracks.
-/** Binds the sink the way AudioOutput does, or the SDK sees bytes with no element and cannot tell this guest from a listener who hears nothing. */
-function bindAudioSink(track, element) {
-  if (track.kind !== "audio") return;
-  element.chalkObservation?.detach();
-  element.chalkObservation = window.proofClient.media?.observeAudioElement?.(track, element);
-}
-
-function proofElement(remote) {
-  const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
-  return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
-}
-
-/** Puts one received track on its element and returns whether the element took a new track. */
-function attachProofTrack(remote, element) {
-  element.dataset.participantId = remote.participantId;
-  element.dataset.proofSource = remote.source;
-  const rebound = element.srcObject?.getTracks()[0] !== remote.track;
-  if (rebound) element.srcObject = new MediaStream([remote.track]);
-  if (element instanceof HTMLVideoElement) element.muted = true;
-  document.body.append(element);
-  if (rebound) bindAudioSink(remote.track, element);
-}
-
+// SDK release guests have no React UI. Play the SDK's gated received tracks. Callers send this function to the page as source text, so every helper lives inside it.
 export async function playProofMedia() {
+  // Binds the sink the way AudioOutput does, or the SDK sees bytes with no element and cannot tell this guest from a listener who hears nothing.
+  function bindAudioSink(track, element) {
+    if (track.kind !== "audio") return;
+    element.chalkObservation?.detach();
+    element.chalkObservation = window.proofClient.media?.observeAudioElement?.(track, element);
+  }
+  function proofElement(remote) {
+    const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
+    return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
+  }
   for (const remote of window.proofClient.getSnapshot().media.remote) {
     const element = proofElement(remote);
-    attachProofTrack(remote, element);
+    element.dataset.participantId = remote.participantId;
+    element.dataset.proofSource = remote.source;
+    const rebound = element.srcObject?.getTracks()[0] !== remote.track;
+    if (rebound) element.srcObject = new MediaStream([remote.track]);
+    if (element instanceof HTMLVideoElement) element.muted = true;
+    document.body.append(element);
+    if (rebound) bindAudioSink(remote.track, element);
     await element.play().then(
       () => element.chalkObservation?.played(undefined),
       (cause) => {

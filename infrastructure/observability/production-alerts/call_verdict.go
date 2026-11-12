@@ -238,7 +238,12 @@ func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 
 	for _, r := range runsOf(samples, func(s sample) bool { return s.recv != nil && *s.recv == 0 && !hiddenByViewer(s) }) {
 		duration := r.to.Sub(r.from)
-		if duration <= silence || !senderWasSending(samples, r) || !receivedBefore(samples, r) {
+		// A receiver that has taken no media yet is still starting up, so only a start that fails to finish within the starved window counts.
+		needed := silence
+		if !receivedBefore(samples, r) {
+			needed = long
+		}
+		if duration <= needed || !senderWasSending(samples, r) {
 			continue
 		}
 		add("media_silence", r.participant, r.from, r.to, fmt.Sprintf("received no media for %d s while a sender was sending", seconds(duration)), silenceCause(rows, r), false)
@@ -384,10 +389,22 @@ var joinStepSides = map[string]string{
 
 // joinCause reads the API refusal that shares the report's journey, else the step the client report says failed first.
 // The report is a JSON string; one that does not parse names no step.
+// failedRequest is a 5xx or transport failure (`http.failure`) or a 4xx answer, which is logged as `http.request` with its status.
+func failedRequest(row logRow) bool {
+	status, _ := row.number("status")
+	return row.event == "http.failure" || (row.event == "http.request" && status >= 400)
+}
+
 func joinCause(rows []logRow, report *logRow) verdictCause {
 	for i := range rows {
-		if rows[i].event == "http.failure" && report.journey != "" && rows[i].journey == report.journey {
-			return verdictCause{"the API refused the request (" + codeOrNotLogged(rows[i].text("error_code")) + ")", "access_initialize", "API"}
+		sameJourney := report.journey != "" && rows[i].journey == report.journey
+		sameTrace := report.text("trace_id") != "" && rows[i].text("trace_id") == report.text("trace_id")
+		if failedRequest(rows[i]) && (sameJourney || sameTrace) {
+			code := rows[i].text("error_code")
+			if status, ok := rows[i].number("status"); code == "" && ok && status > 0 {
+				code = "HTTP " + strconv.Itoa(int(status))
+			}
+			return verdictCause{"the API refused the request (" + codeOrNotLogged(code) + ")", "access_initialize", "API"}
 		}
 	}
 	var parsed struct {
@@ -476,6 +493,32 @@ func orNotLogged(value string) string {
 	return value
 }
 
+// openPause is the latest pause that no later resume or start of the same subscription ended by the time the run ended.
+func openPause(events []*logRow, limit time.Time) *logRow {
+	last := map[string]*logRow{}
+	for _, event := range events {
+		switch event.event {
+		case "sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started":
+			if !event.time.After(limit) {
+				if previous := last[subscriptionKey(event)]; previous == nil || !event.time.Before(previous.time) {
+					last[subscriptionKey(event)] = event
+				}
+			}
+		}
+	}
+	var open *logRow
+	for _, event := range last {
+		if event.event == "sfu.subscription.paused" && (open == nil || event.time.After(open.time)) {
+			open = event
+		}
+	}
+	return open
+}
+
+func subscriptionKey(event *logRow) string {
+	return strings.Join([]string{event.text("publisher_id"), event.text("source"), event.text("media_kind"), event.text("mid")}, "/")
+}
+
 func silenceCause(rows []logRow, r sampleRun) verdictCause {
 	events := nodeEvents(rows, r.conn)
 	resumed := false
@@ -490,7 +533,7 @@ func silenceCause(rows []logRow, r sampleRun) verdictCause {
 			replacement = &rows[i]
 		}
 	}
-	if paused := lastBefore(events, "sfu.subscription.paused", r.to); paused != nil && !resumed {
+	if paused := openPause(events, r.to); paused != nil {
 		side := map[string]string{"viewer": "viewer", "congestion": "network"}[paused.text("reason")]
 		if side == "" {
 			side = "SFU"
@@ -663,8 +706,7 @@ type endedEpisode struct {
 	endedAt                         time.Time
 }
 
-// endedEpisodesSQL lists Episodes that ended a moment ago and had a Participant. The collector looks at a one-minute
-// band so that each Episode is judged once, when its last SDK uploads have landed.
+// endedEpisodesSQL lists Episodes that ended a moment ago and had a Participant, once their last SDK uploads have landed.
 const endedEpisodesSQL = `select episodes.tenant_id::text, coalesce(tenants.name, ''), episodes.id::text, episodes.ended_at from episodes
 left join tenants on tenants.id = episodes.tenant_id
 where status = 'ended' and episodes.ended_at <= now() - $1::int * interval '1 second' and episodes.ended_at > now() - $2::int * interval '1 second'
@@ -762,12 +804,15 @@ func collectCallVerdictsFromEnv(ctx context.Context, client *http.Client) []snap
 }
 
 // An Episode is judged between callVerdictSettle and callVerdictSettle+callVerdictBand after it ended: the wait lets
-// the last SDK uploads land, and the band is the collector's period, so each Episode is judged once.
+// the last SDK uploads land, and the band is longer than the longest gap between two collector runs (the timer's period
+// plus its accuracy, which chalk-alert-state.timer sets and a test reads), so no Episode falls between two runs. An
+// Episode that ended near the band's start can be judged by two runs; both write the same rule name, which the alert
+// monitor treats as one alert.
 //
 // The verdict row is therefore written no later than callVerdictSettle + callVerdictBand + callVerdictBudget after the
 // Episode ended, which call-verdict.json bounds with flag_within_ms.
 const (
 	callVerdictSettle = 30 * time.Second
-	callVerdictBand   = time.Minute
+	callVerdictBand   = 70 * time.Second
 	callVerdictBudget = 12 * time.Second
 )

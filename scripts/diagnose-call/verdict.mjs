@@ -82,20 +82,35 @@ function reportEvents(report) {
   }
 }
 
+/** A 4xx answer is logged as `http.request` with its status; `http.failure` is the 5xx and transport case. */
+const failedRequest = (row) => row.event === "http.failure" || (row.event === "http.request" && number(row, "status") >= 400);
+
 function joinCause(rows, report) {
-  const failure = rows.find((row) => row.event === "http.failure" && row.journey && row.journey === report.journey);
-  if (failure) return cause(`the API refused the request (${attr(failure, "error_code") ?? "code not logged"})`, "access_initialize", "API");
+  const failure = rows.find((row) => failedRequest(row) && ((row.journey && row.journey === report.journey) || (row.trace && row.trace === report.trace)));
+  if (failure) return cause(`the API refused the request (${attr(failure, "error_code") ?? (number(failure, "status") ? `HTTP ${number(failure, "status")}` : "code not logged")})`, "access_initialize", "API");
   const step = reportEvents(report).find((event) => event.event === "space_join_span" && event.outcome === "failed" && event.step in JOIN_STEP_SIDES);
   if (step) return cause(`the join failed at ${step.step} (${step.code ?? "code not logged"}) after ${seconds(step.duration_ms ?? 0)} s`, step.step, JOIN_STEP_SIDES[step.step]);
   return cause("unknown: no failed API request shares the report's journey id and the report names no failed step", "joining", "unknown");
+}
+
+const SUBSCRIPTION_EVENTS = ["sfu.subscription.paused", "sfu.subscription.resumed", "sfu.subscription.started"];
+const SUBSCRIPTION_KEY = ["publisher_id", "source", "media_kind", "mid"];
+
+/** The latest pause that no later resume or start of the same subscription ended by the time the run ended. */
+function openPause(events, run) {
+  const last = new Map();
+  for (const row of [...events].sort((a, b) => a.time - b.time)) {
+    if (row.time <= run.to && SUBSCRIPTION_EVENTS.includes(row.event)) last.set(SUBSCRIPTION_KEY.map((name) => attr(row, name) ?? "").join("/"), row);
+  }
+  return [...last.values()].filter((row) => row.event === "sfu.subscription.paused").sort((a, b) => a.time - b.time).at(-1);
 }
 
 function silenceCause(rows, run) {
   const events = nodeEvents(rows, run.connection);
   const replacement = rows.findLast((row) => row.event === "media.connection_replacement" && row.participant === run.participant && row.time <= run.to);
   const resumed = events.some((row) => row.time >= run.from && (row.event === "sfu.subscription.resumed" || row.event === "sfu.subscription.started"));
-  const paused = events.findLast((row) => row.event === "sfu.subscription.paused" && row.time <= run.to);
-  if (paused && !resumed) return cause(`the node paused the subscription (${attr(paused, "reason") ?? "reason not logged"}) and did not resume it`, "forwarding", PAUSE_SIDES[attr(paused, "reason")] ?? "SFU");
+  const paused = openPause(events, run);
+  if (paused) return cause(`the node paused the subscription (${attr(paused, "reason") ?? "reason not logged"}) and did not resume it`, "forwarding", PAUSE_SIDES[attr(paused, "reason")] ?? "SFU");
   const lost = events.findLast((row) => row.event === "sfu.source.lease_lost" && row.time <= run.to);
   if (lost) return cause(`the source lost its lease on the node (${attr(lost, "cause") ?? "cause not logged"})`, "publishing", "SFU");
   if (replacement && !resumed) return cause(`the connection was replaced (${attr(replacement, "replacement_cause") ?? "cause not logged"}) and the node logged no subscription starting on the new one`, "reconnecting", "API");
@@ -128,8 +143,8 @@ export function diagnose(rows, thresholds) {
   }
 
   for (const run of runsOf(samples, (row) => number(row, "recv_bitrate_kbps") === 0 && !hiddenByViewer(row))) {
-    if (run.to - run.from <= thresholds.silence_ms) continue;
-    if (!senderWasSending(samples, run) || !receivedBefore(samples, run)) continue;
+    // A receiver that has taken no media yet is still starting up, so only a start that fails to finish within the starved window counts.
+    if (run.to - run.from <= (receivedBefore(samples, run) ? thresholds.silence_ms : thresholds.starved_ms) || !senderWasSending(samples, run)) continue;
     add("media_silence", run.participant, run.from, run.to, `received no media for ${seconds(run.to - run.from)} s while a sender was sending`, silenceCause(rows, run));
   }
 

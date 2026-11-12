@@ -3,6 +3,7 @@ import test from "node:test";
 import { diagnoseRows, thresholds } from "./index.mjs";
 import { assertEveryRowJoined, joinByIds, joinedShare, SOURCES } from "./join.mjs";
 import { render } from "./render.mjs";
+import { readSources } from "./sources.mjs";
 import { normalizeRow } from "./rows.mjs";
 import { verdictLine } from "./verdict.mjs";
 
@@ -66,6 +67,22 @@ test("a node that paused the subscription for congestion is the network, for the
   assert.equal(silence("planner").side, "SFU");
 });
 
+test("a pause counts only while no later resume of the same subscription has ended it", () => {
+  const event = (seconds, name, mid) => ({ _time: at(seconds), "service.name": "chalk-sfu", attributes: { event: name, episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", publisher_id: "publisher", source: "camera", media_kind: "video", mid, reason: "viewer" } });
+  const base = dormantReplacementCall().filter((row) => !String(row.attributes.event).startsWith("media."));
+  const cause = (...events) => verdictOf([...base, ...events]).findings.find((finding) => finding.kind === "media_silence")?.cause ?? "";
+  assert.match(cause(event(100, "sfu.subscription.paused", "0")), /paused the subscription/u);
+  assert.doesNotMatch(cause(event(100, "sfu.subscription.paused", "0"), event(110, "sfu.subscription.resumed", "0")), /paused the subscription/u);
+  assert.match(cause(event(100, "sfu.subscription.paused", "0"), event(110, "sfu.subscription.resumed", "1")), /paused the subscription/u);
+});
+
+test("a source that runs past the deadline is listed as missing and the others are still read", async () => {
+  const hang = (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+  const { rows, missing } = await readSources({ episodeId: EPISODE, env: { AXIOM_TOKEN: "x", CHALK_LOG_DATASET: "logs" }, fetchImpl: hang, deadlineMs: 50 });
+  assert.deepEqual(rows, []);
+  assert.match(missing.join("\n"), /log dataset could not be read \(the 0\.05 s deadline passed\)/u);
+});
+
 test("a failed join names the API refusal that shares the report's journey id", () => {
   const journey = "journey-1";
   const rows = [api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: journey }), api(5, "http.failure", "viewer", { error_code: "episode.full", journey_id: journey })];
@@ -81,9 +98,13 @@ test("a replacement within 20 s of the join is flagged and one later is not", ()
   assert.deepEqual(verdictOf(late).findings, []);
 });
 
-test("a receiver that never took media is a failed start, not silence", () => {
-  const rows = [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 0, recv_height: 640 }))];
-  assert.deepEqual(verdictOf(rows).findings, []);
+test("a receiver that never took media is flagged once the start has taken longer than the starved window, and not before", () => {
+  const receiver = (to) => [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, to, () => ({ recv_bitrate_kbps: 0, recv_height: 640 }))];
+  assert.deepEqual(verdictOf(receiver(20)).findings, []);
+  assert.deepEqual(
+    verdictOf(receiver(100)).findings.map((finding) => finding.kind),
+    ["media_silence"],
+  );
 });
 
 test("a call nobody sends into is not silence, and a lone Participant who sends nothing is not a bad call", () => {

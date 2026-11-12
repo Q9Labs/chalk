@@ -47,6 +47,12 @@ export function dormantReplacementCall() {
   ];
 }
 
+/** The node paused the viewer's video at 100 s and resumed that same subscription at 110 s, so the pause is over by the time the silence ends. */
+export function resumedPauseCall() {
+  const subscription = { publisher_id: "publisher", source: "camera", media_kind: "video", mid: "0", reason: "congestion" };
+  return [...dormantReplacementCall(), node(100, "sfu.subscription.paused", "viewer", "conn-view-2", subscription), node(110, "sfu.subscription.resumed", "viewer", "conn-view-2", subscription)];
+}
+
 export function starvedViewerCall() {
   return [
     ...flow("conn-pub"),
@@ -58,7 +64,7 @@ export function starvedViewerCall() {
 
 function failedJoinCall() {
   const journey = "journey-1";
-  return [api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: journey }), api(5, "http.failure", "viewer", { error_code: "episode.full", journey_id: journey })];
+  return [api(5, "sdk.connection_report", "viewer", { trigger: "join_failed", journey_id: journey }), api(5, "http.request", "viewer", { status: 403, error_code: "episode.full", journey_id: journey })];
 }
 
 function earlyReplacementCall() {
@@ -98,6 +104,11 @@ function congestedViewerCall() {
   ];
 }
 
+/** A viewer that never took any media while a sender was sending: the start never finished. */
+function neverReceivedCall() {
+  return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 100, () => ({ recv_bitrate_kbps: 0, recv_height: 640 }))];
+}
+
 /** Every scenario the verdict rules must name, as raw rows. The Go collector reads the same file, so the two implementations agree. */
 export const scenarios = {
   "dormant replacement then silence": dormantReplacementCall,
@@ -108,4 +119,6 @@ export const scenarios = {
   "viewer hid the video itself": hiddenByViewerCall,
   "publisher sent nothing": silentPublisherCall,
   "congested viewer": congestedViewerCall,
+  "receiver never took media": neverReceivedCall,
+  "pause ended by a resume": resumedPauseCall,
 };

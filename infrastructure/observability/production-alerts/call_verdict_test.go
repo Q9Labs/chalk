@@ -148,3 +148,27 @@ func TestVerdictRowLandsWithinTheFlagBound(t *testing.T) {
 		t.Fatalf("an Episode is judged up to %s after it ends, past the %s bound in call-verdict.json", worst, bound)
 	}
 }
+
+// A run that starts late must not leave an Episode between two bands, so the band is longer than the timer's longest gap.
+func TestVerdictBandCoversTheTimerGap(t *testing.T) {
+	timer, err := os.ReadFile("chalk-alert-state.timer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seconds := func(key string) time.Duration {
+		for _, line := range strings.Split(string(timer), "\n") {
+			if value, ok := strings.CutPrefix(line, key+"="); ok {
+				duration, err := time.ParseDuration(strings.NewReplacer("min", "m", "sec", "s").Replace(strings.TrimSpace(value)))
+				if err != nil {
+					t.Fatalf("%s in chalk-alert-state.timer: %v", key, err)
+				}
+				return duration
+			}
+		}
+		t.Fatalf("chalk-alert-state.timer has no %s", key)
+		return 0
+	}
+	if gap := seconds("OnUnitActiveSec") + seconds("AccuracySec"); callVerdictBand < gap {
+		t.Fatalf("the band is %s but two runs can start %s apart, so an Episode can be skipped", callVerdictBand, gap)
+	}
+}
