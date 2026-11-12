@@ -135,7 +135,9 @@ function runLatencyStep({ leaseBusy, kitStatus = 0 }) {
   try {
     mkdirSync(join(dir, "features/scorecard"), { recursive: true });
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "scripts/prod-proof"), { recursive: true });
     mkdirSync(join(dir, "bin"));
+    for (const file of ["registry.json", "registry.mjs"]) copyFileSync(resolve(root, "scripts/prod-proof", file), join(dir, "scripts/prod-proof", file));
     writeFileSync(join(dir, "features/scorecard/own-sfu.mjs"), "");
     const lock = join(dir, "scripts/staging-sfu/staging-lock");
     writeFileSync(
