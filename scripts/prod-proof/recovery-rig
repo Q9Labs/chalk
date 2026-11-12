@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Faults on one guest's network for recovery.mjs, on a Linux host with root (an Instabox machine).
+# Faults on one guest's network for recovery.mjs, on a Linux host where the user can sudo (an Instabox machine).
 #
 #   recovery-rig up            # make namespace "c2" with two uplinks and print the launcher for --guest2-chromium
 #   recovery-rig blackout      # c2's packets vanish, links stay up (a stalled Wi-Fi)
@@ -9,6 +9,7 @@
 #
 # Guest 2's Chromium runs inside c2 through the launcher; guest 1 stays on the host's own network, so only guest 2 loses its network.
 set -euo pipefail
+[[ $EUID -eq 0 ]] || exec sudo -E env "PATH=$PATH" "$0" "$@"
 
 ns=c2
 dir=/tmp/recovery-rig
@@ -39,7 +40,9 @@ case "${1:-}" in
     ip netns exec "$ns" ip route add default via 10.200.1.1
     mkdir -p "$dir"
     chromium="$(cd sdks/typescript/client && node -e 'console.log(require("playwright").chromium.executablePath())')"
-    printf '#!/usr/bin/env bash\nexec ip netns exec %s %q "$@"\n' "$ns" "$chromium" > "$launcher"
+    # The browser runs as the user who called the rig, not as root.
+    printf '#!/usr/bin/env bash\nexec sudo ip netns exec %s setpriv --reuid=%s --regid=%s --init-groups env HOME=%q %q "$@"\n' "$ns" "${SUDO_UID:-0}" "${SUDO_GID:-0}" "${HOME}" "$chromium" > "$launcher"
+    chmod 755 "$dir"
     chmod +x "$launcher"
     echo "$launcher"
     ;;
