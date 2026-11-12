@@ -5,9 +5,7 @@ import { slugOfFile } from "./slug.ts";
 const loaders = import.meta.glob<{ default: MDXContent }>("./content/*.mdx");
 
 /** The lazily loaded article for each docs slug, one per `content/*.mdx` file. */
-export const DOCS_CONTENT: ReadonlyMap<string, LazyExoticComponent<MDXContent>> = new Map(
-  Object.entries(loaders).map(([path, load]) => [slugOfFile(path.replace(/^.*\//, "").replace(/\.mdx$/, "")), lazy(load)]),
-);
+export const DOCS_CONTENT: ReadonlyMap<string, LazyExoticComponent<MDXContent>> = new Map(Object.entries(loaders).map(([path, load]) => [slugOfFile(path.replace(/^.*\//, "").replace(/\.mdx$/, "")), lazy(load)]));
 
 export function docsContent(slug: string): LazyExoticComponent<MDXContent> {
   const content = DOCS_CONTENT.get(slug);

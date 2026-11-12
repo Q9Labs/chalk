@@ -383,13 +383,10 @@ function useExcalidrawApiReady(apiRef: MutableRefObject<ExcalidrawImperativeAPI 
 }
 
 function useExcalidrawSceneHandlers(apiRef: MutableRefObject<ExcalidrawImperativeAPI | null>, engineRef: MutableRefObject<ExcalidrawCollabEngine | null>, onSelectedLatexChange: (latex: string | null) => void) {
-  const handleChange = useCallback(
-    () => {
-      engineRef.current?.handleChange();
-      onSelectedLatexChange(selectedMathLatex(apiRef.current));
-    },
-    [apiRef, engineRef, onSelectedLatexChange],
-  );
+  const handleChange = useCallback(() => {
+    engineRef.current?.handleChange();
+    onSelectedLatexChange(selectedMathLatex(apiRef.current));
+  }, [apiRef, engineRef, onSelectedLatexChange]);
   const handlePointerUpdate = useCallback(
     (payload: { pointer: { x: number; y: number } }) => {
       engineRef.current?.handlePointerUpdate(payload);
@@ -538,7 +535,7 @@ function useEngineHandle(onEngineReady: ((engine: WhiteboardEngineHandle) => voi
     [handleApiReady],
   );
   const onChange = useCallback(
-    (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
+    (_elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
       handleChange();
       if (!appState.isLoading) setLoaded(true);
       // A shared background from an older board must not cover the surface its host paints.

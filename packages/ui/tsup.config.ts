@@ -28,12 +28,5 @@ export default defineConfig({
   outDir: "./dist",
   platform: "node",
   splitting: false,
-  external: [
-    "react",
-    "@base-ui/react",
-    "@q9labsai/chalk-assets",
-    "class-variance-authority",
-    "clsx",
-    "tailwind-merge",
-  ],
+  external: ["react", "@base-ui/react", "@q9labsai/chalk-assets", "class-variance-authority", "clsx", "tailwind-merge"],
 });
