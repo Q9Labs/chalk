@@ -92,12 +92,17 @@ func exportable(kind media.FieldSource, value slog.Value) bool {
 	case media.Enum, media.ServerAssigned, media.RestrictedID:
 		return value.Kind() == slog.KindString && token.MatchString(value.String())
 	case media.Number:
-		switch value.Kind() {
-		case slog.KindInt64, slog.KindUint64, slog.KindBool:
-			return true
-		case slog.KindFloat64:
-			return !math.IsNaN(value.Float64()) && !math.IsInf(value.Float64(), 0)
-		}
+		return exportableNumber(value)
+	}
+	return false
+}
+
+func exportableNumber(value slog.Value) bool {
+	switch value.Kind() {
+	case slog.KindInt64, slog.KindUint64, slog.KindBool:
+		return true
+	case slog.KindFloat64:
+		return !math.IsNaN(value.Float64()) && !math.IsInf(value.Float64(), 0)
 	}
 	return false
 }

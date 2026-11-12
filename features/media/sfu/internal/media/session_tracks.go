@@ -188,16 +188,23 @@ func validateTrackUpdates(tracks []protocol.Track) error {
 		return fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
 	for index, track := range tracks {
-		switch {
-		case track.Location == protocol.LocationLocal:
-			if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
-				return fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
-			}
-		case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
-			return fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
-		case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
-			return fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
+		if err := validateTrackUpdate(index, track); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func validateTrackUpdate(index int, track protocol.Track) error {
+	switch {
+	case track.Location == protocol.LocationLocal:
+		if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
+			return fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
+		}
+	case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
+		return fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
+	case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
+		return fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
 	}
 	return nil
 }

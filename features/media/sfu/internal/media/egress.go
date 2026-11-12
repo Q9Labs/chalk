@@ -73,18 +73,7 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 		if !strings.EqualFold(codec.MimeType, e.codec.MimeType) {
 			continue
 		}
-		binding := &egressBinding{writer: ctx.WriteStream(), ssrc: uint32(ctx.SSRC()), payloadType: uint8(codec.PayloadType)}
-		if rtx, ok := rtxFor(codecs, codec.PayloadType); ok && ctx.SSRCRetransmission() != 0 {
-			binding.rtxSSRC, binding.rtxPayloadType = uint32(ctx.SSRCRetransmission()), uint8(rtx)
-		}
-		for _, extension := range ctx.HeaderExtensions() {
-			switch extension.URI {
-			case sdp.TransportCCURI:
-				binding.twccID = uint8(extension.ID)
-			case sdp.AudioLevelURI:
-				binding.audioLevelID = uint8(extension.ID)
-			}
-		}
+		binding := newEgressBinding(ctx, codec, codecs)
 		if previous := e.binding.Swap(binding); previous != nil {
 			e.markVideo(previous, false)
 			e.transport.unbind(previous)
@@ -97,6 +86,23 @@ func (e *egressTrack) Bind(ctx webrtc.TrackLocalContext) (webrtc.RTPCodecParamet
 		return codec, nil
 	}
 	return webrtc.RTPCodecParameters{}, webrtc.ErrUnsupportedCodec
+}
+
+// newEgressBinding records the negotiated stream: its SSRCs, payload types and header extensions.
+func newEgressBinding(ctx webrtc.TrackLocalContext, codec webrtc.RTPCodecParameters, codecs []webrtc.RTPCodecParameters) *egressBinding {
+	binding := &egressBinding{writer: ctx.WriteStream(), ssrc: uint32(ctx.SSRC()), payloadType: uint8(codec.PayloadType)}
+	if rtx, ok := rtxFor(codecs, codec.PayloadType); ok && ctx.SSRCRetransmission() != 0 {
+		binding.rtxSSRC, binding.rtxPayloadType = uint32(ctx.SSRCRetransmission()), uint8(rtx)
+	}
+	for _, extension := range ctx.HeaderExtensions() {
+		switch extension.URI {
+		case sdp.TransportCCURI:
+			binding.twccID = uint8(extension.ID)
+		case sdp.AudioLevelURI:
+			binding.audioLevelID = uint8(extension.ID)
+		}
+	}
+	return binding
 }
 
 // rtxFor finds the RTX payload type that repairs payload type primary.

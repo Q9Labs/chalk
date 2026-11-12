@@ -103,16 +103,26 @@ type ackWalker struct {
 func (w *ackWalker) chunk(chunk rtcp.PacketStatusChunk) bool {
 	switch chunk := chunk.(type) {
 	case *rtcp.RunLengthChunk:
-		for range chunk.RunLength {
-			if !w.visit(chunk.PacketStatusSymbol) {
-				return false
-			}
-		}
+		return w.visitRun(chunk.PacketStatusSymbol, int(chunk.RunLength))
 	case *rtcp.StatusVectorChunk:
-		for _, symbol := range chunk.SymbolList {
-			if !w.visit(symbol) {
-				return false
-			}
+		return w.visitAll(chunk.SymbolList)
+	}
+	return true
+}
+
+func (w *ackWalker) visitAll(symbols []uint16) bool {
+	for _, symbol := range symbols {
+		if !w.visit(symbol) {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *ackWalker) visitRun(symbol uint16, length int) bool {
+	for range length {
+		if !w.visit(symbol) {
+			return false
 		}
 	}
 	return true

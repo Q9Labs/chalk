@@ -53,23 +53,34 @@ func planEpisode(cameras []*plannedCamera, base, ceiling float64, mayRaise bool)
 		return total
 	}
 	if predicted() > ceiling {
-		changed := false
-		for level := planLowest; level <= planPaused; level++ {
-			for _, camera := range cameras {
-				if predicted() <= ceiling {
-					return changed
-				}
-				if camera.level < level {
-					camera.level, changed = level, true
-				}
-			}
-		}
-		return changed
+		return lowerCameras(cameras, predicted, ceiling)
 	}
 	if !mayRaise {
 		return false
 	}
-	// The reverse of lowering: paused cameras return before capped ones rise.
+	return raiseCamera(cameras, predicted, ceiling)
+}
+
+// lowerCameras lowers every camera one level at a time, quietest first, until the prediction fits.
+func lowerCameras(cameras []*plannedCamera, predicted func() float64, ceiling float64) bool {
+	changed := false
+	for level := planLowest; level <= planPaused; level++ {
+		for _, camera := range cameras {
+			if predicted() <= ceiling {
+				return changed
+			}
+			if camera.level < level {
+				camera.level, changed = level, true
+			}
+		}
+	}
+	return changed
+}
+
+// raiseCamera is the reverse of lowering: paused cameras return before capped ones rise. It
+// raises the first camera it can one level, and keeps that only when the prediction then fits
+// under planRaiseShare of the ceiling.
+func raiseCamera(cameras []*plannedCamera, predicted func() float64, ceiling float64) bool {
 	for level := planPaused; level >= planLowest; level-- {
 		for index := len(cameras) - 1; index >= 0; index-- {
 			camera := cameras[index]

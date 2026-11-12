@@ -5,12 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/pprof"
-	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/media"
@@ -69,40 +66,6 @@ func (s *Server) drain(w http.ResponseWriter, _ *http.Request) error {
 func (s *Server) undrain(w http.ResponseWriter, _ *http.Request) error {
 	writeJSON(w, http.StatusOK, s.Undrain())
 	return nil
-}
-
-func servePprof(handle http.HandlerFunc) func(http.ResponseWriter, *http.Request) error {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		handle(w, r)
-		return nil
-	}
-}
-
-// profile samples the CPU for the asked seconds. The standard handler defaults to 30, which the
-// request deadline would cut short, so an absent value means the limit and a longer one is refused.
-func (s *Server) profile(w http.ResponseWriter, r *http.Request) error {
-	query := r.URL.Query()
-	seconds, err := profileSeconds(query)
-	if err != nil {
-		return err
-	}
-	query.Set("seconds", strconv.Itoa(seconds))
-	sampled := r.Clone(r.Context())
-	sampled.URL.RawQuery = query.Encode()
-	pprof.Profile(w, sampled)
-	return nil
-}
-
-func profileSeconds(query url.Values) (int, error) {
-	raw := query.Get("seconds")
-	if raw == "" {
-		return maxProfileSeconds, nil
-	}
-	seconds, err := strconv.Atoi(raw)
-	if err != nil || seconds < 1 || seconds > maxProfileSeconds {
-		return 0, fmt.Errorf("%w: seconds must be a whole number from 1 to %d", media.ErrInvalidRequest, maxProfileSeconds)
-	}
-	return seconds, nil
 }
 
 // v1 guards an operation: the caller must hold the expected service identity.
@@ -204,79 +167,6 @@ func (s *Server) removeSession(w http.ResponseWriter, r *http.Request) error {
 	}
 	session.CloseFor(media.CloseRemoved)
 	w.WriteHeader(http.StatusNoContent)
-	return nil
-}
-
-func (s *Server) endEpisode(w http.ResponseWriter, r *http.Request) error {
-	var request protocol.EndEpisodeRequest
-	if err := s.decode(w, r, &request); err != nil {
-		return err
-	}
-	scope := protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: "episode", Generation: 1}
-	if err := media.ValidateScope(scope); err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, protocol.EndEpisodeResponse{Closed: s.node.EndEpisode(request.TenantID, request.EpisodeID)})
-	return nil
-}
-
-func (s *Server) retireEpisode(w http.ResponseWriter, r *http.Request) error {
-	var request protocol.RetireEpisodeRequest
-	if err := s.decode(w, r, &request); err != nil {
-		return err
-	}
-	response, err := s.node.RetireEpisode(request)
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, response)
-	return nil
-}
-
-func (s *Server) reserveEpisode(w http.ResponseWriter, r *http.Request) error {
-	var request protocol.ReserveEpisodeRequest
-	if err := s.decode(w, r, &request); err != nil {
-		return err
-	}
-	response, err := s.node.ReserveEpisode(request)
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, response)
-	return nil
-}
-
-func (s *Server) controlSources(w http.ResponseWriter, r *http.Request) error {
-	var request protocol.SourceControlRequest
-	if err := s.decode(w, r, &request); err != nil {
-		return err
-	}
-	response, err := s.node.ControlSources(request)
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, response)
-	return nil
-}
-
-func (s *Server) inspect(w http.ResponseWriter, r *http.Request) error {
-	var request protocol.InspectRequest
-	if err := s.decode(w, r, &request); err != nil {
-		return err
-	}
-	find := s.node.Session
-	if request.Peer {
-		find = s.node.PeerSession
-	}
-	session, err := find(r.PathValue(protocol.SessionConnectionWildcard), request.Scope)
-	if err != nil {
-		return err
-	}
-	response, err := session.Inspect()
-	if err != nil {
-		return err
-	}
-	writeJSON(w, http.StatusOK, response)
 	return nil
 }
 

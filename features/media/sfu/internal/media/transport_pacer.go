@@ -23,12 +23,18 @@ func (t *transport) drain() {
 		case <-t.wake:
 		case <-timer.C:
 		}
-		if !timer.Stop() {
-			select {
-			case <-timer.C:
-			default:
-			}
-		}
+		stopTimer(timer)
+	}
+}
+
+// stopTimer stops timer and drains a tick it already fired, so the next Reset starts clean.
+func stopTimer(timer *time.Timer) {
+	if timer.Stop() {
+		return
+	}
+	select {
+	case <-timer.C:
+	default:
 	}
 }
 

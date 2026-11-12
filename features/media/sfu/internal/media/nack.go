@@ -47,29 +47,42 @@ type nackTracker struct {
 // before it, or 0 for the layer's first packet.
 func (t *nackTracker) observe(ext, highest uint64, now int64) {
 	t.mu.Lock()
+	if t.record(ext, highest, now) {
+		t.mu.Unlock()
+		return
+	}
+	t.reset()
+	t.mu.Unlock()
+	t.giveUp()
+}
+
+// record notes the gap an arrival leaves. It reports false when the gap is too wide to repair
+// with NACKs. The caller holds t.mu.
+func (t *nackTracker) record(ext, highest uint64, now int64) bool {
 	switch {
 	case highest == 0 || ext == highest:
 	case ext < highest:
 		t.clear(ext)
 	case ext == highest+1:
 	case ext-highest-1 > nackPending:
-		t.reset()
-		t.mu.Unlock()
-		t.giveUp()
-		return
+		return false
 	default:
-		due := now + int64(nackGrace)
-		for lost := highest + 1; lost < ext; lost++ {
-			if !t.add(lost, due) {
-				t.reset()
-				t.mu.Unlock()
-				t.giveUp()
-				return
-			}
-		}
-		t.arm(due, now)
+		return t.addGap(highest, ext, now)
 	}
-	t.mu.Unlock()
+	return true
+}
+
+// addGap queues the sequence numbers between highest and ext for NACKs. It reports false when
+// the table is full. The caller holds t.mu.
+func (t *nackTracker) addGap(highest, ext uint64, now int64) bool {
+	due := now + int64(nackGrace)
+	for lost := highest + 1; lost < ext; lost++ {
+		if !t.add(lost, due) {
+			return false
+		}
+	}
+	t.arm(due, now)
+	return true
 }
 
 func (t *nackTracker) giveUp() {

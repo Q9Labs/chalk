@@ -35,25 +35,36 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 	budget := maxRetransmitsPerFeedback
 	binding := s.track.binding.Load()
 	for _, packet := range packets {
-		switch packet := packet.(type) {
-		case *rtcp.PictureLossIndication:
-			if binding != nil && packet.MediaSSRC == binding.ssrc {
-				s.requestKeyframe()
-			}
-		case *rtcp.FullIntraRequest:
-			if binding != nil && slices.ContainsFunc(packet.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == binding.ssrc }) {
-				s.requestKeyframe()
-			}
-		case *rtcp.TransportLayerNack:
-			if binding != nil && packet.MediaSSRC == binding.ssrc {
-				budget = s.retransmit(packet, budget, writer)
-			}
-		case *rtcp.ReceiverReport:
-			s.onReceiverReports(packet.Reports, binding)
-		case *rtcp.ReceiverEstimatedMaximumBitrate:
-			s.transport.onREMB(float64(packet.Bitrate))
-		}
+		budget = s.handlePacket(packet, binding, budget, writer)
 	}
+}
+
+// handlePacket acts on one RTCP packet and returns what is left of the retransmit budget.
+func (s *subscription) handlePacket(packet rtcp.Packet, binding *egressBinding, budget int, writer *packetWriter) int {
+	switch packet := packet.(type) {
+	case *rtcp.PictureLossIndication:
+		if binding != nil && packet.MediaSSRC == binding.ssrc {
+			s.requestKeyframe()
+		}
+	case *rtcp.FullIntraRequest:
+		if binding != nil && asksFor(packet, binding.ssrc) {
+			s.requestKeyframe()
+		}
+	case *rtcp.TransportLayerNack:
+		if binding != nil && packet.MediaSSRC == binding.ssrc {
+			return s.retransmit(packet, budget, writer)
+		}
+	case *rtcp.ReceiverReport:
+		s.onReceiverReports(packet.Reports, binding)
+	case *rtcp.ReceiverEstimatedMaximumBitrate:
+		s.transport.onREMB(float64(packet.Bitrate))
+	}
+	return budget
+}
+
+// asksFor reports whether the intra request names the stream.
+func asksFor(request *rtcp.FullIntraRequest, ssrc uint32) bool {
+	return slices.ContainsFunc(request.FIR, func(entry rtcp.FIREntry) bool { return entry.SSRC == ssrc })
 }
 
 // onReceiverReports feeds the loss the receiver reports for this subscription's stream to the transport.
