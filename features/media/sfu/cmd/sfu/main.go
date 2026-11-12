@@ -65,33 +65,48 @@ func run() error {
 	drain := make(chan os.Signal, 1)
 	signal.Notify(drain, syscall.SIGUSR1)
 	defer signal.Stop(drain)
-	ticker := time.NewTicker(time.Second)
-	ticker.Stop() // runs only while a drain waits for the last session
-	defer ticker.Stop()
-	waiting := false
+	watch := &drainWatch{server: server, log: log, ticker: time.NewTicker(time.Second)}
+	watch.ticker.Stop() // runs only while a drain waits for the last session
+	defer watch.ticker.Stop()
 	for {
 		select {
 		case <-signals.Done():
 			log.Info("sfu stopping")
 			return server.Stop(context.Background())
 		case <-drain:
-			// SIGUSR1 drains without stopping, so an operator can wait for live
-			// calls to end before a restart. "sfu drained" marks the last one.
-			server.Drain()
-			waiting = true
-			ticker.Reset(time.Second)
-		case <-ticker.C:
-			state := server.DrainState()
-			switch {
-			case !waiting:
-			case !state.Draining: // a control request called the restart off
-				waiting = false
-				ticker.Stop()
-			case state.Allocations == 0 && state.CleanupDebt == 0:
-				log.Info("sfu drained")
-				waiting = false
-				ticker.Stop()
-			}
+			watch.begin()
+		case <-watch.ticker.C:
+			watch.check()
 		}
+	}
+}
+
+// drainWatch follows a drain that SIGUSR1 started until the last session is gone.
+type drainWatch struct {
+	server  *control.Server
+	log     *slog.Logger
+	ticker  *time.Ticker
+	waiting bool
+}
+
+// begin drains without stopping, so an operator can wait for live calls to end before a
+// restart. "sfu drained" marks the last one.
+func (w *drainWatch) begin() {
+	w.server.Drain()
+	w.waiting = true
+	w.ticker.Reset(time.Second)
+}
+
+func (w *drainWatch) check() {
+	state := w.server.DrainState()
+	switch {
+	case !w.waiting:
+	case !state.Draining: // a control request called the restart off
+		w.waiting = false
+		w.ticker.Stop()
+	case state.Allocations == 0 && state.CleanupDebt == 0:
+		w.log.Info("sfu drained")
+		w.waiting = false
+		w.ticker.Stop()
 	}
 }

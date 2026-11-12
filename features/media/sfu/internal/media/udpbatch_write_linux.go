@@ -150,33 +150,45 @@ func (c *batchConn) plan(entries []*queued) int {
 	}
 	messages := 0
 	for i := 0; i < len(c.order); {
-		first := entries[c.order[i]]
-		run := 1
-		if c.gso {
-			// The kernel splits a train into equal segments plus a shorter last one.
-			for i+run < len(c.order) && run < gsoSegments && (run+1)*first.n <= gsoPayloadMax {
-				next := entries[c.order[i+run]]
-				if next.addr != first.addr || next.n > first.n || entries[c.order[i+run-1]].n != first.n {
-					break
-				}
-				run++
-			}
-		}
-		name := &c.names[messages]
-		*name = unix.RawSockaddrInet4{Family: unix.AF_INET, Port: bits.ReverseBytes16(first.addr.Port()), Addr: first.addr.Addr().As4()}
-		message := &c.out[messages].Hdr
-		*message = unix.Msghdr{Name: (*byte)(unsafe.Pointer(name)), Iov: &c.iov[i]}
-		message.Namelen = unix.SizeofSockaddrInet4
-		message.SetIovlen(run)
-		if run > 1 {
-			setSegmentSize(&c.control[messages], first.n)
-			message.Control = &c.control[messages][0]
-			message.SetControllen(unix.CmsgSpace(2))
-		}
+		run := c.runAt(entries, i)
+		c.message(messages, entries[c.order[i]], i, run)
 		messages++
 		i += run
 	}
 	return messages
+}
+
+// runAt is how many datagrams from c.order[i] go out as one segmented message.
+func (c *batchConn) runAt(entries []*queued, i int) int {
+	first := entries[c.order[i]]
+	run := 1
+	if !c.gso {
+		return run
+	}
+	// The kernel splits a train into equal segments plus a shorter last one.
+	for i+run < len(c.order) && run < gsoSegments && (run+1)*first.n <= gsoPayloadMax {
+		next := entries[c.order[i+run]]
+		if next.addr != first.addr || next.n > first.n || entries[c.order[i+run-1]].n != first.n {
+			break
+		}
+		run++
+	}
+	return run
+}
+
+// message fills c.out[messages] with the run of datagrams that starts at iovec i.
+func (c *batchConn) message(messages int, first *queued, i, run int) {
+	name := &c.names[messages]
+	*name = unix.RawSockaddrInet4{Family: unix.AF_INET, Port: bits.ReverseBytes16(first.addr.Port()), Addr: first.addr.Addr().As4()}
+	message := &c.out[messages].Hdr
+	*message = unix.Msghdr{Name: (*byte)(unsafe.Pointer(name)), Iov: &c.iov[i]}
+	message.Namelen = unix.SizeofSockaddrInet4
+	message.SetIovlen(run)
+	if run > 1 {
+		setSegmentSize(&c.control[messages], first.n)
+		message.Control = &c.control[messages][0]
+		message.SetControllen(unix.CmsgSpace(2))
+	}
 }
 
 // sendmmsg sends messages and returns how many went out; errno is set when the first one failed.

@@ -138,16 +138,16 @@ func (e *bandwidthEstimator) pressure(on bool) {
 	e.pressured = on
 }
 
-// lossy reports whether the receiver reported heavy loss within the last pressureHold.
-func (e *bandwidthEstimator) lossy(now int64) bool {
-	return e.lossAt != 0 && now-e.lossAt < int64(pressureHold)
-}
-
 // lossEnded reports once that heavy loss has ended: a loss window at or below lossLow has followed one above lossHigh.
 func (e *bandwidthEstimator) lossEnded() bool {
 	ended := e.lossCleared
 	e.lossCleared = false
 	return ended
+}
+
+// lossy reports whether the receiver reported heavy loss within the last pressureHold.
+func (e *bandwidthEstimator) lossy(now int64) bool {
+	return e.lossAt != 0 && now-e.lossAt < int64(pressureHold)
 }
 
 // warm reports whether feedback has arrived yet.
@@ -159,6 +159,21 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		return
 	}
 	e.feedbacks++
+	e.foldAcks(acks, now)
+	e.backOffOnOveruse(now)
+	e.foldLoss(now)
+	if e.increased == 0 {
+		e.increased = now
+	}
+	if !e.holding && e.trend.signal == signalNormal {
+		elapsed := math.Min(float64(now-e.increased)/float64(time.Second), 1)
+		e.estimate = math.Min(e.estimate*math.Pow(increasePerSec, elapsed), maxEstimate)
+	}
+	e.increased = now
+}
+
+// foldAcks counts the report's packets, feeds the trend and records what the report delivered.
+func (e *bandwidthEstimator) foldAcks(acks []packetAck, now int64) {
 	report := ackedReport{first: math.MaxInt64, last: math.MinInt64}
 	reported := delivery{at: now}
 	for index := range acks {
@@ -182,54 +197,55 @@ func (e *bandwidthEstimator) onFeedback(acks []packetAck, now int64) {
 		e.reportNext = (e.reportNext + 1) % len(e.reports)
 		e.reportLen = min(e.reportLen+1, len(e.reports))
 	}
+}
+
+// backOffOnOveruse lowers the estimate below what got through when the trend says the path is
+// full. The trend must stay over its threshold for decreaseSpan, the span a decrease reads, so
+// one blip of jitter never cuts the estimate. Without acknowledged traffic to read there is no
+// rate to back off to, so the estimate holds.
+func (e *bandwidthEstimator) backOffOnOveruse(now int64) {
 	if e.trend.signal != signalOveruse {
 		e.overusingSince = 0
 	} else if e.overusingSince == 0 {
 		e.overusingSince = now
 	}
-	// A queue that grows means the path is full: back off below what got through.
-	// The trend must stay over its threshold for decreaseSpan, the span a decrease
-	// reads, so one blip of jitter never cuts the estimate. Without acknowledged
-	// traffic to read there is no rate to back off to, so the estimate holds.
-	if e.trend.signal == signalOveruse && !e.pressured && now-e.overusingSince >= int64(allocationInterval) && now-e.decreased > int64(decreaseSpacing) &&
-		e.trend.hotFor >= int64(decreaseSpan) {
-		acked := e.ackedOver(decreaseSpan)
-		if acked == 0 {
-			acked = e.acked()
-		}
-		if acked > 0 {
-			e.lower(causeOveruse, math.Max(decreaseFactor*acked, minEstimate), acked, now)
-		}
-		e.trend.signal = signalNormal
-		e.overusingSince = 0
+	if e.trend.signal != signalOveruse || e.pressured || now-e.overusingSince < int64(allocationInterval) || now-e.decreased <= int64(decreaseSpacing) ||
+		e.trend.hotFor < int64(decreaseSpan) {
+		return
 	}
-	if e.total >= lossWindow {
-		loss := float64(e.lost) / float64(e.total)
-		e.lossShare = loss
-		switch {
-		case loss > lossHigh:
-			e.lossAt, e.heavyLoss = now, true
-		case loss <= lossLow && e.heavyLoss:
-			e.heavyLoss, e.lossCleared = false, true
-		}
-		switch {
-		case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
-			e.lower(causeLoss, math.Max(e.estimate*(1-0.5*loss), minEstimate), e.acked(), now)
-		case loss > lossLow:
-			e.holding = true
-		default:
-			e.holding = e.trend.signal == signalUnderuse
-		}
-		e.lost, e.total = 0, 0
+	acked := e.ackedOver(decreaseSpan)
+	if acked == 0 {
+		acked = e.acked()
 	}
-	if e.increased == 0 {
-		e.increased = now
+	if acked > 0 {
+		e.lower(causeOveruse, math.Max(decreaseFactor*acked, minEstimate), acked, now)
 	}
-	if !e.holding && e.trend.signal == signalNormal {
-		elapsed := math.Min(float64(now-e.increased)/float64(time.Second), 1)
-		e.estimate = math.Min(e.estimate*math.Pow(increasePerSec, elapsed), maxEstimate)
+	e.trend.signal = signalNormal
+	e.overusingSince = 0
+}
+
+// foldLoss reads the loss share once a window of packets has been counted.
+func (e *bandwidthEstimator) foldLoss(now int64) {
+	if e.total < lossWindow {
+		return
 	}
-	e.increased = now
+	loss := float64(e.lost) / float64(e.total)
+	e.lossShare = loss
+	switch {
+	case loss > lossHigh:
+		e.lossAt, e.heavyLoss = now, true
+	case loss <= lossLow && e.heavyLoss:
+		e.heavyLoss, e.lossCleared = false, true
+	}
+	switch {
+	case loss > lossHigh && now-e.decreased > int64(decreaseSpacing):
+		e.lower(causeLoss, math.Max(e.estimate*(1-0.5*loss), minEstimate), e.acked(), now)
+	case loss > lossLow:
+		e.holding = true
+	default:
+		e.holding = e.trend.signal == signalUnderuse
+	}
+	e.lost, e.total = 0, 0
 }
 
 // lower sets the estimate to target and remembers why.

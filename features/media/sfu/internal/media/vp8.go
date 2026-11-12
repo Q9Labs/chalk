@@ -44,44 +44,9 @@ func parseVP8(payload []byte) (vp8Descriptor, bool) {
 	first := payload[0]
 	index := 1
 	if first&vp8ExtendedBit != 0 {
-		if len(payload) < 2 {
+		var ok bool
+		if index, ok = d.parseExtension(payload); !ok {
 			return d, false
-		}
-		extension := payload[1]
-		index = 2
-		if extension&vp8PictureBit != 0 {
-			if len(payload) <= index {
-				return d, false
-			}
-			d.pictureIDOffset = uint8(index)
-			if payload[index]&vp8LongIDBit != 0 {
-				if len(payload) <= index+1 {
-					return d, false
-				}
-				d.pictureIDBits = 15
-				d.pictureID = uint16(payload[index]&0x7f)<<8 | uint16(payload[index+1])
-				index += 2
-			} else {
-				d.pictureIDBits = 7
-				d.pictureID = uint16(payload[index])
-				index++
-			}
-		}
-		if extension&vp8TL0Bit != 0 {
-			if len(payload) <= index {
-				return d, false
-			}
-			d.hasTL0, d.tl0, d.tl0Offset = true, payload[index], uint8(index)
-			index++
-		}
-		if extension&(vp8TIDBit|vp8KeyIdxBit) != 0 {
-			if len(payload) <= index {
-				return d, false
-			}
-			if extension&vp8KeyIdxBit != 0 {
-				d.hasKeyIdx, d.keyIdx, d.keyIdxOffset = true, payload[index]&vp8KeyIdxMask, uint8(index)
-			}
-			index++
 		}
 	}
 	d.frameStart = first&vp8StartBit != 0 && first&vp8PIDMask == 0
@@ -92,6 +57,59 @@ func parseVP8(payload []byte) (vp8Descriptor, bool) {
 		d.keyframe = payload[index]&vp8InterFrame == 0
 	}
 	return d, true
+}
+
+// parseExtension reads the extension bytes that follow the first descriptor byte. It returns the
+// index of the payload header, and false for a payload that ends inside the extension.
+func (d *vp8Descriptor) parseExtension(payload []byte) (int, bool) {
+	if len(payload) < 2 {
+		return 0, false
+	}
+	extension := payload[1]
+	index := 2
+	if extension&vp8PictureBit != 0 {
+		size, ok := d.parsePictureID(payload, index)
+		if !ok {
+			return 0, false
+		}
+		index += size
+	}
+	if extension&vp8TL0Bit != 0 {
+		if len(payload) <= index {
+			return 0, false
+		}
+		d.hasTL0, d.tl0, d.tl0Offset = true, payload[index], uint8(index)
+		index++
+	}
+	if extension&(vp8TIDBit|vp8KeyIdxBit) != 0 {
+		if len(payload) <= index {
+			return 0, false
+		}
+		if extension&vp8KeyIdxBit != 0 {
+			d.hasKeyIdx, d.keyIdx, d.keyIdxOffset = true, payload[index]&vp8KeyIdxMask, uint8(index)
+		}
+		index++
+	}
+	return index, true
+}
+
+// parsePictureID reads the 7 or 15 bit picture ID at index and returns the bytes it takes.
+func (d *vp8Descriptor) parsePictureID(payload []byte, index int) (int, bool) {
+	if len(payload) <= index {
+		return 0, false
+	}
+	d.pictureIDOffset = uint8(index)
+	if payload[index]&vp8LongIDBit == 0 {
+		d.pictureIDBits = 7
+		d.pictureID = uint16(payload[index])
+		return 1, true
+	}
+	if len(payload) <= index+1 {
+		return 0, false
+	}
+	d.pictureIDBits = 15
+	d.pictureID = uint16(payload[index]&0x7f)<<8 | uint16(payload[index+1])
+	return 2, true
 }
 
 // vp8Rewrite holds the descriptor values one subscriber sends.

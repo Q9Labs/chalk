@@ -162,68 +162,84 @@ func (s *Session) closeNegotiated(ctx context.Context, request protocol.CloseTra
 // and transceiver, forwards nothing while parked and resumes at the next keyframe. A track that
 // is not live in this session is a per-track error.
 func (s *Session) UpdateTracks(_ context.Context, request protocol.UpdateTracksRequest) (protocol.TracksResponse, error) {
-	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
-		return protocol.TracksResponse{}, fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
-	}
-	for index, track := range request.Tracks {
-		switch {
-		case track.Location == protocol.LocationLocal:
-			if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
-				return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
-			}
-		case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
-			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
-		case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
-			return protocol.TracksResponse{}, fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
-		}
+	if err := validateTrackUpdates(request.Tracks); err != nil {
+		return protocol.TracksResponse{}, err
 	}
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 	return once(s, request.OperationID, request, func() (protocol.TracksResponse, error) {
-		var response protocol.TracksResponse
-		updated := make([]*subscription, len(request.Tracks))
-		parked := make([]*publication, len(request.Tracks))
-		s.mu.Lock()
-		for index, track := range request.Tracks {
-			if track.Location == protocol.LocationLocal {
-				pub := s.published[track.Mid]
-				if pub == nil || pub.name != track.TrackName {
-					response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: s.id, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such publication"})
-					continue
-				}
-				parked[index] = pub
-				response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: pub.source, Paused: track.Paused})
-				continue
-			}
-			subscription := s.subscribed[track.Mid]
-			if subscription == nil || subscription.pub.name != track.TrackName || subscription.pub.session.id != track.SessionID {
-				response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such subscription"})
-				continue
-			}
-			updated[index] = subscription
-			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast, Paused: track.Paused})
-		}
-		s.mu.Unlock()
+		response, updated, parked := s.matchUpdates(request.Tracks)
 		for index, pub := range parked {
 			if pub != nil {
 				pub.setHeld(request.Tracks[index].Paused)
 			}
 		}
 		for index, subscription := range updated {
-			if subscription == nil {
-				continue
+			if subscription != nil {
+				subscription.update(layerUpdateFor(request.Tracks[index], subscription))
 			}
-			track := request.Tracks[index]
-			next := layerRequestFor(track)
-			// Without a simulcast policy the update only pauses or resumes.
-			if track.Simulcast == nil {
-				next = subscription.currentRequest()
-				next.paused = track.Paused
-			}
-			subscription.update(next)
 		}
 		return response, nil
 	})
+}
+
+func validateTrackUpdates(tracks []protocol.Track) error {
+	if len(tracks) == 0 || len(tracks) > protocol.MaxTracksPerRequest {
+		return fmt.Errorf("%w: a request updates 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
+	}
+	for index, track := range tracks {
+		switch {
+		case track.Location == protocol.LocationLocal:
+			if track.Mid == "" || track.TrackName == "" || track.Simulcast != nil {
+				return fmt.Errorf("%w: tracks[%d] needs a mid and trackName and no simulcast policy for a local update", ErrInvalidRequest, index)
+			}
+		case track.Location != protocol.LocationRemote || track.Mid == "" || track.SessionID == "" || track.TrackName == "":
+			return fmt.Errorf("%w: tracks[%d] needs a remote location, mid, sessionId and trackName", ErrInvalidRequest, index)
+		case track.Simulcast != nil && track.Simulcast.PreferredRID == "":
+			return fmt.Errorf("%w: tracks[%d] simulcast needs a preferredRid", ErrInvalidRequest, index)
+		}
+	}
+	return nil
+}
+
+// matchUpdates finds the publication or subscription each update names. It returns them by the
+// update's index, with a per-track error for each one that is not live.
+func (s *Session) matchUpdates(tracks []protocol.Track) (response protocol.TracksResponse, updated []*subscription, parked []*publication) {
+	updated = make([]*subscription, len(tracks))
+	parked = make([]*publication, len(tracks))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for index, track := range tracks {
+		if track.Location == protocol.LocationLocal {
+			pub := s.published[track.Mid]
+			if pub == nil || pub.name != track.TrackName {
+				response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: s.id, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such publication"})
+				continue
+			}
+			parked[index] = pub
+			response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: pub.source, Paused: track.Paused})
+			continue
+		}
+		subscription := s.subscribed[track.Mid]
+		if subscription == nil || subscription.pub.name != track.TrackName || subscription.pub.session.id != track.SessionID {
+			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{SessionID: track.SessionID, TrackName: track.TrackName, Code: protocol.TrackCodeNotFound, Message: "no such subscription"})
+			continue
+		}
+		updated[index] = subscription
+		response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationRemote, Mid: track.Mid, TrackName: track.TrackName, SessionID: track.SessionID, Simulcast: track.Simulcast, Paused: track.Paused})
+	}
+	return response, updated, parked
+}
+
+// layerUpdateFor is the layer request an update asks of the subscription. Without a simulcast
+// policy the update only pauses or resumes.
+func layerUpdateFor(track protocol.Track, subscription *subscription) layerRequest {
+	if track.Simulcast != nil {
+		return layerRequestFor(track)
+	}
+	next := subscription.currentRequest()
+	next.paused = track.Paused
+	return next
 }
 
 // closeMid stops one track and reports whether it existed. With receiveOnly it leaves

@@ -75,46 +75,64 @@ func (t *transport) onReport(apply func(now int64)) {
 // walkFeedback turns a transport-wide feedback report into acknowledgments of
 // logged packets, appended to acks. Packets the log no longer holds are skipped.
 func walkFeedback(report *rtcp.TransportLayerCC, log []sentPacket, acks []packetAck) []packetAck {
-	seq := report.BaseSequenceNumber
-	remaining := int(report.PacketStatusCount)
-	arrival := int64(report.ReferenceTime) * int64(64*time.Millisecond)
-	deltas := report.RecvDeltas
-	visit := func(symbol uint16) bool {
-		received := symbol == rtcp.TypeTCCPacketReceivedSmallDelta || symbol == rtcp.TypeTCCPacketReceivedLargeDelta
-		if received {
-			if len(deltas) == 0 {
-				return false
-			}
-			arrival += deltas[0].Delta * int64(time.Microsecond)
-			deltas = deltas[1:]
-		}
-		entry := &log[int(seq)%len(log)]
-		if entry.valid && entry.seq == seq && !entry.acked {
-			entry.acked = true
-			acks = append(acks, packetAck{sent: entry.sent, arrival: arrival, size: int(entry.size), received: received, probe: entry.probe})
-		}
-		seq++
-		remaining--
-		return remaining > 0
+	w := &ackWalker{
+		seq: report.BaseSequenceNumber, remaining: int(report.PacketStatusCount),
+		arrival: int64(report.ReferenceTime) * int64(64*time.Millisecond),
+		deltas:  report.RecvDeltas, log: log, acks: acks,
 	}
 	for _, chunk := range report.PacketChunks {
-		switch chunk := chunk.(type) {
-		case *rtcp.RunLengthChunk:
-			for range chunk.RunLength {
-				if !visit(chunk.PacketStatusSymbol) {
-					return acks
-				}
-			}
-		case *rtcp.StatusVectorChunk:
-			for _, symbol := range chunk.SymbolList {
-				if !visit(symbol) {
-					return acks
-				}
-			}
-		}
-		if remaining <= 0 {
+		if !w.chunk(chunk) || w.remaining <= 0 {
 			break
 		}
 	}
-	return acks
+	return w.acks
+}
+
+// ackWalker reads one report's packet statuses in sequence order.
+type ackWalker struct {
+	seq       uint16
+	remaining int
+	arrival   int64
+	deltas    []*rtcp.RecvDelta
+	log       []sentPacket
+	acks      []packetAck
+}
+
+// chunk visits the statuses one chunk holds. It reports false once the report is exhausted or
+// malformed.
+func (w *ackWalker) chunk(chunk rtcp.PacketStatusChunk) bool {
+	switch chunk := chunk.(type) {
+	case *rtcp.RunLengthChunk:
+		for range chunk.RunLength {
+			if !w.visit(chunk.PacketStatusSymbol) {
+				return false
+			}
+		}
+	case *rtcp.StatusVectorChunk:
+		for _, symbol := range chunk.SymbolList {
+			if !w.visit(symbol) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (w *ackWalker) visit(symbol uint16) bool {
+	received := symbol == rtcp.TypeTCCPacketReceivedSmallDelta || symbol == rtcp.TypeTCCPacketReceivedLargeDelta
+	if received {
+		if len(w.deltas) == 0 {
+			return false
+		}
+		w.arrival += w.deltas[0].Delta * int64(time.Microsecond)
+		w.deltas = w.deltas[1:]
+	}
+	entry := &w.log[int(w.seq)%len(w.log)]
+	if entry.valid && entry.seq == w.seq && !entry.acked {
+		entry.acked = true
+		w.acks = append(w.acks, packetAck{sent: entry.sent, arrival: w.arrival, size: int(entry.size), received: received, probe: entry.probe})
+	}
+	w.seq++
+	w.remaining--
+	return w.remaining > 0
 }

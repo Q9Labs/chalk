@@ -58,18 +58,8 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.expireHolds()
-	// A retired allocation takes no create, a replay of an earlier one included.
-	if err := n.refuseRetired(episodeOf(scope), allocation); err != nil {
+	if err := n.refuseCreate(scope, allocation); err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
-	}
-	if err := n.refuseUnrecorded(episodeOf(scope), allocation); err != nil {
-		return protocol.CreateSessionResponse{}, nil, err
-	}
-	// A draining node refuses only new Episodes: a live call on it keeps taking
-	// joins and reconnects, so it can run to its end before the restart. A held Episode is not
-	// new: its reserve passed the drain check.
-	if n.stopped || n.draining && !n.hostsEpisode(episodeOf(scope)) && n.heldParticipants(episodeOf(scope)) == 0 {
-		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedDraining, ErrDraining)
 	}
 	if record, ok := n.creates[operationID]; ok {
 		if record.digest != digest {
@@ -77,14 +67,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 		}
 		return n.responseFor(record.id), nil, nil
 	}
-	// The fence outlives the session, so a delayed create from an older generation stays refused
-	// after the newer session closes.
-	if known, _ := n.fences.Get(key); scope.Generation < known {
-		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
-	}
-	// The per-Participant fence cannot know a Participant that never ran on this node, so the
-	// Episode's hold fences the first rejoin: an older generation than the reserve's is stale.
-	if held := n.holdOf(episodeOf(scope)); kind.participant && held != nil && scope.Generation < held.generation {
+	if n.staleCreate(key, scope, kind) {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
 	evict, err := n.fenceVictim(key)
@@ -119,6 +102,37 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
 	n.settleHold(episodeOf(scope), fenced)
 	return n.responseFor(session.id), fenced, nil
+}
+
+// refuseCreate refuses a create for a retired allocation, a replay of an earlier one included, and
+// for a draining node that does not host the Episode. A draining node refuses only new Episodes:
+// a live call on it keeps taking joins and reconnects, so it can run to its end before the
+// restart. A held Episode is not new: its reserve passed the drain check. The caller holds n.mu.
+func (n *Node) refuseCreate(scope protocol.Scope, allocation *int64) error {
+	episode := episodeOf(scope)
+	if err := n.refuseRetired(episode, allocation); err != nil {
+		return err
+	}
+	if err := n.refuseUnrecorded(episode, allocation); err != nil {
+		return err
+	}
+	if n.stopped || n.draining && !n.hostsEpisode(episode) && n.heldParticipants(episode) == 0 {
+		return n.refuseFor(scope, RefusedDraining, ErrDraining)
+	}
+	return nil
+}
+
+// staleCreate reports whether a fence says the create's generation is older than one the node
+// saw. The Participant's fence outlives its session, so a delayed create from an older generation
+// stays refused after the newer session closes. The fence cannot know a Participant that never
+// ran on this node, so the Episode's hold fences the first rejoin: an older generation than the
+// reserve's is stale. The caller holds n.mu.
+func (n *Node) staleCreate(key participantKey, scope protocol.Scope, kind *SessionKind) bool {
+	if known, _ := n.fences.Get(key); scope.Generation < known {
+		return true
+	}
+	held := n.holdOf(episodeOf(scope))
+	return kind.participant && held != nil && scope.Generation < held.generation
 }
 
 // hostsEpisode reports whether a live Participant session belongs to the Episode. A capture does

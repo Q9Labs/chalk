@@ -89,23 +89,34 @@ func (p *publication) monitor() {
 			return
 		case <-ticker.C:
 		}
-		now := monotonic()
-		changed := false
-		for index := range p.layers {
-			layer := p.layers[index].Load()
-			active := layer != nil && layer.active(now)
-			changed = changed || active != was[index]
-			was[index] = active
-		}
-		if changed {
+		if p.layersChanged(&was, monotonic()) {
 			p.reselect()
 		}
-		if subscribers := p.subscribers.Load(); subscribers != nil {
-			for _, subscription := range *subscribers {
-				if layer := subscription.pendingLayer(); layer >= 0 {
-					p.requestKeyframe(layer)
-				}
-			}
+		p.requestPendingKeyframes()
+	}
+}
+
+// layersChanged records which layers carry media at now in was and reports whether any changed.
+func (p *publication) layersChanged(was *[maxLayers]bool, now int64) bool {
+	changed := false
+	for index := range p.layers {
+		layer := p.layers[index].Load()
+		active := layer != nil && layer.active(now)
+		changed = changed || active != was[index]
+		was[index] = active
+	}
+	return changed
+}
+
+// requestPendingKeyframes asks the publisher for the keyframe each subscriber waits on.
+func (p *publication) requestPendingKeyframes() {
+	subscribers := p.subscribers.Load()
+	if subscribers == nil {
+		return
+	}
+	for _, subscription := range *subscribers {
+		if layer := subscription.pendingLayer(); layer >= 0 {
+			p.requestKeyframe(layer)
 		}
 	}
 }

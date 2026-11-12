@@ -66,18 +66,7 @@ type tile struct {
 // allocate decides every tile of one transport. It returns the total bits/s a
 // probe should prove before the next raise, or 0.
 func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, now int64) float64 {
-	slices.SortStableFunc(tiles, func(a, b tile) int {
-		if a.screen != b.screen {
-			if a.screen {
-				return -1
-			}
-			return 1
-		}
-		if a.voiced != b.voiced {
-			return cmp.Compare(b.voiced, a.voiced)
-		}
-		return cmp.Compare(a.order, b.order)
-	})
+	slices.SortStableFunc(tiles, compareTiles)
 	if estimate.pressured {
 		// The estimate and the drops describe a stalled node, not the path. Every
 		// tile keeps its layer, and nothing raises, until the stall is over.
@@ -102,10 +91,27 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 	if !estimate.warm {
 		return 0
 	}
+	return raiseOne(tiles, used, waiting, provenBudget, audio, repair, now)
+}
 
-	// Raise one step, or resume one tile, within what the transport has proven.
-	// A raise the proof cannot carry asks for a probe but does not hide the
-	// paused tiles behind it, which are worse off than any tile that is playing.
+// compareTiles orders a transport's tiles: screen first, then voiced, then oldest.
+func compareTiles(a, b tile) int {
+	if a.screen != b.screen {
+		if a.screen {
+			return -1
+		}
+		return 1
+	}
+	if a.voiced != b.voiced {
+		return cmp.Compare(b.voiced, a.voiced)
+	}
+	return cmp.Compare(a.order, b.order)
+}
+
+// raiseOne raises one step, or resumes one tile, within what the transport has proven.
+// A raise the proof cannot carry asks for a probe but does not hide the
+// paused tiles behind it, which are worse off than any tile that is playing.
+func raiseOne(tiles []tile, used, waiting, provenBudget, audio, repair float64, now int64) float64 {
 	blocked := 0.0
 	for index := range tiles {
 		t := &tiles[index]
@@ -113,22 +119,8 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 			continue
 		}
 		state := t.state
-		floor := t.layers[len(t.layers)-1]
 		if state.paused {
-			need := floor.bps * resumeMargin
-			if used+need > provenBudget {
-				state.fitSince = 0
-				return probeTotal(used+need, audio, repair)
-			}
-			if state.fitSince == 0 {
-				state.fitSince = now
-			}
-			if now-state.fitSince < int64(resumeHold) || now < state.holdUntil {
-				return 0
-			}
-			state.paused, state.rid, state.fitSince = false, floor.rid, 0
-			state.holdUntil = now + int64(upgradeHold)
-			return 0
+			return resumeOne(t, used, provenBudget, audio, repair, now)
 		}
 		current := layerIndex(t.layers, state.rid)
 		if blocked > 0 || current == 0 || now < state.holdUntil {
@@ -144,6 +136,27 @@ func allocate(tiles []tile, estimate transportEstimate, audio, repair float64, n
 		return 0
 	}
 	return blocked
+}
+
+// resumeOne resumes a paused tile once its lowest layer has fit the proven budget for resumeHold.
+// It returns the probe total to ask for when the budget cannot carry it yet.
+func resumeOne(t *tile, used, provenBudget, audio, repair float64, now int64) float64 {
+	state := t.state
+	floor := t.layers[len(t.layers)-1]
+	need := floor.bps * resumeMargin
+	if used+need > provenBudget {
+		state.fitSince = 0
+		return probeTotal(used+need, audio, repair)
+	}
+	if state.fitSince == 0 {
+		state.fitSince = now
+	}
+	if now-state.fitSince < int64(resumeHold) || now < state.holdUntil {
+		return 0
+	}
+	state.paused, state.rid, state.fitSince = false, floor.rid, 0
+	state.holdUntil = now + int64(upgradeHold)
+	return 0
 }
 
 // reserveFloors sets each tile's reserve to what the tiles after it, and the paused tiles before it, need at their lowest layer,

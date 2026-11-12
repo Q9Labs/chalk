@@ -20,25 +20,10 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 	if len(request.Tracks) == 0 || len(request.Tracks) > protocol.MaxTracksPerRequest {
 		return false, fmt.Errorf("%w: a request carries 1 to %d tracks", ErrInvalidRequest, protocol.MaxTracksPerRequest)
 	}
+	local = request.Tracks[0].Location == protocol.LocationLocal
 	for index, track := range request.Tracks {
-		if track.TrackName == "" {
-			return false, fmt.Errorf("%w: tracks[%d].trackName is required", ErrInvalidRequest, index)
-		}
-		if index == 0 {
-			local = track.Location == protocol.LocationLocal
-		}
-		want := protocol.LocationRemote
-		if local {
-			want = protocol.LocationLocal
-		}
-		if track.Location != want {
-			return false, fmt.Errorf("%w: tracks[%d].location must be %q; a request is all local or all remote", ErrInvalidRequest, index, want)
-		}
-		if local && (track.Mid == "" || !validSource(track.Source)) {
-			return false, fmt.Errorf("%w: tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
-		}
-		if !local && track.SessionID == "" {
-			return false, fmt.Errorf("%w: tracks[%d].sessionId is required for a remote track", ErrInvalidRequest, index)
+		if err := checkRequestedTrack(index, track, local); err != nil {
+			return false, err
 		}
 	}
 	switch {
@@ -48,6 +33,26 @@ func classifyTracks(request protocol.TracksRequest) (local bool, err error) {
 		return false, fmt.Errorf("%w: a pull carries no SDP; the server offers", ErrInvalidRequest)
 	}
 	return local, nil
+}
+
+// checkRequestedTrack checks one track of a push (local) or pull (remote) request.
+func checkRequestedTrack(index int, track protocol.Track, local bool) error {
+	if track.TrackName == "" {
+		return fmt.Errorf("%w: tracks[%d].trackName is required", ErrInvalidRequest, index)
+	}
+	want := protocol.LocationRemote
+	if local {
+		want = protocol.LocationLocal
+	}
+	switch {
+	case track.Location != want:
+		return fmt.Errorf("%w: tracks[%d].location must be %q; a request is all local or all remote", ErrInvalidRequest, index, want)
+	case local && (track.Mid == "" || !validSource(track.Source)):
+		return fmt.Errorf("%w: tracks[%d] needs a mid and a source of microphone, camera, screen or screen_audio", ErrInvalidRequest, index)
+	case !local && track.SessionID == "":
+		return fmt.Errorf("%w: tracks[%d].sessionId is required for a remote track", ErrInvalidRequest, index)
+	}
+	return nil
 }
 
 func validSource(source string) bool {
@@ -65,35 +70,10 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: request.SessionDescription.SDP}); err != nil {
 		return protocol.TracksResponse{}, s.failNegotiation("apply the offer", err)
 	}
-	var response protocol.TracksResponse
-	var refused []*webrtc.RTPTransceiver
-	named := make(map[string]bool, len(request.Tracks))
-	s.mu.Lock()
-	// A Close that ran while the offer was applied has already released this session's
-	// publications, so a publication registered now, and its screen claim, would never be released.
-	if s.closed {
-		s.mu.Unlock()
-		return protocol.TracksResponse{}, ErrSessionGone
+	response, refused, err := s.registerPublications(request.Tracks, sections, existing)
+	if err != nil {
+		return protocol.TracksResponse{}, err
 	}
-	for _, track := range request.Tracks {
-		if named[track.Mid] {
-			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: protocol.TrackCodeDuplicate, Message: "the request names this mid twice"})
-			continue
-		}
-		named[track.Mid] = true
-		transceiver, code, message := s.registerPublication(track, sections)
-		if code != "" {
-			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: code, Message: message})
-			if transceiver != nil && !existing[track.Mid] && s.published[track.Mid] == nil {
-				refused = append(refused, transceiver)
-				// A stopped transceiver never receives again, so a retry must use a new section.
-				s.retired[track.Mid] = true
-			}
-			continue
-		}
-		response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: track.Source})
-	}
-	s.mu.Unlock()
 	// Pion has already created a transceiver for each refused section. Stop it so it carries
 	// no media, and the answer marks the section inactive.
 	for _, transceiver := range refused {
@@ -236,4 +216,36 @@ func (s *Session) publication(name string) *publication {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.publishedByName(name)
+}
+
+// registerPublications registers each pushed track under the session's lock. It returns the
+// transceivers of sections it refused, which the caller stops after the lock is gone.
+func (s *Session) registerPublications(tracks []protocol.Track, sections map[string]offerSection, existing map[string]bool) (response protocol.TracksResponse, refused []*webrtc.RTPTransceiver, err error) {
+	named := make(map[string]bool, len(tracks))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// A Close that ran while the offer was applied has already released this session's
+	// publications, so a publication registered now, and its screen claim, would never be released.
+	if s.closed {
+		return response, nil, ErrSessionGone
+	}
+	for _, track := range tracks {
+		if named[track.Mid] {
+			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: protocol.TrackCodeDuplicate, Message: "the request names this mid twice"})
+			continue
+		}
+		named[track.Mid] = true
+		transceiver, code, message := s.registerPublication(track, sections)
+		if code != "" {
+			response.TrackErrors = append(response.TrackErrors, protocol.TrackError{TrackName: track.TrackName, Code: code, Message: message})
+			if transceiver != nil && !existing[track.Mid] && s.published[track.Mid] == nil {
+				refused = append(refused, transceiver)
+				// A stopped transceiver never receives again, so a retry must use a new section.
+				s.retired[track.Mid] = true
+			}
+			continue
+		}
+		response.Tracks = append(response.Tracks, protocol.Track{Location: protocol.LocationLocal, Mid: track.Mid, TrackName: track.TrackName, Source: track.Source})
+	}
+	return response, refused, nil
 }

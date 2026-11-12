@@ -49,13 +49,18 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 				budget = s.retransmit(packet, budget, writer)
 			}
 		case *rtcp.ReceiverReport:
-			for _, report := range packet.Reports {
-				if binding != nil && report.SSRC == binding.ssrc {
-					s.transport.onReceiverReport(float64(report.FractionLost) / 256)
-				}
-			}
+			s.onReceiverReports(packet.Reports, binding)
 		case *rtcp.ReceiverEstimatedMaximumBitrate:
 			s.transport.onREMB(float64(packet.Bitrate))
+		}
+	}
+}
+
+// onReceiverReports feeds the loss the receiver reports for this subscription's stream to the transport.
+func (s *subscription) onReceiverReports(reports []rtcp.ReceptionReport, binding *egressBinding) {
+	for _, report := range reports {
+		if binding != nil && report.SSRC == binding.ssrc {
+			s.transport.onReceiverReport(float64(report.FractionLost) / 256)
 		}
 	}
 }
