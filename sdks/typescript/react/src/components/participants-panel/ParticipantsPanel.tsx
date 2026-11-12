@@ -202,7 +202,7 @@ export const ParticipantsPanelSurface = React.memo(
             </>
           )}
         </div>
-        {onMuteEveryone ? (
+        {onMuteEveryone && participants.length > 1 ? (
           <div className="call-host-controls">
             <ChalkPopover
               label="Mute everyone"
