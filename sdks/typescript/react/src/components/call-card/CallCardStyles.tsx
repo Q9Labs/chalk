@@ -220,26 +220,20 @@ const styles = `.call-card-tabs {
 .call-person-name-input:focus {
   border-color: var(--chalk-text);
 }
-.call-person-tag {
+.call-person-you {
   flex: none;
-  padding: 0 var(--space-1-5);
-  border-radius: var(--corner-sm);
-  background: var(--chalk-hover);
   color: var(--chalk-muted-text);
-  font-style: normal;
-  font-size: var(--type-micro);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 16px;
+  font-size: var(--type-body);
 }
-.call-person-row:hover .call-person-tag,
-.call-person-row[data-open] .call-person-tag {
-  background: var(--chalk-pressed);
+.call-person-host {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--chalk-muted-text);
 }
-.call-person-tag.is-host {
-  background: color-mix(in srgb, var(--chalk-accent) 16%, transparent);
-  color: var(--chalk-accent);
+.call-person-host svg {
+  width: 14px;
+  height: 14px;
 }
 .call-person-sub {
   overflow: hidden;
@@ -252,7 +246,7 @@ const styles = `.call-card-tabs {
 .call-person-state-slots {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   flex: none;
 }
 .call-person-state {
@@ -260,14 +254,13 @@ const styles = `.call-card-tabs {
   place-items: center;
   width: 24px;
   height: 24px;
-  /* token-ratchet-ignore: optical inset for the 24px state icon, between the 2px and 4px steps */
-  padding: 3px;
-  color: color-mix(in srgb, var(--chalk-muted-text) 60%, transparent);
-}
-.call-person-state.off {
   color: var(--chalk-muted-text);
 }
-.call-person-state.mo {
+.call-person-state svg {
+  width: 18px;
+  height: 18px;
+}
+.call-person-state[data-off] {
   color: var(--chalk-danger-text);
 }
 .call-eq {
