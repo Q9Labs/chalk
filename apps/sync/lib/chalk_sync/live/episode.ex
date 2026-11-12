@@ -1,17 +1,14 @@
 defmodule ChalkSync.Live.Episode do
   @moduledoc "Bounded per-Episode media, presence, and directed-request coordination."
 
-  alias ChalkSync.Database
   alias ChalkSync.Live.DirectedRequests
-  alias ChalkSync.Live.MediaPlaneCall
-  alias ChalkSync.Live.Projection
-  alias ChalkSync.Live.ScreenShareLease
-  alias ChalkSync.ProviderCall
+  alias ChalkSync.Live.Episode.MediaObservation
+  alias ChalkSync.Live.Episode.Projections
+  require Projections
+  alias ChalkSync.Live.Episode.Publication
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Telemetry
-  alias ChalkSync.UUID
 
   @enforce_keys [
     :episode,
@@ -44,7 +41,6 @@ defmodule ChalkSync.Live.Episode do
 
   @type t :: %__MODULE__{}
 
-  @connection_qualities ["good", "weak", "poor"]
 
   @spec new(EpisodeKey.t()) :: t()
   def new(%EpisodeKey{} = episode) do
@@ -80,8 +76,8 @@ defmodule ChalkSync.Live.Episode do
                ),
              requests: requests
          },
-         {:ok, next, _discarded_frames} <- refresh_media(next, []),
-         {:ok, next, snapshots} <- replace_live_projections(next) do
+         {:ok, next, _discarded_frames} <- MediaObservation.refresh_media(next, []),
+         {:ok, next, snapshots} <- Projections.replace_live_projections(next) do
       {:ok, next, snapshots, snapshots}
     else
       {:retryable, reason} -> {:error, reason}
@@ -120,7 +116,7 @@ defmodule ChalkSync.Live.Episode do
   @spec set_connection_quality(t(), pid(), String.t()) ::
           {:ok, t(), [map()]} | {:error, atom()}
   def set_connection_quality(%__MODULE__{} = state, socket, quality)
-      when quality in @connection_qualities do
+      when Projections.is_connection_quality(quality) do
     cond do
       not Map.has_key?(state.connections, socket) ->
         {:error, :not_live}
@@ -129,38 +125,31 @@ defmodule ChalkSync.Live.Episode do
         {:ok, state, []}
 
       true ->
-        presence_snapshot(%{
+        Projections.presence_snapshot(%{
           state
           | connection_qualities: Map.put(state.connection_qualities, socket, quality)
         })
     end
   end
 
+  @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}
+  def presence_snapshot(%__MODULE__{} = state), do: Projections.presence_snapshot(state)
+
   @spec live_target(t(), Identity.t(), map()) :: {t(), map()}
   def live_target(%__MODULE__{} = state, %Identity{} = identity, target) do
     with {:ok, authority} <- actor_authority(state, identity),
          source = target_source(target.name),
          :ok <- authorize(authority, target_capability(source)) do
-      apply_live_target(state, identity, authority, source, target)
+      Publication.apply_live_target(state, identity, authority, source, target)
     else
-      {:retryable, reason} -> {state, live_result(target, :retryable_failure, reason)}
-      {:error, reason} -> {state, live_result(target, :terminal_failure, reason)}
+      {:retryable, reason} -> {state, Publication.live_result(target, :retryable_failure, reason)}
+      {:error, reason} -> {state, Publication.live_result(target, :terminal_failure, reason)}
     end
   end
 
   @spec reconcile(t(), keyword()) :: {:ok, t(), [map()]} | {:error, atom()}
   def reconcile(%__MODULE__{} = state, options \\ []) do
-    refresh_media(state, options)
-  end
-
-  @spec presence_snapshot(t()) :: {:ok, t(), [map()]} | {:error, atom()}
-  def presence_snapshot(%__MODULE__{} = state) do
-    with {:ok, items} <- presence_items(state) do
-      case reconcile_presence(state.presence_projection, items) do
-        {:ok, projection, frames} -> {:ok, %{state | presence_projection: projection}, frames}
-        {:error, reason} -> {:error, reason}
-      end
-    end
+    MediaObservation.refresh_media(state, options)
   end
 
   @spec directed_request(t(), Identity.t(), map(), integer()) :: {t(), map()}
@@ -201,587 +190,6 @@ defmodule ChalkSync.Live.Episode do
     {%{state | requests: requests}, deliveries}
   end
 
-  defp refresh_media(state, options) do
-    with {:ok, pauses} <- Stateholder.media_pauses(state.episode),
-         {:ok, stops} <- Stateholder.media_stops(state.episode),
-         {:ok, observation} <- observed_media(state) do
-      apply_media_observation(
-        %{state | media_pauses: pauses, media_stops: stops},
-        observation,
-        options
-      )
-    else
-      {:retryable, _reason} -> {:error, :dependency_unavailable}
-      error -> error
-    end
-  end
-
-  defp apply_media_observation(state, observation, options) do
-    cursor = {observation.incarnation, observation.sequence}
-
-    case compare_media_cursor(cursor, state.media_observation_cursor) do
-      :older ->
-        {:ok, state, []}
-
-      :equal ->
-        apply_equal_media_observation(state, observation.publications)
-
-      :newer ->
-        apply_newer_media_observation(state, cursor, observation.publications, options)
-    end
-  end
-
-  defp apply_equal_media_observation(state, publications) do
-    observed_items = normalize_media_items(publications)
-
-    if observed_items == state.media_observed_items do
-      reconcile_observed_media(
-        state,
-        apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
-      )
-    else
-      {:error, :dependency_unavailable}
-    end
-  end
-
-  defp apply_newer_media_observation(state, cursor, publications, options) do
-    observed_items = normalize_media_items(publications)
-
-    {_pauses, media_items} =
-      projection = apply_media_pauses(observed_items, state.media_pauses, state.media_stops)
-
-    with {:ok, next} <- reconcile_screen_leases(state, media_items, options) do
-      next = %{next | media_observed_items: observed_items, media_observation_cursor: cursor}
-      reconcile_observed_media(next, projection)
-    end
-  end
-
-  defp reconcile_observed_media(state, {pauses, media_items}) do
-    case reconcile_projection(:media, state.media_projection, media_items) do
-      {:ok, projection, frames} ->
-        {:ok,
-         %{state | media_pauses: pauses, media_items: media_items, media_projection: projection},
-         frames}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp apply_media_pauses(observed_items, pauses, stops) do
-    retained =
-      Enum.reduce(observed_items, %{}, fn item, retained ->
-        key = {item["participant_id"], item["source"]}
-        publication_id = item["publication_id"]
-
-        if is_binary(publication_id) and Map.get(pauses, key) == publication_id,
-          do: Map.put(retained, key, publication_id),
-          else: retained
-      end)
-
-    projected =
-      Enum.map(observed_items, fn item ->
-        key = {item["participant_id"], item["source"]}
-
-        if item["enabled"] and not Map.has_key?(retained, key),
-          do: item,
-          else: %{item | "enabled" => false, "publication_id" => nil}
-      end)
-
-    {retained, project_off_reasons(projected, retained, stops)}
-  end
-
-  # Says why an item is off: a host stop (with its revision) wins over a device pause.
-  # A stop projects even when the media plane lists no publication, so a client that
-  # missed the stop event still sees it. It also projects while another device of the
-  # participant has a live publication, because that device's on answers the stop for
-  # that device only; a device with an older intent must still see it. Everything else
-  # stays without a reason.
-  defp project_off_reasons(items, retained, stops) do
-    listed = MapSet.new(items, &{&1["participant_id"], &1["source"]})
-
-    unlisted =
-      for {{participant_id, source} = key, _revision} <- stops, not MapSet.member?(listed, key) do
-        %{
-          "participant_id" => participant_id,
-          "source" => source,
-          "enabled" => false,
-          "publication_id" => nil
-        }
-      end
-
-    (items ++ unlisted)
-    |> Enum.map(&put_off_reason(&1, retained, stops))
-    |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
-  end
-
-  defp put_off_reason(item, retained, stops) do
-    key = {item["participant_id"], item["source"]}
-
-    case Map.fetch(stops, key) do
-      {:ok, revision} ->
-        Map.merge(item, %{"off_reason" => "host", "off_revision" => revision})
-
-      :error ->
-        if item["enabled"] == false and Map.has_key?(retained, key),
-          do: Map.put(item, "off_reason", "self"),
-          else: item
-    end
-  end
-
-  defp replace_live_projections(state) do
-    with {:ok, items} <- presence_items(state),
-         {:ok, media_projection, media_frame} <- Projection.replace(:media, state.media_items),
-         {:ok, presence_projection, presence_frame} <-
-           Projection.replace(:presence, items) do
-      next = %{
-        state
-        | media_projection: media_projection,
-          presence_projection: presence_projection
-      }
-
-      {:ok, next, [media_frame, presence_frame]}
-    end
-  end
-
-  defp reconcile_presence(projection, items) do
-    ids = MapSet.new(items, & &1["participant_id"])
-
-    departed =
-      projection &&
-        Enum.any?(Projection.items(projection), &(not MapSet.member?(ids, &1["participant_id"])))
-
-    # Presence tombstones retain their old fields. Rotate on durable departure so
-    # initial/recovery snapshots cannot resurrect a departed seat's association.
-    if departed do
-      case Projection.replace(:presence, items) do
-        {:ok, next, frame} -> {:ok, next, [frame]}
-        error -> error
-      end
-    else
-      reconcile_projection(:presence, projection, items)
-    end
-  end
-
-  defp reconcile_projection(stream, nil, items) do
-    case Projection.replace(stream, items) do
-      {:ok, projection, frame} -> {:ok, projection, [frame]}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp reconcile_projection(_stream, projection, items),
-    do: Projection.reconcile(projection, items)
-
-  defp observed_media(state) do
-    case media_plane() do
-      nil ->
-        {:ok, %{incarnation: 0, sequence: 0, publications: []}}
-
-      {module, adapter} ->
-        observe_media(module, adapter, state)
-    end
-  end
-
-  defp observe_media(module, adapter, state) do
-    MediaPlaneCall.invoke(fn ->
-      module.observe_episode_publications(adapter, state.episode)
-    end)
-    |> observed_media_result()
-  end
-
-  defp observed_media_result(
-         {:ok,
-          %{incarnation: incarnation, sequence: sequence, publications: publications} =
-            observation}
-       )
-       when is_integer(incarnation) and incarnation >= 0 and is_integer(sequence) and
-              sequence >= 0 and is_list(publications) do
-    {:ok, observation}
-  end
-
-  defp observed_media_result({:error, reason}), do: {:error, reason}
-  defp observed_media_result(_invalid), do: {:error, :dependency_unavailable}
-
-  defp normalize_media_items(publications) do
-    publications
-    # Older v1 SDKs reject unknown projection sources. Tab audio is discovered
-    # through the SFU publication list and follows the screen's control state.
-    |> Enum.reject(&(&1.source == :screen_audio))
-    |> Enum.map(&media_item/1)
-    |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
-  end
-
-  defp compare_media_cursor(_cursor, nil), do: :newer
-  defp compare_media_cursor(cursor, cursor), do: :equal
-  defp compare_media_cursor(cursor, current) when cursor < current, do: :older
-  defp compare_media_cursor(_cursor, _current), do: :newer
-
-  defp presence_items(state) do
-    case Stateholder.participant_devices(state.episode) do
-      {:ok, seats} ->
-        {:ok,
-         Enum.map(seats, fn seat ->
-           connected =
-             Enum.any?(state.connections, fn {_socket, authority} ->
-               authority.participant_id == seat.participant_id and
-                 authority.generation == seat.generation
-             end)
-
-           %{
-             "participant_id" => seat.participant_id,
-             "state" => if(connected, do: "connected", else: "disconnected"),
-             "speaking" => false,
-             "active_speaker" => false,
-             "admission_revision" => seat.admission_revision
-           }
-           |> put_known("identity_id", seat.identity_id)
-           |> put_known("device_type", seat.device_type)
-           |> put_known("connection_quality", seat_quality(state, seat))
-         end)}
-
-      {:retryable, reason} ->
-        {:error, reason}
-    end
-  end
-
-  # Two sockets of one seat can report different tiers; the guests see the worse one.
-  defp seat_quality(state, seat) do
-    state.connections
-    |> Enum.filter(fn {_socket, authority} ->
-      authority.participant_id == seat.participant_id and authority.generation == seat.generation
-    end)
-    |> Enum.map(fn {socket, _authority} -> Map.get(state.connection_qualities, socket) end)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.max_by(&Enum.find_index(@connection_qualities, fn tier -> tier == &1 end), fn ->
-      nil
-    end)
-  end
-
-  defp put_known(item, _key, nil), do: item
-  defp put_known(item, key, value), do: Map.put(item, key, value)
-
-  defp media_item(item) do
-    %{
-      "participant_id" => item.participant_id,
-      "source" => Atom.to_string(item.source),
-      "enabled" => item.enabled,
-      "publication_id" => item.publication_id
-    }
-  end
-
-  defp apply_live_target(state, identity, authority, source, %{enabled: true} = target) do
-    {next, result} = enable_publication(state, identity, authority, source, target)
-
-    if source in [:camera, :microphone, :screen] and
-         result["outcome"] in ["confirmed", "satisfied"] do
-      key = {authority.participant_id, Atom.to_string(source)}
-      cleared = timed(:clear_pause, fn -> Stateholder.set_media_pause(identity, source, nil) end)
-
-      case cleared do
-        :ok -> {%{next | media_pauses: Map.delete(next.media_pauses, key)}, result}
-        {:retryable, reason} -> {next, live_result(target, :retryable_failure, reason)}
-        {:error, reason} -> {next, live_result(target, :terminal_failure, reason)}
-      end
-    else
-      {next, result}
-    end
-  end
-
-  defp apply_live_target(state, identity, authority, source, target)
-       when source in [:camera, :microphone, :screen] do
-    key = {authority.participant_id, Atom.to_string(source)}
-
-    publication_id =
-      case Enum.find(state.media_observed_items, fn item ->
-             item["participant_id"] == authority.participant_id and
-               item["source"] ==
-                 Atom.to_string(source)
-           end) do
-        %{"publication_id" => value} when is_binary(value) -> value
-        _ -> nil
-      end
-
-    if is_binary(publication_id) do
-      case Stateholder.set_media_pause(identity, source, publication_id) do
-        :ok ->
-          pauses = Map.put(state.media_pauses, key, publication_id)
-          next = %{state | media_pauses: pauses}
-          next = maybe_release_screen_lease(next, authority, source, false, :confirmed)
-          {next, live_result(target, :confirmed)}
-
-        {:retryable, reason} ->
-          {state, live_result(target, :retryable_failure, reason)}
-
-        {:error, reason} ->
-          {state, live_result(target, :terminal_failure, reason)}
-      end
-    else
-      next = maybe_release_screen_lease(state, authority, source, false, :confirmed)
-      {next, live_result(target, :confirmed)}
-    end
-  end
-
-  defp enable_publication(state, identity, authority, source, target) do
-    with {module, adapter} <- media_plane(authority) || {:error, :dependency_unavailable},
-         {:ok, reservation} <-
-           timed(:reserve, fn ->
-             Stateholder.reserve_publication_grant(identity, target.operation_id, source)
-           end) do
-      enable_reserved_publication(
-        state,
-        authority,
-        source,
-        target,
-        reservation,
-        module,
-        adapter
-      )
-    else
-      {:retryable, reason} -> {state, live_result(target, :retryable_failure, reason)}
-      {:error, reason} -> {state, live_result(target, :terminal_failure, reason)}
-    end
-  end
-
-  defp enable_reserved_publication(
-         state,
-         authority,
-         :screen,
-         target,
-         reservation,
-         module,
-         adapter
-       ) do
-    case acquire_screen_lease(state, authority, target.operation_id) do
-      {:ok, lease} ->
-        outcome =
-          if screen_observed?(state.media_items, authority.participant_id),
-            do: :satisfied,
-            else:
-              grant(module, adapter, state, authority, :screen, target.operation_id, reservation)
-
-        {reported, retain?} = complete_grant(state, reservation, outcome)
-        retain_or_release_screen_lease(state, authority, lease, retain?, target, reported)
-
-      {:error, reason} ->
-        _ = complete_grant(state, reservation, {:terminal_failure, reason})
-        {state, screen_lease_failure(target, reason)}
-    end
-  end
-
-  defp enable_reserved_publication(
-         state,
-         authority,
-         source,
-         target,
-         reservation,
-         module,
-         adapter
-       ) do
-    outcome = grant(module, adapter, state, authority, source, target.operation_id, reservation)
-    {reported, _retain?} = complete_grant(state, reservation, outcome)
-    {state, live_result(target, reported)}
-  end
-
-  defp timed(stage, fun), do: Telemetry.timed([:live_target, :stage], stage, fun)
-
-  defp grant(module, adapter, state, authority, source, operation_id, reservation) do
-    {module, adapter} =
-      ProviderCall.attach({module, adapter}, %{control_revision: reservation.control_revision})
-
-    timed(:grant, fn ->
-      MediaPlaneCall.invoke(fn ->
-        module.grant_publication(
-          adapter,
-          operation_id,
-          state.episode,
-          authority.participant_id,
-          source
-        )
-      end)
-    end)
-    |> provider_outcome()
-  end
-
-  defp complete_grant(state, reservation, outcome) do
-    completion =
-      timed(:complete, fn ->
-        Stateholder.complete_publication_grant(
-          state.episode,
-          reservation.reservation_id,
-          outcome
-        )
-      end)
-
-    completed_grant_result(outcome, completion)
-  end
-
-  defp completed_grant_result(outcome, {:ok, %{result: :authorized}}),
-    do: {retryable_provider_outcome(outcome), retain_grant_authority?(outcome)}
-
-  defp completed_grant_result(_outcome, {:ok, %{result: :cleanup_required}}),
-    do: {{:terminal_failure, :authority_changed}, false}
-
-  defp completed_grant_result(_outcome, {:retryable, reason}),
-    do: {{:retryable_failure, reason}, true}
-
-  defp completed_grant_result(_outcome, {:error, _reason}),
-    do: {{:terminal_failure, :authority_changed}, false}
-
-  defp retryable_provider_outcome(:ambiguous),
-    do: {:retryable_failure, :dependency_unavailable}
-
-  defp retryable_provider_outcome(outcome), do: outcome
-
-  defp provider_outcome({:error, reason}), do: {:retryable_failure, reason}
-  defp provider_outcome(outcome), do: outcome
-
-  defp retain_grant_authority?({:terminal_failure, _reason}), do: false
-  defp retain_grant_authority?(_outcome), do: true
-
-  defp retain_or_release_screen_lease(state, authority, lease, true, target, outcome) do
-    leases = Map.put(state.screen_leases, authority.participant_id, lease)
-    {%{state | screen_leases: leases}, live_result(target, outcome)}
-  end
-
-  defp retain_or_release_screen_lease(state, _authority, lease, false, target, outcome) do
-    _ = release_screen_lease(state, lease)
-    {state, live_result(target, outcome)}
-  end
-
-  defp maybe_release_screen_lease(state, authority, :screen, false, outcome)
-       when outcome in [:confirmed, :satisfied] do
-    case Map.pop(state.screen_leases, authority.participant_id) do
-      {nil, _leases} ->
-        state
-
-      {lease, leases} ->
-        _ = release_screen_lease(state, lease)
-        %{state | screen_leases: leases}
-    end
-  end
-
-  defp maybe_release_screen_lease(state, _authority, _source, _enabled, _outcome), do: state
-
-  defp reconcile_screen_leases(state, media_items, options) do
-    case observed_screen_participants(media_items) do
-      [] -> release_absent_screen_leases(state, media_items, options)
-      [participant_id] -> reconcile_single_screen(state, media_items, participant_id, options)
-      _conflicting -> {:error, :conflicting_screen_publications}
-    end
-  end
-
-  defp reconcile_single_screen(state, media_items, participant_id, options) do
-    with {:ok, state} <- release_absent_screen_leases(state, media_items, options) do
-      case Map.fetch(state.screen_leases, participant_id) do
-        {:ok, _lease} -> {:ok, state}
-        :error -> acquire_observed_screen_lease(state, participant_id, options)
-      end
-    end
-  end
-
-  defp release_absent_screen_leases(state, media_items, options) do
-    Enum.reduce_while(state.screen_leases, {:ok, state}, fn
-      {participant_id, lease}, {:ok, current} ->
-        result =
-          if screen_observed?(media_items, participant_id) do
-            reconcile_observed_screen_lease(current, participant_id, lease, options)
-          else
-            {:ok, release_and_forget_screen_lease(current, participant_id, lease)}
-          end
-
-        case result do
-          {:ok, next} -> {:cont, {:ok, next}}
-          {:error, _reason} = error -> {:halt, error}
-        end
-    end)
-  end
-
-  defp reconcile_observed_screen_lease(state, participant_id, lease, options) do
-    case Stateholder.participant_authority(state.episode, participant_id, lease.owner_generation) do
-      {:ok, %{generation: generation}} when generation == lease.owner_generation ->
-        renew_screen_lease(state, participant_id, lease, options)
-
-      {:retryable, reason} ->
-        {:error, reason}
-
-      _authority_changed ->
-        {:ok, release_and_forget_screen_lease(state, participant_id, lease)}
-    end
-  end
-
-  defp renew_screen_lease(state, participant_id, lease, options) do
-    with {:ok, connection} <- database_connection(state),
-         {:ok, renewed} <- ScreenShareLease.renew(connection, state.episode, lease, options) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, renewed)}}
-    else
-      {:error, :lease_expired} ->
-        rotate_screen_lease(state, participant_id, lease, options)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp rotate_screen_lease(state, participant_id, lease, options) do
-    with {:ok, connection} <- database_connection(state),
-         {:ok, rotated} <-
-           ScreenShareLease.acquire(
-             connection,
-             state.episode,
-             participant_id,
-             lease.owner_generation,
-             options
-           ) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, rotated)}}
-    else
-      {:error, reason} -> {:error, reason}
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp acquire_observed_screen_lease(state, participant_id, options) do
-    with {:ok, authority} <- Stateholder.participant_authority(state.episode, participant_id, nil),
-         {:ok, connection} <- database_connection(state),
-         {:ok, lease} <-
-           ScreenShareLease.acquire(
-             connection,
-             state.episode,
-             participant_id,
-             authority.generation,
-             options
-           ) do
-      {:ok, %{state | screen_leases: Map.put(state.screen_leases, participant_id, lease)}}
-    else
-      {:retryable, reason} -> {:error, reason}
-      {:error, reason} -> {:error, reason}
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp release_and_forget_screen_lease(state, participant_id, lease) do
-    _ = release_screen_lease(state, lease)
-    %{state | screen_leases: Map.delete(state.screen_leases, participant_id)}
-  end
-
-  defp screen_observed?(media_items, participant_id) do
-    Enum.any?(media_items, fn item ->
-      item["participant_id"] == participant_id and item["source"] == "screen" and
-        item["enabled"]
-    end)
-  end
-
-  defp observed_screen_participants(media_items) do
-    media_items
-    |> Enum.filter(&(&1["source"] == "screen" and &1["enabled"]))
-    |> Enum.map(& &1["participant_id"])
-    |> Enum.uniq()
-  end
-
   defp recovery_authority(state, identity) do
     case actor_authority(state, identity) do
       {:error, :participant_inactive} ->
@@ -808,49 +216,6 @@ defmodule ChalkSync.Live.Episode do
       identity.participant_id,
       identity.participant_generation
     )
-  end
-
-  defp acquire_screen_lease(state, authority, operation_id) do
-    with {:ok, connection} <- database_connection(state) do
-      ScreenShareLease.acquire(
-        connection,
-        state.episode,
-        authority.participant_id,
-        authority.generation,
-        screen_lease_options(operation_id)
-      )
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp screen_lease_options(operation_id) do
-    cond do
-      is_binary(operation_id) and byte_size(operation_id) == 16 ->
-        [lease_id: UUID.load!(operation_id)]
-
-      match?({:ok, _uuid}, UUID.dump(operation_id)) ->
-        [lease_id: operation_id]
-
-      true ->
-        []
-    end
-  end
-
-  defp release_screen_lease(state, lease) do
-    with {:ok, connection} <- database_connection(state) do
-      ScreenShareLease.release(connection, state.episode, lease)
-    end
-  catch
-    :exit, _reason -> {:error, :dependency_unavailable}
-  end
-
-  defp database_connection(state) do
-    configured = Application.get_env(:chalk_sync, :database_connections)
-
-    if configured || Process.whereis(ChalkSync.Database.Registry),
-      do: {:ok, Database.connection(state.episode)},
-      else: {:error, :dependency_unavailable}
   end
 
   defp authorize_directed_request(state, actor, request, now_ms) do
@@ -890,34 +255,9 @@ defmodule ChalkSync.Live.Episode do
   defp target_capability(:camera), do: "publishVideo"
   defp target_capability(:screen), do: "publishScreen"
 
-  defp screen_lease_failure(target, :dependency_unavailable),
-    do: live_result(target, :retryable_failure, :dependency_unavailable)
-
-  defp screen_lease_failure(target, reason),
-    do: live_result(target, :terminal_failure, reason)
-
   defp directed_name("request_unmute"), do: :request_unmute
   defp directed_name("request_start_camera"), do: :request_start_camera
   defp directed_name(name), do: name
-
-  defp name_string(name) when is_atom(name), do: Atom.to_string(name)
-  defp name_string(name) when is_binary(name), do: name
-
-  defp live_result(target, {outcome, error_code})
-       when outcome in [:retryable_failure, :terminal_failure],
-       do: live_result(target, outcome, error_code)
-
-  defp live_result(target, outcome), do: live_result(target, outcome, nil)
-
-  defp live_result(target, outcome, error_code) do
-    %{
-      "type" => "live_target_result",
-      "operation_id" => target.operation_id,
-      "name" => name_string(target.name),
-      "outcome" => Atom.to_string(outcome),
-      "error_code" => error_code && Atom.to_string(error_code)
-    }
-  end
 
   defp directed_result(request_id, result) do
     %{
@@ -925,14 +265,5 @@ defmodule ChalkSync.Live.Episode do
       "request_id" => request_id,
       "result" => Atom.to_string(result)
     }
-  end
-
-  defp media_plane, do: Application.get_env(:chalk_sync, :media_plane)
-
-  defp media_plane(authority) do
-    ProviderCall.attach(media_plane(), %{
-      participant_id: authority.participant_id,
-      participant_generation: authority.generation
-    })
   end
 end
