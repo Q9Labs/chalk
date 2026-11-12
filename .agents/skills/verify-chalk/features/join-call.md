@@ -39,8 +39,6 @@ Preconditions:
 
 - The guest cookie is `__Host-` prefixed and `Secure`. On an origin that is neither `localhost` nor HTTPS the arrival POST returns 201 but the browser drops the cookie, so the page never shows a tile. A non-resolvable `PUBLIC_ORIGIN` also breaks the Sync WebSocket (`ERR_NAME_NOT_RESOLVED` in console.json).
 - A guest can leave only with the cookie and the `X-Chalk-Arrival-Handle` header. A bare DELETE answers 404 `arrival.unavailable`.
-- The privacy-policy banner can cover part of the page. It does not block the controls.
 - console.json shows a few `Failed to load resource ... 406` lines for non-API resources. They did not affect the journey. Treat a new `/v1` status of 4xx or 5xx in network.json as a failure.
 - Without Cloudflare SFU credentials the API cannot create a media session, so tiles never publish. The journey must then fail. Do not skip the video step.
 - The test pattern is the repo's fake camera, so a passing run proves the SFU path and the page, not a real camera or microphone.
-- The first `pnpm dev` from an empty machine compiles Go and Elixir and pulls the Redis image. Allow several minutes before ready.

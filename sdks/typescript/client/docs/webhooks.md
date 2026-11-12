@@ -231,59 +231,7 @@ USING expired WHERE inbox.event_id = expired.event_id;
 
 If the complete statement returns zero rows, throw a content-free ownership error. If the database call itself has an uncertain outcome, don't release: completion may have committed before the connection failed, so a retry must discover `completed` or wait for the original lease to expire.
 
-A Redis implementation should perform each transition in Lua so its state check and mutation remain atomic. Store one hash per Event; the acquire script takes the lease duration and a fresh token in `ARGV`, and uses Redis time so application clock skew cannot steal a lease:
-
-```lua
--- acquire: ARGV[1] = lease milliseconds, ARGV[2] = fresh token
-local lease_ms = tonumber(ARGV[1])
-if not lease_ms or lease_ms < 1 or lease_ms > 300000 or ARGV[2] == '' then
-  return redis.error_reply('invalid acquire arguments')
-end
-local time = redis.call('TIME')
-local now = (tonumber(time[1]) * 1000) + math.floor(tonumber(time[2]) / 1000)
-local state = redis.call('HGET', KEYS[1], 'state')
-if state == 'completed' then return {'completed'} end
-
-local expires_at = tonumber(redis.call('HGET', KEYS[1], 'expires_at') or '0')
-if state == 'leased' and expires_at > now then
-  return {'busy', tostring(math.ceil((expires_at - now) / 1000))}
-end
-
-local new_expiry = now + lease_ms
-redis.call('HSET', KEYS[1], 'state', 'leased', 'token', ARGV[2],
-  'expires_at', new_expiry)
-redis.call('PEXPIREAT', KEYS[1], new_expiry)
-return {'acquired', ARGV[2]}
-```
-
-```lua
--- complete: ARGV[1] = owned token, ARGV[2] = retention milliseconds
-local retention_ms = tonumber(ARGV[2])
-if ARGV[1] == '' or not retention_ms or retention_ms < 2592000000 then
-  return redis.error_reply('invalid complete arguments')
-end
-if redis.call('HGET', KEYS[1], 'state') ~= 'leased'
-  or redis.call('HGET', KEYS[1], 'token') ~= ARGV[1] then
-  return 0
-end
-redis.call('HSET', KEYS[1], 'state', 'completed')
-redis.call('HDEL', KEYS[1], 'token', 'expires_at')
-redis.call('PEXPIRE', KEYS[1], retention_ms)
-return 1
-```
-
-```lua
--- release: ARGV[1] = owned token
-if ARGV[1] == '' then return redis.error_reply('invalid release token') end
-if redis.call('HGET', KEYS[1], 'state') ~= 'leased'
-  or redis.call('HGET', KEYS[1], 'token') ~= ARGV[1] then
-  return 0
-end
-redis.call('DEL', KEYS[1])
-return 1
-```
-
-Pass at least `2592000000` milliseconds—30 days—as the completion retention, with operational margin if cleanup timing is approximate. A complete result of `1` is success and `0` is stale ownership; a release result of `0` is a safe no-op. Treat a Redis timeout during complete as uncertain and leave the lease alone, just as with PostgreSQL. Redis eviction would erase deduplication state, so use persistence and an eviction policy suitable for this data.
+A Redis implementation must perform each transition in a Lua script so the state check and mutation stay atomic. Store one hash per Event with `state`, `token` and `expires_at`. Use Redis `TIME`, not the application clock, so clock skew cannot steal a lease. Acquire returns `completed`, `busy` with seconds left, or `acquired` with the token; complete and release succeed only when the stored token matches. Set completion retention to at least `2592000000` milliseconds (30 days). Treat a Redis timeout during complete as uncertain and leave the lease alone, as with PostgreSQL. Eviction erases deduplication state, so use persistence and an eviction policy suitable for this data.
 
 ## Understand the remaining duplicate window
 

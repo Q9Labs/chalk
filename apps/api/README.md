@@ -1,501 +1,57 @@
 # Chalk API
 
-Go control-plane API for Chalk.
-
-Keep process wiring thin in `cmd/main.go`, HTTP in inbound adapters, domain
-logic behind composable boundaries, and provider-specific details in adapters.
-
-Public REST routes live under one `/v1` boundary. Operational routes stay
-unversioned:
-
-- `/healthz`: process liveness.
-- `/readyz`: dependency readiness, currently Postgres.
-
-For the endpoint design and implementation loop, see
-[`docs/route-workflow.md`](docs/route-workflow.md).
-
-## Gate
-
-Shell commands below run from the repository root unless a block changes directory.
-
-Inspect the API gate with:
-
-```bash
-apps/api/scripts/gate.sh describe
-```
-
-## Runtime Config
-
-Config is env-only. Secret managers or platform-specific config systems should
-inject environment variables before the API starts.
-
-[`internal/config/config.go`](internal/config/config.go) owns supported environment variables, defaults, and startup validation.
-
-### Service principal (optional)
-
-Set all three variables to enable a backend service caller; leave all unset to
-preserve the API-key-only default:
-
-- `CHALK_API_SERVICE_ID`: stable service identity (1–128 characters). Never use a secret here.
-- `CHALK_API_SERVICE_SECRETS`: comma-separated bearer secrets, each at least 32 characters. Add a replacement, deploy callers, then remove the old secret; keep the service ID unchanged.
-- `CHALK_API_SERVICE_SCOPES`: comma-separated explicit scopes from the API-key scope vocabulary, such as `tenants:read,tenants:write,spaces:read`. No wildcard or implicit full access.
-
-The service may create Tenants with optional `external_id` (1–512 characters),
-list only its own Tenants, and use its scopes only within those Tenants.
-`POST /v1/tenants` returns the existing Tenant for a repeated
-`(service ID, external_id)`, without replacing its name, settings, or policies.
-`GET /v1/tenants/by-external-id?external_id=...` looks up only the caller's Tenant.
-The calling service is responsible for the request-supplied `external_id` and end-user identity; Tenant ownership is derived only from the authenticated service identity.
-Keep this credential server-side. It is never System; the local-only System token
-remains unavailable in non-local environments.
-
-With `tenants:read`, services can read their own Tenant including
-`cors_allowed_origins`. With `tenants:write`, they can PATCH only
-`cors_allowed_origins` on their own Tenants. Including any other field returns
-forbidden, even when its value is null. System and Tenant API-key permissions
-are unchanged. Services cannot create or rotate API keys containing `tenants:write`, because those keys can change fields beyond CORS. There is no command for adopting existing Tenants.
-
-Set `CHALK_API_TRUSTED_PROXY_CIDRS` to the comma-separated CIDR ranges of the
-load balancers or edge proxies allowed to supply `CF-Connecting-IP` or
-`X-Forwarded-For` for public-route rate limiting. Non-local environments use
-Redis-backed rate limiting through `CHALK_REDIS_URL`.
-
-Set `CHALK_API_DIRECT_URL` to the https origin of the host's direct TLS proxy
-(see `docs/operators/direct-sync-path.md`) to advertise it as
-`directSignalingUrl` in each own-SFU join grant. Empty (the default) leaves it
-out, so the setting also turns the direct door off for new joins without a web
-deploy. Requests the proxy marks with `X-Chalk-Ingress: direct` are limited per
-client address before any credential check.
-
-For local harnesses, set `CHALK_API_RATE_LIMITS=off` with `CHALK_API_ENV=local`
-to disable only the authenticated read and write policies. Public-route and
-webhook policies remain enabled. `on` (the default when unset or empty) keeps
-all policies enabled. Values are case-insensitive and surrounding whitespace
-is ignored. Other values are rejected. Startup rejects `off` in every
-non-local environment. Do not use this switch to test rate-limit handling.
-
-### Default MediaPlane
-
-`CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when
-a Create Space request omits `media_plane`. The supported deployment default is
-`cf_sfu` or `chalk_sfu`. Managed production requires this setting; generic local
-and test processes may omit it, but then Create Space requests must supply a
-provider. `chalk_sfu` needs `CHALK_SFU_ENABLED=true` and keeps the Cloudflare
-application settings required, because Cloudflare stays the fallback for a client
-SDK that cannot run the own SFU, for the kill switch, and for Episodes already bound
-to it. A Space or Tenant that stores no plane follows the default; one that stores
-`cf_sfu` stays on Cloudflare. Explicit Tenant-managed provider configuration uses `cf_sfu`.
-
-A client SDK that cannot run the own SFU (it sends no `X-Chalk-Media-Providers`
-header naming `chalk_sfu`; every SDK before 5.5.0) gets a working call on
-Cloudflare while a Cloudflare application is configured. Where none is, or once
-`CHALK_SFU_CLIENT_SUNSET` has passed, it gets 409 `media.client_unsupported`, a
-clear upgrade error.
-
-`CHALK_NEW_SPACE_MEDIA_PLANE` sets the plane a Create Space request gets when it
-omits `media_plane`, instead of `CHALK_DEFAULT_MEDIA_PLANE`. It changes new
-Spaces only: a Space or Tenant that stores no plane still resolves to the
-deployment default. `chalk_sfu` is accepted only with `CHALK_SFU_ENABLED=true`
-and `CHALK_SFU_ALLOWED_SPACES=*`, because a new Space's ID is not known ahead of
-time; startup fails otherwise. A Tenant that names its own plane does not get
-it: one with `tenant_managed` or disabled provider credentials, or with a default
-media plane, keeps the deployment default for its new Spaces, and those Spaces
-get no `CHALK_NEW_SPACE_*_POLICY` default. An Episode still starts on Cloudflare when the
-client SDK does not declare `chalk_sfu` (older than 5.5.0) or no node has room.
-To turn it off, unset the variable (or set `cf_sfu`) and restart; Spaces that
-already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
-`CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list.
-
-A Space or Tenant can choose its own plane. A new Episode starts on the first of
-these that names a plane: the kill switch (`media-settings new-episodes --state off|on`, stored in the
-database with an audit row, so it needs no restart; `CHALK_SFU_NEW_EPISODES=off` is a
-deploy-time floor under it). It sends every new Episode to `cf_sfu` and leaves live Episodes alone;
-the Space's `media_plane_setting`, the Tenant's `default_media_plane`, and
-`CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` still applies as well.
-The public API never accepts `chalk_sfu` in a request; only an operator sets it,
-with `cmd/media-settings` (see `infrastructure/sfu/README.md`). A Space whose
-request names no plane gets `CHALK_NEW_SPACE_MEDIA_PLANE` when its Tenant can
-serve it. A Tenant's `default_media_plane` counts only when it names a known
-plane, and `chalk_sfu` counts only when an operator wrote it. A stored choice is
-authoritative only while the legacy column it was written beside (`media_plane`) still equals it; a Tenant default is approved only by the operator command (a trigger
-clears the approval on every other write), so a write by the previous release after a
-rollback wins; a live Episode always resolves from its stored binding. Responses carry `media_plane_setting` (null
-means inherit) and the read-only `effective_media_plane`. Spaces that
-public invites create take their plane from `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`
-instead, so that setting moves them separately.
-
-`CHALK_NEW_SPACE_RECORDING_POLICY` (`disabled`, `manual`, `automatic`) and
-`CHALK_NEW_SPACE_TRANSCRIPTION_POLICY` (`disabled`, `on_demand`, `automatic`) set
-the `recording_policy` and `transcription_policy` a Create Space request gets
-when it omits them. Unset, an omitted policy keeps the database default
-(`automatic` for both). A
-request that names a policy always wins, and a Tenant's transcription ceiling
-still clamps the effective mode. When `CHALK_NEW_SPACE_MEDIA_PLANE=chalk_sfu`,
-unless both effective policies (the configured one, else the database default)
-are `disabled`, `CHALK_SFU_CAPTURE_ENABLED=true` is also required; startup fails
-otherwise. Turning the policies off only affects Spaces created afterwards:
-existing Spaces keep the policies they stored. Spaces that public invites create
-are not covered.
-
-An absent Tenant provider configuration may use deployment credentials only
-when the Space provider matches this default. A concrete Tenant configuration
-remains authoritative, an explicit disable never falls back, and deployment
-credentials are never borrowed across providers.
-
-The checked-in local launcher sets `cf_sfu`. The deployment default requires the
-Realtime app ID and secret.
-
-The ProviderBridge currently uses the Cloudflare SFU executor independently of
-the deployment default. When the bridge is enabled, its Realtime app ID and
-secret remain required.
-
-### Production capabilities
-
-Integrations, recording, and transcription are explicit runtime capabilities:
-
-- `CHALK_RECORDING_ENABLED=true|false`
-- `CHALK_TRANSCRIPTION_ENABLED=true|false`
-
-All three default to `true` outside `local`, preserving fail-closed production
-startup. Local development defaults all three to `false`. A capability-disabled
-deployment must set its flag to `false`; omitting provider credentials never
-disables a capability implicitly.
-
-```bash
-CHALK_RECORDING_ENABLED=false
-CHALK_TRANSCRIPTION_ENABLED=false
-```
-
-When disabled, the API does not construct the provider or worker services.
-Authenticated public routes for that capability return the bounded
-`503 service_unavailable` response, and private transcription worker routes are
-not mounted. `/readyz` reports each capability as `enabled` or `disabled` on
-both ready and dependency-failure responses. The `api.starting` structured log
-records the same capability booleans without logging credentials or provider
-config.
-
-When transcription is enabled, startup requires a workload secret of at least 32
-bytes, a dispatcher Lambda function name, and complete R2 credentials. Invalid
-or non-boolean capability flag values are rejected.
-
-### Tenant media limits
-
-These optional non-negative integer settings default to `0` (unlimited), including
-when unset. Limits apply independently to every Tenant except the managed public Tenant
-(`CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID`, or the Tenant created for local public
-invites). They do not replace the engine-wide recording capacity limits, which
-still apply to the managed public Tenant.
-
-| Setting                                  | Meaning                                                                                                                                                                                                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CHALK_TENANT_MAX_CONCURRENT_RECORDINGS` | Maximum outstanding recording reservations per Tenant.                                                                                                                                                                                      |
-| `CHALK_TENANT_DAILY_RECORDING_MINUTES`   | Reject new recordings when capture time for recordings started in the current UTC day reaches this many minutes. Active recordings count up to now; finished recordings count through capture completion, capped by their capture deadline. |
-| `CHALK_TENANT_MAX_LIVE_EPISODES`         | Maximum active or ending Episodes per Tenant, including public-invite Episodes outside the managed public Tenant. Ending Episodes retain their slot until ended.                                                                            |
-
-Daily recording minutes are an admission check, not a mid-recording stop. An
-admitted recording may exceed the remaining daily allowance, up to the existing
-four-hour per-recording maximum. A recording begun before midnight is charged to
-its start day, not split across days. Concurrent recording admission includes
-reserved/prewarmed recordings so delayed workers cannot overbook a Tenant.
-
-Live Episode rejections use HTTP 409 and `tenant.live_episode_limit_reached`.
-Recording starts are durable Sync commands rather than public REST endpoints;
-the private provider bridge records a terminal outcome and returns HTTP 409 with
-code `tenant.recording_limit_reached` and reason `tenant_recording_limit_reached`, which Sync recognizes without retrying it.
-Transcription operates on existing recordings, so these recording bounds also
-bound the source media available for transcription.
-
-## Transcription artifacts
-
-Asynchronous transcription is enabled only when the API can mount the complete
-worker boundary. Enabled startup requires R2 and Redis plus
-`CHALK_TRANSCRIPTION_WORKLOAD_AUTH_SECRET`,
-`CHALK_TRANSCRIPTION_CONTROL_AUDIENCE`, and
-`CHALK_TRANSCRIPTION_DISPATCHER_FUNCTION_NAME`. The HMAC secret must match the
-dispatcher's SSM-managed workload secret; the audience and API release version
-are included in every replay-bound signature. The API uses its AWS workload
-identity only to enqueue a small asynchronous Lambda wake hint. The minute
-dispatcher schedule reconciles lost hints.
-
-Public transcript requests do not accept providers, object keys, queue
-priority, retry budgets, or lifecycle state. Recorder-owned committed source
-metadata must exist before a request is accepted, and normalized transcript
-bytes remain private R2 artifacts exposed through short-lived download URLs.
-
-### Outbound webhook encryption and erasure
-
-Outbound webhook target URLs and replayable one-time responses are encrypted at
-rest. Local development may omit webhook encryption configuration and use the
-deterministic local-only default. Every non-local environment fails closed
-unless it supplies either `CHALK_WEBHOOK_ENCRYPTION_KEY` as one base64-encoded
-32-byte key, or a versioned keyring through
-`CHALK_WEBHOOK_ENCRYPTION_KEYRING` plus
-`CHALK_WEBHOOK_ENCRYPTION_CURRENT_VERSION`. A keyring entry uses
-`version:base64-key`; retain the previous version during a rotation overlap so
-existing ciphertext remains decryptable, and make the new version current for
-all new writes.
-
-The repository currently uses process-injected AES-GCM keys. It has no KMS or
-envelope-key provider, so deployment secret injection and key retirement remain
-external operational responsibilities.
-
-User deletion must call `WebhookRepository.EraseUserWebhookEvents` before the
-user row is deleted. The hook destroys linked event bodies, terminally fences
-their Deliveries, closes an in-flight Attempt as `event_erased`, emits a
-content-free terminal journey event, and then removes the user link. This live
-erasure path is enforced and directly covered by a PostgreSQL integration test.
-The repository does not yet contain a deletion orchestrator or an external
-tombstone authority that survives database backup restoration. Therefore a
-restored backup can revive pre-erasure webhook bodies or encrypted Endpoint
-material and must not be declared ready until an external durable tombstone
-reconciler has replayed deletions. Backup restore plus tombstone replay is an
-explicit production-readiness blocker, not a capability of the current API.
-
-## Database
-
-The API uses Postgres with `pgx`, `sqlc`, and `goose`. For local Postgres,
-migrations, query generation, and schema workflow, see
-[`docs/database-workflow.md`](docs/database-workflow.md).
-
-For the full local backing-service set, including Redis:
-
-```bash
-apps/api/scripts/dev-services.sh start
-```
-
-## Sync participant tokens
-
-For a person joining from multiple devices, admit one Participant per device with
-a separate admission idempotency key. Pass the same `identity_external_id` on each
-admission to resolve a tenant-scoped person Identity, or pass an existing
-`identity_id`. The backend must derive this identity from its own authenticated
-subject: two people assigned the same key are treated as one person. These fields
-are mutually exclusive. Each Participant keeps its
-own media connection, role, access refresh, leave, attendance, and webhooks.
-Updated clients use the shared Identity to suppress audio from the person's other
-devices and start a new microphone off when another device is already sending.
-Sync projects this verified association for every admitted seat, including seats
-without a live socket. The optional device type is stored per participant
-generation; older clients receive no additional presence fields. The negotiated
-welcome also includes the authenticated seat’s own verified Identity before entry
-confirmation, so a pending admission applies the same microphone startup policy.
-
-Participant admission returns a five-minute Ed25519-signed sync JWT. An
-authenticated tenant member can refresh it with
-`POST /v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token`.
-The refresh path reloads the active participant generation, capabilities, and
-admission intent from Postgres before signing.
-
-Production requires `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`,
-`CHALK_SYNC_TOKEN_KEY_ID`, and `CHALK_SYNC_TOKEN_PRIVATE_KEY`. The private key is
-the unpadded base64url encoding of a 64-byte Ed25519 private key and must be
-supplied through the runtime secret boundary.
-
-## Public Space invites
-
-Public Space links use ten-letter invite codes and canonical
-`/{abc-defg-hij}` URLs. Legacy `cspi1` Ed25519 links remain valid. Hosted
-environments must configure all of these values:
-
-- `CHALK_PUBLIC_INVITE_MANAGED_TENANT_ID` identifies the Tenant that owns Spaces
-  created from the public Open a Space flow.
-- `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE` selects the media plane for those
-  auto-created Spaces.
-- `CHALK_PUBLIC_INVITE_WEB_ORIGIN` is the HTTPS origin used to build canonical
-  `/{abc-defg-hij}` links.
-- `CHALK_PUBLIC_INVITE_KEY_ID` and `CHALK_PUBLIC_INVITE_PRIVATE_KEY` select the
-  current signing key. The private key is an unpadded base64url Ed25519 private
-  key and must stay inside the runtime secret boundary.
-- `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` is a non-empty JSON object that maps
-  key IDs to unpadded base64url Ed25519 public keys. It must include the public
-  key for the current signing key.
-
-Native requests identified by `X-Chalk-Client: react-native` receive a legacy
-link unless they also send `X-Chalk-Invite-Format: code`. This keeps shipped
-native builds compatible while the current mobile app opts into invite codes.
-
-`CHALK_PUBLIC_INVITE_AUTO_LIFECYCLE_SECONDS` controls how long an auto-created
-Space may remain active before Chalk ends its live Episode and archives it. It
-defaults to one hour and accepts values from 60 through 3600 seconds.
-
-`CHALK_PUBLIC_INVITE_SCHEDULER_INTERVAL_MS` and
-`CHALK_PUBLIC_INVITE_SCHEDULER_BATCH` are optional, but they must be set
-together. They control the worker that ends an auto-created Space's live
-Episode and archives the Space after its creator leaves or its deadline passes.
-
-Keep an outgoing public key in `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` while
-links signed by that key must remain valid. Removing the key invalidates those
-links; rotating a Space invite invalidates the prior link through its persisted
-generation instead. Local development derives a local-only keyring and creates
-or reuses a neutral managed Tenant when these variables are absent. It requires
-at least one non-wildcard API CORS origin so canonical links have a safe origin.
-
-Sensitive dashboard mutations use a five-minute, action- and resource-bound
-recent-auth proof. Local development uses a deterministic local-only default;
-every non-local environment must supply `CHALK_AUTH_RECENT_AUTH_SECRET` with at
-least 32 bytes through the runtime secret boundary. The API never logs proof
-values or passwords, and API-key credentials cannot obtain or satisfy this
-Dashboard Account challenge.
-
-## Managed web SDK credentials
-
-Customer backends authenticate tenant API requests with credentials created by
-the API-key lifecycle routes. Raw values use the `chalk_sk_…` namespace and are
-shown only by create and rotate responses. Keep them in the backend secret
-boundary; browsers receive opaque AccessGrants instead.
-
-An AccessGrant contains separate five-minute Sync and media JWTs. The media
-JWT is accepted only by the participant-bound SFU signaling routes and is bound
-to the live participant generation, configured media provider, and exact
-Cloudflare connection. It is never treated as a tenant principal.
-
-The media signer uses `CHALK_SYNC_TOKEN_PRIVATE_KEY` and
-`CHALK_SYNC_TOKEN_KEY_ID`. During signing-key rotation,
-`CHALK_MEDIA_TOKEN_VERIFICATION_KEYS` may contain the current and previous
-Ed25519 public keys as a JSON object whose values are unpadded base64url. The
-entry for the current key ID must match the configured private key. Retain an
-outgoing public key for at least five minutes and 30 seconds so already-issued
-media credentials remain verifiable through their lifetime and clock-skew
-allowance.
-
-Durable Sync media effects use a second, private API listener. Every non-local
-environment must set `CHALK_PROVIDER_BRIDGE_ADDRESS`,
-`CHALK_PROVIDER_BRIDGE_SERVER_CERT_FILE`,
-`CHALK_PROVIDER_BRIDGE_SERVER_KEY_FILE`,
-`CHALK_PROVIDER_BRIDGE_CLIENT_CA_FILE`, and
-`CHALK_PROVIDER_BRIDGE_SPIFFE_TRUST_DOMAIN`; partial configuration is rejected.
-The listener requires TLS 1.3 and a verified client certificate whose sole URI
-SAN is
-`spiffe://<trust-domain>/environment/<CHALK_API_ENV>/sync/<sync-node-uuid>`.
-It is separate from the public router and exposes authenticated readiness at
-`GET /internal/v1/sync/provider-bridge/ready`.
-
-`CHALK_CLOUDFLARE_REALTIME_BASE_URL` exists only for deterministic local tests
-against a protocol-faithful Cloudflare endpoint. Non-local environments reject
-it and always use Cloudflare's production SFU endpoint.
-
-`CHALK_CLOUDFLARE_TURN_KEY_ID` and `CHALK_CLOUDFLARE_TURN_API_TOKEN` name a
-Cloudflare TURN key (created by [`infrastructure/cloudflare-turn`](../../infrastructure/cloudflare-turn/README.md)).
-Set both or neither; the runtime validators require them for nightly and
-production on the Cloudflare SFU. With both, a media bootstrap carries
-`iceServers` with short-lived TURN credentials (UDP 3478, TCP, and TLS on 443)
-next to `stunServer`, but only for callers tied to an accountable owner:
-authenticated access grants and episode admission, and guests who join a
-tenant's Space through its public invite. Guests of an anonymous public Space
-(the managed public Tenant) get STUN only, as do tenant-managed Cloudflare
-accounts. With no TURN key, or when Cloudflare cannot mint a credential, clients
-get STUN only and the join still succeeds. One process-wide minter reuses a
-credential for an hour, backs off for 30 seconds after a failure, and a join
-waits at most two seconds for it.
-
-## Runtime Smoke
-
-```bash
-apps/api/scripts/smoke-healthz.sh
-apps/api/scripts/smoke-lifecycle.mjs
-```
-
-`apps/api/scripts/smoke-healthz.sh` verifies `/healthz`, `/readyz`, 404, and 405 behavior against
-a running API. `apps/api/scripts/smoke-lifecycle.mjs` builds the binary, waits for `/healthz`,
-sends `SIGTERM`, and verifies the process exits cleanly within configurable
-startup/shutdown budgets.
-
-## Local Observability And Performance
-
-Logging is vendor-neutral and writes structured logs to stdout by default. The
-logger attaches stable common fields (`service`, `env`, and `version`) to each
-record so deployment infrastructure can ship the same output to CloudWatch,
-Loki, Datadog, Better Stack, or another backend later.
-
-Useful production-safe defaults:
-
-```bash
-CHALK_API_LOG_FORMAT=json
-CHALK_API_LOG_LEVEL=info
-CHALK_API_REQUEST_LOGS=errors
-CHALK_API_SLOW_REQUEST_MS=250
-```
-
-OpenTelemetry traces and metrics export over OTLP/HTTP when an endpoint is
-configured. The endpoint is a base URL; the API sends traces to `/v1/traces`
-and metrics to `/v1/metrics`.
-
-```bash
-CHALK_API_OTLP_ENDPOINT=https://otel.example.com:4318
-```
-
-`CHALK_API_OTLP_INSECURE=true` allows an `http://` endpoint only in `local`
-environments. The runtime emits Go runtime metrics, HTTP server spans, database
-operation spans, Redis rate-limit spans, and Cloudflare media-plane request
-spans. It propagates W3C `traceparent` and mirrors or creates the lowercase
-`x-chalk-journey-id` response header. A valid `baggage: session.id=<uuid>` request
-header becomes the `session.id` attribute on every span of the request and a field
-on its log lines; anything else in `baggage` is ignored. Request bodies and operation content are
-never included in traces or logs.
-
-`CHALK_API_REQUEST_LOGS` accepts `off`, `errors`, `slow`, `sampled`, or `all`.
-Successful request logs are off by default; startup, shutdown, and error logs
-still use the shared logger. `sampled` uses `CHALK_API_REQUEST_SAMPLE_RATE`
-between `0` and `1`.
-
-Local profiling hooks remain opt-in and are intended for short diagnostic runs:
-
-```bash
-cd apps/api
-CHALK_API_OPERATION_LOGS=1 CHALK_API_PROFILER=1 CHALK_API_REQUEST_LOGS=all go run ./cmd
-```
-
-`CHALK_API_OPERATION_LOGS=1` emits Postgres query timing events to stdout. For
-local profiling, it also defaults request logs to `all` unless
-`CHALK_API_REQUEST_LOGS` is explicitly set. `CHALK_API_PROFILER=1` mounts Go
-profiling handlers under `/debug/pprof`; do not expose it publicly.
+Go control-plane API for Chalk. Keep process wiring thin in `cmd/main.go`, HTTP in inbound adapters, domain logic behind composable boundaries, and provider-specific details in adapters.
+
+Public REST routes live under `/v1`. Operational routes (`/healthz`, `/readyz`) stay unversioned. For the endpoint design loop see [`docs/route-workflow.md`](docs/route-workflow.md); for Postgres, `sqlc` and `goose` see [`docs/database-workflow.md`](docs/database-workflow.md).
+
+Run `apps/api/scripts/gate.sh describe` from the repository root to inspect the gate. `apps/api/scripts/dev-services.sh start` starts local Postgres and Redis. `apps/api/scripts/smoke-healthz.sh` and `apps/api/scripts/smoke-lifecycle.mjs` smoke-test a running API and a clean SIGTERM exit.
+
+## Runtime config
+
+Config is env-only. [`internal/config/config.go`](internal/config/config.go) owns every variable, default and startup validation, so read it instead of a list here. The notes below are the parts the code cannot explain.
+
+**Capabilities.** `CHALK_RECORDING_ENABLED` and `CHALK_TRANSCRIPTION_ENABLED` default to `true` outside `local` and `false` in `local`. Missing provider credentials never disable a capability: a deployment that does not want one must set its flag to `false`. A disabled capability returns `503 service_unavailable` on its public routes, and `/readyz` reports each capability as `enabled` or `disabled`.
+
+**Rate limits.** `CHALK_API_RATE_LIMITS=off` is allowed only with `CHALK_API_ENV=local` and disables only the authenticated read and write policies. Do not use it to test rate-limit handling. `CHALK_API_TRUSTED_PROXY_CIDRS` lists the proxies allowed to supply `CF-Connecting-IP` or `X-Forwarded-For`. Non-local environments rate-limit through Redis.
+
+**Direct door.** `CHALK_API_DIRECT_URL` is advertised as `directSignalingUrl` in own-SFU join grants (see `docs/operators/direct-sync-path.md`). Leaving it empty turns the direct door off for new joins without a web deploy.
+
+**Service principal.** `CHALK_API_SERVICE_ID`, `CHALK_API_SERVICE_SECRETS` and `CHALK_API_SERVICE_SCOPES` are all set or all unset. To rotate a secret, add the new one, deploy callers, then remove the old one; keep the ID unchanged. The service is never System. It owns Tenants it creates (repeated `POST /v1/tenants` with the same `external_id` returns the existing Tenant unchanged), sees only those, and with `tenants:write` may PATCH only `cors_allowed_origins`. Services cannot create or rotate API keys that carry `tenants:write`.
+
+**Media plane choice.** A new Episode starts on the first of these that names a plane: the kill switch (`media-settings new-episodes --state off|on`, stored in the database with an audit row, so it needs no restart; `CHALK_SFU_NEW_EPISODES=off` is a deploy-time floor under it; it sends every new Episode to `cf_sfu` and leaves live Episodes alone), the Space's `media_plane_setting`, the Tenant's `default_media_plane`, then `CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` applies on top. `CHALK_DEFAULT_MEDIA_PLANE` may be `cf_sfu` or `chalk_sfu`; `chalk_sfu` needs `CHALK_SFU_ENABLED=true` and keeps the Cloudflare application settings required, because Cloudflare stays the fallback for old clients, the kill switch and Episodes already bound to it. A Space or Tenant that stores no plane follows the default; one that stores `cf_sfu` stays on Cloudflare. The public API never accepts `chalk_sfu`; only an operator sets it, with `cmd/media-settings` (see `infrastructure/sfu/README.md`). A stored choice counts only while the legacy `media_plane` column still equals it, so a write by the previous release after a rollback wins. A live Episode always resolves from its stored binding.
+
+`CHALK_NEW_SPACE_MEDIA_PLANE`, `CHALK_NEW_SPACE_RECORDING_POLICY` and `CHALK_NEW_SPACE_TRANSCRIPTION_POLICY` set defaults for Create Space requests that omit them. They affect new Spaces only, never public-invite Spaces (those use `CHALK_PUBLIC_INVITE_DEFAULT_MEDIA_PLANE`), and a Tenant with its own provider setup keeps the deployment default. To roll back, unset the variable and restart. An Episode still starts on Cloudflare when no node has room, or when the client SDK does not declare `chalk_sfu` in `X-Chalk-Media-Providers` (every web SDK before 5.5.0) and a Cloudflare application is configured. Where none is, or once `CHALK_SFU_CLIENT_SUNSET` has passed, that client gets 409 `media.client_unsupported`, a clear upgrade error. Startup validation in `internal/config` enforces the SFU prerequisites.
+
+**Tenant media limits.** `CHALK_TENANT_MAX_CONCURRENT_RECORDINGS`, `CHALK_TENANT_DAILY_RECORDING_MINUTES` and `CHALK_TENANT_MAX_LIVE_EPISODES` default to `0` (unlimited) and skip the managed public Tenant. The daily minutes limit is an admission check, not a mid-recording stop: an admitted recording may run past the allowance, up to the four-hour recording maximum, and counts against its start day. Recording starts are durable Sync commands, so the private provider bridge records the terminal outcome (`tenant.recording_limit_reached`, HTTP 409) and Sync does not retry it.
+
+**Transcription.** Enabled startup needs R2, Redis, a workload secret of at least 32 bytes that matches the dispatcher's SSM secret, the control audience and the dispatcher function name. The API only enqueues a small Lambda wake hint; the minute schedule reconciles lost hints. Public transcript requests never choose providers, keys, priority or retry budgets.
+
+**Webhook encryption.** Outbound webhook URLs and replayable one-time responses are encrypted with process-injected AES-GCM keys (no KMS). Non-local environments need either `CHALK_WEBHOOK_ENCRYPTION_KEY` or a keyring plus current version. During rotation keep the previous version in the keyring so old ciphertext stays readable.
+
+User deletion must call `WebhookRepository.EraseUserWebhookEvents` before deleting the user row. There is no deletion orchestrator or external tombstone authority yet, so a restored backup can revive erased webhook bodies and Endpoint material. Do not declare a restore ready until deletions are replayed; this is a production-readiness blocker.
+
+**Sync and media tokens.** Participant admission returns a five-minute Ed25519 sync JWT, refreshed through the participant `sync-token` route, which reloads generation, capabilities and admission intent from Postgres. The AccessGrant's media JWT is accepted only by participant-bound SFU signaling routes and is never a tenant principal. It is signed with the sync key. When rotating that key, keep the outgoing public key in `CHALK_MEDIA_TOKEN_VERIFICATION_KEYS` for at least five minutes and 30 seconds. One person on several devices is admitted as one Participant per device, sharing `identity_external_id` or `identity_id` (mutually exclusive). The backend must derive that value from its own authenticated subject, because two people given the same key are treated as one person.
+
+**Provider bridge.** Durable Sync media effects use a second private listener (TLS 1.3, client certificate whose sole URI SAN is `spiffe://<trust-domain>/environment/<CHALK_API_ENV>/sync/<sync-node-uuid>`). Every non-local environment must configure all `CHALK_PROVIDER_BRIDGE_*` variables; partial config is rejected.
+
+**Cloudflare.** `CHALK_CLOUDFLARE_REALTIME_BASE_URL` is for local protocol-faithful tests only; non-local environments reject it. TURN credentials (`CHALK_CLOUDFLARE_TURN_KEY_ID` and `CHALK_CLOUDFLARE_TURN_API_TOKEN`, created by [`infrastructure/cloudflare-turn`](../../infrastructure/cloudflare-turn/README.md)) are set both or neither. They are issued only to callers tied to an accountable owner; guests of the managed public Tenant and tenant-managed Cloudflare accounts get STUN only. If TURN is missing or Cloudflare fails, the join still succeeds with STUN.
+
+**Public invites.** Links are ten-letter codes at `/{abc-defg-hij}`; legacy `cspi1` Ed25519 links stay valid. Hosted environments must set the `CHALK_PUBLIC_INVITE_*` variables defined in `internal/config`. Keep an outgoing public key in `CHALK_PUBLIC_INVITE_VERIFICATION_KEYS` while links it signed must stay valid; removing it invalidates them, while rotating a Space invite invalidates the old link through its stored generation. Native requests with `X-Chalk-Client: react-native` get a legacy link unless they also send `X-Chalk-Invite-Format: code`, which keeps shipped builds working.
+
+## Observability
+
+Logs are structured JSON-capable stdout with stable `service`, `env` and `version` fields. Traces and metrics export over OTLP/HTTP when `CHALK_API_OTLP_ENDPOINT` is set (a base URL; the API adds `/v1/traces` and `/v1/metrics`). The API propagates W3C `traceparent` and mirrors or creates the lowercase `x-chalk-journey-id` response header. A valid `baggage: session.id=<uuid>` becomes a span and log attribute; other baggage is ignored. Request bodies and operation content never enter traces or logs. Successful request logs are off by default (`CHALK_API_REQUEST_LOGS`).
+
+For a short local profiling run, `cd apps/api && CHALK_API_OPERATION_LOGS=1 CHALK_API_PROFILER=1 CHALK_API_REQUEST_LOGS=all go run ./cmd` logs Postgres query timing and mounts `/debug/pprof`. Never expose the profiler publicly.
 
 ## Call problem reports
 
-Set `CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL` on the **API service only**.
-Only HTTPS Discord webhook URLs on `discord.com` or `discordapp.com` are accepted.
-An unset value disables reports: availability returns false, the web hides report
-entries, and submissions return `503 reports.unavailable`. A nonempty invalid URL
-is startup-fatal: the API rejects its configuration and does not start. Never expose this URL in a
-`VITE_` setting or the dashboard service. Discord is the record; no new table.
+Set `CHALK_PROBLEM_REPORTS_DISCORD_WEBHOOK_URL` on the API service only, never in a `VITE_` setting or the dashboard service. Unset disables reports (availability is false, submissions return `503 reports.unavailable`); a nonempty URL that is not an HTTPS `discord.com` or `discordapp.com` webhook stops startup. Discord is the record; there is no table. Delivery waits for Discord's acknowledgement and failures return 502 with no retry, because the form keeps the text. The report carries the description, display name and role, Space name and Episode ID, and diagnostics only when the user opts in. User text is Markdown-escaped, mentions are disabled, and URL query strings and fragments are stripped. Limits and the payload shape live in `internal/problemreports` and `internal/adapters/discordreports`.
 
-`POST /v1/tenants/{tenant_id}/problem-reports` accepts a signed participant media bearer credential
-and `{description, diagnostics?}`. The full Tenant/Space/Episode/generation binding
-must exist, but a live media connection is not required. Normal credential expiry
-still applies. Descriptions are required (1,000 code points maximum); diagnostics
-are optional (2,000 maximum). Hourly ceilings are three reports per participant, twenty per Episode,
-thirty per IP and one hundred per owning Tenant. Participant limits run first. Delivery waits for Discord acknowledgement;
-failures return 502 with no automatic retry. The form keeps the text for a retry.
-Our private Discord channel receives what you type in the description, your display
-name and owner/guest role, the Space name and call-instance ID (Episode ID), plus
-diagnostics only when you opt in: connection status, last error code, browser/UA,
-and app version. Diagnostics are unselected by default. Please do not include
-passwords or keys. Chalk does not add account email addresses, server configuration,
-environment values, logs or server error text. User-provided text is sent with
-Markdown escaped. Only `http://`, `https://` and `www.` URLs are transformed: query
-strings and fragments are removed, and inline code prevents clicks. Bare hosts,
-commit IDs and file/line/column frames remain text.
-Mentions are disabled. Accepted descriptions and opt-in diagnostics are delivered in
-full: longer reports use ordered description/diagnostic panels in the same message,
-within Discord's 2,000-unit content and 6,000-unit combined embed limits.
-
-### Real-stack report proof
-
-Run on Instabox after committing and pushing:
+Run the real-stack proof on Instabox after pushing:
 
 ```sh
 box run -- 'pnpm install --frozen-lockfile && pnpm --dir sdks/typescript/client exec playwright install --with-deps chromium && node apps/web/tests/dashboard/report-proof.mjs'
 ```
 
-The browser drives real OwnerCall and SpacePage menus, delivery failure/retry,
-opt-in diagnostics, leave, and failed connect. API, signed credentials, Postgres,
-Sync and the built web app are real. Only Discord and the media vendor use local
-fixtures. The Discord fixture uses an ephemeral trusted TLS certificate and a
-process-local proxy; production destination validation stays enabled. Evidence goes to `artifacts/report-discord` in that checkout.
-
-Live proof additionally requires an injected `CHALK_REPORT_LIVE_WEBHOOK_URL`,
-`CHALK_REPORT_LIVE_PROOF=1`, and `CHALK_REPORT_LIVE_ONCE_FILE` pointing to a durable
-exclusive-create marker outside the throwaway checkout. It sends only the labelled
-owner report and reads that Discord message back. Never retry a live run after
-its once marker exists: delivery might already have succeeded. These variables
-are test-driver inputs, not production service settings.
+Only Discord and the media vendor are local fixtures. Evidence goes to `artifacts/report-discord`. A live proof also needs `CHALK_REPORT_LIVE_WEBHOOK_URL`, `CHALK_REPORT_LIVE_PROOF=1` and `CHALK_REPORT_LIVE_ONCE_FILE` (a durable marker outside the checkout). Never retry a live run once the marker exists, because delivery may already have succeeded.

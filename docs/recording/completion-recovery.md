@@ -1,13 +1,13 @@
 # Recover Recording completion
 
-A stopped Capture gets three automatic completion attempts. After a transient
-completion fault is fixed, an operator can request **one additional completion
-attempt** while the source is retained. This does not restart Capture, reset
-attempt counters, or change the automatic completion cap.
+A stopped Capture gets three automatic completion attempts. After an operator
+fixes a transient completion fault, the operator can grant **one extra attempt**
+while the source is retained. The grant does not restart Capture, reset counters
+or change the automatic cap. It is not a public endpoint: the command uses
+privileged database access.
 
-Run the command from `apps/api` with operator-owned `CHALK_DATABASE_URL` and
-`CHALK_R2_ACCOUNT_ID` (or `CHALK_R2_ENDPOINT`), `CHALK_R2_BUCKET`,
-`CHALK_R2_ACCESS_KEY_ID`, and `CHALK_R2_SECRET_ACCESS_KEY` in the environment:
+Run it from `apps/api` with `CHALK_DATABASE_URL` and the `CHALK_R2_*` storage
+settings in the environment (see `apps/api/cmd/recording-recover` for the flags):
 
 ```sh
 go run ./cmd/recording-recover \
@@ -18,34 +18,19 @@ go run ./cmd/recording-recover \
   --reason 'Completion fault repaired'
 ```
 
-The command allows 15 minutes for source inspection by default. Set `--timeout`
-to a longer positive duration when recovering a long Recording over a slow
-connection; each storage request remains bounded to 15 seconds.
+Use a fresh UUID for the first request. To replay after an uncertain response,
+keep the UUID, operator and reason unchanged: the replay succeeds without new
+work. A different request for the same Recording is refused, even if the first
+recovery failed. A failed or expired recovery stays terminal and gets no new
+budget.
 
-Use a fresh UUID for the first request. Keep that UUID, operator, and reason
-unchanged when replaying an uncertain response. A replay returns success without
-creating work; a different request for the same Recording is refused, even if
-the recovery fails. The command uses privileged database access and is not a
-public owner endpoint. Retry Export remains available after Capture completes.
+Recovery refuses an expired source, a missing object or a failed storage
+inspection. Every bundle must still exist at its recorded size and checksum.
+The source deadline is the stop-request time plus the Episode's Recording
+retention, and recovery never renews it. Raise `--timeout` for a long Recording
+over a slow link.
 
-Recovery requires a terminal Capture with three completion-only authorities,
-an applied Capture stop, its retained encryption key, and nonempty bundle
-metadata. Every bundle must still exist in object storage at its recorded size and checksum.
-An expired source, missing object, or failed storage inspection refuses the
-request. The source deadline is the original stop-request time plus the
-Episode's immutable Recording retention; recovery never renews this deadline.
-The worker's existing source validation still applies when completing Capture.
-
-The request and its original attempt count, fencing generation, terminal error,
-failure time, operator identity, database principal, reason, and source deadline
-are stored in append-only `recording_completion_recoveries`. Existing attempt
-authorities remain intact. The request, audit, and queue transition commit
-atomically. A completion-capable Capture worker consumes the grant by advancing
-the job's fencing generation, retaining the Capture epoch. The grant is never
-reusable, and the recovery lease and its heartbeats cannot exceed source expiry.
-
-A successful command means the attempt is queued, not that completion succeeded.
-Inspect the Capture job and Recording in the API logs and Sync spans described
-in [Production observability](../observability.md). A failed or expired recovery
-stays terminal; it does not receive another retry budget.
-Runtime rollback preserves the audit migration.
+Success means the attempt is queued, not that completion worked. Follow the job
+in the API logs and Sync spans in [observability](../observability.md). Every
+grant is stored in the append-only `recording_completion_recoveries` table. A
+runtime rollback must keep that migration.

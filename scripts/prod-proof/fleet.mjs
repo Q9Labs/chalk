@@ -8,7 +8,7 @@
 //   node scripts/prod-proof/fleet.mjs --dry-run ...        # no API, no browsers: the scheduler and the summary only
 //   node scripts/prod-proof/fleet.mjs --merge a/fleet-calls.json b/fleet-calls.json   # one summary for several machines
 //
-// The M7 exit by volume (docs/sfu/milestones.md): scripted joins and fault trials pass, plus at least 200 calls
+// The canary exit by volume: scripted joins and fault trials pass, plus at least 200 calls
 // and 50 call-hours with no P1. See scripts/prod-proof/README.md, "Canary fleet", for what a call does and what a P1 is.
 import { mkdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";

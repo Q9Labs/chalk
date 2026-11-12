@@ -18,7 +18,7 @@
 # Staging runs hold the shared lease:
 #   scripts/staging-sfu/staging-lock --holder lane --purpose live-smoke --run-id label -- \
 #     features/media/sfu/scripts/live-smoke staging --confirm staging
-# Production is the M7 hard condition (docs/sfu/milestones.md). Run it once the production
+# Production needs this smoke (docs/sfu/production-rollout.md). Run it once the production
 # node is deployed and before any production API gets CHALK_SFU_ENABLED. It creates one
 # random-named Episode and ends it.
 set -euo pipefail

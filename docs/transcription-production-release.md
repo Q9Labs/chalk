@@ -1,77 +1,29 @@
 # Production transcription release
 
-This runbook prepares transcript-first transcription for production without
-changing production state. It is intentionally free of account identifiers,
-secret values, provider request payloads, and operational evidence. Store
-those inputs and redacted evidence in the protected release workspace.
+This runbook keeps the rules for releasing transcript-first transcription to production. It holds no account identifiers, secret values, provider payloads or operational evidence. Keep those in the protected release workspace.
 
-## Release contract
+## Constraints
 
-The dispatcher is a dedicated Node.js 22 arm64 Lambda. It reads provider and
-control credentials only from exact SSM SecureString ARNs, calls the control
-API over public authenticated HTTPS, and receives only job-scoped presigned R2
-authorities. It has no VPC attachment, NAT gateway, database access, reusable
-object-storage permission, or Cloudflare fallback.
-
-New transcript-first capture bundles are retained under
-`tenants/<tenant>/recordings/<recording>/capture/`, outside the 24-hour
-temporary prefix. No broad R2 lifecycle change is required for this move. The
-API must keep the source authority and cleanup fencing valid for the intended
-30-day recording source/Export window, including the existing key-revocation
-boundary. Transcript retention remains independently unchanged.
-
-For a legacy immutable Episode snapshot with `recording.retention_seconds = 0`,
-the API resolves the deferred recording window to the same capture-anchored
-30 days. It does not rewrite the Tenant, Space, or Episode policy; an explicit
-positive snapshot value remains authoritative. Repeated Watch or Download
-requests never renew this window.
-
-The separately frozen transcription source window bounds audio preparation and
-transcription; it is capped by the recording source/Export window and may end
-earlier without changing Export availability.
-
-The selected provider is direct DeepInfra native multipart transcription with
-`openai/whisper-large-v3-turbo` and adapter contract
-`deepinfra-native-whisper-turbo.v1`. Set `deepinfra_enabled = true` and
-`cloudflare_enabled = false`. Optional DeepInfra execution-identity and model-
-version pins are absent until the native provider actually returns a stable
-identity or version that can be asserted. They are not qualification evidence.
-
-The provider corpus digest is mandatory when DeepInfra is enabled. It must be
-the digest of the retained, passing qualification corpus for this adapter and
-model. A short native request or a manufactured digest cannot satisfy this
-requirement. The release owner must also confirm the provider account remains
-active, has the intended funding state, and has automatic top-ups disabled;
-those account details do not belong in this repository.
+- The dispatcher is a Node.js arm64 Lambda with no VPC attachment, NAT gateway, database access or reusable object-storage permission. It reads credentials only from exact SSM SecureString ARNs, calls the control API over public authenticated HTTPS, and receives only job-scoped presigned R2 authorities. Its module is `infrastructure/opentofu/modules/aws-transcription-dispatcher`.
+- The provider is direct DeepInfra with an adapter contract version. Set `deepinfra_enabled = true` and `cloudflare_enabled = false`. Do not substitute Cloudflare, a VPC/NAT design or a rendered MP4 path to get around a blocker.
+- The provider corpus digest is mandatory when DeepInfra is enabled. It must be the digest of the retained, passing qualification corpus for this adapter and model. A short request or a made-up digest does not qualify. Optional execution-identity and model-version pins stay absent until the provider returns a stable value to assert. They are not qualification evidence.
+- The release owner confirms outside this repo that the provider account is active, funded as intended and has automatic top-ups disabled.
+- Transcript-first capture bundles live under `tenants/<tenant>/recordings/<recording>/capture/`, outside the 24-hour R2 lifecycle prefixes (`transcription/chunks/` and `transcription/orphans/`, module `cloudflare-r2-transcription-lifecycle`), so no broad R2 lifecycle change is needed. The API keeps the source authority and cleanup fencing valid for the recording source and Export window (30 days, capped in `artifactpolicy`). Transcript retention is unchanged.
+- A legacy immutable Episode snapshot with `recording.retention_seconds = 0` resolves to the same capture-anchored 30 days. The API does not rewrite Tenant, Space or Episode policy, and an explicit positive snapshot value stays authoritative. Watch or Download requests never renew the window.
+- The transcription source window bounds audio preparation. It is capped by the recording window and may end earlier without changing Export availability.
 
 ## Release path
 
-Use [Nightly and Promote](managed-release.md) for production releases. Do not
-publish or deploy a ZIP manually or apply OpenTofu directly; those paths bypass
-the workflow's build binding, proof, and rollback guards. The pipeline tests
-and verifies each changed dispatcher build, records its SHA256 and versioned S3
-identity with the backend release, and deploys it after the target API is
-healthy. First install creates the dispatcher from the nightly module and
-enables reconciliation. Promote copies the exact verified ZIP bytes to the
-production artifact bucket with a new object version. Rollback selects the
-prior recorded ZIP and image pins. Never rebuild the ZIP during Promote.
+Use [Nightly and Promote](managed-release.md). Never publish a ZIP, deploy it by hand or apply OpenTofu directly, because those paths skip the build binding, proof and rollback guards. Promote copies the exact verified ZIP bytes and never rebuilds them. Rollback selects the prior recorded ZIP and image pins. Each environment keeps its own module inputs, SSM references, audience, roles, queues and alarms.
 
-Each environment retains its own module inputs, SSM credential references,
-workload audience, roles, queues and alarms. The release requires the existing
-approved passing corpus digest; it does not manufacture qualification evidence.
+## Disable and recovery
 
-## Disable and recovery boundary
+`CHALK_TRANSCRIPTION_ENABLED=false` stops new transcription jobs. It does not prove that queued jobs have drained. To recover:
 
-Setting `CHALK_TRANSCRIPTION_ENABLED=false` prevents new transcription jobs but
-does not prove that already queued transcript-first jobs have drained. If a
-recovery is required, first disable scheduler delivery and new job admission,
-then use the API-owned fenced claim/reconcile path to drain or terminally
-resolve every existing transcription, finalization, and cleanup job. Confirm
-both dispatcher DLQs are empty before changing any recorder or API component.
-Keep the compatible API migration forward-only and do not restore an older
-recorder image while new transcript jobs remain active.
+1. Disable scheduler delivery and new job admission.
+2. Use the API-owned fenced claim and reconcile path to drain or terminally resolve every transcription, finalization and cleanup job.
+3. Confirm both dispatcher dead-letter queues are empty before you change any recorder or API component.
 
-Any missing corpus qualification, private secret comparison, invoke-role policy,
-or required endpoint/configuration is a release blocker. Do not substitute
-Cloudflare, a VPC/NAT design, optional provider pins, or a rendered
-MP4 path to bypass it.
+Keep the API migration forward-only. Do not restore an older recorder image while new transcript jobs remain active.
+
+A missing corpus qualification, private secret comparison, invoke-role policy or required endpoint is a release blocker.
