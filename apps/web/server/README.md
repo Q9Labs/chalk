@@ -1,8 +1,18 @@
 # Dashboard server
 
-The static site uses named Cloudflare Pages Functions only under `/auth/*` and `/dashboard-api/*` (in `apps/web/functions`). `server/` is imported only by those Functions. The production composition root imports `oauth.ts`, never `tests/dashboard/fixture-provider.ts`. There is no dashboard database and no generic engine proxy.
+The static site uses named Cloudflare Pages Functions only under `/auth/*` and `/dashboard-api/*` (in `apps/web/functions`). The local dev launcher also serves these handlers. The production composition root imports `oauth.ts`, never `tests/dashboard/fixture-provider.ts`. There is no dashboard database and no generic engine proxy.
 
 Import DTOs and request schemas from `src/lib/dashboard/contracts.ts`; routes and handlers are the source of truth for the HTTP surface.
+
+## Sign in on a local preview
+
+Run the repository's `pnpm dev`, or open an Orb running that command. Open `/dashboard/sign-in`, select **Continue with Google** or **Continue with Apple**, then select **Ada**. Both buttons use the same local OAuth fixture; neither contacts a real identity provider. Select **Malik** for an empty account.
+
+Ada has three past calls: Product planning with a transcript and a short synthetic audio recording, Design review with no recording, and Weekly catch-up with a failed recording. Each session has three attendees. Developer lists a Local development API key. These are real API/Postgres records; only identity and artifact storage are local fixtures. Restarting dev preserves the seed rather than adding duplicates.
+
+The middleware is installed programmatically by `scripts/local-dev.mjs`, never by `vite.config.ts` or a deploy-time flag. The production Pages entrypoint still rejects fixture identity, and the production-bundle check rejects fixture code in deployed output.
+
+On the Orb machine, run `node apps/web/tests/dashboard/local-dev-browser.mjs <public-origin> <evidence-directory>` to verify sign-in, Home, Call, session transcript and playback, Developer, Sessions, Recordings, and the empty owner.
 
 ## Build
 
