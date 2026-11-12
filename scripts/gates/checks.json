@@ -1,0 +1,1235 @@
+{
+  "checks": [
+    {
+      "id": "hook:pre-commit/fast-gate",
+      "owner": "Developer workflow",
+      "catches": "Unformatted code, hygiene breaks, leaked secrets, broken document links and tracker drift in staged files reach a commit.",
+      "runs": ["commit"],
+      "blocks": "commit",
+      "minutes": 0.2,
+      "record": "unmeasured",
+      "sample": "Runs on every commit; no failure count is kept."
+    },
+    {
+      "id": "gate:self-test",
+      "owner": "Gate",
+      "catches": "A change to the Gate's selection rules or network isolation makes it skip or run the wrong checks.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:feature-map",
+      "owner": "Gate",
+      "catches": "A feature folder or owner appears in the code without an entry in the feature map, or an entry outlives its folder.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs in the checks cell: Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:workflow-graph",
+      "owner": "Release chain",
+      "catches": "A workflow or scorecard edit breaks the cut, proof, Promote or scorecard graph that releases depend on.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:register",
+      "owner": "Gate",
+      "catches": "A workflow job, Gate lane, hook command or budget group exists without a purpose, owner and consequence in the register, or an entry outlives its check.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "New in this change; no history."
+    },
+    {
+      "id": "gate:hygiene",
+      "owner": "Repository",
+      "catches": "A public package without a license, a placeholder script or another repository hygiene break.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:secrets",
+      "owner": "Security",
+      "catches": "A credential committed in the diff, or in any commit a merge queue group brings in.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:generated",
+      "owner": "Contracts",
+      "catches": "Generated output (API contract, SDK types, tracker views) that is stale against its source.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:format",
+      "owner": "Code style",
+      "catches": "Source or documents that the formatter would change.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:fallow",
+      "owner": "Code quality",
+      "catches": "Dead, duplicated or over-complex code in the changed files.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:ast-grep",
+      "owner": "Security",
+      "catches": "A banned structural pattern, such as unsafe API use or a quality rule, in changed code.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:formal-sync",
+      "owner": "Sync",
+      "catches": "A change to Sync entry admission or Leave ordering that breaks the model-checked invariants.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "Ran as its own pull request workflow before: 0 failures in 11 runs."
+    },
+    {
+      "id": "gate:osv",
+      "owner": "Security",
+      "catches": "A dependency version with a known vulnerability, on a pull request that changes dependencies.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "noise",
+      "sample": "The audit sample lists the vulnerability-baseline copier and stale OSV ignores as noise."
+    },
+    {
+      "id": "gate:services",
+      "owner": "API and Sync",
+      "catches": "A local run of the API and Sync correctness scripts; CI runs the same scripts as the API gate and Sync gate.",
+      "runs": ["local"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "Not run in CI; the API gate and Sync gate carry the record."
+    },
+    {
+      "id": "gate:contracts",
+      "owner": "Contracts",
+      "catches": "A public API or SDK contract that drifts from its producers or consumers.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:syncpack",
+      "owner": "Dependencies",
+      "catches": "Workspace packages that disagree on a dependency version.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:types",
+      "owner": "TypeScript",
+      "catches": "A type error in an affected workspace, including API and SDK incompatibilities.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "The audit sample lists TypeScript and API incompatibilities, among them 2 packed SDK failures, as real catches."
+    },
+    {
+      "id": "gate:explicit-any",
+      "owner": "TypeScript",
+      "catches": "A new explicit or implicit `any` in TypeScript.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:mock-calls",
+      "owner": "TypeScript",
+      "catches": "A new assertion that our own wiring called a mock, which proves nothing a user sees.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New lane (PR 1214); no failure history yet."
+    },
+    {
+      "id": "gate:react-tokens",
+      "owner": "Design system",
+      "catches": "A React SDK component that reaches past the design tokens.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:native-quality",
+      "owner": "Mobile",
+      "catches": "A raw style value or an unsafe worklet in React Native code.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:tests",
+      "owner": "Runtime",
+      "catches": "A failing unit or regression test in an affected workspace.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded. 12 Nov: 1 noise failure, `startup-failures.test.ts` counted a third socket because an earlier test's Sync client kept running; it failed 17 of 40 loaded file runs before and 0 of 40 after PR 1221."
+    },
+    {
+      "id": "gate:browser-tests",
+      "owner": "Web",
+      "catches": "A browser test failure in an affected workspace.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Browser group on pull requests: 7 of 70 runs failed."
+    },
+    {
+      "id": "gate:dashboard-engine",
+      "owner": "Dashboard",
+      "catches": "The dashboard breaking against the real API, Sync and Pages runtime over HTTP.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "4 of 91 pull request runs failed: 1 real Pages Functions build error, 1 duplicate of types, 1 apt failure (noise), 1 unexplained. 12 Nov: 1 more noise failure in 4.9 s, a Hex registry 500 while fetching a package (Gate run 43200994606); the job now restores Mix dependencies from a cache keyed on the lockfile (PR 1210)."
+    },
+    {
+      "id": "gate:dashboard-refresh",
+      "owner": "Dashboard",
+      "catches": "Dashboard media-access credentials failing to refresh across the real five-minute lifetime.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "Split from dashboard-engine in #1199; no history of its own."
+    },
+    {
+      "id": "gate:build",
+      "owner": "Build",
+      "catches": "A workspace that no longer builds.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Build group on pull requests: 16 of 74 runs failed; the split by lane is not recorded."
+    },
+    {
+      "id": "gate:call-performance",
+      "owner": "Call",
+      "catches": "A call bundle that grows past its gzip budget.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "The audit sample lists a scorecard bundle-size breach as a real catch."
+    },
+    {
+      "id": "gate:call-leaks",
+      "owner": "Call",
+      "catches": "A call journey that leaks connections, listeners or memory beyond its budget.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Call-leaks shards on pull requests: 2 of 70 runs failed."
+    },
+    {
+      "id": "gate:recorder",
+      "owner": "Recording",
+      "catches": "Recorder infrastructure or scripts that fail validation, including the OpenTofu configuration.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:proof-bundle",
+      "owner": "Release chain",
+      "catches": "A production proof script that no longer bundles against the Leave baseline client.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:sfu",
+      "owner": "Media",
+      "catches": "A regression in the SFU Go module, its loopback test or its impairment test.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:publint",
+      "owner": "Packaging",
+      "catches": "A public package whose published layout is broken.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:attw",
+      "owner": "Packaging",
+      "catches": "A public package whose types do not resolve for consumers.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
+    },
+    {
+      "id": "gate:scope",
+      "owner": "Gate",
+      "catches": "A run with no files in scope that would otherwise pass green.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded.",
+      "builtin": true
+    },
+    {
+      "id": "gate:depcruise",
+      "owner": "Architecture",
+      "catches": "An import that crosses a workspace boundary, or a package that imports an application.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded.",
+      "builtin": true
+    },
+    {
+      "id": "gate:design-tokens",
+      "owner": "Design system",
+      "catches": "A new raw color, spacing, radius, font-size or shadow value outside the tokens.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded.",
+      "builtin": true
+    },
+    {
+      "id": "workflow:boot-smoke.yml#boot",
+      "owner": "Call",
+      "catches": "A broken developer bootstrap: `pnpm dev` not reaching ready from an empty machine, `pnpm dev:doctor` failing, or a fake-media call that cannot join through the SFU.",
+      "runs": ["pull_request", "manual"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "No failure history recorded in the register yet.",
+      "reason": "The only CI run of `pnpm dev` and `dev:doctor`, which the dashboard lanes do not use; it stays out of the required contexts so a developer-stack failure does not hold a merge."
+    },
+    {
+      "id": "workflow:gate.yml#changes",
+      "owner": "Gate",
+      "catches": "A wrong job selection that would skip a check a change needs.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": 0.6,
+      "record": "never-failed",
+      "sample": "0 of 30 pull request runs failed."
+    },
+    {
+      "id": "workflow:gate.yml#root-lanes",
+      "owner": "Gate",
+      "catches": "Any selected Root lane failing: the checks, build, browser, dashboard and call lanes.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": 5.4,
+      "record": "caught",
+      "sample": "11 of 183 cells failed on pull requests: 10 real catches, 1 noise."
+    },
+    {
+      "id": "workflow:gate.yml#root",
+      "owner": "Gate",
+      "catches": "Turns the Root cells into the one required Root gate context.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": 0.4,
+      "record": "caught",
+      "sample": "7 of 30 pull request runs failed: 4 real catches, 3 noise."
+    },
+    {
+      "id": "workflow:gate.yml#api",
+      "owner": "API",
+      "catches": "API build, tests, lifecycle, migrations and govulncheck failing.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": 5.1,
+      "record": "caught",
+      "sample": "3 of 10 pull request runs failed (noise); 2 of 14 weekly runs were real catches. 12 Nov: 1 noise failure, `TestCaptureReadinessShutdownTriggers` (run 43192587605); 5 of 6,400 loaded subtest runs failed before and 0 of 6,400 after PR 1211."
+    },
+    {
+      "id": "workflow:gate.yml#sync-parts",
+      "owner": "Sync",
+      "catches": "Sync server or client tests and reliability checks failing, run as two jobs side by side.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Split from the Sync job (PR 1210); no failure history of its own yet."
+    },
+    {
+      "id": "workflow:host-change-check.yml#check",
+      "owner": "Monitoring",
+      "catches": "A change to the node that no release made, read from CloudTrail every five minutes and sent to Oncall.",
+      "runs": ["daily"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs on a five-minute schedule; no failure history recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#plan",
+      "owner": "Release",
+      "catches": "A hotfix request for a commit that is not on master or whose push Gate did not pass.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#retain",
+      "owner": "Release",
+      "catches": "A hotfix that would lose the release now running as its rollback baseline.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#release",
+      "owner": "Release",
+      "catches": "A hotfix release that fails to build or deploy.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#smoke",
+      "owner": "Release",
+      "catches": "A hotfix that breaks a real call in production.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#rollback",
+      "owner": "Release",
+      "catches": "A failed hotfix that is not rolled back to the previous release.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:hotfix.yml#result",
+      "owner": "Release",
+      "catches": "A hotfix run whose outcome is not reported.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Dispatched for an incident; no run recorded yet."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#plan",
+      "owner": "Release",
+      "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",
+      "runs": ["weekly", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#deploy-current",
+      "owner": "Release",
+      "catches": "The newest passed cut failing to deploy on nightly.",
+      "runs": ["weekly", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#roll-back",
+      "owner": "Release",
+      "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
+      "runs": ["weekly", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#roll-forward",
+      "owner": "Release",
+      "catches": "Rolling forward again after a rollback failing.",
+      "runs": ["weekly", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+    },
+    {
+      "id": "workflow:rollback-rehearsal.yml#result",
+      "owner": "Release",
+      "catches": "A rehearsal whose outcome is not reported.",
+      "runs": ["weekly", "manual"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
+    },
+    {
+      "id": "workflow:gate.yml#sync",
+      "owner": "Sync",
+      "catches": "Sync compile, tests and reliability checks failing.",
+      "runs": ["pull_request", "merge_queue", "weekly", "manual"],
+      "blocks": "merge",
+      "minutes": 8.6,
+      "record": "never-failed",
+      "sample": "0 of 11 pull request runs and 0 of 14 scheduled runs failed."
+    },
+    {
+      "id": "workflow:cache-warm.yml#go",
+      "owner": "Gate",
+      "catches": "Queue groups downloading the go toolchain from a flaky host because master saved no cache.",
+      "runs": ["push"],
+      "blocks": "action",
+      "minutes": 2.5,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:cache-warm.yml#tofu",
+      "owner": "Gate",
+      "catches": "Queue groups downloading the tofu toolchain from a flaky host because master saved no cache.",
+      "runs": ["push"],
+      "blocks": "action",
+      "minutes": 0.2,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:cache-warm.yml#scanners",
+      "owner": "Gate",
+      "catches": "Queue groups downloading the scanners toolchain from a flaky host because master saved no cache.",
+      "runs": ["push"],
+      "blocks": "action",
+      "minutes": 0.1,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:cache-warm.yml#sync",
+      "owner": "Gate",
+      "catches": "Queue groups downloading the sync toolchain from a flaky host because master saved no cache.",
+      "runs": ["push"],
+      "blocks": "action",
+      "minutes": 0.1,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#require-gate",
+      "owner": "Release chain",
+      "catches": "A deploy of a commit that has no green master Gate.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 0.1,
+      "record": "never-failed",
+      "sample": "0 of 11 cut runs and 0 of 19 Promote runs failed."
+    },
+    {
+      "id": "workflow:ci.yml#plan-managed",
+      "owner": "Release chain",
+      "catches": "A release whose component plan cannot be computed.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 0.4,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#check-managed-contracts",
+      "owner": "Release chain",
+      "catches": "A deploy whose pre-deploy release contracts fail.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 2.8,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#build-managed-images",
+      "owner": "Release chain",
+      "catches": "An API or Sync image that does not build, so the release stops before users see it.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 1.9,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#build-media",
+      "owner": "Release chain",
+      "catches": "Media release archives that do not build.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 6.3,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#publish-managed-manifest",
+      "owner": "Release chain",
+      "catches": "A release manifest that cannot be published, so no deploy can start.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 0.1,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#deploy-managed",
+      "owner": "Release chain",
+      "catches": "A managed deploy that fails to start, drain or become healthy on the target host.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 10.2,
+      "record": "caught",
+      "sample": "3 of 11 cut runs failed: 2 real catches, 1 noise."
+    },
+    {
+      "id": "workflow:ci.yml#build-web",
+      "owner": "Release chain",
+      "catches": "A web build that fails before it ships.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 1.4,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#prepare-web",
+      "owner": "Release chain",
+      "catches": "A web build that cannot be prepared for deploy.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#prepare-release",
+      "owner": "Release chain",
+      "catches": "A release envelope whose source does not match the revision being deployed.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 0.2,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:ci.yml#deploy-web",
+      "owner": "Release chain",
+      "catches": "A production web deploy that serves a stale service worker or assets.",
+      "runs": ["cut", "promote"],
+      "blocks": "release",
+      "minutes": 2.3,
+      "record": "caught",
+      "sample": "1 real catch in 17 Promote runs: a stale service worker."
+    },
+    {
+      "id": "workflow:cloudflare-egress-check.yml#check",
+      "owner": "Monitoring",
+      "catches": "SFU or TURN egress nearing its Cloudflare limit before calls degrade.",
+      "runs": ["daily"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "0 of 24 runs failed."
+    },
+    {
+      "id": "workflow:codeql.yml#languages",
+      "owner": "Security",
+      "catches": "Selects the languages CodeQL analyses.",
+      "runs": ["pull_request", "weekly"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:codeql.yml#analyze",
+      "owner": "Security",
+      "catches": "A code-scanning finding in JavaScript, TypeScript or Go; findings appear as Security alerts.",
+      "runs": ["pull_request", "push", "weekly"],
+      "blocks": "advisory",
+      "minutes": 1.4,
+      "record": "never-failed",
+      "sample": "0 of 100 pull request runs failed.",
+      "reason": "Findings go to the Security tab, not to a required status. It blocks only if the ruleset adds a code scanning rule, which needs the repository owner."
+    },
+    {
+      "id": "workflow:listener-audio-check.yml#check",
+      "owner": "Monitoring",
+      "catches": "A listener who cannot hear a call: audio missing at the receiving end.",
+      "runs": ["daily"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "0 of 55 runs failed."
+    },
+    {
+      "id": "workflow:mcp-production-check.yml#mcp",
+      "owner": "Monitoring",
+      "catches": "The hosted MCP server rejecting sign-in or tool calls the way a client sees them.",
+      "runs": ["daily", "promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "4 of 21 runs failed on 7 and 8 November; the causes were not reviewed."
+    },
+    {
+      "id": "workflow:mobile-ci.yml#fingerprint",
+      "owner": "Mobile",
+      "catches": "A native change that the over-the-air update path cannot carry.",
+      "runs": ["pull_request", "push"],
+      "blocks": "advisory",
+      "minutes": 1.2,
+      "record": "never-failed",
+      "sample": "0 of 100 runs failed.",
+      "reason": "Cheap input for the two native builds below; it blocks nothing itself."
+    },
+    {
+      "id": "workflow:mobile-ci.yml#android",
+      "owner": "Mobile",
+      "catches": "An unsigned Android release build that no longer compiles.",
+      "runs": ["pull_request", "push"],
+      "blocks": "advisory",
+      "minutes": 16.8,
+      "record": "noise",
+      "sample": "0 of 100 runs failed; the audit sample lists one Gradle 504 as noise.",
+      "reason": "The only pull request build of the native Android app, and it cannot join the Gate; the signed build catches the same break later at release time."
+    },
+    {
+      "id": "workflow:mobile-ci.yml#ios",
+      "owner": "Mobile",
+      "catches": "An unsigned iOS simulator build that no longer compiles.",
+      "runs": ["pull_request", "push"],
+      "blocks": "advisory",
+      "minutes": 25.0,
+      "record": "never-failed",
+      "sample": "0 of 100 runs failed.",
+      "reason": "The only pull request build of the native iOS app; it needs a macOS runner, so it cannot join the Gate. The signed build catches the same break at release time."
+    },
+    {
+      "id": "workflow:mobile-nightly-android.yml#android",
+      "owner": "Mobile",
+      "catches": "A nightly Android build that fails after a successful cut.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "noise",
+      "sample": "1 of 12 runs failed (Gradle 504)."
+    },
+    {
+      "id": "workflow:mobile-signed-build.yml#android",
+      "owner": "Mobile",
+      "catches": "Signs and builds the Android release.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "4 of 13 runs failed; the causes were not reviewed."
+    },
+    {
+      "id": "workflow:mobile-signed-build.yml#ios",
+      "owner": "Mobile",
+      "catches": "Signs and builds the iOS release.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Counted with the Android job above."
+    },
+    {
+      "id": "workflow:nightly-cf-latency.yml#target",
+      "owner": "Scorecard",
+      "catches": "Finds the revision a successful cut deployed, so the Cloudflare run measures the right build.",
+      "runs": ["cut"],
+      "blocks": "alert",
+      "minutes": 0.1,
+      "record": "never-failed",
+      "sample": "3 successful runs since 9 November."
+    },
+    {
+      "id": "workflow:nightly-cf-latency.yml#latency",
+      "owner": "Scorecard",
+      "catches": "Cloudflare-plane action latency over a gated budget; the job turns red and blocks nothing else.",
+      "runs": ["cut"],
+      "blocks": "alert",
+      "minutes": 1.6,
+      "record": "never-failed",
+      "sample": "3 successful runs since 9 November."
+    },
+    {
+      "id": "workflow:nightly-cf-latency.yml#history",
+      "owner": "Scorecard",
+      "catches": "A Cloudflare latency card that cannot be recorded in the scorecard history.",
+      "runs": ["cut"],
+      "blocks": "alert",
+      "minutes": 0.3,
+      "record": "never-failed",
+      "sample": "3 successful runs since 9 November."
+    },
+    {
+      "id": "workflow:nightly.yml#plan",
+      "owner": "Release chain",
+      "catches": "A cut of the wrong revision, or a cut when nothing new is on master.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0.3,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:nightly.yml#release",
+      "owner": "Release chain",
+      "catches": "Builds and deploys the nightly through the shared release workflow (the ci.yml jobs above).",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "caught",
+      "sample": "Counted in the ci.yml jobs."
+    },
+    {
+      "id": "workflow:nightly.yml#proof",
+      "owner": "Real-call proofs",
+      "catches": "A real call on the nightly that fails: camera share, call artifacts or long call.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 27.7,
+      "record": "unmeasured",
+      "sample": "1 of 8 cut runs failed; the cause was not reviewed."
+    },
+    {
+      "id": "workflow:nightly.yml#web-e2e",
+      "owner": "Web",
+      "catches": "The web app failing a real browser journey against the nightly deploy.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 4.6,
+      "record": "never-failed",
+      "sample": "0 of 7 cut runs failed."
+    },
+    {
+      "id": "workflow:nightly.yml#record",
+      "owner": "Release chain",
+      "catches": "Writes the nightly record Promote reads, and fails when any required job failed.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0.3,
+      "record": "caught",
+      "sample": "4 of 11 cut runs failed; it only reports the jobs it depends on."
+    },
+    {
+      "id": "workflow:nightly.yml#github-release",
+      "owner": "Release chain",
+      "catches": "A GitHub release record that cannot be written for a proven nightly.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0.2,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:nightly.yml#scorecard",
+      "owner": "Scorecard",
+      "catches": "The nightly's chalk_sfu action latencies over their gated budgets, or no card at all.",
+      "runs": ["cut"],
+      "blocks": "release",
+      "minutes": 0.4,
+      "record": "unmeasured",
+      "sample": "Holds the cut with a SHA-bound verdict; the failure count is not recorded."
+    },
+    {
+      "id": "workflow:npm-publish.yml#publish",
+      "owner": "Release chain",
+      "catches": "Publishes the SDK packages to npm.",
+      "runs": ["manual"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "noise",
+      "sample": "10 of 68 runs failed; 57 succeeded."
+    },
+    {
+      "id": "workflow:osv-daily.yml#scan",
+      "owner": "Security",
+      "catches": "A new advisory against a package nobody changed; reports to the standing security issue.",
+      "runs": ["daily"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "caught",
+      "sample": "Catches advisories that pull requests cannot see."
+    },
+    {
+      "id": "workflow:promote.yml#select",
+      "owner": "Release chain",
+      "catches": "Promoting a nightly that is not proven: no passing proof, scorecard or latency verdict.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 0.4,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:promote.yml#approve",
+      "owner": "Release chain",
+      "catches": "A production deploy that nobody approved.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 0.5,
+      "record": "never-failed",
+      "sample": "Waits for a person; no failure count."
+    },
+    {
+      "id": "workflow:promote.yml#own-sfu-spaces",
+      "owner": "Media",
+      "catches": "Production Spaces on the wrong media plane when Promote starts.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 1.6,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:promote.yml#release",
+      "owner": "Release chain",
+      "catches": "Deploys the proven nightly to production through ci.yml.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 5.4,
+      "record": "noise",
+      "sample": "2 of 19 runs failed (noise)."
+    },
+    {
+      "id": "workflow:promote.yml#proof",
+      "owner": "Real-call proofs",
+      "catches": "A real call on production that fails after the deploy, which triggers rollback.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 25.8,
+      "record": "unmeasured",
+      "sample": "1 of 16 runs failed; the cause was not reviewed."
+    },
+    {
+      "id": "workflow:promote.yml#scorecard",
+      "owner": "Scorecard",
+      "catches": "The production Leave proof over the nightly median.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": 0.3,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:promote.yml#scorecard-rerun",
+      "owner": "Scorecard",
+      "catches": "A one-time Leave breach that a rerun clears.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "Runs only after a breach."
+    },
+    {
+      "id": "workflow:promote.yml#scorecard-final",
+      "owner": "Scorecard",
+      "catches": "A Leave breach that survives a rerun; opens the regression issue.",
+      "runs": ["promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "Runs only after a repeated breach."
+    },
+    {
+      "id": "workflow:promote.yml#rollback",
+      "owner": "Release chain",
+      "catches": "A failed production proof that leaves the bad deploy in place.",
+      "runs": ["promote"],
+      "blocks": "action",
+      "minutes": 4.2,
+      "record": "noise",
+      "sample": "2 of 5 runs failed (noise)."
+    },
+    {
+      "id": "workflow:promote.yml#rollback-npm",
+      "owner": "Release chain",
+      "catches": "A failed proof that leaves a bad npm package version published.",
+      "runs": ["promote"],
+      "blocks": "action",
+      "minutes": 0.6,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:promote.yml#result",
+      "owner": "Release chain",
+      "catches": "Reports the Promote outcome from every job it depends on.",
+      "runs": ["promote"],
+      "blocks": "release",
+      "minutes": 0.1,
+      "record": "caught",
+      "sample": "5 of 18 runs failed; it only reports the jobs it depends on."
+    },
+    {
+      "id": "workflow:promote.yml#github-release",
+      "owner": "Release chain",
+      "catches": "A GitHub release record that cannot be written for a promoted release.",
+      "runs": ["promote"],
+      "blocks": "action",
+      "minutes": 0.2,
+      "record": "never-failed",
+      "sample": "0 failures in the audit sample."
+    },
+    {
+      "id": "workflow:real-call-proof.yml#smoke",
+      "owner": "Real-call proofs",
+      "catches": "A real call failing on the nightly or production Spaces; the daily production run pages Discord.",
+      "runs": ["cut", "promote", "daily"],
+      "blocks": "release",
+      "minutes": 21.6,
+      "record": "unmeasured",
+      "sample": "7 of the last 20 daily runs failed up to 7 November and none since; the causes were not reviewed."
+    },
+    {
+      "id": "workflow:release-contracts.yml#podman-image-cleanup",
+      "owner": "Release chain",
+      "catches": "The managed host's image cleanup script misbehaving on Podman 4.9.",
+      "runs": ["pull_request"],
+      "blocks": "advisory",
+      "minutes": 0.3,
+      "record": "never-failed",
+      "sample": "0 of 100 runs failed.",
+      "reason": "A contract test of a script the managed deploy runs on a real host; deploy-managed would catch a failure there, so the pull request run is early notice only."
+    },
+    {
+      "id": "workflow:release-contracts.yml#contracts",
+      "owner": "Release chain",
+      "catches": "Release workflow lint, dispatcher and recorder image checks and OpenTofu validation breaking.",
+      "runs": ["pull_request"],
+      "blocks": "advisory",
+      "minutes": 4.0,
+      "record": "never-failed",
+      "sample": "0 of 100 runs failed.",
+      "reason": "Release CI repeats only the plan checks, so this is the only pull request cover for these inputs. It cannot join the Gate without importing OpenTofu provider downloads, which failed 5 times with 504 in the sample."
+    },
+    {
+      "id": "workflow:sdk-web-consumer-e2e.yml#packed-consumer",
+      "owner": "SDK",
+      "catches": "The packed web SDK failing in a real browser as a consumer installs it.",
+      "runs": ["pull_request", "daily"],
+      "blocks": "advisory",
+      "minutes": 10.3,
+      "record": "caught",
+      "sample": "2 real catches in 29 pull request runs; 1 unexplained failure in 6 nightly runs.",
+      "reason": "The Gate runs the packed consumer in Chromium on every SDK change; this workflow adds Firefox and WebKit nightly and runs on a pull request only when its own setup changes."
+    },
+    {
+      "id": "workflow:sfu-bench-reaper.yml#reap",
+      "owner": "Media",
+      "catches": "Capacity-bench droplets that run on and bill after a bench ends.",
+      "runs": ["daily"],
+      "blocks": "action",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "0 of 13 runs failed."
+    },
+    {
+      "id": "workflow:staging-sfu-latency.yml#target",
+      "owner": "Scorecard",
+      "catches": "Picks the newest held nightly whose SHA staging still runs.",
+      "runs": ["cut", "daily", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New in #1197; no history."
+    },
+    {
+      "id": "workflow:staging-sfu-latency.yml#latency",
+      "owner": "Scorecard",
+      "catches": "The own-SFU action latencies over their budgets on the staging node.",
+      "runs": ["cut", "daily", "manual"],
+      "blocks": "release",
+      "minutes": 32.6,
+      "record": "unmeasured",
+      "sample": "New in #1197; 0 of 2 runs failed before the move."
+    },
+    {
+      "id": "workflow:staging-sfu-latency.yml#record",
+      "owner": "Release chain",
+      "catches": "Writes the SHA-bound latency verdict Promote requires.",
+      "runs": ["cut", "daily", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New in #1197; no history."
+    },
+    {
+      "id": "workflow:web-call-proof.yml#web",
+      "owner": "Real-call proofs",
+      "catches": "A web call that fails end to end in a real browser against a deployed environment.",
+      "runs": ["cut", "manual"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "5 runs since 18 October: 2 failed, 2 cancelled."
+    },
+    {
+      "id": "scorecard:web.route",
+      "owner": "Call",
+      "catches": "The pre-join route's JavaScript or CSS growing past its gzip ceiling.",
+      "runs": ["pull_request", "merge_queue"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "Budget commits are frequent; the audit sample lists a bundle-size breach as a real catch."
+    },
+    {
+      "id": "scorecard:web.laptop",
+      "owner": "Call",
+      "catches": "Laptop call bundles, timing, video quality and leaks growing past their ceilings.",
+      "runs": ["pull_request", "merge_queue"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "Eight of the last ten budget commits raised a ceiling for a feature pull request."
+    },
+    {
+      "id": "scorecard:web.phone",
+      "owner": "Call",
+      "catches": "Phone call bundles, timing, video quality and leaks growing past their ceilings.",
+      "runs": ["pull_request", "merge_queue"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "caught",
+      "sample": "Eight of the last ten budget commits raised a ceiling for a feature pull request."
+    },
+    {
+      "id": "scorecard:chalk_sfu.action",
+      "owner": "Media",
+      "catches": "An own-SFU call action (join, toggle, publish, leave) getting slower than its p95 ceiling.",
+      "runs": ["cut", "daily"],
+      "blocks": "release",
+      "minutes": null,
+      "record": "caught",
+      "sample": "6 of 306 history values exceeded a ceiling in 19 runs; the cut holds on a breach."
+    },
+    {
+      "id": "scorecard:cf_sfu.action",
+      "owner": "Media",
+      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling; only the Cloudflare latency run turns red.",
+      "runs": ["cut"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "3 successful runs; the limits are interim."
+    },
+    {
+      "id": "scorecard:sfu.loopback",
+      "owner": "Media",
+      "catches": "The SFU loopback test pass rate falling.",
+      "runs": ["pull_request", "merge_queue"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "No breach in the audit sample."
+    },
+    {
+      "id": "scorecard:sfu.impairment",
+      "owner": "Media",
+      "catches": "The SFU impairment test pass rate falling.",
+      "runs": ["pull_request", "merge_queue"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "No breach in the audit sample."
+    },
+    {
+      "id": "scorecard:proof.leave_median_ms",
+      "owner": "Media",
+      "catches": "The median Leave confirmation on the real-call proof getting slower than 5 s.",
+      "runs": ["cut", "promote"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "never-failed",
+      "sample": "14 nightly values between 0.3 and 0.5 s."
+    }
+  ]
+}

@@ -453,6 +453,13 @@ class OwnSfuPromotionTests(unittest.TestCase):
             deferred = run('--latency-deferred')
             self.assertEqual((deferred.returncode, json.loads(deferred.stdout)['result']), (0, 'passed'), deferred.stderr)
 
+    def test_the_cut_needs_no_own_card_when_latency_is_deferred(self):
+        # The cut's proofs write no scorecard; the staging latency run supplies the own-SFU card that Promote reads next to the cut.
+        result = subprocess.run(['node', 'features/scorecard/evaluate.mjs', '--latency-deferred', SHA, RUN], cwd=release.ROOT,
+                                capture_output=True, text=True, env={**os.environ, 'GITHUB_OUTPUT': os.devnull})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((json.loads(result.stdout)['result'], json.loads(result.stdout)['missing_items']), ('passed', []))
+
     def test_missing_own_card_cannot_be_replaced_by_cf_card(self):
         fixture = json.loads((Path(__file__).parent / 'fixtures/own_sfu_over_budget.json').read_text())
         fixture['mediaPlane'] = 'cf_sfu'

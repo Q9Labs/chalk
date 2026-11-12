@@ -15,6 +15,10 @@ if [[ "$part" != clients ]]; then
   apps/sync/scripts/gate.sh run
 fi
 if [[ "$part" != server ]]; then
+  # The client proofs start the Sync fixture with mix, which needs the locked dependencies; the server part fetches them in its own gate.
+  if [[ "$part" == clients ]]; then
+    apps/sync/scripts/gate.sh deps
+  fi
   pnpm --dir sdks/typescript/client run test
   pnpm --dir packages/whiteboard run test
   pnpm --dir sdks/typescript/client run test:sync-browser

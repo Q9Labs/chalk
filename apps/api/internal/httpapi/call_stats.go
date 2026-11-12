@@ -61,6 +61,9 @@ type callStatsSample struct {
 	// RecvPausedVideos counts remote videos the SFU had paused for network at the
 	// end of the window. Only an SDK on a plane that reports subscription state sends it.
 	RecvPausedVideos *int64 `json:"recv_paused_videos,omitempty"`
+	// RecvHiddenVideos counts remote videos the viewer chose not to receive at the end of
+	// the window because their tiles were hidden or off screen. They send nothing on purpose.
+	RecvHiddenVideos *int64 `json:"recv_hidden_videos,omitempty"`
 }
 
 // These are also the OpenAPI enums, so no free text can enter the log through a
@@ -95,7 +98,7 @@ func CallStatsMaximum(field string) int64 {
 		return 10000
 	case "freeze_ms":
 		return 600000
-	case "recv_paused_videos":
+	case "recv_paused_videos", "recv_hidden_videos":
 		return 64
 	default:
 		return 0
@@ -143,7 +146,7 @@ func validateCallStatsSample(sample callStatsSample) string {
 			return field + "_label"
 		}
 	}
-	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos} {
+	for field, value := range map[string]*int64{"rtt_ms": sample.RTTMS, "send_bitrate_kbps": sample.SendBitrateKbps, "send_jitter_ms": sample.SendJitterMS, "recv_bitrate_kbps": sample.RecvBitrateKbps, "recv_jitter_ms": sample.RecvJitterMS, "recv_height": sample.RecvHeight, "freeze_count": sample.FreezeCount, "freeze_ms": sample.FreezeMS, "recv_paused_videos": sample.RecvPausedVideos, "recv_hidden_videos": sample.RecvHiddenVideos} {
 		if value != nil && (*value < 0 || *value > CallStatsMaximum(field)) {
 			return field + "_range"
 		}
@@ -269,7 +272,7 @@ func (s callStatsSample) logAttributes() []any {
 			attributes = append(attributes, key, value)
 		}
 	}
-	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos} {
+	for key, value := range map[string]*int64{"rtt_ms": s.RTTMS, "send_bitrate_kbps": s.SendBitrateKbps, "send_jitter_ms": s.SendJitterMS, "recv_bitrate_kbps": s.RecvBitrateKbps, "recv_jitter_ms": s.RecvJitterMS, "recv_height": s.RecvHeight, "freeze_count": s.FreezeCount, "freeze_ms": s.FreezeMS, "recv_paused_videos": s.RecvPausedVideos, "recv_hidden_videos": s.RecvHiddenVideos} {
 		if value != nil {
 			attributes = append(attributes, key, *value)
 		}

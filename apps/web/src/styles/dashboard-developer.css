@@ -57,7 +57,7 @@
 .site .dash .dev .side .cap {
   font-size: var(--type-caption);
   font-weight: 600;
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
   padding: 0 var(--space-2-5) var(--space-1-5);
 }
 
@@ -89,7 +89,7 @@
 .site .dash .dev .side .ct {
   margin-left: auto;
   font-size: var(--type-caption);
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
   font-weight: 500;
 }
 
@@ -351,7 +351,7 @@
 }
 
 .site .dash .dev .pill.mu .d {
-  background: var(--faint-text);
+  background: var(--faint-mark);
 }
 
 /* Favicons: the site's own icon, or a lettered tile when it has none */
@@ -467,7 +467,7 @@
 }
 
 .site .dash .dev .redact {
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
   letter-spacing: 0.04em;
 }
 
@@ -493,7 +493,7 @@
 }
 
 .site .dash .dev .sites .o .sc {
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .dev .sites .o b {
@@ -652,18 +652,10 @@
 }
 
 .site .dash .dev .blank .tile {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--corner-xl);
-  background: var(--chalk-raised);
-  color: var(--chalk-muted-text);
   display: grid;
   place-items: center;
+  color: var(--chalk-muted-text);
   margin-bottom: var(--space-1);
-}
-
-.site[data-chalk-theme="dark"] .dash .dev .blank .tile {
-  background: var(--chalk-hover);
 }
 
 .site .dash .dev .blank b {
@@ -925,7 +917,7 @@
   flex: none;
   padding-right: var(--space-3);
   text-align: right;
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
   user-select: none;
   font-variant-numeric: tabular-nums;
 }
@@ -943,7 +935,7 @@
 }
 
 .site .dash .dev .code .c {
-  color: var(--faint-text);
+  color: var(--chalk-muted-text);
 }
 
 .site .dash .dev .code .p {
@@ -1555,4 +1547,55 @@
   .site .dash .dlg.titled .acts .hint {
     display: none;
   }
+}
+
+/* ---------- Loading: the page's own frame, values still to come ---------- */
+
+.site .dash .dev .dstack {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.site .dash .dev .skbody {
+  border-top: 1px solid var(--chalk-line);
+  padding: var(--space-1) var(--space-4);
+}
+
+.site .dash .dev .skline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+}
+
+.site .dash .dev .skline + .skline {
+  border-top: 1px solid var(--chalk-line);
+}
+
+.site .dash .dev .set.jumped::after {
+  inset: var(--space-1);
+  border-radius: var(--corner-lg);
+}
+
+/* The session skeleton's recording and transcript cards hold a video-shaped block, as the loaded cards do. */
+.site .dash .dev .skpanel {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.site .dash .dev .skpanel .sk {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--corner-xl);
+}
+
+/* With a second line under the title, the icon sits on the title's line instead of between the two. */
+.site .dash .dev .ph:has(.sub) {
+  align-items: flex-start;
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+.site .dash .dev .ph:has(.sub) > svg.site-icon {
+  margin-top: 1px;
 }

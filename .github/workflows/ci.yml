@@ -1043,8 +1043,10 @@ jobs:
     outputs:
       pages_deployment_id: ${{ steps.restore.outputs.pages_deployment_id }}
     needs: [prepare-web, deploy-managed]
+    # always() lets the Pages restore run after a failed backend deploy, so no dependency can refuse a branch revision here:
+    # the job holds the Cloudflare credentials and checks out the workflow revision's own tooling.
     if: >-
-      always() && (!cancelled() || inputs.pages_rollback_id != '') && inputs.deploy_web &&
+      always() && github.ref == 'refs/heads/master' && (!cancelled() || inputs.pages_rollback_id != '') && inputs.deploy_web &&
       (inputs.pages_rollback_id != '' || needs.deploy-managed.result == 'success' || (!inputs.deploy_managed && needs.deploy-managed.result == 'skipped')) &&
       (inputs.manifest_run_id != '' || needs.prepare-web.result == 'success')
     runs-on: ubuntu-24.04
