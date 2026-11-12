@@ -28,10 +28,16 @@ describe("SpaceClient.close", () => {
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1), logger: { warn: (...args: unknown[]) => warnings.push(args) } }, createCoreTestPlatform());
     await client.join({ microphone: false, camera: false });
     vi.spyOn(client, "leave").mockRejectedValue(new Error("socket already closed"));
+    const dispose = client.dispose.bind(client);
+    let disposals = 0;
+    client.dispose = () => {
+      disposals += 1;
+      return dispose();
+    };
 
     await expect(client.close()).resolves.toBeUndefined();
     expect(warnings).toEqual([["SpaceClient leave failed while closing", { message: "socket already closed" }]]);
-    expect(client.getSnapshot().connection.status).toBe("left");
+    expect(disposals).toBe(1);
   });
 });
 
