@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -136,39 +137,53 @@ func SameRows(expected, current Plan) error {
 // only for cleanup jobs that the background retention worker completes. All
 // other approved rows (including Tenant identities) and the schema stay exact.
 func SameRowsForFrozenBackup(expected, current Plan) error {
-	copy := current
-	copy.Tables = append([]Table(nil), current.Tables...)
+	relaxed := current
+	relaxed.Tables = slices.Clone(current.Tables)
 	for index, table := range expected.Tables {
-		if table.Name != "transcription_cleanup_jobs" || index >= len(copy.Tables) {
+		if table.Name != "transcription_cleanup_jobs" || index >= len(relaxed.Tables) {
 			continue
 		}
-		other := copy.Tables[index]
-		if other.Name != table.Name || len(table.Rows) != len(other.Rows) {
-			return errors.New("cleanup-job key set changed")
+		if err := sameRowKeys(table, relaxed.Tables[index]); err != nil {
+			return err
 		}
-		for rowIndex, row := range table.Rows {
-			var before, after interface{}
-			if err := json.Unmarshal(row.Key, &before); err != nil {
-				return err
-			}
-			if err := json.Unmarshal(other.Rows[rowIndex].Key, &after); err != nil {
-				return err
-			}
-			left, err := json.Marshal(before)
-			if err != nil {
-				return err
-			}
-			right, err := json.Marshal(after)
-			if err != nil {
-				return err
-			}
-			if string(left) != string(right) {
-				return errors.New("cleanup-job key set changed")
-			}
-		}
-		copy.Tables[index].Digest = table.Digest
+		relaxed.Tables[index].Digest = table.Digest
 	}
-	return SameRows(expected, copy)
+	return SameRows(expected, relaxed)
+}
+
+func sameRowKeys(expected, current Table) error {
+	errKeys := errors.New("cleanup-job key set changed")
+	if current.Name != expected.Name || len(expected.Rows) != len(current.Rows) {
+		return errKeys
+	}
+	for index, row := range expected.Rows {
+		same, err := sameJSON(row.Key, current.Rows[index].Key)
+		if err != nil {
+			return err
+		}
+		if !same {
+			return errKeys
+		}
+	}
+	return nil
+}
+
+// sameJSON compares two documents by value, ignoring formatting and object key order.
+func sameJSON(left, right json.RawMessage) (bool, error) {
+	canonical := func(raw json.RawMessage) (string, error) {
+		var value any
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return "", err
+		}
+		data, err := json.Marshal(value)
+		return string(data), err
+	}
+	l, err := canonical(left)
+	if err != nil {
+		return false, err
+	}
+	r, err := canonical(right)
+	return l == r, err
 }
 
 type BackupReceipt struct {
@@ -237,37 +252,40 @@ func (b Backfill) Validate(scope Scope) error {
 // DeleteOrder returns child-first tables after caller-verified cycle cuts and
 // cascade groups. Unknown remaining cycles fail closed.
 func DeleteOrder(names []string, parents map[string][]string) ([]string, error) {
-	remaining := make(map[string]bool)
+	remaining := make(map[string]bool, len(names))
 	for _, name := range names {
 		remaining[name] = true
 	}
 	var result []string
 	for len(remaining) > 0 {
-		var leaves []string
-		for candidate := range remaining {
-			hasChild := false
-			for child := range remaining {
-				if child == candidate {
-					continue
-				}
-				for _, parent := range parents[child] {
-					if parent == candidate {
-						hasChild = true
-					}
-				}
-			}
-			if !hasChild {
-				leaves = append(leaves, candidate)
-			}
-		}
+		leaves := leafTables(remaining, parents)
 		if len(leaves) == 0 {
 			return nil, errors.New("unhandled foreign-key cycle; no rows were committed")
 		}
 		sort.Strings(leaves)
 		for _, name := range leaves {
-			result = append(result, name)
 			delete(remaining, name)
 		}
+		result = append(result, leaves...)
 	}
 	return result, nil
+}
+
+// leafTables returns the remaining tables that no other remaining table references as a parent.
+func leafTables(remaining map[string]bool, parents map[string][]string) []string {
+	hasChild := make(map[string]bool, len(remaining))
+	for child := range remaining {
+		for _, parent := range parents[child] {
+			if parent != child {
+				hasChild[parent] = true
+			}
+		}
+	}
+	var leaves []string
+	for name := range remaining {
+		if !hasChild[name] {
+			leaves = append(leaves, name)
+		}
+	}
+	return leaves
 }
