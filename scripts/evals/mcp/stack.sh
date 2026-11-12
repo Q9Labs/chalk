@@ -20,7 +20,7 @@ server_ref="${CHALK_EVAL_SERVER_REF:-HEAD}"
 git rev-parse "${server_ref}^{commit}" > "$state/server-revision"
 if [[ "$server_ref" != HEAD ]]; then
   source_root="$(mktemp -d "$state/source.XXXXXX")"
-  git archive "$server_ref" apps/api features/mcp | tar -x -C "$source_root"
+  git archive "$server_ref" apps/api features/mcp features/media/sfu/protocol | tar -x -C "$source_root"
   cp apps/api/internal/adapters/postgres/mcp_eval_test.go "$source_root/apps/api/internal/adapters/postgres/mcp_eval_test.go"
 fi
 docker run --name "$container" -e POSTGRES_DB=chalk_mcp_eval -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:25432:5432 -d postgres:18.3-alpine >/dev/null

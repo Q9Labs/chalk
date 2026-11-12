@@ -2,18 +2,23 @@ package media
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
-var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+// checkIdentifier refuses a value that is not a valid identifier, naming the field it came from.
+func checkIdentifier(field, value string) error {
+	if !protocol.IdentifierPattern.MatchString(value) {
+		return fmt.Errorf("%w: %s must be %s", ErrInvalidRequest, field, protocol.IdentifierRule)
+	}
+	return nil
+}
 
 // ValidateScope rejects scopes that are empty or carry unexpected characters.
 func ValidateScope(scope protocol.Scope) error {
 	for name, value := range map[string]string{"tenantId": scope.TenantID, "episodeId": scope.EpisodeID, "participantId": scope.ParticipantID} {
-		if !identifierPattern.MatchString(value) {
-			return fmt.Errorf("%w: scope.%s must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest, name)
+		if err := checkIdentifier("scope."+name, value); err != nil {
+			return err
 		}
 	}
 	if scope.Generation < 1 {

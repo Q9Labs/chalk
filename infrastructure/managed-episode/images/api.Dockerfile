@@ -9,6 +9,7 @@ WORKDIR /src/apps/api
 
 COPY --from=api_source go.mod go.sum ./
 COPY --from=mcp_source . /src/features/mcp/api/
+COPY --from=protocol_source . /src/features/media/sfu/protocol/
 COPY --from=api_source . ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

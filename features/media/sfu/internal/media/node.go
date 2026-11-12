@@ -482,8 +482,8 @@ func (n *Node) CreateCaptureSessionAt(operationID string, scope protocol.Scope, 
 }
 
 func (n *Node) create(operationID string, scope protocol.Scope, kind sessionKind, allocation *int64) (protocol.CreateSessionResponse, error) {
-	if !identifierPattern.MatchString(operationID) {
-		return protocol.CreateSessionResponse{}, fmt.Errorf("%w: operationId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest)
+	if err := checkIdentifier("operationId", operationID); err != nil {
+		return protocol.CreateSessionResponse{}, err
 	}
 	if err := ValidateScope(scope); err != nil {
 		return protocol.CreateSessionResponse{}, err
