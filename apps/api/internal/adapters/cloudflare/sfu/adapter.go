@@ -100,6 +100,9 @@ func (e providerFailure) Error() string {
 
 func (e providerFailure) ProviderFailureCode() string { return e.providerCode }
 
+func (e providerFailure) UpstreamStatus() int  { return e.statusCode }
+func (e providerFailure) UpstreamCode() string { return e.providerCode }
+
 func (e providerFailure) Unwrap() error {
 	switch {
 	case e.transportCause == mediaplane.TransportCauseCallerCanceled:

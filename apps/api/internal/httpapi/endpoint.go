@@ -222,6 +222,7 @@ func (e Endpoint[Request, Response]) writeFailure(w http.ResponseWriter, r *http
 		return
 	}
 	apiErr := e.apiError(err)
+	observability.RecordUpstream(w, err)
 	if apiErr.Status >= http.StatusInternalServerError {
 		observability.LogHTTPError(r.Context(), e.contract.Method, e.contract.Path, apiErr.Code, err)
 	}

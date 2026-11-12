@@ -82,14 +82,34 @@ export function requestContextHeaders(): Record<string, string> {
   return { baggage, traceparent: `00-${trace}-${trace.slice(16)}-01` };
 }
 
-/** Wraps a fetch so every request carries the session; headers the caller already set win. Use only for Chalk API origins. */
+const JOURNEY_HEADER = "x-chalk-journey-id";
+
+export type FailedRequest = { readonly journeyId: string; readonly status: number };
+let failedRequest: FailedRequest | undefined;
+
+/**
+ * The API names every request with a journey ID in the `x-chalk-journey-id` response header and puts it on that
+ * request's log line. The client keeps the latest failure's ID so a problem report can quote the request that failed. The
+ * client never sends a journey ID: the ledger keys one lifecycle by it, so a session-wide ID would merge unrelated ones.
+ */
+export function lastFailedRequest(): FailedRequest | undefined {
+  return failedRequest;
+}
+
+function recordFailure(response: Response): Response {
+  const journeyId = response.headers.get(JOURNEY_HEADER);
+  if (!response.ok && journeyId && SESSION_ID.test(journeyId)) failedRequest = { journeyId, status: response.status };
+  return response;
+}
+
+/** Wraps a fetch so every request carries the session and failed responses keep their journey ID; headers the caller already set win. Use only for Chalk API origins. */
 export function withRequestContext(fetchImplementation?: typeof globalThis.fetch): typeof globalThis.fetch {
-  return (input, init) => {
+  return async (input, init) => {
     const send = fetchImplementation ?? globalThis.fetch;
     const context = requestContextHeaders();
-    if (Object.keys(context).length === 0) return send(input, init);
+    if (Object.keys(context).length === 0) return recordFailure(await send(input, init));
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     for (const [name, value] of Object.entries(context)) if (!headers.has(name)) headers.set(name, value);
-    return send(input, { ...init, headers });
+    return recordFailure(await send(input, { ...init, headers }));
   };
 }

@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const (
@@ -312,6 +313,7 @@ func (a *Adapter) send(ctx context.Context, endpoint string, body []byte) (int, 
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(request.Header))
 	reply, err := a.client.Do(request)
 	if err != nil {
 		return 0, nil, err
@@ -330,21 +332,22 @@ func classify(status int, payload []byte) error {
 	var envelope wireError
 	_ = json.Unmarshal(payload, &envelope)
 	code := envelope.Error.Code
+	upstream := mediaplane.UpstreamFailure{Status: status, Code: code}
 	switch {
 	case status == http.StatusNotFound || code == "session_gone":
-		return fmt.Errorf("%w: sfu %s", mediaplane.ErrConnectionNotFound, code)
+		return fmt.Errorf("%w: %w", mediaplane.ErrConnectionNotFound, upstream)
 	case status == http.StatusBadRequest:
-		return fmt.Errorf("%w: sfu %s", mediaplane.ErrInvalidSignalRequest, code)
+		return fmt.Errorf("%w: %w", mediaplane.ErrInvalidSignalRequest, upstream)
 	case code == "stale_generation":
-		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, errStaleGeneration, code)
+		return fmt.Errorf("%w: %w: %w", mediaplane.ErrProviderFailed, errStaleGeneration, upstream)
 	case status == http.StatusTooManyRequests:
-		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, mediaplane.ErrProviderRateLimited, code)
+		return fmt.Errorf("%w: %w: %w", mediaplane.ErrProviderFailed, mediaplane.ErrProviderRateLimited, upstream)
 	case status == http.StatusForbidden:
-		return fmt.Errorf("%w: %w: sfu %s", mediaplane.ErrProviderFailed, mediaplane.ErrProviderUnauthorized, code)
+		return fmt.Errorf("%w: %w: %w", mediaplane.ErrProviderFailed, mediaplane.ErrProviderUnauthorized, upstream)
 	case status == http.StatusNotImplemented:
-		return fmt.Errorf("%w: sfu %s", mediaplane.ErrUnsupportedOperation, code)
+		return fmt.Errorf("%w: %w", mediaplane.ErrUnsupportedOperation, upstream)
 	default:
-		return fmt.Errorf("%w: sfu status %d %s", mediaplane.ErrProviderFailed, status, code)
+		return fmt.Errorf("%w: %w", mediaplane.ErrProviderFailed, upstream)
 	}
 }
 

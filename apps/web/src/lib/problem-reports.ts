@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Schema } from "effect";
-import { currentSessionId, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
+import { currentSessionId, lastFailedRequest, withRequestContext, type SpaceClient } from "@q9labsai/chalk-client";
 import type { ChalkProps } from "@q9labsai/chalk-react";
 
 const apiFetch = withRequestContext();
@@ -68,6 +68,11 @@ export function useProblemReports(baseURL: string, tenantId: string | undefined)
   return !refused;
 }
 
+function failedRequestLine(): string {
+  const failed = lastFailedRequest();
+  return failed ? `${failed.journeyId} (HTTP ${failed.status})` : "none";
+}
+
 export function problemReporter({ baseURL, tenantId, mediaProof, connection }: { readonly baseURL: string; readonly tenantId: string | undefined; readonly mediaProof: () => string | undefined; readonly connection: () => ReportConnection }): ReportProblem {
   return async ({ description, diagnostics }) => {
     const credential = mediaProof();
@@ -79,7 +84,13 @@ export function problemReporter({ baseURL, tenantId, mediaProof, connection }: {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${credential}` },
       body: JSON.stringify({
         description,
-        ...(diagnostics === undefined ? {} : { diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join("\n") }),
+        ...(diagnostics === undefined
+          ? {}
+          : {
+              diagnostics: [`Connection: ${snapshot.status}`, `Last error: ${snapshot.lastError?.code ?? "none"}`, `App version: ${__APP_VERSION__}`, `Session: ${currentSessionId() ?? "none"}`, `Last failed request: ${failedRequestLine()}`, `Browser: ${navigator.userAgent.slice(0, 400)}`].join(
+                "\n",
+              ),
+            }),
       }),
     });
     if (!response.ok) {
