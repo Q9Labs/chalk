@@ -69,18 +69,6 @@ try {
       await details.getByRole("img", { name: "Scan to join this call", exact: true }).waitFor();
       await details.getByRole("button", { name: "Close", exact: true }).click();
       await details.waitFor({ state: "hidden" });
-      const linkTrigger = device === "phone" ? page.getByRole("button", { name: "Call details", exact: true }) : page.getByRole("button", { name: "Show call link", exact: true });
-      if (device === "phone") {
-        await linkTrigger.click();
-        await page.getByRole("dialog", { name: "Call details", exact: true }).getByRole("button", { name: "Show call link", exact: true }).click();
-      } else await linkTrigger.click();
-      const readyTitle = page.getByRole("region", { name: "Your call is ready", exact: true }).getByRole("heading", { name: "Your call is ready", exact: true });
-      await readyTitle.waitFor();
-      assert.equal(await page.locator('[data-part="ready-link"]').innerText(), "example.com/invite/test-call");
-      await page.getByRole("button", { name: "Close call link", exact: true }).click();
-      await readyTitle.waitFor({ state: "hidden" });
-      const returned = device === "phone" ? linkTrigger : page.getByRole("button", { name: "Show call link", exact: true });
-      assert.equal(await returned.evaluate((element) => element === document.activeElement), true, `${device}: closing the call link returns focus`);
       await page.mouse.move(40, 100);
       await page.waitForTimeout(250);
       if (out) await page.screenshot({ path: resolve(out, `${device}-before.png`) });
@@ -116,7 +104,7 @@ try {
       await page.getByRole("heading", { name: "Sent", exact: true }).waitFor({ state: "hidden" });
       assert.equal(await page.getByRole("button", { name: "Report a problem", exact: true }).evaluate((element) => element === document.activeElement), true, "the report dialog returns terminal focus");
       assert.deepEqual(errors, [], `${device}: no runtime errors`);
-      console.log(`${device}: call-link sharing/focus, People/Chat card, stage continuity and typed media failures passed`);
+      console.log(`${device}: call-link sharing, People/Chat card, stage continuity and typed media failures passed`);
     } finally {
       await context.close();
     }

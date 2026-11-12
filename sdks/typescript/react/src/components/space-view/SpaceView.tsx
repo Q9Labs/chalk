@@ -29,7 +29,6 @@ import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
 import { useHeldWhile } from "../../internal/useHeldWhile";
 import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useCallToasts } from "../toast-stack/useCallToasts";
-import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
@@ -198,8 +197,10 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  // While reconnecting the tray stays usable: a raised hand waits for the connection, and only the emoji pause.
+  const reactionsReachable = connection.status === "live" || connection.status === "reconnecting";
   // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
-  if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
+  if (isReactionPickerOpen && !reactionsReachable) setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -407,14 +408,12 @@ export function SpaceView({
                   density="comfortable"
                   layout={layout}
                   onLayoutChange={updateLayout}
-                  shareUrl={effectiveShareUrl}
-                  callLinkOpen={callLinkOpen ?? callLink.open}
-                  onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
                   buttons={buttons}
                   activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                   onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                   onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                   onToggleWhiteboard={onToggleWhiteboard}
+                  isWhiteboardOpen={whiteboard?.isOpen}
                   onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                   reactionsOpen={isReactionPickerOpen}
                   onCommandError={onCommandError}
@@ -428,7 +427,7 @@ export function SpaceView({
                 {feature("reactions") ? <ReactionsOverlay /> : null}
                 {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
                 <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onOpenReportProblem} />
-                {feature("reactions") && canSendReaction && connection.status === "live" ? (
+                {feature("reactions") && canSendReaction && reactionsReachable ? (
                   <div className="absolute bottom-24 left-1/2 z-44">
                     <ReactionPicker
                       isHandRaised={self.handRaised}
@@ -436,6 +435,7 @@ export function SpaceView({
                       isOpen={isReactionPickerOpen}
                       onClose={() => setReactionPickerOpen(false)}
                       allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
+                      emojiPaused={connection.status !== "live"}
                       onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
                       size="compact"
                     />
@@ -490,7 +490,6 @@ export function SpaceView({
                     <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />
                   </Suspense>
                 ) : null}
-                <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
                 {overlay}
               </>
             }

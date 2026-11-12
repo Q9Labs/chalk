@@ -1,0 +1,5 @@
+---
+"@q9labsai/chalk-react": minor
+---
+
+The call invite now lives in one place. A host who is alone at call start sees the call menu open with the QR code expanded, and the menu closes when someone joins. `CallReady` is no longer exported, and `ControlBar` no longer takes `shareUrl`, `callLinkOpen`, `onCallLinkToggle` or `onCopyError`; pass `callLinkOpen` and `onCallLinkToggle` to `SpaceHeader` or `SpaceView` instead. Record moved into the dock and turns red while recording. The weak-connection chip is a quiet pill that opens connection details, and the recording indicator reads "Recording" in red. The call menu drops the keyboard shortcuts row (the ? key still opens them), and Copy diagnostics is an icon button. "Report a problem" shows whenever the app passes `onReportProblem`. The reactions button stays usable while reconnecting: the hand still works and emoji wait for the link. The people panel uses plain mic and camera icons and a host crown, and hides Mute everyone when you're alone. The end screen no longer shows the raw reference code; it goes into the problem report instead.

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
+import { ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
 import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
@@ -24,23 +24,23 @@ export function CallDetails({
   onColorSchemeChange,
   sounds,
   onSoundsChange,
-  onDialog,
+  onReport,
   onReportProblem,
   revealConnection = false,
-  hideShortcuts = false,
+  revealQr = false,
 }: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
-  /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
-  readonly hideShortcuts?: boolean;
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
-  readonly onDialog: (kind: "shortcuts" | "report") => void;
-  /** Opened from the connection chip: the Connection row starts expanded and ringed so the person sees where the chip led. */
+  readonly onReport: () => void;
+  /** Opened from the connection chip: the Connection row starts expanded and marked so the person sees where the chip led. */
   readonly revealConnection?: boolean;
+  /** Opened at call start for a host who is alone: the QR code starts expanded so the invite is one glance away. */
+  readonly revealQr?: boolean;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
-  const [qrOpen, setQrOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(revealQr);
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
@@ -88,13 +88,15 @@ export function CallDetails({
             <span className="chalk-shell-detail-lead">
               <ConnectionBars level={quality.level} />
             </span>
-            <span className="chalk-shell-detail-label">Connection</span>
+            <span className="chalk-shell-detail-label">
+              Connection
+              {quality.helper ? <small>{quality.helper}</small> : null}
+            </span>
             <span className="chalk-shell-detail-value" data-tone={quality.tone}>
               {quality.word}
               <ShellIcon name={details ? "up2" : "down"} size={16} />
             </span>
           </button>
-          {quality.helper ? <p className="chalk-shell-detail-helper">{quality.helper}</p> : null}
           <div id="chalk-details-connection" hidden={!details}>
             {details && network.samples && network.samples.length > 1 ? (
               <Suspense fallback={null}>
@@ -113,9 +115,15 @@ export function CallDetails({
                 ))}
               </dl>
             ) : null}
-            <div className="chalk-shell-diagnostics-copy">
-              <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" showLabel />
-            </div>
+            <ChalkTooltip
+              trigger={
+                <span className="chalk-shell-diagnostics-copy">
+                  <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
+                </span>
+              }
+            >
+              Copy diagnostics
+            </ChalkTooltip>
           </div>
         </>
       ) : null}
@@ -145,21 +153,10 @@ export function CallDetails({
           <span />
         </span>
       </button>
-      {hideShortcuts ? null : (
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-          <span className="chalk-shell-detail-lead">
-            <RowIcon name="keyboard" />
-          </span>
-          <span className="chalk-shell-detail-label">Keyboard shortcuts</span>
-          <span className="chalk-shell-detail-trail">
-            <ShellIcon name="right" size={16} />
-          </span>
-        </button>
-      )}
       {onReportProblem ? (
         <>
           <div className="chalk-shell-sep" />
-          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
+          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={onReport}>
             <span className="chalk-shell-detail-lead">
               <RowIcon name="flag" />
             </span>
