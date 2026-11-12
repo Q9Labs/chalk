@@ -8,7 +8,6 @@ import { CopyAction, Dialog, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
 import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";
-import { type Home } from "./home-rows";
 
 export function CallReadyDialog({ call, link, onLanguage, onJoin, onClose }: { readonly call: CallDTO; readonly link: string; readonly onLanguage: (call: CallDTO) => void; readonly onJoin: () => void; readonly onClose: () => void }) {
   const [language, setLanguage] = useState<NewCallLanguage>(call.transcriptLanguage ?? readNewCallLanguage());

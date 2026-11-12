@@ -12,17 +12,13 @@ import { CallReadyDialog, JoinLinkField, RenameDialog } from "./HomeDialogs";
 
 export function HomePage() {
   const held = useRef<Row[]>([]);
-  const { state, reload, update } = useLoad<Home>(
-    async () => replay(held.current, await readPage("home", {})),
-    "home",
-    {
-      // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
-      // every call Home holds: its live state, whether it is archived, its last active time and recent people, and the
-      // first page when a call was made elsewhere. A failed check keeps the old rows and the next one catches up.
-      interval: () => 5000,
-      read: readHomeStatus,
-    },
-  );
+  const { state, reload, update } = useLoad<Home>(async () => replay(held.current, await readPage("home", {})), "home", {
+    // Like a call page, Home checks every five seconds while visible. Each check is one request that answers for
+    // every call Home holds: its live state, whether it is archived, its last active time and recent people, and the
+    // first page when a call was made elsewhere. A failed check keeps the old rows and the next one catches up.
+    interval: () => 5000,
+    read: readHomeStatus,
+  });
   useEffect(() => {
     if (state.kind === "ready") held.current = state.data.rows;
   }, [state]);
@@ -167,4 +163,3 @@ function HomeLoadFailed({ detail, onRetry }: { readonly detail: string; readonly
     </div>
   );
 }
-

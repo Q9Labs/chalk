@@ -61,19 +61,19 @@ export async function replay(rows: Row[], page: HomeDTO): Promise<Home> {
 
 /** One status check: refreshes every held row, and folds in the first page when a call was made elsewhere. */
 export async function readHomeStatus(home: Home): Promise<Home> {
-    const ids = home.rows.map((row) => row.id);
-    const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
-    const rows = withStatus(home.rows, status);
-    const first = status.first;
-    if (!first) return { ...home, rows };
-    // Calls made elsewhere are the newest, so they sit above every call Home holds: put the first page's calls above
-    // the first one Home knows on top. With no known call on the page (five or more new calls), or an unknown call
-    // below a known one (a call archived before Home loaded, then restored), reload from this page into the rows
-    // this answer just updated.
-    const known = new Set(rows.map((row) => row.id));
-    const overlap = first.calls.findIndex((call) => known.has(call.id));
-    if (overlap < 0 || first.calls.slice(overlap).some((call) => !known.has(call.id))) return replay(rows, first);
-    const discovered = rowsOf(first);
-    const byId = new Map(discovered.map((row) => [row.id, row]));
-    return { ...home, rows: capped([...discovered.slice(0, overlap), ...rows.map((row) => byId.get(row.id) ?? row)]) };
+  const ids = home.rows.map((row) => row.id);
+  const status = await readPage("home-status", { home: "1", ...(ids.length ? { spaceIds: ids.join(",") } : {}) });
+  const rows = withStatus(home.rows, status);
+  const first = status.first;
+  if (!first) return { ...home, rows };
+  // Calls made elsewhere are the newest, so they sit above every call Home holds: put the first page's calls above
+  // the first one Home knows on top. With no known call on the page (five or more new calls), or an unknown call
+  // below a known one (a call archived before Home loaded, then restored), reload from this page into the rows
+  // this answer just updated.
+  const known = new Set(rows.map((row) => row.id));
+  const overlap = first.calls.findIndex((call) => known.has(call.id));
+  if (overlap < 0 || first.calls.slice(overlap).some((call) => !known.has(call.id))) return replay(rows, first);
+  const discovered = rowsOf(first);
+  const byId = new Map(discovered.map((row) => [row.id, row]));
+  return { ...home, rows: capped([...discovered.slice(0, overlap), ...rows.map((row) => byId.get(row.id) ?? row)]) };
 }

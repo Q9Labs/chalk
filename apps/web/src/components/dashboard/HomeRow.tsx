@@ -5,7 +5,7 @@ import { Faces } from "../site/Avatar";
 import { CopyAction, Menu, MenuItem, usePhone, useToast } from "./kit";
 import { inviteLink } from "./home-rows";
 
-function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
+export function CallRow({ call, live, onRename, onArchive }: { readonly call: HomeCallDTO; readonly live: LiveDTO["episode"]; readonly onRename: () => void; readonly onArchive: () => void }) {
   const phone = usePhone();
   const navigate = useNavigate();
   const join = () => void navigate({ to: "/dashboard/call/$spaceId/join", params: { spaceId: call.id } });
@@ -99,4 +99,3 @@ function CopyMenuItem({ call, onDone }: { readonly call: HomeCallDTO; readonly o
     </MenuItem>
   );
 }
-
