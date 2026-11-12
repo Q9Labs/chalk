@@ -186,6 +186,7 @@
       "scripts/recorder/**",
       "scratchpad/**",
       "docs/**",
+      "tools/formal/**/*.view.mjs",
       "apps/api/docs/**",
       "apps/docs/**",
       "apps/mobile/**",
