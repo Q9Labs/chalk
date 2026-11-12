@@ -77,7 +77,7 @@ func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T)
 				}
 				return
 			}
-			if binding == nil || binding.Provider != string(test.want) {
+			if binding == nil || binding.Provider != test.want.SettingName() {
 				t.Fatalf("binding %+v, want provider %s", binding, test.want)
 			}
 		})

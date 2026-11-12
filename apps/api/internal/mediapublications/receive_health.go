@@ -158,7 +158,7 @@ func (h *receiveHealth) updatePublications(input provideroperations.ObservationI
 	}
 	identities := make(map[receivePublicationKey][32]byte)
 	for _, publication := range input.Publications[:min(len(input.Publications), receiveHealthMaxPublications)] {
-		if (publication.Source != "microphone" && publication.Source != "screen_audio") || len(publication.PublicationID) > 4096 {
+		if !publication.Source.IsAudio() || len(publication.PublicationID) > 4096 {
 			continue
 		}
 		reference, err := ParseReference(publication.PublicationID)
@@ -451,7 +451,7 @@ func (h *receiveHealth) reconcile(key ReceiveHealthEpisode, publications []provi
 	}
 	seen := make(map[receivePairKey]bool)
 	for _, publication := range publications {
-		if (publication.Source != "microphone" && publication.Source != "screen_audio") || publication.PublicationID == "" || len(publication.PublicationID) > 4096 {
+		if !publication.Source.IsAudio() || publication.PublicationID == "" || len(publication.PublicationID) > 4096 {
 			continue
 		}
 		reference, err := ParseReference(publication.PublicationID)

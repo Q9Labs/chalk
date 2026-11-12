@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -243,7 +244,7 @@ func reconciliationTestID(t *testing.T, raw string) utilities.ID {
 	return id
 }
 
-func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source string, enabled bool) {
+func assertPublicationEnabled(t *testing.T, publications []provideroperations.Publication, participantID utilities.ID, source mediaplane.PublicationSource, enabled bool) {
 	t.Helper()
 	for _, publication := range publications {
 		if publication.ParticipantID == participantID && publication.Source == source {

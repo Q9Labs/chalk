@@ -407,17 +407,17 @@ func (e SFUExecutor) resumePublication(ctx context.Context, input provideroperat
 
 // controlSources sends one action for every source the operation names at its
 // control revision, and returns the sources the node applied it to.
-func controlSources(ctx context.Context, chalk ChalkNode, input provideroperations.OperationInput, action mediaplane.SourceAction) (map[string]bool, map[mediaplane.ClosedSourceTrack]bool, *ExecutionResult) {
-	sources := []string{input.PublicationSource}
+func controlSources(ctx context.Context, chalk ChalkNode, input provideroperations.OperationInput, action mediaplane.SourceAction) (map[mediaplane.PublicationSource]bool, map[mediaplane.ClosedSourceTrack]bool, *ExecutionResult) {
+	sources := []mediaplane.PublicationSource{input.PublicationSource}
 	if input.Effect == provideroperations.EffectRemoveParticipant {
-		sources = []string{"microphone", "camera", "screen"}
+		sources = mediaplane.SelectableSources
 	}
 	controls := make([]mediaplane.SourceControl, 0, len(sources)+1)
 	for _, source := range sources {
 		controls = append(controls, mediaplane.SourceControl{ParticipantID: input.ParticipantID.String(), Source: source, Action: action, Revision: input.ControlRevision})
 		// Tab audio is published with the screen and follows its control.
-		if source == "screen" {
-			controls = append(controls, mediaplane.SourceControl{ParticipantID: input.ParticipantID.String(), Source: "screen_audio", Action: action, Revision: input.ControlRevision})
+		if companion, ok := source.Companion(); ok {
+			controls = append(controls, mediaplane.SourceControl{ParticipantID: input.ParticipantID.String(), Source: companion, Action: action, Revision: input.ControlRevision})
 		}
 	}
 	results, err := chalk.ControlSources(ctx, mediaplane.ControlSourcesInput{TenantID: input.TenantID.String(), EpisodeID: input.EpisodeID.String(), Controls: controls})
@@ -426,7 +426,7 @@ func controlSources(ctx context.Context, chalk ChalkNode, input provideroperatio
 		slog.WarnContext(ctx, "Provider source control failed", "operation_id", input.OperationID, "effect", input.Effect, "action", action, "error_code", result.Reason)
 		return nil, nil, &result
 	}
-	applied, closed := map[string]bool{}, map[mediaplane.ClosedSourceTrack]bool{}
+	applied, closed := map[mediaplane.PublicationSource]bool{}, map[mediaplane.ClosedSourceTrack]bool{}
 	for _, result := range results {
 		if result.Applied {
 			applied[result.Source] = true
@@ -469,7 +469,7 @@ func operationTargets(publications []provideroperations.Publication, input provi
 func publicationMatchesOperation(publication provideroperations.Publication, input provideroperations.OperationInput) bool {
 	switch input.Effect {
 	case provideroperations.EffectRevokePublication:
-		return publication.ParticipantID == input.ParticipantID && (publication.Source == input.PublicationSource || (input.PublicationSource == "screen" && publication.Source == "screen_audio"))
+		return publication.ParticipantID == input.ParticipantID && (publication.Source == input.PublicationSource || publication.Source.IsCompanionOf(input.PublicationSource))
 	case provideroperations.EffectRemoveParticipant:
 		return publication.ParticipantID == input.ParticipantID
 	case provideroperations.EffectEndEpisode:

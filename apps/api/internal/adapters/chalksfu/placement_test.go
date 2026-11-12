@@ -209,7 +209,7 @@ type placements struct{ got []string }
 func (p *placements) RecordResolution(context.Context, providercontracts.Resolution) {}
 
 func (p *placements) RecordPlacement(_ context.Context, provider mediaplane.Provider, reason mediaplane.PlacementReason) {
-	p.got = append(p.got, string(provider)+"/"+string(reason))
+	p.got = append(p.got, provider.SettingName()+"/"+string(reason))
 }
 
 var withCloudflare = runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app", RealtimeAppSecret: "secret", RequestTimeout: time.Second}

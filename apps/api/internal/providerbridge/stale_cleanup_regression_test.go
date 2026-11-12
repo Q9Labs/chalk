@@ -12,6 +12,7 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/adapters/cloudflare/sfu"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/provideroperations"
 )
 
@@ -49,7 +50,7 @@ func TestObservedInternalCleanupRequiresTerminalSessionError(t *testing.T) {
 		t.Run(string(observed.Receipt.Effect), func(t *testing.T) {
 			publication := provideroperations.Publication{
 				ParticipantID: testExecutorID(t, fixture.Publication.ParticipantID),
-				Source:        fixture.Publication.Source,
+				Source:        mediaplane.PublicationSource(fixture.Publication.Source),
 				Enabled:       fixture.Publication.Enabled,
 				PublicationID: fixture.Publication.PublicationID,
 			}
