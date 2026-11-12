@@ -23,6 +23,7 @@ import { cleanupRun, runLabel, sweepStaleRuns } from "./cleanup.mjs";
 import { launchGuests } from "./media.mjs";
 import { createSpace, episodeEnd, prepareIntegration, trackEpisode } from "./proofs.mjs";
 import { installLatencyProbe } from "./latency-probe.mjs";
+import { lossStepOf } from "./loss-step.mjs";
 import { recoveryOf } from "./recovery-analysis.mjs";
 import { installRecoverySampler } from "./recovery-sampler.mjs";
 
@@ -109,8 +110,8 @@ async function callUnderFault(run, origin, settings) {
     // pages[0] receives guest 2's media (up); pages[1] receives guest 1's media (down).
     return {
       fault: { start_cmd_ms: started.ms, hold_s: settings.holdS, end_cmd_ms: ended?.ms ?? null, held_s: Math.round((faultEnd - faultStart) / 100) / 10 },
-      down: recoveryOf(down, window_),
-      up: recoveryOf(up, window_),
+      down: { ...recoveryOf(down, window_), video: lossStepOf(down, window_) },
+      up: { ...recoveryOf(up, window_), video: lossStepOf(up, window_) },
     };
   } finally {
     await ending.end().catch((error) => console.warn(`end Episode: ${error instanceof Error ? error.message : String(error)}`));
