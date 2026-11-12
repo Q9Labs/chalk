@@ -318,7 +318,9 @@ export function SpaceView({
   const mediaNotice = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
   const [dismissedMediaNotice, setDismissedMediaNotice] = useState<string | undefined>(undefined);
   const mediaToast: Toast[] = mediaNotice && mediaNotice !== dismissedMediaNotice ? [{ id: "media-notice", type: "error", duration: Infinity, message: mediaNotice }] : [];
-  const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: limitWarning.minutes === 1 ? "error" : "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
+  const limitToast: Toast[] = limitWarning
+    ? [{ id: limitWarning.id, type: limitWarning.minutes === 1 ? "error" : "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }]
+    : [];
   const toasts = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
