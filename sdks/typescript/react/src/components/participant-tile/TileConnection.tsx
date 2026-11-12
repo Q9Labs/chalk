@@ -37,7 +37,7 @@ function TileConnectionStyles() {
   );
 }
 
-const TILE_CSS = `.chalk-tile-signal {position:absolute;top:var(--space-2);left:var(--space-2);z-index:30;display:inline-flex;align-items:center;gap:var(--space-2);height:24px;padding:0 var(--space-2);border-radius:6px;background:var(--chalk-overlay);color:var(--chalk-on-overlay);font-size:var(--type-caption);font-weight:500;white-space:nowrap;pointer-events:auto;}
+const TILE_CSS = `.chalk-tile-signal {position:absolute;top:var(--space-2);left:var(--space-2);z-index:30;display:inline-flex;align-items:center;gap:var(--space-2);height:24px;padding:0 var(--space-2);border-radius:var(--corner-md);background:var(--chalk-overlay);color:var(--chalk-on-overlay);font-size:var(--type-caption);font-weight:500;white-space:nowrap;pointer-events:auto;}
 .chalk-tile-signal-words {display:none;}
 @container (min-width: 200px) {
   .chalk-tile-signal {height:28px;padding:0 var(--space-3) 0 var(--space-2-5);}
