@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { type ChalkChatFileTransport, createChalkChatFileHttpTransport } from "../chat-files";
 import { ConnectionLifecycleFailure } from "../connection/lifecycle";
+import { ChalkChatFileError } from "../chat-files/types";
+import { reportUploadFailure } from "./chat-upload-report";
 import { createCoreTestPlatform, opaqueAccessGrant } from "./core.test.helpers";
 import { createSpaceClientForPlatform } from "./space-client";
 
@@ -24,7 +26,11 @@ describe("public chat attachment failures", () => {
     const platform = createCoreTestPlatform();
     const client = createSpaceClientForPlatform(
       { space: "space-1", getAccess },
-      { ...platform, fetch: storageFetch, dependencies: { ...platform.dependencies, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) } },
+      {
+        ...platform,
+        fetch: storageFetch,
+        dependencies: { ...platform.dependencies, createConnectionReporter: () => undefined, clock: { ...platform.dependencies.clock, now: () => now }, createChatFileTransport: ({ token }) => createChalkChatFileHttpTransport({ baseUrl: "https://api.chalk.test", token, fetch }) },
+      },
     );
     try {
       await client.join({ microphone: false, camera: false });
@@ -48,6 +54,7 @@ describe("public chat attachment failures", () => {
         ...platform,
         dependencies: {
           ...platform.dependencies,
+          createConnectionReporter: () => undefined,
           createChatFileTransport: () =>
             createChalkChatFileHttpTransport({
               baseUrl: "https://api.chalk.test",
@@ -126,5 +133,20 @@ describe("public chat attachment failures", () => {
 
 function attachmentClient(createChatFileTransport: (input: { readonly token: () => Promise<string> }) => ChalkChatFileTransport, fetch = vi.fn<typeof globalThis.fetch>()) {
   const platform = createCoreTestPlatform();
-  return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("chat-failure") }, { ...platform, fetch, dependencies: { ...platform.dependencies, createChatFileTransport } });
+  return createSpaceClientForPlatform({ space: "space-1", getAccess: async () => opaqueAccessGrant("chat-failure") }, { ...platform, fetch, dependencies: { ...platform.dependencies, createConnectionReporter: () => undefined, createChatFileTransport } });
 }
+
+describe("reporting a failed chat upload", () => {
+  it("sends the failure kind and an HTTP status, and nothing else", () => {
+    const recordTransportDiagnostic = vi.fn();
+    const cause = new ChalkChatFileError({ operation: "store_upload", code: "file_transfer_failed", recoverable: false, message: "Attachment upload failed with HTTP 403 for https://storage.example/secret", httpStatus: 403 });
+    reportUploadFailure({ recordTransportDiagnostic }, cause);
+    expect(recordTransportDiagnostic).toHaveBeenCalledExactlyOnceWith({ event: "chat_upload_failed", upload_failure: "storage_rejected", http_status: 403 });
+  });
+
+  it("reports nothing for an error that is not an upload failure", () => {
+    const recordTransportDiagnostic = vi.fn();
+    reportUploadFailure({ recordTransportDiagnostic }, new Error("boom"));
+    expect(recordTransportDiagnostic).not.toHaveBeenCalled();
+  });
+});
