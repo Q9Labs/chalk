@@ -36,13 +36,16 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	if publications == nil {
 		return mediaplane.CloseTracksResponse{}, mediapublications.ErrUnavailable
 	}
-	requiredTracks := make([]mediaplane.CloseTrack, 0, len(tracks))
-	for _, track := range tracks {
-		decision, err := publications.PrepareClose(ctx, mediapublications.CloseInput{
+	closeInput := func(track mediaplane.CloseTrack) mediapublications.CloseInput {
+		return mediapublications.CloseInput{
 			TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
 			ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID,
 			MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
-		})
+		}
+	}
+	requiredTracks := make([]mediaplane.CloseTrack, 0, len(tracks))
+	for _, track := range tracks {
+		decision, err := publications.PrepareClose(ctx, closeInput(track))
 		if err != nil {
 			return mediaplane.CloseTracksResponse{}, err
 		}
@@ -63,11 +66,7 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 		return mediaplane.CloseTracksResponse{}, err
 	}
 	for _, track := range requiredTracks {
-		if err := publications.RecordClosedPublication(ctx, mediapublications.CloseInput{
-			TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: request.ParticipantID,
-			ParticipantGeneration: subject.ParticipantGeneration, ConnectionID: request.Body.ConnectionID,
-			MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
-		}); err != nil {
+		if err := publications.RecordClosedPublication(ctx, closeInput(track)); err != nil {
 			return mediaplane.CloseTracksResponse{}, err
 		}
 	}

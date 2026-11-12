@@ -55,37 +55,10 @@ func allowCORS(options CORSOptions, rateLimits RateLimitOptions) func(http.Handl
 			}
 			ok := allowedOrigin != ""
 			if ok {
-				headers := w.Header()
-				headers.Set("Access-Control-Allow-Origin", allowedOrigin)
-				headers.Set("Access-Control-Allow-Methods", "DELETE, GET, POST, PUT, PATCH, OPTIONS")
-				headers.Set("Access-Control-Allow-Headers", "Authorization, B3, Baggage, Content-Type, Idempotency-Key, MCP-Protocol-Version, Traceparent, Tracestate, X-Chalk-Arrival-Handle, X-Chalk-Journey-ID, X-Chalk-Media-Providers")
-				headers.Set("Access-Control-Expose-Headers", "Traceparent, Tracestate, X-Chalk-Journey-ID")
-				if allowedOrigin != "*" {
-					headers.Set("Access-Control-Allow-Credentials", "true")
-				}
-				// A cached preflight never skips the origin check: each real request repeats it.
-				headers.Set("Access-Control-Max-Age", "600")
+				setCORSAllowHeaders(w.Header(), allowedOrigin)
 			}
 			if origin != "" {
-				outcome := "forbidden"
-				if ok {
-					outcome = "allowed"
-				}
-				recordCORSDecision(r.Context(), policy, outcome)
-				if !ok {
-					observableOrigin := observableCORSOrigin(origin)
-					trace.SpanFromContext(r.Context()).SetAttributes(
-						attribute.String("cors.outcome", "forbidden"),
-						attribute.String("cors.policy", policy),
-						attribute.String("cors.origin", observableOrigin),
-					)
-					slog.WarnContext(r.Context(), "CORS origin rejected",
-						"event", "cors.origin_forbidden",
-						"cors_origin", observableOrigin,
-						"cors_policy", policy,
-						"http_method", r.Method,
-					)
-				}
+				recordCORSOutcome(r, policy, origin, ok)
 			}
 
 			if r.Method == http.MethodOptions {
@@ -251,4 +224,37 @@ func chatAttachmentCORSOrigin(r *http.Request, origin string, allowed map[string
 		return "", "tenant", nil
 	}
 	return origin, "tenant", nil
+}
+
+func setCORSAllowHeaders(headers http.Header, allowedOrigin string) {
+	headers.Set("Access-Control-Allow-Origin", allowedOrigin)
+	headers.Set("Access-Control-Allow-Methods", "DELETE, GET, POST, PUT, PATCH, OPTIONS")
+	headers.Set("Access-Control-Allow-Headers", "Authorization, B3, Baggage, Content-Type, Idempotency-Key, MCP-Protocol-Version, Traceparent, Tracestate, X-Chalk-Arrival-Handle, X-Chalk-Journey-ID, X-Chalk-Media-Providers")
+	headers.Set("Access-Control-Expose-Headers", "Traceparent, Tracestate, X-Chalk-Journey-ID")
+	if allowedOrigin != "*" {
+		headers.Set("Access-Control-Allow-Credentials", "true")
+	}
+	// A cached preflight never skips the origin check: each real request repeats it.
+	headers.Set("Access-Control-Max-Age", "600")
+}
+
+// recordCORSOutcome records the decision for a request that carried an Origin and logs a rejected origin.
+func recordCORSOutcome(r *http.Request, policy, origin string, allowed bool) {
+	if allowed {
+		recordCORSDecision(r.Context(), policy, "allowed")
+		return
+	}
+	recordCORSDecision(r.Context(), policy, "forbidden")
+	observableOrigin := observableCORSOrigin(origin)
+	trace.SpanFromContext(r.Context()).SetAttributes(
+		attribute.String("cors.outcome", "forbidden"),
+		attribute.String("cors.policy", policy),
+		attribute.String("cors.origin", observableOrigin),
+	)
+	slog.WarnContext(r.Context(), "CORS origin rejected",
+		"event", "cors.origin_forbidden",
+		"cors_origin", observableOrigin,
+		"cors_policy", policy,
+		"http_method", r.Method,
+	)
 }

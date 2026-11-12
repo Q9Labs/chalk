@@ -14,7 +14,30 @@ import (
 )
 
 func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
-	mcptools.Bind(registry, mcptools.InspectEpisodes, func(ctx context.Context, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.InspectEpisodes, inspectEpisodesTool(o))
+	bindMCPEndpoint(registry, mcptools.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
+		// The tool has no SDK to ask, like its admit and grant tools below.
+		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, MediaClients: mediaplane.AllClientProviders(), Body: i.Body}
+	})
+	bindMCPEndpoint(registry, mcptools.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.EpisodeInput) endEpisodeEndpointRequest {
+		return endEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey}
+	})
+	bindMCPEndpoint(registry, mcptools.SetEpisodeDeadline, setDeadlineEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.DeadlineInput) setDeadlineEndpointRequest {
+		deadline, err := time.Parse(time.RFC3339Nano, i.DeadlineAt)
+		if err != nil {
+			b.err = apiErrorInvalidRequest
+		}
+		return setDeadlineEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey, Body: setDeadlineRequest{DeadlineAt: deadline}}
+	})
+	mcptools.Bind(registry, mcptools.DecideAdmissionRequest, decideAdmissionTool(o))
+	mcptools.Bind(registry, mcptools.ControlCall, controlCallTool(o))
+	bindMCPEndpoint(registry, mcptools.RemoveParticipant, removeParticipantEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.RemovalInput) removeParticipantEndpointRequest {
+		return removeParticipantEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), ParticipantID: b.id(i.ParticipantID), RequestKey: i.RequestKey, Body: removeParticipantRequest{ParticipantGeneration: i.ParticipantGeneration}}
+	})
+}
+
+func inspectEpisodesTool(o Options) func(context.Context, mcptools.EpisodesViewInput) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.EpisodesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "episode":
@@ -30,22 +53,11 @@ func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
 		default:
 			return mcpInvoke(b, listEpisodesEndpoint(o.Episodes, o.TenantAuthz), listEpisodesRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), Page: b.page(i.PageInput)})
 		}
-	})
-	bindMCPEndpoint(registry, mcptools.CreateEpisode, createEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.SpaceBodyInput[createEpisodeRequest]) createEpisodeEndpointRequest {
-		// The tool has no SDK to ask, like its admit and grant tools below.
-		return createEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestKey: i.RequestKey, MediaClients: mediaplane.AllClientProviders(), Body: i.Body}
-	})
-	bindMCPEndpoint(registry, mcptools.EndEpisode, endEpisodeEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.EpisodeInput) endEpisodeEndpointRequest {
-		return endEpisodeEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey}
-	})
-	bindMCPEndpoint(registry, mcptools.SetEpisodeDeadline, setDeadlineEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.DeadlineInput) setDeadlineEndpointRequest {
-		deadline, err := time.Parse(time.RFC3339Nano, i.DeadlineAt)
-		if err != nil {
-			b.err = apiErrorInvalidRequest
-		}
-		return setDeadlineEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), RequestKey: i.RequestKey, Body: setDeadlineRequest{DeadlineAt: deadline}}
-	})
-	mcptools.Bind(registry, mcptools.DecideAdmissionRequest, func(ctx context.Context, i mcptools.AdmissionDecisionInput) (json.RawMessage, error) {
+	}
+}
+
+func decideAdmissionTool(o Options) func(context.Context, mcptools.AdmissionDecisionInput) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.AdmissionDecisionInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		request := decidePublicAdmissionRequestRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), RequestHandle: i.RequestHandle, RequestKey: i.RequestKey}
 		switch i.Decision {
@@ -56,8 +68,11 @@ func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
 		default:
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
-	})
-	mcptools.Bind(registry, mcptools.ControlCall, func(ctx context.Context, i mcptools.CallInput) (json.RawMessage, error) {
+	}
+}
+
+func controlCallTool(o Options) func(context.Context, mcptools.CallInput) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.CallInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		space, episode, participant := b.id(i.SpaceID), b.id(i.EpisodeID), b.optionalID(i.ParticipantID)
 		var (
@@ -88,8 +103,5 @@ func bindMCPEpisodeTools(registry *mcptools.Registry, o Options) {
 		// The audit line names who minted credentials for whom. It never holds a credential.
 		slog.InfoContext(ctx, "MCP call credentials requested", "event", "mcp.call_credentials.requested", "action", i.Action, "tenant_id", b.tenant.String(), "actor_id", mcptools.ConnectionFrom(ctx).ActorID, "space_id", space.String(), "episode_id", episode.String(), "participant_id", participant.String(), "outcome", outcome)
 		return data, err
-	})
-	bindMCPEndpoint(registry, mcptools.RemoveParticipant, removeParticipantEndpoint(o.Episodes, o.TenantAuthz), func(b *mcpRequest, i mcptools.RemovalInput) removeParticipantEndpointRequest {
-		return removeParticipantEndpointRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID), EpisodeID: b.id(i.EpisodeID), ParticipantID: b.id(i.ParticipantID), RequestKey: i.RequestKey, Body: removeParticipantRequest{ParticipantGeneration: i.ParticipantGeneration}}
-	})
+	}
 }

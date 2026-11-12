@@ -9,7 +9,13 @@ import (
 )
 
 func bindMCPWebhookTools(registry *mcptools.Registry, o Options) {
-	mcptools.Bind(registry, mcptools.InspectWebhooks, func(ctx context.Context, i mcptools.WebhooksViewInput) (json.RawMessage, error) {
+	mcptools.Bind(registry, mcptools.InspectWebhooks, inspectWebhooksTool(o))
+	mcptools.Bind(registry, mcptools.ConfigureWebhook, configureWebhookTool(o))
+	mcptools.Bind(registry, mcptools.SendWebhook, sendWebhookTool(o))
+}
+
+func inspectWebhooksTool(o Options) func(context.Context, mcptools.WebhooksViewInput) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.WebhooksViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "endpoint":
@@ -21,8 +27,11 @@ func bindMCPWebhookTools(registry *mcptools.Registry, o Options) {
 		default:
 			return mcpInvoke(b, listWebhookEndpoints(o.Webhooks, o.TenantAuthz), listWebhooksRequest{TenantID: b.tenant, Page: b.page(i.PageInput)})
 		}
-	})
-	mcptools.Bind(registry, mcptools.ConfigureWebhook, func(ctx context.Context, i mcptools.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
+	}
+}
+
+func configureWebhookTool(o Options) func(context.Context, mcptools.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.Action {
 		case "create":
@@ -48,8 +57,11 @@ func bindMCPWebhookTools(registry *mcptools.Registry, o Options) {
 		default:
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
-	})
-	mcptools.Bind(registry, mcptools.SendWebhook, func(ctx context.Context, i mcptools.WebhookSendInput) (json.RawMessage, error) {
+	}
+}
+
+func sendWebhookTool(o Options) func(context.Context, mcptools.WebhookSendInput) (json.RawMessage, error) {
+	return func(ctx context.Context, i mcptools.WebhookSendInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		endpointID := b.id(i.EndpointID)
 		switch i.Action {
@@ -60,5 +72,5 @@ func bindMCPWebhookTools(registry *mcptools.Registry, o Options) {
 		default:
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
-	})
+	}
 }

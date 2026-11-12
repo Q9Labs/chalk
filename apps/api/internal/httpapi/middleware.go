@@ -45,30 +45,35 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			if credential, ok := bearerToken(r.Header.Get("Authorization")); ok && apikeys.LooksLikeRawKey(credential) {
-				if apiKeys == nil {
-					writeServiceUnavailable(w)
-					return
-				}
-				address, _ := netip.ParseAddr(clientIP(r, clientIPs))
-				principal, err := apiKeys.Authenticate(r.Context(), apikeys.AuthenticateInput{RawKey: credential, IPAddress: address})
-				if err != nil {
-					if errors.Is(err, apikeys.ErrUnauthenticated) {
-						writeUnauthenticated(w)
-					} else {
-						writeServiceUnavailable(w)
-					}
-					return
-				}
-				ctx := authentication.ContextWithPrincipal(r.Context(), principal)
-				next.ServeHTTP(w, r.WithContext(ctx))
+			credential, ok := bearerToken(r.Header.Get("Authorization"))
+			if !ok || !apikeys.LooksLikeRawKey(credential) {
+				writeUnauthenticated(w)
 				return
 			}
-
-			writeUnauthenticated(w)
+			principal, failure, ok := authenticateAPIKey(r, apiKeys, clientIPs, credential)
+			if !ok {
+				writeAPIError(w, failure)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(authentication.ContextWithPrincipal(r.Context(), principal)))
 		})
 	}
+}
+
+// authenticateAPIKey checks a raw API key and returns the API error to send when it fails.
+func authenticateAPIKey(r *http.Request, apiKeys APIKeyAuthenticator, clientIPs ClientIPOptions, credential string) (authentication.Principal, APIError, bool) {
+	if apiKeys == nil {
+		return authentication.Principal{}, apiErrorServiceUnavailable, false
+	}
+	address, _ := netip.ParseAddr(clientIP(r, clientIPs))
+	principal, err := apiKeys.Authenticate(r.Context(), apikeys.AuthenticateInput{RawKey: credential, IPAddress: address})
+	switch {
+	case errors.Is(err, apikeys.ErrUnauthenticated):
+		return authentication.Principal{}, apiErrorUnauthenticated, false
+	case err != nil:
+		return authentication.Principal{}, apiErrorServiceUnavailable, false
+	}
+	return principal, APIError{}, true
 }
 
 func writeUnauthenticated(w http.ResponseWriter) {

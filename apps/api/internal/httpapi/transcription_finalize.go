@@ -89,6 +89,7 @@ type finalizerChunkResponse struct {
 }
 
 func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth WorkloadAuthorizer, authority FinalizerAuthority) http.HandlerFunc {
+	finalizer := finalizerSigner{service: service, authority: authority}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := auth.AuthorizeWorkload(r.Context(), r, transcriptionWorkloadRole); err != nil {
 			writeError(w, http.StatusUnauthorized, "workload.unauthorized", "Workload authorization failed")
@@ -102,7 +103,7 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 		assignments := make([]finalizerAssignmentResponse, 0, body.BatchSize)
 		for i := 0; i < body.BatchSize; i++ {
 			now := time.Now()
-			assignment, err := service.ClaimFinalizer(r.Context(), transcripts.FinalizerClaimInput{Owner: transcriptionWorkloadRole, LeaseDuration: transcriptionWorkLeaseDuration, Now: now})
+			claimed, err := service.ClaimFinalizer(r.Context(), transcripts.FinalizerClaimInput{Owner: transcriptionWorkloadRole, LeaseDuration: transcriptionWorkLeaseDuration, Now: now})
 			if errors.Is(err, transcripts.ErrNoClaimableJob) {
 				break
 			}
@@ -110,35 +111,55 @@ func finalizerClaimHandler(service TranscriptFinalizerWorkerService, auth Worklo
 				writeWorkerError(w, err)
 				return
 			}
-			const ttl = transcriptionWorkLeaseDuration
-			chunks := make([]finalizerChunkResponse, 0, len(assignment.Chunks))
-			for _, chunk := range assignment.Chunks {
-				url, urlErr := authority.CreateResultGETURL(r.Context(), FinalizerChunkGETURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: chunk.ResultKey, ExpiresIn: ttl})
-				if urlErr != nil {
-					writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
-					return
-				}
-				chunks = append(chunks, finalizerChunkResponse{ChunkID: chunk.ID.String(), InputURL: url, InputURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), InputContentType: chunk.ResultContentType, InputSizeBytes: chunk.ResultSize, InputSHA256: hex.EncodeToString(chunk.ResultSHA256), EpisodeStartMS: chunk.StartMS, EpisodeEndMS: chunk.EndMS})
-			}
-			lease := transcripts.LeaseInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: assignment.LeaseToken, Now: now}
-			key, keyErr := service.FinalizerKey(r.Context(), lease)
-			if keyErr != nil {
-				writeWorkerError(w, keyErr)
-				return
-			}
-			outputURL, err := authority.CreateFinalArtifactPUTURL(r.Context(), FinalizerPUTURLInput{JobID: assignment.Job.ID, Attempt: assignment.Job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
-			if err != nil {
+			response, err := finalizer.sign(r.Context(), claimed, now)
+			if errors.Is(err, errFinalizerUnavailable) {
 				writeError(w, http.StatusServiceUnavailable, "workload.unavailable", "Finalizer authority unavailable")
 				return
 			}
-			leaseExpiresAt := ""
-			if assignment.Job.LeaseExpiresAt != nil {
-				leaseExpiresAt = utilities.FormatTimestamp(*assignment.Job.LeaseExpiresAt)
+			if err != nil {
+				writeWorkerError(w, err)
+				return
 			}
-			assignments = append(assignments, finalizerAssignmentResponse{JobID: assignment.Job.ID.String(), TranscriptID: assignment.Transcript.ID.String(), EpisodeID: assignment.Transcript.EpisodeID.String(), Attempt: assignment.Job.Attempt, LeaseToken: assignment.LeaseToken, LeaseExpiresAt: leaseExpiresAt, Chunks: chunks, OutputPutURL: outputURL, OutputPutURLExpiresAt: now.Add(ttl).UTC().Format(time.RFC3339Nano), OutputContentType: "application/json"})
+			assignments = append(assignments, response)
 		}
 		writeJSON(w, http.StatusOK, finalizerClaimResponse{Assignments: assignments})
 	}
+}
+
+var errFinalizerUnavailable = errors.New("finalizer authority unavailable")
+
+// finalizerSigner turns a claimed finalizer job into the worker's assignment, with presigned URLs for each chunk result and the final artifact.
+type finalizerSigner struct {
+	service   TranscriptFinalizerWorkerService
+	authority FinalizerAuthority
+}
+
+func (f finalizerSigner) sign(ctx context.Context, claimed transcripts.FinalizerAssignment, now time.Time) (finalizerAssignmentResponse, error) {
+	const ttl = transcriptionWorkLeaseDuration
+	job := claimed.Job
+	expiresAt := now.Add(ttl).UTC().Format(time.RFC3339Nano)
+	chunks := make([]finalizerChunkResponse, 0, len(claimed.Chunks))
+	for _, chunk := range claimed.Chunks {
+		url, err := f.authority.CreateResultGETURL(ctx, FinalizerChunkGETURLInput{JobID: job.ID, Attempt: job.Attempt, Key: chunk.ResultKey, ExpiresIn: ttl})
+		if err != nil {
+			return finalizerAssignmentResponse{}, errFinalizerUnavailable
+		}
+		chunks = append(chunks, finalizerChunkResponse{ChunkID: chunk.ID.String(), InputURL: url, InputURLExpiresAt: expiresAt, InputContentType: chunk.ResultContentType, InputSizeBytes: chunk.ResultSize, InputSHA256: hex.EncodeToString(chunk.ResultSHA256), EpisodeStartMS: chunk.StartMS, EpisodeEndMS: chunk.EndMS})
+	}
+	lease := transcripts.LeaseInput{JobID: job.ID, Attempt: job.Attempt, LeaseOwner: transcriptionWorkloadRole, LeaseToken: claimed.LeaseToken, Now: now}
+	key, err := f.service.FinalizerKey(ctx, lease)
+	if err != nil {
+		return finalizerAssignmentResponse{}, err
+	}
+	outputURL, err := f.authority.CreateFinalArtifactPUTURL(ctx, FinalizerPUTURLInput{JobID: job.ID, Attempt: job.Attempt, Key: key, ContentType: "application/json", MaxBytes: 524288000, ExpiresIn: ttl})
+	if err != nil {
+		return finalizerAssignmentResponse{}, errFinalizerUnavailable
+	}
+	leaseExpiresAt := ""
+	if job.LeaseExpiresAt != nil {
+		leaseExpiresAt = utilities.FormatTimestamp(*job.LeaseExpiresAt)
+	}
+	return finalizerAssignmentResponse{JobID: job.ID.String(), TranscriptID: claimed.Transcript.ID.String(), EpisodeID: claimed.Transcript.EpisodeID.String(), Attempt: job.Attempt, LeaseToken: claimed.LeaseToken, LeaseExpiresAt: leaseExpiresAt, Chunks: chunks, OutputPutURL: outputURL, OutputPutURLExpiresAt: expiresAt, OutputContentType: "application/json"}, nil
 }
 
 type finalizerCompleteBody struct {

@@ -62,6 +62,16 @@ func writeTranscriptText(w http.ResponseWriter, _ *http.Request, status int, res
 }
 
 func transcriptTextDisposition(title string, startedAt time.Time) string {
+	suffix := "-" + startedAt.UTC().Format("2006-01-02") + ".txt"
+	disposition := fmt.Sprintf(`attachment; filename="%s%s"`, asciiFilenameBase(title), suffix)
+	if !isASCII(title) {
+		disposition += "; filename*=UTF-8''" + utf8FilenameParameter(title, suffix)
+	}
+	return disposition
+}
+
+// asciiFilenameBase keeps the first 100 ASCII letters and digits of the title, joins the gaps with one dash, and falls back to "transcript".
+func asciiFilenameBase(title string) string {
 	var ascii strings.Builder
 	for _, r := range title {
 		if ascii.Len() >= 100 {
@@ -75,24 +85,24 @@ func transcriptTextDisposition(title string, startedAt time.Time) string {
 	}
 	base := strings.Trim(ascii.String(), "-")
 	if base == "" {
-		base = "transcript"
+		return "transcript"
 	}
-	suffix := "-" + startedAt.UTC().Format("2006-01-02") + ".txt"
-	disposition := fmt.Sprintf(`attachment; filename="%s%s"`, base, suffix)
-	if !isASCII(title) {
-		runes := []rune(strings.Map(func(r rune) rune {
-			if unicode.IsControl(r) || strings.ContainsRune(`/\":`, r) {
-				return '-'
-			}
-			return r
-		}, title))
-		if len(runes) > 100 {
-			runes = runes[:100]
+	return base
+}
+
+// utf8FilenameParameter percent-encodes the title, cut to 100 characters, for the RFC 5987 filename* parameter.
+func utf8FilenameParameter(title, suffix string) string {
+	runes := []rune(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || strings.ContainsRune(`/\":`, r) {
+			return '-'
 		}
-		filename := strings.Trim(string(runes), " .-") + suffix
-		disposition += "; filename*=UTF-8''" + strings.ReplaceAll(url.QueryEscape(filename), "+", "%20")
+		return r
+	}, title))
+	if len(runes) > 100 {
+		runes = runes[:100]
 	}
-	return disposition
+	filename := strings.Trim(string(runes), " .-") + suffix
+	return strings.ReplaceAll(url.QueryEscape(filename), "+", "%20")
 }
 
 func isASCII(value string) bool {
