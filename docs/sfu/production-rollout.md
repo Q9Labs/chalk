@@ -83,17 +83,17 @@ Then read `/healthz` and `/readyz` and check that a new join grant still works. 
 
 ### State on 2026-11-10 (names and counts only)
 
-| Setting                                                                                        | Production                                                                  | Staging (`nightly`) |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------- |
-| `CHALK_SFU_ENABLED`                                                                            | `true`                                                                      | `true`              |
-| `CHALK_RECORDING_ENABLED`                                                                      | `true`                                                                      | `true`              |
-| `CHALK_TRANSCRIPTION_ENABLED`                                                                  | `true`                                                                      | `true`              |
-| `CHALK_SFU_CAPTURE_ENABLED`                                                                    | absent (default off)                                                        | `true`              |
-| `CHALK_SFU_NEW_EPISODES`                                                                       | absent (new Episodes allowed)                                               | not read            |
-| `CHALK_DEFAULT_MEDIA_PLANE`                                                                    | `cf_sfu`                                                                    | not read            |
-| `CHALK_SFU_NODES`                                                                              | 1 entry                                                                     | 1 or more           |
-| Provider bridge (`CHALK_PROVIDER_BRIDGE_*`) and fleet issuer (`CHALK_RECORDER_FLEET_ISSUER_*`) | present                                                                     | present             |
-| `CHALK_SFU_ALLOWED_SPACES`                                                                     | 3 entries: the three proof Spaces (SSM version 31; version 29 held 1 entry) | not read            |
+| Setting                                                                                        | Production                                                                  | Staging (`nightly`)                                          |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `CHALK_SFU_ENABLED`                                                                            | `true`                                                                      | `true`                                                       |
+| `CHALK_RECORDING_ENABLED`                                                                      | `true`                                                                      | `true`                                                       |
+| `CHALK_TRANSCRIPTION_ENABLED`                                                                  | `true`                                                                      | `true`                                                       |
+| `CHALK_SFU_CAPTURE_ENABLED`                                                                    | absent (default off)                                                        | `true`                                                       |
+| `CHALK_SFU_NEW_EPISODES`                                                                       | absent (new Episodes allowed)                                               | floor only: the live switch is `media-settings new-episodes` |
+| `CHALK_DEFAULT_MEDIA_PLANE`                                                                    | `cf_sfu`                                                                    | not read                                                     |
+| `CHALK_SFU_NODES`                                                                              | 1 entry                                                                     | 1 or more                                                    |
+| Provider bridge (`CHALK_PROVIDER_BRIDGE_*`) and fleet issuer (`CHALK_RECORDER_FLEET_ISSUER_*`) | present                                                                     | present                                                      |
+| `CHALK_SFU_ALLOWED_SPACES`                                                                     | 3 entries: the three proof Spaces (SSM version 31; version 29 held 1 entry) | not read                                                     |
 
 Production already records and transcribes on Cloudflare, so its recorder fleet exists. Only `CHALK_SFU_CAPTURE_ENABLED` is new. Check these again before Promote with names and counts only.
 
@@ -205,7 +205,7 @@ Read every five minutes, from the [SFU runbook](../../infrastructure/observabili
 | Recording and Transcription                                     | a Recording failed for 15 minutes, or stuck stopping for 2 minutes                  | the M10 Episode is the only expected Recording                                                            |
 | Proof results                                                   | the drill misses a threshold, M7 misses `meetsM7Minimum`, or `call-artifacts` fails | n/a                                                                                                       |
 
-Roll back with the kill switch: first the Space setting for the affected Space, then `CHALK_SFU_NEW_EPISODES=off` with an API reload if more than one Space is affected. New Episodes go to Cloudflare; live calls finish where they are.
+Roll back with the kill switch: first the Space setting for the affected Space, then `media-settings new-episodes --state off --operator <name> --reason <text>` if more than one Space is affected. It takes effect on the next new Episode with no API reload, and the database keeps an audit row of who flipped it and why. New Episodes go to Cloudflare; live calls finish where they are.
 
 ### Kill-switch drill (timed)
 
@@ -265,6 +265,18 @@ The API refuses to start with it set to `chalk_sfu` unless three things hold: `C
 With `*` the allowlist no longer limits anything, so these Spaces use `chalk_sfu` for new Episodes: every Space whose stored setting is `chalk_sfu` (the Spaces moved above), every Space created after the restart, and every Space that inherits a Tenant default of `chalk_sfu` (none today: 10 Tenants are `cf_sfu`, 13 are unset). `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` stays, so every other existing Space stays on Cloudflare. `*` also removes the allowlist as a safety net for `media-settings set`, so each later flip needs the same care as before.
 
 **Undo.** Restore both lines together: the saved allowlist line and no `CHALK_NEW_SPACE_MEDIA_PLANE` line (`DELETE=1`), in SSM and on the host, with one restart. Spaces created in the meantime keep `chalk_sfu` as their stored setting; set the ones that should not have it back with `media-settings set --plane cf_sfu`.
+
+### `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` (the own SFU as the platform default)
+
+Not applied by this document. It makes the own SFU the plane of every Space and Tenant that stores no plane of its own. A Space that stores `cf_sfu` stays on Cloudflare, and a client SDK that cannot run the own SFU gets Cloudflare while a Cloudflare application is configured.
+
+1. Keep `CHALK_SFU_ENABLED=true` and the Cloudflare application settings (`CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET`): Cloudflare is the fallback and the kill-switch target.
+2. Set `CHALK_DEFAULT_MEDIA_PLANE=chalk_sfu` and `CHALK_SFU_ALLOWED_SPACES=*`, save the previous lines first, and restart once. Leave `CHALK_SFU_CLIENT_SUNSET` unset, so old SDKs keep working on Cloudflare.
+3. Read `/healthz`, then `media-settings get --tenant <tenant> --space <space>` on a throwaway Space: it must report `chalk_sfu`.
+
+Old clients: the web SDK declares `chalk_sfu` since 5.5.0, and the mobile app since the build tagged `mobile-v3.0.6-b40` (9 Nov 2026, which includes #867). Any earlier mobile build, and any web SDK before 5.5.0, declares nothing and gets a working Cloudflare call. Setting `CHALK_SFU_CLIENT_SUNSET` turns that fallback into 409 `media.client_unsupported` after the date, so leave it unset until the old builds are gone from use.
+
+**Undo.** Either restore the saved lines (`CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` and the old allowlist) and restart, or, with no restart, run `media-settings new-episodes --state off --operator <name> --reason <text>`: every new Episode starts on Cloudflare and live Episodes finish where they are. Spaces that stored `chalk_sfu` themselves need `media-settings set --plane cf_sfu` to leave for good.
 
 ## Not proven
 

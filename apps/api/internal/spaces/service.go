@@ -150,6 +150,7 @@ type Service struct {
 	repository Repository
 	newSpace   NewSpaceDefaults
 	tenants    TenantReader
+	killSwitch NewEpisodeSwitch
 	planes     PlanePolicy
 }
 
@@ -281,6 +282,12 @@ func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaP
 // Spaces inherit, and the own-SFU kill switch and allowlist that Effective applies.
 func (s Service) WithPlanePolicy(policy PlanePolicy) Service {
 	s.planes = policy
+	return s
+}
+
+// WithNewEpisodeSwitch lets the effective plane follow the live kill switch.
+func (s Service) WithNewEpisodeSwitch(killSwitch NewEpisodeSwitch) Service {
+	s.killSwitch = killSwitch
 	return s
 }
 

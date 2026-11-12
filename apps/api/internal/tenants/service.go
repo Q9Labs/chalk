@@ -70,9 +70,9 @@ type TenantRepository interface {
 
 type Service struct {
 	repository TenantRepository
-	// publicMediaPlane is the only default plane a Tenant owner may choose for the Tenant.
+	// publicMediaPlane says which default planes a Tenant owner may choose for the Tenant.
 	// Any other known plane is an operator decision.
-	publicMediaPlane string
+	publicMediaPlane func(string) bool
 	knownMediaPlane  func(string) bool
 }
 
@@ -145,10 +145,9 @@ func NewService(repository TenantRepository) Service {
 	return Service{repository: repository}
 }
 
-// WithMediaPlanes sets the only default plane that CreateTenant and UpdateTenant
-// accept besides null, and which strings name a plane at all. Without it they accept
-// no plane.
-func (s Service) WithMediaPlanes(public string, known func(string) bool) Service {
+// WithMediaPlanes sets which default planes CreateTenant and UpdateTenant accept besides
+// null, and which strings name a plane at all. Without it they accept no plane.
+func (s Service) WithMediaPlanes(public, known func(string) bool) Service {
 	s.publicMediaPlane, s.knownMediaPlane = public, known
 	return s
 }
@@ -193,7 +192,7 @@ func (s Service) checkPublicMediaPlane(plane *string) error {
 	if s.knownMediaPlane == nil || !s.knownMediaPlane(*plane) {
 		return ErrInvalidTenantField
 	}
-	if *plane != s.publicMediaPlane {
+	if s.publicMediaPlane == nil || !s.publicMediaPlane(*plane) {
 		return ErrMediaPlaneNotPermitted
 	}
 	return nil

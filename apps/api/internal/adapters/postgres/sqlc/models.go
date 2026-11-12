@@ -217,6 +217,21 @@ type McpOauthToken struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type MediaPlaneKillSwitch struct {
+	Singleton bool               `json:"singleton"`
+	Paused    bool               `json:"paused"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type MediaPlaneKillSwitchChange struct {
+	ID           int64              `json:"id"`
+	ChangedAt    pgtype.Timestamptz `json:"changed_at"`
+	PausedBefore bool               `json:"paused_before"`
+	PausedAfter  bool               `json:"paused_after"`
+	Operator     string             `json:"operator"`
+	Reason       string             `json:"reason"`
+}
+
 type Membership struct {
 	ID        pgtype.UUID        `json:"id"`
 	TenantID  pgtype.UUID        `json:"tenant_id"`

@@ -63,8 +63,8 @@ removal still touches.
   `media_plane_setting`, else a stored `chalk_sfu`, which the API still honors for
   Spaces stored before the setting existed), or the Tenant default when it has
   none (`tenant_default_*`), or `none`. A `space_cf_sfu` cell is an explicit
-  Space-level override. The inventory does not read `CHALK_SFU_NEW_EPISODES`: with
-  the kill switch off every new Episode binds to Cloudflare whatever these cells say.
+  Space-level override. The inventory reads neither `CHALK_SFU_NEW_EPISODES` nor the live kill switch
+  (`media-settings new-episodes`): with the switch off every new Episode binds to Cloudflare whatever these cells say.
 - `by_new_episode_provider` is what the API would bind a new Episode to.
   `cf_sfu_by_allowlist` is a Space that selects `chalk_sfu` but is outside the
   allowlist. A `chalk_sfu` Space inside the allowlist under a tenant-managed

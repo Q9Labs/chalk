@@ -319,6 +319,8 @@ type Querier interface {
 	LockLifecycleIntentForRequestForUpdate(ctx context.Context, arg LockLifecycleIntentForRequestForUpdateParams) (SyncLifecycleIntent, error)
 	LockLifecycleParticipantForUpdate(ctx context.Context, arg LockLifecycleParticipantForUpdateParams) (Participant, error)
 	LockLiveEpisodeForUpdate(ctx context.Context, arg LockLiveEpisodeForUpdateParams) (Episode, error)
+	LockMediaPlaneKillSwitchForEpisode(ctx context.Context) (bool, error)
+	LockMediaPlaneKillSwitchForUpdate(ctx context.Context) (bool, error)
 	LockPendingDeadlineOperation(ctx context.Context, arg LockPendingDeadlineOperationParams) (SyncExternalOperation, error)
 	LockPublicEpisodeAdmission(ctx context.Context, arg LockPublicEpisodeAdmissionParams) (SyncAdmissionRequest, error)
 	LockRecordingCapacity(ctx context.Context) (int16, error)
@@ -367,6 +369,8 @@ type Querier interface {
 	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
 	PrepareRecordingSpace(ctx context.Context, arg PrepareRecordingSpaceParams) (PrepareRecordingSpaceRow, error)
 	PublishRecordingFleetPool(ctx context.Context, arg PublishRecordingFleetPoolParams) (string, error)
+	ReadMediaPlaneKillSwitch(ctx context.Context) (bool, error)
+	RecordMediaPlaneKillSwitchChange(ctx context.Context, arg RecordMediaPlaneKillSwitchChangeParams) error
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
 	RecordRecordingFleetWorkerObservation(ctx context.Context, arg RecordRecordingFleetWorkerObservationParams) (RecordRecordingFleetWorkerObservationRow, error)
@@ -417,6 +421,7 @@ type Querier interface {
 	RotateSpacePublicInvite(ctx context.Context, arg RotateSpacePublicInviteParams) (SpacePublicInvite, error)
 	RotateWebhookEndpointSecret(ctx context.Context, arg RotateWebhookEndpointSecretParams) (RotateWebhookEndpointSecretRow, error)
 	SeedDefaultSpaceRoles(ctx context.Context, arg SeedDefaultSpaceRolesParams) error
+	SetMediaPlaneKillSwitch(ctx context.Context, paused bool) error
 	SetRecordingCaptureConnectionActiveCommand(ctx context.Context, arg SetRecordingCaptureConnectionActiveCommandParams) (int64, error)
 	SetRecordingCaptureDurationLimit(ctx context.Context, arg SetRecordingCaptureDurationLimitParams) error
 	SetRecordingCaptureReadyAt(ctx context.Context, arg SetRecordingCaptureReadyAtParams) (pgtype.Timestamptz, error)

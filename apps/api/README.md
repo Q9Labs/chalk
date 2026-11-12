@@ -78,10 +78,19 @@ non-local environment. Do not use this switch to test rate-limit handling.
 
 `CHALK_DEFAULT_MEDIA_PLANE` selects the deployment-owned MediaPlane used when
 a Create Space request omits `media_plane`. The supported deployment default is
-`cf_sfu`, because the Dashboard access-grant path is SFU-only. Managed
-production requires this setting; generic local and test processes may omit it,
-but then Create Space requests must supply a provider. Explicit Space and
-Tenant-managed provider configuration uses `cf_sfu`.
+`cf_sfu` or `chalk_sfu`. Managed production requires this setting; generic local
+and test processes may omit it, but then Create Space requests must supply a
+provider. `chalk_sfu` needs `CHALK_SFU_ENABLED=true` and keeps the Cloudflare
+application settings required, because Cloudflare stays the fallback for a client
+SDK that cannot run the own SFU, for the kill switch, and for Episodes already bound
+to it. A Space or Tenant that stores no plane follows the default; one that stores
+`cf_sfu` stays on Cloudflare. Explicit Tenant-managed provider configuration uses `cf_sfu`.
+
+A client SDK that cannot run the own SFU (it sends no `X-Chalk-Media-Providers`
+header naming `chalk_sfu`; every SDK before 5.5.0) gets a working call on
+Cloudflare while a Cloudflare application is configured. Where none is, or once
+`CHALK_SFU_CLIENT_SUNSET` has passed, it gets 409 `media.client_unsupported`, a
+clear upgrade error.
 
 `CHALK_NEW_SPACE_MEDIA_PLANE` sets the plane a Create Space request gets when it
 omits `media_plane`, instead of `CHALK_DEFAULT_MEDIA_PLANE`. It changes new
@@ -98,8 +107,9 @@ already stored `chalk_sfu` move back to Cloudflare for their next Episodes once
 `CHALK_SFU_ALLOWED_SPACES` is set back to the canary Space list.
 
 A Space or Tenant can choose its own plane. A new Episode starts on the first of
-these that names a plane: `CHALK_SFU_NEW_EPISODES=off` (the kill switch, default
-`on`, which sends every new Episode to `cf_sfu` and leaves live Episodes alone),
+these that names a plane: the kill switch (`media-settings new-episodes --state off|on`, stored in the
+database with an audit row, so it needs no restart; `CHALK_SFU_NEW_EPISODES=off` is a
+deploy-time floor under it). It sends every new Episode to `cf_sfu` and leaves live Episodes alone;
 the Space's `media_plane_setting`, the Tenant's `default_media_plane`, and
 `CHALK_DEFAULT_MEDIA_PLANE`. `CHALK_SFU_ALLOWED_SPACES` still applies as well.
 The public API never accepts `chalk_sfu` in a request; only an operator sets it,

@@ -117,8 +117,12 @@ API settings, not in Git. Production keeps the switch off until the M7 canary.
 Which plane a new Episode gets is decided in this order, and the first rule that
 names one wins:
 
-1. `CHALK_SFU_NEW_EPISODES=off` sends every new Episode to Cloudflare. It is the
-   kill switch and defaults to `on`. Live Episodes keep their node.
+1. The kill switch sends every new Episode to Cloudflare, and live Episodes keep their node.
+   It is stored in the database, so `media-settings new-episodes --state off --operator <name> --reason <text>`
+   takes effect on the next new Episode with no API restart, and `--state on` puts it back. Every flip
+   writes an audit row (who, why, before, after). Without `--state` the command shows the live value.
+   `CHALK_SFU_NEW_EPISODES=off` is a deploy-time floor under it: while the variable says off, the
+   switch is off whatever the database says.
 2. The Space's own setting (`media_plane_setting`), if it has one.
 3. The Tenant's `default_media_plane`, when it names a known plane. Before operators
    owned it, any caller could write it with no check, so a value counts only if it
@@ -242,9 +246,9 @@ starting a new one.
    Episode's join grant reports `media.provider` as `chalk_sfu`, not when `get`
    says so.
 
-To stop every new Episode instead of one Space, set `CHALK_SFU_NEW_EPISODES=off` in
-the private API settings and reload the API (see the order above). Use the Space
-setting first: it touches one Space and needs no reload.
+To stop every new Episode instead of one Space, run `media-settings new-episodes --state off
+--operator <name> --reason <text>`. It needs no reload. Use the Space setting first: it
+touches one Space.
 
 **Measured times.** A drill on staging flipped one Space between `chalk_sfu` and
 `cf_sfu` twelve times (six each way) with two real browser guests in a live call
@@ -312,8 +316,8 @@ Move internal Spaces one at a time: add the Space ID to
 then run `media-settings set --plane chalk_sfu` for that Space. To roll a Space
 back, run it with `--plane inherit` (or `cf_sfu`); live Episodes finish on the
 node, and new Episodes use Cloudflare. To stop every new own-SFU Episode at once,
-set `CHALK_SFU_NEW_EPISODES=off` and restart the API; no setting needs to change,
-and removing the variable puts everything back.
+run `media-settings new-episodes --state off --operator <name> --reason <text>`; no setting needs to change,
+and `--state on` puts everything back.
 
 The scripted check joins two real SDK clients per trial, measures how long both
 take to render audio and video, then blocks UDP to the media provider, proves

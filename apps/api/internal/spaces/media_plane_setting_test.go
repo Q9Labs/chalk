@@ -324,3 +324,48 @@ func (s tenantStore) GetTenant(context.Context, utilities.ID) (tenants.Tenant, e
 func (s tenantStore) SetDefaultMediaPlane(context.Context, utilities.ID, *string) (tenants.Tenant, error) {
 	return s.tenant, nil
 }
+
+func TestLiveSwitchPausesOnTopOfTheDeployFloor(t *testing.T) {
+	cf, own := MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU
+	policy := PlanePolicy{Platform: own, Allowed: allowAll(t)}
+	if got, _ := policy.Effective(tenants.Tenant{}, Space{}); got != own {
+		t.Fatalf("an own SFU default with the switch on: got %q", got)
+	}
+	if got, _ := policy.Paused(true).Effective(tenants.Tenant{}, Space{}); got != cf {
+		t.Fatalf("the live switch off must send new Episodes to Cloudflare: got %q", got)
+	}
+	floor := PlanePolicy{Platform: own, Allowed: allowAll(t), NewEpisodesPaused: true}
+	if !floor.Paused(false).NewEpisodesPaused {
+		t.Fatal("a live switch that is on must not lift the deploy-time floor")
+	}
+}
+
+func TestPausedValueTravelsInTheContext(t *testing.T) {
+	if _, carried := NewEpisodesPausedFrom(context.Background()); carried {
+		t.Fatal("a plain context carries no switch value")
+	}
+	for _, want := range []bool{true, false} {
+		got, carried := NewEpisodesPausedFrom(WithNewEpisodesPaused(context.Background(), want))
+		if !carried || got != want {
+			t.Fatalf("carried %v, got %v carried %v", want, got, carried)
+		}
+	}
+}
+
+func TestOwnSFUDefaultAllowsNamingBothPlanesAndStoresCloudflareForInheritingSpaces(t *testing.T) {
+	cf, own := MediaPlaneProviderCloudflareSFU, MediaPlaneProviderChalkSFU
+	policy := PlanePolicy{Platform: own, Allowed: allowAll(t)}
+	if !policy.PublicWriteAllowed(own) || !policy.PublicWriteAllowed(cf) {
+		t.Fatal("under an own SFU default an owner may name the default and Cloudflare")
+	}
+	cfDefault := PlanePolicy{Platform: cf}
+	if cfDefault.PublicWriteAllowed(own) {
+		t.Fatal("under a Cloudflare default an owner must not name the own SFU")
+	}
+	if got := policy.legacyPlane(nil); got != string(cf) {
+		t.Fatalf("an inheriting Space must store cf_sfu, got %q", got)
+	}
+	if got := policy.legacyPlane(planePtr(own)); got != string(own) {
+		t.Fatalf("a Space's own choice is stored as is, got %q", got)
+	}
+}

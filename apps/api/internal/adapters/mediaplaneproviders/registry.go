@@ -35,9 +35,13 @@ type Config struct {
 	// ChalkSFUSpaces are the Spaces whose new Episodes may start on the own SFU.
 	// Every other Space selecting it starts on Cloudflare.
 	ChalkSFUSpaces spaces.ChalkSFUAllowlist
-	// ChalkSFUNewEpisodesPaused sends every new Episode to Cloudflare. Live Episodes
-	// keep resolving to their own SFU binding.
+	// ChalkSFUNewEpisodesPaused is the deploy-time floor of the kill switch: it sends every new
+	// Episode to Cloudflare. Live Episodes keep resolving to their own SFU binding.
 	ChalkSFUNewEpisodesPaused bool
+	// NewEpisodeSwitch is the live kill switch. It pauses on top of the floor, without a restart.
+	// A caller that read it in its own transaction passes the value in the context instead
+	// (spaces.WithNewEpisodesPaused).
+	NewEpisodeSwitch spaces.NewEpisodeSwitch
 	// ChalkSFUClientSunset is the instant after which a client that cannot run the
 	// own SFU is refused a new Episode in an allowlisted Space, instead of getting
 	// Cloudflare. The zero value means never.
@@ -80,6 +84,7 @@ type Registry struct {
 	chalk           *chalksfu.Fleet
 	chalkSpaces     spaces.ChalkSFUAllowlist
 	chalkPaused     bool
+	killSwitch      spaces.NewEpisodeSwitch
 	clientSunset    time.Time
 	now             func() time.Time
 	episodes        EpisodeReader
@@ -123,6 +128,7 @@ func NewRegistry(config Config) Registry {
 		chalk:           config.ChalkSFU,
 		chalkSpaces:     config.ChalkSFUSpaces,
 		chalkPaused:     config.ChalkSFUNewEpisodesPaused,
+		killSwitch:      config.NewEpisodeSwitch,
 		episodes:        config.Episodes,
 		recovery:        config.Recovery,
 		backlog:         &backlogCell{},
@@ -212,6 +218,20 @@ type resolvedProviderConfig struct {
 // is the provider of an existing Episode's binding; it replaces the Space and
 // Tenant selection and relaxes the Tenant document's provider check, because that
 // document describes the next Episode, not this one.
+// deploymentRuns is true when the deployment's own configuration serves the provider for a
+// Tenant that has none. Startup validation requires the Cloudflare application whenever a
+// platform default is set, so Cloudflare stays available as the fallback beside the own SFU.
+func (r Registry) deploymentRuns(provider spaces.MediaPlaneProvider) bool {
+	switch provider {
+	case spaces.MediaPlaneProviderChalkSFU:
+		return r.chalk != nil
+	case spaces.MediaPlaneProviderCloudflareSFU:
+		return r.defaultProvider != ""
+	default:
+		return false
+	}
+}
+
 func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Space, resolution *providercontracts.Resolution, pin spaces.MediaPlaneProvider) (*resolvedProviderConfig, error) {
 	providerName := pin
 	if pin == "" {
@@ -229,7 +249,7 @@ func (r Registry) resolveProviderConfig(tenant tenants.Tenant, space spaces.Spac
 	providerConfig, err := parseProviderConfig(tenant.MediaPlaneProviderConfig)
 	if err != nil {
 		if errors.Is(err, providercontracts.ErrMissingProviderConfig) {
-			if providerName != r.defaultProvider && !(providerName == spaces.MediaPlaneProviderChalkSFU && r.chalk != nil) {
+			if !r.deploymentRuns(providerName) {
 				return nil, fmt.Errorf("%w: no process config for provider %s", providercontracts.ErrAdapterUnavailable, providerName)
 			}
 			resolution.ConfigurationSource = providercontracts.ConfigurationSourceDeploymentDefault
@@ -334,8 +354,18 @@ func (r Registry) selectedProvider(tenant tenants.Tenant, space spaces.Space) (s
 
 // admitsNewChalkSFUEpisode is false while the kill switch is on or the Space is off
 // the allowlist: its new Episodes start on Cloudflare.
-func (r Registry) admitsNewChalkSFUEpisode(space spaces.Space) bool {
-	return !r.chalkPaused && r.chalkSpaces.Allows(space.ID)
+func (r Registry) admitsNewChalkSFUEpisode(ctx context.Context, space spaces.Space) (bool, error) {
+	if !r.chalkSpaces.Allows(space.ID) || r.chalkPaused {
+		return false, nil
+	}
+	paused, carried := spaces.NewEpisodesPausedFrom(ctx)
+	if !carried && r.killSwitch != nil {
+		var err error
+		if paused, err = r.killSwitch.NewEpisodesPaused(ctx); err != nil {
+			return false, err
+		}
+	}
+	return !paused, nil
 }
 
 func parseSelectedProvider(value string) (spaces.MediaPlaneProvider, error) {

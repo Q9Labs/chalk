@@ -61,8 +61,9 @@ func seedSettingsSpace(t *testing.T, pool *pgxpool.Pool, tenantDefault, setting 
 // guards (client capability, node room) are the Registry's and have their own tests.
 type policyResolver struct{ policy spaces.PlanePolicy }
 
-func (r policyResolver) ResolveBinding(_ context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
-	plane, err := r.policy.Effective(tenant, space)
+func (r policyResolver) ResolveBinding(ctx context.Context, tenant tenants.Tenant, space spaces.Space, _ mediaplane.ClientProviders) (*mediaplane.Binding, error) {
+	live, _ := spaces.NewEpisodesPausedFrom(ctx)
+	plane, err := r.policy.Paused(live).Effective(tenant, space)
 	if err != nil {
 		return nil, err
 	}

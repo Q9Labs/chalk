@@ -80,8 +80,37 @@ type PlanePolicy struct {
 	Allowed ChalkSFUAllowlist
 	// NewSpace is CHALK_NEW_SPACE_MEDIA_PLANE: the plane a Create Space request gets when it names none.
 	NewSpace MediaPlaneProvider
-	// NewEpisodesPaused is CHALK_SFU_NEW_EPISODES=off: every new Episode starts on Cloudflare.
+	// NewEpisodesPaused is CHALK_SFU_NEW_EPISODES=off, a floor set at deploy time: every new
+	// Episode starts on Cloudflare. The live switch (NewEpisodeSwitch) pauses on top of it.
 	NewEpisodesPaused bool
+}
+
+// NewEpisodeSwitch is the live kill switch, stored in the database like the Space and Tenant
+// settings. While it is paused every new Episode starts on Cloudflare, and Episodes already
+// bound to the own SFU keep their binding.
+type NewEpisodeSwitch interface {
+	NewEpisodesPaused(ctx context.Context) (bool, error)
+}
+
+type pausedKey struct{}
+
+// WithNewEpisodesPaused carries a kill switch value that the caller read inside its own
+// transaction, so the binding decision does not need a second connection while that
+// transaction is open.
+func WithNewEpisodesPaused(ctx context.Context, paused bool) context.Context {
+	return context.WithValue(ctx, pausedKey{}, paused)
+}
+
+// NewEpisodesPausedFrom is the value WithNewEpisodesPaused carried, and whether there is one.
+func NewEpisodesPausedFrom(ctx context.Context) (paused, carried bool) {
+	paused, carried = ctx.Value(pausedKey{}).(bool)
+	return paused, carried
+}
+
+// Paused is the policy with the live kill switch applied on top of the deploy-time floor.
+func (p PlanePolicy) Paused(live bool) PlanePolicy {
+	p.NewEpisodesPaused = p.NewEpisodesPaused || live
+	return p
 }
 
 // Effective is the plane a new Episode in the Space would start on, ignoring the
@@ -101,7 +130,7 @@ func (p PlanePolicy) Effective(tenant tenants.Tenant, space Space) (MediaPlanePr
 	return selected, nil
 }
 
-// PublicWritePlane is the only plane a Tenant or Space owner may name: the platform
+// PublicWritePlane is the plane a Space created without one is stored with: the platform
 // default, or Cloudflare while none is configured.
 func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
 	if p.Platform == "" {
@@ -110,21 +139,33 @@ func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
 	return p.Platform
 }
 
-// publicWriteAllowed gates a Space write that a caller's request names. The new-Space
-// plane is no exception: the deployment fills it in for a Space that names none, after
-// it checked that the Tenant can serve it, but a caller may not name it.
+// PublicWriteAllowed is true for the planes a Tenant or Space owner may name: the platform
+// default, and Cloudflare, which every integration could always name. Naming the own SFU
+// stays an operator choice until it is the platform default. The new-Space plane is no
+// exception: the deployment fills it in for a Space that names none, after it checked that
+// the Tenant can serve it, but a caller may not name it.
+func (p PlanePolicy) PublicWriteAllowed(provider MediaPlaneProvider) bool {
+	return provider == p.PublicWritePlane() || provider == MediaPlaneProviderCloudflareSFU
+}
+
 func (p PlanePolicy) publicWriteAllowed(provider MediaPlaneProvider) error {
-	if provider != p.PublicWritePlane() {
+	if !p.PublicWriteAllowed(provider) {
 		return ErrMediaPlaneNotPermitted
 	}
 	return nil
 }
 
 // legacyPlane is what the previous release reads from media_plane: the Space's own
-// setting, else the platform default.
+// setting, else the platform default. A Space that inherits must not store the own SFU:
+// the stored value would count as the Space's own choice (see SelectPlane) and survive a
+// platform default that moves back to Cloudflare. It stores Cloudflare, which both releases
+// can serve, and follows the platform default through its empty setting.
 func (p PlanePolicy) legacyPlane(setting *MediaPlaneProvider) string {
 	if setting != nil {
 		return string(*setting)
+	}
+	if p.Platform == MediaPlaneProviderChalkSFU {
+		return string(MediaPlaneProviderCloudflareSFU)
 	}
 	return string(p.Platform)
 }
@@ -291,8 +332,16 @@ func (s Service) EffectiveMediaPlanes(ctx context.Context, tenantID utilities.ID
 	if err != nil {
 		return nil, fmt.Errorf("read Tenant for the effective media plane: %w", err)
 	}
+	policy := s.planes
+	if s.killSwitch != nil {
+		paused, err := s.killSwitch.NewEpisodesPaused(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read the new-Episode switch for the effective media plane: %w", err)
+		}
+		policy = policy.Paused(paused)
+	}
 	for i, space := range list {
-		if provider, err := s.planes.Effective(tenant, space); err == nil && provider != "" {
+		if provider, err := policy.Effective(tenant, space); err == nil && provider != "" {
 			effective[i] = &provider
 		}
 	}
