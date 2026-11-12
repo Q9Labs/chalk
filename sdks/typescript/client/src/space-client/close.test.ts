@@ -18,6 +18,17 @@ describe("SpaceClient.close", () => {
     expect(client.getSnapshot().connection.status).toBe("left");
   });
 
+  it("ends in left with the unconfirmed-leave error, so a caller can tell the seat may still be held", async () => {
+    const platform = createCoreTestPlatform();
+    const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, { ...platform, dependencies: { ...platform.dependencies, cancelPendingAdmission: async () => false } });
+    await client.join({ microphone: false, camera: false });
+    vi.spyOn(platform.sync, "leave").mockRejectedValue(new Error("offline"));
+
+    await expect(client.close()).resolves.toBeUndefined();
+    expect(client.getSnapshot().connection.status).toBe("left");
+    expect(client.getSnapshot().connection.lastError?.code).toBe("connection.leave_unconfirmed");
+  });
+
   it("frees a client that never joined", async () => {
     const client = createSpaceClientForPlatform({ space: "test", getAccess: async () => opaqueAccessGrant(1) }, createCoreTestPlatform());
     await expect(client.close()).resolves.toBeUndefined();

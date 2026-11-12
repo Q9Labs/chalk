@@ -184,7 +184,9 @@ export function OwnerCall({ spaceId }: { readonly spaceId: string }) {
       unsubscribe();
       window.removeEventListener("pagehide", pagehide);
       void owned.close().then(() => {
-        if (owned.getSnapshot().connection.status === "left") owner.clearReload();
+        // A leave the server never acknowledged also ends in `left`, but the seat may still be live: keep the join key so a return reuses it.
+        const { status, lastError } = owned.getSnapshot().connection;
+        if (status === "left" && !lastError) owner.clearReload();
       });
     };
   }, [spaceId, owner]);
