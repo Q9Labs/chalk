@@ -19,7 +19,7 @@ const CALL_MENU_CSS = `.chalk-shell-sep {height:1px;background:var(--chalk-line-
 .chalk-invite-link[data-variant="menu"][data-copied="true"] .chalk-invite-link-label {flex:1;}
 .chalk-shell-qr-card {margin:var(--space-1) 0;padding:var(--space-2) var(--space-4);display:grid;place-items:center;}
 .chalk-shell-qr-card[hidden] {display:none;}
-.chalk-shell-detail-action[data-ringed] {box-shadow:inset 0 0 0 1px var(--chalk-line-strong);}
+.chalk-shell-detail-action[data-ringed] {outline:1px solid var(--chalk-line-strong);outline-offset:-1px;}
 .chalk-shell-detail-label small {display:block;padding-bottom:var(--space-1-5);margin-top:calc(var(--space-0-5) * -1);font-size:var(--type-caption);color:var(--chalk-muted-text);}
 .chalk-shell-detail-action:has(.chalk-shell-detail-label small) {padding-top:var(--space-1-5);}
 .chalk-shell-charts {display:grid;gap:var(--space-4);padding:var(--space-2) var(--space-3);}
