@@ -34,6 +34,9 @@ concurrency:
 
 env:
   CI: "true"
+  # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
+  npm_config_fetch_retries: "5"
+  npm_config_fetch_retry_mintimeout: "10000"
 
 jobs:
   changes:
@@ -179,6 +182,8 @@ jobs:
             apps/sync/deps
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+          # A changed mix.lock still starts from the last saved dependencies, so only the changed packages come from Hex.
+          restore-keys: sync-mix-${{ runner.os }}-
 
       - name: Install the dashboard database client
         if: startsWith(matrix.group, 'dashboard-')
@@ -455,6 +460,8 @@ jobs:
             apps/sync/deps
             apps/sync/_build
           key: sync-mix-${{ runner.os }}-${{ hashFiles('apps/sync/mix.lock') }}
+          # A changed mix.lock still starts from the last saved dependencies, so only the changed packages come from Hex.
+          restore-keys: sync-mix-${{ runner.os }}-
 
       - name: Install Chromium for the browser reconnection proof
         if: matrix.part == 'clients'
