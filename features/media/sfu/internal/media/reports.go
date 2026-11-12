@@ -27,7 +27,8 @@ type reportEstimator struct {
 	ceiling float64 // bits/s
 	rembAt  int64   // monotonic time of the latest REMB, or 0
 	heavyAt int64   // monotonic time of the latest heavy loss report, or 0
-	stepAt  int64   // monotonic time of the latest step of the ceiling, or 0
+	downAt  int64   // monotonic time of the latest step down, or 0
+	upAt    int64   // monotonic time of the latest step up, or 0
 	at      int64   // monotonic time of the latest report, or 0
 }
 
@@ -39,7 +40,9 @@ func (r *reportEstimator) onREMB(bitrate float64, now int64) {
 	r.rembAt, r.at = now, now
 }
 
-// onLoss steps the ceiling by one receiver report's fraction of lost packets.
+// onLoss steps the ceiling by one receiver report's fraction of lost packets. A receiver reports
+// each stream it receives, so a clean audio report can arrive between heavy video reports: steps
+// down and up keep their own spacing, and no step up happens while heavy loss still stands.
 func (r *reportEstimator) onLoss(fraction float64, now int64) {
 	r.at = now
 	if fraction > lossHigh {
@@ -49,12 +52,12 @@ func (r *reportEstimator) onLoss(fraction float64, now int64) {
 		return
 	}
 	switch {
-	case fraction > lossHigh && now-r.stepAt >= int64(reportDecreaseSpacing):
+	case fraction > lossHigh && now-r.downAt >= int64(reportDecreaseSpacing):
 		r.ceiling = max(r.ceiling*(1-fraction/2), minEstimate)
-		r.stepAt = now
-	case fraction < lossLow && now-r.stepAt >= int64(reportIncreaseSpacing):
+		r.downAt = now
+	case fraction < lossLow && !r.lossy(now) && now-r.upAt >= int64(reportIncreaseSpacing):
 		r.ceiling = min(r.ceiling*increasePerSec, reportMax)
-		r.stepAt = now
+		r.upAt = now
 	}
 }
 

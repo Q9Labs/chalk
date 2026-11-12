@@ -1001,6 +1001,7 @@ func chalkSFUCapabilities(c publicinvites.PublicAccessCapabilities) map[string]a
 		"pullPublished":         c.PullPublished,
 		"unifiedSignaling":      c.UnifiedSignaling,
 		"muteInPlace":           c.MuteInPlace,
+		"keepsIdleSession":      c.KeepsIdleSession,
 	}
 	if c.DirectSignalingURL != "" {
 		capabilities["directSignalingUrl"] = c.DirectSignalingURL

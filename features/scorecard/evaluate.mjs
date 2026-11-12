@@ -32,11 +32,12 @@ for (const path of paths) {
   for (const metric of card.metrics) if (metric.n > 0) measured.add(metric.id);
   for (const row of diffMetrics([], card.metrics, planeBudgets(budgets, card.mediaPlane)).failures) metrics.add(`${card.mediaPlane}.${row.id}`);
 }
-// Every deployed nightly cut runs the own-SFU proof; a Cloudflare card cannot replace its measurements.
-// The latency kit records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
+// A standalone latency evaluation needs the own-SFU card: a Cloudflare card cannot replace its measurements, and the latency kit
+// records every gated action metric each cycle, so a chalk_sfu metric with no samples across the cards is missing evidence, not a pass.
+// A deferred cut has no latency card to show: the cut's proofs write none, and Promote adds the staging latency verdict of the same SHA.
 if (planes.has("chalk_sfu")) {
   if (!latencyDeferred) for (const id of gatedActionIds(budgets, "chalk_sfu")) if (!measured.has(id)) missing.add(`chalk_sfu.${id}`);
-} else if (![...missing].some((item) => item.startsWith("chalk_sfu scorecard"))) {
+} else if (!latencyDeferred && ![...missing].some((item) => item.startsWith("chalk_sfu scorecard"))) {
   missing.add("chalk_sfu scorecard");
 }
 let result = "passed";

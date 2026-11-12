@@ -7,7 +7,7 @@ import { Icon } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
 import { useLoad } from "./AppShell";
 import { DisconnectPrompt } from "./DisconnectPrompt";
-import { CopyAction, ErrorPanel, MoreButton, Sk, useToast } from "./kit";
+import { CopyAction, ErrorPanel, MoreButton, Sk, SkeletonRows, useToast } from "./kit";
 import { McpClients } from "./McpClients";
 
 const ACCESS_LABEL = { "chalk:read": "Read only", "chalk:manage": "Read and change" } as const;
@@ -34,13 +34,7 @@ export function AiAppsPage() {
           <McpClients mcpUrl={state.data.mcpUrl} registeredNames={[...(state.data.nextCursor ? state.data.connectedNames : []), ...state.data.connections.map((connection) => connection.clientName)]} />
         </>
       ) : null}
-      {state.kind === "loading" ? (
-        <div className="cgrid" aria-hidden="true">
-          {[0, 1, 2, 3].map((index) => (
-            <Sk key={index} width="100%" height={132} radius="16px" />
-          ))}
-        </div>
-      ) : null}
+      {state.kind === "loading" ? <AiAppsSkeleton /> : null}
       {state.kind === "error" ? (
         <div style={{ marginTop: "var(--space-8)" }}>
           <ErrorPanel title="Couldn’t load your AI apps" detail={errorMessage(state.error)} onRetry={reload} />
@@ -132,6 +126,39 @@ export function AiAppsPage() {
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+/** The loaded page's parts in place: the URL row, the search, app tiles and the connected list's heading. */
+function AiAppsSkeleton() {
+  return (
+    <div aria-busy="true">
+      <div className="murl">
+        <span className="lbl">Chalk URL</span>
+        <Sk width="min(320px, 50%)" height={14} />
+        <Sk width="96px" height={32} radius="999px" />
+      </div>
+      <div className="cfind">
+        <Sk width="100%" height={44} radius="999px" />
+      </div>
+      <ul className="cgrid" aria-hidden="true">
+        {[0, 1, 2, 3, 4, 5].map((index) => (
+          <li key={index}>
+            <div className="ctile">
+              <Sk width="40px" height={40} radius="12px" />
+              <span className="ctext">
+                <Sk width="96px" height={14} />
+                <Sk width="80%" height={12} />
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="secth" style={{ marginTop: "var(--space-12)" }}>
+        <h2>Connected apps</h2>
+      </div>
+      <SkeletonRows count={2} />
     </div>
   );
 }

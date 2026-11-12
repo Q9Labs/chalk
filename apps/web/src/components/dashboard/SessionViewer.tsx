@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 
 import type { PastSessionDTO, RecordingDTO, TranscriptDTO } from "../../lib/dashboard/contracts";
@@ -97,10 +98,14 @@ export function usePastSession(ids: Ids) {
 }
 
 /** What a session's frame draws: the video or the reason there is none, the transcript beside it, and what can be downloaded. */
+/** A failure the page can't fix routes to support, with the page's link so they can find the session. */
+const supportHref = (problem: string) => `mailto:support@chalkmeet.com?subject=${encodeURIComponent(problem)}&body=${encodeURIComponent(`Session: ${window.location.href}`)}`;
+
 export type Parts = {
   readonly recording: RecordingDTO | undefined;
   readonly playable: boolean;
   readonly downloadableTranscript: TranscriptDTO | null;
+  readonly transcript: TranscriptView["kind"];
   readonly media: ReactNode;
   readonly panel: ReactNode;
 };
@@ -124,7 +129,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
   const unreadable = item?.read.failure?.kind === "terminal" ? item.read.failure.message : null;
   const playable = recording !== undefined && !unreadable && videoState(recording) === "play";
   const downloadableTranscript = transcript.kind === "ready" ? transcript.transcript : null;
-  if (!recording) return render({ recording, playable, downloadableTranscript, media: null, panel: null });
+  if (!recording) return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media: null, panel: null });
 
   async function prepareRecording(target: RecordingDTO) {
     if (exporting) return;
@@ -184,6 +189,18 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
             {actionIcon(note.action)}
             {actionLabel(note.action)}
           </button>
+        ) : video === "capture_failed" || video === "export_failed" ? (
+          <a className="btn sec lg" href={supportHref(note.title)}>
+            <Icon name="send" />
+            Contact support
+          </a>
+        ) : null}
+        {video === "preparable" ? (
+          <p className="pnote-more">
+            <Link to="/dashboard/developer" hash="recording-videos">
+              Prepare every recording on its own
+            </Link>
+          </p>
         ) : null}
       </div>
     </div>
@@ -208,7 +225,7 @@ function Viewer({ ids, item, transcribed, newer, actions, render }: { readonly i
     ) : (
       <TranscriptPanel key={target.id} transcript={transcript} time={-1} from={clock(target.createdAt)} onCreate={() => createTranscript(target)} />
     );
-  return render({ recording, playable, downloadableTranscript, media, panel });
+  return render({ recording, playable, downloadableTranscript, transcript: transcript.kind, media, panel });
 }
 
 export function DownloadMenu({ ids, recording, video, transcript }: { readonly ids: Ids; readonly recording: RecordingDTO; readonly video: boolean; readonly transcript: TranscriptDTO | null }) {
@@ -390,39 +407,44 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
         Loading the transcript…
       </div>
     );
-  else if (transcript.kind === "failed")
-    body = (
-      <div style={{ padding: "var(--space-3)" }}>
-        <ErrorPanel title={TRANSCRIPT.failed.copy} detail="The transcript isn’t available for this session." />
-      </div>
-    );
   else if (transcript.kind === "unreadable")
     body = (
       <div style={{ padding: "var(--space-3)" }}>
         <ErrorPanel title="Couldn’t load the transcript" detail={transcript.message} />
       </div>
     );
-  else if (transcript.kind === "creatable")
+  else if (transcript.kind !== "ready") {
+    const state = TRANSCRIPT[transcript.kind];
     body = (
-      <div className="tempty">
-        <p>{TRANSCRIPT.creatable.copy}</p>
-        <button
-          type="button"
-          className="btn sec sm"
-          aria-busy={creating || undefined}
-          onClick={() => {
-            if (creating) return;
-            setCreating(true);
-            void onCreate().finally(() => setCreating(false));
-          }}
-        >
-          <Icon name="file" />
-          Make a transcript
-        </button>
+      <div className="tempty" role={transcript.kind === "failed" ? "alert" : undefined}>
+        {transcript.kind === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name="file" />}
+        <div>
+          <b>{state.title}</b>
+          <p>{state.detail}</p>
+        </div>
+        {state.action === "create" ? (
+          <button
+            type="button"
+            className="btn sec sm"
+            aria-busy={creating || undefined}
+            onClick={() => {
+              if (creating) return;
+              setCreating(true);
+              void onCreate().finally(() => setCreating(false));
+            }}
+          >
+            <Icon name="file" />
+            Make a transcript
+          </button>
+        ) : transcript.kind === "failed" ? (
+          <a className="btn sec sm" href={supportHref(state.title)}>
+            <Icon name="send" />
+            Contact support
+          </a>
+        ) : null}
       </div>
     );
-  else if (transcript.kind !== "ready") body = <div className="tempty">{TRANSCRIPT[transcript.kind].copy}</div>;
-  else if (!lines.length) body = <div className="tempty">No lines mention “{query.trim()}”.</div>;
+  } else if (!lines.length) body = <div className="tempty">No lines mention “{query.trim()}”.</div>;
   else
     body = lines.map(({ cue, index }) => {
       const at = playbackTime(cue.startMs / 1000);
@@ -467,18 +489,20 @@ function TranscriptPanel({ transcript, time, from, onSeek, onCreate }: { readonl
             <span>From the {from} recording</span>
           ) : null}
         </h2>
-        <div className="tsearch">
-          <Icon name="search" />
-          <label className="sr" htmlFor="transcript-search">
-            Search transcript
-          </label>
-          <input id="transcript-search" className="inp" value={query} placeholder="Search transcript" autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
-          {search ? (
-            <button type="button" className="ib" aria-label="Clear search" onClick={() => setQuery("")}>
-              <Icon name="x" />
-            </button>
-          ) : null}
-        </div>
+        {transcript.kind === "ready" ? (
+          <div className="tsearch">
+            <Icon name="search" />
+            <label className="sr" htmlFor="transcript-search">
+              Search transcript
+            </label>
+            <input id="transcript-search" className="inp" value={query} placeholder="Search transcript" autoComplete="off" onChange={(event) => setQuery(event.target.value)} />
+            {search ? (
+              <button type="button" className="ib" aria-label="Clear search" onClick={() => setQuery("")}>
+                <Icon name="x" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div className="tlines">{body}</div>
     </section>
