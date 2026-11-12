@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { baselineEntry } from "./leave-baseline.mjs";
 import { evaluateOffReason } from "./off-reason-criteria.mjs";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { openEpisode, prepareIntegration } from "./proofs.mjs";
 import { check, save, waitFor } from "./runtime.mjs";
 
 const requireSDK = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url));
@@ -97,10 +97,7 @@ export async function offReasonProof(run) {
   const candidateSdk = await loadSdk(run, "candidate", resolve(process.env.CHALK_PROOF_CANDIDATE_SDK_ENTRY ?? new URL("../../sdks/typescript/client/src/index.ts", import.meta.url).pathname));
   const baselineSdk = await loadSdk(run, "baseline", await baselineEntry(run));
   await prepareIntegration(run, false);
-  const space = await createSpace(run);
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`;
-  const ending = episodeEnd(run, path);
+  const { path, ending } = await openEpisode(run);
   const { defaultSyncUrl } = await loadSdk(run, "urls", fileURLToPath(new URL("../../sdks/typescript/client/src/space-client/urls.ts", import.meta.url)));
   const url = defaultSyncUrl(run.config.api_url);
   const clients = [];

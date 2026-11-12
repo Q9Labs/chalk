@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createSpace, episodeEnd, prepareIntegration } from "./proofs.mjs";
+import { openEpisode, prepareIntegration } from "./proofs.mjs";
 import { fileURLToPath } from "node:url";
 import { connect, loadSdk } from "./off-reason.mjs";
 import { check, measured, save } from "./runtime.mjs";
@@ -54,10 +54,7 @@ async function admitAndConnect(run, path, clients) {
 
 export async function chatUploadProof(run) {
   await prepareIntegration(run, false);
-  const space = await createSpace(run);
-  const episode = await run.apiRequest("POST", `${run.tenantPath}/spaces/${space.id}/episodes`, { metadata: { proof_run_id: run.runId } });
-  const path = `${run.tenantPath}/spaces/${space.id}/episodes/${episode.id}`;
-  const ending = episodeEnd(run, path);
+  const { path, ending } = await openEpisode(run);
   const clients = [];
   try {
     const token = await admitAndConnect(run, path, clients);
