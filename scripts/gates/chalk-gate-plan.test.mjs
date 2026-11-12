@@ -45,6 +45,25 @@ test("a path no lane reads is classified on a pull request and fails closed else
   assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
 });
 
+test("the feature map is read only by the always-on feature-map lane, so editing it selects no more than that on every event", () => {
+  for (const event of ["pull_request", "merge_group"]) {
+    const plan = createGatePlan(["features.json"], { scope: "merge base to HEAD", services: "external", event });
+    assert.equal(plan.full, false);
+    assert.ok(
+      plan.tasks
+        .filter((task) => task.selected)
+        .map((task) => task.id)
+        .includes("feature-map"),
+    );
+  }
+});
+
+test("a host-change-alert edit is classified on a pull request and fails closed elsewhere", () => {
+  const file = "infrastructure/host-change-alert/host-change-check.mjs";
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" }).full, false);
+  assert.equal(createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "merge_group" }).full, true);
+});
+
 test("a test-only change skips the dashboard engine and the call lanes on a pull request, and the queue still runs them", () => {
   const files = ["sdks/typescript/client/src/media/client.test.ts"];
   assert.deepEqual(
