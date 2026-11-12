@@ -75,6 +75,8 @@ type CloseInput struct {
 	MID                   string
 	Source                string
 	PublicationID         string
+	// OnlyWhileEnabled makes the close a no-op when the publication was muted in place after the caller chose it.
+	OnlyWhileEnabled bool
 }
 
 type AvailabilityInput struct {
@@ -398,6 +400,9 @@ func publicationCloseState(latest *provideroperations.Observation, input CloseIn
 		}
 		if publication.PublicationID != input.PublicationID {
 			return closeStateStale
+		}
+		if input.OnlyWhileEnabled && !publication.Enabled {
+			return closeStateSatisfied
 		}
 		return closeStateRequired
 	}
