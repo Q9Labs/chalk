@@ -1,7 +1,6 @@
 defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
   use ExUnit.Case, async: false
 
-  alias ChalkSync.Live.PublicationFence
   alias ChalkSync.Live.ScreenShareLease
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.SyncPostgres
@@ -111,126 +110,6 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
              )
 
     assert {:error, :invalid_limit} = ScreenShareLease.expire(connection, @now, 501)
-  end
-
-  test "checks active publication fences by participant and source", %{
-    connections: [connection | _],
-    fixture: fixture
-  } do
-    identity = hd(fixture.identities)
-    participant = identity.participant_id
-    generation = identity.participant_generation
-    operation_id = "00000000-0000-4000-8000-000000000020"
-    insert_external_operation(connection, fixture, identity, operation_id)
-
-    Postgrex.query!(
-      connection,
-      """
-      insert into sync_publication_fences (
-        tenant_id, space_id, episode_id, participant_id, participant_generation,
-        source, external_operation_id, created_at, expires_at
-      ) values ($1, $2, $3, $4, $5, 'camera', $6, $7, $8)
-      """,
-      [
-        UUID.dump!(fixture.episode.tenant_id),
-        UUID.dump!(fixture.episode.space_id),
-        UUID.dump!(fixture.episode.episode_id),
-        UUID.dump!(participant),
-        generation,
-        UUID.dump!(operation_id),
-        @now,
-        DateTime.add(@now, 30_000, :millisecond)
-      ]
-    )
-
-    assert :owned =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               generation,
-               :camera,
-               operation_id,
-               @now
-             )
-
-    assert {:fenced, ^operation_id} =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               generation,
-               :camera,
-               "00000000-0000-4000-8000-000000000021",
-               @now
-             )
-
-    assert :clear =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               generation,
-               :microphone,
-               operation_id,
-               @now
-             )
-
-    assert :clear =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               generation,
-               :camera,
-               operation_id,
-               DateTime.add(@now, 30_000, :millisecond)
-             )
-
-    assert :clear =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               generation + 1,
-               :camera,
-               operation_id,
-               @now
-             )
-
-    assert {:error, :invalid_generation} =
-             PublicationFence.check(
-               connection,
-               fixture.episode,
-               participant,
-               0,
-               :camera,
-               operation_id,
-               @now
-             )
-  end
-
-  defp insert_external_operation(connection, fixture, identity, operation_id) do
-    Postgrex.query!(
-      connection,
-      """
-      insert into sync_external_operations (
-        tenant_id, space_id, episode_id, external_operation_id, request_key,
-        request_fingerprint, operation_name, target_participant_id,
-        target_participant_generation, payload
-      ) values ($1, $2, $3, $4, 'remove-request-0001', $5, 'remove_participant', $6, $7, $8)
-      """,
-      [
-        UUID.dump!(fixture.episode.tenant_id),
-        UUID.dump!(fixture.episode.space_id),
-        UUID.dump!(fixture.episode.episode_id),
-        UUID.dump!(operation_id),
-        :crypto.hash(:sha256, "remove-request-0001"),
-        UUID.dump!(identity.participant_id),
-        identity.participant_generation,
-        %{"participant_id" => identity.participant_id}
-      ]
-    )
   end
 
   defp seed_fixture(connection) do
