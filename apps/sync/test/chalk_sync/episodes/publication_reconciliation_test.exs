@@ -1,13 +1,13 @@
 defmodule ChalkSync.Episodes.PublicationReconciliationTest do
-  use ExUnit.Case, async: false
+  use ChalkSync.PostgresCase, async: false
 
   alias ChalkSync.Database
   alias ChalkSync.Episodes.Coordinator
   alias ChalkSync.Fanout.PostgresNotifications
   alias ChalkSync.Reliability.TcpFaultProxy
-  alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Stateholder.Memory
+  alias ChalkSync.Stateholder.Postgres
+  alias ChalkSync.SyncPostgres
   alias ChalkSync.UUID
 
   defmodule HeldMediaPlane do
@@ -21,37 +21,19 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     end
   end
 
-  setup do
+  setup %{connection: connection} do
     previous = Application.get_env(:chalk_sync, :media_plane)
-    previous_stateholder = Application.get_env(:chalk_sync, :stateholder)
-    Application.put_env(:chalk_sync, :stateholder, Memory)
     Application.put_env(:chalk_sync, :media_plane, {HeldMediaPlane, self()})
+    on_exit(fn -> restore(:media_plane, previous) end)
 
-    on_exit(fn ->
-      restore(:media_plane, previous)
-      restore(:stateholder, previous_stateholder)
-    end)
-
-    episode = %EpisodeKey{
-      tenant_id: UUID.generate(),
-      space_id: UUID.generate(),
-      episode_id: UUID.generate()
-    }
-
-    identity = %Identity{
-      episode: episode,
-      participant_id: UUID.generate(),
-      participant_generation: 1
-    }
-
-    :ok =
-      Memory.seed_episode(episode, [
-        %{id: identity.participant_id, generation: 1, display_name: "Participant", role: "owner"}
-      ])
+    fixture = SyncPostgres.seed_episode(connection)
+    on_exit(fn -> SyncPostgres.cleanup(connection, fixture.episode) end)
+    episode = fixture.episode
+    [identity] = fixture.identities
 
     coordinator = start_supervised!({Coordinator, episode})
 
-    {:ok, recovery} = Memory.recover_episode(episode, nil)
+    {:ok, recovery} = Postgres.recover_episode(episode, nil)
     {:ok, ^coordinator} = Coordinator.subscribe(identity, recovery.head)
     socket = self()
 
@@ -150,7 +132,7 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
       participant_generation: 1
     }
 
-    assert :ok = Memory.set_media_pause(identity, :microphone, "P")
+    assert :ok = Postgres.set_media_pause(identity, :microphone, "P")
     pause_key = {participant_id, "microphone"}
 
     :sys.replace_state(coordinator, fn state ->
@@ -187,14 +169,11 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     assert_converged(coordinator, 1)
   end
 
-  @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
-                  System.get_env("CHALK_DATABASE_URL")
-  @tag skip: is_nil(@database_url)
   test "a dropped LISTEN connection reconnects and fresh publications still converge", %{
     episode: episode,
     coordinator: coordinator
   } do
-    uri = URI.parse(@database_url)
+    uri = URI.parse(SyncPostgres.database_url!())
 
     proxy =
       start_supervised!(
@@ -207,7 +186,7 @@ defmodule ChalkSync.Episodes.PublicationReconciliationTest do
     listener =
       start_supervised!({PostgresNotifications, url: proxy_url, name: {:global, make_ref()}})
 
-    {:ok, options} = Database.connection_options(@database_url)
+    {:ok, options} = Database.connection_options(SyncPostgres.database_url!())
     connection = start_supervised!({Postgrex, options})
     notify(connection, episode)
     assert_receive {:observing, first, ^episode}, 1_000
