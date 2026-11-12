@@ -29,7 +29,9 @@ try {
   }
   async function visit(path, heading, name) {
     await page.goto(`${origin}${path}`);
-    await page.getByRole("heading", { name: heading, exact: true }).waitFor({ timeout: 60000 });
+    await page.locator("h1").filter({ hasText: heading }).waitFor({ timeout: 60000 });
+    const content = heading === "Developer" ? "Local development" : heading === "Product planning" ? "Past sessions" : "Product planning";
+    await page.getByText(content, { exact: true }).first().waitFor({ timeout: 60000 });
     assert(!(await page.locator("body").innerText()).includes("Couldn't open"));
     await page.screenshot({ path: resolve(output, `${name}.png`), fullPage: true });
     results.push(name);
