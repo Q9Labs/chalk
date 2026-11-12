@@ -68,40 +68,48 @@ func run(args []string, stdout, stderr io.Writer) error {
 			Sequence: bundle.Manifest.Sequence, Tracks: recordingdecode.Summarize(bundle.Fragments),
 		})
 	case "replay":
-		duration := *durationMS
-		if duration < 0 {
-			// The inclusive bundle boundary floors RTP ticks to milliseconds.
-			// Round its replay bound up so a fractional final packet is included.
-			duration = bundle.Manifest.MediaRange.EndMilliseconds
-			if duration < math.MaxInt64 {
-				duration++
-			}
-		}
-		results, err := recordingdecode.ReplayVP8(context.Background(), bundle.Fragments, duration)
-		if err != nil {
-			return err
-		}
-		if err := writeJSON(stdout, results); err != nil {
-			return err
-		}
-		for _, result := range results {
-			if result.Failure != nil {
-				return fmt.Errorf("track %s epoch %d failed: %s", result.TrackID, result.Epoch, result.Failure.Error)
-			}
-		}
-		return nil
+		return replay(stdout, bundle, *durationMS)
 	case "fixture":
-		fixture, skipped, err := recordingdecode.NewFixture(bundle.Fragments)
-		if err != nil {
-			return err
-		}
-		for _, name := range skipped {
-			fmt.Fprintf(stderr, "skipped non-VP8 track %s\n", name)
-		}
-		return writeJSON(stdout, fixture)
+		return writeFixture(stdout, stderr, bundle)
 	default:
 		return fmt.Errorf("unknown command %q", command)
 	}
+}
+
+// replay decodes every VP8 track and fails when any track failed, after it prints the results.
+func replay(stdout io.Writer, bundle recordingbundle.Bundle, durationMS int64) error {
+	if durationMS < 0 {
+		// The inclusive bundle boundary floors RTP ticks to milliseconds.
+		// Round its replay bound up so a fractional final packet is included.
+		durationMS = bundle.Manifest.MediaRange.EndMilliseconds
+		if durationMS < math.MaxInt64 {
+			durationMS++
+		}
+	}
+	results, err := recordingdecode.ReplayVP8(context.Background(), bundle.Fragments, durationMS)
+	if err != nil {
+		return err
+	}
+	if err := writeJSON(stdout, results); err != nil {
+		return err
+	}
+	for _, result := range results {
+		if result.Failure != nil {
+			return fmt.Errorf("track %s epoch %d failed: %s", result.TrackID, result.Epoch, result.Failure.Error)
+		}
+	}
+	return nil
+}
+
+func writeFixture(stdout, stderr io.Writer, bundle recordingbundle.Bundle) error {
+	fixture, skipped, err := recordingdecode.NewFixture(bundle.Fragments)
+	if err != nil {
+		return err
+	}
+	for _, name := range skipped {
+		fmt.Fprintf(stderr, "skipped non-VP8 track %s\n", name)
+	}
+	return writeJSON(stdout, fixture)
 }
 
 func openBundle(path, keyFile string) (recordingbundle.Bundle, error) {

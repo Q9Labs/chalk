@@ -43,19 +43,23 @@ func parseAllowlist(value string) (allowlist, error) {
 type counts map[string]int
 
 // rawReport holds exact counts. Only report.go turns it into publishable output.
+type tenantCounts struct {
+	ByDefaultMediaPlane   counts
+	ByConfigurationSource counts
+	BySpaceSelection      counts
+}
+
+type spaceCounts struct {
+	Archived                 int
+	BySelection              counts
+	ByNewEpisodeProvider     counts
+	ByConfigurationSource    counts
+	CloudflareByConfigSource counts
+}
+
 type rawReport struct {
-	Tenants struct {
-		ByDefaultMediaPlane   counts
-		ByConfigurationSource counts
-		BySpaceSelection      counts
-	}
-	Spaces struct {
-		Archived                 int
-		BySelection              counts
-		ByNewEpisodeProvider     counts
-		ByConfigurationSource    counts
-		CloudflareByConfigSource counts
-	}
+	Tenants  tenantCounts
+	Spaces   spaceCounts
 	Episodes struct {
 		LiveByBoundProvider           counts
 		CreatedLast24hByBoundProvider counts
@@ -223,27 +227,44 @@ func collect(ctx context.Context, q querier, list allowlist) (rawReport, error) 
 	report.Spaces.BySelection, report.Spaces.ByNewEpisodeProvider = counts{}, counts{}
 	report.Spaces.ByConfigurationSource, report.Spaces.CloudflareByConfigSource = counts{}, counts{}
 
-	err := scan(ctx, q, tenantsSQL, []any{list.all, list.spaces}, func(rows pgx.Rows) error {
+	if err := countTenants(ctx, q, list, &report.Tenants); err != nil {
+		return rawReport{}, fmt.Errorf("count Tenants: %w", err)
+	}
+	if err := countSpaces(ctx, q, list, &report.Spaces); err != nil {
+		return rawReport{}, fmt.Errorf("count Spaces: %w", err)
+	}
+	if err := scan(ctx, q, archivedSpacesSQL, nil, func(rows pgx.Rows) error {
+		return rows.Scan(&report.Spaces.Archived)
+	}); err != nil {
+		return rawReport{}, fmt.Errorf("count archived Spaces: %w", err)
+	}
+	if err := countBoundProviders(ctx, q, &report); err != nil {
+		return rawReport{}, err
+	}
+	return report, nil
+}
+
+func countTenants(ctx context.Context, q querier, list allowlist, tenants *tenantCounts) error {
+	return scan(ctx, q, tenantsSQL, []any{list.all, list.spaces}, func(rows pgx.Rows) error {
 		var provider, source string
 		var hasCloudflareSpace bool
 		var n int
 		if err := rows.Scan(&provider, &source, &hasCloudflareSpace, &n); err != nil {
 			return err
 		}
-		report.Tenants.ByDefaultMediaPlane[provider] += n
-		report.Tenants.ByConfigurationSource[source] += n
+		tenants.ByDefaultMediaPlane[provider] += n
+		tenants.ByConfigurationSource[source] += n
 		if hasCloudflareSpace {
-			report.Tenants.BySpaceSelection["has_cloudflare_space"] += n
+			tenants.BySpaceSelection["has_cloudflare_space"] += n
 		} else {
-			report.Tenants.BySpaceSelection["no_cloudflare_space"] += n
+			tenants.BySpaceSelection["no_cloudflare_space"] += n
 		}
 		return nil
 	})
-	if err != nil {
-		return rawReport{}, fmt.Errorf("count Tenants: %w", err)
-	}
+}
 
-	err = scan(ctx, q, spacesSQL, []any{list.all, list.spaces}, func(rows pgx.Rows) error {
+func countSpaces(ctx context.Context, q querier, list allowlist, spaces *spaceCounts) error {
+	return scan(ctx, q, spacesSQL, []any{list.all, list.spaces}, func(rows pgx.Rows) error {
 		var selected, selectionSource, source, outcome string
 		var pinned bool
 		var n int
@@ -251,30 +272,24 @@ func collect(ctx context.Context, q querier, list allowlist) (rawReport, error) 
 			return err
 		}
 		if selected == "none" {
-			report.Spaces.BySelection["none"] += n
+			spaces.BySelection["none"] += n
 		} else {
-			report.Spaces.BySelection[selectionSource+"_"+selected] += n
+			spaces.BySelection[selectionSource+"_"+selected] += n
 		}
 		if outcome == "cf_sfu" && pinned {
 			outcome = "cf_sfu_by_allowlist"
 		}
-		report.Spaces.ByNewEpisodeProvider[outcome] += n
-		report.Spaces.ByConfigurationSource[source] += n
+		spaces.ByNewEpisodeProvider[outcome] += n
+		spaces.ByConfigurationSource[source] += n
 		if selected == "cf_sfu" || pinned {
-			report.Spaces.CloudflareByConfigSource[source] += n
+			spaces.CloudflareByConfigSource[source] += n
 		}
 		return nil
 	})
-	if err != nil {
-		return rawReport{}, fmt.Errorf("count Spaces: %w", err)
-	}
+}
 
-	if err := scan(ctx, q, archivedSpacesSQL, nil, func(rows pgx.Rows) error {
-		return rows.Scan(&report.Spaces.Archived)
-	}); err != nil {
-		return rawReport{}, fmt.Errorf("count archived Spaces: %w", err)
-	}
-
+// countBoundProviders counts the Episodes and dependent work that stay bound to each media plane provider.
+func countBoundProviders(ctx context.Context, q querier, report *rawReport) error {
 	for _, query := range []struct {
 		name string
 		sql  string
@@ -296,11 +311,11 @@ func collect(ctx context.Context, q querier, list allowlist) (rawReport, error) 
 			result[bound] += n
 			return nil
 		}); err != nil {
-			return rawReport{}, fmt.Errorf("count %s: %w", query.name, err)
+			return fmt.Errorf("count %s: %w", query.name, err)
 		}
 		*query.into = result
 	}
-	return report, nil
+	return nil
 }
 
 func scan(ctx context.Context, q querier, sql string, args []any, each func(pgx.Rows) error) error {

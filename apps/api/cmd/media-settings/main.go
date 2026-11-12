@@ -70,33 +70,14 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	if flags.NArg() != 0 || *limit <= 0 || *limit > 10*time.Minute {
 		return errors.New("--timeout must be in (0, 10m] and no positional arguments are allowed")
 	}
-	var parsed request
-	var err error
-	switch {
-	case command == "new-episodes":
-		parsed, err = parseSwitchRequest(*tenantFlag, *spaceFlag, *planeFlag, *dryRun, *stateFlag, *operatorFlag, *reasonFlag)
-	case *stateFlag != "" || *operatorFlag != "" || *reasonFlag != "":
-		err = errors.New("--state, --operator and --reason apply to new-episodes only")
-	default:
-		parsed, err = parseRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun)
-	}
+	parsed, err := buildRequest(command, *tenantFlag, *spaceFlag, *planeFlag, *dryRun, *stateFlag, *operatorFlag, *reasonFlag)
 	if err != nil {
 		return err
 	}
-	url := os.Getenv(config.DatabaseURL)
-	if url == "" {
-		return fmt.Errorf("%s required", config.DatabaseURL)
-	}
-	policy, err := config.LoadPlanePolicy()
+	url, policy, err := loadDatabaseSettings(parsed)
 	if err != nil {
 		return err
 	}
-	if parsed.command == "backfill" {
-		if _, set := os.LookupEnv(config.ChalkSFUAllowedSpaces); !set {
-			return fmt.Errorf("state the allowlist the API runs with: set %s (empty means none)", config.ChalkSFUAllowedSpaces)
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, *limit)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, url)
@@ -105,6 +86,35 @@ func run(ctx context.Context, args []string, out io.Writer) error {
 	}
 	defer pool.Close()
 	return newSettings(pool, policy, out).execute(ctx, parsed)
+}
+
+func buildRequest(command, tenant, space, plane string, dryRun bool, state, operator, reason string) (request, error) {
+	switch {
+	case command == "new-episodes":
+		return parseSwitchRequest(tenant, space, plane, dryRun, state, operator, reason)
+	case state != "" || operator != "" || reason != "":
+		return request{}, errors.New("--state, --operator and --reason apply to new-episodes only")
+	default:
+		return parseRequest(command, tenant, space, plane, dryRun)
+	}
+}
+
+// loadDatabaseSettings reads the database URL and the media plane policy from the environment.
+func loadDatabaseSettings(parsed request) (string, spaces.PlanePolicy, error) {
+	url := os.Getenv(config.DatabaseURL)
+	if url == "" {
+		return "", spaces.PlanePolicy{}, fmt.Errorf("%s required", config.DatabaseURL)
+	}
+	policy, err := config.LoadPlanePolicy()
+	if err != nil {
+		return "", spaces.PlanePolicy{}, err
+	}
+	if parsed.command == "backfill" {
+		if _, set := os.LookupEnv(config.ChalkSFUAllowedSpaces); !set {
+			return "", spaces.PlanePolicy{}, fmt.Errorf("state the allowlist the API runs with: set %s (empty means none)", config.ChalkSFUAllowedSpaces)
+		}
+	}
+	return url, policy, nil
 }
 
 type request struct {
