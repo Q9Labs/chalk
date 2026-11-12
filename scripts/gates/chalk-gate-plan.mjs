@@ -123,11 +123,11 @@ function isSyncReliabilityInput(file) {
 function isKnownPath(file, workspaces, narrow) {
   if (isGateDefinition(file, narrow)) return true;
   // No lane reads these, so a full gate would run the same lanes as the always-on ones.
-  if (narrow && (startsWithAny(file, ["infrastructure/observability"]) || file === "e2e.config.ts")) return true;
+  if (narrow && (startsWithAny(file, ["infrastructure/observability", "infrastructure/host-change-alert"]) || file === "e2e.config.ts")) return true;
   if (isDocumentation(file) || workspaces.some((workspace) => startsWithAny(file, [workspace.directory]))) return true;
   if (startsWithAny(file, ["apps/api", "features/mcp", "features/media/sfu", "features/scorecard", "perf", "apps/sync", "contract", "docs", "scripts", "infrastructure/recorder", ...deploymentRoots])) return true;
   if (file.startsWith(".github/") || file.startsWith(".agents/")) return true;
-  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
+  if (["CHANGELOG.md", "LICENSE", "README.md", "cspell.json", "features.json", "lefthook.yml", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "turbo.json"].includes(file)) return true;
   return [".gitignore", ".gitleaks.toml", ".gitleaksignore", ".npmrc", ".oxfmtrc.json", ".fallowrc.json"].includes(file);
 }
 
