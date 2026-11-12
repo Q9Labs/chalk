@@ -1,0 +1,39 @@
+name: Add scorecards to the history
+description: Compare the downloaded scorecards with the history, append them, and open, edit or close the regression issue. Does nothing when the folder holds no scorecard. Check out the repository and set up Node first.
+
+inputs:
+  cards-dir:
+    description: Folder that holds the downloaded scorecard-*.json files.
+    required: true
+  none-message:
+    description: What to print when the folder holds no scorecard.
+    required: true
+  keep-issue:
+    description: Set to "true" to never close the regression issue (the cards hold no latency run).
+    default: ""
+  warn-only:
+    description: Set to "true" to only compare and append, never open, edit or close the issue.
+    default: ""
+  github-token:
+    description: Token that writes the history branch and the issue.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Score the cards and add them to the history
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        SCORECARD_KEEP_ISSUE: ${{ inputs.keep-issue }}
+        SCORECARD_WARN_ONLY: ${{ inputs.warn-only }}
+        CARDS_DIR: ${{ inputs.cards-dir }}
+        NONE_MESSAGE: ${{ inputs.none-message }}
+      run: |
+        cards=$(find "$CARDS_DIR" -name "scorecard-*.json" 2> /dev/null || true)
+        if [ -z "$cards" ]; then
+          echo "$NONE_MESSAGE"
+          exit 0
+        fi
+        # shellcheck disable=SC2086
+        features/scorecard/nightly.sh $cards

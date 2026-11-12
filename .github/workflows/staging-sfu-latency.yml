@@ -86,16 +86,10 @@ jobs:
           node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
       - name: Score the run and add it to the history
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
-          if [ -z "$cards" ]; then
-            echo "No latency scorecard in this run."
-            exit 0
-          fi
-          # shellcheck disable=SC2086
-          features/scorecard/nightly.sh $cards
+        uses: ./.github/actions/scorecard-history
+        with:
+          cards-dir: artifacts/nightly
+          none-message: No latency scorecard in this run.
       - name: Record the verdict for Promote
         if: always()
         env:

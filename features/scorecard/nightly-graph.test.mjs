@@ -102,9 +102,9 @@ test("the Cloudflare workflow runs after a successful cut, outside the nightly l
   assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(history), ["latency"]);
   assert.match(history.if, /needs\.latency\.result == 'success'/);
-  const step = history.steps.find((item) => item.env?.SCORECARD_WARN_ONLY);
-  assert.equal(step.env.SCORECARD_WARN_ONLY, "true");
-  assert.match(step.run, /features\/scorecard\/nightly\.sh/);
+  const step = history.steps.find((item) => item.uses === "./.github/actions/scorecard-history");
+  assert.equal(step.with["warn-only"], "true");
+  assert.match(readFileSync(resolve(root, ".github/actions/scorecard-history/action.yml"), "utf8"), /features\/scorecard\/nightly\.sh/);
 });
 
 test("the gate's scorecard download cannot match the Cloudflare card", () => {

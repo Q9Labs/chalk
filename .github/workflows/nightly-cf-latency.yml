@@ -75,14 +75,8 @@ jobs:
           path: artifacts/warn
           merge-multiple: true
       - name: Add the Cloudflare card to the history
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SCORECARD_WARN_ONLY: "true"
-        run: |
-          cards=$(find artifacts/warn -name "scorecard-*.json" 2> /dev/null || true)
-          if [ -z "$cards" ]; then
-            echo "No Cloudflare latency card in this run."
-            exit 0
-          fi
-          # shellcheck disable=SC2086
-          features/scorecard/nightly.sh $cards
+        uses: ./.github/actions/scorecard-history
+        with:
+          cards-dir: artifacts/warn
+          none-message: No Cloudflare latency card in this run.
+          warn-only: "true"
