@@ -90,15 +90,15 @@ function connectionFailure(cause: ConnectionLifecycleFailure | ConnectionError):
 
 function normalizeChatFileError(cause: unknown): SpaceClientError | null {
   if (!(cause instanceof ChalkChatFileError)) return null;
-  if (cause.operation === "store_upload") return storeUploadError(cause);
-  if (cause.code !== "unavailable") return null;
+  if (cause.operation === "store_upload") return uploadError(cause);
+  if (cause.code !== "unavailable") return cause.operation === "get_download" || cause.code === "access.invalid" ? null : uploadError(cause);
   if (cause.stage === "token" && isAccessInvalid(cause.cause)) {
     return new SpaceClientError({ code: "access.invalid", recoverable: false, message: cause.cause instanceof Error ? cause.cause.message : "Access was rejected" });
   }
   return new SpaceClientError({ code: cause.stage === "token" ? "access.unavailable" : "collaboration.unavailable", recoverable: cause.recoverable, message: cause.message, ...uploadDetail(cause) });
 }
 
-function storeUploadError(cause: ChalkChatFileError): SpaceClientError {
+function uploadError(cause: ChalkChatFileError): SpaceClientError {
   const code = cause.code === "unavailable" ? "collaboration.unavailable" : "command.rejected";
   return new SpaceClientError({ code, recoverable: cause.recoverable, message: cause.message, ...uploadDetail(cause) });
 }
