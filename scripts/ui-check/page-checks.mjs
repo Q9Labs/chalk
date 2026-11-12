@@ -4,7 +4,7 @@
 
 /** @typedef {{ check: string, key: string, detail: string }} Finding */
 
-export const CHECKS = ["blank", "page-scroll", "viewport-overflow", "child-clipped", "text-clipped", "control-overlap", "control-covered", "tap-target"];
+export const CHECKS = ["blank", "page-scroll", "viewport-overflow", "child-clipped", "frame-unfilled", "text-clipped", "control-overlap", "control-covered", "tap-target"];
 
 /** Smallest touch or pointer target in CSS pixels, from WCAG 2.2 success criterion 2.5.8. */
 export const MIN_TARGET = 24;
@@ -150,6 +150,20 @@ export function pageChecks(options) {
     const lostX = box.width - rect.width;
     const lostY = box.height - rect.height;
     if (lostX > 4 || lostY > 4) add("child-clipped", `${describe(el)} picture`, `${describe(el)} is ${Math.round(box.width)}x${Math.round(box.height)} and a parent cuts off ${Math.round(Math.max(lostX, lostY))}px of it`);
+  }
+
+  // frame-unfilled: a round frame that clips (an avatar) whose one child sits flush against one side and stops short of the
+  // other, such as a face drawn 24px wide in a 28px circle. A child centered in its frame has equal gaps and is fine.
+  for (const frame of everything) {
+    if (inertOrHidden(frame) || frame.children.length !== 1) continue;
+    const own = style(frame);
+    const box = frame.getBoundingClientRect();
+    if (box.width < 16 || box.height < 16 || own.overflowX === "visible" || Number.parseFloat(own.borderTopLeftRadius) < Math.min(box.width, box.height) / 2 - 1) continue;
+    const child = frame.children[0].getBoundingClientRect();
+    const uneven = Math.abs(child.left - box.left - (box.right - child.right)) > 2 || Math.abs(child.top - box.top - (box.bottom - child.bottom)) > 2;
+    if (!uneven || child.width < 2) continue;
+    const named = frame.closest("[aria-label]") ?? frame;
+    add("frame-unfilled", `${describe(named)} face`, `${describe(frame)} is ${Math.round(box.width)}x${Math.round(box.height)} but its content is ${Math.round(child.width)}x${Math.round(child.height)}, flush on one side and short on the other`);
   }
 
   // control-overlap: two controls share screen area and neither sits inside the other.

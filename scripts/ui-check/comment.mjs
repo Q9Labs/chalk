@@ -14,7 +14,8 @@ const CHECK_NAMES = {
   "control-unreachable": "control unreachable",
   "never-ready": "never finished loading",
   "console-error": "console error",
-  "journey-failed": "journey failed",
+  "journey-failed": "journey NOT RUN",
+  "frame-unfilled": "content does not fill its round frame",
 };
 const MAX_ROWS = 20;
 const MAX_IMAGES = 6;
