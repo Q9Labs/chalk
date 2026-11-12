@@ -7,7 +7,7 @@ import { clock, duration, longDay } from "../../lib/dashboard/format";
 import { videoGroup, videoState, type VideoState } from "../../lib/dashboard/recording";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { BadgeView, people } from "./ListParts";
+import { BadgeView } from "./ListParts";
 import { Page, Stat } from "./Page";
 import { DownloadMenu, SessionViewer, usePastSession, type Ids, type Page as Loaded, type Parts } from "./SessionViewer";
 import { CopyAction, ErrorPanel, Sk } from "./kit";
@@ -18,32 +18,16 @@ const sessionLink = (ids: Ids) => `${window.location.origin}/dashboard/call/${id
 export function PastSessionPage({ spaceId, episodeId }: Ids) {
   const ids = useMemo(() => ({ spaceId, episodeId }), [spaceId, episodeId]);
   const { state, reload, actions } = usePastSession(ids);
+  // A session belongs to its call, so the way back is the call, by name once it is known.
   const crumb = (
     <div className="crumb">
-      <Link to="/dashboard/sessions">
+      <Link to="/dashboard/call/$spaceId" params={{ spaceId }}>
         <Icon name="left" size={14} />
-        Sessions
+        {state.kind === "ready" ? state.data.callName : state.kind === "loading" ? <Sk width="72px" height={12} /> : "Call"}
       </Link>
     </div>
   );
-  if (state.kind === "loading")
-    return (
-      <Page icon="calendar" title="Session" intro="" crumb={crumb}>
-        <div className="card stats" aria-busy="true">
-          {[0, 1, 2, 3].map((index) => (
-            <div key={index} className="stat">
-              <Sk width="80px" height={12} />
-              <Sk width="60px" height={24} />
-              <Sk width="100px" height={12} />
-            </div>
-          ))}
-        </div>
-        <div className="dsplit">
-          <Sk width="100%" height={360} radius="12px" />
-          <Sk width="100%" height={360} radius="12px" />
-        </div>
-      </Page>
-    );
+  if (state.kind === "loading") return <SessionSkeleton crumb={crumb} />;
   if (state.kind === "error")
     return (
       <Page icon="calendar" title="Session" intro="" crumb={crumb}>
@@ -56,6 +40,91 @@ export function PastSessionPage({ spaceId, episodeId }: Ids) {
     </SessionViewer>
   );
 }
+
+/** The loaded page's frame with placeholders where its words and numbers go. */
+function SessionSkeleton({ crumb }: { readonly crumb: ReactNode }) {
+  return (
+    <Page
+      icon="calendar"
+      title={<Sk width="180px" height={24} />}
+      intro={<Sk width="240px" height={14} />}
+      crumb={crumb}
+      end={
+        <span className="end">
+          <Sk width="104px" height={36} radius="999px" />
+          <Sk width="112px" height={36} radius="999px" />
+        </span>
+      }
+    >
+      <div className="card stats" aria-busy="true">
+        {STAT_SHAPE.map(([icon, label]) => (
+          <Stat key={label} icon={icon} label={label} value={<Sk width="56px" height={24} />}>
+            <Sk width="104px" height={12} />
+          </Stat>
+        ))}
+      </div>
+      <div className="dsplit" aria-hidden="true">
+        {PANEL_SHAPE.map(([icon, label]) => (
+          <section key={label} className="card">
+            <div className="ph">
+              <Icon name={icon} size={18} />
+              <h2>{label}</h2>
+            </div>
+            <div className="skpanel">
+              <span className="sk" />
+            </div>
+          </section>
+        ))}
+      </div>
+      <section className="card" aria-hidden="true">
+        <div className="ph">
+          <Icon name="users" size={18} />
+          <h2>Who joined</h2>
+        </div>
+        <div className="skbody">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="skline">
+              <Sk width="160px" height={14} />
+              <Sk width="40%" height={8} radius="999px" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </Page>
+  );
+}
+
+const STAT_SHAPE = [
+  ["clock", "Duration"],
+  ["users", "People"],
+  ["film", "Recording"],
+  ["file", "Transcript"],
+] as const;
+const PANEL_SHAPE = [
+  ["film", "Recording"],
+  ["file", "Transcript"],
+] as const;
+
+/** "Ali", "Ali and Jana", "Ali, Jana and 3 more": who came, by name, in the space a stat has. */
+function names(list: readonly string[]): string {
+  if (list.length === 0) return "No one joined";
+  if (list.length <= 2) return list.join(" and ");
+  const more = list.length - 2;
+  return `${list.slice(0, 2).join(", ")} and ${more} more`;
+}
+
+/** The transcript stat in the same words as the panel beside it. */
+const TRANSCRIPT_STAT: Record<Parts["transcript"], { readonly value: string; readonly sub: string }> = {
+  ready: { value: "Ready", sub: "Click a line to play from it" },
+  loading: { value: "Checking", sub: "Reading the transcript" },
+  unreadable: { value: "Unavailable", sub: "It couldn’t be loaded" },
+  preparing: { value: "Processing", sub: "You can leave this page" },
+  failed: { value: "Failed", sub: "It couldn’t be made" },
+  deleted: { value: "Deleted", sub: "It was deleted" },
+  expired: { value: "Expired", sub: "It can’t be made now" },
+  creatable: { value: "Not made", sub: "Make one from the recording" },
+  none: { value: "None", sub: "Transcription was off" },
+};
 
 const VIDEO_STAT: Record<"off" | VideoState, { readonly value: string; readonly sub: string }> = {
   off: { value: "Off", sub: "Recording was off" },
@@ -74,9 +143,9 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
   const { recording, playable, downloadableTranscript, media, panel } = parts;
   const end = episode.endedAt ?? episode.startedAt;
   const count = attendance.participants.length;
-  const guests = attendance.participants.filter((person) => person.kind === "guest").length;
   const video = recording ? videoState(recording) : null;
   const stat = VIDEO_STAT[video ?? "off"];
+  const words = recording ? TRANSCRIPT_STAT[parts.transcript] : { value: "None", sub: "Needs a recording" };
   return (
     <Page
       icon="calendar"
@@ -85,10 +154,7 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
       crumb={crumb}
       end={
         <span className="end">
-          <Link className="btn out" to="/dashboard/call/$spaceId" params={{ spaceId: ids.spaceId }}>
-            Open call
-            <Icon name="arrowR" size={16} />
-          </Link>
+          <CopyAction pill text={sessionLink(ids)} toastMessage="Link copied. It opens for people signed in to this account." />
           {recording && (playable || downloadableTranscript) ? <DownloadMenu ids={ids} recording={recording} video={playable} transcript={downloadableTranscript} /> : null}
         </span>
       }
@@ -106,13 +172,13 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
           {clock(episode.startedAt)} to {clock(end)}
         </Stat>
         <Stat icon="users" label="People" value={String(count)}>
-          {guests ? <span className="pill">{guests === 1 ? "1 guest" : `${guests} guests`}</span> : people(count)}
+          <span className="ell">{names(attendance.participants.map((person) => person.name))}</span>
         </Stat>
         <Stat icon="film" label="Recording" value={stat.value}>
           {stat.sub}
         </Stat>
-        <Stat icon="file" label="Transcript" value={downloadableTranscript ? "Ready" : "–"}>
-          {recording === undefined ? "Needs a recording" : downloadableTranscript ? "Ready to read" : "Shown beside the video"}
+        <Stat icon="file" label="Transcript" value={words.value}>
+          {words.sub}
         </Stat>
       </div>
       {recording ? (
@@ -122,9 +188,6 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
               <Icon name="film" size={18} />
               <h2 id="recording-title">Recording</h2>
               {video ? <BadgeView badge={VIDEO_BADGE[videoGroup(video)]} /> : null}
-              <span className="end">
-                <CopyAction pill small text={sessionLink(ids)} toastMessage="Link copied. It opens for people signed in to this account." />
-              </span>
             </div>
             <div className="body">{media}</div>
           </section>
@@ -140,7 +203,7 @@ function Detail({ ids, page, parts, crumb }: { readonly ids: Ids; readonly page:
         <section className="card">
           <div className="blank tall">
             <span className="tile">
-              <Icon name="film" size={20} />
+              <Icon name="recOff" size={20} />
             </span>
             <b>No recording</b>
             <p>Recording was off for this session, so there’s no transcript either. Who came is still kept.</p>
@@ -167,9 +230,6 @@ function WhoJoined({ attendance, startedAt, endedAt }: { readonly attendance: At
           <h2 id="who-title">Who joined</h2>
           <div className="sub">First join to last leave. Someone who dropped and came back shows as one bar.</div>
         </div>
-        <span className="end">
-          <span className="pill">{people(attendance.participants.length)}</span>
-        </span>
       </div>
       <div className="wjt">
         <div className="wjr head" aria-hidden="true">

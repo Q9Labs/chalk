@@ -144,6 +144,11 @@ func (p PlanePolicy) PublicWritePlane() MediaPlaneProvider {
 // stays an operator choice until it is the platform default. The new-Space plane is no
 // exception: the deployment fills it in for a Space that names none, after it checked that
 // the Tenant can serve it, but a caller may not name it.
+//
+// Even then the write only says "use the default": the Space stores no setting of its own,
+// so a platform default that moves back to Cloudflare moves the Space with it. A stored
+// own-SFU setting would stay on the own SFU until an operator cleared it, and only an
+// operator may make that choice.
 func (p PlanePolicy) PublicWriteAllowed(provider MediaPlaneProvider) bool {
 	return provider == p.PublicWritePlane() || provider == MediaPlaneProviderCloudflareSFU
 }

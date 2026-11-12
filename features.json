@@ -148,7 +148,6 @@
       "name": "recording",
       "summary": "Captures an Episode and manages its recording artifacts, rendering, and retention.",
       "paths": [
-        ".github/workflows/recorder-infrastructure.yml",
         "apps/api/internal/adapters/aws/recorderarchive",
         "apps/api/internal/adapters/aws/recordingkms",
         "apps/api/internal/adapters/cloudflare/r2",
@@ -408,7 +407,6 @@
         ".github/workflows/cache-warm.yml",
         ".github/workflows/ci.yml",
         ".github/workflows/codeql.yml",
-        ".github/workflows/formal-sync-entry-leave.yml",
         ".github/workflows/gate.yml",
         ".github/workflows/host-change-check.yml",
         ".github/workflows/hotfix.yml",

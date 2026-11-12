@@ -14,7 +14,7 @@ const nightly = workflow("nightly.yml");
 const cloudflare = workflow("nightly-cf-latency.yml");
 const proof = workflow("real-call-proof.yml");
 
-// The Cloudflare latency measurement is warn-only. It lives in its own workflow so it cannot hold the nightly
+// The Cloudflare latency measurement gates only its own run. It lives in its own workflow so it cannot hold the nightly
 // deployment lock, delay the next cut, or change the conclusion of Cut nightly that the Android release reads.
 test("Cut nightly has no Cloudflare job and no job needs one", () => {
   assert.equal(nightly.concurrency.group, "chalk-environment-nightly");
@@ -231,7 +231,7 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
         PROOFS: proofs,
         CHALK_PROOF_MEDIA_PLANE: plane,
         STAGING_SFU_PROOF: String(isNightly),
-        NEED_OVERLAP: isNightly && ownOrigin ? "1" : "",
+        NEED_OVERLAP: isNightly && ownOrigin.endsWith(":4568") ? "1" : "",
         CHALK_PROOF_PROOF_ORIGIN: "http://127.0.0.1:4567",
         CHALK_PROOF_PROOF_ORIGIN_OWN: ownOrigin,
         RUN_PREFIX: "abc",
@@ -285,6 +285,13 @@ test("call-artifacts runs beside the proofs that share a Space on its own proof 
 
 test("without a second proof origin every proof runs alone on the one origin", () => {
   const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin: "" });
+  assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
+  assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);
+});
+
+test("a second origin on the same port runs every proof alone on the one origin", () => {
+  const run = runProofStep({ nightly: true, plane: "chalk_sfu", proofs: nightlyProofs, ownOrigin: "http://localhost:4567/" });
   assert.equal(run.results, "camera-share=passed call-artifacts=passed long-call=passed");
   assert.deepEqual(run.ran, ["camera-share", "call-artifacts", "long-call"]);
   assert.deepEqual(Object.values(run.origins), ["http://127.0.0.1:4567", "http://127.0.0.1:4567", "http://127.0.0.1:4567"]);

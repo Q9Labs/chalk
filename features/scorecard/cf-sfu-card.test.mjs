@@ -20,7 +20,7 @@ test("only the Cloudflare plane carries the Iowa and Singapore note", () => {
   assert.match(planeNoteMarkdown("cf_sfu"), /Iowa.*nearby point of presence.*Singapore.*not a fair comparison yet.*fewer samples/s);
 });
 
-test("a Cloudflare latency card is collected, shown with the note, and an over-budget value only warns", (t) => {
+test("a Cloudflare latency card is collected, shown with the note, and an over-budget value blocks its own run", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "cf-card-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const evidence = join(dir, "evidence");
@@ -37,11 +37,11 @@ test("a Cloudflare latency card is collected, shown with the note, and an over-b
   const text = readFileSync(summary, "utf8");
   assert.match(text, /Own SFU nightly: cf_sfu/);
   assert.match(text, /Iowa/);
-  assert.match(text, /⚠️ warns/);
-  assert.doesNotMatch(text, /❌ blocks/);
+  assert.match(text, /❌ blocks/);
+  assert.doesNotMatch(text, /⚠️ warns/);
 
   const table = node("scorecard.mjs", ["diff", "--current", path, "--fail-on-gate"]);
-  assert.equal(table.status, 0, table.stderr);
+  assert.equal(table.status, 1, table.stderr);
   assert.match(table.stdout, /^> \*\*Read with care:\*\*.*Iowa/);
 
   writeFileSync(path, JSON.stringify(card("chalk_sfu", [metric("action.leave_ms", 300)])));
@@ -58,7 +58,7 @@ test("adding a Cloudflare latency card cannot change the nightly verdict", async
       "chalk_sfu",
       gated.map((id) => metric(id, id === "action.leave_ms" ? leave : 100)),
     );
-  // Every Cloudflare action metric far over its warn-only budget, in every cycle.
+  // Every Cloudflare action metric far over its budget, in every cycle.
   const cloudflare = card(
     "cf_sfu",
     gated.map((id) => metric(id, 999999)),
