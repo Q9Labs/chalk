@@ -22,6 +22,12 @@ export const callQuery = z.strictObject({ spaceId: id, cursor: z.string().max(10
 export const callStatusQuery = z.strictObject({ spaceId: id });
 export const callMetadataQuery = z.discriminatedUnion("kind", [z.strictObject({ kind: z.literal("recording"), spaceId: id, id, view: z.enum(["call", "past-session"]).optional() }), z.strictObject({ kind: z.literal("transcript"), spaceId: id, id })]);
 export type CallMetadataQuery = z.infer<typeof callMetadataQuery>;
+/** How long a call the dashboard creates may run: the default, the longest, and the wait after the last person leaves. */
+export const CALL_DEFAULT_SECONDS = 3600;
+export const CALL_MAX_SECONDS = 86400;
+export const CALL_LINGER_SECONDS = 60;
+/** The name of a call made without one, and the slug it gets. */
+export const DEFAULT_CALL_NAME = "New call";
 /** The most rows Home lists. One status check covers them all with one engine read, and 300 ids fit in a GET URL. */
 export const HOME_STATUS_ROWS = 300;
 const spaceIds = (most: number) =>

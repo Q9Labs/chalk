@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Episode, Recording, Space, Transcript } from "@q9labsai/chalk-client/effect";
 import { EpisodeIdSchema, SpaceIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, run } from "./engine";
+import { attendance, ENGINE_MAX_PAGE_SIZE, run } from "./engine";
 import { recordingDTO } from "./dto";
 import { DashboardError } from "./http";
 import { keptRecording, videoGroup, videoState, type VideoGroup } from "../src/lib/dashboard/recording";
@@ -16,8 +16,6 @@ import { PAGE_ROWS, type RecordingsQuery, type SessionListDTO, type SessionRowDT
  * A request is stateless: the cursor is the position in the sorted list, and each page reads the scan again.
  */
 
-/** The engine's own maximum page, MaxPageSize in apps/api/internal/pagination/pagination.go. */
-const LIST = 100;
 /** Space reads: three pages of 100, which is also what one activity read covers (300 ids). */
 const SPACE_PAGES = 3;
 /** Calls whose Episodes one answer reads. */
@@ -50,7 +48,7 @@ async function allSpaces(engine: Engine): Promise<Spans<Space>> {
   const items: Space[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < SPACE_PAGES; page++) {
-    const result = await run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: LIST, cursor } }));
+    const result = await run(engine.api.spaces.listSpaces({ params: { tenant_id: engine.tenantId }, query: { page_size: ENGINE_MAX_PAGE_SIZE, cursor } }));
     items.push(...result.spaces);
     if (result.pagination.next_cursor === null) return { items, truncated: false };
     cursor = result.pagination.next_cursor;
@@ -88,20 +86,20 @@ async function scan(engine: Engine, range: Range, filter: { readonly spaceId?: s
     Promise.all(
       read.map((space) =>
         walk(async (cursor) => {
-          const result = await run(engine.api.episodes.listEpisodes({ params: { ...tenant, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(space.id) }, query: { page_size: LIST, cursor } }));
+          const result = await run(engine.api.episodes.listEpisodes({ params: { ...tenant, space_id: Schema.decodeUnknownSync(SpaceIdSchema)(space.id) }, query: { page_size: ENGINE_MAX_PAGE_SIZE, cursor } }));
           return { items: result.episodes, next: result.pagination.next_cursor };
         }, range.from),
       ),
     ),
     read.length
       ? walk(async (cursor) => {
-          const result = await run(engine.api.recordings.listRecordings({ params: tenant, query: { page_size: LIST, cursor, ...(only === undefined ? {} : { space_id: Schema.decodeUnknownSync(SpaceIdSchema)(only) }) } }));
+          const result = await run(engine.api.recordings.listRecordings({ params: tenant, query: { page_size: ENGINE_MAX_PAGE_SIZE, cursor, ...(only === undefined ? {} : { space_id: Schema.decodeUnknownSync(SpaceIdSchema)(only) }) } }));
           return { items: result.recordings, next: result.pagination.next_cursor };
         }, range.from)
       : { items: [], truncated: false },
     read.length
       ? walk(async (cursor) => {
-          const result = await run(engine.api.transcripts.listTranscripts({ params: tenant, query: { page_size: LIST, cursor } }));
+          const result = await run(engine.api.transcripts.listTranscripts({ params: tenant, query: { page_size: ENGINE_MAX_PAGE_SIZE, cursor } }));
           return { items: result.transcripts, next: result.pagination.next_cursor };
         }, range.from)
       : { items: [], truncated: false },

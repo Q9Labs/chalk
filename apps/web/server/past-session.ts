@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { EpisodeIdSchema, RecordingIdSchema, SpaceIdSchema, TranscriptIdSchema } from "@q9labsai/chalk-client/effect";
 import type { Engine } from "./engine";
-import { attendance, listedRecording, recordingTranscripts, run } from "./engine";
+import { attendance, listedRecording, recordingTranscripts, run, transcriptPageSize } from "./engine";
 import { episodeDTO, recordingDTO, transcriptDTO } from "./dto";
 import { DashboardError } from "./http";
 import type { DashboardEnvironment } from "./config";
@@ -19,7 +19,7 @@ export async function pastSessionPage(engine: Engine, spaceId: string, episodeId
     episode: episodeDTO(episode),
     attendance: { ...people, participants: people.participants.map((participant) => ({ ...participant, isYou: participant.id === viewerParticipantId })) },
     // The page shows the newest completed transcript of any attempt, so it needs each attempt's recent transcripts, as the Call overview does.
-    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, "past-session"))),
+    recordings: await Promise.all(recordings.recordings.map((recording) => listedRecording(engine, recording, transcriptPageSize("past-session")))),
     nextCursor: recordings.pagination.next_cursor,
   };
 }
@@ -44,7 +44,7 @@ export async function pastMutation(engine: Engine, action: PastSessionAction): P
         return { transcript: transcriptDTO(result.transcript) };
       }
       case "transcripts": {
-        return recordingTranscripts(engine, params.recording_id, action.view);
+        return recordingTranscripts(engine, params.recording_id, transcriptPageSize(action.view ?? "past-session"));
       }
     }
   }

@@ -28,7 +28,6 @@ function client(env: DashboardEnvironment) {
     }),
   );
 }
-// This is the only Tenant selection point. No request value can supply its authority.
 export async function resolveTenant(env: DashboardEnvironment, person: Identity, provision = false) {
   const api = await client(env);
   const externalId = `${person.provider}:${env.CHALK_ENVIRONMENT}:${person.userId}`;
@@ -90,28 +89,41 @@ export async function run<A, E>(operation: Effect.Effect<A, E>): Promise<A> {
   if (code === "participant.not_active") throw new DashboardError(409, "participant_not_active");
   throw new DashboardError(502, "engine_unavailable");
 }
+type LiveEpisodeRow = { episode_id: string; participant_count: number; participants: readonly { participant_id: string; display_name: string }[] } | null;
+export function liveDTO(spaceId: string, liveEpisode: LiveEpisodeRow): LiveDTO {
+  return { spaceId, episode: liveEpisode && { id: liveEpisode.episode_id, count: liveEpisode.participant_count, participants: liveEpisode.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) } };
+}
 export async function live(engine: Engine, spaceIds: readonly string[]): Promise<LiveDTO[]> {
   if (!spaceIds.length) return [];
   const result = await run(engine.api.episodes.listSpaceLiveEpisodes({ params: { tenant_id: engine.tenantId }, query: { space_ids: spaceIds.join(",") } }));
-  return result.spaces.map((row) => ({ spaceId: row.space_id, episode: row.live_episode && { id: row.live_episode.episode_id, count: row.live_episode.participant_count, participants: row.live_episode.participants.map((p) => ({ id: p.participant_id, name: p.display_name })) } }));
+  return result.spaces.map((row) => liveDTO(row.space_id, row.live_episode));
 }
 export async function attendance(engine: Engine, params: Parameters<Engine["api"]["episodes"]["getEpisodeAttendance"]>[0]["params"]): Promise<AttendanceDTO> {
   const result = await run(engine.api.episodes.getEpisodeAttendance({ params }));
   return { kind: "available", participants: result.participants.map((p) => ({ id: p.participant_id, name: p.display_name, kind: p.identity_kind, externalId: p.external_id, firstJoinedAt: p.first_joined_at, isYou: false, lastLeftAt: p.last_left_at })) };
 }
 
-/** Each view reads one page. The API's real maximum is MaxPageSize = 100 in apps/api/internal/pagination/pagination.go:15. */
-export async function recordingTranscripts(engine: Engine, recordingId: Recording["id"], view: "call" | "past-session" = "past-session") {
-  const result = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recordingId, page_size: view === "call" ? 5 : 100 } }));
+/** The most rows the API returns for one page of any list. */
+export const ENGINE_MAX_PAGE_SIZE = 100;
+
+/** The call screen shows a recording's few newest transcripts; the past session shows every one the API returns. */
+export function transcriptPageSize(view: "call" | "past-session"): number {
+  return view === "call" ? 5 : ENGINE_MAX_PAGE_SIZE;
+}
+
+/** Each view reads one page of `pageSize` transcripts. */
+export async function recordingTranscripts(engine: Engine, recordingId: Recording["id"], pageSize: number) {
+  const result = await run(engine.api.transcripts.listTranscripts({ params: { tenant_id: engine.tenantId }, query: { recording_id: recordingId, page_size: pageSize } }));
   return { transcripts: result.transcripts.map(transcriptDTO) };
 }
 
 /** A failed list leaves the fresh recording unlisted, so a page retries only that list. */
-export async function listedRecording(engine: Engine, recording: Recording, view: "call" | "past-session" = "call"): Promise<RecordingDTO> {
+export async function listedRecording(engine: Engine, recording: Recording, pageSize: number): Promise<RecordingDTO> {
   try {
-    const result = await recordingTranscripts(engine, recording.id, view);
+    const result = await recordingTranscripts(engine, recording.id, pageSize);
     return { ...recordingDTO(recording), transcripts: result.transcripts };
-  } catch {
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "dashboard.transcripts_unlisted", error_type: error instanceof Error ? error.name : typeof error }));
     return recordingDTO(recording);
   }
 }
