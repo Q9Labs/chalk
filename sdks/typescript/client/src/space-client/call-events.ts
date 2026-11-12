@@ -68,15 +68,26 @@ function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallE
   return next.media.incomingRequests.filter((request) => !knownRequests.has(request.requestId)).map((request): CallEvent => ({ kind: "mediaRequest", request }));
 }
 
+type CurrentRecording = SpaceSnapshot["recording"]["current"];
+
 function recordingEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
-  const events: CallEvent[] = [];
-  const wasRecording = previous.recording.current?.status === "recording";
-  const isRecording = next.recording.current?.status === "recording";
-  if (!wasRecording && isRecording) events.push({ kind: "recordingStarted" });
-  if (wasRecording && !isRecording && next.recording.current?.status !== "failed") events.push({ kind: "recordingStopped" });
-  const failure = next.recording.current;
-  if (failure?.status === "failed" && (previous.recording.current?.status !== "failed" || previous.recording.current.recordingId !== failure.recordingId)) events.push({ kind: "recordingFailed", failureCode: failure.failureCode });
-  return events;
+  const was = previous.recording.current;
+  const now = next.recording.current;
+  return [...recordingStarted(was, now), ...recordingStopped(was, now), ...recordingFailed(was, now)];
+}
+
+function recordingStarted(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
+  return was?.status !== "recording" && now?.status === "recording" ? [{ kind: "recordingStarted" }] : [];
+}
+
+function recordingStopped(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
+  return was?.status === "recording" && now?.status !== "recording" && now?.status !== "failed" ? [{ kind: "recordingStopped" }] : [];
+}
+
+function recordingFailed(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
+  if (now?.status !== "failed") return [];
+  const alreadyReported = was?.status === "failed" && was.recordingId === now.recordingId;
+  return alreadyReported ? [] : [{ kind: "recordingFailed", failureCode: now.failureCode }];
 }
 
 function deviceEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
