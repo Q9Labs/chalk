@@ -1,0 +1,5 @@
+# Each broken variant must break the rule it names; `run.sh` fails otherwise.
+# Format: <Break value><TAB><rule><TAB><code edit the variant mirrors>
+stale_observation_applies	NewestObservationWins	drop the `cursor < current -> :older` clause of compare_media_cursor in live/episode.ex
+renew_skips_authority	LeaseNeedsAuthority	renew in reconcile_observed_screen_lease without matching the participant authority generation
+takeover_ignores_expiry	NoTakeoverWhileLive	drop the `where least(...) <= excluded.acquired_at` guard of acquire_query
