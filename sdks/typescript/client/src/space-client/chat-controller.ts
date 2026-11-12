@@ -9,6 +9,7 @@ import type { ConnectionLifecycleCapability, ConnectionPorts } from "../connecti
 import { chatDigest, chatMessageFor, chatReceiptFor, compareChatSequence, MAX_CHAT_PAGE_SIZE, MAX_LOADED_CHAT_MESSAGES, mergeChatMessage, validateChatMessage, validateChatUpload } from "./chat-controller-helpers";
 import { failureFromError, normalizeClientError, SpaceClientError } from "./errors";
 import type { OfflineActionsHold } from "./offline-actions";
+import { apiUrls } from "../urls";
 import { SpaceStore } from "./store";
 import type { ChatAttachment, ChatMessage, ChatReadReceipt, ChatReactionInput, ChatReactions, ChatSendInput, ChatSlice, ChatUploadFile, PendingChatSend } from "./types";
 type ClientEffect<A> = Effect.Effect<A, SpaceClientError>;
@@ -78,7 +79,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
   #unsubscribeSnapshot: (() => void) | null = null;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, transport: ChalkChatFileTransport | null, apiBaseUrl: string, fetch: typeof globalThis.fetch, fork: Fork, offline?: OfflineActionsHold) {
     this.#offline = offline;
-    this.#apiBaseUrl = apiBaseUrl.replace(/\/+$/u, "");
+    this.#apiBaseUrl = apiBaseUrl;
     this.#connection = connection;
     this.#store = store;
     this.#transport = transport;
@@ -190,7 +191,7 @@ class ChatControllerRuntime implements ChatControllerEffects {
       );
     });
   };
-  url = (attachment: ChatAttachment): string => `${this.#apiBaseUrl}/v1/chat/attachments/${encodeURIComponent(attachment.attachmentId)}/download`;
+  url = (attachment: ChatAttachment): string => apiUrls.chatAttachmentDownload(this.#apiBaseUrl, attachment.attachmentId);
   resolveUrl = (attachment: ChatAttachment): ClientEffect<string> =>
     Effect.suspend(() => {
       if (!this.#transport) return Effect.fail(new SpaceClientError({ code: "collaboration.unavailable", recoverable: false, message: "Chat file download is unavailable" }));

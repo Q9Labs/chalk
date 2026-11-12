@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directOrigin, directPathBlocked, directSyncUrl, markDirectPathFailed, type DirectPathMemory } from "./direct-path";
+import { directOrigin, directPathBlocked, markDirectPathFailed, type DirectPathMemory } from "./direct-path";
 
 describe("directOrigin", () => {
   it("accepts a bare https origin", () => {
@@ -10,11 +10,6 @@ describe("directOrigin", () => {
   it.each(["http://direct.example.test", "https://direct.example.test/v1", "https://direct.example.test/?a=1", "https://user:pass@direct.example.test", "wss://direct.example.test", "direct.example.test", "", 3, null])("rejects %j", (value) => {
     expect(directOrigin(value)).toBeNull();
   });
-});
-
-it("derives the Sync URL on the same host", () => {
-  const origin = directOrigin("https://direct.example.test");
-  expect(origin && directSyncUrl(origin)).toBe("wss://direct.example.test/v1/sync");
 });
 
 describe("failure memory", () => {

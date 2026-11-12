@@ -1,6 +1,7 @@
 import { CHALK_CHAT_ATTACHMENT_LIMITS, CHALK_CHAT_ATTACHMENT_MIME_TYPES, type ChalkChatAttachmentMimeType } from "../collaboration/types";
 import { CHAT_FILE_REACHABILITY_MESSAGE, ChalkChatFileError, type ChalkChatFileFailure, type ChalkChatFileOperation, type ChalkChatFileTransport } from "./types";
 import { withRequestContext } from "../session";
+import { apiUrls } from "../urls";
 
 export type ChalkChatFileHttpTransportOptions = {
   readonly baseUrl: string;
@@ -18,7 +19,7 @@ export function createChalkChatFileHttpTransport(options: ChalkChatFileHttpTrans
       validateUploadInput(input);
       return request(
         "initiate_upload",
-        "/v1/chat/attachments/uploads",
+        apiUrls.chatUploads(options.baseUrl),
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -27,8 +28,8 @@ export function createChalkChatFileHttpTransport(options: ChalkChatFileHttpTrans
         isInitiateUploadResponse,
       );
     },
-    finalizeUpload: (uploadId) => request("finalize_upload", `/v1/chat/attachments/uploads/${encodeURIComponent(uploadId)}/finalize`, { method: "POST" }, isAttachment),
-    getDownloadUrl: (attachmentId) => request("get_download", `/v1/chat/attachments/${encodeURIComponent(attachmentId)}/download`, { method: "GET" }, isDownloadResponse),
+    finalizeUpload: (uploadId) => request("finalize_upload", apiUrls.chatUploadFinalize(options.baseUrl, uploadId), { method: "POST" }, isAttachment),
+    getDownloadUrl: (attachmentId) => request("get_download", apiUrls.chatAttachmentDownload(options.baseUrl, attachmentId), { method: "GET" }, isDownloadResponse),
   };
 }
 
@@ -54,9 +55,7 @@ function invalidUpload(message: string): never {
 
 function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
   const fetchImplementation = withRequestContext(options.fetch);
-  let baseUrl = options.baseUrl;
-  while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
-  return async function request<T>(operation: ChalkChatFileOperation, path: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
+  return async function request<T>(operation: ChalkChatFileOperation, url: string, init: RequestInit, accepts: (value: unknown) => value is T): Promise<T> {
     const headers = new Headers(init.headers);
     try {
       headers.set("authorization", `Bearer ${await options.token()}`);
@@ -65,7 +64,7 @@ function createChatFileRequest(options: ChalkChatFileHttpTransportOptions) {
     }
     let response: Response;
     try {
-      response = await fetchImplementation(`${baseUrl}${path}`, { ...init, headers });
+      response = await fetchImplementation(url, { ...init, headers });
     } catch (cause) {
       throw new ChalkChatFileError({ operation, code: "unavailable", recoverable: true, message: CHAT_FILE_REACHABILITY_MESSAGE }, { cause });
     }

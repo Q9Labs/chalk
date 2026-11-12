@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { parseAccessGrant, type AccessGrant } from "../access/grant.js";
+import { MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "../urls.js";
 import { makeChalkEffectClient } from "../effect-client.js";
 import { ChalkPublicApi } from "../generated/public-http-api.js";
 import type { PublicSpaceArrival as GeneratedPublicSpaceArrival, PublicSpaceCreated as GeneratedPublicSpaceCreated } from "../generated/schemas.js";
@@ -92,7 +93,7 @@ export function createChalkPublicClient(options: ChalkPublicClientOptions): Chal
 export const createChalkPublicInviteClient = createChalkPublicClient;
 function requestHeaders(options: ChalkPublicClientOptions, guestCredential: string | undefined): Readonly<Record<string, string>> {
   // The API binds a call to the own SFU only for an SDK that declares it runs it.
-  const headers: Record<string, string> = { "X-Chalk-Media-Providers": "cloudflare_sfu,chalk_sfu", ...options.headers };
+  const headers: Record<string, string> = { [MEDIA_PROVIDERS_HEADER]: MEDIA_PROVIDERS, ...options.headers };
   if (options.runtime === "react-native") {
     headers["X-Chalk-Client"] = "react-native";
     const credential = guestCredential ?? options.guestCredential;
