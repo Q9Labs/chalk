@@ -134,22 +134,22 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 	key := episodeOf(scope)
 	count := counts[key]
 	if count+1 > n.cfg.MaxEpisodeParticipants {
-		return n.refuse(RefusedEpisodeFull, errEpisodeFull)
+		return n.refuseFor(scope, RefusedEpisodeFull, errEpisodeFull)
 	}
 	// A replacement keeps its Participant's place, so only a new Episode meets the guard.
 	// A held Episode passed the guard when it was reserved.
 	if count == 0 && replacing == nil && n.heldParticipants(key) == 0 {
 		if reason := n.guard.closedReason(); reason != "" {
-			return n.refuse(reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
+			return n.refuseFor(scope, reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
 	}
 	if n.mandatoryPackets(count+1, n.screens[key] != nil) > n.episodeCeiling(count+1) {
-		return n.refuse(RefusedMandatoryMedia, errMandatoryMedia)
+		return n.refuseFor(scope, RefusedMandatoryMedia, errMandatoryMedia)
 	}
 	held := n.heldParticipants(key)
 	grown := total - n.episodeReservation(max(count, held)) + n.episodeReservation(max(count+1, held))
 	if grown > n.cfg.PacketBudget {
-		return n.refuse(RefusedNodeFull, errNodeFull)
+		return n.refuseFor(scope, RefusedNodeFull, errNodeFull)
 	}
 	return nil
 }
@@ -174,7 +174,7 @@ func (n *Node) admitCapture(scope protocol.Scope, replacing *Session) error {
 		}
 	}
 	if captures+1 > n.cfg.MaxCapturesPerEpisode {
-		return n.refuse(RefusedCaptureLimit, errCaptureLimit)
+		return n.refuseFor(scope, RefusedCaptureLimit, errCaptureLimit)
 	}
 	return nil
 }
@@ -215,7 +215,7 @@ func (n *Node) reserveCapture(s *Session, cost int) (*captureLease, error) {
 		held = min(cost, hold.capture)
 	}
 	if total-held+cost > n.cfg.PacketBudget {
-		return nil, n.refuse(RefusedNodeFull, errNodeFull)
+		return nil, n.refuseFor(s.scope, RefusedNodeFull, errNodeFull)
 	}
 	lease := &captureLease{cost: cost}
 	if hold != nil {
