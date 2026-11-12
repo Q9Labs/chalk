@@ -137,7 +137,14 @@ test("a missing or unreadable pair never confirms a path", () => {
 });
 
 test("the transport of the selected pair reaches the reading and a value outside udp and tcp does not", () => {
-  const read = (protocol) => icePairOf([{ t: 10, k: "ice_connected", peer: 1 }, { t: 20, k: "ice_pair", d: JSON.stringify({ peer: 1, local: "host", remote: "host", protocol }) }], 0);
+  const read = (protocol) =>
+    icePairOf(
+      [
+        { t: 10, k: "ice_connected", peer: 1 },
+        { t: 20, k: "ice_pair", d: JSON.stringify({ peer: 1, local: "host", remote: "host", protocol }) },
+      ],
+      0,
+    );
   assert.equal(read("tcp").protocol, "tcp");
   assert.equal(read("sctp").protocol, null);
 });
