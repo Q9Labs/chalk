@@ -504,6 +504,22 @@ ${phoneRules(`
     min-height: 48px;
   }
 `)}
+/* A call under 300 CSS px wide is a phone at 200% zoom, where a 36px button is still about 72 device pixels, so every dock button, Leave included, stays on screen. */
+@container chalk-call (max-width: 300px) {
+  .chalk-shell-dock {
+    padding-inline: var(--space-1-5);
+  }
+  .chalk-frame-dock .chalk-shell-dock {width:calc(100% + var(--space-1-5) * 2);margin-inline:calc(var(--space-1-5) * -1);}
+  .chalk-shell-split,
+  .chalk-shell-split .chalk-shell-main,
+  .chalk-shell-dock .chalk-icon-button {
+    width: 36px;
+    height: 36px;
+  }
+  .chalk-shell-dock {
+    height: 36px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .chalk-shell-split button,
   .chalk-shell-split > .chalk-shell-main,
