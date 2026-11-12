@@ -96,6 +96,24 @@
   --corner-pill: 999px;
 }
 
+/* Motion by role, from design.md section 6. Each token is a duration and a curve, so a component writes
+   `transition: opacity var(--chalk-motion-enter)` and never a raw timing. Reduced motion turns them off below. */
+:root,
+[data-chalk] {
+  --chalk-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --chalk-ease-move: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --chalk-motion-press: 150ms ease-out;
+  --chalk-motion-tooltip: 120ms ease-out;
+  --chalk-motion-toggle: 180ms var(--chalk-ease-out-expo);
+  --chalk-motion-enter: 180ms var(--chalk-ease-out-expo);
+  --chalk-motion-exit: 160ms ease-out;
+  --chalk-motion-toast: 200ms var(--chalk-ease-out-expo);
+  --chalk-motion-card: 200ms var(--chalk-ease-out-expo);
+  --chalk-motion-sheet: 240ms var(--chalk-ease-out-expo);
+  --chalk-motion-copy: 200ms var(--chalk-ease-out-expo);
+  --chalk-motion-move: 220ms var(--chalk-ease-move);
+}
+
 [data-chalk]:not([data-chalk] [data-chalk]) {
   --background: var(--chalk-canvas);
   --foreground: var(--chalk-text);
@@ -128,9 +146,9 @@
   --chalk-text: #ececee;
   --chalk-muted-text: #9a9ca3;
   --chalk-faint-text: #5f6168;
-  --chalk-danger: #e5484d;
-  --chalk-danger-pressed: #c93d42;
-  --chalk-danger-hover: #ec5d61;
+  --chalk-danger: #c93d42;
+  --chalk-danger-pressed: #b3363a;
+  --chalk-danger-hover: #d13438;
   --chalk-danger-text: #ff6b6b;
   --chalk-positive: #80b879;
   --chalk-warning: #d9b641;
@@ -225,7 +243,6 @@
   --chalk-duration-fast: 150ms;
   --chalk-duration-normal: 220ms;
   --chalk-duration-slow: 300ms;
-  --chalk-ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   color-scheme: dark;
 }
 [data-chalk][data-chalk-theme="light"]:not([data-chalk] [data-chalk]) {
@@ -248,10 +265,10 @@
   --chalk-faint-text: #8b8c94;
   --chalk-soft-text: #3d3e45;
   --chalk-danger: #d93a3f;
-  --chalk-danger-pressed: #c93d42;
-  --chalk-danger-hover: #e04b50;
+  --chalk-danger-pressed: #b3363a;
+  --chalk-danger-hover: #c4373c;
   --chalk-danger-text: #bf272c;
-  --chalk-positive: #2b8a3e;
+  --chalk-positive: #268039;
   --chalk-warning: #8a6400;
   --chalk-accent: #1b70a0;
   --chalk-wash: rgba(0, 0, 0, 0.04);
@@ -339,28 +356,6 @@
   }
 }
 
-/* =============================================================================
-   Animations
-   ============================================================================= */
-
-@keyframes chalk-episode-exit {
-  from {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-
-  to {
-    opacity: 0;
-    transform: scale(0.95);
-    filter: blur(4px);
-  }
-}
-
-.chalk-animate-exit {
-  animation: chalk-episode-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
 @keyframes chalk-scale-in {
   from {
     opacity: 0;
@@ -370,97 +365,6 @@
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes chalk-fade-out {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes chalk-speaking-pulse {
-  0%,
-  100% {
-    box-shadow: var(--elevation-speaking-pulse-low);
-  }
-
-  50% {
-    box-shadow: var(--elevation-speaking-pulse-high);
-  }
-}
-
-@keyframes chalk-speaking-glow {
-  0%,
-  100% {
-    box-shadow: var(--elevation-speaking-ring);
-  }
-
-  50% {
-    box-shadow: var(--elevation-speaking-ring-wide);
-  }
-}
-
-@keyframes chalk-bounce {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(0.95);
-  }
-}
-
-@keyframes chalk-panel-slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-slide-right {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-slide-left {
-  from {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-float-up {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translateY(-50px) scale(1.2);
   }
 }
 
@@ -518,18 +422,7 @@
   }
 }
 
-@keyframes chalk-particle-burst {
-  0% {
-    transform: translate(-50%, -50%) rotate(var(--particle-angle, 0deg)) translateY(0) scale(1);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translate(-50%, -50%) rotate(var(--particle-angle, 0deg)) translateY(calc(var(--particle-distance, 50px) * -1)) scale(0);
-    opacity: 0;
-  }
-}
-
+/* ReactionBubble animates its particles with this from an inline style. */
 @keyframes chalk-particle-explode {
   0% {
     transform: translate(0, 0) scale(1);
@@ -542,34 +435,6 @@
   }
 }
 
-@keyframes chalk-hand-wave {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-
-  10% {
-    transform: rotate(14deg);
-  }
-
-  20% {
-    transform: rotate(-8deg);
-  }
-
-  30% {
-    transform: rotate(14deg);
-  }
-
-  40% {
-    transform: rotate(-4deg);
-  }
-
-  50%,
-  100% {
-    transform: rotate(0deg);
-  }
-}
-
 @keyframes chalk-hand-bounce {
   0%,
   100% {
@@ -579,144 +444,6 @@
   50% {
     transform: translateY(-5px);
   }
-}
-
-@keyframes chalk-recording-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: var(--elevation-danger-pulse-rest);
-  }
-
-  50% {
-    opacity: 0.8;
-    box-shadow: var(--elevation-danger-pulse-wide);
-  }
-}
-
-@keyframes chalk-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.5;
-  }
-}
-
-@keyframes chalk-scale-spring {
-  0% {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-
-  60% {
-    transform: scale(1.05);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes chalk-toast-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-control-hover {
-  from {
-    transform: scale(1);
-  }
-
-  to {
-    transform: scale(1.04);
-  }
-}
-
-@keyframes chalk-shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes chalk-glow-pulse {
-  0%,
-  100% {
-    box-shadow: var(--elevation-glow-rest);
-  }
-
-  50% {
-    box-shadow: var(--elevation-glow-wide);
-  }
-}
-
-@keyframes chalk-audio-pulse {
-  0%,
-  100% {
-    transform: scaleX(1);
-  }
-
-  50% {
-    transform: scaleX(1.02);
-  }
-}
-
-@keyframes chalk-ripple-expand {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.8;
-    border-width: 4px;
-  }
-
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-    border-width: 0;
-  }
-}
-
-@keyframes chalk-spin-slow {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes chalk-spin-reverse-slow {
-  from {
-    transform: rotate(360deg);
-  }
-
-  to {
-    transform: rotate(0deg);
-  }
-}
-
-/* Transition for theme switching */
-.chalk-theme-transition,
-.chalk-theme-transition *,
-.chalk-theme-transition *::before,
-.chalk-theme-transition *::after {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-duration: 300ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Tactile button base styles */
@@ -733,132 +460,6 @@
 
 .chalk-button-tactile:hover {
   transform: scale(1.05);
-}
-
-/* Dock Entrance & Exit */
-@keyframes chalk-dock-slide-up {
-  0% {
-    transform: translateY(150%) scale(0.9);
-    opacity: 0;
-  }
-
-  60% {
-    transform: translateY(-10%) scale(1.02);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes chalk-dock-slide-down {
-  0% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(150%);
-    opacity: 0;
-  }
-}
-
-/* Tile Staggered Entrance */
-@keyframes chalk-tile-pop-in {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-  }
-
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Void Exit */
-@keyframes chalk-void-exit {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-    filter: blur(0);
-  }
-
-  100% {
-    transform: scale(0);
-    opacity: 0;
-    filter: blur(20px);
-  }
-}
-
-/* Voice halo behind the avatar of a speaking, camera-off participant: a soft ring that breathes.
-   The ring lives on a pseudo-element so the breathe animates transform/opacity only
-   (composited) instead of box-shadow spread, which repainted the whole tile every frame. */
-@keyframes chalk-voice-halo-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  50% {
-    transform: scale(1.3);
-    opacity: 0.5;
-  }
-}
-
-/* Sound bars in the tile chip while someone speaks. */
-@keyframes chalk-sound-bar {
-  0%,
-  100% {
-    transform: scaleY(0.35);
-  }
-
-  50% {
-    transform: scaleY(1);
-  }
-}
-
-/* Animation utilities */
-.chalk-animate-dock-up {
-  animation: chalk-dock-slide-up 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
-}
-
-.chalk-animate-dock-down {
-  animation: chalk-dock-slide-down 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
-}
-
-.chalk-animate-void-exit {
-  animation: chalk-void-exit 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
-}
-
-.chalk-animate-tile-pop {
-  animation: chalk-tile-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards !important;
-}
-
-.chalk-voice-halo {
-  position: relative;
-}
-
-.chalk-voice-halo::before {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border-radius: var(--corner-pill);
-  /* token-ratchet-ignore: the halo reads --chalk-participant-color, which is set on each tile, so no root token can hold it */
-  box-shadow: 0 0 0 8px color-mix(in srgb, var(--chalk-participant-color) 18%, transparent);
-  animation: chalk-voice-halo-breathe 1.8s ease-in-out infinite;
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-
-.chalk-sound-bars {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  height: 12px;
 }
 
 /* Faces float over the board on a narrow stage, so an edge and a shadow lift each face off the drawing. */
@@ -898,121 +499,13 @@
   }
 }
 
-@container (min-width: 240px) {
-  .chalk-sound-bars {
-    height: 14px;
-  }
-}
-
-.chalk-sound-bars > i {
-  display: block;
-  width: 3px;
-  height: 100%;
-  border-radius: var(--corner-xs);
-  background: currentColor;
-  transform-origin: center;
-  animation: chalk-sound-bar 0.9s ease-in-out infinite;
-}
-
-.chalk-sound-bars > i:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.chalk-sound-bars > i:nth-child(2) {
-  animation-delay: 150ms;
-}
-
-.chalk-sound-bars > i:nth-child(3) {
-  animation-delay: 300ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chalk-voice-halo::before {
-    animation: none;
-  }
-
-  .chalk-sound-bars > i {
-    animation: none;
-    transform: scaleY(0.7);
-  }
-}
-
 /* Animation utility classes */
 .chalk-animate-scale-in {
   animation: chalk-scale-in var(--chalk-duration-normal) var(--chalk-ease-out-expo);
 }
 
-.chalk-animate-fade-out {
-  animation: chalk-fade-out var(--chalk-duration-normal) ease-out forwards;
-}
-
-.chalk-animate-speaking {
-  animation: chalk-speaking-pulse 1.5s ease-in-out infinite;
-}
-
-.chalk-animate-speaking-glow {
-  animation: chalk-speaking-glow 1.5s ease-in-out infinite;
-}
-
-.chalk-animate-bounce {
-  animation: chalk-bounce var(--chalk-duration-fast) ease-out;
-}
-
-.chalk-animate-slide-right {
-  animation: chalk-slide-right var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-slide-left {
-  animation: chalk-slide-left var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-panel-slide-in {
-  animation: chalk-panel-slide-in var(--chalk-duration-slow) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-float-up {
-  animation: chalk-float-up 2s ease-out forwards;
-}
-
 .chalk-animate-reaction-float {
   animation: chalk-reaction-float var(--float-duration, 3000ms) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-/* Classic reactions: rise from the stage floor, sway once, fade at the top of the travel. */
-@keyframes chalk-reaction-rise {
-  0% {
-    opacity: 0;
-    transform: translate3d(0, 12px, 0) scale(0.6);
-  }
-
-  12% {
-    opacity: 1;
-    transform: translate3d(var(--reaction-sway, 0px), -36px, 0) scale(1.12);
-  }
-
-  55% {
-    transform: translate3d(calc(var(--reaction-sway, 0px) * -0.6), calc(var(--reaction-travel, -280px) * 0.55), 0) scale(1);
-  }
-
-  82% {
-    opacity: 1;
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate3d(calc(var(--reaction-sway, 0px) * 0.4), var(--reaction-travel, -280px), 0) scale(0.92);
-  }
-}
-
-.chalk-reaction-rise {
-  animation: chalk-reaction-rise var(--reaction-duration, 3200ms) cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
-  will-change: transform, opacity;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chalk-reaction-rise {
-    animation: chalk-fade-out 400ms ease-out calc(var(--reaction-duration, 3200ms) - 400ms) forwards;
-  }
 }
 
 .chalk-animate-reaction-bounce-in {
@@ -1025,48 +518,6 @@
 
 .chalk-animate-hand-bounce {
   animation: chalk-hand-bounce 0.6s ease-in-out infinite;
-}
-
-.chalk-animate-hand-wave {
-  animation: chalk-hand-wave 2.5s ease-in-out infinite;
-}
-
-.chalk-animate-pulse {
-  animation: chalk-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-recording {
-  animation: chalk-recording-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-toast-in {
-  animation: chalk-toast-in var(--chalk-duration-normal) var(--chalk-ease-out-expo);
-}
-
-.chalk-animate-scale-spring {
-  animation: chalk-scale-spring var(--chalk-duration-slow) var(--chalk-ease-out-back);
-}
-
-.chalk-animate-shimmer {
-  background: linear-gradient(90deg, transparent 0%, var(--chalk-shimmer) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: chalk-shimmer 2s ease-in-out infinite;
-}
-
-.chalk-animate-glow-pulse {
-  animation: chalk-glow-pulse 2s ease-in-out infinite;
-}
-
-.chalk-animate-ripple {
-  animation: chalk-ripple-expand 2s ease-out infinite;
-}
-
-.chalk-animate-spin-slow {
-  animation: chalk-spin-slow 8s linear infinite;
-}
-
-.chalk-animate-spin-reverse-slow {
-  animation: chalk-spin-reverse-slow 12s linear infinite;
 }
 
 .chalk-logo {
@@ -1096,7 +547,9 @@
   color: var(--chalk-text);
   position: relative;
   transition:
-    transform 0.15s ease-out,
+    transform var(--chalk-motion-press),
+    background-color var(--chalk-motion-press),
+    color var(--chalk-motion-press),
     opacity 0.25s ease-out;
 }
 .chalk-icon-button:hover {
@@ -1134,11 +587,22 @@
   justify-content: center;
   gap: var(--space-1-5);
   transition:
-    transform 0.15s ease-out,
-    opacity 0.15s;
+    transform var(--chalk-motion-press),
+    background-color var(--chalk-motion-press),
+    opacity var(--chalk-motion-press);
 }
 .chalk-pill-button:hover {
   background: var(--chalk-pressed);
+}
+.chalk-pill-button[data-chalk-tone="danger"] {
+  background: var(--chalk-danger);
+  color: var(--chalk-on-overlay);
+}
+.chalk-pill-button[data-chalk-tone="danger"]:hover {
+  background: var(--chalk-danger-hover);
+}
+.chalk-pill-button[data-chalk-tone="danger"]:active {
+  background: var(--chalk-danger-pressed);
 }
 .chalk-pill-button:active {
   transform: scale(0.97);
@@ -1177,10 +641,24 @@
   text-align: left;
   white-space: nowrap;
 }
+.chalk-menu-item {
+  transition: background-color var(--chalk-motion-press);
+}
 .chalk-menu-item:hover,
 .chalk-menu-item[data-highlighted],
 .chalk-menu-item:focus-visible {
   background: var(--chalk-hover);
+}
+.chalk-menu-item:active {
+  background: var(--chalk-pressed);
+  transition-duration: 0s;
+}
+.chalk-menu-item[data-two-line] {
+  min-height: 52px;
+}
+/* A menu whose rows are still loading stays out of view, so the first frame never shows an empty capsule. Its enter plays when the rows arrive, because leaving display: none restarts the animation. */
+.chalk-menu:empty {
+  display: none;
 }
 .chalk-menu-check {
   width: 18px;
@@ -1197,19 +675,24 @@
 .chalk-tooltip {
   position: absolute;
   z-index: 95;
-  padding: var(--space-1-5) var(--space-2);
-  border-radius: var(--corner-md);
+  padding: var(--space-1) var(--space-2-5);
+  border-radius: var(--corner-pill);
   background: var(--chalk-text);
   color: var(--chalk-canvas);
   font-size: var(--type-caption);
   font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s ease-out;
+  transition: opacity var(--chalk-motion-tooltip);
 }
 .chalk-tooltip[data-open] {
   opacity: 1;
+}
+/* Moving from one control to its neighbour swaps the tooltip at once. */
+.chalk-tooltip[data-instant] {
+  transition: none;
 }
 .chalk-segmented {
   margin-left: auto;
@@ -1239,7 +722,9 @@
   place-items: center;
   flex: none;
   color: var(--chalk-text);
-  transition: transform 0.15s ease-out;
+  transition:
+    transform var(--chalk-motion-press),
+    background-color var(--chalk-motion-press);
 }
 .chalk-copy:hover {
   background: var(--chalk-pressed);
@@ -1257,11 +742,11 @@
 .chalk-copy-icon svg {
   position: absolute;
   inset: 0;
-  width: 18px;
-  height: 18px;
+  width: 100%;
+  height: 100%;
   transition:
-    opacity 0.2s var(--chalk-ease-out-expo),
-    transform 0.2s var(--chalk-ease-out-expo);
+    opacity var(--chalk-motion-copy),
+    transform var(--chalk-motion-copy);
 }
 .chalk-copy-check {
   opacity: 0;
@@ -1328,17 +813,21 @@
   gap: var(--space-2-5);
   flex-shrink: 0;
   min-height: 48px;
-  max-width: calc(100% - 32px);
+  max-width: min(480px, calc(100% - 32px));
   padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-3);
   background: var(--chalk-popover);
   border: 1px solid var(--chalk-line);
   border-radius: var(--corner-xl);
   box-shadow: var(--elevation-toast);
   pointer-events: auto;
-  animation: tin 0.2s var(--chalk-ease-out-expo);
+  animation: tin var(--chalk-motion-toast);
   transition:
-    opacity 0.15s ease-out,
-    transform 0.15s ease-out;
+    opacity var(--chalk-motion-exit),
+    transform var(--chalk-motion-exit);
+}
+/* A notice with no button keeps the same air on both sides. */
+.chalk-toast:not(:has(button)) {
+  padding-right: var(--space-4);
 }
 /* One icon slot for every notice: a caller's icon or avatar, else the severity icon. Severity shows in that icon and a thin border tint only. */
 .chalk-toast {
@@ -1353,9 +842,6 @@
 }
 .chalk-toast[data-type="error"] {
   --chalk-toast-accent: var(--chalk-danger-text);
-}
-.chalk-toast:not([data-type="info"]) {
-  border-color: color-mix(in srgb, var(--chalk-toast-accent) 40%, var(--chalk-line));
 }
 .chalk-toast [data-part="toast-icon"] {
   display: grid;
@@ -1388,14 +874,23 @@
 }
 .chalk-toast > [data-part="toast-message"] {
   /* Long names, links and error tokens wrap inside the notice instead of widening it past the call. */
+  flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
   margin-right: var(--space-1);
   line-height: 1.35;
   padding: var(--space-1) 0;
 }
 .chalk-toast[data-type="error"] {
   max-width: min(560px, calc(100% - 32px));
+}
+/* On a phone a notice uses the width it has, so a sentence with an action stays within two lines. */
+@container chalk-call (max-width: 640px) {
+  .chalk-toast,
+  .chalk-toast[data-type="error"] {
+    max-width: calc(100% - 16px);
+  }
 }
 /* The header's notice button stays when a phone hides the header's other controls. */
 .chalk-notice-button {
@@ -1538,6 +1033,7 @@
   border-radius: var(--corner-pill);
   background: var(--chalk-pressed);
   flex: none;
+  transition: background-color var(--chalk-motion-toggle);
 }
 .chalk-switch > span:first-child {
   position: absolute;
@@ -1547,13 +1043,76 @@
   height: 16px;
   border-radius: 50%;
   background: var(--chalk-on-overlay);
-  transition: transform 0.15s ease-out;
+  transition:
+    transform var(--chalk-motion-toggle),
+    scale var(--chalk-motion-press);
+}
+/* The press uses the separate scale property, so it composes with any knob travel a caller sets. */
+.chalk-switch:active > span:first-child {
+  scale: 0.88;
 }
 .chalk-switch[aria-checked="true"] {
   background: var(--chalk-positive);
 }
 .chalk-switch[aria-checked="true"] > span:first-child {
   transform: translateX(14px);
+}
+/* The checkbox: an 18px box on a 6px radius that fills with text and draws its check on. */
+.chalk-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-height: 36px;
+  cursor: pointer;
+  user-select: none;
+}
+.chalk-checkbox-box {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--corner-md);
+  border: 1.5px solid var(--chalk-muted-text);
+  color: var(--chalk-canvas);
+  transition:
+    background-color var(--chalk-motion-toggle),
+    border-color var(--chalk-motion-toggle),
+    transform var(--chalk-motion-press);
+}
+.chalk-checkbox:active .chalk-checkbox-box {
+  transform: scale(0.92);
+}
+.chalk-checkbox-box[data-checked] {
+  border-color: var(--chalk-text);
+  background: var(--chalk-text);
+}
+.chalk-checkbox-box svg {
+  width: 14px;
+  height: 14px;
+  stroke-dasharray: 20;
+  stroke-dashoffset: 20;
+  transition: stroke-dashoffset var(--chalk-motion-toggle);
+}
+.chalk-checkbox-box[data-checked] svg {
+  stroke-dashoffset: 0;
+}
+[data-chalk] .chalk-checkbox-box:focus-visible {
+  outline: 2px solid var(--chalk-focus);
+  outline-offset: 2px;
+}
+.chalk-checkbox-label {
+  display: grid;
+  gap: var(--space-0-5);
+}
+.chalk-checkbox-label small {
+  color: var(--chalk-muted-text);
+  font-size: var(--type-caption);
+}
+.chalk-checkbox[data-disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .chalk-sheet-scrim {
   position: absolute;
@@ -1566,6 +1125,32 @@
 .chalk-sheet-scrim[data-ending-style] {
   opacity: 0;
 }
+/* When one sheet hands off to the next, the dim stays steady: the closing scrim drops out and the opening one starts at full. */
+[data-chalk]:has(.chalk-sheet-scrim:not([data-ending-style])) .chalk-sheet-scrim[data-ending-style] {
+  opacity: 0;
+  transition: none;
+}
+[data-chalk]:has(.chalk-sheet-scrim[data-ending-style]) .chalk-sheet-scrim[data-starting-style] {
+  opacity: 1;
+}
+/* A sheet opened from a sheet dims the one under it the same way the call is dimmed. */
+.chalk-sheet[data-nested-dialog-open]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--chalk-sheet-scrim);
+  pointer-events: none;
+}
+/* A sheet whose rows are still loading stays out of view, and slides in once they arrive. */
+.chalk-sheet:has(> .chalk-sheet-body:empty) {
+  display: none;
+}
+@starting-style {
+  .chalk-sheet:is([data-variant="default"], [data-variant="reactions"]) {
+    transform: translateY(100%);
+  }
+}
 .chalk-sheet {
   position: absolute;
   left: 0;
@@ -1575,7 +1160,7 @@
   padding: 0 var(--space-3) var(--chalk-sheet-bottom);
   background: var(--chalk-surface);
   border-radius: var(--corner-3xl) var(--corner-3xl) 0 0;
-  transition: transform 0.24s var(--chalk-ease-out-expo);
+  transition: transform var(--chalk-motion-sheet);
 }
 .chalk-sheet[data-starting-style],
 .chalk-sheet[data-ending-style] {
@@ -1838,9 +1423,6 @@
     transform 0.2s var(--chalk-ease-out-expo);
   pointer-events: none;
 }
-.chalk-drawer-scrim {
-  display: none;
-}
 .chalk-tooltip {
   position: relative;
   opacity: 1;
@@ -1857,12 +1439,20 @@
     transform: translateY(8px);
   }
 }
+/* One ring per control: the outline. A Tailwind ring on the same control would stack a second circle, so it is cleared. */
 [data-chalk] :is(button, [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):focus-visible {
   outline: 2px solid var(--chalk-focus);
   outline-offset: 2px;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
 }
-[data-chalk] .chalk-menu-item:focus-visible {
+/* Inside menus, sheets and panels the ring sits inside the control, so a scrolling list never clips it. */
+[data-chalk] :is(.chalk-menu, .chalk-sheet, .chalk-drawer, .chalk-call-details) :is(button, [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):focus-visible {
   outline-offset: -2px;
+}
+/* Controls that sit on video keep a white ring in both themes, because the call's light focus color disappears on dark media. */
+[data-chalk] :is([data-part="tile-menu"], [data-part="share-local-overlay"], .chalk-tile-signal) {
+  --chalk-focus: var(--chalk-on-overlay);
 }
 @media (max-width: 640px) {
   .chalk-frame-header,
@@ -1963,6 +1553,10 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+  /* Opacity still fades, so a menu, popover, tooltip or toast appears in place instead of popping. */
+  [data-chalk] :is(.chalk-tooltip, .chalk-sheet-scrim, .chalk-toast) {
+    transition: opacity 120ms linear !important;
   }
 }
 
