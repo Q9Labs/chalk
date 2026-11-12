@@ -3,11 +3,13 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
 
   alias ChalkSync.Database
   alias ChalkSync.Observability
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.ExternalOperationClaims
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Telemetry
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.SQL, as: WebhookSQL
+  require OperationTable
 
   def participant_object([
         id,
@@ -148,7 +150,7 @@ defmodule ChalkSync.Stateholder.Postgres.WebhookObservation do
        do: "participant.left"
 
   defp external_webhook_event_name(name)
-       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       when OperationTable.is_episode_end_name(name),
        do: "episode.ended"
 
   defp lifecycle_webhook_event_name("participant_joined"), do: "participant.joined"

@@ -3,56 +3,15 @@ defmodule ChalkSync.Stateholder.Operation do
 
   alias ChalkSync.CanonicalJSON
   alias ChalkSync.Stateholder.ObservedContext
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.UUID
 
   @request_key ~r/\A[A-Za-z0-9_-]{16,128}\z/
   @max_payload_bytes 16 * 1024
-  @names %{
-    "admit_participant" => :admit_participant,
-    "deny_admission" => :deny_admission,
-    "admission_request_expired" => :admission_request_expired,
-    "mute_participant" => :mute_participant,
-    "stop_participant_camera" => :stop_participant_camera,
-    "stop_participant_screen_share" => :stop_participant_screen_share,
-    "remove_participant" => :remove_participant,
-    "start_recording" => :start_recording,
-    "stop_recording" => :stop_recording,
-    "recording_capture_ready" => :recording_capture_ready,
-    "recording_capture_stopped" => :recording_capture_stopped,
-    "recording_capture_failed" => :recording_capture_failed,
-    "participant_leave" => :participant_leave,
-    "start_episode" => :start_episode,
-    "extend_episode" => :extend_episode,
-    "end_episode" => :end_episode,
-    "tenant_set_deadline" => :tenant_set_deadline,
-    "tenant_end_episode" => :tenant_end_episode,
-    "maximum_episode_duration_expired" => :maximum_duration_expired,
-    "maximum_duration_expired" => :maximum_duration_expired
-  }
-
   @enforce_keys [:request_key, :name, :payload, :fingerprint, :normalized_bytes]
   defstruct [:request_key, :name, :payload, :fingerprint, :normalized_bytes, :observed_context]
 
-  @type name ::
-          :admit_participant
-          | :deny_admission
-          | :admission_request_expired
-          | :mute_participant
-          | :stop_participant_camera
-          | :stop_participant_screen_share
-          | :remove_participant
-          | :start_recording
-          | :stop_recording
-          | :recording_capture_ready
-          | :recording_capture_stopped
-          | :recording_capture_failed
-          | :participant_leave
-          | :start_episode
-          | :extend_episode
-          | :end_episode
-          | :tenant_set_deadline
-          | :tenant_end_episode
-          | :maximum_duration_expired
+  @type name :: OperationTable.name()
 
   @type t :: %__MODULE__{
           request_key: String.t(),
@@ -164,13 +123,13 @@ defmodule ChalkSync.Stateholder.Operation do
       do: {:error, :invalid_payload}
 
   defp normalize_name(name) when is_atom(name) do
-    if name in Map.values(@names), do: {:ok, name}, else: {:error, :unknown_operation}
+    if OperationTable.intake_name?(name), do: {:ok, name}, else: {:error, :unknown_operation}
   end
 
   defp normalize_name(name) when is_binary(name) do
-    case @names do
-      %{^name => normalized} -> {:ok, normalized}
-      _ -> {:error, :unknown_operation}
+    case OperationTable.from_intake(name) do
+      {:ok, normalized} -> {:ok, normalized}
+      :error -> {:error, :unknown_operation}
     end
   end
 

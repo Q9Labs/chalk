@@ -1,10 +1,12 @@
 defmodule ChalkSync.Stateholder.Postgres.Recording do
   @moduledoc false
 
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.Scope
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationFinalizer, as: FinalizerSQL
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
+  require OperationTable
 
   @maximum_duration_seconds 4 * 60 * 60
 
@@ -307,7 +309,7 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
             recording_stop_id == stop_operation_uuid
 
         %{name: name, recording_id: ^recording_id}
-        when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] ->
+        when OperationTable.is_episode_end_name(name) ->
           recording_status in ["starting", "recording", "stopping", "stopped"]
 
         _ ->

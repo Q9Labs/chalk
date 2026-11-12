@@ -25,9 +25,10 @@ defmodule ChalkSync.ExternalOperationConsumer do
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Telemetry
 
-  require ExternalOperation
+  require OperationTable
 
   @local_page_size 32
   @default_max_backoff_ms 5_000
@@ -57,11 +58,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
       provider_calls: true
     }
   }
-  @end_episode_operations [
-    :end_episode,
-    :tenant_end_episode,
-    :maximum_duration_expired
-  ]
 
   def start_link(options \\ []) do
     name = Keyword.get(options, :name, __MODULE__)
@@ -304,27 +300,21 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch(_episode, %{name: name}, _media_plane, _recording_plane, _timeout_ms)
-       when ExternalOperation.is_local_name(name),
+       when OperationTable.is_local_name(name),
        do: {:confirmed, :local}
 
   defp dispatch(episode, %{name: name} = operation, media_plane, recording_plane, timeout_ms)
-       when name in @end_episode_operations do
+       when OperationTable.is_episode_end_name(name) do
     invoke_end_cleanup(media_plane, recording_plane, episode, operation, timeout_ms)
   end
 
   defp dispatch(episode, %{name: name} = operation, media_plane, _recording_plane, timeout_ms)
-       when name in [
-              :mute_participant,
-              :stop_participant_camera,
-              :stop_participant_screen_share,
-              :remove_participant,
-              :role_transition_source_stop
-            ] do
+       when OperationTable.is_media_name(name) do
     invoke_media_plane(media_plane, episode, operation, timeout_ms)
   end
 
   defp dispatch(episode, %{name: name} = operation, _media_plane, recording_plane, timeout_ms)
-       when name in [:start_recording, :stop_recording] do
+       when OperationTable.is_recording_name(name) do
     invoke_recording_plane(recording_plane, episode, operation, timeout_ms)
   end
 
@@ -359,7 +349,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp media_arguments(adapter, episode, %{name: name} = operation)
-       when name in @end_episode_operations,
+       when OperationTable.is_episode_end_name(name),
        do: {:end_episode, [adapter, operation.external_operation_id, episode]}
 
   defp revoke_arguments(adapter, episode, operation, source) do

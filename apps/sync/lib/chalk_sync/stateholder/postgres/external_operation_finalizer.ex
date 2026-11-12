@@ -3,6 +3,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
   alias ChalkSync.Episodes.Reducer
   alias ChalkSync.Stateholder.ExternalOperation
+  alias ChalkSync.Stateholder.OperationTable
   alias ChalkSync.Stateholder.Postgres.Authority
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
@@ -20,6 +21,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.WebhookObservation
   alias ChalkSync.UUID
   alias ChalkSync.Webhooks.Producer, as: WebhookProducer
+  require OperationTable
 
   @max_event_bytes 32 * 1024
   @schema_version 1
@@ -183,7 +185,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp validate_finalization_episode(%{name: name}, %{status: "ending"})
-       when name in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       when OperationTable.is_episode_end_name(name),
        do: :ok
 
   defp validate_finalization_episode(%{name: :recording_capture_stopped}, %{status: status})
@@ -191,7 +193,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
        do: :ok
 
   defp validate_finalization_episode(%{name: name}, %{status: "active"})
-       when name not in [:end_episode, :tenant_end_episode, :maximum_duration_expired],
+       when not OperationTable.is_episode_end_name(name),
        do: :ok
 
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
@@ -826,7 +828,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp update_external_products(connection, episode, external, _event, _state)
-       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+       when OperationTable.is_episode_end_name(external.name) do
     complete_external_episode(connection, episode, external)
   end
 
@@ -1091,7 +1093,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   end
 
   defp release_failed_acceptance(connection, episode, external)
-       when external.name in [:end_episode, :tenant_end_episode, :maximum_duration_expired] do
+       when OperationTable.is_episode_end_name(external.name) do
     case Postgrex.query!(connection, SQL.restore_episode_active(), Scope.episode(episode)).rows do
       [[_id]] -> :ok
       [] -> Postgrex.rollback(connection, {:error, :invalid_state})
