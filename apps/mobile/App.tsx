@@ -73,7 +73,6 @@ export default function App(): React.JSX.Element {
   return (
     <ChalkUI colorScheme={preferences?.colorScheme ?? "dark"}>
       {ready ? <Shell apiBaseURL={apiBaseURL} diagnosticsEnabled={diagnosticsEnabled} name={name} onNameChange={setName} openedLink={openedLink} preferences={preferences} recentCalls={recentCalls} reportError={reportError} buildProfile={diagnosticsMode.buildProfile} /> : <Splash />}
-      {/* Dev states: the harness lane mounts its route on the next line. */}
     </ChalkUI>
   );
 }

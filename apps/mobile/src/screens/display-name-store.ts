@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // The key and its JSON shape date from the retired onboarding flow; stored names must keep loading.
+export const DISPLAY_NAME_MAX_LENGTH = 40;
+
 const DISPLAY_NAME_STORAGE_KEY = "chalk.mobile.onboarding.v1";
 
 export function parseDisplayName(value: string | null): string | null {
