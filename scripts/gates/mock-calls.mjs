@@ -22,12 +22,17 @@ const matcher = /^(?:toHaveBeen(?:Last|Nth)?Called|toBeCalled|toHaveReturned|toH
 const mockState = new Set(["calls", "lastCall", "results"]);
 const testFile = /(?:\.(?:test|spec)\.[cm]?[jt]sx?|(?:^|\/)__tests__\/.*\.[cm]?[jt]sx?)$/u;
 
+/** node:test reads the number of calls with `fn.mock.callCount()`. */
+function isMockCallCount(callee) {
+  return callee.name.text === "callCount" && ts.isPropertyAccessExpression(callee.expression) && callee.expression.name.text === "mock";
+}
+
 /** Counts matcher calls such as `expect(x).toHaveBeenCalledWith(...)` and reads of `fn.mock.calls`. */
 export function countMockCallAssertions(file, source) {
   const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
   let count = 0;
   function visit(node) {
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && matcher.test(node.expression.name.text)) count++;
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && (matcher.test(node.expression.name.text) || isMockCallCount(node.expression))) count++;
     else if (ts.isPropertyAccessExpression(node) && mockState.has(node.name.text) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "mock") count++;
     ts.forEachChild(node, visit);
   }

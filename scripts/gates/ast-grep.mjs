@@ -72,7 +72,6 @@ addSourceRule(
   "Do not mock a module of this repository. Run the real module and fake only the real boundary (network, time, storage, provider SDK, browser APIs); see CODING_STANDARDS.md.",
   anyPattern(...mockSpecifiers.flatMap((specifier) => mockCallees.flatMap((callee) => [`${callee}(${specifier})`, `${callee}(${specifier}, $$$REST)`]))),
   {
-    files: ["**/*.test.*", "**/*.spec.*", "**/__tests__/**", "**/test/**", "**/tests/**", "**/*.setup.*"],
     constraints: { SPEC: { any: [{ kind: "string" }, { kind: "template_string" }], regex: repoModuleSpecifier } },
   },
 );
@@ -182,7 +181,22 @@ for (const [suffix, language] of [["yaml", "Yaml"], ...sourceLanguages]) {
   });
 }
 
+// ast-grep honors `// ast-grep-ignore` on or above a line, and a trailing one hides the comment itself too, so a rule cannot
+// guard against it. Check the text instead: a suppression must name its rule, and may not name the own-module mock ban.
+const sourceFile = /\.[cm]?[jt]sx?$/u;
+const ownModuleBanSuppressed = /ast-grep-ignore\s*:[^\n]*forbid-own-module-mocks/u;
+const blanketSuppression = /ast-grep-ignore(?!\s*:)/u;
+function forbiddenSuppressions(paths) {
+  const found = spawnSync("git", ["grep", "--no-index", "--exclude-standard", "-n", "-E", "ast-grep-ignore", "--", ...(paths.length > 0 ? paths : ["."]), ":!scripts/gates/ast-grep*"], { encoding: "utf8", maxBuffer: 1 << 26 });
+  if (found.status !== 0 && found.status !== 1) throw new Error(`git grep failed: ${found.stderr}`);
+  return found.stdout.split("\n").filter((line) => sourceFile.test(line.split(":", 1)[0]) && (blanketSuppression.test(line) || ownModuleBanSuppressed.test(line)));
+}
+
+const args = process.argv.slice(2);
+const suppressions = forbiddenSuppressions(args.filter((arg) => !arg.startsWith("-")));
+for (const line of suppressions) console.error(`${line}\n  Name the rule you suppress (ast-grep-ignore: <rule> -- reason); a blanket ignore, or one naming forbid-own-module-mocks, would hide a mock of a module of this repository.`);
+
 const binary = process.env.AST_GREP_BIN ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../node_modules/.bin/ast-grep");
-const result = spawnSync(binary, ["scan", "--inline-rules", rules.map((rule) => JSON.stringify(rule)).join("\n---\n"), ...process.argv.slice(2)], { stdio: "inherit" });
+const result = spawnSync(binary, ["scan", "--inline-rules", rules.map((rule) => JSON.stringify(rule)).join("\n---\n"), ...args], { stdio: "inherit" });
 if (result.error) console.error(`Could not run ast-grep: ${result.error.message}`);
-process.exitCode = result.status ?? 1;
+process.exitCode = suppressions.length > 0 ? 1 : (result.status ?? 1);

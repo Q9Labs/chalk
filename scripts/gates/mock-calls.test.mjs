@@ -10,7 +10,7 @@ const script = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "mock-
 const baselineFile = "scripts/gates/mock-call-baseline.json";
 
 // A scratch repository: `main` holds the base baseline, the checked-out branch holds `assertions` mock-call assertions and the baseline under test.
-function scratch(t, { base, baseline, assertions }) {
+function scratch(t, { base, baseline, assertions, assertion = "expect(callback).toHaveBeenCalled();" }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "chalk-mock-calls-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const git = (...args) => execFileSync("git", args, { cwd: root, stdio: "ignore" });
@@ -26,7 +26,7 @@ function scratch(t, { base, baseline, assertions }) {
   git("add", ".");
   git("commit", "-q", "-m", "base");
   git("checkout", "-q", "-b", "feature");
-  write("pkg/a.test.ts", Array.from({ length: assertions }, () => "expect(callback).toHaveBeenCalled();").join("\n"));
+  write("pkg/a.test.ts", Array.from({ length: assertions }, () => assertion).join("\n"));
   write(baselineFile, `${JSON.stringify(baseline)}\n`);
   git("add", ".");
   git("commit", "-q", "-m", "feature");
@@ -45,6 +45,12 @@ test("a new assertion above the baseline fails", (t) => {
   const result = scratch(t, { base: { pkg: 2 }, baseline: { pkg: 2 }, assertions: 3 }).run();
   assert.equal(result.status, 1);
   assert.match(result.output, /pkg: 3 assertions on mock calls, baseline 2/u);
+});
+
+test("node:test's fn.mock.callCount() counts as an assertion on a mock call", (t) => {
+  const result = scratch(t, { base: { pkg: 0 }, baseline: { pkg: 0 }, assertions: 1, assertion: "assert.equal(callback.mock.callCount(), 1);" }).run();
+  assert.equal(result.status, 1);
+  assert.match(result.output, /pkg: 1 assertions on mock calls, baseline 0/u);
 });
 
 test("removing assertions fails until the baseline is lowered, so they cannot come back", (t) => {
