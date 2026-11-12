@@ -30,6 +30,20 @@ function run(seconds: number, options: Parameters<typeof frame>[1] = {}) {
 }
 
 describe("call stats collector", () => {
+  it("reports the videos the viewer hid, on planes that report no subscription state too", async () => {
+    let clock = 0;
+    const uploads: CallStatsRequest[] = [];
+    const upload = async (request: CallStatsRequest) => void uploads.push(request);
+    const collector = createCallStatsCollector({ now: () => clock, upload });
+    for (let second = 0; second <= 10; second++) {
+      clock = second * 1000;
+      collector.observe(frame(second), { hiddenVideos: second < 5 ? 0 : 1 });
+    }
+    await collector.flush(upload);
+    expect(uploads.at(-1)?.samples.at(-1)).toMatchObject({ recv_hidden_videos: 1 });
+    expect(uploads.at(-1)?.samples.at(-1)?.recv_paused_videos).toBeUndefined();
+  });
+
   it("reports the videos the SFU paused for network, and nothing on planes that do not say", async () => {
     let clock = 0;
     const uploads: CallStatsRequest[] = [];
@@ -37,7 +51,7 @@ describe("call stats collector", () => {
     const collector = createCallStatsCollector({ now: () => clock, upload });
     for (let second = 0; second <= 10; second++) {
       clock = second * 1000;
-      collector.observe(frame(second), { pausedVideos: second < 5 ? 0 : 2 });
+      collector.observe(frame(second), { pausedVideos: second < 5 ? 0 : 2, hiddenVideos: 0 });
     }
     await collector.flush(upload);
     expect(uploads.at(-1)?.samples.at(-1)).toMatchObject({ recv_paused_videos: 2 });
