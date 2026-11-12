@@ -648,7 +648,8 @@ class OwnSfuPromotionTests(unittest.TestCase):
     def test_warn_only_nightly_saves_history_and_never_touches_the_issue(self):
         with tempfile.TemporaryDirectory() as directory:
             result, remote, calls = self.run_nightly(Path(directory), warn_only=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            # Warn-only still turns the calling job red while a gated metric is over its budget (nightly.sh, #1201).
+            self.assertEqual(result.returncode, 1, result.stderr)
             saved = subprocess.check_output(['git', '--git-dir', str(remote), 'show',
                                              'scorecard-history:history.jsonl'], text=True)
             self.assertEqual(json.loads(saved)['run']['commit'], SHA)
