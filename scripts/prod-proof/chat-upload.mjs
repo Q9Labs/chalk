@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { openEpisode, prepareIntegration } from "./proofs.mjs";
 import { fileURLToPath } from "node:url";
-import { connect, loadSdk } from "./off-reason.mjs";
+import { connect, loadSdk } from "./sync-connect.mjs";
 import { check, measured, save } from "./runtime.mjs";
 
 // A browser origin that is on no list. The bucket's CORS rule must answer it anyway: the presigned

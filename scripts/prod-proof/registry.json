@@ -71,12 +71,6 @@
     "flags": { "ensureSpaces": true },
     "proofs": ["own-sfu-spaces"]
   },
-  "offreason": {
-    "description": "Sync's media_off_reason extension over the WebSocket protocol.",
-    "planes": ["cf_sfu", "chalk_sfu"],
-    "browser": false,
-    "proofs": ["offreason"]
-  },
   "chat-upload": {
     "description": "A real chat attachment upload from an origin on no list: preflight, PUT, finalize and download against the storage bucket.",
     "planes": ["cf_sfu", "chalk_sfu"],

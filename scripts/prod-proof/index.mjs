@@ -4,7 +4,6 @@ import { callArtifactsProof, captureCall } from "./call-artifacts.mjs";
 import { leaveProof } from "./leave.mjs";
 import { leaveOwnSfuProof } from "./leave-own-sfu.mjs";
 import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
-import { offReasonProof } from "./off-reason.mjs";
 import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { deployHoldProof } from "./deploy-hold.mjs";
@@ -71,7 +70,6 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
     leave: () => leaveProof(run),
     "leave-own-sfu": () => leaveOwnSfuProof(run),
     "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
-    offreason: () => offReasonProof(run),
     "chat-upload": () => chatUploadProof(run),
     "camera-share": async () => {
       check(!captured.camera.error, captured.camera.error);
