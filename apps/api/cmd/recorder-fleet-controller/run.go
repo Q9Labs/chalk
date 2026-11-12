@@ -42,6 +42,9 @@ func buildReconciler(config commandConfig, logger *slog.Logger) (reconcileRunner
 		},
 	}
 	config.Provider.PresignArchive = func(ctx context.Context, archive recorderfleet.ArchiveSpec) (string, error) {
+		if config.ArchiveCDN != nil {
+			return config.ArchiveCDN.PresignCDN(archive, config.Fleet.StartupTimeout, time.Now())
+		}
 		return recorderarchive.Presign(ctx, archive, config.Fleet.StartupTimeout)
 	}
 	provider, err := digitalocean.NewRecorderFleet(config.Provider)

@@ -100,6 +100,7 @@ const upstream = createServer(async (request, response) => {
           logo_key: null,
           website: null,
           transcription_ceiling: "on_demand",
+          recording_render_mode: "on_demand",
           transcription_default_mode: "on_demand",
           transcript_language: "auto",
           provider_policy_version: "test",
@@ -176,8 +177,7 @@ try {
   origin = `http://127.0.0.1:${port}`;
   await cp(resolve(web, "server"), resolve(sandbox, "server"), { recursive: true });
   await cp(resolve(web, "functions"), resolve(sandbox, "functions"), { recursive: true });
-  await mkdir(resolve(sandbox, "src/lib/dashboard"), { recursive: true });
-  await cp(resolve(web, "src/lib/dashboard/contracts.ts"), resolve(sandbox, "src/lib/dashboard/contracts.ts"));
+  await cp(resolve(web, "src/lib"), resolve(sandbox, "src/lib"), { recursive: true });
   await symlink(resolve(web, "node_modules"), resolve(sandbox, "node_modules"), "dir");
   // Only external endpoint addresses change. Named routes, production composition,
   // handler, adapter, crypto, fetch options and generated client run in workerd.

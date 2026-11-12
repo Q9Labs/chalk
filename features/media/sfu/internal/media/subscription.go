@@ -397,6 +397,14 @@ func (s *subscription) handleFeedback(packets []rtcp.Packet, writer *packetWrite
 			if binding != nil && packet.MediaSSRC == binding.ssrc {
 				budget = s.retransmit(packet, budget, writer)
 			}
+		case *rtcp.ReceiverReport:
+			for _, report := range packet.Reports {
+				if binding != nil && report.SSRC == binding.ssrc {
+					s.transport.onReceiverReport(float64(report.FractionLost) / 256)
+				}
+			}
+		case *rtcp.ReceiverEstimatedMaximumBitrate:
+			s.transport.onREMB(float64(packet.Bitrate))
 		}
 	}
 }

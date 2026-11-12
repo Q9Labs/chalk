@@ -133,10 +133,14 @@ type transport struct {
 	seq       uint16
 	log       [sendLogSize]sentPacket
 	estimator bandwidthEstimator
-	acks      []packetAck
-	seen      [feedbackSeen]uint32
-	seenNext  int
-	feedback  int64 // monotonic time of the latest feedback, or 0
+	// reportBased means the receiver sends no transport-wide feedback, so the estimate
+	// is the ceiling its receiver reports and REMB allow.
+	reportBased bool
+	reports     reportEstimator
+	acks        []packetAck
+	seen        [feedbackSeen]uint32
+	seenNext    int
+	feedback    int64 // monotonic time of the latest feedback, or 0
 
 	pace, repairRate float64 // bits/s
 	tokens, repair   float64 // bytes
@@ -171,9 +175,9 @@ func newTransport(delays *delayHistogram, queueLimit int, nodeDone <-chan struct
 	t := &transport{
 		delays: delays, queueLimit: queueLimit, nodeDone: nodeDone,
 		done: make(chan struct{}), wake: make(chan struct{}, 1),
-		estimator: newBandwidthEstimator(),
-		acks:      make([]packetAck, 0, 256),
-		backoff:   probeBackoffMin,
+		estimator: newBandwidthEstimator(), reports: newReportEstimator(),
+		acks:    make([]packetAck, 0, 256),
+		backoff: probeBackoffMin,
 	}
 	t.setRates(0)
 	return t
@@ -184,7 +188,9 @@ func newTransport(delays *delayHistogram, queueLimit int, nodeDone <-chan struct
 // The caller holds t.mu.
 func (t *transport) setRates(now int64) {
 	proven := t.estimator.proven(now)
-	if !t.estimator.warm() {
+	if t.reportBased {
+		proven = t.reports.ceiling
+	} else if !t.estimator.warm() {
 		proven = initialEstimate
 	}
 	t.pace = math.Max(paceFactor*proven, minPace)
@@ -211,10 +217,10 @@ func (t *transport) refill(now int64) {
 
 // send paces one packet. It reports whether the packet went out or waits in
 // the queue; a packet the pacer drops still reports true, because the
-// subscriber's NACK recovers it. Without transport-wide feedback there is no
-// estimate to pace by, so the packet goes out at once, but it is still counted
-// and a repair is still capped. A packet its source may no longer forward
-// reports false, here and when the pacer writes it later.
+// subscriber's NACK recovers it. A receiver without transport-wide feedback is
+// paced by its report ceiling and its packets carry no transport sequence number.
+// A packet its source may no longer forward reports false, here and when the pacer
+// writes it later.
 func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 	size := packet.size()
 	t.mu.Lock()
@@ -235,12 +241,6 @@ func (t *transport) send(packet *egressPacket, w *packetWriter) bool {
 			return true
 		}
 		t.repair -= float64(size)
-	}
-	if packet.binding.twccID == 0 {
-		t.counters.Sent[packet.class]++
-		t.meters[packet.class].add(size)
-		t.mu.Unlock()
-		return w.transmit(packet, 0)
 	}
 	if !t.sendsNow(packet.class) {
 		queued := t.enqueue(packet, size, now)
@@ -527,6 +527,36 @@ func (t *transport) onFeedback(report *rtcp.TransportLayerCC) {
 	t.setRates(now)
 }
 
+// useReports makes the receiver's reports the estimate, because it sends no transport-wide feedback.
+func (t *transport) useReports() {
+	t.mu.Lock()
+	t.reportBased = true
+	t.setRates(monotonic())
+	t.mu.Unlock()
+}
+
+// onReceiverReport folds the fraction of packets a receiver report says it lost into the ceiling.
+func (t *transport) onReceiverReport(fractionLost float64) {
+	t.onReport(func(now int64) { t.reports.onLoss(fractionLost, now) })
+}
+
+// onREMB takes a receiver's own estimate, in bits/s, as the ceiling.
+func (t *transport) onREMB(bitrate float64) {
+	t.onReport(func(now int64) { t.reports.onREMB(bitrate, now) })
+}
+
+func (t *transport) onReport(apply func(now int64)) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed || !t.reportBased {
+		return
+	}
+	now := monotonic()
+	apply(now)
+	t.refill(now)
+	t.setRates(now)
+}
+
 // tick runs the transport's periodic work from the node's control loop: rate
 // meters and a probe whose feedback never came.
 func (t *transport) tick(now int64) (growth transportGrowth) {
@@ -603,6 +633,13 @@ func (t *transport) estimate(now int64) transportEstimate {
 	defer t.mu.Unlock()
 	congested := t.dropsUnread && !t.stalled(now)
 	t.dropsUnread = false
+	if t.reportBased {
+		// The ceiling is what the receiver's reports allow, so it counts as proven.
+		return transportEstimate{
+			pressured: t.stalled(now), warm: true, current: t.reports.ceiling, proven: t.reports.ceiling,
+			feedback: t.reports.at, congested: congested, lossy: t.reports.lossy(now),
+		}
+	}
 	return transportEstimate{
 		pressured: t.stalled(now),
 		warm:      t.estimator.warm(), current: t.estimator.current(), proven: t.estimator.proven(now),
@@ -627,6 +664,11 @@ func (t *transport) reading(now int64) estimateReading {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	e := &t.estimator
+	if t.reportBased {
+		return estimateReading{
+			current: t.reports.ceiling, proven: t.reports.ceiling, pressured: t.stalled(now), lossy: t.reports.lossy(now),
+		}
+	}
 	return estimateReading{
 		current: e.current(), proven: e.proven(now), delivered: e.delivered(now),
 		probing: t.probeID != 0, pressured: t.stalled(now),
@@ -645,8 +687,12 @@ func (t *transport) probing() bool {
 func (t *transport) inspect(now int64) protocol.TransportState {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	estimate, proven := t.estimator.current(), t.estimator.proven(now)
+	if t.reportBased {
+		estimate, proven = t.reports.ceiling, t.reports.ceiling
+	}
 	state := protocol.TransportState{
-		EstimateBps: int64(t.estimator.current()), ProvenBps: int64(t.estimator.proven(now)),
+		EstimateBps: int64(estimate), ProvenBps: int64(proven),
 		QueuedBytes: t.queuedBytes, Probing: t.probeID != 0,
 		Sent: protocol.PacketCounts{
 			Audio: t.counters.Sent[classAudio], Video: t.counters.Sent[classVideo],
@@ -654,6 +700,13 @@ func (t *transport) inspect(now int64) protocol.TransportState {
 		},
 		Dropped: t.counters.Dropped, RepairsCut: t.counters.RepairsCut,
 		Probes: t.counters.Probes, ProvedProbe: t.counters.ProvedProbe,
+	}
+	if t.reportBased {
+		if t.reports.at != 0 {
+			age := time.Duration(now - t.reports.at).Milliseconds()
+			state.FeedbackAgeMs = &age
+		}
+		return state
 	}
 	if t.feedback != 0 {
 		age := time.Duration(now - t.feedback).Milliseconds()
