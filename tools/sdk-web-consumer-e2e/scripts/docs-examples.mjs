@@ -11,7 +11,7 @@ export async function checkDocExamples(repository, consumer, run) {
     .filter((name) => name.endsWith(".mdx"))
     .sort()
     .map((name) => `${content}/${name}`);
-  paths.push("sdks/typescript/react/README.md", "sdks/typescript/client/README.md", "sdks/typescript/react-native/README.md", "sdks/typescript/client/docs/webhooks.md", "docs/sdk-web-quickstart.md");
+  paths.push("sdks/typescript/react/README.md", "sdks/typescript/client/README.md", "sdks/typescript/react-native/README.md", "sdks/typescript/client/docs/webhooks.md");
   const bindings = [
     "client",
     "spaceClient",

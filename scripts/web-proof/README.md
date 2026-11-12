@@ -32,19 +32,9 @@ for the call and off again afterwards, and ends the Episode it made. `CHALK_PROO
 iPad Safari profile) beside Chromium. `CHALK_PROOF_JOIN_ORDER=web-first` or `guest-first` fixes which side is in the
 Episode before the other joins; unset, the SDK guest starts while the web app opens.
 
-Run browser suites in a configured M4 checkout, not a developer laptop. Keep its
-proof configuration and evidence in that checkout. For hosted runs,
-`.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only
-when the test, cleanup, and encrypted evidence upload pass. Nightly runs it after
-deploy and after the `chalk_sfu` real-call proof, on `chalk_sfu` (the Space an operator
-moved, `CHALK_PROOF_SPACE_ID_CHALK_SFU`, under the staging SFU lease). A manual dispatch
-takes `media_plane`, `cf_sfu` by default. Both workflows share the same
-environment lock because existing proof cleanup resets the webhook. Both must pass to hold a cut;
-the deployment record retains `real_call_proof_result` and `web_e2e_result`.
+Run browser suites in a configured checkout, not a developer laptop. For hosted runs, `.github/workflows/web-call-proof.yml` accepts an environment and returns `result=passed` only when the test, cleanup and encrypted evidence upload pass. Nightly runs it after deploy and after the `chalk_sfu` real-call proof, on `chalk_sfu` under the staging SFU lease; a manual dispatch takes `media_plane` (`cf_sfu` by default). Both workflows share one environment lock because proof cleanup resets the webhook. Both must pass to hold a cut.
 
-Tests live in `tests/*.e2e.ts` and use TesterArmy `e2e` with `@e2e-dev/web`.
-There are no agent steps, model calls, or replay-cache entries to commit.
-Retries are disabled, so a failing cut stays failed rather than passing on retry.
+Tests live in `tests/*.e2e.ts` and use TesterArmy `e2e` with `@e2e-dev/web`. Retries are disabled, so a failing cut stays failed.
 
 Private screenshots and cleanup reports are in `.private/prod-proof/<run-id>/`.
 The full e2e result folder, `.private/web-proof/e2e`, is encrypted too, including

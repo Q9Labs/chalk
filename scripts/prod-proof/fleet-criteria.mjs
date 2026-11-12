@@ -1,5 +1,5 @@
 // Pass and fail rules for the canary fleet, apart from the browsers and the API that feed them.
-// The thresholds are the M7 canary check in docs/sfu/milestones.md.
+// The thresholds are the production canary check in scripts/prod-proof/README.md.
 import { percentile } from "./sfu-canary-criteria.mjs";
 
 export const joinLimitMs = 10_000;

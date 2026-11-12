@@ -4,25 +4,14 @@ This runbook covers the production Chalk SFU node (`chalk_sfu`): what each alert
 
 ## Where alerts come from and where they go
 
-Which path covers which alert:
+- **Node down** reaches Discord and Oncall through the Axiom `sfu-readiness` branch (reason `unreachable`: at least 4 unhealthy minute samples in 5 minutes, latest still unhealthy, because the API host cannot read `/readyz`). The DigitalOcean ping check `chalk-sfu-<env>-ping` (fails from every region for 2 minutes) is the second, independent signal and reaches Discord only.
+- **CPU, memory or disk high** (DigitalOcean policies `chalk-sfu-<env>: ...`: CPU or memory above 85%, disk above 80%, for 5 minutes) reaches Discord only. A busy host that still answers `/readyz` pages Oncall only once the node closes admission itself (`admission_cpu_busy` and the other admission reasons).
+- **Node refusing calls or near its packet budget** is the same `sfu-readiness` branch, from the collector's `/readyz` probe.
+- **Join failures on `chalk_sfu`** (an accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu`, one alert per Episode and failure), **recording failed or stranded** (`recording` and `recording-stop` branches) and **overflow to `cf_sfu`** (`sfu-overflow` branch, any `chalk_sfu.overflow` event in the last 2 minutes) all reach Discord and Oncall through Axiom.
 
-| Alert                                                       | Source                                                             | Fires when                                                                                                             | Goes to         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | --------------- |
-| Node down                                                   | Axiom `sfu-readiness` branch, reason `unreachable`                 | At least 4 unhealthy minute samples in 5 minutes, latest still unhealthy (the API host cannot reach `/readyz`)         | Discord, Oncall |
-| Node down                                                   | DigitalOcean ping check `chalk-sfu-<env>-ping`                     | The node fails the ping check from every region for 2 minutes                                                          | Discord         |
-| CPU, memory or disk high                                    | DigitalOcean alert policies `chalk-sfu-<env>: ...`                 | CPU above 85%, memory above 85% or disk above 80% for 5 minutes                                                        | Discord         |
-| Node unreachable, refusing calls, or near its packet budget | Axiom `sfu-readiness` branch, from the collector's `/readyz` probe | At least 4 unhealthy minute samples in 5 minutes, latest still unhealthy                                               | Discord, Oncall |
-| Join failures on `chalk_sfu`                                | Axiom connection-report branch                                     | An accepted `join_failed` or `media_start_failed` report with provider `chalk_sfu` (one alert per Episode and failure) | Discord, Oncall |
-| Recording failed or stranded                                | Axiom `recording` and `recording-stop` branches                    | A Recording Capture failed in the last 15 minutes, or a stop is stuck for 2 minutes                                    | Discord, Oncall |
-| Overflow to `cf_sfu`                                        | Axiom `sfu-overflow` branch                                        | One or more `chalk_sfu.overflow` events in the last 2 minutes                                                          | Discord, Oncall |
+Why the split: DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL, so its alerts have no Oncall path. The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor and Oncall is a Slack-type notifier. A forwarder (a small Cloudflare Worker re-posting DigitalOcean's Slack-format POST to Oncall and Discord) would close the gap but is not built; until then the readiness probe is how Oncall hears of a down node. If the collector probe is ever turned off, the `sfu-readiness` branch has no data and node health reaches the team only through DigitalOcean's Discord alerts.
 
-The rule of thumb: every alert that goes through the collector and Axiom reaches Discord and Oncall. The DigitalOcean alerts reach Discord only. DigitalOcean accepts only Slack-format webhooks and answers HTTP 500 to the Oncall URL. So a node that is down reaches Oncall through the collector's `sfu-readiness` rule (the API host fails to read `/readyz`), and the DigitalOcean ping check is the second, independent signal in Discord. CPU, memory and disk high have no Oncall path: a host that is busy but still answers `/readyz` pages Oncall only once the node closes admission itself (`admission_cpu_busy` and the other admission reasons). The Axiom plan allows 3 monitors and no custom-webhook notifier, so every Axiom rule is a branch of the first grouped monitor, and Oncall is a Slack-type notifier. A paid Axiom plan would lift the Axiom limits; confirm its price on the Axiom billing page before buying. The plan to close the DigitalOcean gap is in [Follow-up: DigitalOcean alerts to Oncall](#follow-up-digitalocean-alerts-to-oncall).
-
-DigitalOcean to Discord is proved at the Discord API, not seen in a client. The `/slack` endpoint of the Discord webhook accepts DigitalOcean's own payload: a captured CPU-alert body, sent once with a "[TEST, planned drill]" prefix, returned HTTP 200 with the body `ok`. That endpoint returns no message id, so the same content was posted once through the standard webhook JSON with `?wait=true` and read back with `GET /webhooks/{id}/{token}/messages/{message id}`: Discord stored a webhook message from "DigitalOcean" with the embed title "Monitor triggered: chalk-sfu-test: cpu-above-85", the description "CPU Utilization Percent is currently at 100.00%, above setting of 85.00% for the last 5m", the Droplet and IP fields and the red colour. The standard-webhook post is a proxy. It does not prove that DigitalOcean's own POST reached Discord, and DigitalOcean's API keeps no delivery history to read. A person has not looked at the channel in a client, so how the message renders there is unconfirmed.
-
-The collector probe is on for the production host (see [the readiness probe](#the-readiness-probe-on-the-production-host)). If it is ever turned off, the `sfu-readiness` branch has no data and cannot alert, so node health reaches the team only through the DigitalOcean alerts.
-
-Set the DigitalOcean side with `do-monitoring.sh <env> plan|apply|remove` and the Axiom side with `provision.py`. The `remove` action deletes everything the script made.
+DigitalOcean to Discord was proved at the Discord API only (DigitalOcean's own POST and the rendering in a Discord client were not observed). Set the DigitalOcean side with `do-monitoring.sh <env> plan|apply|remove` and the Axiom side with `provision.py`; `remove` deletes everything the script made.
 
 ## The readiness probe on the production host
 
@@ -103,10 +92,6 @@ systemctl start chalk-alert-state.service
 ```
 
 To stop only the probe and keep the new binary, comment out `CHALK_ALERT_SFU_READY_URL` in `/etc/chalk-alerts/collector.env` and run the service once.
-
-## Follow-up: DigitalOcean alerts to Oncall
-
-Not built here. DigitalOcean alert policies can post only to a Slack-format receiver, and the Oncall webhook is not one, so node down and CPU, memory or disk high reach Discord only. The plan is a small free forwarder: one Cloudflare Worker that accepts DigitalOcean's Slack-format POST, re-posts it to the Oncall webhook in Oncall's payload shape and to Discord, and is set as the policies' Slack URL in `do-monitoring.sh`. Until it exists, the readiness probe is the way Oncall hears of a down node, through the `sfu-readiness` rule.
 
 ## Drill an alert without paging Oncall
 
@@ -189,44 +174,18 @@ A node that restarts or is rebuilt with the same node id keeps its name in the E
 3. Ask participants to reload the class page. The SDK asks the API for a new grant and joins the node again.
 4. Open one new Episode as a test and check a second participant receives media. `features/media/sfu/tests` has `TestLiveSmoke`, which does the same end to end against a node through the deploy tunnel.
 
-Drill result: after a service restart, `/readyz` answered again within 3 seconds and a fresh Episode with two guests passed the smoke test about 10 seconds later.
-
 ## Rebuild a node
 
-Rebuild order: create the Droplet from the cloud-init template, wait for the bootstrap marker, run `deploy <env> <address>`, check `/readyz`, point the API at the node, run the smoke test. The steps are in [Own-SFU nodes](../../sfu/README.md).
+Order: create the Droplet from the cloud-init template, wait for the bootstrap marker, run `deploy <env> <address>`, check `/readyz`, point the API at the node, run the smoke test ([Own-SFU nodes](../../sfu/README.md)). Plan on roughly 10 minutes including finding the operator and updating `CHALK_SFU_NODES`.
 
-Timed drill on a temporary 1 vCPU, 1 GB Droplet (not the production size) in the production region, using the throwaway `bench` environment, then deleted. Certificates already existed. The container image came from a warm local build cache.
-
-| Phase                                                    | Elapsed |
-| -------------------------------------------------------- | ------- |
-| Droplet active                                           | 35 s    |
-| First SSH login                                          | 47 s    |
-| Cloud-init finished (bootstrap marker present)           | 163 s   |
-| Deploy finished (`/readyz` 200 through the tunnel)       | 198 s   |
-| First guest join through the node (`TestLiveSmoke` pass) | 215 s   |
-| Restart and rejoin pass                                  | 229 s   |
-
-The drill spent about 3.6 minutes from nothing to a node that carried a test call. A real rebuild adds the time to find the operator, update `CHALK_SFU_NODES` and restart the API, which was not timed; plan on 10 minutes in total. A cold image build, with no local cache, was not timed. Cost: under 1 USD, and the Droplet and firewall were deleted at the end of the run.
-
-### Weekly backup or snapshot
-
-Recommendation: do not turn on weekly backups. The node holds no state of its own (certificates are in 1Password and the private directory, the image and config come from the deploy), so the rebuild above takes under 4 minutes and a backup would only save part of the 163 seconds of cloud-init while restoring a stale image. DigitalOcean weekly backups cost 20% of the Droplet price: 3.60 USD a month for the 18 USD node, 43.20 USD a year. A manual snapshot costs 0.06 USD per GB-month of used disk; confirm the exact price in the DigitalOcean billing page before enabling either.
+Do not turn on weekly backups or snapshots. The node holds no state of its own (certificates are in 1Password and the private directory, image and config come from deploy), so a rebuild is quicker than restoring a stale image.
 
 ## What guests see when the media node restarts or reboots
 
-Measured once on the staging node (1 vCPU, 1 GB Droplet) with two live guests on `chalk_sfu`, sampled every 250 ms. The guests stayed on the same page for both faults. Neither guest reloaded or rejoined by hand, the roster stayed at 2 and no error code appeared. Both are single runs, so read the times as an order of magnitude, not a promise.
+Neither guest has to reload or rejoin by hand, the roster stays intact and no error code appears (measured once on staging with two live guests, so read the times as an order of magnitude).
 
-| Fault                                                       | Guest-visible state                                                                                                                                                                     | Media frozen | Back to flowing                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------------------------- |
-| Media node process restart (`systemctl --user ... restart`) | Video and audio freeze at once. About 6 s later each guest shows `reconnecting` for about 5 s, its camera and microphone show `requesting` while they publish again, then `live`.       | about 14 s   | about 13 s after the restart command ends |
-| Node host reboot                                            | Video and audio freeze at once. Each guest shows `reconnecting` for about 24 s, with camera and microphone `requesting`, until the host is back and the service is active, then `live`. | about 34 s   | about 37 s after the reboot command       |
-
-Expected behaviour per case:
-
-1. **Process restart.** Tell the class to wait about 15 seconds. The SDK recovers on its own: do not ask guests to reload, since a reload only adds its own join time.
-2. **Host reboot.** The Droplet and service were back about 29 s after the reboot command and guests were flowing about 8 s after that. Tell the class to wait under a minute. The test did not cover an outage longer than this, so if the node is still down after 2 minutes, treat it as the Node down case above. How long the SDK keeps trying before it gives up was not measured, so ask guests who are still frozen to reload.
-
-The guests' `reconnecting` state started about 6 s after media stopped in both runs.
+1. **Process restart.** Video and audio freeze, each guest shows `reconnecting`, then `live`, in about 15 seconds. Tell the class to wait; do not ask guests to reload, since a reload only adds its own join time.
+2. **Host reboot.** The same sequence takes under a minute. Outages longer than that were not tested, so if the node is still down after 2 minutes treat it as Node down, and ask guests who stay frozen to reload.
 
 ## After a host resize or deploy
 
@@ -238,12 +197,6 @@ features/media/sfu/scripts/live-smoke production --confirm production
 
 On staging, hold the staging lease: `scripts/staging-sfu/staging-lock --holder <you> --purpose live-smoke --run-id <label> -- features/media/sfu/scripts/live-smoke staging --confirm staging`.
 
-## Kill-switch steps (timed)
+## Kill switch
 
-The procedure to send one Space back to Cloudflare, and to return it, is [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it) in the own-SFU README. It holds the commands, who may run them, how to move a live call, the verification, and the measured times. On staging the operator command returned in under 3 s, and both guests of a live call had media on the other plane about 30 s after the flip.
-
-Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`CHALK_SFU_NEW_EPISODES=off`) is the second step and needs an API reload, described in the same section.
-
-## Direct door / certificate expiry
-
-<!-- Owned by the direct-door firewall and TLS expiry lane. Put the alert, its check and its fix here; this runbook does not duplicate them. -->
+Sending one Space back to Cloudflare, and returning it, is in [Send one Space back to Cloudflare, and return it](../../sfu/README.md#send-one-space-back-to-cloudflare-and-return-it). Use the Space setting first: it touches one Space and needs no API reload. Stopping every new Episode (`CHALK_SFU_NEW_EPISODES=off`) is the second step and needs an API reload.
