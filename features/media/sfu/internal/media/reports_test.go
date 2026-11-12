@@ -2,10 +2,11 @@ package media
 
 import (
 	"os"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -85,7 +86,8 @@ func TestReportEstimatorStepsDownRightAfterACleanReport(t *testing.T) {
 }
 
 // A receiver sends REMB only when the answer negotiates it, so the node's answer to a browser
-// offer must carry goog-remb on VP8 and on nothing else.
+// offer must carry goog-remb on VP8 in every video section the browser opened to receive in, and
+// on no audio section.
 func TestAnswerNegotiatesREMBForVideo(t *testing.T) {
 	offer, err := os.ReadFile(chromiumOffer)
 	if err != nil {
@@ -99,10 +101,35 @@ func TestAnswerNegotiatesREMBForVideo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(answer.SDP, "a=rtcp-fb:96 goog-remb") {
-		t.Fatalf("the answer does not negotiate REMB for VP8:\n%s", answer.SDP)
+	var offered, answered sdp.SessionDescription
+	if err := offered.Unmarshal(offer); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(answer.SDP, "a=rtcp-fb:111 goog-remb") {
-		t.Fatalf("the answer negotiates REMB for audio:\n%s", answer.SDP)
+	if err := answered.Unmarshal([]byte(answer.SDP)); err != nil {
+		t.Fatal(err)
+	}
+	remb := func(media *sdp.MediaDescription, payloadType string) bool {
+		return slices.Contains(media.Attributes, sdp.Attribute{Key: "rtcp-fb", Value: payloadType + " goog-remb"})
+	}
+	viewing := 0
+	for _, section := range answered.MediaDescriptions {
+		mid, _ := section.Attribute(sdp.AttrKeyMID)
+		if section.MediaName.Media == "audio" && remb(section, "111") {
+			t.Errorf("the answer negotiates REMB for audio section %s", mid)
+		}
+		wanted := offered.MediaDescriptions[slices.IndexFunc(offered.MediaDescriptions, func(m *sdp.MediaDescription) bool {
+			offeredMid, _ := m.Attribute(sdp.AttrKeyMID)
+			return offeredMid == mid
+		})]
+		if _, receives := wanted.Attribute(sdp.AttrKeyRecvOnly); section.MediaName.Media != "video" || !receives {
+			continue
+		}
+		viewing++
+		if !remb(section, "96") {
+			t.Errorf("the answer does not negotiate REMB for VP8 in video section %s, which the browser opened to receive in", mid)
+		}
+	}
+	if viewing == 0 {
+		t.Fatal("the offer has no receive-only video section, so the test proves nothing")
 	}
 }
