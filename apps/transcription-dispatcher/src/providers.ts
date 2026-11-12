@@ -1,6 +1,7 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
 import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
-import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody, parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-utils.js";
+import { classifyProviderStatus, ensureAbortableTimeout, errorCodeFromBody } from "./provider-failure.js";
+import { parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-response.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 import { nativeDeepInfraBody, observedDeepInfraCost, observedDeepInfraIdentity, observedDeepInfraVersion } from "./deepinfra-response.js";
 

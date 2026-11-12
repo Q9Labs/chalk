@@ -1,5 +1,6 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
-import { classifyProviderStatus, openRouterReason, parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-utils.js";
+import { classifyProviderStatus, openRouterReason } from "./provider-failure.js";
+import { parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-response.js";
 import { prepareSpeechAudio } from "./speech-audio.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 

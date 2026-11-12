@@ -1,7 +1,7 @@
 import { AssignmentError, ProviderError, isLateCompletion, isTerminalFailure, providerFailureKind, providerSchemaFields, safeErrorCode } from "./errors.js";
 import type { TranscriptionAssignment } from "./assignment-types.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
-import { isReasonWord } from "./provider-utils.js";
+import { isReasonWord } from "./provider-failure.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
