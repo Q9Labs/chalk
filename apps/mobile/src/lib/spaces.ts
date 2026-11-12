@@ -1,6 +1,5 @@
 import type { AccessGrant, GetAccess, PublicSpaceArrival } from "@q9labsai/chalk-client";
-import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
+import { createChalkPublicClient, INVITE_HOSTS, parseChalkInviteLink } from "@q9labsai/chalk-client/invites";
 import * as SecureStore from "expo-secure-store";
 import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
 import { Platform } from "react-native";
@@ -42,21 +41,15 @@ export type SpaceOperation = "create" | "arrive" | "pending" | "refresh" | "leav
 export type SpaceOperationState = "failed" | "observed" | "succeeded";
 export type SpaceOperationObserver = (operation: SpaceOperation, state: SpaceOperationState) => void;
 
+const NIGHTLY_API_BASE_URL = "https://nightly-api.chalkmeet.com";
+
+function inviteHosts(): readonly string[] {
+  return getApiBaseURL() === NIGHTLY_API_BASE_URL ? [...INVITE_HOSTS, "nightly.chalkmeet.com"] : INVITE_HOSTS;
+}
+
 export function parseSpaceLink(input: string): SpaceRoute | null {
   const inviteLink = input.trim();
-  let parseInput = inviteLink;
-  if (getApiBaseURL() === "https://nightly-api.chalkmeet.com") {
-    try {
-      const url = new URL(inviteLink);
-      if (url.protocol === "https:" && url.hostname === "nightly.chalkmeet.com" && !url.username && !url.password && !url.port) {
-        url.hostname = "chalkmeet.com";
-        parseInput = url.toString();
-      }
-    } catch {
-      // Invite codes are not URLs and remain valid inputs.
-    }
-  }
-  const invite = parseChalkInviteLink(parseInput);
+  const invite = parseChalkInviteLink(inviteLink, { hosts: inviteHosts() });
   if (!invite) return null;
   return {
     kind: "space",
@@ -78,8 +71,7 @@ export async function routeMobileLink(input: string | null): Promise<SpaceRoute 
   } catch {
     return null;
   }
-  const isNightlyHost = url.hostname === "nightly.chalkmeet.com" && getApiBaseURL() === "https://nightly-api.chalkmeet.com";
-  if ((url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "chalkmeet.com" || url.hostname === "chalk.q9labs.ai" || isNightlyHost)) {
+  if ((url.protocol === "https:" || url.protocol === "http:") && inviteHosts().includes(url.hostname)) {
     // Linking.openURL would send an associated URL straight back to this app.
     if (Platform.OS === "android") {
       const browsers = await getCustomTabsSupportingBrowsersAsync();

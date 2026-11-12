@@ -1,6 +1,19 @@
 import { PrivacyNotice } from "../privacy/PrivacyNotice";
 import { useTheme } from "../../lib/theme-context";
-import { preconnect, readReloadRejoin, AccessMediaProofRejectedError, ArrivalUnavailableError, MediaUnavailableError, SpacePublicInviteUnavailableError, type ClientFailure, type JoinOptions, type ReloadRejoinMarker } from "@q9labsai/chalk-client";
+import {
+  canonicalSpaceInviteLink,
+  DEFAULT_INVITE_ORIGIN,
+  preconnect,
+  readReloadRejoin,
+  verifiedSpaceInviteLink,
+  AccessMediaProofRejectedError,
+  ArrivalUnavailableError,
+  MediaUnavailableError,
+  SpacePublicInviteUnavailableError,
+  type ClientFailure,
+  type JoinOptions,
+  type ReloadRejoinMarker,
+} from "@q9labsai/chalk-client";
 import { CallLimbo, listedRememberedDevices, readRememberedDevices, type PreJoinJoinOptions } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { publicAPIBaseURL, publicSyncDirectURL, publicSyncURL, createPreparedPublicSpace, createPublicInviteClient, resumePublicSpace, type SpaceAccessCleanupOptions, type PreparedPublicSpace, type PublicInviteClient } from "../../lib/chalk-access";
@@ -519,17 +532,17 @@ function spaceInviteToken(): string | undefined {
 }
 
 async function arrive(client: PublicInviteClient, displayName: string, slug: string | undefined, inviteToken: string | undefined): Promise<PublicPreparation> {
-  const { canonicalSpaceInviteLink, verifiedSpaceInviteLink } = await import("../../lib/named-space-route");
+  const origin = globalThis.location?.origin ?? DEFAULT_INVITE_ORIGIN;
   if (inviteToken) {
     const arrival = await client.arriveBySpacePublicInvite(inviteToken, displayName);
     const verifiedSlug = arrival.space?.slug ?? slug;
     if (!verifiedSlug) throw new Error(neutralSpaceError);
-    const inviteLink = canonicalSpaceInviteLink(verifiedSlug, inviteToken);
+    const inviteLink = canonicalSpaceInviteLink(origin, verifiedSlug, inviteToken);
     return { kind: "public", arrival, canonicalSlug: verifiedSlug, inviteLink, spaceName: arrival.space?.name };
   }
   const created = await client.createPublicSpace(displayName);
   const prepared = createPreparedPublicSpace(client, created.arrival);
-  const inviteLink = verifiedSpaceInviteLink(created.space.slug, created.invite_link);
+  const inviteLink = verifiedSpaceInviteLink(origin, created.space.slug, created.invite_link);
   return { kind: "public", arrival: created.arrival, canonicalSlug: created.space.slug, inviteLink, spaceName: created.space.name, prepared };
 }
 async function releasePublicPreparation(client: PublicInviteClient, preparation: PublicPreparation): Promise<void> {
