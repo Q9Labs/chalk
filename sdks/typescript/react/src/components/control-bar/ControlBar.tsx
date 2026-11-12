@@ -214,9 +214,10 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
 });
 ControlBarSurface.displayName = "ControlBarSurface";
 /** A standalone dock has no call toast stack, so its media notice or command failure gets one of its own, dismissible until the message changes. */
-function ControlBarNotice({ message }: { readonly message: string | undefined }): React.JSX.Element {
+function ControlBarNotice({ message }: { readonly message: string | undefined }): React.JSX.Element | null {
   const [dismissed, setDismissed] = useState<string | undefined>(undefined);
-  const toasts: Toast[] = message && message !== dismissed ? [{ id: "control-bar-notice", type: "error", duration: Infinity, message }] : [];
+  if (!message || message === dismissed) return null;
+  const toasts: Toast[] = [{ id: "control-bar-notice", type: "error", duration: Infinity, message }];
   return <ToastStack toasts={toasts} onDismiss={() => setDismissed(message)} />;
 }
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
