@@ -1,15 +1,18 @@
 import type { ParticipantListParticipant, ParticipantListVariant } from "./ParticipantsPanel";
 import type { ParticipantGradientPreference } from "../../utils/colorGenerator";
-import { lazy, Suspense, useState, useRef, useEffect, type ReactNode } from "react";
+import { Suspense, useState, useRef, useEffect, type ReactNode } from "react";
 import { ChalkPopoverPrimitive as Popover, ChalkSheet } from "../chalk-ui";
-import { HandIcon, Microphone01Icon, MicrophoneOff01Icon, Video01Icon, VideoOffIcon } from "../../utils/icons";
+import { Crown01Icon } from "../../utils/icons";
+import { MediaGlyph, ShellIcon } from "../control-bar/ShellIcon";
+import { preloadable } from "../../internal/preloadable";
 import { Avatar } from "../atomic";
 import { useNarrowCall } from "../../internal/call-width";
 import { useIsMobile } from "../../internal/useMediaQuery";
 import { splitMatch } from "./participant-search";
 
 // The menu opens on a click, so its code and styles load then.
-const ParticipantOptionsMenu = lazy(() => import("./participant-options-menu").then((module) => ({ default: module.ParticipantOptionsMenu })));
+// The menu downloads when a row with an options button mounts, so "Edit name" and the rest open with their content on the first frame.
+const { Component: ParticipantOptionsMenu, preload: preloadOptionsMenu } = preloadable(() => import("./participant-options-menu").then((module) => module.ParticipantOptionsMenu));
 
 export function ParticipantRow({
   participant,
@@ -137,8 +140,12 @@ export function ParticipantRow({
               </bdi>
             </button>
           )}
-          {participant.isLocal && !isEditing ? <i className="call-person-tag">You</i> : null}
-          {participant.isHost && !isEditing ? <i className="call-person-tag is-host">Host</i> : null}
+          {participant.isLocal && !isEditing ? <span className="call-person-you">(You)</span> : null}
+          {participant.isHost && !isEditing ? (
+            <span className="call-person-host" role="img" aria-label="Host" title="Host">
+              <Crown01Icon aria-hidden="true" />
+            </span>
+          ) : null}
         </div>
         {subLine ? <div className="call-person-sub">{subLine}</div> : null}
       </div>
@@ -146,7 +153,7 @@ export function ParticipantRow({
       <div className="call-person-state-slots">
         {participant.isHandRaised ? (
           <span className="call-hand" data-solo={handNumber === undefined || undefined} role="img" aria-label={`Hand raised${handNumber ? `, number ${handNumber}` : ""}`}>
-            <HandIcon />
+            <ShellIcon name="hand" size={14} />
             {handNumber}
           </span>
         ) : null}
@@ -158,18 +165,20 @@ export function ParticipantRow({
               <i />
             </span>
           </span>
-        ) : participant.isMuted ? (
-          <MicrophoneOff01Icon className="call-person-state mo" aria-label="Microphone off" role="img" />
         ) : (
-          <Microphone01Icon className="call-person-state" aria-label="Microphone on" role="img" />
+          <span className="call-person-state" data-off={participant.isMuted || undefined} role="img" aria-label={participant.isMuted ? "Microphone off" : "Microphone on"}>
+            <MediaGlyph kind="mic" slashed={participant.isMuted === true} busy={false} />
+          </span>
         )}
-        {participant.isVideoEnabled ? <Video01Icon className="call-person-state" aria-label="Camera on" role="img" /> : <VideoOffIcon className="call-person-state off" aria-label="Camera off" role="img" />}
+        <span className="call-person-state" role="img" aria-label={participant.isVideoEnabled ? "Camera on" : "Camera off"}>
+          <MediaGlyph kind="cam" slashed={participant.isVideoEnabled !== true} busy={false} />
+        </span>
       </div>
 
       {showMenuButton && !isEditing ? (
         phone ? (
           <>
-            <button type="button" className="call-person-options" aria-label={optionsLabel} aria-expanded={menuOpen} onClick={onMenuToggle}>
+            <button ref={() => void preloadOptionsMenu()} type="button" className="call-person-options" aria-label={optionsLabel} aria-expanded={menuOpen} onClick={onMenuToggle}>
               <MoreIcon />
             </button>
             <ChalkSheet open={menuOpen} onOpenChange={(open) => (open ? onMenuToggle() : onMenuClose())} title={optionsLabel}>
@@ -194,7 +203,7 @@ export function ParticipantRow({
               else onMenuClose();
             }}
           >
-            <Popover.Trigger className="call-person-options" aria-label={optionsLabel}>
+            <Popover.Trigger ref={() => void preloadOptionsMenu()} className="call-person-options" aria-label={optionsLabel}>
               <MoreIcon />
             </Popover.Trigger>
             <Popover.Portal container={rootRef.current?.closest<HTMLElement>("[data-chalk]") ?? undefined}>
