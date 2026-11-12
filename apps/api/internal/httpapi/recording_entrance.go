@@ -37,7 +37,7 @@ func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer Te
 			return entrancePreparationResponse{}, err
 		}
 		return prepareEntrance(ctx, preparer, request.TenantID, request.SpaceID)
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError).
 		Middleware(noStoreResponses)

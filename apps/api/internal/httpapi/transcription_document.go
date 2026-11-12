@@ -50,7 +50,7 @@ func transcriptDocumentEndpoint(service TranscriptArtifactService, objects Recor
 		}
 
 		return newTranscriptDocumentResponse(transcript, document), nil
-	}).Auth(APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
+	}).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).Responds(http.StatusOK, "TranscriptDocument", transcriptDocumentResponse{}).Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).MapErrors(transcriptDocumentAPIError)
 }
 
 func readTranscriptDocument(ctx context.Context, service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer, request transcriptDocumentRequest) (transcripts.Transcript, transcripts.Document, error) {

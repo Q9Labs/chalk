@@ -5,8 +5,7 @@ import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 type APIAuth string
 
 const (
-	APIAuthCookieOrBearer   APIAuth = "session_or_bearer"
-	APIAuthSessionOrBearer          = APIAuthCookieOrBearer
+	APIAuthSessionOrBearer  APIAuth = "session_or_bearer"
 	APIAuthParticipantMedia APIAuth = "participant_media"
 	APIAuthParticipantSync  APIAuth = "participant_sync"
 )

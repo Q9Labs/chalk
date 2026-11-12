@@ -41,7 +41,7 @@ func transcriptTextEndpoint(service TranscriptArtifactService, objects Recording
 			text:        transcripts.FormatText(document, info),
 			disposition: transcriptTextDisposition(info.SpaceTitle, info.StartedAt),
 		}, nil
-	}).Auth(APIAuthCookieOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).
+	}).Auth(APIAuthSessionOrBearer).Parameters(tenantIDParameter(), transcriptIDParameter()).
 		Description("Download a UTF-8 transcript with a Space title, UTC recording date, duration, detected language when known, and recording-relative speaker lines. Requires transcriptions:read.").
 		RespondsText(http.StatusOK, "TranscriptText").ResponseHeaders(APIHeaderContract{Name: "Content-Disposition", Type: "string", Required: true}).
 		Errors(transcriptReadErrors(apiErrorInvalidTranscriptID, apiErrorTranscriptNotFound, apiErrorTranscriptNotReady, apiErrorRecordingArtifactNotFound)...).
