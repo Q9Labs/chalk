@@ -45,6 +45,9 @@ func (n *Node) trail(level slog.Level, event string, scope protocol.Scope, attrs
 
 // trail emits a session event.
 func (s *Session) trail(level slog.Level, event string, attrs ...any) {
+	if s == nil || s.node == nil {
+		return
+	}
 	head := []any{"event", event, "connection_id", s.id, "session_kind", s.kind.name(), "node_incarnation", s.node.incarnation}
 	head = append(head, scopeAttrs(s.scope)...)
 	if trace := s.trace.Load(); trace != nil {
@@ -166,6 +169,9 @@ func (s *Session) tracePublicationStarted(source string, kind webrtc.RTPCodecTyp
 }
 
 func (s *Session) tracePublicationStopped(p *publication) {
+	if s == nil { // a bench or unit publication has no session
+		return
+	}
 	reason := "closed"
 	if s.cause.Load() != nil {
 		reason = "session_closed"
@@ -180,10 +186,16 @@ func (s *Session) subscriptionAttrs(sub *subscription) []any {
 }
 
 func (s *Session) traceSubscriptionStarted(sub *subscription) {
+	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
+		return
+	}
 	s.trail(slog.LevelInfo, "sfu.subscription.started", s.subscriptionAttrs(sub)...)
 }
 
 func (s *Session) traceSubscriptionPause(sub *subscription, was, now string) {
+	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
+		return
+	}
 	event, attrs := "sfu.subscription.paused", append(s.subscriptionAttrs(sub), "reason", now)
 	if now == "" {
 		event, attrs = "sfu.subscription.resumed", append(s.subscriptionAttrs(sub), "was", was)
@@ -192,6 +204,9 @@ func (s *Session) traceSubscriptionPause(sub *subscription, was, now string) {
 }
 
 func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
+	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
+		return
+	}
 	rid := "none"
 	if layer := sub.pub.layer(target); layer != nil {
 		rid = layer.rid
@@ -200,6 +215,9 @@ func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
 }
 
 func (s *Session) traceSubscriptionStopped(sub *subscription) {
+	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
+		return
+	}
 	reason := "released"
 	switch {
 	case s.cause.Load() != nil:

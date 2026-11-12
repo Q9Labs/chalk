@@ -269,18 +269,18 @@ func (n *Node) logCongestionPause(s *subscription, paused bool, now int64) {
 	}
 	s.pauseLogged = paused
 	reading := s.transport.reading(now)
-	event := "sfu.subscription.congestion_resumed"
+	message := "subscription resumed after a congestion pause"
 	reason := "bandwidth_recovered"
 	if paused {
-		event = "sfu.subscription.congestion_paused"
+		message = "subscription paused for congestion"
 		reason = "insufficient_bandwidth"
 	}
-	s.owner.trail(slog.LevelInfo, event, "mid", s.mid, "rid", s.alloc.rid, "reason", reason,
+	n.log.Info(message, append(scopeAttrs(s.owner.scope), "event", "sfu.subscription.congestion", "connection_id", s.owner.id, "connectionId", s.owner.id, "mid", s.mid, "rid", s.alloc.rid, "reason", reason,
 		"estimateBps", math.Round(reading.current), "provenBps", math.Round(reading.proven),
 		"deliveredShare", round2(reading.delivered), "probing", reading.probing, "hostPressure", reading.pressured,
 		"ackedBps", math.Round(reading.acked), "lossShare", round2(reading.lossShare), "lossy", reading.lossy,
 		"trend", reading.trend.String(), "decreaseCause", reading.decrease.cause, "decreaseAgoMs", reading.decrease.agoMs(now),
-		"decreaseFromBps", math.Round(reading.decrease.from), "decreaseToBps", math.Round(reading.decrease.to), "decreaseAckedBps", math.Round(reading.decrease.acked))
+		"decreaseFromBps", math.Round(reading.decrease.from), "decreaseToBps", math.Round(reading.decrease.to), "decreaseAckedBps", math.Round(reading.decrease.acked))...)
 }
 
 // plan predicts the Episode's packets/s from what its publishers send and
