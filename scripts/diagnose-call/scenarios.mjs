@@ -85,11 +85,14 @@ function silentPublisherCall() {
   ];
 }
 
+const CLEAR_LINK = { recv_bitrate_kbps: 1200, recv_loss_pct: 0, rtt_ms: 40, available_incoming_kbps: 6000 };
+const CONGESTED_LINK = { recv_bitrate_kbps: 60, recv_loss_pct: 11, rtt_ms: 420, available_incoming_kbps: 250 };
+
 /** A viewer whose downlink lost packets and queued: the bitrate fell to a trickle while the node and the publisher were fine. */
 function congestedViewerCall() {
   return [
     ...flow("conn-pub"),
-    ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 60, recv_height: 360, recv_loss_pct: second < 20 ? 0 : 11, rtt_ms: second < 20 ? 40 : 420, available_incoming_kbps: second < 20 ? 6000 : 250 })),
+    ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_height: 360, ...(second < 20 ? CLEAR_LINK : CONGESTED_LINK) })),
     node(0, "sfu.session.registered", "viewer", "conn-view"),
     node(20, "sfu.subscription.layer", "viewer", "conn-view", { layer: "low", ceiling: "high", server_limit: "high" }),
   ];
