@@ -316,11 +316,15 @@ const styles = `.call-card-tabs {
 }
 .call-message-column {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
-  max-width: 240px;
   min-width: 0;
+}
+.call-message-column > :not(.call-message),
+.call-message > * {
+  max-width: 240px;
 }
 .is-local .call-message-column {
   align-items: flex-end;
@@ -349,10 +353,12 @@ const styles = `.call-card-tabs {
   color: var(--chalk-muted-text);
   margin: 0 var(--space-1-5);
 }
+/* The message spans the row, so its reaction bar opens at the far edge, away from the sender name and time. */
 .call-message {
   position: relative;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   align-items: flex-start;
   gap: var(--space-1);
   max-width: 100%;
@@ -555,7 +561,7 @@ const styles = `.call-card-tabs {
 .call-reaction-bar {
   position: absolute;
   bottom: calc(100% - 8px);
-  left: 0;
+  inset-inline-end: 0;
   z-index: 3;
   display: flex;
   padding: var(--space-1);
@@ -572,8 +578,8 @@ const styles = `.call-card-tabs {
     visibility 0s 0.12s;
 }
 .is-local .call-reaction-bar {
-  left: auto;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: auto;
 }
 .call-message:hover .call-reaction-bar,
 .call-message:focus-visible .call-reaction-bar,
@@ -847,8 +853,12 @@ const styles = `.call-card-tabs {
   line-height: 20px;
   outline: none;
 }
+/* An enlarged placeholder ends in an ellipsis instead of wrapping into a line the field cannot show. */
 .call-message-input::placeholder {
+  overflow: hidden;
   color: var(--chalk-muted-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .call-message-input:focus-visible {
   box-shadow: var(--elevation-focus-ring);
