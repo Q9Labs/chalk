@@ -2,22 +2,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ColorScheme } from "@q9labsai/chalk-react-native";
 import { useCallback, useEffect, useState } from "react";
 
-export const CALL_PREFERENCES_STORAGE_KEY = "chalk.mobile.call-preferences.v1";
+const CALL_PREFERENCES_STORAGE_KEY = "chalk.mobile.call-preferences.v1";
 
 export type CallPreferences = {
   readonly colorScheme: ColorScheme;
   readonly soundsEnabled: boolean;
 };
 
-export interface CallPreferencesStorage {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-}
-
 /** The call opens dark with sounds on until the person picks otherwise. */
-export const DEFAULT_CALL_PREFERENCES: CallPreferences = { colorScheme: "dark", soundsEnabled: true };
+const DEFAULT_CALL_PREFERENCES: CallPreferences = { colorScheme: "dark", soundsEnabled: true };
 
-export function parseCallPreferences(value: string | null): CallPreferences {
+function parseCallPreferences(value: string | null): CallPreferences {
   if (!value) return DEFAULT_CALL_PREFERENCES;
 
   try {
@@ -31,12 +26,12 @@ export function parseCallPreferences(value: string | null): CallPreferences {
   }
 }
 
-export async function loadCallPreferences(storage: CallPreferencesStorage = AsyncStorage): Promise<CallPreferences> {
-  return parseCallPreferences(await storage.getItem(CALL_PREFERENCES_STORAGE_KEY));
+async function loadCallPreferences(): Promise<CallPreferences> {
+  return parseCallPreferences(await AsyncStorage.getItem(CALL_PREFERENCES_STORAGE_KEY));
 }
 
-export async function saveCallPreferences(preferences: CallPreferences, storage: CallPreferencesStorage = AsyncStorage): Promise<void> {
-  await storage.setItem(CALL_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+async function saveCallPreferences(preferences: CallPreferences): Promise<void> {
+  await AsyncStorage.setItem(CALL_PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
 }
 
 export type StoredCallPreferences = CallPreferences & {
