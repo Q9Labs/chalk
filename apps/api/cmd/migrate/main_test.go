@@ -84,7 +84,7 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const before int64 = 20261106120000
+	const before int64 = 20261112090000
 	latest := strconv.FormatInt(migrations.LatestVersion, 10)
 	run := func(args ...string) {
 		t.Helper()
@@ -106,7 +106,7 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 		if err := database.QueryRowContext(ctx, `select max(version_id) from goose_db_version where is_applied`).Scan(&version); err != nil {
 			t.Fatal(err)
 		}
-		if err := database.QueryRowContext(ctx, `select to_regclass('sfu_retirement_debts') is not null`).Scan(&table); err != nil {
+		if err := database.QueryRowContext(ctx, `select to_regclass('recording_colocated_capture_workers') is not null`).Scan(&table); err != nil {
 			t.Fatal(err)
 		}
 		return version, table
@@ -114,19 +114,19 @@ func TestDownToRevertsMigrationsAfterTheTarget(t *testing.T) {
 
 	run("--target", latest)
 	if version, table := state(); version != migrations.LatestVersion || !table {
-		t.Fatalf("after the up run: version %d, debt table %v", version, table)
+		t.Fatalf("after the up run: version %d, workers table %v", version, table)
 	}
 	// --target is an up-only target: it exits cleanly and leaves the newer migrations in place.
-	run("--target", "20261106120000")
+	run("--target", "20261112090000")
 	if version, table := state(); version != migrations.LatestVersion || !table {
-		t.Fatalf("--target went down: version %d, debt table %v", version, table)
+		t.Fatalf("--target went down: version %d, workers table %v", version, table)
 	}
-	run("--down-to", "20261106120000")
+	run("--down-to", "20261112090000")
 	if version, table := state(); version != before || table {
-		t.Fatalf("after --down-to %d: version %d, debt table %v", before, version, table)
+		t.Fatalf("after --down-to %d: version %d, workers table %v", before, version, table)
 	}
 	run("--target", latest)
 	if _, table := state(); !table {
-		t.Fatal("the debt table did not come back on the next up")
+		t.Fatal("the workers table did not come back on the next up")
 	}
 }

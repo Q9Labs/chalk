@@ -4,7 +4,7 @@ The API uses pgx, sqlc, and goose. `apps/api/scripts/dev-services.sh` manages lo
 
 ## Schema changes
 
-`apps/api/db/migrations/*.sql` is the source used by goose and sqlc. Keep `db/schema.sql`, the human-readable snapshot, in sync; editing it alone doesn't change a database. Add a timestamped migration with goose `Up` and `Down` sections. Use a safe rollback, or make `Down` fail explicitly if the migration is irreversible. Test reversible changes with up, down, and up using `apps/api/scripts/db-migrate.sh`.
+`apps/api/db/migrations/*.sql` is the source used by goose and sqlc. Keep `db/schema.sql`, the schema sqlc reads, in sync; editing it alone doesn't change a database. Add a timestamped migration with goose `Up` and `Down` sections. Use a safe rollback, or make `Down` fail explicitly if the migration is irreversible. Test reversible changes with up, down, and up using `apps/api/scripts/db-migrate.sh`.
 
 For managed databases, use the direct owner connection in `CHALK_DATABASE_URL`, not the runtime/PgBouncer URL. The controller runs checked-in migrations to the release manifest's `minimum_migration` before API/Sync activation. Owner credentials stay out of runtime services. Only an explicitly named checked-in repair may fill an out-of-order gap; other gaps fail. API readiness rejects an older schema. Runtime rollback does not undo migrations.
 
@@ -13,6 +13,12 @@ For managed databases, use the direct owner connection in `CHALK_DATABASE_URL`, 
 An `Up` migration must not remove or rename a table, column, type, or constraint that the previous release still uses. Use two releases: first stop using the object, then drop it only after that release is in production. The previous image must work without undoing migrations.
 
 The API gate checks new migrations for destructive changes. A deliberate second-release removal needs a standalone `-- chalk:removed-in #<PR>` comment in `Up` naming the merged PR that stopped using the object. This marker is an assertion, not proof: verify that the PR removed every use and is already in production. The check does not prove dynamic SQL or data changes safe. For its narrow concurrent-index retry exception, see `apps/api/scripts/check-additive-migrations.mjs`.
+
+## Baseline
+
+`20261110090000_baseline.sql` replaces every migration through that version, the newest one in production release `production-42914197949`. A database already at that version skips it, an empty database builds the same schema from it, and a database older than the baseline refuses it: migrate that database with a release from before the squash first. Its `Down` fails on purpose.
+
+To squash again, take the newest migration version in the last production release (the release tag, or `production-<run id>`, and the promote workflow run), never from a production database. Dump the schema of a database migrated through that version (`pg_dump --schema-only --no-owner --no-privileges`, without `goose_db_version`), add the seed rows the squashed migrations inserted, and name the file with that version. Then prove on a disposable Postgres that a database built from the new chain dumps identically to one built from the old chain, that a database migrated to the cutoff with the old chain and then with the new one ends identical, and that the previous release's API still reports ready against both.
 
 ## Queries and verification
 
