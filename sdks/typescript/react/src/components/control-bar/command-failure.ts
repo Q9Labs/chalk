@@ -111,9 +111,12 @@ export const MEDIA_FAILURE_POLICY = {
   "whiteboard.unavailable": unavailable,
 } satisfies Record<ErrorCode, Rule>;
 
+const MACHINE_CODE = /^[a-z][a-z0-9_.]*$/;
+
 export function commandFailurePresentation(failure: ClientFailure, source?: MediaCommandSource, operation: Operation = "change", hasExactRetry = false): { readonly message: string; readonly retry: boolean } {
   if (!Object.hasOwn(MEDIA_FAILURE_POLICY, failure.code)) return { message: "This media action couldn’t be completed.", retry: false };
-  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: failure.message, retry: false };
+  // A rejected Sync command carries its server reason (such as external_operation_failed) as the message, which isn't copy.
+  if (!source && operation === "change" && !failure.code.startsWith("media.")) return { message: MACHINE_CODE.test(failure.message) ? "That didn’t work. Try again in a moment." : failure.message, retry: false };
   const rule: Rule = MEDIA_FAILURE_POLICY[failure.code];
   const context = { source, recoverable: failure.recoverable };
   const message = rule.copy[operation](context);
