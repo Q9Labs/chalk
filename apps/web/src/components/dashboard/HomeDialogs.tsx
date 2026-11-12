@@ -4,7 +4,8 @@ import { spaceNameMaxCodePoints, type CallDTO } from "../../lib/dashboard/contra
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { displayLink } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
-import { CopyAction, Dialog, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { CopyAction, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
 import { readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./language-choice";
 import { SITE_HOST } from "../../lib/site-origin";

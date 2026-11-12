@@ -1,6 +1,6 @@
 import { Icon } from "../site/Icon";
 import { KEY_PREFIX_LENGTH, SIGNING_PREFIX_LENGTH } from "./developer-snippets";
-import { Dialog } from "./kit";
+import { Dialog } from "./Dialog";
 import { SecretField } from "./SecretField";
 
 export function Cancel({ onClose }: { readonly onClose: () => void }) {

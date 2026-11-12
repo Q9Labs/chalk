@@ -1,7 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { errorMessage } from "../../lib/dashboard/client";
-import { trapDialogFocus } from "../../lib/dialog-focus";
 import { useMediaQuery } from "../../lib/use-media-query";
 import { ChalkToast } from "@q9labsai/chalk-react/toast";
 import { Icon, type IconName } from "../site/Icon";
@@ -84,124 +83,6 @@ export function MenuItem({ icon, danger, onSelect, children }: { readonly icon?:
       {icon ? <Icon name={icon} /> : null}
       {children}
     </button>
-  );
-}
-
-/* ---------- dialogs: a card on a scrim, a bottom sheet on the phone ---------- */
-
-type DialogProps = {
-  readonly title: ReactNode;
-  readonly description?: ReactNode;
-  readonly alert?: boolean;
-  readonly wide?: boolean;
-  /** On a phone the sheet fills the screen height. */
-  readonly tall?: boolean;
-  /** Artwork above the title, such as the app and Chalk logos. */
-  readonly lead?: ReactNode;
-  /** A tile beside the title, the heading shape the Developer dialogs use. Body and actions get their own bands. */
-  readonly icon?: IconName;
-  readonly tone?: "ok";
-  /** Quiet text on the left of the actions. */
-  readonly hint?: ReactNode;
-  readonly onClose: () => void;
-  readonly onSubmit?: () => void;
-  readonly children?: ReactNode;
-  readonly actions: ReactNode;
-};
-
-/** Traps focus, closes on Esc or the scrim, and gives focus back to whatever opened it. */
-export function Dialog({ title, description, alert, wide, tall, lead, icon, tone, hint, onClose, onSubmit, children, actions }: DialogProps) {
-  const card = useRef<HTMLElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const first = card.current?.querySelector<HTMLElement>("[autofocus], input:not([type=checkbox]), .acts .btn:last-child");
-    first?.focus();
-    return () => {
-      if (opener?.isConnected) opener.focus();
-    };
-  }, []);
-
-  function onKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-    trapDialogFocus(event);
-  }
-
-  const heading = (
-    <>
-      <h2 id={titleId}>{title}</h2>
-      {description ? <p id={descriptionId}>{description}</p> : null}
-    </>
-  );
-  const inner = (
-    <>
-      <button type="button" className="ib x" aria-label="Close" onClick={onClose}>
-        <Icon name="x" />
-      </button>
-      {lead}
-      {icon ? (
-        <div className="dh">
-          <span className={tone === "ok" ? "tile ok" : "tile"}>
-            <Icon name={icon} size={20} />
-          </span>
-          <div>{heading}</div>
-        </div>
-      ) : (
-        heading
-      )}
-      {icon && children ? <div className="db">{children}</div> : children}
-      <div className="acts">
-        {hint ? <span className="hint">{hint}</span> : null}
-        {actions}
-      </div>
-    </>
-  );
-  const shared = {
-    className: ["dlg", icon && "titled", wide && "w", tall && "tall"].filter(Boolean).join(" "),
-    role: alert ? "alertdialog" : "dialog",
-    "aria-modal": true,
-    "aria-labelledby": titleId,
-    "aria-describedby": description ? descriptionId : undefined,
-    onKeyDown,
-  } as const;
-  return (
-    <div
-      className="scrim"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      {onSubmit ? (
-        <form
-          {...shared}
-          ref={(node) => {
-            card.current = node;
-          }}
-          noValidate
-          onSubmit={(event: FormEvent) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-        >
-          {inner}
-        </form>
-      ) : (
-        <div
-          {...shared}
-          ref={(node) => {
-            card.current = node;
-          }}
-        >
-          {inner}
-        </div>
-      )}
-    </div>
   );
 }
 

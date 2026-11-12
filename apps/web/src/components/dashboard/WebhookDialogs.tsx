@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { type DeveloperAction, type WebhookDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
-import { Dialog, useIntentKeys, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { useIntentKeys, useToast } from "./kit";
 import { Cancel, FieldError } from "./developer-dialog-parts";
 
 type EventType = Extract<DeveloperAction, { action: "create-webhook" }>["eventTypes"][number];

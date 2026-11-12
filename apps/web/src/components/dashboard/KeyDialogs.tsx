@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { type DeveloperAction, type KeyDTO } from "../../lib/dashboard/contracts";
 import { act, errorMessage } from "../../lib/dashboard/client";
 import { fullDate } from "../../lib/dashboard/format";
-import { Dialog, Seg, useIntentKeys, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { Seg, useIntentKeys, useToast } from "./kit";
 import { Cancel, FieldError } from "./developer-dialog-parts";
 
 type CreateKey = Extract<DeveloperAction, { action: "create-key" }>;

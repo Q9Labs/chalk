@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { SITE_ORIGIN } from "../../lib/site-origin";
 import { act, errorMessage } from "../../lib/dashboard/client";
-import { Dialog, useToast } from "./kit";
+import { Dialog } from "./Dialog";
+import { useToast } from "./kit";
 import { Cancel, FieldError } from "./developer-dialog-parts";
 
 const HTTPS_ORIGIN = /^https:\/\/(localhost|([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})(:\d{1,5})?$/;
