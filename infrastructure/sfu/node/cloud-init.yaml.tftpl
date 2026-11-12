@@ -30,7 +30,7 @@ runcmd:
   - ufw allow ${media_port}/udp
   - ufw allow ${media_port}/tcp
 %{ for address in control_addresses ~}
-  - ufw allow proto tcp from ${address} to any port 8443
+  - ufw allow proto tcp from ${address} to any port ${control_port}
 %{ endfor ~}
 %{ for address in ssh_addresses ~}
   - ufw allow proto tcp from ${address} to any port 22

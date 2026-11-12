@@ -138,10 +138,7 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 	}
 	receiveBuffer := receiveSocketBuffer.size(conn, cfg.UDPReceiveBuffer, log)
 	sendBuffer := sendSocketBuffer.size(conn, cfg.UDPSendBuffer, log)
-	var media net.PacketConn = conn
-	if cfg.UDPBatch {
-		media = newMediaConn(conn)
-	}
+	media := newMediaConn(conn)
 	mux := webrtc.NewICEUDPMux(nil, media)
 	var tcpMux ice.TCPMux
 	if cfg.TCPAddr != "" {
@@ -401,7 +398,7 @@ func (n *Node) Host() protocol.HostState {
 		}
 		n.mu.Unlock()
 	}
-	if rss, known := readRSS(rssPath); known {
+	if rss, known := ResidentBytes(); known {
 		state.RSSBytes = &rss
 	}
 	if errs, known := readUDPErrors(udpStatsPath); known {

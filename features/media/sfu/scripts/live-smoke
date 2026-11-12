@@ -42,9 +42,7 @@ fi
 label="${environment}-live-smoke"
 fail() { echo "${label}: FAIL: $1"; exit 1; }
 
-script_dir="$(cd "$(dirname "$0")" && pwd)"
-sfu_root="$(dirname "$script_dir")"
-node_dir="$(cd "${sfu_root}/../../../infrastructure/sfu" && pwd)"
+source "$(dirname "$0")/../../../../infrastructure/sfu/lib.sh"
 dir="${CHALK_SFU_PRIVATE_DIR:-$HOME/.config/chalk-sfu}/${environment}"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
@@ -65,19 +63,12 @@ for file in ca.crt operator.crt operator.key; do
   [[ -f "${dir}/${file}" ]] || fail "missing ${file}"
 done
 
-ssh_options=(-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts" -o ExitOnForwardFailure=yes)
-ssh_options+=(-i "${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}")
+sfu_ssh_options "${dir}/known_hosts"
 port=$((20000 + RANDOM % 20000))
-ssh "${ssh_options[@]}" -N -L "${port}:127.0.0.1:8443" "root@${host}" &
-tunnel=$!
+sfu_tunnel "$port" "$host"
 log="$(mktemp)"
 trap 'kill "$tunnel" 2>/dev/null || true; rm -f "$log"' EXIT
-
-for _ in $(seq 20); do
-  kill -0 "$tunnel" 2>/dev/null || fail "the SSH tunnel did not open"
-  (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null && break
-  sleep 0.5
-done
+sfu_wait_port "$port" || fail "the SSH tunnel did not open"
 
 cd "$sfu_root"
 script_sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"

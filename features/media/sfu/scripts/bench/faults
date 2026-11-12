@@ -35,7 +35,7 @@ long_drain_seconds="${BENCH_LONG_DRAIN_SECONDS:-3600}"
 
 tenant=bench
 run="r$(date +%s)"
-ssh_options=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=${dir}/known_hosts" -i "$SFU_SSH_KEY")
+sfu_ssh_options "${dir}/known_hosts" -o ConnectTimeout=10
 status="" body=""
 results=()
 

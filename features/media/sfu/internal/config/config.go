@@ -2,6 +2,8 @@
 package config
 
 import (
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -31,9 +33,6 @@ type Config struct {
 	// UDPSendBuffer is the SO_SNDBUF size requested for the UDP socket. The kernel grants at most
 	// net.core.wmem_max, so the host must raise it too. A full send buffer drops outgoing media.
 	UDPSendBuffer int
-	// UDPBatch sends and receives media datagrams in batches (recvmmsg, sendmmsg, UDP
-	// segmentation) instead of one system call each. Off is the rollback.
-	UDPBatch bool
 
 	TLSCertFile    string
 	TLSKeyFile     string
@@ -55,9 +54,8 @@ type Config struct {
 	// Participant's microphone and camera, so it needs more than a Participant's limit.
 	MaxCaptureSubscriptions int
 	MaxRequestBytes         int64
-	// PacketBudget is the node's admission budget in packets/s, in plus out. Set it
-	// per node size: 16000 on s-1vcpu-1gb, 32000 on s-2vcpu-2gb. A join that would
-	// push the Episodes' reservations above it is refused.
+	// PacketBudget is the node's admission budget in packets/s, in plus out, set by the node size
+	// (SFU_NODE_SIZE). A join that would push the Episodes' reservations above it is refused.
 	PacketBudget int
 	// VideoStreamCost is the reserved packets/s of one camera sent to one subscriber, at its top
 	// layer. CameraUplinkCost is what the camera's publisher sends the node: every simulcast
@@ -142,25 +140,68 @@ type Guard struct {
 	Window                time.Duration
 }
 
+// nodes is the table of node sizes, ports and guard limits. The deploy scripts and the OpenTofu
+// module read the same file, so a node is described once. A size's packet budget admits only as many
+// classes as keep the node's own CPU under about 65% of what its vCPUs deliver at the worst steal
+// seen (52% over 10 s): a 3-person, 2-camera class reserves 7170 packets/s and costs about 11% of
+// one vCPU, so 22000 admits 3 classes on 1 vCPU and 36000 admits 5 on 2 (docs/sfu/capacity-calibration.md).
+// Production closes admission to new Episodes at 40% steal; the other environments keep 25 so the
+// guard stays easy to exercise there.
+//
+//go:embed node.json
+var nodesJSON []byte
+
+type nodeTable struct {
+	Ports struct {
+		Control int `json:"control"`
+		Media   int `json:"media"`
+	} `json:"ports"`
+	DefaultSize string `json:"defaultSize"`
+	Sizes       map[string]struct {
+		PacketBudget int `json:"packetBudget"`
+	} `json:"sizes"`
+	StealPercent struct {
+		Production int `json:"production"`
+		Other      int `json:"other"`
+	} `json:"stealPercent"`
+}
+
+var nodes = func() nodeTable {
+	var table nodeTable
+	if err := json.Unmarshal(nodesJSON, &table); err != nil {
+		panic(fmt.Sprintf("node.json: %v", err))
+	}
+	return table
+}()
+
 // Lookup reads one setting, like os.LookupEnv.
 type Lookup func(key string) (string, bool)
 
-// Load reads SFU_* settings. It reports every invalid setting at once.
 // minSourceLeaseTTL is two of the API's 5 s lease renewal intervals
 // (providerbridge.SourceLeaseRenewInterval), so a lease cannot lapse between renewals.
 const minSourceLeaseTTL = 10 * time.Second
 
+// Load reads SFU_* settings. It reports every invalid setting at once.
 func Load(lookup Lookup) (Config, error) {
 	r := reader{lookup: lookup}
+	size := r.text("SFU_NODE_SIZE", nodes.DefaultSize)
+	node, known := nodes.Sizes[size]
+	if !known {
+		r.fail("SFU_NODE_SIZE", fmt.Errorf("%q is not a node size in node.json", size))
+	}
+	environment := r.text("SFU_ENVIRONMENT", "local")
+	stealPercent := nodes.StealPercent.Other
+	if environment == "production" {
+		stealPercent = nodes.StealPercent.Production
+	}
 	cfg := Config{
-		ControlAddr:                r.text("SFU_CONTROL_ADDR", ":8443"),
-		UDPAddr:                    r.text("SFU_UDP_ADDR", ":50000"),
+		ControlAddr:                r.text("SFU_CONTROL_ADDR", fmt.Sprintf(":%d", nodes.Ports.Control)),
+		UDPAddr:                    r.text("SFU_UDP_ADDR", fmt.Sprintf(":%d", nodes.Ports.Media)),
 		TCPAddr:                    r.text("SFU_TCP_ADDR", ""),
 		AnnounceIPs:                r.list("SFU_ANNOUNCE_IPS"),
 		IncludeLoopback:            r.boolean("SFU_ICE_LOOPBACK", false),
 		UDPReceiveBuffer:           r.integer("SFU_UDP_RECEIVE_BUFFER", 8<<20, 256<<10, 64<<20),
 		UDPSendBuffer:              r.integer("SFU_UDP_SEND_BUFFER", 8<<20, 256<<10, 64<<20),
-		UDPBatch:                   r.boolean("SFU_UDP_BATCH", true),
 		TLSCertFile:                r.required("SFU_TLS_CERT_FILE"),
 		TLSKeyFile:                 r.required("SFU_TLS_KEY_FILE"),
 		ClientCAFile:               r.required("SFU_CLIENT_CA_FILE"),
@@ -172,7 +213,7 @@ func Load(lookup Lookup) (Config, error) {
 		MaxCapturesPerEpisode:      r.integer("SFU_MAX_CAPTURES_PER_EPISODE", 2, 0, 8),
 		MaxCaptureSubscriptions:    r.integer("SFU_MAX_CAPTURE_SUBSCRIPTIONS", 0, 1, 512),
 		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 384<<10, 4<<10, 1<<20)),
-		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
+		PacketBudget:               r.integer("SFU_PACKET_BUDGET", node.PacketBudget, 1000, 1000000),
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 300, 1, 10000),
 		CameraUplinkCost:           r.integer("SFU_CAMERA_UPLINK_COST", 390, 1, 10000),
 		CamerasPerParticipant:      r.integer("SFU_CAMERAS_PER_PARTICIPANT", 2, 1, 8),
@@ -189,7 +230,7 @@ func Load(lookup Lookup) (Config, error) {
 			PacerQueueBytes:    r.integer("SFU_PACER_QUEUE_BYTES", 128<<10, 16<<10, 4<<20),
 		},
 		Guard: Guard{
-			MaxStealPercent:       float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", 3, 1, 100)),
+			MaxStealPercent:       float64(r.integer("SFU_GUARD_MAX_STEAL_PERCENT", stealPercent, 1, 100)),
 			MaxBusyPercent:        float64(r.integer("SFU_GUARD_MAX_BUSY_PERCENT", 90, 1, 100)),
 			MaxSchedulerLatency:   r.duration("SFU_GUARD_MAX_SCHEDULER_LATENCY", 20*time.Millisecond, time.Millisecond, 5*time.Second),
 			MaxPacerDropPercent:   float64(r.integer("SFU_GUARD_MAX_PACER_DROP_PERCENT", 5, 1, 100)),
@@ -199,7 +240,7 @@ func Load(lookup Lookup) (Config, error) {
 		Telemetry: Telemetry{
 			OTLPEndpoint: r.text("SFU_OTLP_ENDPOINT", ""),
 			OTLPInsecure: r.boolean("SFU_OTLP_INSECURE", false),
-			Environment:  r.text("SFU_ENVIRONMENT", "local"),
+			Environment:  environment,
 			Version:      r.text("SFU_VERSION", "dev"),
 			Interval:     r.duration("SFU_OTLP_INTERVAL", 10*time.Second, time.Second, 5*time.Minute),
 		},
