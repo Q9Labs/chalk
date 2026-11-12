@@ -24,7 +24,7 @@ pnpm dev                                           # run it in tmux or another s
 - With both SFU variables set the launcher does not call the 1Password CLI. With neither set it reads the item through `op` as before. Setting only one fails startup.
 - `PUBLIC_ORIGIN` is the origin a person or browser uses to reach the web app. It sets the Sync token issuer, the CORS list, the Vite host allow-list and the browser's Sync WebSocket URL. Unset, the issuer stays `http://chalk.local`.
 - Chalk's guest cookie is `__Host-chalk_space_guest_*` and is `Secure`. A browser only stores it on `https://` origins or on `localhost`. Use `http://localhost:3070` (or `http://<name>.localhost:3070`, which Chromium resolves to loopback) for a plain-HTTP run. A real remote origin needs HTTPS in front of port 3070. A name such as `http://chalk-orb.test` fails: the browser cannot resolve it.
-- From an empty data dir the first run starts Postgres and Redis containers, pulls their images, compiles the API, runs `mix deps.get` and compile for Sync, runs migrations, creates a tenant and a Space, and enables the Space's public invite. On a 4 vCPU, 8 GB Linux box with the pnpm store warm, empty caches reached ready in about 100 s, and the stack alone uses about 3 GB of memory. Two headless Chromium contexts from the join-call journey raise the machine's used memory to about 6 GB, so keep other work off that box while you drive. Pulling the images and `pnpm install` add to the first run.
+- From an empty data dir the first run starts Postgres and Redis containers, pulls their images, compiles the API, runs `mix deps.get` and compile for Sync, runs migrations, creates a tenant and a Space, and enables the Space's public invite. Plan for about 3 GB of memory for the stack and about 6 GB with two Chromium contexts, so keep other work off the box while you drive.
 
 Ready means the supervisor printed `Chalk dev ready`. That line only appears after a seeded guest has arrived through the invite page and left again, using the web origin. The seed is in .private/chalk-dev/seed.json (mode 0600, git-ignored) and holds `tenantId`, `spaceId`, `invite.path`, `systemToken`, `urls`. The `systemToken` is a credential: read it, never copy it into evidence.
 
@@ -34,7 +34,7 @@ Ready means the supervisor printed `Chalk dev ready`. That line only appears aft
 pnpm dev:doctor
 ```
 
-Read-only. It prints JSON `{ "ok": true|false, "checks": [...] }` and exits 0 only when every check passes. The checks are: owner (this checkout owns the runtime and its supervisor is alive), build (the running revision equals `HEAD`), services (every recorded process id still runs the expected command), api, sync and web (each answers its health route), and sign-in (a seeded guest arrives through the web origin and leaves). Run it before every drive and whenever anything looks off. A failing check names the stage. Do not drive on a failed doctor.
+Read-only. It prints JSON `{ "ok": true|false, "checks": [...] }` and exits 0 only when every check passes. The checks are owner, build (the running revision equals `HEAD`), services, api, sync, web and sign-in. Run it before every drive and whenever anything looks off. A failing check names the stage. Do not drive on a failed doctor.
 
 ## Drive
 
@@ -67,8 +67,3 @@ pnpm dev:down
 ```
 
 `down` runs `stop`, then `reset --yes`: it stops the processes this runtime started, drops the `chalk_dev` database, clears Redis state and removes `.private/chalk-dev`. It leaves the shared Postgres container and the pulled images in place. It never touches `.verify/`. After cleanup, `ls .verify/<run-id>` must still list the evidence. Delete scratch secret files you wrote. Run `down` after a failed iteration too, so no port stays bound. Do not kill processes by name.
-
-## Helpers
-
-- `scripts/join-call.mjs <run-id> [--web <origin>]`: the join-call journey above. It reads the seed from .private/chalk-dev/seed.json in the current directory and defaults `--web` to the seed's public origin. Needs `playwright` (a repo dev dependency) and its Chromium (`pnpm exec playwright install --with-deps chromium` on a fresh Linux box).
-- `pnpm dev:doctor`, `pnpm dev:down`, `pnpm dev:status`, `pnpm dev:logs -- <service>`: the repo's own supervisor commands.

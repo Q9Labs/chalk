@@ -1,569 +1,40 @@
 schema_version: 7
 principle: >-
-  Each entry is one product outcome: what exists today and the work left. Evidence and verification
-  logs live elsewhere. Priority is set by the owner.
+  Each entry is remaining work that code cannot show. Delete an entry when its work is done: the
+  code is the record of what works. Priority is set by the owner.
 sizing: >-
   Size is the work left. S is one focused change, M is several connected changes, L must be split
   before starting, and Unknown needs investigation first.
 outcomes:
-  - id: media.real_network_qualification
-    title: Media works on real networks and devices
-    area: media
-    state: unknown
-    summary: >-
-      Web and native media are implemented, but every automated run uses mocked signaling. No
-      two-party call has been checked on real browsers or physical phones.
-    priority: P1
-    size: M
-    remaining:
-      - >-
-        Run a two-party call with audio, video, screen share, admission changes and reconnect on
-        supported browsers and on iOS and Android release builds.
-      - Cover permission denial, background return and media-route replacement.
-      - >-
-        Make an unmute after a moderator mute reach every receiver in under two seconds. In production
-        it took about six seconds, and one receiver sometimes never hears it.
-      - Find whether audio can play for a few tens of milliseconds after a muted badge when Sync restarts.
-      - Check camera simulcast on physical Safari and phones; Firefox publishes one camera layer.
-    uncertainty: No real-network or physical-device observation exists.
-    theory: theory.md#product-goals
-    code:
-      - tools/sdk-web-consumer-e2e/README.md
-      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
-      - apps/mobile/MOBILE_ENV_CONTRACT.md
-  - id: realtime_sync.failover_qualification
-    title: Sync survives node and database failure
-    area: realtime_sync
-    state: in_progress
-    summary: >-
-      Local checks cover repeated Sync restarts and chat queued during reconnects, alongside
-      database outages and slow clients. Recovery on a production-like topology remains
-      unqualified, and production has no database standby.
-    priority: P1
-    size: M
-    remaining:
-      - >-
-        Run the fault soak against a named production-like topology, including the original
-        database coming back after an outage.
-      - Decide whether production needs a database standby once there are users.
-    uncertainty: The soak has only run on one machine with a local Postgres.
-    theory: theory.md#sync-correctness
-    code:
-      - apps/sync/lib/chalk_sync/stateholder/postgres.ex
-      - infrastructure/managed-episode
-  - id: collaboration.whiteboard_delivery
-    title: Whiteboard works across web and mobile
-    area: collaboration
-    state: unknown
-    summary: >-
-      The whiteboard is wired into both the web and native Space, but no live Episode has used it
-      across several clients or a phone.
-    priority: P1
-    size: S
-    remaining:
-      - >-
-        Draw live web to web and web to phone, including view-only permission, file transfer,
-        reconnect and snapshot recovery.
-      - Check math, touch and keyboard input and viewport resizing.
-    uncertainty: No live whiteboard Episode across clients has been observed.
-    theory: theory.md#product-memory
-    code:
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react-native/src/components/EmbeddedWhiteboard.tsx
-  - id: collaboration.whiteboard_connection_stability
-    title: Keep whiteboard connections steady
-    area: collaboration
-    state: unknown
-    summary: >-
-      Drawings survive reconnects, but the cause of unexpected whiteboard reconnects is not known.
-    size: Unknown
-    remaining:
-      - Reproduce an unexpected reconnect while drawing.
-      - Find and fix the cause without weakening recovery after a real connection cut.
-      - Confirm the board stays connected during normal drawing and sharing.
-    uncertainty: The reconnect trigger needs investigation before a fix can be scoped.
-    theory: theory.md#sync-correctness
-    code:
-      - sdks/typescript/client/src/connection/lifecycle.ts
-      - sdks/typescript/client/src/whiteboard/v1-client.ts
-      - sdks/typescript/react/src/internal/useWhiteboardSceneSubscription.ts
-  - id: collaboration.attachment_retention
-    title: Chat attachments stay isolated and get deleted
-    area: collaboration
-    state: unknown
-    summary: >-
-      Upload, download, expiry and cleanup exist, but only local storage has been tested. Isolation
-      between Tenants and real object deletion are unproved.
-    priority: P1
-    size: S
-    remaining:
-      - >-
-        Share an attachment between two authorized clients and check that another Tenant or
-        Participant is refused.
-      - >-
-        Check that expired and abandoned uploads are deleted from real storage, cleanup survives
-        interruption, and stale grants fail.
-    uncertainty: Only local storage has been exercised.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/chatattachments/service.go
-      - apps/api/internal/chatattachments/cleanup.go
-      - apps/api/internal/httpapi/chat_attachments.go
-  - id: recording.export
-    title: Download a Recording as MP4
-    area: recording
-    state: in_progress
-    summary: >-
-      Export renders an MP4 on request with the native compositor on an s-1vcpu-1gb worker in
-      production. When a camera's video is damaged, the Export holds the last good frame and is
-      marked degraded instead of failing. A camera can still freeze for several seconds after its
-      quality changes.
-    size: M
-    remaining:
-      - Find why a camera freezes after a quality change, and shorten the freeze.
-      - Report Capture's packet and repeat counts for each Recording in production.
-      - Download one Export twice to confirm the second download reuses the file.
-    uncertainty: >-
-      The freeze may be the wait for the next keyframe after a quality change. This is not measured.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/httpapi/recordings.go
-      - apps/api/internal/recordingpipeline/types.go
-      - sdks/typescript/react/src/components/recording-history/RecordingHistoryPanel.tsx
-      - docs/recording-transcription.md
-  - id: recording.capture_reliability
-    title: Long Recordings stay in sync
-    area: recording
-    state: planned
-    summary: >-
-      Capture bundles now share one recording clock, which fixed the skew that failed a 332-second
-      run. Senders whose clocks really drift apart are still unhandled.
-    size: Unknown
-    remaining:
-      - Handle sender clock divergence and pass a one-hour Recording.
-      - Prove recorder restart continuity and TLS peer rejection on the managed hosts.
-    uncertainty: >-
-      Whether the remaining drift comes from the headless sender or the recorder is not known.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/recorderworker
-      - infrastructure/recorder
-  - id: recording.capture_cost
-    title: Capture starts fast and costs little
-    area: recording
-    state: in_progress
-    summary: >-
-      Capture runs on the lean Debian image on s-1vcpu-1gb. A cold worker is ready about 46 seconds
-      after record, and anything said before it is ready is missing from the Recording. Automatic
-      Spaces pre-warm Capture when someone opens the Entrance. SFU traffic to the recorder, about
-      $90 a month at 2,000 hours, is now the largest Capture cost.
-    size: M
-    remaining:
-      - >-
-        Experiment: with camera simulcast live, have Capture record the low camera layer and compare
-        the Export and the SFU traffic to the recorder.
-      - >-
-        Experiment, only if UDP loss damages Recordings: compare Capture over TURN on TCP with UDP in
-        one Recording. Cloudflare's SFU has no direct TCP receiver.
-    uncertainty: >-
-      Boot time is measured on few samples across DigitalOcean's variable create step. The owner
-      chose pre-warm for Automatic Spaces only; Manual Spaces may want it later.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/adapters/digitalocean/recorder_fleet.go
-      - apps/api/internal/recorderfleet
-      - apps/api/internal/recorderworker
-      - infrastructure/recorder/images
-  - id: recording.scheduled_preparation
-    title: Scheduled Recordings in a real integration
-    area: recording
-    state: in_progress
-    summary: >-
-      Scheduled preparation works in production: the 2026-09-20 canary started from a ready
-      preparation. No first-party integration uses it yet, and reschedule, cancel, no-show and
-      expiry have not run live.
-    priority: P1
-    size: M
-    remaining:
-      - >-
-        Use the contract in a first-party integration and exercise reschedule, cancel, no-show and
-        expiry live.
-    theory: theory.md#product-memory
-    code:
-      - apps/api/internal/httpapi/recording_preparation.go
-      - apps/api/internal/recordingpreparation
-      - sdks/typescript/client/src/generated/http-api.ts
-  - id: recording.mobile
-    title: Recordings and Transcripts on mobile
-    area: recording
-    state: in_progress
-    summary: >-
-      The headless native SDK exposes Recording state and actions. The mobile call screens have
-      been removed for the redesign, so Participants have no Recording controls or disclosure.
-    priority: P2
-    size: M
-    remaining:
-      - Restore Recording controls with disclosure and consent in the redesigned mobile call.
-      - Let authorized Participants open the finished Recording and Transcript.
-      - Check denial, failed start or stop, background return and reconnect.
-    theory: theory.md#product-memory
-    code:
-      - sdks/typescript/react-native/src/hooks/space-hooks.ts
-      - apps/mobile/App.tsx
-  - id: transcription.final_artifact
-    title: Recordings produce a Transcript in production
-    area: transcription
-    state: in_progress
-    summary: >-
-      Production Recordings produce a Transcript through the direct DeepInfra adapter, and every
-      Tenant allows on-demand Transcripts. Who can read a production Transcript and how the new path
-      handles failure are not checked.
-    priority: P1
-    size: M
-    remaining:
-      - Check that only the right Tenant and Participants can read a production Transcript.
-      - >-
-        Check that provider failure, retry, cancellation and Artifact Policy limits behave on the
-        new path.
-    theory: theory.md#product-memory
-    code:
-      - apps/transcription-dispatcher/src/providers.ts
-      - apps/api/internal/httpapi/transcription_finalize.go
-      - apps/api/internal/httpapi/transcripts.go
-      - apps/api/internal/artifactpolicy/policy.go
-  - id: transcription.mixed_language
-    title: Transcripts for mixed-language Recordings
-    area: transcription
-    state: planned
-    summary: >-
-      Whisper expects one language per Recording, so speech that switches between languages, such as
-      Urdu and English or Arabic and English, transcribes badly. The hard part is finding a model
-      that handles it at an acceptable cost.
-    priority: P2
-    size: M
-    remaining:
-      - Find a model that transcribes mixed-language speech well, and compare its cost with Whisper.
-      - >-
-        Choose how Recordings reach it: a per-Space or per-Recording model choice, or automatic
-        routing that sends mixed-language audio to it and single-language audio to the cheaper
-        model.
-    theory: theory.md#product-memory
-    code:
-      - apps/transcription-dispatcher/src/providers.ts
-  - id: sdk_and_embedding.packed_consumer
-    title: Published packages work in a fresh app
-    area: sdk_and_embedding
-    state: unknown
-    summary: >-
-      A packed-archive browser test covers recovery and attachments on three browsers against mocked
-      signaling. Type consumption, a React Native release app and the server-only package are
-      unchecked.
-    priority: P1
-    size: S
-    remaining:
-      - Record a current green packed-archive run.
-      - Typecheck an independent consumer against the published declarations.
-      - >-
-        Build a React Native release app from the packages and check that server-only imports pull
-        in no browser or native code.
-    uncertainty: No current packed-archive or native consumer result exists.
-    theory: theory.md#product-goals
-    code:
-      - tools/sdk-web-consumer-e2e/README.md
-      - sdks/typescript/client/package.json
-      - sdks/typescript/react/package.json
-      - sdks/typescript/react-native/package.json
-  - id: sdk_and_embedding.native_parity
-    title: Mobile call controls match web
-    area: sdk_and_embedding
-    state: planned
-    summary: >-
-      Web has call controls, while mobile retains only the headless native SDK and OS integrations.
-      The redesigned mobile call needs controls built on the shared client and snapshot hooks.
-    priority: P1
-    size: M
-    remaining:
-      - Build the redesigned mobile controls over the shared client and headless hooks.
-      - Document differences required by native permissions and rendering.
-    theory: theory.md#product-goals
-    code:
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
-      - sdks/typescript/react-native/src/index.ts
-  - id: sdk_and_embedding.api_contract_parity
-    title: Every public endpoint is in the generated client
-    area: sdk_and_embedding
-    state: unknown
-    summary: >-
-      OpenAPI and the generated client cover API keys and attachments, but nobody has compared
-      every public route against them.
-    priority: P1
-    size: S
-    remaining:
-      - >-
-        Compare router.go against OpenAPI and the generated client, and mark internal routes as
-        internal.
-      - Call one Tenant-scoped API key route and one attachment route through the public client.
-    uncertainty: No full route comparison has been made.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-      - sdks/typescript/client/src/generated/http-api.ts
-      - apps/api/internal/httpapi/router.go
-  - id: integrations_and_webhooks.delivery_qualification
-    title: Webhooks deliver and recover on a deployment
-    area: integrations_and_webhooks
-    state: unknown
-    summary: >-
-      Signing, rotation and idempotency are implemented and unit-tested, but no deployed delivery or
-      outage recovery has been observed.
-    priority: P1
-    size: S
-    remaining:
-      - >-
-        Run a deployed canary through delivery, overlapping secret rotation, duplicate replay and a
-        recipient outage, and check that each event takes effect exactly once.
-    uncertainty: No deployed delivery has been observed.
-    theory: theory.md#product-memory
-    code:
-      - sdks/typescript/client/src/webhooks/verify.ts
-      - sdks/typescript/client/src/webhooks/processor.ts
-  - id: observability_and_operations.failure_recovery
-    title: Alerts fire and service recovers from failure
-    area: observability_and_operations
-    state: in_progress
-    summary: >-
-      Production alerts for Recording, Export, Transcript, API and Sync failures reach Discord, and
-      a test alert arrived. No failure has been injected and recovered from.
-    priority: P1
-    size: M
-    remaining:
-      - >-
-        Inject one scoped service failure, confirm the Discord alert, then recover
-        and confirm healthy state.
-    uncertainty: No failure drill has been observed.
-    theory: theory.md#product-memory
-    code:
-      - infrastructure/observability
-      - infrastructure/uptime-worker/src/index.ts
-      - docs/observability.md
-  - id: observability_and_operations.self_hosted
-    title: Customer-operated app tier runs
-    area: observability_and_operations
-    state: unknown
-    summary: >-
-      The API, Sync and Postgres are meant to run on a customer app tier, but no self-hosted
-      revision has been deployed and validated.
-    priority: P1
-    size: M
-    remaining:
-      - >-
-        Deploy a named revision on a customer-style app tier with a configured media adapter and
-        pass validate-runtime and a web join.
-    uncertainty: No self-hosted deployment has been observed.
-    theory: theory.md#constraints
-    code:
-      - infrastructure/managed-episode/scripts/validate-runtime
-      - apps/sync/README.md
-  - id: observability_and_operations.performance_budget
-    title: Join an Episode faster
-    area: observability_and_operations
-    state: planned
-    summary: >-
-      Seeing the other Participant takes about 4 seconds after clicking join. About 2 seconds of
-      that is Cloudflare SFU track setup and the browser handshake, which Chalk's code can't
-      shorten; only starting them earlier can.
-    priority: P1
-    size: M
-    remaining:
-      - Start the arrival request when the visitor shows intent to join, before the click.
-      - >-
-        Decide whether to open the Cloudflare SFU connection before the click, given consent and
-        connection lifetime.
-      - Time the API's Cloudflare SFU calls as their own spans so each join stage is visible.
-      - Consider pushing chat message bodies over Sync instead of a head signal plus a fetch.
-    uncertainty: No change has been tried, so the real saving is unknown.
-    theory: theory.md#performance-budget
-    code:
-      - sdks/typescript/client/src/connection/lifecycle.ts
-      - sdks/typescript/client/src/media/client.ts
-      - apps/api/internal/mediaplane/signaling.go
-  - id: realtime_sync.reconnect_self_healing
-    title: Reconnect heals on rocky networks
-    area: realtime_sync
-    state: planned
-    summary: >-
-      Clients rejoin after a page reload, hold offline actions, show a non-blocking reconnecting
-      bar, and recover media in about 2.6 seconds after a 30-second cut. The owner's target is
-      recovery as fast as possible on every path.
-    size: M
-    remaining:
-      - Confirm the reconnecting bar and its 10-second dialog with a real network cut in production.
-      - >-
-        Cut recovery further: restart ICE instead of rebuilding media, overlap SDP readiness, and
-        get keyframes sooner after a cut.
-      - >-
-        Check in a real call whether Postgres restarts and flapping networks
-        recover more slowly in their worst cases.
-      - >-
-        Re-record a self-mute that a Sync restart interrupted, so other Participants don't see the
-        muted Participant as unmuted.
-    theory: theory.md#sync-correctness
-    code:
-      - sdks/typescript/client/src/sync/v1-client.ts
-      - sdks/typescript/client/src/connection/lifecycle.ts
-      - sdks/typescript/client/src/media/client.ts
-  - id: observability_and_operations.test_value
-    title: Tests and gate catch real bugs
-    area: observability_and_operations
-    state: planned
-    summary: >-
-      The gate passed while real media and reconnect bugs shipped, because tests fake Cloudflare
-      SFU and the gate skips server checks for SDK-only changes. Many tests kill no mutation.
-    size: M
-    remaining:
-      - Run a broad mutation pass across the suite, then delete the tests that catch nothing.
-      - Run a real Cloudflare SFU contract check on a schedule, covering disable and re-enable.
-      - Stop SDK-only changes from skipping the server checks.
-      - >-
-        Keep the Sync, media and privacy soak harnesses runnable as scheduled checks rather than
-        one-off scripts.
-    theory: theory.md#product-memory
-    code:
-      - gate.config.ts
-      - scripts/gates/chalk-gate-plan.mjs
-  - id: product_delivery.mcp_server
-    title: Chalk MCP server
-    area: product_delivery
-    state: planned
-    summary: Chalk has no MCP server, so AI tools cannot use Chalk directly.
-    priority: P3
-    size: L
-    remaining:
-      - >-
-        Decide which Space, Episode, Recording and Transcript operations to expose, then ship an MCP
-        server on the public API.
-    theory: theory.md#product-goals
-    code:
-      - sdks/typescript/client/src
-
-# Ideas without a current user journey; not planned work.
-wishlist:
-  - id: identity_and_tenancy.people_management
-    title: Manage Tenant members and invitations
-    area: identity_and_tenancy
-    state: planned
-    summary: >-
-      The API supports Tenant membership and Roles. Invitations and the dashboard are removed;
-      people management has no current user journey.
-    priority: P1
-    size: M
-    remaining:
-      - Design people management only when a real user journey requires it.
-      - >-
-        Verify that denied Roles cannot change membership and that expired or revoked invitations
-        show a way forward.
-    theory: theory.md#identity-and-membership
-    code:
-      - apps/api/internal/httpapi/memberships.go
   - id: media.usage_metering
     title: Measure media usage per Tenant and Episode
     area: media
     state: planned
     summary: >-
-      The Usage type has egress and Participant-minute fields, but both Cloudflare adapters always
-      report zero, so media cost cannot be measured or limited.
-    priority: P2
+      The Usage type has egress and Participant-minute fields, but both the Cloudflare and Chalk
+      SFU adapters return only metadata, so media cost cannot be measured or limited.
     size: M
     remaining:
-      - Collect usage in both Cloudflare adapters and attribute it to Tenant and Episode.
-      - Reconcile one live Episode against the provider bill, then expose usage to policy limits.
+      - Collect usage in both adapters and attribute it to Tenant and Episode.
+      - Expose usage to policy limits.
     theory: theory.md#constraints
     code:
       - apps/api/internal/mediaplane/service.go
       - apps/api/internal/adapters/cloudflare/sfu/adapter.go
-  - id: media.custom_sfu
-    title: Custom SFU
-    area: media
-    state: in_progress
-    summary: >-
-      Chalk has its own Pion SFU, the chalk_sfu media plane, built through milestones M1 to M6 behind
-      a default-off switch. Staging and production nodes are live in sgp1, and Cloudflare SFU still
-      carries all Chalk media.
-    priority: P1
-    size: XL
-    remaining:
-      - >-
-        M7: run the internal canary, including a live audio and video smoke against the production
-        node, before production turns own SFU on.
-      - >-
-        M10: implement Recording capture for the own provider, then remove the own-provider capture
-        rejection.
-      - >-
-        M11: add primary-first placement, degraded standby admission and drain, with the capacity proof.
-      - >-
-        M12: move every Tenant and Space to the own SFU and reach monitoring parity. M8 visible-tile
-        subscriptions must land first; M13 retires Cloudflare SFU after that.
-    uncertainty: >-
-      No live media has run through the production node yet, and the design lists workload
-      combinations that do not fit the initial capacity budgets.
-    theory: theory.md#constraints
-    code:
-      - docs/sfu/milestones.md
-      - docs/sfu/design.md
-      - features/media/sfu
       - apps/api/internal/adapters/chalksfu/adapter.go
-      - apps/api/internal/mediaplane/service.go
-      - sdks/typescript/client/src/media
-      - sdks/typescript/react-native/src/space-client/create-native-space-client.ts
-  - id: collaboration.sound_packs
-    title: Selectable sound packs
-    area: collaboration
-    state: planned
-    summary: Chalk has one set of sounds. There are no packs and no way for a Tenant to choose one.
-    priority: P3
-    size: M
-    remaining:
-      - >-
-        Define packs and a Tenant setting, wire them into web and native events, and respect mute
-        and accessibility settings.
-    theory: theory.md#product-goals
-    code:
-      - docs/redesign/sound-design.md
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
-  - id: transcription.live_captions
-    title: Live captions in a Space
-    area: transcription
-    state: planned
-    summary: >-
-      Captions are off in Chalk and no live caption path exists. The Transcript panel only shows
-      finished Transcripts.
-    priority: P3
-    size: L
-    remaining:
-      - Deliver live partial and final captions with consent, capability checks and cleanup.
-      - Verify latency, reconnect, language handling and privacy.
-    theory: theory.md#product-memory
-    code:
-      - sdks/typescript/react/src/components/chalk/Chalk.tsx
   - id: security_and_compliance.chat_retention
     title: Tenant-set chat retention
     area: security_and_compliance
     state: planned
     summary: >-
-      Tenants can set retention for Recordings and Transcripts but not for chat, and Sync has no
-      chat purge.
-    priority: P2
+      Artifact Policy sets retention for Recordings and Transcripts only. Chat has no retention
+      setting and no purge.
     size: M
     remaining:
       - >-
         Add chat retention to Tenant policy and purge expired messages and their attachments without
         breaking Sync recovery.
-      - >-
-        Check that hard delete overrides retention and purged messages never return through replay
-        or snapshots.
-      - >-
-        Clear unsent offline chat held in browser storage when the Participant leaves or signs out,
-        so it doesn't stay on a shared computer for up to 24 hours.
+      - Make sure hard delete overrides retention and purged messages never return through replay or snapshots.
     theory: theory.md#constraints
     code:
       - apps/api/internal/artifactpolicy/policy.go
@@ -572,72 +43,34 @@ wishlist:
     title: SDK app name in server telemetry
     area: sdk_and_embedding
     state: planned
-    summary: No appName option exists on the client, SpaceClient, Chalk or AccessGrant request.
-    priority: P1
+    summary: >-
+      The client, SpaceClient, Chalk and the AccessGrant request have no app name. Only the
+      React Native CallKit options use an `appName`, for a different purpose.
     size: S
     remaining:
       - >-
-        Add appName with the bounds from theory.md and carry it on HTTP and WebSocket requests into
-        spans and logs.
-      - Check omitted and oversized values and that appName never affects authorization.
-    theory: theory.md#identity-and-membership
+        Add a top-level `appName` and carry it on HTTP and WebSocket requests into API spans and
+        logs. The server trims it, normalizes it to `[a-z0-9._-]`, caps it near 64 characters and
+        drops it when empty, because it becomes a metric and log dimension.
+      - Never let `appName` affect authorization.
+    theory: theory.md#product-goals
     code:
       - sdks/typescript/client/src/client.ts
       - sdks/typescript/client/src/space-client/types.ts
       - apps/api/internal/httpapi/access_grants.go
-  - id: sdk_and_embedding.swift_sdk
-    title: Swift SDK
+  - id: sdk_and_embedding.other_language_sdks
+    title: SDKs beyond TypeScript
     area: sdk_and_embedding
     state: planned
-    summary: Only TypeScript SDKs exist.
+    summary: >-
+      Only TypeScript SDKs exist. The OpenAPI contract is the input for Swift, Kotlin, Python and Go
+      clients, and none is generated or published.
     priority: P2
     size: XL
     remaining:
       - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.kotlin_sdk
-    title: Kotlin SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.python_sdk
-    title: Python SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
-    theory: theory.md#product-goals
-    code:
-      - contract/generated/openapi.json
-  - id: sdk_and_embedding.go_sdk
-    title: Go SDK
-    area: sdk_and_embedding
-    state: planned
-    summary: Only TypeScript SDKs exist.
-    priority: P2
-    size: XL
-    remaining:
-      - >-
-        Define the supported surface, generate or write the package, and ship it with an independent
-        consumer build and contract fixtures.
+        Per language: define the supported surface, generate or write the package, and ship it with
+        an independent consumer build and contract fixtures.
     theory: theory.md#product-goals
     code:
       - contract/generated/openapi.json
@@ -646,148 +79,40 @@ wishlist:
     area: sdk_and_embedding
     state: planned
     summary: >-
-      The SDK can be embedded, but there is no supported iframe contract for origins, access handoff
-      or lifecycle messages.
-    priority: P2
+      No supported iframe contract exists for origins, access handoff or lifecycle messages.
     size: L
     remaining:
       - Define the iframe entry, access handoff, allowed origins and lifecycle messages.
-      - >-
-        Check camera and microphone permission, resize, teardown and expired access from another
-        origin.
+      - Check camera and microphone permission, resize, teardown and expired access from another origin.
     theory: theory.md#product-goals
     code:
       - apps/web/src/routes/_space.tsx
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
-  - id: integrations_and_webhooks.management_ui
-    title: Connect third-party apps
-    area: integrations_and_webhooks
+  - id: transcription.live_captions
+    title: Live captions in a Space
+    area: transcription
     state: planned
     summary: >-
-      Composio integrations and their management UI have been removed. Future integrations need
-      a concrete user journey before implementation.
-    priority: P2
-    size: M
+      No live caption path exists. The Transcript panel only shows finished Transcripts.
+    priority: P3
+    size: L
     remaining:
-      - >-
-        Build a page to browse the app catalog, connect, refresh and disconnect an app, and show
-        clear errors.
-      - Require member permission and recent authentication for secrets, and show the audit records.
+      - Deliver live partial and final captions with consent, capability checks and cleanup.
     theory: theory.md#product-memory
-    code: []
-  - id: product_delivery.parallel_dev_stacks
-    title: Run several local stacks at once
-    area: product_delivery
-    state: planned
-    summary: >-
-      The local stack allows one runtime per machine, fixes its container and database names, and
-      its stop command fails its own ownership check, so parallel agents collide.
-    size: S
-    remaining:
-      - Let the database, container names and owner lock vary per checkout.
-      - Make stopping the stack work after a rebase or a supervisor restart.
-      - Stop the local unused-code check from failing on untracked scratchpad scripts.
     code:
-      - scripts/dev/config.mjs
-      - scripts/dev/chalk.mjs
-      - scripts/dev/ownership.mjs
-  - id: product_delivery.desktop_application
-    title: Desktop app
-    area: product_delivery
-    state: planned
-    summary: No desktop app exists; the browser is the desktop surface.
-    priority: P3
-    size: XL
-    remaining:
-      - >-
-        Decide scope and distribution, then build with native integration, updates and a release
-        proof.
-    theory: theory.md#product-goals
-    code:
-      - apps
-  - id: product_delivery.agent_layer
-    title: Bring your own agents
-    area: product_delivery
-    state: unknown
-    summary: >-
-      People bring their own agents into a Space, as an assistant beside them or acting on their
-      behalf. Agents can already join as Participants, but nothing lets a person bring, authorize or
-      direct one.
-    priority: P3
-    size: XL
-    remaining:
-      - >-
-        Define how a person brings an agent, what it may do alone or on their behalf, and how others
-        see it.
-      - Build the agent join, authority and consent flow on the existing Agent identity.
-    uncertainty: The agent product is not defined yet.
-    theory: theory.md#identity-and-membership
-    code:
-      - apps
-      - sdks/typescript
-  - id: episode_core.call_client_states
-    title: Finish hidden call states in the client
-    area: episode_core
-    state: planned
-    summary: >-
-      The redesigned call hides these states and controls because the public client doesn't
-      expose them. Each is client work; none needs a Sync or API change.
-    size: M
-    remaining:
-      - Let a host set who can join from People.
-      - Show upload progress for chat attachments, with the outgoing upload bubble.
-      - Keep the current screen share when a person opens Change and cancels the picker.
-      - Show when someone's screen share is connecting or paused.
-      - >-
-        Tell a Participant why they left the Episode: removed by a host, the Episode ended, or joined
-        from another tab.
-    code:
-      - sdks/typescript/client/src/space-client/participants-controller.ts
-      - sdks/typescript/client/src/space-client/chat-controller.ts
-      - sdks/typescript/client/src/space-client/media-controller.ts
-      - sdks/typescript/client/src/sync/v1-client.ts
-      - sdks/typescript/react/src/selectors/space-selectors.ts
+      - sdks/typescript/react/src/components/chalk/Chalk.tsx
   - id: realtime_sync.call_moderation_details
     title: Numbered hands and named moderation
     area: realtime_sync
     state: planned
     summary: >-
-      Raised hands are only up or down, mute and camera-stop events don't say who did it, and a
-      full Episode has no join rejection reason the call can show. Each needs a Sync protocol field,
-      so Sync ships before the SDKs.
+      Raised hands are only a boolean, and the mute and stop events for microphone, camera and
+      screen share carry only the target participant_id, not who acted. Each needs a Sync protocol
+      field, so Sync ships before the SDKs.
     size: M
     remaining:
       - Keep the order hands were raised in, and let a host lower someone else's hand.
-      - Name the Participant who muted someone or stopped their camera.
-      - Give a full Episode its own join rejection reason.
-      - Number raised hands and name the moderator in the call.
+      - Name the Participant who muted someone or stopped their camera or screen share.
     code:
       - apps/sync/lib/chalk_sync/episodes/reducer.ex
       - sdks/typescript/client/src/space-client/participants-controller.ts
-  - id: media.remote_share_quality
-    title: Show when a shared screen is degraded
-    area: media
-    state: unknown
-    summary: >-
-      The redesigned call can draw weak and low-quality states on a shared screen, but nothing
-      measures how a remote share arrives, and screens publish a single layer.
-    size: Unknown
-    remaining:
-      - Find a receive-side quality signal for someone else's screen share.
-      - Decide whether screens need a lower-quality layer.
-      - Feed the weak and low-quality states in the call.
-    uncertainty: No receive-side quality measurement exists to build on.
-    code:
-      - sdks/typescript/client/src/media/client.ts
-  - id: episode_core.take_over_from_another_tab
-    title: Move a call to this tab
-    area: episode_core
-    state: unknown
-    summary: Nothing lets a Participant move a live call from one tab or device to another.
-    size: Unknown
-    remaining:
-      - Define what taking over does to the first session and whether the person confirms it.
-      - Build the join path in Sync and the API, and the Take over here action in the call.
-    uncertainty: The takeover behaviour isn't defined yet.
-    code:
-      - sdks/typescript/client/src/space-client/reload-rejoin.ts

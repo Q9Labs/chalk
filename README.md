@@ -9,102 +9,22 @@ Chalk is an open-source monorepo for low-latency real-time collaboration and com
 - [tracker.yaml](tracker.yaml) — the only editable outcome inventory.
 - [Design](design.md) — visual system and Google Stitch generation guidance.
 
-[Web SDK quickstart](docs/sdk-web-quickstart.md) documents executable SDK usage.
-
 ## Development
 
-Install dependencies with `pnpm install`. The local stack needs OrbStack (or a
-Docker-compatible daemon), Go, Elixir/OTP and OpenSSL. It also needs the
-Cloudflare SFU credential, from 1Password CLI access through the configured
-service account or from the environment (see below).
-
-Run the core profile with:
+Install dependencies with `pnpm install`. The local stack needs OrbStack (or a Docker-compatible daemon), Go, Elixir/OTP and OpenSSL, plus a Cloudflare SFU credential.
 
 ```bash
-pnpm dev
+pnpm dev                    # core: Postgres, Redis, API, Sync, SDK watchers, web
+pnpm dev --profile mobile   # core plus Expo and the simulator/device bridges
 ```
 
-This starts Postgres, Redis, migrations, the Go API, Postgres-backed Sync, SDK
-watchers and the web app. It waits for readiness and
-verifies a real no-track
-connection through the Cloudflare SFU before it prints the summary. All Chalk
-listeners use `127.0.0.1`; this command is for local development and never
-touches production.
+`pnpm dev` is for local development and never touches production. It prints the endpoints, a seeded Tenant and a Space on the `cf_sfu` media plane once a seeded guest can join and leave through the web origin. Use that Space for local end-to-end runs. Logs go to `.logs/dev-server.log`.
 
-The mobile profile adds Expo and the existing simulator/device localhost
-bridges after the core is ready:
+The credential is one non-production Cloudflare SFU `API_CREDENTIAL` item in 1Password that identifies Chalk/SFU and has `app_id` and `app_secret`. Zero or multiple matching items stop startup. On a headless machine set `CHALK_CLOUDFLARE_REALTIME_APP_ID` and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET` instead (both, or startup fails). Set `PUBLIC_ORIGIN` when the web port sits behind another origin.
 
-```bash
-pnpm dev --profile mobile
-```
+Inspect and clean up with `pnpm dev:status`, `dev:logs`, `dev:smoke`, `dev:doctor`, `dev:stop` and `dev:down`. `pnpm dev --fresh` recreates only this checkout's Tenant and Space. `pnpm dev:reset` is destructive and asks first. Only one local runtime can own a machine, so worktrees share its ports, database and containers. `dev:status` names the owner.
 
-No connected device is a warning. A mobile-only failure leaves the ready core
-running and marks the profile degraded.
-
-The runtime reads exactly one approved non-production local Cloudflare SFU
-`API_CREDENTIAL` from 1Password. The item must identify Chalk/SFU, include
-`app_id` and `app_secret`, and not be marked production. The launcher reads it
-at startup with an explicit vault on the item lookup, passes the values only
-to the API child, and never writes or logs them. Zero or multiple matching
-items stop startup.
-
-On a headless machine (CI, a cloud box) set `CHALK_CLOUDFLARE_REALTIME_APP_ID`
-and `CHALK_CLOUDFLARE_REALTIME_APP_SECRET` instead. When both are set the
-launcher does not call `op`; when only one is set it fails startup. Set
-`PUBLIC_ORIGIN` (for example `http://localhost:3070`, or an HTTPS origin in front
-of the web port) to make it the Sync token issuer, a CORS origin, an allowed web
-host and the browser's Sync WebSocket origin. Unset, the issuer stays
-`http://chalk.local`. The ready line appears only after a seeded guest can arrive
-through the web origin and leave again; `pnpm dev:doctor` repeats that check.
-
-The ready summary uses these localhost endpoints:
-
-| Service | URL                           |
-| ------- | ----------------------------- |
-| Web     | `http://127.0.0.1:3070`       |
-| API     | `http://127.0.0.1:8080`       |
-| Sync    | `ws://127.0.0.1:4100/v1/sync` |
-| Logs    | `.logs/dev-server.log`        |
-
-Use the small command surface for inspection and cleanup:
-
-```bash
-pnpm dev:status
-node scripts/dev/cli.mjs status --ready  # exit 0 only when this checkout owns a ready runtime
-pnpm dev:logs                 # all services
-pnpm dev:logs -- api          # one service
-pnpm dev:smoke
-pnpm dev:stop
-pnpm dev:doctor               # read-only health check as JSON; exit 0 only when every check passes
-pnpm dev:down                 # stop, then reset without the prompt
-pnpm dev --fresh              # recreate this checkout's local fixture
-pnpm dev:reset                # destructive: asks before removing local state
-pnpm dev:reset -- --yes       # skip only the confirmation prompt
-```
-
-Only one local Chalk runtime can own a machine at a time. Worktrees share its
-ports, database, and containers; `dev:status` identifies the owning checkout.
-The `--ready` check uses the supervisor's recorded state, not a live health probe.
-
-`pnpm dev` also creates a local Tenant and Space with the `cf_sfu` media plane and
-prints their ids in the ready summary. Use that Space for local end-to-end runs.
-
-`--fresh` replaces only this checkout's tenant and Space fixture. It leaves
-backing services, unrelated rows, and caches in place.
-
-The core uses a dedicated `chalk_dev` database inside the shared
-`chalk-postgres` container. A normal stop keeps that database and its volume.
-
-`Ctrl-C` and `pnpm dev:stop` stop only processes and containers owned by the
-runtime. They preserve Postgres and Redis volumes, package
-caches, and other reusable local state. `dev:reset` is the destructive path:
-it lists the owned containers, volumes, Worker state, and private runtime
-directory, then drops and recreates only `chalk_dev`. It removes Redis state while preserving the shared `chalk-postgres` container and
-`chalk-postgres` volume. It acts only after the runtime has stopped. Run the
-normal command again to restore the stack.
-
-Run `pnpm run gate` for the canonical repository quality gate;
-`pnpm run gate:explain` describes its checks.
+Run `pnpm run gate` for the canonical quality gate. `pnpm run gate:explain` describes its checks.
 
 ## License
 

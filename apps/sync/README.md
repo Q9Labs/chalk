@@ -2,429 +2,65 @@
 
 Elixir/OTP WebSocket sync server and the primary `SyncEngine` adapter.
 
-Postgres is the sole durable authority for Episode control state, ordered
-events, command receipts, participant-episode lifecycle, lifecycle intents,
-and externally effective operation intents. Actual media publications remain
-MediaPlane truth. Every BEAM process, ETS table, notification, and SDK replica
-is a disposable projection. Redis is absent from the correctness path and may
-only be added later as an optional presence or head-hint accelerator.
+Postgres is the sole durable authority for Episode control state, ordered events, command receipts, participant-episode lifecycle, lifecycle intents and external operation intents. Actual media publications remain MediaPlane truth. Every BEAM process, ETS table, notification and SDK replica is a disposable projection. Redis is not in the correctness path.
 
-## Commands
+Commands: `mix deps.get`, `mix test`, `iex -S mix` (listens on `http://localhost:4100`), `scripts/gate.sh`. The root `pnpm dev` runs Sync with `MIX_ENV=prod` and `CHALK_SYNC_LOCAL_PARITY=true`: real Postgres, API-issued Ed25519 JWTs, and the generated local mTLS provider bridge, with identities created under `.private/chalk-dev/`. That is distinct from `CHALK_SYNC_LOCAL_PROOF`, which uses memory state.
 
-```bash
-mix deps.get
-mix test
-iex -S mix
-scripts/gate.sh
-```
+## Durable command path
 
-Development listens on `http://localhost:4100`. The development server
-exposes the same v1 WebSocket transport used by the production service.
+`WebSocket -> bounded admission -> node-local Episode coordinator -> semantic Postgres transaction -> folded state + exact-next event + stable receipt -> Postgres head notification -> bounded per-socket queue -> SDK replica`.
 
-## Local parity
-
-The root `pnpm dev` profile runs Sync with `MIX_ENV=prod` and
-`CHALK_SYNC_LOCAL_PARITY=true`. Sync uses the migrated local Postgres database,
-verifies API-issued Ed25519 JWTs, binds to `127.0.0.1`, and reaches the Go API
-through the generated local mutual-TLS provider bridge. The runtime creates
-those signing and certificate identities under `.private/chalk-dev/`; no
-manual key or environment-file setup is needed.
-
-This path is distinct from `CHALK_SYNC_LOCAL_PROOF`: it does not use memory
-state or the development token verifier. `/readyz` checks the Postgres and
-provider-bridge dependencies before the root command reports ready.
-
-## Current media observations
-
-The provider bridge observer requests `media-observations?latest=true`, returning
-one current snapshot instead of the growing Episode observation history. Explicit
-cursor reads retain the paginated history contract. Deploy API support for the
-latest-only read before updating Sync; the response byte bound stays unchanged.
-
-## Hidden-tab heartbeat tolerance
-
-The v1 transport still checks every 20 seconds, but closes only after five
-consecutive missed checks. Depending on check alignment, this tolerates 80–100
-seconds without an incoming frame, including Chromium's once-per-minute timer
-wake-ups in silent background tabs. Its WebSocket idle timeout is 120 seconds,
-so it does not race a throttled heartbeat. Published SDKs need no upgrade.
-
-The trade-off is that an open but silent socket takes 80–100 seconds to mark
-disconnected instead of 20–40 seconds. Explicit Leave and a detected TCP close
-remain immediate. The separate 120-second participant lease expiry and
-600-second missing-lease fallback are unchanged.
-
-## Durable architecture
-
-The v1 command path is:
-
-```text
-WebSocket
-  -> bounded command admission
-  -> node-local Episode coordinator
-  -> semantic Postgres transaction
-  -> folded state + exact-next event + stable receipt
-  -> Postgres head notification
-  -> bounded per-socket queue
-  -> SDK canonical replica
-```
-
-The authority key is `{tenant_id, episode_id}`. The Episode control row is the
-serialization lock. One transaction returns a committed event and receipt or a
-stable rejected receipt. An uncertain COMMIT is resolved by reading that
-receipt from a fresh writable-primary connection.
-
-`Episodes.Reducer` owns pure state transitions. `Stateholder.Postgres` is the
-public persistence facade and sole owner of `Postgrex.transaction/3`, boundary
-timeout/error and uncertain-commit mapping, and post-commit hooks. Its
-transaction-scoped collaborators divide semantic ownership:
-
-- `Authority` and `Control` own locks, receipts, and control reads;
-  `CommandDecision` and `CommandPersistence` own command replay and atomic
-  event/state/receipt writes; `Lifecycle` owns end/abort intents; and
-  `RecoveryReader` owns bounded recovery pages.
-- `ExternalOperationPlanner`, `ExternalOperationClaims`,
-  `ExternalOperationDecision`, `ExternalOperationFinalizer`, and
-  `ExternalOperationRecord` own the external-operation lifecycle.
-- `ParticipantAuthority`, `PublicationGrants`, `PublicationFences`,
-  `RoleTransitionPlanner`, and `RoleTransitionSettlement` own their named
-  authority and fencing decisions; `WebhookObservation` owns post-commit
-  delivery observation.
-- `Postgres.SQL.*` mirrors those areas; `ExternalOperationColumns` owns only the
-  shared row projection. `Scope`, `Transaction`, and `FaultHooks` remain narrow
-  policy adapters.
-
-No collaborator opens a transaction. `Episodes.Coordinator` caches only local
-heads and subscriptions. PostgreSQL notifications accelerate delivery, while a
-periodic authoritative head read repairs every dropped hint.
+The authority key is `{tenant_id, episode_id}`, and the Episode control row is the serialization lock. One transaction returns a committed event and receipt or a stable rejected receipt. An uncertain COMMIT is resolved by reading the receipt from a fresh writable-primary connection. `Episodes.Reducer` is pure; `Stateholder.Postgres` is the only owner of `Postgrex.transaction/3`, and no collaborator opens its own transaction. The coordinator caches only local heads. Notifications speed delivery, and a periodic authoritative head read repairs dropped hints.
 
 ## Lifecycle
 
-Episode creation writes the product Episode and revision-zero control row in
-one synchronous Postgres transaction. Admission produces bounded lifecycle
-intents. Removal, explicit Leave, capability recovery, deadline expiry, Recording,
-and Episode end reserve idempotent external operations under the same Episode
-control lock. Explicit Leave commits its departure, authority revocation, event,
-receipt, webhook outbox record, and a generation-scoped cleanup operation in one
-transaction. The departure timestamp is Leave acceptance time. Cleanup uses the
-existing external-operation leases and bounded retries; exhaustion is retained as
-a failed cleanup without changing attendance or the committed receipt. A newer
-entry already awaiting confirmation can defer or supersede an older Leave.
-
-Each node runs two external-operation lanes. The local lane claims operations that
-only change Postgres (admission, denial, expiry, deadline, Leave, capture
-callbacks), so a provider call never delays them. The provider lane claims the
-rest and runs up to eight at a time. Both claim with `FOR UPDATE SKIP LOCKED` and
-finalize under the Episode control lock, so rows may run in any order and in
-parallel.
-Other provider operations execute effects outside the transaction and finalize
-durable facts after confirmation. Opening or losing a socket never directly
-creates a durable join or leave.
-
-A v1 socket renews one shared Postgres **Episode** lease at entry and on each
-client ping (published SDKs ping every 20 seconds). Any current participant's
-connection on any Sync node keeps the room live. After 120 seconds without a
-renewal, the existing empty-room linger starts; after the customer's linger,
-the ordinary Episode-end operation stops media and recording. Room-lease expiry never
-issues Leave, changes attendance or removes an individual's media. A return
-before Episode end renews the room lease and cancels this empty window, with
-no SDK upgrade, new participant or new terminal reason. After end, clients
-receive the existing `episode_ended` recovery.
-
-Presence-based expiry pauses while no lease-aware Sync runtime is connected to
-Postgres. Each Sync startup or database reconnect establishes a session witness
-and a fresh 120-second recovery floor before serving traffic. The scheduler
-locks that floor and rechecks the room lease under the Episode lock before
-reserving the existing idempotent end operation. Explicit all-left linger keeps
-its existing behavior even without Sync. Rooms with no lease use Episode
-creation plus grace, bounded by the same startup floor.
-
-Each live connection also renews a participant-generation lease. After 120 seconds
-without renewal, the API scheduler reserves an ordinary participant leave under
-the same Episode authority lock as renewal. A legacy joined participant that never
-opens its first Sync socket has no lease; its join timestamp starts a separate
-600-second grace. The runtime recovery floor still applies in both cases.
-Sync records `left_at` and emits `participant.left` before asynchronous media cleanup; the existing attendance endpoint reports
-the departure. Reconnect before reservation renews the lease and cancels expiry.
-A lease-aware Sync session witness and startup recovery floor prevent inference
-during Sync/database outages. This does not require a new client heartbeat.
-
-Apply the additive migration before API and Sync, and replace the whole Sync
-fleet before relying on abandonment cleanup: older **servers** do not renew
-room leases. Production Promote/Sync restarts replace the one Sync container;
-published **clients** need no change. Runtime rollback can leave these tables
-in place. Trade-off: if everyone is cut off from Sync for grace plus linger
-while the service is otherwise available, the Episode ends, even if media still
-flows. Previously such an Episode could run until the customer's closure.
+- Opening or losing a socket never directly creates a durable join or leave. Removal, explicit Leave, capability recovery, deadline expiry, Recording and Episode end reserve idempotent external operations under the Episode control lock. Explicit Leave commits departure, authority revocation, event, receipt, webhook outbox and a generation-scoped cleanup operation in one transaction; the departure time is Leave acceptance time, and exhausted cleanup is kept as a failed cleanup without changing attendance or the receipt.
+- Each node runs local, provider and a one-at-a-time lane (see `ChalkSync.ExternalOperationConsumer`). Local operations only change Postgres, so a provider call never delays them. All lanes claim with `FOR UPDATE SKIP LOCKED` and finalize under the Episode control lock, so rows may run in any order.
+- A socket renews one shared Postgres Episode lease on entry and each client ping (SDKs ping every 20 seconds). After 120 seconds with no renewal the empty-room linger starts, and after the customer's linger the ordinary Episode-end operation stops media and recording. Room-lease expiry never issues Leave or changes attendance. A return before end cancels the window.
+- Each live connection also renews a participant-generation lease. After 120 seconds the API scheduler reserves an ordinary participant leave under the same Episode lock. A legacy joined participant that never opened a socket has no lease and gets a separate 600-second grace.
+- Presence-based expiry pauses while no lease-aware Sync is connected to Postgres. Each startup or reconnect writes a session witness and a fresh 120-second recovery floor before serving, so a Sync or database outage never causes inferred abandonment.
+- Rollout: apply the additive migration before API and Sync, and replace the whole Sync fleet before relying on abandonment cleanup, since older servers do not renew room leases. Rollback can leave the tables. Trade-off: if everyone is cut off from Sync for grace plus linger while the service is otherwise up, the Episode ends even if media still flows.
+- The v1 transport checks heartbeats every 20 seconds and closes after five consecutive misses (80 to 100 seconds), so Chromium's once-per-minute timer wake-ups in silent background tabs survive. The WebSocket idle timeout is 120 seconds so it never races a throttled heartbeat. The cost is that a silent open socket takes 80 to 100 seconds to mark disconnected; explicit Leave and TCP close stay immediate.
 
 ## Protocol v1
 
-### Follow views
+The language-neutral source is `contract/schema/sync-v1.json`; generated Elixir and TypeScript bindings are checked by the root codegen gate. Frame bounds, command IDs, recovery rules and reservations are defined there and in the reducer. Two invariants worth knowing: control events keep their reservations until the SDK confirms the exact applied revision and digest (snapshots and replay pages until an exact `recovery_ack`), and MediaPlane observations carry monotonic incarnation/sequence cursors so a stale provider snapshot cannot overwrite newer truth.
 
-An Episode must be served by one Sync node. Production runs one Sync container.
-If Sync ever runs several nodes, route each Episode to one node, so there is
-still one owner. View messages deliberately do not use PostgreSQL fan-out.
+**Follow views.** An Episode must be served by one Sync node (production runs one container). If Sync ever runs several nodes, route each Episode to one node: view messages deliberately do not use PostgreSQL fan-out. One on-demand node-local process owns an Episode's disposable view state, serializes moves across a person's tabs, and stops when its last socket leaves. Clients negotiate `view_v1` with `origins: true, owner: true`, the welcome names the owner's start UUID with an atomic snapshot, and every reconnect discards cached views and sequences. An owner crash closes sockets with 1012 to force the same handshake. Real moves carry `move: true` and an `input_id` of `tab-UUID:sequence`; a per-tab high watermark prevents duplicates, and heartbeats use `move: false` so they cannot reclaim another tab's geometry. The owner admits at most 500 active people and 1,024 input streams and stops admitting rather than evicting deduplication watermarks. SDK 5.0 and 5.1 messages stay accepted; owner fields never go to clients that did not negotiate them.
 
-One on-demand, node-local process owns each Episode's disposable view state.
-It serializes moves across a person's tabs and stamps a sequence per person.
-It stops when its last socket leaves. Its registry and dynamic supervisor use
-rest-for-one supervision, so losing the registry cannot leave unnamed owners.
+**Opt-in extensions.** New web SDKs opt in by WebSocket query, and none of these fields change the canonical control digest. Sockets without the query keep the earlier shape, and new SDKs accept older servers that omit the fields.
 
-Clients negotiate `view_v1` with `origins: true, owner: true`. The welcome names
-the owner's start UUID, followed by an atomic snapshot of its canonical views.
-On every reconnect clients discard cached views and sequences. An owner crash
-closes its sockets with 1012, forcing the same snapshot handshake. Clients
-ignore views from another owner and keep the highest sequence for each person.
+- `participant_devices=1`: presence items may carry `identity_id` (from the admitted participant's tenant-scoped row) and a best-effort `device_type`.
+- `connection_quality=1`: the SDK sends `connection_quality_set` (`good`, `weak`, `poor`) when its tier changes. Sync keeps it in memory per socket and projects the worse tier when a seat has two sockets. The frame from a socket that did not opt in is a `protocol_error`. Nothing is stored.
+- `media_off_reason=1`: a disabled media item may carry `off_reason` (`host`, `self`, or `dead`, which only a deliberate tombstone uses). A missing reason means no evidence, never "off". A host stop (`off_reason: host` plus `off_revision`) is stored in `sync_media_stops` in the same transaction as its event, until a newer host stop for the same participant and source replaces it. An accepted on does not clear it. A device compares its own intent's control revision with `off_revision`: a newer intent wins, an older one stays off. The welcome carries `"media_off_reason": true`, and the SDK applies the `off_reason` rule only on such a connection. Finish the Sync rollout on every instance before releasing the SDK, because an old instance can commit a host stop without filling the table while a new one advertises the extension.
 
-Real moves carry `move: true` and an `input_id` of `tab-UUID:sequence`. Retries
-reuse that ID. A per-tab high watermark prevents duplicate application without
-retaining every move. Heartbeats and reconnect/visibility refreshes use
-`move: false` and cannot reclaim another tab's geometry. Relays name a source
-person; the owner copies its canonical geometry instead of trusting the relay.
+**Migrations that must run before Sync.** `20261031120000_sync_media_stops`: every live registration reads the table, so without it readiness fails with `incompatible_database_migration`. `20261106120000_sync_source_control_revisions`: source grants and stops record `control_revision` from a sequence taken under the Episode row lock, which the provider bridge sends so the own SFU orders grants and revokes per source. The control stream revision cannot serve here because it counts committed events. This is the `minimum_compatible_sync_migration` floor. A rollback leaves the columns; the previous Sync writes null, and the API never renews a grant without a revision, so its own-SFU grants lapse.
 
-SDK 5.0/5.1 messages remain accepted. For unmarked legacy input the owner detects
-motion by changes to that tab's rectangle; unchanged keepalives do not lead.
-Legacy origin-capable clients receive canonical sequences as their existing
-origin fields. Other legacy clients receive plain view frames. Owner fields
-never go to clients that did not negotiate them.
-
-Each owner admits at most 500 active people and retains at most 1,024 input
-streams, a separate bound on retry receipts. Admission stops at those bounds
-rather than evicting deduplication watermarks. Snapshots exclude durable
-departures; a socket disconnect alone does not retire a person’s view. Socket
-scene recovery retains only the newest view per person before resuming delivery.
-
-The language-neutral source is `contract/schema/sync-v1.json`; generated
-Elixir and TypeScript bindings are checked by the root codegen gate. V1 has
-strict frame bounds, tenant/Episode-scoped identity, stable command IDs,
-digest-checked control cursors, snapshot/replay/up-to-date recovery, bounded
-replay pages, retryable dependency outcomes, and explicit terminal lifecycle
-results. Control events retain their event, byte, and age reservations until
-the SDK confirms the exact applied revision and state digest. Snapshot welcomes
-and replay pages retain the same reservations until an exact `recovery_ack`
-confirms successful client application. Media and presence recover with fresh
-bounded projection snapshots, then change through exact-next events; disabled
-publications and disconnected presence are explicit tombstones. MediaPlane
-observations carry monotonic incarnation/sequence cursors so stale provider
-snapshots cannot overwrite newer truth.
+The provider bridge observer requests `media-observations?latest=true` for one current snapshot instead of the full history. Deploy API support for it before updating Sync.
 
 ## Operations
 
-- `/healthz` proves the listener is alive.
-- `/readyz` applies dependency checks and readiness hysteresis.
-- `/metrics` exposes fixed-cardinality aggregate counters.
-- SIGTERM begins bounded drain, rejects new work, resolves accepted decisions,
-  drains socket queues, and closes clients with retryable code 1012.
-- Ended Episode history is independently folded and checkpointed before the
-  bounded retention worker deletes eligible rows after seven days.
+- `/healthz` proves the listener is alive; `/readyz` applies dependency checks with hysteresis; `/metrics` exposes fixed-cardinality counters.
+- SIGTERM drains boundedly, rejects new work, resolves accepted decisions and closes clients with retryable 1012.
+- Ended Episode history is folded and checkpointed before the retention worker deletes eligible rows after seven days.
+- Production boot refuses Memory, the development verifier, an incompatible migration, a non-writable database and a missing required synchronous standby. `CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY` defaults to `true`; set `false` only for an approved single-node deployment without failover (readiness reports `not_required`; all other database checks stay on).
+- Admission verifies API-issued Ed25519 JWTs locally with `CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE` and `CHALK_SYNC_TOKEN_PUBLIC_KEYS` (a JSON object of `kid` to unpadded base64url 32-byte public key). On rotation, render both public keys before the API signs with the new `kid`.
+- Durable media operations use the API's private provider bridge over mutual TLS 1.3: `CHALK_SYNC_PROVIDER_BRIDGE_URL`, `_CERTFILE`, `_KEYFILE` (unencrypted) and `_CAFILE`. Startup fails on any missing or malformed value, and readiness probes the endpoint. The seven-second bridge request budget stays below the eight-second durable-operation consumer budget.
 
-Production boot refuses Memory, the development verifier, an incompatible
-migration, a non-writable database, and a missing required synchronous standby.
-The exact launch topology and WAL-lag ceiling remain deployment inputs.
-`CHALK_SYNC_REQUIRE_SYNCHRONOUS_STANDBY` defaults to `true`. Set it to `false`
-only for an approved single-node deployment without automatic failover. This
-keeps PostgreSQL 18, writable-primary, migration, fsync, full-page-write,
-checksum, synchronous-commit, authentication, and provider-bridge checks enabled.
-Readiness reports the standby requirement as `not_required` in this mode.
-
-Production protocol-v1 admission verifies API-issued Ed25519 JWTs locally. Set
-`CHALK_SYNC_TOKEN_ISSUER`, `CHALK_SYNC_TOKEN_AUDIENCE`, and
-`CHALK_SYNC_TOKEN_PUBLIC_KEYS`; the last value is a JSON object mapping each
-accepted `kid` to an unpadded base64url 32-byte Ed25519 public key. Rotation
-renders both public keys before the API begins signing with the new `kid`.
-
-Production durable media operations use the API's private provider bridge over
-TLS 1.3 with mutual certificate verification. Set
-`CHALK_SYNC_PROVIDER_BRIDGE_URL` to the private HTTPS origin and provide the
-client certificate, unencrypted private key, and trusted CA PEM paths through
-`CHALK_SYNC_PROVIDER_BRIDGE_CERTFILE`, `CHALK_SYNC_PROVIDER_BRIDGE_KEYFILE`, and
-`CHALK_SYNC_PROVIDER_BRIDGE_CAFILE`. Production startup fails when any value or
-PEM file is missing or malformed, and readiness actively verifies the mTLS-only
-bridge endpoint. The seven-second bridge request budget remains shorter than the
-eight-second durable-operation consumer budget.
-
-## Direct connections
-
-A TLS proxy on the host can accept `/v1/sync` upgrades without the Tunnel (see
-[the operator runbook](../../docs/operators/direct-sync-path.md)). The proxy
-overwrites `Cf-Connecting-Ip` with the TCP peer and sets `X-Chalk-Ingress:
-direct`. Sync trusts the marker only to choose stricter bounds, so a client that
-sets it on the Tunnel limits only itself. Without the marker nothing changes.
-
-`ChalkSync.Transport.DirectLimits` keeps the bounds as disposable node-local
-state, with monitors that release a slot when its socket process exits. It does
-not touch the Episode coordinators or Postgres, so the tenant-and-Episode
-authority is unchanged. A restart forgets every count, and the limiter fails
-closed (503) when it cannot answer or tracks too many IPs.
-
-| Bound                                   | Default     | Variable                                       | Result when exceeded                  |
-| --------------------------------------- | ----------- | ---------------------------------------------- | ------------------------------------- |
-| Upgrades per IP in a 10 second window   | 20          | `CHALK_SYNC_DIRECT_UPGRADES_PER_IP_WINDOW`     | 429 before the upgrade                |
-| Sockets per IP                          | 64          | `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_IP`         | 429 before the upgrade, or close 1013 |
-| Sockets per IP that sent no `hello` yet | 8           | `CHALK_SYNC_DIRECT_MAX_UNAUTHENTICATED_PER_IP` | 429 before the upgrade, or close 1013 |
-| Sockets per tenant                      | 512         | `CHALK_SYNC_DIRECT_MAX_SOCKETS_PER_TENANT`     | close 1013 at `hello`                 |
-| Frame size                              | 65536 bytes | none                                           | close 1009 (Bandit)                   |
-
-The listener also closes a fragmented message over 256 KiB with 1009 (Bandit defaults to 8 MB; the setting is per listener, so it covers Tunnel sockets too, and 256 KiB is the largest inbound message any Sync socket accepts). The existing 5 second `hello` timeout applies to direct sockets too. The count
-of tracked IPs is bounded (8192). Decisions appear as
-`chalk.sync.direct.admission.<outcome>.<stage>` metrics and as the `ingress`
-attribute on `sync.websocket.handshake`.
+**Direct connections.** A host TLS proxy can accept `/v1/sync` upgrades without the Tunnel (see [the operator runbook](../../docs/operators/direct-sync-path.md)). It overwrites `Cf-Connecting-Ip` with the TCP peer and sets `X-Chalk-Ingress: direct`. Sync trusts the marker only to pick stricter bounds, so a client that sets it on the Tunnel limits only itself. `ChalkSync.Transport.DirectLimits` keeps per-IP and per-tenant bounds as disposable node-local state (defaults and `CHALK_SYNC_DIRECT_*` overrides are in that module), fails closed with 503 when it cannot answer, and forgets all counts on restart. The listener closes any message over 256 KiB with 1009, for Tunnel sockets too. Decisions appear as `chalk.sync.direct.admission.<outcome>.<stage>` metrics and the `ingress` attribute on `sync.websocket.handshake`.
 
 ## Observability
 
-`ChalkSync.Observability` provides the observability boundary. It emits stable
-`:telemetry` events, correlated Logger metadata, and
-short OpenTelemetry spans. It does not retain a connection-long span. Socket
-work uses root, phase, and terminal events; Episode-coordinator work links back
-to the originating socket span after crossing the OTP process boundary.
+`ChalkSync.Observability` emits `[:chalk_sync, :observability, :event]` telemetry, correlated Logger metadata and short OpenTelemetry spans, never a connection-long span. Set `CHALK_SYNC_OTLP_ENDPOINT` to export OTLP HTTP/protobuf (service name `chalk-sync`); otherwise the exporter is off. Tokens, Space IDs, participant IDs, command IDs and raw revisions are never observability dimensions.
 
-Set `CHALK_SYNC_OTLP_ENDPOINT` to enable OTLP HTTP/protobuf export. The
-service resource name is `chalk-sync`; the exporter is otherwise disabled.
-The batch processor isolates collector failures from space and socket work.
+Frames may carry optional top-level `journey_id`, `traceparent` and `tracestate` (W3C Trace Context), which HTTP upgrades carry as headers (plus `x-chalk-journey-id`). Browsers that cannot set upgrade headers send them on `hello`. The server creates a journey at ingress when none is supplied.
 
-```bash
-CHALK_SYNC_OTLP_ENDPOINT=http://localhost:4318 mix run --no-halt
-```
-
-The stable telemetry event name is `[:chalk_sync, :observability, :event]`.
-Its measurements are `%{count: 1}` and its metadata contains `event`, `stage`
-(`root`, `phase`, or `terminal`), `journey_id`, and bounded `attributes`.
-BEAM health uses `[:chalk_sync, :runtime, :health]` with memory, process, and
-run-queue measurements. Logger events include the journey and, when tracing is
-enabled, the trace and span identifiers. When the connection supplied a session
-(below), telemetry metadata has `session_id`, spans have the `session.id`
-attribute, stdout lifecycle lines have a `"session.id"` field, and Logger
-metadata has `session_id`. Tokens, space ids, participant ids,
-command ids, and raw revisions are never observability dimensions.
-
-Client and server protocol frames may carry these optional top-level fields
-without changing frame semantics:
-
-```json
-{
-  "journey_id": "00000000-0000-4000-8000-000000000042",
-  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-  "tracestate": "vendor=value"
-}
-```
-
-`traceparent` and `tracestate` use W3C Trace Context. HTTP upgrades use the
-same headers plus `x-chalk-journey-id`; browser clients that cannot set upgrade
-headers send the three fields on `hello`. The server forwards valid context on
-its response frames and creates a journey at v1 sync ingress when one is absent.
-
-A session is one run of a Chalk app on one device. It is not an Episode. Its ID
-travels as W3C baggage with the OpenTelemetry attribute name `session.id`:
-
-```json
-{ "baggage": "session.id=3f2b8c1e-5d4a-4e7b-9a6c-1d2e3f4a5b6c" }
-```
-
-`baggage` is accepted on `hello` only, and the upgrade request may carry the same
-text in a `baggage` header. The contract allows exactly one 47-byte member,
-`session.id=<lowercase UUID>`. The server reads the header first and the `hello`
-field when the header has no valid session. For the header it finds the
-`session.id` member among other W3C baggage members and ignores the rest. A
-missing or malformed value is ignored, so it never rejects a connection. The
-session is connection-scoped: it is never emitted on server frames or written to
-journey, lifecycle, or external-operation records.
+A session is one run of a Chalk app on one device, not an Episode. Its ID arrives as `baggage: session.id=<lowercase UUID>` on `hello` or the upgrade header (header first). Anything else in baggage is ignored, and a malformed value never rejects a connection. The session is connection-scoped and never goes on server frames or into journey, lifecycle or external-operation records.
 
 ## Verification
-
-The Sync gate runs formatting, compilation, Credo, the surviving runtime
-regressions, and the API bridge readiness proof. The correctness command also
-runs the selected TypeScript regressions and real-browser reconnection proof:
 
 ```sh
 box run -- 'bash scripts/gates/instabox-run.sh --browser scripts/gates/with-postgres.sh apps/sync/scripts/reliability-correctness'
 ```
 
-The external
-[`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md)
-still controls nightly provider drills.
-
-## Participant device hints
-
-New web SDKs opt into identity and coarse device hints with the
-`participant_devices=1` WebSocket query. Presence items may then contain
-`identity_id` and `device_type` (`phone`, `tablet`, or `computer`). Identity comes
-from the admitted participant's tenant-scoped database row. Device type is a
-best-effort user-agent hint. These fields do not change the canonical control
-digest. Sockets without the query retain the previous exact presence shape;
-new SDKs also accept presence from older servers without these optional hints.
-
-## Connection quality
-
-New web SDKs opt in with the `connection_quality=1` WebSocket query. The welcome
-then carries `"connection_quality": true`, and the socket may send
-`{"type": "connection_quality_set", "quality": "good" | "weak" | "poor"}` in the
-live phase. The SDK rates its own link from its call-stats windows and sends a
-frame only when the tier changes. Sync keeps the tier of each live socket in
-memory, drops it when the socket goes, and projects it as the optional
-`connection_quality` key on that participant's presence item while the seat is
-connected. If one seat has two live sockets, guests see the worse tier. Sockets
-without the query never get the key, and a `connection_quality_set` frame from
-one is a `protocol_error`. Nothing is stored, and the field does not change the
-canonical control digest. New SDKs accept presence from older servers that never
-send it, and treat a missing value as unknown.
-
-## Media off reasons
-
-New web SDKs opt into the reason a media item is off with the
-`media_off_reason=1` WebSocket query. A media item that is `enabled: false` may
-then carry `off_reason`, and a retained host stop also rides on an enabled item
-(see `host`):
-
-- `host`: a host mute, camera stop or screen stop committed. The item also
-  carries `off_revision`, the control revision of that stop event. Sync stores
-  the stop in `sync_media_stops` in the same transaction as the event and
-  projects it even when the media plane lists no publication, so a client that
-  missed the stop event (replay beyond retention, a fresh Sync process, a
-  snapshot fallback) still sees it. An accepted on does not clear the stop,
-  and the stop stays on the item while another device of the participant has
-  published since (`enabled: true`): that device's on answers the stop for that
-  device only, and a device whose intent is older than `off_revision` must still
-  see it. A device compares its own intent's control revision with
-  `off_revision`, so the newer intent keeps and the older one stays off.
-- `self`: the device paused the source itself (a Sync-held device pause).
-- `dead`: reserved for a tombstone Sync writes on purpose. It never means the
-  user or host turned the source off.
-
-A plain tombstone, a source with no publication yet, and every other item carry
-no reason. A missing reason means no evidence, never "off". Sockets without the
-query keep the exact earlier four-key item shape, and new SDKs accept items from
-older servers that never send the fields. The fields do not change the canonical
-control digest.
-
-A host stop stays in `sync_media_stops` until a newer host stop for the same
-participant and source replaces it. An accepted on does not clear it. Intent
-revisions are per device, but a stop's revision and the control revision a device
-had seen when the user acted are positions in the one control stream of the
-Episode, so every device of one participant compares the same numbers. A device
-that was offline with an older on still sees the stop after another device's on
-was accepted, and pauses; a device whose intent is newer than the stop ignores
-it. The cost is one row for each participant and source that a host has stopped,
-deleted with the Episode's other rows.
-
-A socket that negotiated `media_off_reason=1` gets `"media_off_reason": true` in
-its welcome frame. The SDK applies the rule that depends on `off_reason` only on
-a connection whose welcome carried it. A Sync that never sends it makes the SDK
-keep the rule it used before: pause a wanted-on source when Sync's own item is
-missing or not enabled. Finish the Sync rollout on every instance first, then release the SDK: while old and new Sync run side by side, an old instance can commit a host stop without filling the new table, and a new instance then advertises the extension without that evidence.
-
-Apply `20261031120000_sync_media_stops` before Sync. Every live registration reads
-`sync_media_stops`, so a database without the table fails readiness with
-`incompatible_database_migration` and Sync does not serve. A rollback leaves the
-table in place.
-
-Apply `20261106120000_sync_source_control_revisions` before Sync too. Every source
-grant reservation and source stop records `control_revision`, the next value of
-the `sync_source_control_revisions` sequence, and the provider bridge sends it so
-the own SFU orders grants and revokes for one source. Each transaction takes it
-while it holds the Episode row lock, so within an Episode revisions are unique and
-rise in commit order. A grant decided after a stop is strictly newer even when the
-stop failed without a control event. The control stream revision can't serve here,
-because it counts committed events. The compatibility floor
-`minimum_compatible_sync_migration` is this version. A rollback leaves the columns
-and the sequence in place. The previous Sync release still runs against them but writes null, and
-the API never renews a grant without a revision, so its own-SFU grants lapse.
+The external [`release-topology-failure-schedule`](./docs/release-topology-failure-scheduler.md) controls nightly provider drills.
