@@ -1680,29 +1680,6 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
-/* A skeleton is the shape of the content it stands for: give it the content's size and radius. It breathes once a second, the one loading pulse in design.md. */
-.chalk-skeleton {
-  display: block;
-  background: var(--chalk-raised);
-  border-radius: var(--corner-md);
-  animation: chalk-skeleton 1.6s ease-in-out infinite;
-}
-.chalk-skeleton[data-shape="text"] {
-  height: 0.75em;
-  margin: 0.3em 0;
-  border-radius: var(--corner-sm);
-}
-.chalk-skeleton[data-shape="circle"] {
-  border-radius: 50%;
-}
-.chalk-skeleton[data-shape="pill"] {
-  border-radius: var(--corner-pill);
-}
-@keyframes chalk-skeleton {
-  50% {
-    opacity: 0.45;
-  }
-}
 .chalk-sheet-scrim {
   position: absolute;
   inset: 0;
@@ -2043,7 +2020,7 @@
   outline-offset: -2px;
 }
 /* Controls that sit on video keep a white ring in both themes, because the call's light focus color disappears on dark media. */
-[data-chalk] :is([data-on-media], [data-part="tile-menu"], [data-part="share-local-overlay"], .chalk-tile-signal) {
+[data-chalk] :is([data-part="tile-menu"], [data-part="share-local-overlay"], .chalk-tile-signal) {
   --chalk-focus: var(--chalk-on-overlay);
 }
 @media (max-width: 640px) {
