@@ -581,6 +581,8 @@ const rootLaneGroups = {
   "browser-tests": ["browser-tests"],
   "dashboard-engine": ["dashboard-engine"],
   "dashboard-refresh": ["dashboard-refresh"],
+  // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
+  sfu: ["sfu"],
   "call-leaks-1": ["call-leaks"],
   "call-leaks-2": ["call-leaks"],
   "call-leaks-3": ["call-leaks"],
