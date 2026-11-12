@@ -14,7 +14,7 @@ func TestCongestionLogsIdentifySubscriptionAndDecision(t *testing.T) {
 	// The same MID belongs to different subscriptions on different connections.
 	for _, connectionID := range []string{"connection-a", "connection-b"} {
 		sub := &subscription{
-			owner: &Session{id: connectionID},
+			owner: &Session{kind: ParticipantSession, id: connectionID},
 			mid:   "2",
 			alloc: allocation{decided: true, rid: "l"},
 			transport: &transport{estimator: bandwidthEstimator{
@@ -58,7 +58,7 @@ func TestPauseLogNamesTheCauseOfTheLastCut(t *testing.T) {
 		t.Helper()
 		var logs bytes.Buffer
 		node := &Node{log: slog.New(slog.NewJSONHandler(&logs, nil))}
-		node.logCongestionPause(&subscription{owner: &Session{id: "c"}, mid: "1", alloc: allocation{decided: true, rid: "l"}, transport: tr}, true, now)
+		node.logCongestionPause(&subscription{owner: &Session{kind: ParticipantSession, id: "c"}, mid: "1", alloc: allocation{decided: true, rid: "l"}, transport: tr}, true, now)
 		var record map[string]any
 		if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
 			t.Fatalf("decode congestion log: %v", err)

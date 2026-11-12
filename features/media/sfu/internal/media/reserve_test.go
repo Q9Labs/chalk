@@ -97,7 +97,7 @@ func reserveRequest(episode string, participants int) protocol.ReserveEpisodeReq
 func join(t *testing.T, node *Node, episode, participant string) {
 	t.Helper()
 	scope := protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: participant, Generation: 1}
-	if _, err := node.CreateSession("join-"+episode+"-"+participant, scope); err != nil {
+	if _, err := node.Create("join-"+episode+"-"+participant, scope, ParticipantSession, nil); err != nil {
 		t.Fatalf("join %s: %v", participant, err)
 	}
 }
@@ -131,7 +131,7 @@ func TestReserveEpisodeRefusesWhatWouldExceedTheBudget(t *testing.T) {
 		t.Fatalf("a refused reserve left %d reserved, want %d", f.reserved(), 2*threePerson)
 	}
 	// A join of a new Episode meets the same budget: it needs 3,480 and 1,660 are left.
-	if _, err := f.node.CreateSession("join-three", protocol.Scope{TenantID: "tenant", EpisodeID: "three", ParticipantID: "p", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("join-three", protocol.Scope{TenantID: "tenant", EpisodeID: "three", ParticipantID: "p", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a new Episode's first join beside two held Episodes: %v, want capacity exceeded", err)
 	}
 }
@@ -300,7 +300,7 @@ func TestReserveRefusesAStaleGeneration(t *testing.T) {
 	}
 	// A live Participant of a newer generation fences an older reserve too.
 	scope := protocol.Scope{TenantID: "tenant", EpisodeID: "live", ParticipantID: "a", Generation: 9}
-	if _, err := f.node.CreateSession("live-a", scope); err != nil {
+	if _, err := f.node.Create("live-a", scope, ParticipantSession, nil); err != nil {
 		t.Fatal(err)
 	}
 	stale := reserveRequest("live", 3)
@@ -319,13 +319,13 @@ func TestReserveHonoursTheSessionAndEpisodeLimits(t *testing.T) {
 		t.Fatalf("six sessions on a limit of five: %v, want capacity exceeded", err)
 	}
 	// A join counts the other Episodes' held Participants too.
-	if _, err := f.node.CreateSession("solo", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "a", Generation: 1}); err != nil {
+	if _, err := f.node.Create("solo", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); err != nil {
 		t.Fatalf("one session beside three held fits five: %v", err)
 	}
-	if _, err := f.node.CreateSession("solo-b", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "b", Generation: 1}); err != nil {
+	if _, err := f.node.Create("solo-b", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "b", Generation: 1}, ParticipantSession, nil); err != nil {
 		t.Fatalf("two sessions beside three held fit five: %v", err)
 	}
-	if _, err := f.node.CreateSession("solo-c", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "c", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("solo-c", protocol.Scope{TenantID: "tenant", EpisodeID: "solo", ParticipantID: "c", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a sixth slot: %v, want capacity exceeded", err)
 	}
 
@@ -412,7 +412,7 @@ func TestAHeldEpisodeRejoinsAfterTheNodeDrainsOrTheGuardCloses(t *testing.T) {
 	}
 	f.closeAdmission(RefusedCPUBusy)
 	join(t, f.node, "held", "a")
-	if _, err := f.node.CreateSession("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("a new Episode while the guard is closed: %v, want capacity exceeded", err)
 	}
 
@@ -424,7 +424,7 @@ func TestAHeldEpisodeRejoinsAfterTheNodeDrainsOrTheGuardCloses(t *testing.T) {
 	other.node.Drain()
 	join(t, other.node, "held", "a")
 	join(t, other.node, "held", "b")
-	if _, err := other.node.CreateSession("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrDraining) {
+	if _, err := other.node.Create("new", protocol.Scope{TenantID: "tenant", EpisodeID: "new", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrDraining) {
 		t.Fatalf("a new Episode on a draining node: %v, want draining", err)
 	}
 }
@@ -437,16 +437,16 @@ func TestReservedCapturesKeepTheirSessionSlots(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Three Participants and the capture fill the four slots: nobody else gets one.
-	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("another Episode took a slot the hold promised: %v", err)
 	}
 	for _, participant := range []string{"a", "b", "c"} {
 		join(t, f.node, "one", participant)
 	}
-	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("another Episode took the capture's slot: %v", err)
 	}
-	if _, err := f.node.CreateCaptureSession("capture", protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}); err != nil {
+	if _, err := f.node.Create("capture", protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "recorder", Generation: 1}, CaptureSession, nil); err != nil {
 		t.Fatalf("the reserved capture: %v", err)
 	}
 
@@ -464,7 +464,7 @@ func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	stale := protocol.Scope{TenantID: "tenant", EpisodeID: "one", ParticipantID: "a", Generation: 5}
-	if _, err := f.node.CreateSession("stale", stale); !errors.Is(err, ErrStaleGeneration) {
+	if _, err := f.node.Create("stale", stale, ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
 		t.Fatalf("a create below the hold's generation: %v, want stale", err)
 	}
 	if f.reserved() != newEpisode {
@@ -472,7 +472,7 @@ func TestAHoldFencesJoinsOfAnOlderGeneration(t *testing.T) {
 	}
 	fresh := stale
 	fresh.Generation = 6
-	if _, err := f.node.CreateSession("fresh", fresh); err != nil {
+	if _, err := f.node.Create("fresh", fresh, ParticipantSession, nil); err != nil {
 		t.Fatalf("a create at the hold's generation: %v", err)
 	}
 }
@@ -577,7 +577,7 @@ func (f *reserveFixture) camera(t *testing.T, episode, participant string) proto
 	}}); err != nil {
 		t.Fatalf("grant %s a camera: %v", participant, err)
 	}
-	created, err := f.node.CreateSession("join-"+episode+"-"+participant, scope)
+	created, err := f.node.Create("join-"+episode+"-"+participant, scope, ParticipantSession, nil)
 	if err != nil {
 		t.Fatalf("join %s: %v", participant, err)
 	}
@@ -626,7 +626,7 @@ type recorder struct {
 func (f *reserveFixture) recorder(t *testing.T, episode string) recorder {
 	t.Helper()
 	scope := protocol.Scope{TenantID: "tenant", EpisodeID: episode, ParticipantID: "recorder", Generation: 1}
-	created, err := f.node.CreateCaptureSession("capture-"+episode, scope)
+	created, err := f.node.Create("capture-"+episode, scope, CaptureSession, nil)
 	if err != nil {
 		t.Fatalf("create the capture session: %v", err)
 	}
@@ -760,7 +760,7 @@ func TestASubscriptionEndingAfterAReReserveReturnsItsShareToTheNewHold(t *testin
 	if f.reserved() != captureBudget {
 		t.Fatalf("after the subscription ended the node reserves %d, want %d", f.reserved(), captureBudget)
 	}
-	if _, err := f.node.CreateSession("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := f.node.Create("other", protocol.Scope{TenantID: "tenant", EpisodeID: "other", ParticipantID: "a", Generation: 1}, ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("another Episode took the capture room the hold promised: %v", err)
 	}
 }

@@ -66,7 +66,7 @@ func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
 	if _, reserved := node.Budget(); reserved != 2*want {
 		t.Fatalf("two classes reserve %d, want %d", reserved, 2*want)
 	}
-	_, err := node.CreateSession("create-third-class", episodeScope("class-2", "p0"))
+	_, err := node.Create("create-third-class", episodeScope("class-2", "p0"), ParticipantSession, nil)
 	if !errors.Is(err, errNodeFull) {
 		t.Fatalf("a third class on a 16,000 budget: %v, want the node full", err)
 	}
@@ -209,7 +209,7 @@ func TestUDPBufferErrorsCloseAdmissionAndNameTheReason(t *testing.T) {
 			if reason := node.guard.closedReason(); reason != reasonUDPBufferErrors {
 				t.Fatalf("admission reason %q, want %q", reason, reasonUDPBufferErrors)
 			}
-			_, err := node.CreateSession("create-new", episodeScope("new", "bob"))
+			_, err := node.Create("create-new", episodeScope("new", "bob"), ParticipantSession, nil)
 			if !errors.Is(err, errAdmissionClosed) {
 				t.Fatalf("a new Episode while buffers overflow: %v, want admission closed", err)
 			}

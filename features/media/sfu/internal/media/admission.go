@@ -102,7 +102,7 @@ func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total 
 	for _, session := range n.sessions {
 		switch {
 		case session == leaving:
-		case session.kind == kindCapture:
+		case !session.kind.participant:
 			total += session.captureReserved
 		default:
 			counts[episodeOf(session.scope)]++
@@ -169,7 +169,7 @@ func (n *Node) admitCapture(scope protocol.Scope, replacing *Session) error {
 	}
 	captures := 0
 	for _, session := range n.sessions {
-		if session != replacing && session.kind == kindCapture && episodeOf(session.scope) == key {
+		if session != replacing && !session.kind.participant && episodeOf(session.scope) == key {
 			captures++
 		}
 	}
@@ -253,7 +253,7 @@ func (n *Node) releaseCapture(s *Session, lease *captureLease) {
 func (n *Node) adoptCaptureLeases(key episodeKey, hold *episodeHold, bound int) {
 	room := bound
 	for _, session := range n.sessions {
-		if session.kind != kindCapture || episodeOf(session.scope) != key {
+		if session.kind.participant || episodeOf(session.scope) != key {
 			continue
 		}
 		for _, lease := range session.captureLeases {
@@ -269,7 +269,7 @@ func (n *Node) adoptCaptureLeases(key episodeKey, hold *episodeHold, bound int) 
 func (n *Node) capturePackets(key episodeKey) int {
 	packets := 0
 	for _, session := range n.sessions {
-		if session.kind == kindCapture && episodeOf(session.scope) == key {
+		if !session.kind.participant && episodeOf(session.scope) == key {
 			packets += session.captureReserved
 		}
 	}

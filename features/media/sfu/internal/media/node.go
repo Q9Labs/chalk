@@ -341,11 +341,9 @@ func randomHex(bytes int) string {
 
 // scopeDigest fingerprints a create, so a reused operation ID with another body conflicts. A
 // participant create digests as it did before session kinds, and a capture create never matches it.
-func scopeDigest(scope protocol.Scope, kind sessionKind) [sha256.Size]byte {
+func scopeDigest(scope protocol.Scope, kind *SessionKind) [sha256.Size]byte {
 	encoded, _ := json.Marshal(scope)
-	if kind == kindCapture {
-		encoded = append(encoded, "capture"...)
-	}
+	encoded = append(encoded, kind.digestTag...)
 	return sha256.Sum256(encoded)
 }
 
@@ -413,40 +411,16 @@ func (n *Node) SessionCount() int {
 	return len(n.sessions)
 }
 
-// SessionKinds lists the non-default session kinds the node creates, for readiness. A node with
-// captures turned off lists none, so the API places no capture on it.
-func (n *Node) SessionKinds() []string {
-	if n.cfg.MaxCapturesPerEpisode == 0 {
-		return nil
-	}
-	return []string{protocol.SessionKindCapture}
-}
-
-// CreateSession creates the participant's session, or returns the session the
-// same operation ID already created. A newer generation fences the older session.
-func (n *Node) CreateSession(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, error) {
-	return n.CreateSessionAt(operationID, scope, nil)
-}
-
-// CreateSessionAt is CreateSession for a caller that names the allocation generation it was
-// issued under: a generation below the Episode's retirement floor (see RetireEpisode) is stale.
-func (n *Node) CreateSessionAt(operationID string, scope protocol.Scope, allocation *int64) (protocol.CreateSessionResponse, error) {
-	return n.create(operationID, scope, kindParticipant, allocation)
-}
-
-// CreateCaptureSession creates a receive-only capture session for a recording or transcription.
-// Scope.ParticipantID names the capture and Scope.Generation is its capture epoch: a newer epoch
-// replaces the older session, and an older epoch is refused. A capture holds no Participant slot.
-func (n *Node) CreateCaptureSession(operationID string, scope protocol.Scope) (protocol.CreateSessionResponse, error) {
-	return n.CreateCaptureSessionAt(operationID, scope, nil)
-}
-
-// CreateCaptureSessionAt is CreateCaptureSession with the caller's allocation generation.
-func (n *Node) CreateCaptureSessionAt(operationID string, scope protocol.Scope, allocation *int64) (protocol.CreateSessionResponse, error) {
-	return n.create(operationID, scope, kindCapture, allocation)
-}
-
-func (n *Node) create(operationID string, scope protocol.Scope, kind sessionKind, allocation *int64) (protocol.CreateSessionResponse, error) {
+// Create makes the session of the given kind, or returns the session the same operation ID
+// already created. A newer generation fences the older session. allocation is the generation the
+// caller was issued under, or nil: one below the Episode's retirement floor (see RetireEpisode) is
+// stale.
+//
+// A ParticipantSession is a Participant's connection. A CaptureSession is a receive-only
+// connection for a recording or transcription: Scope.ParticipantID names the capture,
+// Scope.Generation is its capture epoch, a newer epoch replaces the older session, an older epoch
+// is refused, and it holds no Participant slot.
+func (n *Node) Create(operationID string, scope protocol.Scope, kind *SessionKind, allocation *int64) (protocol.CreateSessionResponse, error) {
 	if err := checkIdentifier("operationId", operationID); err != nil {
 		return protocol.CreateSessionResponse{}, err
 	}
@@ -460,9 +434,9 @@ func (n *Node) create(operationID string, scope protocol.Scope, kind sessionKind
 	return response, err
 }
 
-func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKind, allocation *int64) (protocol.CreateSessionResponse, *Session, error) {
+func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionKind, allocation *int64) (protocol.CreateSessionResponse, *Session, error) {
 	digest := scopeDigest(scope, kind)
-	key := sessionKey(scope, kind)
+	key := kind.key(scope)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.expireHolds()
@@ -492,7 +466,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	}
 	// The per-Participant fence cannot know a Participant that never ran on this node, so the
 	// Episode's hold fences the first rejoin: an older generation than the reserve's is stale.
-	if held := n.holds[episodeOf(scope)]; kind != kindCapture && held != nil && scope.Generation < held.generation {
+	if held := n.holds[episodeOf(scope)]; kind.participant && held != nil && scope.Generation < held.generation {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
 	evict, err := n.fenceVictim(key)
@@ -506,11 +480,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 	if n.sessionSlots(scope, kind, fenced) > n.cfg.MaxSessions {
 		return protocol.CreateSessionResponse{}, nil, n.refuseFor(scope, RefusedSessions, ErrCapacityExceeded)
 	}
-	admit := n.admit
-	if kind == kindCapture {
-		admit = n.admitCapture
-	}
-	if err := admit(scope, fenced); err != nil {
+	if err := kind.admit(n, scope, fenced); err != nil {
 		return protocol.CreateSessionResponse{}, nil, err
 	}
 	session, err := n.newSession(n.incarnation+"."+randomHex(12), operationID, scope, kind)
@@ -538,7 +508,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind sessionKi
 // The caller holds n.mu.
 func (n *Node) hostsEpisode(key episodeKey) bool {
 	for _, session := range n.sessions {
-		if session.kind == kindParticipant && episodeOf(session.scope) == key {
+		if session.kind.participant && episodeOf(session.scope) == key {
 			return true
 		}
 	}
@@ -586,7 +556,7 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 	}
 	participants := 0
 	for _, session := range n.sessions {
-		if session.kind == kindParticipant && episodeOf(session.scope) == key {
+		if session.kind.participant && episodeOf(session.scope) == key {
 			participants++
 		}
 	}
