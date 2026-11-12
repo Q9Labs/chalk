@@ -414,6 +414,16 @@
       "sample": "Split from the Sync job (PR 1210); no failure history of its own yet."
     },
     {
+      "id": "workflow:host-change-check.yml#check",
+      "owner": "Monitoring",
+      "catches": "A change to the node that no release made, read from CloudTrail every five minutes and sent to Oncall.",
+      "runs": ["daily"],
+      "blocks": "alert",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "Runs on a five-minute schedule; no failure history recorded yet."
+    },
+    {
       "id": "workflow:hotfix.yml#plan",
       "owner": "Release",
       "catches": "A hotfix request for a commit that is not on master or whose push Gate did not pass.",
