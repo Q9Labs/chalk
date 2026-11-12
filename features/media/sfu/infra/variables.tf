@@ -48,7 +48,7 @@ variable "ssh_addresses" {
 }
 
 variable "media_port" {
-  description = "The one UDP port every peer shares (SFU_UDP_ADDR)."
+  description = "The one port every peer shares: UDP (SFU_UDP_ADDR) and, for peers whose network blocks UDP, TCP (SFU_TCP_ADDR)."
   type        = number
   default     = 50000
 }
