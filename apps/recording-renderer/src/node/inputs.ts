@@ -19,7 +19,6 @@ export interface VerifiedRenderInputs {
   readonly workspaceDirectory: string;
   readonly timeline: RecordingPresentationTimelineV1;
   readonly media: DecodedMediaIndexV1;
-  readonly decodedMediaDocument: unknown;
   readonly assets: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mediaFiles: ReadonlyMap<string, VerifiedFileBinding>;
   readonly mixPath: string;
@@ -54,7 +53,7 @@ export async function loadVerifiedRenderInputs(request: FrameRenderRequestV1): P
   const mixPath = await confinedRealPath(mediaRoot, resolve(mediaRoot, media.mix.path));
   await verifyFileFacts(mixPath, media.mix.byteSize, media.mix.sha256, "decoded audio mix");
 
-  return { workspaceDirectory, timeline, media, decodedMediaDocument: decodedMediaValue, assets, mediaFiles, mixPath };
+  return { workspaceDirectory, timeline, media, assets, mediaFiles, mixPath };
 }
 
 async function validateSharedAuthority(request: FrameRenderRequestV1, timeline: RecordingPresentationTimelineV1, media: DecodedMediaIndexV1): Promise<void> {
