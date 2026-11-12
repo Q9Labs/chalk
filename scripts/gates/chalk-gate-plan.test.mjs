@@ -47,12 +47,12 @@ test("a path no lane reads is classified on a pull request and fails closed else
 test("a test-only change skips the dashboard engine and the call lanes on a pull request, and the queue still runs them", () => {
   const files = ["sdks/typescript/client/src/media/client.test.ts"];
   assert.deepEqual(
-    jobs(files, "pull_request").rootGroups.filter((group) => group === "dashboard-engine" || group.startsWith("call-leaks-")),
+    jobs(files, "pull_request").rootGroups.filter((group) => group.startsWith("dashboard-") || group.startsWith("call-leaks-")),
     [],
   );
   assert.deepEqual(
-    jobs(files, "merge_group").rootGroups.filter((group) => group === "dashboard-engine" || group.startsWith("call-leaks-")),
-    ["dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
+    jobs(files, "merge_group").rootGroups.filter((group) => group.startsWith("dashboard-") || group.startsWith("call-leaks-")),
+    ["dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3"],
   );
 });
 
@@ -75,8 +75,20 @@ test("an API test-only change still runs the API gate", () => {
 });
 
 test("the merge queue selects the dashboard engine and every leak shard for any change beyond documentation", () => {
-  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
+  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
   assert.deepEqual(jobs(["docs/observability.md"], "merge_group").rootGroups, ["checks"]);
+});
+
+test("the refresh proof is its own lane: a pull request runs it for refresh inputs, the queue for every change", () => {
+  const refresh = (files, event) => jobs(files, event).rootGroups.includes("dashboard-refresh");
+  assert.equal(refresh(["apps/api/internal/httpapi/router.go"], "pull_request"), false);
+  assert.equal(refresh(["apps/web/src/components/space/Controls.tsx"], "pull_request"), false);
+  assert.equal(refresh(["apps/api/internal/accessgrants/types.go"], "pull_request"), true);
+  assert.equal(refresh(["apps/web/server/owner-access.ts"], "pull_request"), true);
+  assert.equal(refresh(["apps/web/tests/dashboard/owner-refresh.mjs"], "pull_request"), true);
+  assert.equal(refresh(["apps/api/internal/httpapi/router.go"], "merge_group"), true);
+  assert.equal(refresh(["docs/observability.md"], "merge_group"), false);
+  assert.ok(ciJobs([], { full: true }).rootGroups.includes("dashboard-refresh"));
 });
 
 test("the workflow graph tests run for scorecard edits and the full gate", () => {

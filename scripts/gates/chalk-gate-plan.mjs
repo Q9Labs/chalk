@@ -371,6 +371,11 @@ export function createGatePlan(files, options = {}) {
   const queue = mergeGroup && nonDocumentationFiles.length > 0;
   const shippedFiles = narrow ? nonDocumentationFiles.filter((file) => !isTestFile(file)) : nonDocumentationFiles;
   const dashboardEngine = queue || (narrow ? full || shippedFiles.some(isApiInput) || affectedWorkspaces(shippedFiles, workspaces, allJavaScript).some((workspace) => workspace.name === "web") : api || selectedWorkspaces.some((workspace) => workspace.name === "web"));
+  // The refresh proof waits out the real five-minute media-access lifetime. A pull request runs it only for the inputs
+  // it exercises; the queue runs it for every change, so master never receives a commit it skipped.
+  const dashboardRefresh = narrow
+    ? full || nonDocumentationFiles.some((file) => startsWithAny(file, ["apps/web/server", "apps/web/src/lib/dashboard", "apps/web/src/components/dashboard", "apps/web/tests/dashboard", "apps/api/internal/accessgrants", "scripts/gates/with-postgres.sh"]))
+    : dashboardEngine;
   const sync = full || nonDocumentationFiles.some((file) => isSyncReliabilityInput(file) || startsWithAny(file, deploymentRoots));
   const contracts = full || api || nonDocumentationFiles.some((file) => startsWithAny(file, ["contract", "scripts/codegen", "scripts/contracts", "tools/contract-fixture-proof", "sdks/typescript/client/src/generated"]));
   // What the call-states page imports (traced from apps/web/src/call-states/main.tsx through vite.aliases.ts) plus the harness that drives it.
@@ -465,7 +470,8 @@ export function createGatePlan(files, options = {}) {
     ]),
     task("tests", "Selected runtime regression tests", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", [], [workspaceConcurrency, "--sort"])),
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
-    task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh"]),
+    task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "http"]),
+    task("dashboard-refresh", "Owner call across the real media-access lifetime", dashboardRefresh, dashboardRefresh ? "refresh inputs changed, or the merge queue" : "the dashboard refresh proof is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "refresh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
     task("call-performance", "Call performance budgets", callUi, "call rendering inputs or full gate", ["node", "apps/web/scripts/check-call-performance.mjs", "--gate", "--bundle-only"]),
     task("call-leaks", "Call lifecycle leak budgets", callUi, "call lifecycle inputs or full gate", [
@@ -571,7 +577,15 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
-const rootLaneGroups = { "browser-tests": ["browser-tests"], "dashboard-engine": ["dashboard-engine"], "call-leaks-1": ["call-leaks"], "call-leaks-2": ["call-leaks"], "call-leaks-3": ["call-leaks"], build: ["call-performance", "build", "publint", "attw"] };
+const rootLaneGroups = {
+  "browser-tests": ["browser-tests"],
+  "dashboard-engine": ["dashboard-engine"],
+  "dashboard-refresh": ["dashboard-refresh"],
+  "call-leaks-1": ["call-leaks"],
+  "call-leaks-2": ["call-leaks"],
+  "call-leaks-3": ["call-leaks"],
+  build: ["call-performance", "build", "publint", "attw"],
+};
 
 export function laneGroup(laneId) {
   return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";

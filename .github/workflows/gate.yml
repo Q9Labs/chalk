@@ -120,14 +120,14 @@ jobs:
       actions: read
       pull-requests: write
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
+    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
     strategy:
       fail-fast: false
       # One run holds at most four root runners, so a full run takes 6 of the organisation's 20 hosted-runner slots
       # (four root groups, API and Sync) instead of 10. The matrix lists the slowest groups first so they start first.
       max-parallel: 4
       matrix:
-        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "browser-tests", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
+        group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
@@ -154,21 +154,21 @@ jobs:
 
       # Go runs the generated-output and contract checks.
       - name: Set up Go
-        if: matrix.group == 'checks' || matrix.group == 'dashboard-engine'
+        if: matrix.group == 'checks' || startsWith(matrix.group, 'dashboard-')
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: apps/api/go.mod
           cache: false
 
       - name: Set up Erlang and Elixir for the dashboard engine proof
-        if: matrix.group == 'dashboard-engine'
+        if: startsWith(matrix.group, 'dashboard-')
         uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124
         with:
           version-file: .tool-versions
           version-type: strict
 
       - name: Install the dashboard database client
-        if: matrix.group == 'dashboard-engine'
+        if: startsWith(matrix.group, 'dashboard-')
         uses: ./.github/actions/apt-install
         with:
           packages: postgresql-client
@@ -212,7 +212,7 @@ jobs:
 
       # Browser tests, the call bundle budget (in the build group) and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "dashboard-engine", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
+        if: contains(fromJSON('["browser-tests", "dashboard-refresh", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:
