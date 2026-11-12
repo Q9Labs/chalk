@@ -19,6 +19,8 @@ export interface CallLimboProps {
   /** A neutral symbol for a request that ended, so declined and expired look different from waiting before they are read. */
   readonly glyph?: "declined" | "expired";
   readonly action?: { readonly label: string; readonly onClick: () => void; readonly disabled?: boolean };
+  /** A second, quieter way forward beside `action`, such as asking again after a refusal. `action` then becomes the solid one. */
+  readonly secondaryAction?: { readonly label: string; readonly onClick: () => void };
   readonly children?: ReactNode;
   /** Overlay the admitted call instead of rendering the privacy-safe stand-in. */
   readonly overlay?: boolean;
@@ -32,7 +34,7 @@ export interface CallLimboProps {
 }
 
 /** One surface for joining, admission and connection recovery. Never renders participant data. */
-export function CallLimbo({ spaceName = "Call", message, detail, action, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
+export function CallLimbo({ spaceName = "Call", message, detail, action, secondaryAction, children, joiningAs, glyph, overlay = false, active = true, initiallyCovered = false, theme, recorded = false, blocking = true, className }: CallLimboProps): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement>(null);
   const reducedMotion = usePrefersReducedMotion();
   const [covered, setCovered] = useState(active || initiallyCovered);
@@ -138,7 +140,16 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
           </span>
         ) : null}
         {children}
-        {action ? (
+        {action && secondaryAction ? (
+          <span className={cn("mt-6 flex gap-2", stacked && "w-full")}>
+            <ChalkButton className="!h-11 flex-1" variant="outline" onClick={secondaryAction.onClick}>
+              {secondaryAction.label}
+            </ChalkButton>
+            <ChalkButton className="!h-11 flex-1" variant="solid" onClick={action.onClick} disabled={action.disabled}>
+              {action.label}
+            </ChalkButton>
+          </span>
+        ) : action ? (
           <ChalkButton className={cn("mt-6 !h-11", stacked && "w-full")} variant="outline" onClick={action.onClick} disabled={action.disabled}>
             {action.label}
           </ChalkButton>

@@ -354,7 +354,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
   const denied = await knock("Deny guest");
   try {
     await page.getByRole("button", { name: "Decline Deny guest", exact: true }).click();
-    await denied.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
+    await denied.guest.getByText("The host didn’t let you in", { exact: true }).waitFor({ timeout: 15000 });
     await terminalProjection("Deny guest", "denied");
     await denied.guest.screenshot({ path: resolve(out, "after-guest-denied.png") });
   } finally {
@@ -406,7 +406,7 @@ export async function provePublicAdmission({ browser, page, origin, tenantId, sp
         await pending.guest.getByRole("button", { name: "Leave call", exact: true }).click();
         await pending.guest.getByRole("heading", { name: /You left/ }).waitFor();
       } else {
-        await pending.guest.getByText("The host declined your request to join.", { exact: true }).waitFor({ timeout: 15000 });
+        await pending.guest.getByText("The host didn’t let you in", { exact: true }).waitFor({ timeout: 15000 });
       }
     } finally {
       await pending.context.close();

@@ -84,7 +84,7 @@ export const CALL_STATES: readonly CallState[] = [
     title: "Host declined the request",
     render: () => (
       <main className="h-dvh">
-        <CallLimbo spaceName={SPACE_NAME} message="The host declined your request to join." action={{ label: "Ask again", onClick: () => undefined }} />
+        <CallLimbo spaceName={SPACE_NAME} message="The host didn’t let you in" glyph="declined" action={{ label: "Go to Chalk", onClick: () => undefined }} secondaryAction={{ label: "Ask again", onClick: () => undefined }} />
       </main>
     ),
   },
