@@ -1,68 +1,36 @@
-import { createHash, randomUUID } from "node:crypto";
-import { AssignmentError, ControlApiError, providerFailureKind, safeErrorCode } from "./errors.js";
+import { createHash } from "node:crypto";
+import { AssignmentError, ControlApiError, isTerminalFailure, safeErrorCode } from "./errors.js";
 export { mergeTranscriptDocuments } from "./finalizer-merge.js";
 import { mergeTranscriptDocuments } from "./finalizer-merge.js";
 import type { ChunkDocument } from "./finalizer-merge.js";
+import { loggerOf, reportRetry } from "./queue.js";
+import type { JobQueue } from "./queue.js";
 import { fetchAudioChunk, conditionalPutJson } from "./storage.js";
-import type { DispatcherDependencies } from "./dispatcher.js";
-import type { DispatcherContext, DispatcherEvent, DispatcherLogger, FinalizeAssignment, JourneyContext, NormalizedTranscriptDocument } from "./types.js";
+import type { DispatcherContext, DispatcherDependencies, FinalizeAssignment, JourneyContext, NormalizedTranscriptDocument } from "./types.js";
 
-export async function runFinalizeDispatcher(event: DispatcherEvent = {}, context: DispatcherContext, dependencies: DispatcherDependencies, maxClaims?: number): Promise<{ claimed: number; completed: number; failed: number }> {
-  const claimFinalize = dependencies.control.claimFinalize?.bind(dependencies.control);
-  const completeFinalize = dependencies.control.completeFinalize;
-  const retryFinalize = dependencies.control.retryFinalize?.bind(dependencies.control);
-  if (!claimFinalize || !completeFinalize || !retryFinalize) return { claimed: 0, completed: 0, failed: 0 };
-  const logger = dependencies.logger ?? { info: () => undefined, warn: () => undefined };
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+export function finalizeQueue(context: DispatcherContext, dependencies: DispatcherDependencies): JobQueue<FinalizeAssignment> {
   const now = dependencies.now ?? Date.now;
-  const journey: JourneyContext = {
-    journeyId: event.journeyId || randomUUID(),
-    ...(event.traceparent === undefined ? {} : { traceparent: event.traceparent }),
-    ...(event.tracestate === undefined ? {} : { tracestate: event.tracestate }),
+  return {
+    logPrefix: "finalize",
+    claim: async (limit, journey) => (await dependencies.control.claimFinalize({ limit, context: journey })).assignments,
+    process: (assignment, journey) => processFinalizeAssignment(assignment, journey, context, dependencies, now),
+    release: (assignment, journey) => retryFinalize(dependencies, assignment, journey, "timeout_reserve", false),
   };
-  const configuredLimit = Math.min(dependencies.config.maxBatch, dependencies.config.concurrency, 50);
-  const limit = Math.min(configuredLimit, maxClaims ?? configuredLimit);
-  if (limit <= 0 || context.getRemainingTimeInMillis() <= dependencies.config.timeoutReserveMs) {
-    logger.info("finalize_timeout_reserve_reached");
-    return { claimed: 0, completed: 0, failed: 0 };
-  }
-  const claim = await claimFinalize({ limit, context: journey });
-  const assignments = claim.assignments;
-  let completed = 0;
-  let failed = 0;
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, assignments.length) }, async () => {
-    while (cursor < assignments.length) {
-      const assignment = assignments[cursor];
-      cursor += 1;
-      if (!assignment) return;
-      if (context.getRemainingTimeInMillis() <= dependencies.config.timeoutReserveMs) {
-        await safeFinalizeRetry(retryFinalize, assignment, journey, "timeout_reserve", false, logger);
-        failed += 1;
-        continue;
-      }
-      const result = await processFinalizeAssignment(assignment, journey, context, dependencies, now);
-      if (result === "completed") completed += 1;
-      else failed += 1;
-    }
-  });
-  await Promise.all(workers);
-  logger.info("finalize_claimed", { count: assignments.length });
-  return { claimed: assignments.length, completed, failed };
 }
 
 async function processFinalizeAssignment(assignment: FinalizeAssignment, journey: JourneyContext, context: DispatcherContext, dependencies: DispatcherDependencies, now: () => number): Promise<"completed" | "failed"> {
-  const logger = dependencies.logger ?? { info: () => undefined, warn: () => undefined };
+  const logger = loggerOf(dependencies);
   try {
     const documents: ChunkDocument[] = [];
     let totalChunkBytes = 0;
     let lastHeartbeat = now();
-    if (dependencies.control.heartbeatFinalize) {
-      await dependencies.control.heartbeatFinalize({ assignment, context: journey });
-    }
+    await dependencies.control.heartbeat({ assignment, context: journey });
     for (const chunk of assignment.chunks) {
       if (context.getRemainingTimeInMillis() <= dependencies.config.timeoutReserveMs) throw new AssignmentError("finalize timeout reserve", true);
-      if (dependencies.control.heartbeatFinalize && now() - lastHeartbeat >= 30_000) {
-        await dependencies.control.heartbeatFinalize({ assignment, context: journey });
+      if (now() - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
+        await dependencies.control.heartbeat({ assignment, context: journey });
         lastHeartbeat = now();
       }
       const fetched = await fetchAudioChunk({
@@ -96,7 +64,7 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
       // retry after a successful PUT but transient completion failure safe.
       logger.warn("finalize_existing_result_verified_by_completion");
     }
-    await dependencies.control.completeFinalize?.({
+    await dependencies.control.completeFinalize({
       jobId: assignment.jobId,
       attempt: assignment.attempt,
       leaseToken: assignment.leaseToken,
@@ -118,20 +86,14 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
       logger.warn("finalize_late_or_duplicate_completion_rejected");
       return "failed";
     }
-    const kind = providerFailureKind(error);
-    const terminal = kind === "nonretryable" || kind === "schema";
+    const terminal = isTerminalFailure(error);
     const errorCode = safeErrorCode(error);
     logger.warn("finalize_failed", { error: errorCode, attempt: assignment.attempt, terminal });
-    await safeFinalizeRetry(dependencies.control.retryFinalize?.bind(dependencies.control), assignment, journey, errorCode, terminal, logger);
+    await retryFinalize(dependencies, assignment, journey, errorCode, terminal);
     return "failed";
   }
 }
 
-async function safeFinalizeRetry(retryFinalize: DispatcherDependencies["control"]["retryFinalize"], assignment: FinalizeAssignment, context: JourneyContext, errorCode: string, terminal: boolean, logger: DispatcherLogger): Promise<void> {
-  try {
-    if (!retryFinalize) throw new Error("finalize retry API is not configured");
-    await retryFinalize({ jobId: assignment.jobId, attempt: assignment.attempt, leaseToken: assignment.leaseToken, errorCode, terminal, context });
-  } catch (error) {
-    logger.warn("finalize_retry_report_failed", { error: safeErrorCode(error) });
-  }
+function retryFinalize(dependencies: DispatcherDependencies, assignment: FinalizeAssignment, context: JourneyContext, errorCode: string, terminal: boolean): Promise<void> {
+  return reportRetry(loggerOf(dependencies), "finalize", () => dependencies.control.retryFinalize({ jobId: assignment.jobId, attempt: assignment.attempt, leaseToken: assignment.leaseToken, errorCode, terminal, context }));
 }

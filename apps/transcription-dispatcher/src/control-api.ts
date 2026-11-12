@@ -46,23 +46,7 @@ export class RecorderControlApiClient implements ControlApi {
     return { assignments: validated };
   }
 
-  // fallow-ignore-next-line unused-class-member
-  async heartbeat(input: { assignment: TranscriptionAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
-    await this.call(
-      "/internal/v1/transcription/jobs/heartbeat",
-      "POST",
-      {
-        job_id: input.assignment.jobId,
-        attempt: input.assignment.attempt,
-        lease_token: input.assignment.leaseToken,
-      },
-      input.context,
-      input.signal,
-    );
-  }
-
-  // fallow-ignore-next-line unused-class-member
-  async heartbeatFinalize(input: { assignment: FinalizeAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
+  async heartbeat(input: { assignment: Pick<TranscriptionAssignment, "jobId" | "attempt" | "leaseToken">; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/jobs/heartbeat",
       "POST",
@@ -93,7 +77,6 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async complete(input: CompletionInput & { context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/jobs/complete",
@@ -171,7 +154,6 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async claimCleanup(input: { limit: number; context: JourneyContext; signal?: AbortSignal }): Promise<{ assignments: CleanupAssignment[] }> {
     const value = await this.call("/internal/v1/transcription/cleanup/claim", "POST", { batch_size: input.limit }, input.context, input.signal);
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ControlApiError("invalid cleanup claim response", 502);
@@ -180,7 +162,6 @@ export class RecorderControlApiClient implements ControlApi {
     return { assignments: assignments.map((assignment) => validateCleanupAssignment(assignment, this.options.maxAssignmentUrlTtlMs)) };
   }
 
-  // fallow-ignore-next-line unused-class-member
   async completeCleanup(input: { assignment: CleanupAssignment; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/cleanup/complete",
@@ -195,7 +176,6 @@ export class RecorderControlApiClient implements ControlApi {
     );
   }
 
-  // fallow-ignore-next-line unused-class-member
   async retryCleanup(input: { assignment: CleanupAssignment; errorCode: string; terminal?: boolean; context: JourneyContext; signal?: AbortSignal }): Promise<void> {
     await this.call(
       "/internal/v1/transcription/cleanup/retry",
