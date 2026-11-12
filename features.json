@@ -525,6 +525,7 @@
         "apps/api/internal/httpapi/router_workers.go",
         "apps/api/internal/httpapi/testdata",
         "apps/api/internal/httpapi/transcripts.go",
+        "apps/api/internal/httpapi/unified_signaling_grant_test.go",
         "apps/api/internal/mediaplane",
         "apps/api/internal/mediapublications",
         "apps/api/internal/memberships",
