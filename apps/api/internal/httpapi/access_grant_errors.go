@@ -47,13 +47,3 @@ func accessGrantErrors(existing []APIError) []APIError {
 	}
 	return result
 }
-
-func accessGrantAPIError(err error) APIError {
-	if apiErr, ok := errorAsAPIError(err); ok {
-		return apiErr
-	}
-	if apiErr, ok := episodeLifecycleEndpointAPIError(err); ok {
-		return apiErr
-	}
-	return apiErrorInternal
-}

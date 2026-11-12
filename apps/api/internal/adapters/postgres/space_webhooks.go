@@ -78,7 +78,7 @@ func (r SpaceRepository) createSpaceWithWebhook(ctx context.Context, input space
 	space := mapCreatedSpace(row)
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
 		TenantID:     input.TenantID,
-		EventName:    "space.created",
+		EventName:    webhooks.EventSpaceCreated,
 		SemanticKey:  "space:" + space.ID.String() + ":created",
 		ResourceType: "space",
 		ResourceID:   space.ID,
@@ -167,7 +167,7 @@ func (r SpaceRepository) updateSpaceWithWebhook(ctx context.Context, tenantID, s
 	}
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
 		TenantID:     tenantID,
-		EventName:    "space.updated",
+		EventName:    webhooks.EventSpaceUpdated,
 		SemanticKey:  "space:" + spaceID.String() + ":space.updated:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		ResourceType: "space",
 		ResourceID:   spaceID,
@@ -215,11 +215,11 @@ func (r SpaceRepository) archiveSpaceWithWebhook(ctx context.Context, tenantID, 
 		return spaces.Space{}, err
 	}
 	after := mapSpace(row)
-	if err := persistSpaceLifecycleJourney(ctx, tx, "space.archived", after.UpdatedAt); err != nil {
+	if err := persistSpaceLifecycleJourney(ctx, tx, webhooks.EventSpaceArchived, after.UpdatedAt); err != nil {
 		return spaces.Space{}, fmt.Errorf("persist space.archived journey: %w", err)
 	}
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
-		TenantID: tenantID, EventName: "space.archived", SemanticKey: "space:" + spaceID.String() + ":archived:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		TenantID: tenantID, EventName: webhooks.EventSpaceArchived, SemanticKey: "space:" + spaceID.String() + ":archived:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		ResourceType: "space", ResourceID: spaceID, OccurredAt: after.UpdatedAt,
 		Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 			return webhooks.EncodeSpaceEvent(metadata, spaceWebhookSnapshot(after), nil)
@@ -264,11 +264,11 @@ func (r SpaceRepository) restoreSpaceWithWebhook(ctx context.Context, tenantID, 
 		return spaces.Space{}, err
 	}
 	after := mapSpace(row)
-	if err := persistSpaceLifecycleJourney(ctx, tx, "space.restored", after.UpdatedAt); err != nil {
+	if err := persistSpaceLifecycleJourney(ctx, tx, webhooks.EventSpaceRestored, after.UpdatedAt); err != nil {
 		return spaces.Space{}, fmt.Errorf("persist space.restored journey: %w", err)
 	}
 	metric, err := fanoutWebhookEvent(ctx, tx, webhookProduction{
-		TenantID: tenantID, EventName: "space.restored", SemanticKey: "space:" + spaceID.String() + ":restored:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		TenantID: tenantID, EventName: webhooks.EventSpaceRestored, SemanticKey: "space:" + spaceID.String() + ":restored:" + after.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		ResourceType: "space", ResourceID: spaceID, OccurredAt: after.UpdatedAt,
 		Body: func(metadata webhooks.EventMetadata) ([]byte, [32]byte, error) {
 			return webhooks.EncodeSpaceEvent(metadata, spaceWebhookSnapshot(after), nil)
@@ -353,22 +353,22 @@ func spaceWebhookSnapshot(value spaces.Space) webhooks.SpaceSnapshot {
 // Its attributes intentionally contain only the bounded transition label;
 // names, slugs, policies, request bodies, and other tenant payloads never
 // enter the journey ledger.
-func persistSpaceLifecycleJourney(ctx context.Context, tx pgx.Tx, name string, occurredAt time.Time) error {
-	if name != "space.archived" && name != "space.restored" {
+func persistSpaceLifecycleJourney(ctx context.Context, tx pgx.Tx, name webhooks.EventName, occurredAt time.Time) error {
+	if name != webhooks.EventSpaceArchived && name != webhooks.EventSpaceRestored {
 		return fmt.Errorf("unsupported Space lifecycle journey transition %q", name)
 	}
 	journey, err := lifecycleJourneyFromContext(ctx)
 	if err != nil {
 		return err
 	}
-	if err := persistLifecycleJourneyRoot(ctx, tx, journey, name+"_requested"); err != nil {
+	if err := persistLifecycleJourneyRoot(ctx, tx, journey, string(name)+"_requested"); err != nil {
 		return err
 	}
 	eventID, err := utilities.NewID()
 	if err != nil {
 		return err
 	}
-	attributes, err := json.Marshal(map[string]string{"transition": name})
+	attributes, err := json.Marshal(map[string]string{"transition": string(name)})
 	if err != nil {
 		return err
 	}

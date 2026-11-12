@@ -19,7 +19,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
-	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
 
 // OAuth Client ID Metadata Documents (CIMD): a client_id that is an https URL
@@ -188,7 +187,7 @@ func (f httpsMetadataFetcher) Fetch(ctx context.Context, clientID string) ([]byt
 	}
 	// One non-public answer rejects the host, so a mixed DNS answer cannot pick the private address.
 	for _, address := range addresses {
-		if !webhooks.PublicAddress(address) {
+		if !utilities.PublicAddress(address) {
 			return nil, errors.New("host resolves to a non-public address")
 		}
 	}
