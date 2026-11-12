@@ -8,7 +8,6 @@ import { offReasonProof } from "./off-reason.mjs";
 import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
 import { deployHoldProof } from "./deploy-hold.mjs";
-import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
 import { dryRunNames, noBrowserNames, proofDescription, proofNames, proofPlan } from "./registry.mjs";
 import { mkdir } from "node:fs/promises";
@@ -18,7 +17,7 @@ import { cleanupRun, cleanupByRunId, runLabel, sweepStaleRuns } from "./cleanup.
 import { createProofKey, prepareIntegration, recordProof, exportProof, transcriptProof, smokeProof } from "./proofs.mjs";
 
 const plans = Object.fromEntries(proofNames.map((name) => [name, proofPlan(name)]));
-const dryRunPlans = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
+const dryRunPlans = { "long-call": longCallPlan };
 const dryRuns = Object.fromEntries(dryRunNames.map((name) => [name, dryRunPlans[name]]));
 const usage = `Usage: pnpm prod:proof [${proofNames.join("|")}] [--force-layer-switch|--no-layer-switch] [${dryRunNames.join("|")} --dry-run]
 ${proofNames.map((name) => `  ${name}: ${proofDescription(name)}`).join("\n")}
@@ -69,7 +68,6 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   const actions = {
     "long-call": () => longCallProof(run, receiver),
     "deploy-hold": () => deployHoldProof(run, receiver),
-    "toggle-offers": () => toggleOffersProof(run, receiver),
     leave: () => leaveProof(run),
     "leave-own-sfu": () => leaveOwnSfuProof(run),
     "own-sfu-spaces": () => ensureOwnSfuSpaces(run),

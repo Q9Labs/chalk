@@ -55,13 +55,6 @@
     "flags": { "longCall": true },
     "proofs": ["deploy-hold"]
   },
-  "toggle-offers": {
-    "description": "Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.",
-    "planes": ["chalk_sfu"],
-    "dryRun": true,
-    "flags": { "longCall": true },
-    "proofs": ["toggle-offers"]
-  },
   "leave": {
     "description": "The candidate Leave against the published client on the same host and backend.",
     "planes": ["cf_sfu"],

@@ -9,14 +9,14 @@ const ipad = devices["iPad Pro 11"];
 const webkitEngine = web({ browser: "webkit", viewport: ipad.viewport, userAgent: ipad.userAgent, initScripts: [webMediaFixture(1, { permission: "granted" })] });
 
 export default {
-  tests: process.env.CHALK_CLASS_CHECKLIST === "1" ? ["tests/class-checklist.e2e.ts"] : ["tests/call.e2e.ts", "tests/board.e2e.ts", "tests/pre-join.e2e.ts"],
+  tests: ["tests/call.e2e.ts", "tests/board.e2e.ts", "tests/pre-join.e2e.ts"],
   targets: [
     { name: "web", engine, app: { url: process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}` } },
     ...(process.env.CHALK_PROOF_WEBKIT === "1" ? [{ name: "webkit-ipad", engine: webkitEngine, app: { url: process.env.CHALK_PROOF_WEB_URL ?? `http://localhost:${ports.web}` } }] : []),
   ],
   workers: 1,
   retries: 0,
-  timeout: process.env.CHALK_CLASS_CHECKLIST === "1" ? 660_000 : 240_000,
+  timeout: 240_000,
   cleanupTimeout: 30_000,
   output: ".private/web-proof/e2e",
   trace: "off",

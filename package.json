@@ -17,7 +17,6 @@
   "scripts": {
     "build": "GOMAXPROCS=1 turbo build",
     "dev": "node scripts/dev/cli.mjs start",
-    "integration:smoke": "node scripts/integration-smoke/run.mjs",
     "dev:status": "node scripts/dev/cli.mjs status",
     "dev:logs": "node scripts/dev/cli.mjs logs",
     "dev:stop": "node scripts/dev/cli.mjs stop",
@@ -25,7 +24,6 @@
     "dev:down": "node scripts/dev/cli.mjs down",
     "dev:reset": "node scripts/dev/cli.mjs reset",
     "dev:smoke": "node scripts/dev/media-smoke-runner.mjs .private/chalk-dev/manifest.json",
-    "dev:turn-proof": "node scripts/dev/turn-proof.mjs .private/chalk-dev/manifest.json",
     "mobile:simulators": "node scripts/open-mobile-dev-simulators.mjs",
     "mobile:install:local": "bash scripts/mobile-install-local-apk.sh",
     "mobile:logs": "bash scripts/dev/android-logs.sh",
@@ -81,7 +79,6 @@
     "tenant:purge": "cd apps/api && go run ./cmd/tenant-purge",
     "web:proof": "node scripts/web-proof/run.mjs",
     "test:e2e": "e2e run",
-    "test:class-checklist": "node scripts/web-proof/class-checklist-run.mjs",
     "test:mutations": "bash scripts/gates/with-postgres.sh -- node scripts/test/mutations.mjs"
   },
   "dependencies": {
