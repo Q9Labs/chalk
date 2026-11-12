@@ -51,7 +51,7 @@ func (n *Node) DrainState() protocol.DrainState {
 // standing grants while no session exists. The caller holds n.mu.
 func (n *Node) allocations() int {
 	n.expireHolds()
-	return len(n.sessions) + len(n.holds)
+	return len(n.sessions) + n.heldEpisodes()
 }
 
 // sourceLeases counts the source leases that are open now. It only informs: a lease with no

@@ -88,51 +88,40 @@ func episodeOf(scope protocol.Scope) episodeKey { return episodeKey{scope.Tenant
 // NewEpisodePackets is the reservation of an Episode's first join: room for two Participants.
 func (n *Node) NewEpisodePackets() int { return n.episodeReservation(1) }
 
-// reservations counts live Participant sessions per Episode, leaving out one session that is
-// about to be replaced, and sums the Episodes' reservations. An Episode reserves for the larger of
+// reservations sums the Episodes' reservations, leaving out one session that is about to be
+// replaced. An Episode reserves for the larger of
 // its live sessions and the Participants its hold promised (see ReserveEpisode), so a join into a
 // held Episode replaces the hold and never counts twice. A hold's capture packets add to the total
 // until a capture session takes them. A capture session adds what its accepted subscriptions
 // reserve (see reserveCapture) to the total and no Participant to its Episode, so a recording
 // takes node budget without changing what the Episode's callers reserve. Expired holds are
 // released first. The caller holds n.mu.
-func (n *Node) reservations(leaving *Session) (counts map[episodeKey]int, total int) {
+func (n *Node) reservations(leaving *Session) int {
 	n.expireHolds()
-	counts = map[episodeKey]int{}
-	for _, session := range n.sessions {
-		switch {
-		case session == leaving:
-		case !session.kind.participant:
-			total += session.captureReserved
-		default:
-			counts[episodeOf(session.scope)]++
+	total := 0
+	for _, rec := range n.episodes {
+		held := 0
+		if rec.hold != nil {
+			held = rec.hold.participants
+			total += rec.hold.capture
 		}
+		total += rec.captureReserved(leaving) + n.episodeReservation(max(rec.count(true, leaving, 0), held))
 	}
-	for key, count := range counts {
-		total += n.episodeReservation(max(count, n.heldParticipants(key)))
-	}
-	for key, hold := range n.holds {
-		if _, live := counts[key]; !live {
-			total += n.episodeReservation(hold.participants)
-		}
-		total += hold.capture
-	}
-	return counts, total
+	return total
 }
 
 // reservedPackets is the sum of every live Episode's reservation. The caller holds n.mu.
 func (n *Node) reservedPackets() int {
-	_, total := n.reservations(nil)
-	return total
+	return n.reservations(nil)
 }
 
 // admit checks that one more Participant fits in its Episode and on the node. replacing is the
 // older generation of the same Participant that the new session replaces, if any, so a
 // reconnect does not count twice. The caller holds n.mu.
 func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
-	counts, total := n.reservations(replacing)
+	total := n.reservations(replacing)
 	key := episodeOf(scope)
-	count := counts[key]
+	count := n.episodes[key].count(true, replacing, 0)
 	if count+1 > n.cfg.MaxEpisodeParticipants {
 		return n.refuseFor(scope, RefusedEpisodeFull, errEpisodeFull)
 	}
@@ -143,7 +132,7 @@ func (n *Node) admit(scope protocol.Scope, replacing *Session) error {
 			return n.refuseFor(scope, reason, fmt.Errorf("%w: %s", errAdmissionClosed, reason))
 		}
 	}
-	if n.mandatoryPackets(count+1, n.screens[key] != nil) > n.episodeCeiling(count+1) {
+	if n.mandatoryPackets(count+1, n.screenOf(key) != nil) > n.episodeCeiling(count+1) {
 		return n.refuseFor(scope, RefusedMandatoryMedia, errMandatoryMedia)
 	}
 	held := n.heldParticipants(key)
@@ -167,12 +156,7 @@ func (n *Node) admitCapture(scope protocol.Scope, replacing *Session) error {
 	if !n.hostsEpisode(key) {
 		return fmt.Errorf("%w: the node hosts no Participant of this Episode", ErrSessionGone)
 	}
-	captures := 0
-	for _, session := range n.sessions {
-		if session != replacing && !session.kind.participant && episodeOf(session.scope) == key {
-			captures++
-		}
-	}
+	captures := n.episodes[key].count(false, replacing, 0)
 	if captures+1 > n.cfg.MaxCapturesPerEpisode {
 		return n.refuseFor(scope, RefusedCaptureLimit, errCaptureLimit)
 	}
@@ -206,10 +190,10 @@ type captureLease struct {
 func (n *Node) reserveCapture(s *Session, cost int) (*captureLease, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	_, total := n.reservations(nil)
+	total := n.reservations(nil)
 	// The Episode's hold already counts the packets it kept for captures, so a capture takes them
 	// from the hold instead of adding to the total.
-	hold := n.holds[episodeOf(s.scope)]
+	hold := n.holdOf(episodeOf(s.scope))
 	held := 0
 	if hold != nil {
 		held = min(cost, hold.capture)
@@ -237,7 +221,7 @@ func (n *Node) releaseCapture(s *Session, lease *captureLease) {
 	// lasts, so a failed or replaced subscription does not hand promised room to other Episodes.
 	// Only this subscription's own borrow goes back, never another subscription's.
 	key := episodeOf(s.scope)
-	if hold := n.holds[key]; hold != nil && hold == lease.hold {
+	if hold := n.holdOf(key); hold != nil && hold == lease.hold {
 		hold.capture += lease.borrowed
 		hold.lent -= lease.borrowed
 		lease.borrowed = 0
@@ -252,8 +236,8 @@ func (n *Node) releaseCapture(s *Session, lease *captureLease) {
 // would end up promised less than its bound. The caller holds n.mu.
 func (n *Node) adoptCaptureLeases(key episodeKey, hold *episodeHold, bound int) {
 	room := bound
-	for _, session := range n.sessions {
-		if session.kind.participant || episodeOf(session.scope) != key {
+	for _, session := range n.episodes[key].list() {
+		if session.kind.participant {
 			continue
 		}
 		for _, lease := range session.captureLeases {
@@ -266,12 +250,4 @@ func (n *Node) adoptCaptureLeases(key episodeKey, hold *episodeHold, bound int) 
 
 // capturePackets is what the Episode's live capture sessions reserve for their subscriptions.
 // The caller holds n.mu.
-func (n *Node) capturePackets(key episodeKey) int {
-	packets := 0
-	for _, session := range n.sessions {
-		if !session.kind.participant && episodeOf(session.scope) == key {
-			packets += session.captureReserved
-		}
-	}
-	return packets
-}
+func (n *Node) capturePackets(key episodeKey) int { return n.episodes[key].captureReserved(nil) }

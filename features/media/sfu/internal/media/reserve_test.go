@@ -175,7 +175,7 @@ func TestJoinsReplaceTheHoldWithoutDoubleCounting(t *testing.T) {
 		}
 	}
 	f.node.mu.Lock()
-	remaining := len(f.node.holds)
+	remaining := f.node.heldEpisodes()
 	f.node.mu.Unlock()
 	if remaining != 0 {
 		t.Fatalf("%d holds remain after every Participant joined", remaining)
@@ -208,7 +208,7 @@ func TestAHoldExpiresAndReleasesWhatNoJoinUsed(t *testing.T) {
 	f.node.mu.Lock()
 	f.node.expireHolds()
 	f.node.expireHolds()
-	holds := len(f.node.holds)
+	holds := f.node.heldEpisodes()
 	f.node.mu.Unlock()
 	if holds != 0 || f.reserved() != newEpisode {
 		t.Fatalf("holds %d and reserved %d after a second release", holds, f.reserved())

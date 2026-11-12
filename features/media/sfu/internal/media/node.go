@@ -86,11 +86,10 @@ type Node struct {
 	closedCreates *orderedTable[string, struct{}]            // create operation IDs whose session closed; bounded
 	fences        *orderedTable[participantKey, int64]       // highest generation seen per Participant; outlives sessions
 	retired       *orderedTable[episodeKey, retirement]      // Episodes retired at an allocation generation (see RetireEpisode)
-	screens       map[episodeKey]*Session                    // the session sharing a screen in each Episode
 	sources       *orderedTable[sourceKey, *sourceAuthority] // newest grant or revoke per source; outlives sessions; its limit also bounds sourceFloors
 	sourceFloors  map[episodeKey]int64                       // highest revision of a source evicted per Episode
 
-	holds    map[episodeKey]*episodeHold          // Episodes reserved ahead of their joins (see ReserveEpisode)
+	episodes map[episodeKey]*episodeRecord        // what the node keeps per Episode
 	reserves *orderedTable[string, reserveRecord] // reserve results by operation ID, for replay
 	now      func() time.Time                     // the clock holds expire by; tests replace it
 
@@ -181,10 +180,9 @@ func NewNode(cfg config.Config, log *slog.Logger) (*Node, error) {
 		creates:       map[string]createRecord{},
 		closedCreates: newOrderedTable[string, struct{}](defaultClosedCreateLimit),
 		fences:        newOrderedTable[participantKey, int64](defaultFenceLimit),
-		screens:       map[episodeKey]*Session{},
 		sources:       newOrderedTable[sourceKey, *sourceAuthority](defaultSourceLimit),
 		sourceFloors:  map[episodeKey]int64{},
-		holds:         map[episodeKey]*episodeHold{},
+		episodes:      map[episodeKey]*episodeRecord{},
 		reserves:      newOrderedTable[string, reserveRecord](defaultReserveLimit),
 		now:           time.Now,
 		plans:         map[episodeKey]int64{},
@@ -491,7 +489,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 	}
 	// The per-Participant fence cannot know a Participant that never ran on this node, so the
 	// Episode's hold fences the first rejoin: an older generation than the reserve's is stale.
-	if held := n.holds[episodeOf(scope)]; kind.participant && held != nil && scope.Generation < held.generation {
+	if held := n.holdOf(episodeOf(scope)); kind.participant && held != nil && scope.Generation < held.generation {
 		return protocol.CreateSessionResponse{}, nil, ErrStaleGeneration
 	}
 	evict, err := n.fenceVictim(key)
@@ -520,7 +518,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 	if evict != nil {
 		n.fences.Delete(*evict)
 	}
-	n.sessions[session.id] = session
+	n.enter(session)
 	n.participants[key] = session
 	n.raiseFence(key, scope.Generation)
 	n.creates[operationID] = createRecord{digest: digest, id: session.id}
@@ -531,14 +529,7 @@ func (n *Node) register(operationID string, scope protocol.Scope, kind *SessionK
 // hostsEpisode reports whether a live Participant session belongs to the Episode. A capture does
 // not host one: a node holding only captures admits no new Participants of a draining node's Episode.
 // The caller holds n.mu.
-func (n *Node) hostsEpisode(key episodeKey) bool {
-	for _, session := range n.sessions {
-		if session.kind.participant && episodeOf(session.scope) == key {
-			return true
-		}
-	}
-	return false
-}
+func (n *Node) hostsEpisode(key episodeKey) bool { return n.episodes[key].hosts() }
 
 // fenceVictim finds the fence a new Participant would take the place of, or nil when the table
 // has room or already knows the Participant. It picks the oldest fence of a Participant with no
@@ -576,20 +567,15 @@ func (n *Node) claimScreen(s *Session) (code, message string) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	key := episodeOf(s.scope)
-	if n.screens[key] != nil {
+	if n.screenOf(key) != nil {
 		return protocol.TrackCodeScreenShareActive, "another Participant is already sharing a screen in this Episode"
 	}
-	participants := 0
-	for _, session := range n.sessions {
-		if session.kind.participant && episodeOf(session.scope) == key {
-			participants++
-		}
-	}
+	participants := n.episodes[key].count(true, nil, 0)
 	if n.mandatoryPackets(participants, true) > n.episodeCeiling(participants) {
 		_ = n.refuseFor(s.scope, RefusedScreenCeiling, nil)
 		return protocol.TrackCodeLimitExceeded, "a screen share with every microphone and camera would exceed the Episode's packet ceiling"
 	}
-	n.screens[key] = s
+	n.record(key).screen = s
 	return "", ""
 }
 
@@ -605,21 +591,18 @@ func (n *Node) refuseCamera(s *Session) {
 func (n *Node) releaseScreen(s *Session) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if key := episodeOf(s.scope); n.screens[key] == s {
-		delete(n.screens, key)
+	if key := episodeOf(s.scope); n.screenOf(key) == s {
+		n.episodes[key].screen = nil
+		n.tidy(key)
 	}
 }
 
 // EndEpisode closes every session of the Tenant's Episode and reports how many it closed.
 func (n *Node) EndEpisode(tenantID, episodeID string) int {
 	n.mu.Lock()
-	delete(n.holds, episodeKey{tenantID, episodeID})
-	var ended []*Session
-	for _, session := range n.sessions {
-		if session.scope.TenantID == tenantID && session.scope.EpisodeID == episodeID {
-			ended = append(ended, session)
-		}
-	}
+	key := episodeKey{tenantID, episodeID}
+	ended := n.episodes[key].list()
+	n.clearHold(key)
 	n.mu.Unlock()
 	for _, session := range ended {
 		session.CloseFor(CloseEpisodeEnded)
@@ -662,7 +645,7 @@ func (n *Node) remove(session *Session) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.sessions[session.id] == session {
-		delete(n.sessions, session.id)
+		n.leave(session)
 	}
 	if n.participants[session.key()] == session {
 		delete(n.participants, session.key())

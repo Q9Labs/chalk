@@ -63,8 +63,8 @@ func (n *Node) RetireEpisode(request protocol.RetireEpisodeRequest) (protocol.Re
 		}
 	}
 	var ended []*Session
-	for _, session := range n.sessions {
-		if episodeOf(session.scope) == key && session.allocation < floor {
+	for _, session := range n.episodes[key].list() {
+		if session.allocation < floor {
 			ended = append(ended, session)
 		}
 	}
