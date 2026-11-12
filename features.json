@@ -80,6 +80,7 @@
         "apps/api/internal/adapters/mediaplaneproviders",
         "apps/api/internal/adapters/pion",
         "apps/api/internal/captureplane",
+        "apps/api/internal/httpapi/create_space_own_sfu_test.go",
         "apps/api/internal/httpapi/direct_ingress.go",
         "apps/api/internal/httpapi/direct_ingress_test.go",
         "apps/api/internal/httpapi/media_client_preflight_test.go",
@@ -250,6 +251,7 @@
         "apps/sync/lib/chalk_sync/reactions.ex",
         "apps/sync/test/chalk_sync/chat",
         "sdks/typescript/client/src/chat-files",
+        "sdks/typescript/client/src/space-client/chat-upload-report.ts",
         "sdks/typescript/client/src/space-client/reactions-controller.ts",
         "sdks/typescript/react-native/src/sheets/people-chat"
       ]

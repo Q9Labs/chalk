@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs"];
+export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs", "features"];
 
 // This directory contains data-only snapshots, not source packages; its generated identifier stays out of the map.
 const dataOnlySubtrees = ["apps/sync/test/fixtures"];
@@ -16,9 +17,23 @@ function validRelativePath(candidate) {
   return typeof candidate === "string" && candidate.length > 0 && !candidate.includes("\\") && !path.posix.isAbsolute(candidate) && !path.win32.isAbsolute(candidate) && path.posix.normalize(candidate) === candidate && candidate !== "." && candidate !== ".." && !candidate.startsWith("../");
 }
 
+function ignoredPaths(root, paths) {
+  if (paths.length === 0 || !fs.existsSync(path.join(root, ".git"))) return new Set();
+  const result = spawnSync("git", ["check-ignore", "--stdin", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+    input: `${paths.join("\0")}\0`,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0 && result.status !== 1) throw new Error(`git check-ignore failed: ${result.stderr.trim()}`);
+  return new Set(result.stdout.split("\0").filter(Boolean));
+}
+
 function listDirectories(root, scanRoots, excludedSubtrees) {
   const directories = [];
+  const files = [];
   const errors = [];
+  let pendingDirectories = [];
 
   for (const scanRoot of scanRoots) {
     const absoluteRoot = path.join(root, scanRoot);
@@ -34,19 +49,37 @@ function listDirectories(root, scanRoots, excludedSubtrees) {
       continue;
     }
 
-    const visit = (relativeDirectory) => {
-      directories.push(relativeDirectory);
-      if (excludedSubtrees.some((excluded) => relativeDirectory === excluded)) return;
-      const absoluteDirectory = path.join(root, relativeDirectory);
-      for (const entry of fs.readdirSync(absoluteDirectory, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name === "node_modules") continue;
-        visit(path.posix.join(relativeDirectory, entry.name));
-      }
-    };
-    visit(scanRoot);
+    directories.push(scanRoot);
+    pendingDirectories.push(scanRoot);
   }
 
-  return { directories, errors };
+  while (pendingDirectories.length > 0) {
+    const candidatesByDirectory = new Map();
+    for (const relativeDirectory of pendingDirectories) {
+      if (excludedSubtrees.some((excluded) => relativeDirectory === excluded)) continue;
+      const entries = fs.readdirSync(path.join(root, relativeDirectory), { withFileTypes: true });
+      candidatesByDirectory.set(relativeDirectory, entries);
+    }
+    const candidatePaths = [...candidatesByDirectory].flatMap(([relativeDirectory, entries]) => entries.filter((entry) => (entry.isDirectory() || entry.isFile()) && !entry.isSymbolicLink() && entry.name !== "node_modules").map((entry) => path.posix.join(relativeDirectory, entry.name)));
+    const ignored = ignoredPaths(root, candidatePaths);
+    const nextDirectories = [];
+    for (const [relativeDirectory, entries] of candidatesByDirectory) {
+      for (const entry of entries) {
+        if (entry.isSymbolicLink() || entry.name === "node_modules") continue;
+        const relativeEntry = path.posix.join(relativeDirectory, entry.name);
+        if (ignored.has(relativeEntry)) continue;
+        if (entry.isDirectory()) {
+          directories.push(relativeEntry);
+          nextDirectories.push(relativeEntry);
+        } else if (entry.isFile()) {
+          files.push(relativeEntry);
+        }
+      }
+    }
+    pendingDirectories = nextDirectories;
+  }
+
+  return { directories, files, errors };
 }
 
 export function validateFeatureMap(featureMap, options = {}) {
@@ -79,7 +112,6 @@ export function validateFeatureMap(featureMap, options = {}) {
 
   if (!featuresByName.has("shared")) errors.push('features.json must contain an entry named "shared"');
 
-  const directoryOwners = new Map();
   for (const [name, feature] of featuresByName) {
     if (!Array.isArray(feature.paths)) continue;
     const uniquePaths = new Set();
@@ -101,26 +133,23 @@ export function validateFeatureMap(featureMap, options = {}) {
         errors.push(`Feature ${name} path does not exist: ${relativePath}`);
         continue;
       }
-      if (!stats.isDirectory()) continue;
-      const owners = directoryOwners.get(relativePath) ?? new Set();
-      owners.add(name);
-      directoryOwners.set(relativePath, owners);
-    }
-  }
-
-  for (const [directory, owners] of directoryOwners) {
-    if (owners.size > 3) {
-      errors.push(`Directory ${directory} is claimed by ${owners.size} features (${[...owners].join(", ")}); move shared code to the shared entry in features.json.`);
     }
   }
 
   const scan = listDirectories(root, scanRoots, excludedSubtrees);
   errors.push(...scan.errors);
+  const claims = [...featuresByName.entries()].flatMap(([name, feature]) => (Array.isArray(feature.paths) ? feature.paths.map((claim) => ({ name, claim })) : []));
+  const ownersFor = (relativePath) => new Set(claims.filter(({ claim }) => isWithin(relativePath, claim)).map(({ name }) => name));
   for (const directory of scan.directories) {
-    const hasPrefixOwner = [...directoryOwners.keys()].some((claim) => isWithin(directory, claim));
-    if (hasPrefixOwner) continue;
-    const isSplit = [...featuresByName.values()].some((feature) => Array.isArray(feature.paths) && feature.paths.some((claim) => claim.startsWith(`${directory}/`)));
-    if (!isSplit) errors.push(`Unclaimed source directory: ${directory}. Add this directory to features.json.`);
+    const owners = ownersFor(directory);
+    if (owners.size > 3) {
+      errors.push(`Directory ${directory} is claimed by ${owners.size} features (${[...owners].join(", ")}); move shared code to the shared entry in features.json.`);
+    }
+    const hasDescendantClaim = claims.some(({ claim }) => isWithin(claim, directory));
+    if (owners.size === 0 && !hasDescendantClaim) errors.push(`Unclaimed source directory: ${directory}. Add this directory to features.json.`);
+  }
+  for (const file of scan.files) {
+    if (ownersFor(file).size === 0) errors.push(`Unclaimed source file: ${file}. Add this file to features.json.`);
   }
 
   return { errors, directoryCount: scan.directories.length };
@@ -130,16 +159,10 @@ function ownersForPath(featureMap, relativePath) {
   const exactOwners = featureMap.features.filter((feature) => feature.paths.includes(relativePath)).map((feature) => feature.name);
   if (exactOwners.length > 0) return exactOwners;
 
-  const owners = new Set();
-  let candidate = path.posix.dirname(relativePath);
-  while (candidate !== "." && candidate !== "..") {
-    for (const feature of featureMap.features) {
-      if (feature.paths.includes(candidate)) owners.add(feature.name);
-    }
-    if (owners.size > 0) return [...owners].sort();
-    candidate = path.posix.dirname(candidate);
-  }
-  return [];
+  return featureMap.features
+    .filter((feature) => feature.paths.some((claim) => isWithin(relativePath, claim)))
+    .map((feature) => feature.name)
+    .sort();
 }
 
 function printUsage() {
