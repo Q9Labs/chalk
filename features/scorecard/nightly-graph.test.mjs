@@ -208,7 +208,9 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
   const dir = mkdtempSync(join(tmpdir(), "proof-step-"));
   try {
     mkdirSync(join(dir, "scripts/staging-sfu"), { recursive: true });
+    mkdirSync(join(dir, "scripts/prod-proof"), { recursive: true });
     mkdirSync(join(dir, "bin"));
+    for (const file of ["registry.json", "registry.mjs"]) copyFileSync(resolve(root, "scripts/prod-proof", file), join(dir, "scripts/prod-proof", file));
     const lease = join(dir, "scripts/staging-sfu/gate-lease");
     const pnpm = join(dir, "bin/pnpm");
     // staging-lock rejects a purpose that is not a plain label, so the stand-in rejects it too.
