@@ -81,6 +81,35 @@ defmodule ChalkSync.Stateholder.RoleTransitionPlannerPostgresTest do
              MediaPlaneTestAdapter.calls(adapter)
   end
 
+  # A registry entry from an older connection or generation is disabled with its id kept, the
+  # same shape as a muted one, and Sync cannot tell them apart. The node records a revoke for a
+  # source that has no track, so the stop finishes and the role change still completes.
+  test "demoting a participant whose registry holds only a retired entry finishes through a stop that finds no track",
+       %{connection: connection, episode: episode, host: host, target: target} do
+    publications = [publication(target, :microphone, false, "retired-older-connection")]
+
+    assert {:ok, %{result: :pending, external_operation_id: parent_id}} =
+             demote(host, target, "demote-retired-source-01", publications)
+
+    assert stop_sources(connection, episode, parent_id) == ["microphone"]
+    assert fenced_sources(connection, episode, target) == ["microphone"]
+
+    {:ok, adapter} = MediaPlaneTestAdapter.start_link()
+    stop = claim_stop(connection, episode, parent_id, "microphone")
+
+    assert :confirmed =
+             ExternalOperationConsumer.execute_operation(
+               episode,
+               stop,
+               {MediaPlaneTestAdapter, adapter},
+               nil,
+               &Postgres.finalize_operation/3
+             )
+
+    assert parent_status(connection, episode, parent_id) == "applied"
+    assert fenced_sources(connection, episode, target) == []
+  end
+
   test "a closed publication has no track or lease, so demoting its participant commits at once",
        %{host: host, target: target} do
     publications = [publication(target, :microphone, false, nil)]
@@ -140,6 +169,20 @@ defmodule ChalkSync.Stateholder.RoleTransitionPlannerPostgresTest do
       Scope.episode(episode) ++ [Scope.uuid(target.participant_id)]
     ).rows
     |> List.flatten()
+  end
+
+  defp parent_status(connection, episode, parent_id) do
+    [[status]] =
+      Postgrex.query!(
+        connection,
+        """
+        select status from sync_external_operations
+        where tenant_id = $1 and space_id = $2 and episode_id = $3 and external_operation_id = $4
+        """,
+        Scope.episode(episode) ++ [Scope.uuid(parent_id)]
+      ).rows
+
+    status
   end
 
   defp claim_stop(connection, episode, parent_id, source) do

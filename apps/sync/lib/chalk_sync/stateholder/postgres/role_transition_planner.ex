@@ -163,7 +163,10 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner do
 
   # A source is open while the registry still holds its publication id. A microphone muted in
   # place is registered with enabled == false but keeps its node track and source lease, so
-  # unmuting forwards at once; only a closed publication has an empty id and no lease.
+  # unmuting forwards at once. A closed publication has an empty id and no lease. An entry that
+  # an older connection or generation left behind is disabled with its id kept, so it counts as
+  # open too: the registry cannot tell it from a muted one, and stopping a source that has no
+  # track is harmless because the node records a revoke for it and the stop completes.
   defp observed_open?(publications, participant_id, source) do
     Enum.any?(publications, fn publication ->
       Map.get(publication, :participant_id) == participant_id and
