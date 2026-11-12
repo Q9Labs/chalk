@@ -258,6 +258,29 @@ html:has(.site[data-chalk-theme="light"]) {
     color: var(--chalk-positive);
   }
 
+  /* Copy and check share one cell and swap with the same 200ms morph as the call's copy button. */
+  & .ib.copy svg.site-icon {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--chalk-motion-copy),
+      transform var(--chalk-motion-copy);
+  }
+
+  & .ib.copy svg.site-icon + svg.site-icon,
+  & .ib.copy[data-copied] svg.site-icon:first-child {
+    opacity: 0;
+    transform: scale(0.4) rotate(-20deg);
+  }
+
+  & .ib.copy svg.site-icon + svg.site-icon {
+    color: var(--chalk-positive);
+  }
+
+  & .ib.copy[data-copied] svg.site-icon + svg.site-icon {
+    opacity: 1;
+    transform: none;
+  }
+
   /* The theme button carries both icons, so the prerendered page shows the right one before hydration. */
   &[data-chalk-theme="dark"] .when-light,
   &[data-chalk-theme="light"] .when-dark {
