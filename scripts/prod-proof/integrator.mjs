@@ -200,7 +200,7 @@ async function main() {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   if (process.argv.includes("--help")) console.log("Manual hosted integrator proof: node scripts/prod-proof/integrator.mjs\nRun alone, using the same configuration as pnpm prod:proof. Prepare /guest1 and /guest2 before Join. Ctrl-C cleans up owned resources.");
   else
     await main().catch(() => {

@@ -38,7 +38,7 @@ async function main() {
   console.log(`Set LatestVersion to ${latest}`);
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

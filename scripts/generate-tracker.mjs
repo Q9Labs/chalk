@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { isMain } from "./script-entry.mjs";
 import { readTracker, repoRoot } from "./tracker-data.mjs";
 import { renderMarkdown } from "./tracker-render.mjs";
 
@@ -21,7 +20,7 @@ export const generateTracker = async ({ root = repoRoot, check = false } = {}) =
   return tracker;
 };
 
-if (isMain(import.meta)) {
+if (import.meta.main) {
   const args = process.argv.slice(2);
   let root = repoRoot;
   let check = false;

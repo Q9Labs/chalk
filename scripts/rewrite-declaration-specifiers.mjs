@@ -1,6 +1,5 @@
 import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 function isExtensionlessRelativeSpecifier(specifier) {
@@ -66,7 +65,7 @@ export async function rewriteDeclarationFiles(directory) {
   return { changedFiles, removedMaps: mapFiles.length };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (import.meta.main) {
   const directory = process.argv[2];
   if (!directory) throw new Error("A declaration directory is required");
   const { changedFiles, removedMaps } = await rewriteDeclarationFiles(path.resolve(directory));

@@ -122,4 +122,4 @@ async function main() {
   if (report.result !== "passed") process.exitCode = 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+if (import.meta.main) await main();
