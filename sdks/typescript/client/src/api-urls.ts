@@ -7,25 +7,20 @@ export type ParticipantRouteSubject = {
   readonly participantId: string;
 };
 
-const segment = encodeURIComponent;
-
-function tenantUrl(base: string, tenantId: string): string {
-  return `${trimTrailingSlashes(base)}/v1/tenants/${segment(tenantId)}`;
-}
-
-function participantUrl(base: string, subject: ParticipantRouteSubject): string {
-  return `${tenantUrl(base, subject.tenantId)}/spaces/${segment(subject.spaceId)}/episodes/${segment(subject.episodeId)}/participants/${segment(subject.participantId)}`;
-}
+/** `base` and `/v1/` followed by the parts, each encoded as one path segment. */
+const route = (base: string, ...parts: string[]): string => `${trimTrailingSlashes(base)}/v1/${parts.map(encodeURIComponent).join("/")}`;
+const tenantRoute = (base: string, tenantId: string, ...parts: string[]) => route(base, "tenants", tenantId, ...parts);
+const participantRoute = (base: string, subject: ParticipantRouteSubject, ...leaf: string[]) => route(base, "tenants", subject.tenantId, "spaces", subject.spaceId, "episodes", subject.episodeId, "participants", subject.participantId, ...leaf);
 
 /** The API routes the SDK calls by hand, because the generated client does not carry their bearer or streaming needs. */
-export const mediaSignalling = (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/media/sfu`;
-export const episodeStatus = (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/episode-status`;
-export const cancelJoin = (base: string, subject: ParticipantRouteSubject) => `${participantUrl(base, subject)}/cancel-join`;
-export const connectionReports = (base: string, tenantId: string) => `${tenantUrl(base, tenantId)}/connection-reports`;
-export const problemReports = (base: string, tenantId: string) => `${tenantUrl(base, tenantId)}/problem-reports`;
-export const problemReportAvailability = (base: string, tenantId: string) => `${tenantUrl(base, tenantId)}/problem-reports/availability`;
-export const callStats = (base: string, tenantId: string) => `${tenantUrl(base, tenantId)}/call-stats`;
-export const chatUploads = (base: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/uploads`;
-export const chatUploadFinalize = (base: string, uploadId: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/uploads/${segment(uploadId)}/finalize`;
-export const chatAttachmentDownload = (base: string, attachmentId: string) => `${trimTrailingSlashes(base)}/v1/chat/attachments/${segment(attachmentId)}/download`;
-export const whiteboardFileDownload = (base: string, fileId: string) => `${trimTrailingSlashes(base)}/v1/whiteboard/files/${segment(fileId)}/download`;
+export const mediaSignalling = (base: string, subject: ParticipantRouteSubject) => participantRoute(base, subject, "media", "sfu");
+export const episodeStatus = (base: string, subject: ParticipantRouteSubject) => participantRoute(base, subject, "episode-status");
+export const cancelJoin = (base: string, subject: ParticipantRouteSubject) => participantRoute(base, subject, "cancel-join");
+export const connectionReports = (base: string, tenantId: string) => tenantRoute(base, tenantId, "connection-reports");
+export const problemReports = (base: string, tenantId: string) => tenantRoute(base, tenantId, "problem-reports");
+export const problemReportAvailability = (base: string, tenantId: string) => tenantRoute(base, tenantId, "problem-reports", "availability");
+export const callStats = (base: string, tenantId: string) => tenantRoute(base, tenantId, "call-stats");
+export const chatUploads = (base: string) => route(base, "chat", "attachments", "uploads");
+export const chatUploadFinalize = (base: string, uploadId: string) => route(base, "chat", "attachments", "uploads", uploadId, "finalize");
+export const chatAttachmentDownload = (base: string, attachmentId: string) => route(base, "chat", "attachments", attachmentId, "download");
+export const whiteboardFileDownload = (base: string, fileId: string) => route(base, "whiteboard", "files", fileId, "download");

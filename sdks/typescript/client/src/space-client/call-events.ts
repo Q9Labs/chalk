@@ -54,13 +54,9 @@ function changedParticipantEvents(old: Participant, participant: Participant): C
 
 function mutedByHostEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicrophoneOff: boolean): CallEvent[] {
   const wentOff = previous.media.local.microphone.state === "enabled" && next.media.local.microphone.state === "disabled";
-  return wentOff && !ownMicrophoneOff ? [{ kind: "mutedByHost", by: soleMuter(next) }] : [];
-}
-
-/** The one participant who could have muted the microphone, or null when there are none or several. */
-function soleMuter(next: SpaceSnapshot): Participant | null {
+  if (!wentOff || ownMicrophoneOff) return [];
   const muters = next.participants.roster.filter((participant) => participant.participantId !== next.self.participantId && participant.capabilities.includes("muteOthers"));
-  return muters.length === 1 ? (muters[0] ?? null) : null;
+  return [{ kind: "mutedByHost", by: muters.length === 1 ? (muters[0] ?? null) : null }];
 }
 
 function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
@@ -68,36 +64,26 @@ function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallE
   return next.media.incomingRequests.filter((request) => !knownRequests.has(request.requestId)).map((request): CallEvent => ({ kind: "mediaRequest", request }));
 }
 
-type CurrentRecording = SpaceSnapshot["recording"]["current"];
-
 function recordingEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const was = previous.recording.current;
   const now = next.recording.current;
-  return [...recordingStarted(was, now), ...recordingStopped(was, now), ...recordingFailed(was, now)];
-}
-
-function recordingStarted(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
-  return was?.status !== "recording" && now?.status === "recording" ? [{ kind: "recordingStarted" }] : [];
-}
-
-function recordingStopped(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
-  return was?.status === "recording" && now?.status !== "recording" && now?.status !== "failed" ? [{ kind: "recordingStopped" }] : [];
-}
-
-function recordingFailed(was: CurrentRecording, now: CurrentRecording): CallEvent[] {
-  if (now?.status !== "failed") return [];
-  const alreadyReported = was?.status === "failed" && was.recordingId === now.recordingId;
-  return alreadyReported ? [] : [{ kind: "recordingFailed", failureCode: now.failureCode }];
+  const wasRecording = was?.status === "recording";
+  const nowRecording = now?.status === "recording";
+  if (now?.status === "failed") return was?.status === "failed" && was.recordingId === now.recordingId ? [] : [{ kind: "recordingFailed", failureCode: now.failureCode }];
+  if (nowRecording) return wasRecording ? [] : [{ kind: "recordingStarted" }];
+  return wasRecording ? [{ kind: "recordingStopped" }] : [];
 }
 
 function deviceEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const events: CallEvent[] = [];
-  for (const source of ["microphone", "camera"] as const) {
+  for (const [source, list] of [
+    ["microphone", "microphones"],
+    ["camera", "cameras"],
+  ] as const) {
     const wasSelected = previous.media.selection[source];
     if (wasSelected === next.media.selection[source]) continue;
-    const devices = source === "camera" ? next.media.devices.cameras : next.media.devices.microphones;
-    const oldDevices = source === "camera" ? previous.media.devices.cameras : previous.media.devices.microphones;
-    const disconnected = oldDevices.find((device) => device.deviceId === wasSelected);
+    const devices = next.media.devices[list];
+    const disconnected = previous.media.devices[list].find((device) => device.deviceId === wasSelected);
     if (!disconnected || devices.some((device) => device.deviceId === disconnected.deviceId)) continue;
     const selected = devices.find((device) => device.deviceId === next.media.selection[source]);
     if (selected) events.push({ kind: "deviceSwitched", source, from: disconnected.label, to: selected.label });
