@@ -6,8 +6,10 @@ const AXIOM_URL = "https://api.axiom.co/v1/datasets/_apl?format=tabular";
 const HOST_CALLS = new Set(["StopInstances", "StartInstances", "RebootInstances"]);
 const CLOUDTRAIL_WINDOW_MS = 30 * 60 * 1000;
 const START_WINDOW_MS = 10 * 60 * 1000;
-// A deploy record may be created a few minutes before the API container restarts, so it explains a start for this long.
+// A deploy record is created before the API container restarts, so it explains a start from its creation until the deploy completes.
+// A record that never completed (a failed attempt) has no end time and explains starts for this long.
 const DEPLOY_LEAD_MS = 30 * 60 * 1000;
+const DEPLOY_SLACK_MS = 120_000;
 const literal = (value) => `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
 
 export function startsQuery(dataset) {
@@ -37,9 +39,10 @@ export function hostCalls(events, instanceId) {
 }
 
 /** API starts that no deploy record explains: a crash, a host restart or a hand-run command. */
-export function unexplainedStarts(starts, deploymentTimes) {
+export function unexplainedStarts(starts, deployments) {
+  const explains = (deployment, time) => time - deployment.created >= -DEPLOY_SLACK_MS && time <= (deployment.finished ? deployment.finished.getTime() + DEPLOY_SLACK_MS : deployment.created.getTime() + DEPLOY_LEAD_MS);
   return starts
-    .filter((start) => !deploymentTimes.some((deployed) => start.time - deployed >= -120_000 && start.time - deployed <= DEPLOY_LEAD_MS))
+    .filter((start) => !deployments.some((deployment) => explains(deployment, start.time)))
     .map((start) => ({
       key: `api-start:chalk:${start.time.toISOString()}`,
       detail: `The production API started at ${start.time.toISOString()} with no deploy record. Previous boot ended: ${start.previousBootEnd || "unknown"}. Every live socket dropped.`,
@@ -62,14 +65,27 @@ async function readStarts({ fetchImpl, token, dataset, startTime, endTime }) {
   return parseStarts(await response.json());
 }
 
-async function readDeployments({ fetchImpl, token, repository }) {
-  const response = await fetchImpl(`https://api.github.com/repos/${repository}/deployments?environment=production&per_page=50`, {
+async function githubJson({ fetchImpl, token, path }) {
+  const response = await fetchImpl(`https://api.github.com/repos/${path}`, {
     headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json" },
   }).catch(() => {
-    throw new Error("GitHub deployments request failed");
+    throw new Error("GitHub request failed");
   });
-  if (!response.ok) throw new Error(`GitHub deployments answered HTTP ${response.status}`);
-  return (await response.json()).map((deployment) => new Date(deployment.created_at));
+  if (!response.ok) throw new Error(`GitHub answered HTTP ${response.status}`);
+  return response.json();
+}
+
+/** Production release records that could explain a start in the window, with the time each one completed (null while open or failed). */
+async function readDeployments({ fetchImpl, token, repository, since }) {
+  const records = await githubJson({ fetchImpl, token, path: `${repository}/deployments?environment=production&task=production-release&per_page=50` });
+  const recent = records.filter((record) => record.task === "production-release" && new Date(record.created_at) >= since);
+  return Promise.all(
+    recent.map(async (record) => {
+      const statuses = await githubJson({ fetchImpl, token, path: `${repository}/deployments/${record.id}/statuses?per_page=10` });
+      const success = statuses.find((status) => status.state === "success");
+      return { created: new Date(record.created_at), finished: success ? new Date(success.created_at) : null };
+    }),
+  );
 }
 
 // One lookup per event name: a lookup by resource returns the newest 50 events of any kind, which API reads can fill.
@@ -95,7 +111,7 @@ export async function check({ env, fetchImpl = fetch, awsImpl = aws, now = new D
     const [calls, starts, deployments] = await Promise.all([
       readHostCalls({ now, awsImpl }),
       readStarts({ fetchImpl, token: env.CHALK_AXIOM_QUERY_TOKEN, dataset: env.CHALK_AXIOM_LOG_DATASET, startTime, endTime: now.toISOString() }),
-      readDeployments({ fetchImpl, token: env.GITHUB_TOKEN, repository: env.GITHUB_REPOSITORY }),
+      readDeployments({ fetchImpl, token: env.GITHUB_TOKEN, repository: env.GITHUB_REPOSITORY, since: new Date(now.getTime() - START_WINDOW_MS - DEPLOY_LEAD_MS) }),
     ]);
     incidents = [...hostCalls(calls, env.PRODUCTION_INSTANCE_ID), ...unexplainedStarts(starts, deployments)];
     log(`${incidents.length} incidents, ${starts.length} API starts, ${deployments.length} deploy records`);

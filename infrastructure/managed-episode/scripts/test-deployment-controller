@@ -1210,6 +1210,8 @@ stable_controller_sha="$(sha256sum "${fixture_root}/install/chalk-deployment-con
 stable_policy_sha="$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')"
 stable_health_sha="$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')"
 stable_restore_unit_sha="$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')"
+stable_grace_sha="$(sha256sum "${fixture_root}/systemd/user@.service.d/timeout.conf" | awk '{print $1}')"
+printf '\n# candidate grace\n' >>"${fixture_root}/source/infrastructure/managed-episode/systemd/chalk-user-manager-grace.conf"
 printf '\n# candidate controller\n' >>"${fixture_root}/source/infrastructure/managed-episode/controller/chalk-deployment-controller"
 printf '\n' >>"${fixture_root}/source/infrastructure/managed-episode/contracts/environments.json"
 printf '\n# candidate health\n' >>"${fixture_root}/source/infrastructure/managed-episode/scripts/chalk-runtime-health"
@@ -1220,6 +1222,7 @@ assert_stable_installed_runtime() {
   [[ "$(sha256sum "${fixture_root}/install/environments.json" | awk '{print $1}')" == "$stable_policy_sha" ]] || fail "stable environment policy was not restored"
   [[ "$(sha256sum "${fixture_root}/install/chalk-runtime-health" | awk '{print $1}')" == "$stable_health_sha" ]] || fail "stable health script was not restored"
   [[ "$(sha256sum "${fixture_root}/systemd/chalk-runtime-restore.service" | awk '{print $1}')" == "$stable_restore_unit_sha" ]] || fail "stable restore unit was not restored"
+  [[ "$(sha256sum "${fixture_root}/systemd/user@.service.d/timeout.conf" | awk '{print $1}')" == "$stable_grace_sha" ]] || fail "stable user manager stop grace was not restored"
   [[ -e "${fixture_root}/restore-unit-enabled" ]] || fail "stable restore unit enablement was not restored"
 }
 
@@ -1405,8 +1408,9 @@ if group_enabled restore; then
   cat >"${fixture_root}/bin/journalctl" <<'JOURNAL'
 #!/usr/bin/env bash
 case "$*" in
+  *"-o short-unix"*) printf '2000.5 host chalk-api[1]: api.starting\n' ;;
   *"-t chalk-api"*) printf '%s' "${FAKE_API_LAST:-}" ;;
-  *"Killing process"*) printf '%s' "${FAKE_KILLED:-}" ;;
+  *"Killing process"*) [[ -n "${FAKE_KILL_BEFORE_START:-}" && "$*" == *"--since @2000"* ]] || printf '%s' "${FAKE_KILLED:-}" ;;
 esac
 JOURNAL
   chmod 0755 "${fixture_root}/bin/journalctl"
@@ -1421,6 +1425,7 @@ JOURNAL
   FAKE_API_LAST='{"event":"api.shutdown_complete"}' boot_end clean
   FAKE_API_LAST='{"event":"api.starting"}' boot_end killed
   FAKE_API_LAST='{"event":"api.shutdown_complete"}' FAKE_KILLED='user@1001.service: Killing process 7 (chalk-api) with signal SIGKILL.' boot_end killed
+  FAKE_API_LAST='{"event":"api.shutdown_complete"}' FAKE_KILLED='user@1001.service: Killing process 7 (chalk-api) with signal SIGKILL.' FAKE_KILL_BEFORE_START=1 boot_end clean
   grep -Fx 'CHALK_HOST_BOOT_ID=boot-1234' "${fixture_root}/boot-end-run/boot.env" >/dev/null || fail "boot-end did not record the boot id"
 fi
 

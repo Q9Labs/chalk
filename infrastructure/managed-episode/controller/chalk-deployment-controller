@@ -722,6 +722,7 @@ snapshot_installed_runtime() {
   snapshot_installed_file "${controller_install_dir}/chalk-deployment-controller" "${snapshot_root}/chalk-deployment-controller"
   snapshot_installed_file "${controller_install_dir}/environments.json" "${snapshot_root}/environments.json"
   snapshot_installed_file "${systemd_root}/chalk-runtime-restore.service" "${snapshot_root}/chalk-runtime-restore.service"
+  snapshot_installed_file "${systemd_root}/user@.service.d/timeout.conf" "${snapshot_root}/user-manager-timeout.conf"
   if "$systemctl_bin" is-enabled chalk-runtime-restore.service >/dev/null 2>&1; then
     : >"${snapshot_root}/restore-unit-enabled"
   fi
@@ -748,6 +749,7 @@ restore_installed_runtime() {
   restore_installed_file 0755 "${snapshot_root}/chalk-deployment-controller" "${controller_install_dir}/chalk-deployment-controller"
   restore_installed_file 0644 "${snapshot_root}/environments.json" "${controller_install_dir}/environments.json"
   restore_installed_file 0644 "${snapshot_root}/chalk-runtime-restore.service" "${systemd_root}/chalk-runtime-restore.service"
+  restore_installed_file 0644 "${snapshot_root}/user-manager-timeout.conf" "${systemd_root}/user@.service.d/timeout.conf"
   "$systemctl_bin" daemon-reload >/dev/null 2>"${stage_root}/systemd-rollback-error.log" || fail "root systemd daemon reload failed during rollback"
   if [[ -f "${snapshot_root}/restore-unit-enabled" ]]; then
     "$systemctl_bin" enable chalk-runtime-restore.service >/dev/null 2>"${stage_root}/systemd-rollback-enable-error.log" || fail "root restore unit enable failed during rollback"
@@ -1703,12 +1705,14 @@ parse_deploy_args() {
 }
 
 # Say how the previous boot ended, so the API can log it next to api.starting (Axiom has no host logs).
-# killed: the user manager SIGKILLed the containers, or the API never logged api.shutdown_complete last.
+# killed: the user manager SIGKILLed the containers after the last API start, or the API never logged api.shutdown_complete last.
 boot_end_class() {
-  local last
+  local last started
   last="$("$journalctl_bin" -b -1 -q -o cat -t chalk-api -g 'api[.](starting|shutdown_complete)' 2>/dev/null | tail -n 1)" || last=""
   [[ -n "$last" ]] || { printf unknown; return; }
-  if "$journalctl_bin" -b -1 -q -o cat -g 'user@[0-9]+[.]service: Killing process .* SIGKILL' -n 1 2>/dev/null | grep -q .; then
+  started="$("$journalctl_bin" -b -1 -q -o short-unix -t chalk-api -g 'api[.]starting' 2>/dev/null | tail -n 1 | cut -d. -f1)" || started=""
+  [[ "$started" =~ ^[0-9]+$ ]] || started=""
+  if "$journalctl_bin" -b -1 -q -o cat ${started:+--since "@${started}"} -g 'user@[0-9]+[.]service: Killing process .* SIGKILL' -n 1 2>/dev/null | grep -q .; then
     printf killed
   elif [[ "$last" == *api.shutdown_complete* ]]; then
     printf clean

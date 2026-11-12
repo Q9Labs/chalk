@@ -14,14 +14,20 @@ test("a stop, start or reboot of the production node pages, other calls and node
   );
 });
 
-test("a start within the lead time of a deploy record is explained, any other start pages", () => {
+test("a start during an open deploy record is explained, any other start pages", () => {
   const starts = [
     { time: at(20), previousBootEnd: "" },
     { time: at(59), previousBootEnd: "killed" },
   ];
-  const incidents = unexplainedStarts(starts, [at(5)]);
+  const incidents = unexplainedStarts(starts, [{ created: at(5), finished: null }]);
   assert.equal(incidents.length, 1);
   assert.match(incidents[0].detail, /Previous boot ended: killed/);
+});
+
+test("a completed deploy explains starts only until it finished", () => {
+  const deployment = { created: at(5), finished: at(16) };
+  assert.equal(unexplainedStarts([{ time: at(10), previousBootEnd: "" }, { time: at(17), previousBootEnd: "" }], [deployment]).length, 0);
+  assert.equal(unexplainedStarts([{ time: at(25), previousBootEnd: "killed" }], [deployment]).length, 1);
 });
 
 test("Axiom start rows parse and a malformed table is refused", () => {
@@ -34,7 +40,8 @@ test("the check posts to Oncall and fails the run when something paged", async (
   const posts = [];
   const fetchImpl = async (url, init) => {
     if (url.includes("axiom")) return { ok: true, json: async () => ({ tables: [{ fields: [{ name: "_time" }], columns: [[new Date(Date.UTC(2026, 10, 12, 10, 55)).toISOString()]] }] }) };
-    if (url.includes("github")) return { ok: true, json: async () => [] };
+    if (url.includes("/statuses")) return { ok: true, json: async () => [{ state: "success", created_at: at(40).toISOString() }] };
+    if (url.includes("github")) return { ok: true, json: async () => [{ id: 7, task: "production-release", created_at: at(30).toISOString() }, { id: 8, task: "other", created_at: at(54).toISOString() }] };
     posts.push(JSON.parse(init.body));
     return { ok: true };
   };
