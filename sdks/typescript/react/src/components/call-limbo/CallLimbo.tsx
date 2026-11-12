@@ -168,7 +168,6 @@ function StandInCall({ spaceName }: { readonly spaceName: string }) {
         {[0, 1, 2, 3, 4].map((slot) => (
           <span key={slot} className="h-12 w-12 rounded-full bg-[var(--chalk-raised)]" />
         ))}
-        <span className="h-12 w-12 rounded-full bg-[var(--chalk-danger)] opacity-70" />
       </div>
     </div>
   );
