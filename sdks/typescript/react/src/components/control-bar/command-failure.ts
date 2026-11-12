@@ -35,8 +35,8 @@ const operationCopy = {
 const generic: Rule = { copy: operationCopy, retry: true };
 const unavailable: Rule = { copy: operationCopy, retry: false };
 const specific = (copy: Copy): Rule => ({ copy: { ...operationCopy, start: copy, select: copy, request: copy, change: copy }, retry: false });
-const capture: Copy = (context) => `${settings(context)} Check that it is connected and available${context.recoverable ? ", then try again" : ""}.`;
-const captureStart: Copy = (context) => (context.source === "screen" ? `${start(context)}${again(context)}` : `Your ${device(context)} couldn’t start. Check that it is connected and available${context.recoverable ? ", then try again" : ""}.`);
+const capture: Copy = (context) => `${settings(context)} Check that it’s connected${context.recoverable ? ", then try again" : ""}.`;
+const captureStart: Copy = (context) => (context.source === "screen" ? `${start(context)}${again(context)}` : `Your ${device(context)} couldn’t start. Check that it’s connected${context.recoverable ? ", then try again" : ""}.`);
 
 /** Every client code has a media-context policy. Non-media commands are preserved at the boundary below. */
 export const MEDIA_FAILURE_POLICY = {
@@ -81,10 +81,12 @@ export const MEDIA_FAILURE_POLICY = {
   "episode.ended": { copy: { start: () => "This call has ended.", stop: () => "This call has ended.", select: () => "This call has ended.", test: () => "This call has ended.", request: () => "This call has ended.", change: () => "This call has ended." }, retry: false },
   "media.permission_denied": specific((context) =>
     context.source === "screen"
-      ? `Your screen couldn’t be shared. Allow screen recording for your browser in System Settings${context.recoverable ? ", then try again" : ""}.`
+      ? "Screen sharing is blocked. Allow it for your browser in System Settings."
       : context.source === "speaker"
-        ? "Chalk can’t use your speaker. Check your browser’s audio permissions and system sound settings."
-        : `Chalk can’t use your ${device(context)}. Click the camera icon in the address bar and allow ${context.source === "camera" ? "Camera" : context.source === "microphone" ? "Microphone" : "Camera and Microphone"}.`,
+        ? "Chalk can’t use your speaker. Check your browser’s sound permissions."
+        : context.source === "camera" || context.source === "microphone"
+          ? `Your ${context.source} is blocked. Allow it from the icon in the address bar.`
+          : "Your camera and microphone are blocked. Allow them from the address bar.",
   ),
   "media.device_not_found": specific((context) => `No ${device(context)} found. Connect one${context.recoverable ? ", then try again" : ""}.`),
   "media.device_busy": { ...specific((context) => `Your ${device(context)} is being used by another app. Close it there${context.recoverable ? ", then try again" : ""}.`), retry: true },
