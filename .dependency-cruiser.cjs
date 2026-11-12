@@ -73,9 +73,52 @@ const workspaceSourceCannotReachAppSource = {
   to: { path: "(?:^|/)apps/[^/]+/src(?:/|$)" },
 };
 
+const webSectionsStandAlone = {
+  name: "web-sections-stand-alone",
+  comment: "The landing, docs, dashboard and space sections of the web app do not import each other. Shared pieces live in components/site or components/privacy.",
+  severity: "error",
+  from: { path: "^apps/web/src/components/(landing|docs|dashboard|space)/" },
+  to: { path: "^apps/web/src/components/(landing|docs|dashboard|space)/", pathNot: "^apps/web/src/components/$1/" },
+};
+
+const webSharedSectionsAreLeaves = {
+  name: "web-shared-sections-are-leaves",
+  comment: "components/site and components/privacy are what the sections share, so they import no section back.",
+  severity: "error",
+  from: { path: "^apps/web/src/components/(site|privacy)/" },
+  to: { path: "^apps/web/src/components/(landing|docs|dashboard|space)/" },
+};
+
+const dashboardServerHasNoUi = {
+  name: "dashboard-server-has-no-ui",
+  comment: "The Pages Function bundle imports no component or route of the browser app.",
+  severity: "error",
+  from: { path: "^apps/web/server/" },
+  to: { path: "^apps/web/src/(components|routes)/" },
+};
+
+const whiteboardCoreIsFrameworkNeutral = {
+  name: "whiteboard-core-is-framework-neutral",
+  comment: "The collab core and the embedded protocol and bridge are framework-neutral contracts, so they import nothing from the React folder.",
+  severity: "error",
+  from: { path: "^packages/whiteboard/src/(collab/|embedded/(protocol|renderer-bridge))" },
+  to: { path: "^packages/whiteboard/src/react/" },
+};
+
 module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
-  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource],
+  forbidden: [
+    webSectionsStandAlone,
+    webSharedSectionsAreLeaves,
+    dashboardServerHasNoUi,
+    whiteboardCoreIsFrameworkNeutral,
+    packageSourceCannotReachOtherPackageSource,
+    packageSourceCannotReachSdkSource,
+    sdkSourceCannotReachPackageSource,
+    sdkSourceCannotReachOtherSdkSource,
+    appSourceCannotReachWorkspaceSource,
+    workspaceSourceCannotReachAppSource,
+  ],
   options: {
     ...canonicalConfiguration.options,
     includeOnly: { path: "^(?:apps|packages|sdks/typescript)(?:/|$)" },
