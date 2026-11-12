@@ -8,6 +8,8 @@
 #   certs <staging|production|bench> capture-ca     the capture workers' own CA, apart from the service CA
 #   certs <staging|production|bench> capture-worker <sfu node>
 #                                              the identity of the capture worker beside that node, 30 days
+#   certs <staging|production|bench> capture-worker-check <sfu node>
+#                                              fails unless the installed worker identity is the node's, from the capture CA, with 14 days left
 #
 # The API presents its identity to the SFU, and the SFU requires it
 # (SFU_CLIENT_IDENTITY). The same certificate serves the provider bridge, so it
@@ -17,7 +19,7 @@
 # 1Password, because scripts/bench deletes the whole directory with the fleet.
 set -euo pipefail
 
-usage="usage: certs <staging|production|bench> <ca|server|api|operator|capture-ca|capture-worker>"
+usage="usage: certs <staging|production|bench> <ca|server|api|operator|capture-ca|capture-worker|capture-worker-check>"
 environment="${1:?$usage}"
 command="${2:?$usage}"
 case "$environment" in
@@ -128,6 +130,21 @@ case "$command" in
     sign "${work}/capture-worker.csr" "${work}/capture-worker.ext" 30 "${work}/capture-worker.crt"
     install_pair capture-worker
     echo "worker ${worker_id} for SFU node ${node}"
+    ;;
+  capture-worker-check)
+    node="${3:?usage: certs <env> capture-worker-check <sfu node id>}"
+    worker_id="$(capture_worker_id "$spiffe_environment" "$node")"
+    cert="${dir}/capture-worker.crt"
+    [[ -f "$cert" && -f "${dir}/capture-worker.key" ]] || { echo "no worker identity in ${dir}; run: certs ${environment} capture-worker ${node}" >&2; exit 1; }
+    "$openssl" verify -purpose sslclient -CAfile "${dir}/capture-ca.crt" "$cert" >/dev/null 2>&1 \
+      || { echo "${cert} does not verify against ${dir}/capture-ca.crt" >&2; exit 1; }
+    names="$("$openssl" x509 -in "$cert" -noout -ext subjectAltName | tr -d ' \n')"
+    [[ "$names" == *"URI:spiffe://chalkmeet.com/environment/${spiffe_environment}/capture/${worker_id}" && "$names" != *,* ]] \
+      || { echo "${cert} does not carry exactly the identity of worker ${worker_id} for node ${node}" >&2; exit 1; }
+    "$openssl" x509 -in "$cert" -noout -checkend 1209600 >/dev/null || { echo "${cert} expires within 14 days; run: certs ${environment} capture-worker ${node}" >&2; exit 1; }
+    [[ "$("$openssl" x509 -in "$cert" -noout -pubkey)" == "$("$openssl" pkey -in "${dir}/capture-worker.key" -pubout)" ]] \
+      || { echo "${dir}/capture-worker.key is not the key of ${cert}" >&2; exit 1; }
+    echo "worker ${worker_id} for SFU node ${node}: $("$openssl" x509 -in "$cert" -noout -enddate)"
     ;;
   server)
     new_key "${work}/server.key"

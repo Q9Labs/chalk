@@ -39,7 +39,7 @@ func newColocatedScenario(t *testing.T) colocatedScenario {
 		t.Fatal(err)
 	}
 	node := "sfu-" + hex.EncodeToString(suffix)
-	execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_token=null, lease_owner=null, lease_expires_at=null,
+	execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_token=null, lease_owner=null, lease_expires_at=null, attempt_limit=10,
 		available_at=now()-interval '1 second' where id=$1`, fixture.jobID.Bytes())
 	execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
 	workerID := workeridentity.ColocatedWorkerID(colocatedTestEnvironment, node)
@@ -68,8 +68,8 @@ func (s colocatedScenario) setBinding(t *testing.T, update string, args ...any) 
 
 func (s colocatedScenario) reportWorker(t *testing.T, observedAt string, open bool) {
 	t.Helper()
-	execCleanupFixture(t, s.tx, `update recording_fleet_nodes set ready=$2, admission_open=$2, ready_capacity=case when $2 then 2 else 0 end,
-		observed_at=`+observedAt+` where colocated_sfu_node=$1`, s.node, open)
+	execCleanupFixture(t, s.tx, `update recording_colocated_capture_workers set ready=$2, admission_open=$2, ready_capacity=case when $2 then 2 else 0 end,
+		observed_at=`+observedAt+` where sfu_node=$1`, s.node, open)
 }
 
 func (s colocatedScenario) claim(t *testing.T, owner string, grace int32) (sqlc.ClaimRecordingJobRow, error) {
@@ -97,6 +97,28 @@ func (s colocatedScenario) wantNoClaim(t *testing.T, owner string, grace int32) 
 	if _, err := s.claim(t, owner, grace); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("%s claim with grace %d = %v, want no job", owner, grace, err)
 	}
+}
+
+// failAttempt records the claim's placement the way the repository does in the claim transaction
+// (InsertRecordingJobAttemptAuthority), then ends the attempt: the worker reported a failure or its
+// lease lapsed, so the job is pending again and available now.
+func (s colocatedScenario) failAttempt(t *testing.T, claimed sqlc.ClaimRecordingJobRow, owner string) {
+	t.Helper()
+	requestID := make([]byte, 16)
+	if _, err := rand.Read(requestID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.queries.InsertRecordingJobAttemptAuthority(t.Context(), sqlc.InsertRecordingJobAttemptAuthorityParams{
+		JobID: claimed.ID, AttemptCount: claimed.AttemptCount, FencingGeneration: claimed.FencingGeneration, CaptureEpoch: 1,
+		ClaimRequestID: pgtype.UUID{Bytes: [16]byte(requestID), Valid: true}, Kind: "capture", LeaseOwner: owner,
+		LeaseToken: "colocated-lease-" + owner, LeaseExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Minute), Valid: true},
+		EnvelopeBytes: []byte("{}"), EnvelopeDigest: make([]byte, 32), IssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		t.Fatalf("record attempt authority: %v", err)
+	}
+	execCleanupFixture(t, s.tx, `update recording_jobs set state='pending', lease_token=null, lease_owner=null, lease_expires_at=null,
+		available_at=now()-interval '1 second' where id=$1`, s.fixture.jobID.Bytes())
+	execCleanupFixture(t, s.tx, `update recording_pipelines set state='retryable_failure' where recording_id=$1`, s.fixture.recordingID.Bytes())
 }
 
 func TestColocatedCaptureClaimPlacement(t *testing.T) {
@@ -163,6 +185,14 @@ func TestColocatedCaptureDemandAndObservations(t *testing.T) {
 		t.Errorf("a capture the unhealthy worker cannot take must count again: queued %d→%d, held starts %d→%d", off.QueuedJobs, stale.QueuedJobs, off.HeldStarts, stale.HeldStarts)
 	}
 
+	observation, err := s.queries.RecordRecordingColocatedWorkerObservation(t.Context(), sqlc.RecordRecordingColocatedWorkerObservationParams{
+		Ready: true, AdmissionOpen: true, ReadyCapacity: 2, Environment: colocatedTestEnvironment, Role: "capture",
+		WorkerID: cleanupUUID(workeridentity.ColocatedWorkerID(colocatedTestEnvironment, s.node)),
+	})
+	if err != nil || observation.ProviderID != "sfu:"+s.node || !observation.Ready {
+		t.Fatalf("colocated worker observation = %+v, %v", observation, err)
+	}
+
 	nodes, err := s.queries.ListRecordingFleetNodeObservations(t.Context(), sqlc.ListRecordingFleetNodeObservationsParams{Environment: colocatedTestEnvironment, Role: "capture"})
 	if err != nil {
 		t.Fatal(err)
@@ -176,26 +206,63 @@ func TestColocatedCaptureDemandAndObservations(t *testing.T) {
 
 func TestColocatedCaptureWorkerAuthorization(t *testing.T) {
 	s := newColocatedScenario(t)
-	authorized := func(enabled bool) bool {
+	// The switch gates new claims only: a worker that holds a lease keeps authorizing its heartbeats
+	// and commits with the switch off.
+	authorizedWorker := func() bool {
+		ok, err := s.queries.AuthorizeRecordingFleetWorker(t.Context(), sqlc.AuthorizeRecordingFleetWorkerParams{
+			Environment: colocatedTestEnvironment, Role: "capture", WorkerID: cleanupUUID(workeridentity.ColocatedWorkerID(colocatedTestEnvironment, s.node)),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	claimGate := func(enabled bool) (claim, closed bool) {
+		row, err := s.queries.AuthorizeRecordingFleetWorkerClaim(t.Context(), sqlc.AuthorizeRecordingFleetWorkerClaimParams{
+			Environment: colocatedTestEnvironment, Role: "capture", ColocatedEnabled: enabled,
+			WorkerID: cleanupUUID(workeridentity.ColocatedWorkerID(colocatedTestEnvironment, s.node)),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return row.Authorized, row.AdmissionClosed
+	}
+	lockGate := func(enabled bool) bool {
 		ok, err := s.queries.LockRecordingFleetWorkerClaim(t.Context(), sqlc.LockRecordingFleetWorkerClaimParams{Role: "capture", ColocatedEnabled: enabled, LeaseOwner: s.worker})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return ok
 	}
-	if !authorized(true) {
-		t.Error("a ready colocated worker must be authorized while the switch is on")
+	if !authorizedWorker() {
+		t.Error("a registered colocated worker must be authorized on its worker routes")
 	}
-	if authorized(false) {
-		t.Error("a colocated worker must not be authorized while the switch is off")
+	if claim, _ := claimGate(true); !claim || !lockGate(true) {
+		t.Error("a ready colocated worker must be authorized to claim while the switch is on")
 	}
-	execCleanupFixture(t, s.tx, `update recording_fleet_nodes set state='revoked', ready=false, admission_open=false, ready_capacity=0, revoked_at=now() where colocated_sfu_node=$1`, s.node)
+	if claim, closed := claimGate(false); claim || !closed || lockGate(false) {
+		t.Errorf("with the switch off the worker must not claim and must see admission closed: claim=%v closed=%v lock=%v", claim, closed, lockGate(false))
+	}
+	if !authorizedWorker() {
+		t.Error("switching colocation off must not cut a running worker off its heartbeat and commit routes")
+	}
+
+	var legacy int
+	if err := s.tx.QueryRow(t.Context(), `select count(*) from recording_fleet_nodes where worker_id=$1 or provider_id like 'sfu:%'`,
+		workeridentity.ColocatedWorkerID(colocatedTestEnvironment, s.node).String()).Scan(&legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy != 0 {
+		t.Errorf("the legacy fleet registry holds %d colocated rows; earlier releases read it as the DigitalOcean fleet", legacy)
+	}
+
+	execCleanupFixture(t, s.tx, `update recording_colocated_capture_workers set state='revoked', ready=false, admission_open=false, ready_capacity=0, revoked_at=now() where sfu_node=$1`, s.node)
 	if err := s.queries.EnsureRecordingColocatedCaptureWorker(t.Context(), sqlc.EnsureRecordingColocatedCaptureWorkerParams{
 		Environment: colocatedTestEnvironment, SfuNode: s.node, WorkerID: cleanupUUID(workeridentity.ColocatedWorkerID(colocatedTestEnvironment, s.node)),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if authorized(true) {
+	if authorizedWorker() || lockGate(true) {
 		t.Error("registering again must not reactivate a revoked colocated worker")
 	}
 }
@@ -219,36 +286,58 @@ func TestColocatedCaptureClaimedEvent(t *testing.T) {
 	}
 }
 
-// A capture the colocated worker holds is lost when its node dies or the worker process dies. The
-// lease lapses and recovery requeues the job; the fleet must then be able to take it, at once when
-// the worker's reports have stopped (the node is gone) and after the grace when the worker is
-// still reporting (the process came back).
-func TestColocatedCaptureLeaseLapse(t *testing.T) {
-	lapse := func(t *testing.T, s colocatedScenario) {
+// A capture attempt on the colocated worker ends when its node dies, its process dies or it
+// reports a failure. The next attempt goes to the fleet at once and never back to the colocated
+// worker, whatever its health, so a worker that reports ready but cannot capture cannot use up the
+// job's attempts alone.
+func TestColocatedCaptureFailedAttemptGoesToFleet(t *testing.T) {
+	failFirst := func(t *testing.T, s colocatedScenario) {
 		t.Helper()
-		s.wantClaim(t, s.worker, colocatedTestGrace)
-		execCleanupFixture(t, s.tx, `update recording_jobs set lease_expires_at=now()-interval '1 second' where id=$1`, s.fixture.jobID.Bytes())
-		if _, err := s.queries.RecoverExpiredRecordingJobs(t.Context(), 7200); err != nil {
-			t.Fatalf("recover expired jobs: %v", err)
+		claimed, err := s.claim(t, s.worker, colocatedTestGrace)
+		if err != nil {
+			t.Fatalf("colocated claim: %v", err)
 		}
-		execCleanupFixture(t, s.tx, `update recording_jobs set available_at=now()-interval '1 second' where id=$1`, s.fixture.jobID.Bytes())
+		s.failAttempt(t, claimed, s.worker)
 	}
-	t.Run("node dies: reports stop and the fleet takes the capture at once", func(t *testing.T) {
+	t.Run("worker still reports ready: the fleet takes the next attempt without waiting for the grace", func(t *testing.T) {
 		s := newColocatedScenario(t)
-		lapse(t, s)
+		failFirst(t, s)
+		s.wantNoClaim(t, s.worker, colocatedTestGrace)
+		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)
+	})
+	t.Run("node died: reports stopped and the fleet takes it", func(t *testing.T) {
+		s := newColocatedScenario(t)
+		failFirst(t, s)
 		s.reportWorker(t, "now()-interval '2 minutes'", true)
 		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)
 	})
-	t.Run("worker process dies and returns: it keeps the capture, the fleet waits out the grace", func(t *testing.T) {
+	t.Run("the failed attempt's job counts as fleet demand again", func(t *testing.T) {
 		s := newColocatedScenario(t)
-		lapse(t, s)
-		s.wantNoClaim(t, fleetTestWorker, colocatedTestGrace)
-		s.wantClaim(t, s.worker, colocatedTestGrace)
+		demand := func() int32 {
+			row, err := s.queries.GetRecordingFleetDemand(t.Context(), sqlc.GetRecordingFleetDemandParams{
+				Role: "capture", ObservedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+				ColocatedGraceSeconds: colocatedTestGrace, OwnCapture: true, RecordingCap: 100,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return row.QueuedJobs
+		}
+		held := demand()
+		failFirst(t, s)
+		if after := demand(); after != held+1 {
+			t.Errorf("queued jobs %d→%d: a capture the colocated worker failed must count for the fleet", held, after)
+		}
 	})
-	t.Run("worker process dies and does not return: the fleet takes the capture after the grace", func(t *testing.T) {
+	t.Run("a repeat failure on the fleet leaves the retries with the fleet", func(t *testing.T) {
 		s := newColocatedScenario(t)
-		lapse(t, s)
-		execCleanupFixture(t, s.tx, `update recording_jobs set available_at=now()-interval '1 minute' where id=$1`, s.fixture.jobID.Bytes())
+		failFirst(t, s)
+		claimed, err := s.claim(t, fleetTestWorker, colocatedTestGrace)
+		if err != nil {
+			t.Fatalf("fleet claim: %v", err)
+		}
+		s.failAttempt(t, claimed, fleetTestWorker)
+		s.wantNoClaim(t, s.worker, colocatedTestGrace)
 		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)
 	})
 }

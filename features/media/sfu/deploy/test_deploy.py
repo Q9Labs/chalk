@@ -81,6 +81,35 @@ class CaptureWorkerCertificateTest(unittest.TestCase):
             self.assertIn('URI:spiffe://chalkmeet.com/environment/bench/capture/5bf8647d-4fac-8dd9-86a0-411de7850d79', names)
             subprocess.run(['openssl', 'verify', '-CAfile', str(bench / 'capture-ca.crt'), str(bench / 'capture-worker.crt')], check=True, capture_output=True)
 
+    def test_check_refuses_an_identity_that_is_not_the_nodes_or_is_about_to_lapse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = {**os.environ, 'CHALK_SFU_PRIVATE_DIR': directory}
+            certs = str(DEPLOY.with_name('certs'))
+
+            def run(*command):
+                return subprocess.run([certs, 'bench', *command], env=env, capture_output=True, text=True, timeout=60)
+
+            self.assertEqual(run('capture-ca').returncode, 0)
+            self.assertEqual(run('capture-worker', 'sfu-1').returncode, 0)
+            self.assertEqual(run('capture-worker-check', 'sfu-1').returncode, 0)
+            other = run('capture-worker-check', 'sfu-2')
+            self.assertNotEqual(other.returncode, 0)
+            self.assertIn('does not carry exactly the identity', other.stderr)
+
+            bench = Path(directory) / 'bench'
+            # A short-lived certificate from the same CA must be refused for its remaining lifetime.
+            short = Path(directory) / 'short'
+            short.mkdir()
+            subprocess.run(['openssl', 'req', '-new', '-key', str(bench / 'capture-worker.key'), '-subj', '/CN=short', '-out', str(short / 'w.csr')], check=True, capture_output=True)
+            ext = subprocess.run(['openssl', 'x509', '-in', str(bench / 'capture-worker.crt'), '-noout', '-ext', 'subjectAltName'], check=True, capture_output=True, text=True).stdout
+            uri = ext.split('URI:')[1].strip()
+            (short / 'w.ext').write_text(f'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=clientAuth\nsubjectAltName=URI:{uri}\n')
+            subprocess.run(['openssl', 'x509', '-req', '-in', str(short / 'w.csr'), '-CA', str(bench / 'capture-ca.crt'), '-CAkey', str(bench / 'capture-ca.key'),
+                            '-set_serial', '7', '-days', '3', '-sha256', '-extfile', str(short / 'w.ext'), '-out', str(bench / 'capture-worker.crt')], check=True, capture_output=True)
+            lapsing = run('capture-worker-check', 'sfu-1')
+            self.assertNotEqual(lapsing.returncode, 0)
+            self.assertIn('expires within 14 days', lapsing.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()

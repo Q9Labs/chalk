@@ -24,6 +24,8 @@ type Querier interface {
 	ArchiveTenantSpace(ctx context.Context, arg ArchiveTenantSpaceParams) (Space, error)
 	AuthenticateMCPOAuthAccessToken(ctx context.Context, arg AuthenticateMCPOAuthAccessTokenParams) (AuthenticateMCPOAuthAccessTokenRow, error)
 	AuthorizeRecordingArtifactReplay(ctx context.Context, arg AuthorizeRecordingArtifactReplayParams) (bool, error)
+	// The colocated switch gates new claims only (the claim queries below). A worker that is not
+	// revoked keeps heartbeating and committing the leases it already holds.
 	AuthorizeRecordingFleetWorker(ctx context.Context, arg AuthorizeRecordingFleetWorkerParams) (bool, error)
 	AuthorizeRecordingFleetWorkerClaim(ctx context.Context, arg AuthorizeRecordingFleetWorkerClaimParams) (AuthorizeRecordingFleetWorkerClaimRow, error)
 	AuthorizeRecordingJobLease(ctx context.Context, arg AuthorizeRecordingJobLeaseParams) (pgtype.UUID, error)
@@ -121,7 +123,8 @@ type Querier interface {
 	DestroyWebhookEndpointURLs(ctx context.Context, arg DestroyWebhookEndpointURLsParams) (int64, error)
 	DrainCaptureStopPublications(ctx context.Context, observedAt pgtype.Timestamptz) error
 	// The API registers the capture worker beside each own-SFU node from its node list. A revoked or
-	// existing row is never reactivated or rewritten here.
+	// existing row is never reactivated or rewritten here. These rows live apart from
+	// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 	EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error
 	EnsureWebhookTenantState(ctx context.Context, tenantID pgtype.UUID) error
 	// Recheck both empty signals after the Episode lock. Heartbeat renewal and
@@ -336,6 +339,9 @@ type Querier interface {
 	LockRecordingCapturePlanHandle(ctx context.Context, planHandle string) error
 	LockRecordingCaptureSignalingAuthority(ctx context.Context, arg LockRecordingCaptureSignalingAuthorityParams) (LockRecordingCaptureSignalingAuthorityRow, error)
 	LockRecordingCompletionRecovery(ctx context.Context, arg LockRecordingCompletionRecoveryParams) (pgtype.UUID, error)
+	// No row means the worker has no registration. A colocated worker is authorized to claim only
+	// while the switch is on. Each registration is locked in its own CTE, since FOR SHARE cannot
+	// apply to a UNION.
 	LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error)
 	LockRecordingJobClaimRequest(ctx context.Context, claimRequestID string) error
 	LockRecordingRenderCommitAuthority(ctx context.Context, arg LockRecordingRenderCommitAuthorityParams) (LockRecordingRenderCommitAuthorityRow, error)
@@ -379,6 +385,7 @@ type Querier interface {
 	RecordMediaPlaneKillSwitchChange(ctx context.Context, arg RecordMediaPlaneKillSwitchChangeParams) error
 	RecordPublicAdmissionCancellation(ctx context.Context, arg RecordPublicAdmissionCancellationParams) error
 	RecordPublicAdmissionDecision(ctx context.Context, arg RecordPublicAdmissionDecisionParams) error
+	RecordRecordingColocatedWorkerObservation(ctx context.Context, arg RecordRecordingColocatedWorkerObservationParams) (RecordRecordingColocatedWorkerObservationRow, error)
 	RecordRecordingFleetWorkerObservation(ctx context.Context, arg RecordRecordingFleetWorkerObservationParams) (RecordRecordingFleetWorkerObservationRow, error)
 	RecoverExpiredArtifactJobs(ctx context.Context, arg RecoverExpiredArtifactJobsParams) ([]ArtifactJob, error)
 	RecoverExpiredRecordingJobs(ctx context.Context, maximumRenderSeconds int32) ([]RecoverExpiredRecordingJobsRow, error)

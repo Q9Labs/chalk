@@ -584,6 +584,22 @@ type RecordingCaptureStopPublication struct {
 	ResolvedAt       pgtype.Timestamptz `json:"resolved_at"`
 }
 
+type RecordingColocatedCaptureWorker struct {
+	Environment     string             `json:"environment"`
+	SfuNode         string             `json:"sfu_node"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	State           string             `json:"state"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ResourcesLatest []byte             `json:"resources_latest"`
+	PeakRssBytes    int64              `json:"peak_rss_bytes"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecordingCompletionRecovery struct {
 	JobID             pgtype.UUID        `json:"job_id"`
 	RequestID         pgtype.UUID        `json:"request_id"`
@@ -616,27 +632,26 @@ type RecordingDataKey struct {
 }
 
 type RecordingFleetNode struct {
-	Environment      string             `json:"environment"`
-	Role             string             `json:"role"`
-	ProviderID       string             `json:"provider_id"`
-	NodeName         string             `json:"node_name"`
-	Region           string             `json:"region"`
-	ReleaseID        string             `json:"release_id"`
-	ImageDigest      string             `json:"image_digest"`
-	BootGeneration   int64              `json:"boot_generation"`
-	InventoryDigest  string             `json:"inventory_digest"`
-	WorkerID         pgtype.UUID        `json:"worker_id"`
-	State            string             `json:"state"`
-	Ready            bool               `json:"ready"`
-	AdmissionOpen    bool               `json:"admission_open"`
-	ReadyCapacity    int32              `json:"ready_capacity"`
-	ObservedAt       pgtype.Timestamptz `json:"observed_at"`
-	ResourcesLatest  []byte             `json:"resources_latest"`
-	PeakRssBytes     int64              `json:"peak_rss_bytes"`
-	RevokedAt        pgtype.Timestamptz `json:"revoked_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	ColocatedSfuNode pgtype.Text        `json:"colocated_sfu_node"`
+	Environment     string             `json:"environment"`
+	Role            string             `json:"role"`
+	ProviderID      string             `json:"provider_id"`
+	NodeName        string             `json:"node_name"`
+	Region          string             `json:"region"`
+	ReleaseID       string             `json:"release_id"`
+	ImageDigest     string             `json:"image_digest"`
+	BootGeneration  int64              `json:"boot_generation"`
+	InventoryDigest string             `json:"inventory_digest"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	State           string             `json:"state"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	ResourcesLatest []byte             `json:"resources_latest"`
+	PeakRssBytes    int64              `json:"peak_rss_bytes"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type RecordingJob struct {

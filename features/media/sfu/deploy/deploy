@@ -17,9 +17,10 @@
 # would be a disruptive replacement, which only --force accepts. Certificates come from `certs` in $CHALK_SFU_PRIVATE_DIR/<env>. SSH uses SFU_SSH_KEY (default ~/.ssh/chalk-sfu-operator_ed25519); the script exits at the start if that file is missing. Metrics export
 # turns on when that directory holds `otlp-headers`: the OTLP headers value, token and dataset,
 # which the node gets as a Podman secret. SFU_OTLP_ENDPOINT overrides the default endpoint.
-# The capture worker beside the SFU is installed when the directory also holds capture.conf,
-# capture-worker.crt/.key (certs capture-worker) and bridge-ca.crt; without capture.conf the deploy
-# removes it. It starts after the SFU is ready.
+# The capture worker beside the SFU is installed when the directory also holds capture.conf
+# (NODE_ID, CONTROL_PLANE_URL, SERVER_NAME), capture-ca.crt (certs capture-ca) and bridge-ca.crt.
+# Each deploy issues the node's worker identity (certs capture-worker) and checks it before use.
+# Without capture.conf the deploy removes the worker. It starts after the SFU is ready.
 # `bench` is the short-lived fleet that scripts/bench creates; it alone takes SFU_PACKET_BUDGET and SFU_MAX_EPISODE_PARTICIPANTS.
 set -euo pipefail
 
@@ -219,8 +220,8 @@ sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s
 # those files and deploying again; every capture then goes to the on-demand fleet.
 capture_on=false
 if [[ -f "${dir}/capture.conf" ]]; then
-  for file in capture-worker.crt capture-worker.key bridge-ca.crt; do
-    [[ -f "${dir}/${file}" ]] || { echo "capture.conf is present but ${dir}/${file} is missing; see certs ... capture-worker" >&2; exit 1; }
+  for file in capture-ca.crt bridge-ca.crt; do
+    [[ -f "${dir}/${file}" ]] || { echo "capture.conf is present but ${dir}/${file} is missing; see certs ... capture-ca" >&2; exit 1; }
   done
   capture_on=true
 fi
@@ -244,7 +245,13 @@ if $capture_on; then
     as_sfu podman secret inspect "$name" >/dev/null 2>&1 && replace=(--replace)
     as_sfu podman secret create "${replace[@]}" "$name" - <"${dir}/${pair#*:}" >/dev/null
   done
-  # capture.conf holds CONTROL_PLANE_URL, SERVER_NAME and optionally SLOTS; no secrets.
+  # capture.conf holds NODE_ID (this node's ID in CHALK_SFU_NODES), CONTROL_PLANE_URL, SERVER_NAME and
+  # optionally SLOTS; no secrets. Every deploy issues the node's worker identity afresh, so it never
+  # lapses, and refuses to install one that is not this node's, from the capture CA, with 14 days left.
+  node_id="$(sed -n 's/^NODE_ID=//p' "${dir}/capture.conf")"
+  [[ -n "$node_id" ]] || { echo "${dir}/capture.conf needs NODE_ID=" >&2; exit 1; }
+  "${deploy_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
+  "${deploy_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
   control_plane_url="$(sed -n 's/^CONTROL_PLANE_URL=//p' "${dir}/capture.conf")"
   server_name="$(sed -n 's/^SERVER_NAME=//p' "${dir}/capture.conf")"
   slots="$(sed -n 's/^SLOTS=//p' "${dir}/capture.conf")"

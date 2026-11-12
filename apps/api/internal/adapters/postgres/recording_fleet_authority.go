@@ -27,6 +27,7 @@ type recordingFleetAuthorityQuerier interface {
 	AuthorizeRecordingFleetWorkerClaim(context.Context, sqlc.AuthorizeRecordingFleetWorkerClaimParams) (sqlc.AuthorizeRecordingFleetWorkerClaimRow, error)
 	CloseRecordingFleetNodeAdmission(context.Context, sqlc.CloseRecordingFleetNodeAdmissionParams) (string, error)
 	EnsureRecordingColocatedCaptureWorker(context.Context, sqlc.EnsureRecordingColocatedCaptureWorkerParams) error
+	RecordRecordingColocatedWorkerObservation(context.Context, sqlc.RecordRecordingColocatedWorkerObservationParams) (sqlc.RecordRecordingColocatedWorkerObservationRow, error)
 	GetRecordingFleetDemand(context.Context, sqlc.GetRecordingFleetDemandParams) (sqlc.GetRecordingFleetDemandRow, error)
 	ListRecordingFleetNodeObservations(context.Context, sqlc.ListRecordingFleetNodeObservationsParams) ([]sqlc.ListRecordingFleetNodeObservationsRow, error)
 	PublishRecordingFleetPool(context.Context, sqlc.PublishRecordingFleetPoolParams) (string, error)
@@ -274,7 +275,18 @@ func (r RecordingFleetAuthorityRepository) RecordWorkerObservation(ctx context.C
 		Environment: environment, Role: string(observation.Identity.Role), WorkerID: uuid(observation.Identity.WorkerID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return recorderfleet.NodeObservation{}, recorderfleet.ErrNodeNotFound
+		colocated, colocatedErr := r.queries.RecordRecordingColocatedWorkerObservation(ctx, sqlc.RecordRecordingColocatedWorkerObservationParams{
+			Ready: observation.Ready, AdmissionOpen: observation.AdmissionOpen, ReadyCapacity: int32(observation.ReadyCapacity),
+			ResourcesLatest: resources, PeakRssBytes: peakRSS,
+			Environment: environment, Role: string(observation.Identity.Role), WorkerID: uuid(observation.Identity.WorkerID),
+		})
+		if errors.Is(colocatedErr, pgx.ErrNoRows) {
+			return recorderfleet.NodeObservation{}, recorderfleet.ErrNodeNotFound
+		}
+		if colocatedErr != nil {
+			return recorderfleet.NodeObservation{}, fmt.Errorf("record colocated capture worker observation: %w", colocatedErr)
+		}
+		row, err = sqlc.RecordRecordingFleetWorkerObservationRow(colocated), nil
 	}
 	if err != nil {
 		return recorderfleet.NodeObservation{}, fmt.Errorf("record recording fleet worker observation: %w", err)
@@ -294,7 +306,7 @@ func (r RecordingFleetAuthorityRepository) AuthorizeWorker(ctx context.Context, 
 		return recorderfleet.ErrProviderUnavailable
 	}
 	authorized, err := r.queries.AuthorizeRecordingFleetWorker(ctx, sqlc.AuthorizeRecordingFleetWorkerParams{
-		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID), ColocatedEnabled: r.colocatedGrace > 0,
+		Environment: environment, Role: string(identity.Role), WorkerID: uuid(identity.WorkerID),
 	})
 	if err != nil {
 		return fmt.Errorf("authorize recording fleet worker: %w", err)

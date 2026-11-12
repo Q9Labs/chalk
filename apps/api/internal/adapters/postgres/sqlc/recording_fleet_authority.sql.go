@@ -80,7 +80,7 @@ where environment = $2
   and boot_generation = $9
   and inventory_digest = $10
   and (state = 'requested' or (state = 'active' and worker_id = $1))
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at, colocated_sfu_node
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
 `
 
 type ActivateRecordingFleetBootstrapParams struct {
@@ -131,36 +131,36 @@ func (q *Queries) ActivateRecordingFleetBootstrap(ctx context.Context, arg Activ
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.ColocatedSfuNode,
 	)
 	return i, err
 }
 
 const authorizeRecordingFleetWorker = `-- name: AuthorizeRecordingFleetWorker :one
-select exists (
-    select 1 from recording_fleet_nodes
-    where environment = $1
-      and role = $2
-      and worker_id = $3
-      and state in ('active', 'draining')
-      and (colocated_sfu_node is null or $4::boolean)
-) as authorized
+select (exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = $1
+      and node.role = $2
+      and node.worker_id = $3
+      and node.state in ('active', 'draining')
+) or exists (
+    select 1 from recording_colocated_capture_workers colocated
+    where colocated.environment = $1
+      and $2::text = 'capture'
+      and colocated.worker_id = $3
+      and colocated.state = 'active'
+))::boolean as authorized
 `
 
 type AuthorizeRecordingFleetWorkerParams struct {
-	Environment      string      `json:"environment"`
-	Role             string      `json:"role"`
-	WorkerID         pgtype.UUID `json:"worker_id"`
-	ColocatedEnabled bool        `json:"colocated_enabled"`
+	Environment string      `json:"environment"`
+	Role        string      `json:"role"`
+	WorkerID    pgtype.UUID `json:"worker_id"`
 }
 
+// The colocated switch gates new claims only (the claim queries below). A worker that is not
+// revoked keeps heartbeating and committing the leases it already holds.
 func (q *Queries) AuthorizeRecordingFleetWorker(ctx context.Context, arg AuthorizeRecordingFleetWorkerParams) (bool, error) {
-	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorker,
-		arg.Environment,
-		arg.Role,
-		arg.WorkerID,
-		arg.ColocatedEnabled,
-	)
+	row := q.db.QueryRow(ctx, authorizeRecordingFleetWorker, arg.Environment, arg.Role, arg.WorkerID)
 	var authorized bool
 	err := row.Scan(&authorized)
 	return authorized, err
@@ -168,13 +168,21 @@ func (q *Queries) AuthorizeRecordingFleetWorker(ctx context.Context, arg Authori
 
 const authorizeRecordingFleetWorkerClaim = `-- name: AuthorizeRecordingFleetWorkerClaim :one
 with worker as (
-    select state, ready, admission_open, ready_capacity, observed_at
-    from recording_fleet_nodes
-    where environment = $1
-      and role = $2
-      and worker_id = $3
-      and state in ('active', 'draining')
-      and (colocated_sfu_node is null or $4::boolean)
+    select node.state, node.ready, node.admission_open, node.ready_capacity, node.observed_at
+    from recording_fleet_nodes node
+    where node.environment = $1
+      and node.role = $2
+      and node.worker_id = $3
+      and node.state in ('active', 'draining')
+    union all
+    -- A colocated worker claims only while the switch is on; switched off it sees admission closed.
+    select colocated.state, colocated.ready and $4::boolean,
+        colocated.admission_open and $4::boolean, colocated.ready_capacity, colocated.observed_at
+    from recording_colocated_capture_workers colocated
+    where colocated.environment = $1
+      and $2::text = 'capture'
+      and colocated.worker_id = $3
+      and colocated.state = 'active'
 )
 select exists (
     select 1 from worker
@@ -249,14 +257,8 @@ func (q *Queries) CloseRecordingFleetNodeAdmission(ctx context.Context, arg Clos
 }
 
 const ensureRecordingColocatedCaptureWorker = `-- name: EnsureRecordingColocatedCaptureWorker :exec
-insert into recording_fleet_nodes (
-    environment, role, provider_id, node_name, region, release_id, image_digest,
-    boot_generation, inventory_digest, worker_id, state, colocated_sfu_node
-) values (
-    $1, 'capture', 'sfu:' || $2::text, $2, 'colocated', 'colocated',
-    'sha256:0000000000000000000000000000000000000000000000000000000000000000', 1,
-    '0000000000000000000000000000000000000000000000000000000000000000', $3, 'active', $2
-)
+insert into recording_colocated_capture_workers (environment, sfu_node, worker_id)
+values ($1, $2, $3)
 on conflict do nothing
 `
 
@@ -267,7 +269,8 @@ type EnsureRecordingColocatedCaptureWorkerParams struct {
 }
 
 // The API registers the capture worker beside each own-SFU node from its node list. A revoked or
-// existing row is never reactivated or rewritten here.
+// existing row is never reactivated or rewritten here. These rows live apart from
+// recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
 func (q *Queries) EnsureRecordingColocatedCaptureWorker(ctx context.Context, arg EnsureRecordingColocatedCaptureWorkerParams) error {
 	_, err := q.db.Exec(ctx, ensureRecordingColocatedCaptureWorker, arg.Environment, arg.SfuNode, arg.WorkerID)
 	return err
@@ -320,8 +323,8 @@ preparation_demand as (
         nullif(btrim(spaces.media_plane), ''),
         (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
         or ($4::boolean and not ($3::integer > 0 and exists (
-            select 1 from recording_fleet_nodes colocated
-            where colocated.colocated_sfu_node is not null and recording_colocated_worker_healthy(colocated.colocated_sfu_node)))))
+            select 1 from recording_colocated_capture_workers colocated
+            where recording_colocated_worker_healthy(colocated.sfu_node)))))
 ),
 facts as (
     select
@@ -431,7 +434,6 @@ where node.environment = $1
   and node.role = $2
   and node.state in ('active', 'draining', 'revoked')
   and node.worker_id is not null
-  and node.colocated_sfu_node is null
 order by node.provider_id
 `
 
@@ -485,23 +487,37 @@ func (q *Queries) ListRecordingFleetNodeObservations(ctx context.Context, arg Li
 }
 
 const lockRecordingFleetWorkerClaim = `-- name: LockRecordingFleetWorkerClaim :one
-select coalesce((role = $1 and state = 'active' and ready and admission_open
-    and (colocated_sfu_node is null or $2::boolean)
-    and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
-    and observed_at <= clock_timestamp()), false)::boolean as authorized
-from recording_fleet_nodes
-where worker_id::text = $3::text
-for share
+with fleet as (
+    select (role = $1 and state = 'active' and ready and admission_open
+        and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+        and observed_at <= clock_timestamp()) as authorized
+    from recording_fleet_nodes
+    where worker_id::text = $2::text
+    for share
+), colocated as (
+    select ($1::text = 'capture' and $3::boolean and state = 'active' and ready and admission_open
+        and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+        and observed_at <= clock_timestamp()) as authorized
+    from recording_colocated_capture_workers
+    where worker_id::text = $2::text
+    for share
+)
+select coalesce(registration.authorized, false)::boolean as authorized
+from (select authorized from fleet union all select authorized from colocated) registration
+limit 1
 `
 
 type LockRecordingFleetWorkerClaimParams struct {
 	Role             string `json:"role"`
-	ColocatedEnabled bool   `json:"colocated_enabled"`
 	LeaseOwner       string `json:"lease_owner"`
+	ColocatedEnabled bool   `json:"colocated_enabled"`
 }
 
+// No row means the worker has no registration. A colocated worker is authorized to claim only
+// while the switch is on. Each registration is locked in its own CTE, since FOR SHARE cannot
+// apply to a UNION.
 func (q *Queries) LockRecordingFleetWorkerClaim(ctx context.Context, arg LockRecordingFleetWorkerClaimParams) (bool, error) {
-	row := q.db.QueryRow(ctx, lockRecordingFleetWorkerClaim, arg.Role, arg.ColocatedEnabled, arg.LeaseOwner)
+	row := q.db.QueryRow(ctx, lockRecordingFleetWorkerClaim, arg.Role, arg.LeaseOwner, arg.ColocatedEnabled)
 	var authorized bool
 	err := row.Scan(&authorized)
 	return authorized, err
@@ -602,6 +618,72 @@ func (q *Queries) PublishRecordingFleetPool(ctx context.Context, arg PublishReco
 	return role, err
 }
 
+const recordRecordingColocatedWorkerObservation = `-- name: RecordRecordingColocatedWorkerObservation :one
+update recording_colocated_capture_workers
+set ready = $1, admission_open = $2, ready_capacity = $3,
+    resources_latest = coalesce($4::jsonb, resources_latest),
+    peak_rss_bytes = greatest(peak_rss_bytes, coalesce($5::bigint, 0)),
+    observed_at = clock_timestamp(), updated_at = now()
+where environment = $6
+  and $7::text = 'capture'
+  and worker_id = $8
+  and state = 'active'
+returning ('sfu:' || sfu_node)::text as provider_id, worker_id, 'capture'::text as role, 1::bigint as boot_generation,
+    ready, admission_open, ready_capacity, observed_at, sfu_node as node_name,
+    (select id from recording_jobs where lease_owner = recording_colocated_capture_workers.worker_id::text and state = 'leased' and lease_expires_at > now() limit 1) as current_job_id
+`
+
+type RecordRecordingColocatedWorkerObservationParams struct {
+	Ready           bool        `json:"ready"`
+	AdmissionOpen   bool        `json:"admission_open"`
+	ReadyCapacity   int32       `json:"ready_capacity"`
+	ResourcesLatest []byte      `json:"resources_latest"`
+	PeakRssBytes    pgtype.Int8 `json:"peak_rss_bytes"`
+	Environment     string      `json:"environment"`
+	Role            string      `json:"role"`
+	WorkerID        pgtype.UUID `json:"worker_id"`
+}
+
+type RecordRecordingColocatedWorkerObservationRow struct {
+	ProviderID     string             `json:"provider_id"`
+	WorkerID       pgtype.UUID        `json:"worker_id"`
+	Role           string             `json:"role"`
+	BootGeneration int64              `json:"boot_generation"`
+	Ready          bool               `json:"ready"`
+	AdmissionOpen  bool               `json:"admission_open"`
+	ReadyCapacity  int32              `json:"ready_capacity"`
+	ObservedAt     pgtype.Timestamptz `json:"observed_at"`
+	NodeName       string             `json:"node_name"`
+	CurrentJobID   pgtype.UUID        `json:"current_job_id"`
+}
+
+func (q *Queries) RecordRecordingColocatedWorkerObservation(ctx context.Context, arg RecordRecordingColocatedWorkerObservationParams) (RecordRecordingColocatedWorkerObservationRow, error) {
+	row := q.db.QueryRow(ctx, recordRecordingColocatedWorkerObservation,
+		arg.Ready,
+		arg.AdmissionOpen,
+		arg.ReadyCapacity,
+		arg.ResourcesLatest,
+		arg.PeakRssBytes,
+		arg.Environment,
+		arg.Role,
+		arg.WorkerID,
+	)
+	var i RecordRecordingColocatedWorkerObservationRow
+	err := row.Scan(
+		&i.ProviderID,
+		&i.WorkerID,
+		&i.Role,
+		&i.BootGeneration,
+		&i.Ready,
+		&i.AdmissionOpen,
+		&i.ReadyCapacity,
+		&i.ObservedAt,
+		&i.NodeName,
+		&i.CurrentJobID,
+	)
+	return i, err
+}
+
 const recordRecordingFleetWorkerObservation = `-- name: RecordRecordingFleetWorkerObservation :one
 update recording_fleet_nodes
 set ready = case when state = 'active' then $1 else false end,
@@ -690,7 +772,7 @@ where recording_fleet_nodes.node_name = excluded.node_name
   and recording_fleet_nodes.boot_generation = excluded.boot_generation
   and recording_fleet_nodes.inventory_digest = excluded.inventory_digest
   and recording_fleet_nodes.state <> 'revoked'
-returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at, colocated_sfu_node
+returning environment, role, provider_id, node_name, region, release_id, image_digest, boot_generation, inventory_digest, worker_id, state, ready, admission_open, ready_capacity, observed_at, resources_latest, peak_rss_bytes, revoked_at, updated_at, created_at
 `
 
 type ReserveRecordingFleetBootstrapParams struct {
@@ -739,7 +821,6 @@ func (q *Queries) ReserveRecordingFleetBootstrap(ctx context.Context, arg Reserv
 		&i.RevokedAt,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.ColocatedSfuNode,
 	)
 	return i, err
 }

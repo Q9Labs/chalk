@@ -59,8 +59,8 @@ func (q *Queries) AuthorizeRecordingArtifactReplay(ctx context.Context, arg Auth
 
 const claimRecordingJob = `-- name: ClaimRecordingJob :one
 with claimant as (
-    select colocated_sfu_node from recording_fleet_nodes
-    where worker_id::text = $1::text and colocated_sfu_node is not null
+    select sfu_node from recording_colocated_capture_workers
+    where worker_id::text = $1::text
 ), candidate as (
     select recording_jobs.id, recovery.source_expires_at as recovery_expires_at,
         (recording_jobs.kind = 'capture' and recording_capture_completion_available(recording_jobs.recording_id))::boolean as completion_only,
@@ -104,7 +104,8 @@ with claimant as (
           when exists (select 1 from claimant)
               then $5::integer > 0
                   and episodes.config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
-                  and episodes.config_snapshot->'media_plane_binding'->>'node' = (select colocated_sfu_node from claimant)
+                  and episodes.config_snapshot->'media_plane_binding'->>'node' = (select sfu_node from claimant)
+                  and not recording_capture_colocated_attempted(recording_jobs.id)
           else not ($5::integer > 0
                   and recording_capture_colocated(recording_jobs.recording_id, $5::integer))
           end)
@@ -2213,8 +2214,8 @@ select gen_random_uuid(), coalesce(start_operation.journey_id, job.recording_id)
     start_operation.parent_journey_event_id, $1, $2,
     jsonb_build_object('recording_id', job.recording_id, 'job_id', job.id, 'attempt_count', job.attempt_count,
         'claim_lag_ms', greatest(0, floor(extract(epoch from (clock_timestamp() - job.available_at)) * 1000))::bigint,
-        'placement', case when exists (select 1 from recording_fleet_nodes node
-                                       where node.worker_id::text = $3::text and node.colocated_sfu_node is not null)
+        'placement', case when exists (select 1 from recording_colocated_capture_workers node
+                                       where node.worker_id::text = $3::text)
                           then 'colocated' else 'fleet' end)
 from recording_jobs job
 left join sync_recordings recording on recording.recording_id = job.recording_id and recording.tenant_id = job.tenant_id

@@ -45,8 +45,8 @@ preparation_demand as (
         nullif(btrim(spaces.media_plane), ''),
         (select tenants.default_media_plane from tenants where tenants.id = spaces.tenant_id), '') <> 'chalk_sfu'
         or (sqlc.arg(own_capture)::boolean and not (sqlc.arg(colocated_grace_seconds)::integer > 0 and exists (
-            select 1 from recording_fleet_nodes colocated
-            where colocated.colocated_sfu_node is not null and recording_colocated_worker_healthy(colocated.colocated_sfu_node)))))
+            select 1 from recording_colocated_capture_workers colocated
+            where recording_colocated_worker_healthy(colocated.sfu_node)))))
 ),
 facts as (
     select
@@ -173,7 +173,6 @@ where node.environment = sqlc.arg(environment)
   and node.role = sqlc.arg(role)
   and node.state in ('active', 'draining', 'revoked')
   and node.worker_id is not null
-  and node.colocated_sfu_node is null
 order by node.provider_id;
 
 -- name: ObserveRecordingFleetIdentityLeases :one
@@ -256,24 +255,39 @@ returning provider_id, worker_id, role, boot_generation, ready, admission_open,
     (select id from recording_jobs where lease_owner = recording_fleet_nodes.worker_id::text and state = 'leased' and lease_expires_at > now() limit 1) as current_job_id;
 
 -- name: AuthorizeRecordingFleetWorker :one
-select exists (
-    select 1 from recording_fleet_nodes
-    where environment = sqlc.arg(environment)
-      and role = sqlc.arg(role)
-      and worker_id = sqlc.arg(worker_id)
-      and state in ('active', 'draining')
-      and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
-) as authorized;
+-- The colocated switch gates new claims only (the claim queries below). A worker that is not
+-- revoked keeps heartbeating and committing the leases it already holds.
+select (exists (
+    select 1 from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment)
+      and node.role = sqlc.arg(role)
+      and node.worker_id = sqlc.arg(worker_id)
+      and node.state in ('active', 'draining')
+) or exists (
+    select 1 from recording_colocated_capture_workers colocated
+    where colocated.environment = sqlc.arg(environment)
+      and sqlc.arg(role)::text = 'capture'
+      and colocated.worker_id = sqlc.arg(worker_id)
+      and colocated.state = 'active'
+))::boolean as authorized;
 
 -- name: AuthorizeRecordingFleetWorkerClaim :one
 with worker as (
-    select state, ready, admission_open, ready_capacity, observed_at
-    from recording_fleet_nodes
-    where environment = sqlc.arg(environment)
-      and role = sqlc.arg(role)
-      and worker_id = sqlc.arg(worker_id)
-      and state in ('active', 'draining')
-      and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
+    select node.state, node.ready, node.admission_open, node.ready_capacity, node.observed_at
+    from recording_fleet_nodes node
+    where node.environment = sqlc.arg(environment)
+      and node.role = sqlc.arg(role)
+      and node.worker_id = sqlc.arg(worker_id)
+      and node.state in ('active', 'draining')
+    union all
+    -- A colocated worker claims only while the switch is on; switched off it sees admission closed.
+    select colocated.state, colocated.ready and sqlc.arg(colocated_enabled)::boolean,
+        colocated.admission_open and sqlc.arg(colocated_enabled)::boolean, colocated.ready_capacity, colocated.observed_at
+    from recording_colocated_capture_workers colocated
+    where colocated.environment = sqlc.arg(environment)
+      and sqlc.arg(role)::text = 'capture'
+      and colocated.worker_id = sqlc.arg(worker_id)
+      and colocated.state = 'active'
 )
 select exists (
     select 1 from worker
@@ -289,13 +303,27 @@ exists (
 ) as admission_closed;
 
 -- name: LockRecordingFleetWorkerClaim :one
-select coalesce((role = sqlc.arg(role) and state = 'active' and ready and admission_open
-    and (colocated_sfu_node is null or sqlc.arg(colocated_enabled)::boolean)
-    and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
-    and observed_at <= clock_timestamp()), false)::boolean as authorized
-from recording_fleet_nodes
-where worker_id::text = sqlc.arg(lease_owner)::text
-for share;
+-- No row means the worker has no registration. A colocated worker is authorized to claim only
+-- while the switch is on. Each registration is locked in its own CTE, since FOR SHARE cannot
+-- apply to a UNION.
+with fleet as (
+    select (role = sqlc.arg(role) and state = 'active' and ready and admission_open
+        and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+        and observed_at <= clock_timestamp()) as authorized
+    from recording_fleet_nodes
+    where worker_id::text = sqlc.arg(lease_owner)::text
+    for share
+), colocated as (
+    select (sqlc.arg(role)::text = 'capture' and sqlc.arg(colocated_enabled)::boolean and state = 'active' and ready and admission_open
+        and ready_capacity > 0 and observed_at > clock_timestamp() - interval '2 minutes'
+        and observed_at <= clock_timestamp()) as authorized
+    from recording_colocated_capture_workers
+    where worker_id::text = sqlc.arg(lease_owner)::text
+    for share
+)
+select coalesce(registration.authorized, false)::boolean as authorized
+from (select authorized from fleet union all select authorized from colocated) registration
+limit 1;
 
 -- name: PublishRecordingFleetPool :one
 insert into recording_pool_health (
@@ -316,13 +344,22 @@ returning role;
 
 -- name: EnsureRecordingColocatedCaptureWorker :exec
 -- The API registers the capture worker beside each own-SFU node from its node list. A revoked or
--- existing row is never reactivated or rewritten here.
-insert into recording_fleet_nodes (
-    environment, role, provider_id, node_name, region, release_id, image_digest,
-    boot_generation, inventory_digest, worker_id, state, colocated_sfu_node
-) values (
-    sqlc.arg(environment), 'capture', 'sfu:' || sqlc.arg(sfu_node)::text, sqlc.arg(sfu_node), 'colocated', 'colocated',
-    'sha256:0000000000000000000000000000000000000000000000000000000000000000', 1,
-    '0000000000000000000000000000000000000000000000000000000000000000', sqlc.arg(worker_id), 'active', sqlc.arg(sfu_node)
-)
+-- existing row is never reactivated or rewritten here. These rows live apart from
+-- recording_fleet_nodes, which earlier releases read as the DigitalOcean fleet.
+insert into recording_colocated_capture_workers (environment, sfu_node, worker_id)
+values (sqlc.arg(environment), sqlc.arg(sfu_node), sqlc.arg(worker_id))
 on conflict do nothing;
+
+-- name: RecordRecordingColocatedWorkerObservation :one
+update recording_colocated_capture_workers
+set ready = sqlc.arg(ready), admission_open = sqlc.arg(admission_open), ready_capacity = sqlc.arg(ready_capacity),
+    resources_latest = coalesce(sqlc.narg(resources_latest)::jsonb, resources_latest),
+    peak_rss_bytes = greatest(peak_rss_bytes, coalesce(sqlc.narg(peak_rss_bytes)::bigint, 0)),
+    observed_at = clock_timestamp(), updated_at = now()
+where environment = sqlc.arg(environment)
+  and sqlc.arg(role)::text = 'capture'
+  and worker_id = sqlc.arg(worker_id)
+  and state = 'active'
+returning ('sfu:' || sfu_node)::text as provider_id, worker_id, 'capture'::text as role, 1::bigint as boot_generation,
+    ready, admission_open, ready_capacity, observed_at, sfu_node as node_name,
+    (select id from recording_jobs where lease_owner = recording_colocated_capture_workers.worker_id::text and state = 'leased' and lease_expires_at > now() limit 1) as current_job_id;

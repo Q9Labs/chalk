@@ -35,12 +35,27 @@ Recording starts fast when a capture worker runs on the SFU node, and the on-dem
 To turn it on:
 
 1. Create the environment's capture CA once (`certs <env> capture-ca`) and add its certificate to the provider bridge's client CA bundle.
-2. Issue the worker identity for each node (`certs <env> capture-worker <node id>`) and put `capture.conf` (the bridge URL and TLS name), the identity and the bridge's server CA in the node's operator directory. `deploy` then builds and starts the worker after the node is ready.
+2. Put `capture.conf` (`NODE_ID`, the bridge URL as `CONTROL_PLANE_URL`, and the TLS name as `SERVER_NAME`) and the bridge's server CA as `bridge-ca.crt` in the node's operator directory. `deploy` issues the node's worker identity (`certs <env> capture-worker <node id>`), checks that it is this node's, comes from the capture CA and has 14 days left, then builds and starts the worker after the node is ready.
 3. Set `CHALK_SFU_COLOCATED_CAPTURE=true` and deploy the API. It registers the worker rows at start.
 
-The undo is two independent steps, either of which is enough. Set `CHALK_SFU_COLOCATED_CAPTURE=false` and restart the API: the next claim and the next demand read go back to the fleet at once, and a capture a worker already holds finishes. Or revoke the node's row in `recording_fleet_nodes` to cut one worker off without touching the others. To remove a worker from a node, delete `capture.conf` from its operator directory and deploy, which stops and removes the unit.
+The undo is two independent steps, either of which is enough. Set `CHALK_SFU_COLOCATED_CAPTURE=false` and restart the API: the next claim and the next demand read go back to the fleet at once, and a capture a worker already holds keeps its heartbeats and commits and finishes. Or revoke one node's worker, which cuts it off at its next request, running captures included, without touching the others:
 
-A deploy of the node waits for zero allocations first, and a capture session holds one, so a recording in progress delays the deploy instead of being cut. `--force` cuts it: the worker's lease lapses and the capture retries from the last committed bundle, on the node's worker when it returns or on the fleet after the grace.
+```sql
+update recording_colocated_capture_workers
+set state = 'revoked', ready = false, admission_open = false, ready_capacity = 0, revoked_at = now()
+where environment = '<env>' and sfu_node = '<node id>';
+```
+
+To remove a worker from a node, delete `capture.conf` from its operator directory and deploy, which stops and removes the unit. Rolling the API back to an earlier release needs nothing else: the earlier release never reads the worker table, so the worker is simply unauthorized there. The migration's Down drops the table, which removes every registration.
+
+A deploy of the node waits for zero allocations first, and a capture session holds one, so a recording in progress delays the deploy instead of being cut. `--force` cuts it: the worker's lease lapses and the capture retries from the last committed bundle on the fleet.
+
+Constraints to know before the switch goes on:
+
+- **The capture CA is not role-constrained.** An X.509 name constraint can limit a URI SAN by host, not by path, and every Chalk identity shares the host `chalkmeet.com`, so the CA cannot be limited to `/capture/`. Once the bridge's client bundle trusts it, whoever holds its key can sign an identity for any role that bundle serves, not only capture. Treat the key as a bridge credential. It lives in 1Password as "Chalk SFU <Environment> Capture CA Key" in the dev vault, and its certificate sits in the operator directory.
+- **Revoking a worker stops its next request, not what it already holds.** Presigned object URLs the API issued to the worker stay valid until they expire.
+- **The migration's Up takes ordinary locks.** It creates one table and three functions, and touches no existing table, so it blocks nothing that is running. How long it takes on production is not measured.
+- **Bundles are assembled in memory.** The worker's unit sets a memory and CPU limit but no file-descriptor or disk budget, so a very large Episode is bounded by the memory limit alone.
 
 ## The node ships before any SDK that raises the offer size
 
