@@ -84,6 +84,39 @@ const styles = `.chalk-knock-notice {
   flex: 1;
   height: 36px;
 }
+/* On wide screens the notice is one toast-high row, so it covers a strip of the tile under it, not a face. */
+@media (min-width: 768px) {
+  .chalk-knock-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    width: auto;
+    max-width: min(560px, calc(100% - var(--space-6)));
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  }
+  .chalk-knock-top {
+    display: contents;
+  }
+  .chalk-knock-text {
+    flex: 1 1 120px;
+  }
+  .chalk-knock-hide {
+    order: 3;
+    align-self: center;
+  }
+  .chalk-knock-actions {
+    order: 2;
+    flex: none;
+  }
+  .chalk-knock-actions .chalk-pill-button {
+    flex: none;
+    height: 32px;
+  }
+  .chalk-knock-notice > p {
+    order: 4;
+    flex-basis: 100%;
+  }
+}
 @media (max-width: 767px) {
   .chalk-knock-notice {
     left: var(--space-3);
