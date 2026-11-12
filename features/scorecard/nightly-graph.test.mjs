@@ -30,28 +30,49 @@ test("Cut nightly has no Cloudflare job and no job needs one", () => {
   for (const verdict of ["scorecard", "record", "github-release"]) assert.ok(nightly.jobs[verdict], `${verdict} job exists`);
 });
 
-// The gate of the cut is the own SFU (chalk_sfu): the proof job holds the cut, the latency job holds only Promote.
-test("Cut nightly gates on a chalk_sfu proof, and only Promote waits on the latency run", () => {
-  const { proof: gate, latency, "web-e2e": web, record, scorecard } = nightly.jobs;
+// The gate of the cut is the own SFU (chalk_sfu): the proof job holds the cut, and the staging latency workflow holds only Promote.
+test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => {
+  const { proof: gate, "web-e2e": web, record, scorecard } = nightly.jobs;
+  assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
   assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
-  assert.equal(latency.with.media_plane, "chalk_sfu");
-  assert.equal(latency.with.latency_only, true);
-  assert.ok(needsOf(latency).includes("proof"));
   assert.equal(web.with.media_plane, "chalk_sfu");
   assert.equal(web.permissions.contents, "write", "the staging lease is a Git ref");
-  for (const name of ["proof", "latency", "web-e2e", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
-  assert.ok(needsOf(scorecard).includes("latency"));
+  for (const name of ["proof", "web-e2e", "scorecard"]) assert.ok(needsOf(record).includes(name), `record waits for ${name}`);
+  assert.deepEqual(needsOf(scorecard), ["plan", "proof"]);
+  const evaluate = scorecard.steps.find((item) => item.id === "evaluate").run;
+  assert.match(evaluate, /evaluate\.mjs --latency-deferred /, "the cut's cards hold no latency run");
   const env = record.steps.find((item) => item.env?.PROOF_RESULT).env;
   assert.match(env.PROOF_RESULT, /needs\.proof\.result == 'success' && needs\.proof\.outputs\.result/);
   assert.match(env.PROOF_FAILURE, /needs\.proof\.outputs\.failure/);
-  assert.match(env.OWN_SFU_RESULT, /needs\.latency\.outputs\.result == 'passed' && needs\.proof\.outputs\.result == 'passed'/);
+  assert.equal(env.OWN_SFU_RESULT, "${{ needs.proof.outputs.result == 'passed' && 'passed' || 'failed' }}");
   const run = record.steps.find((item) => item.env?.PROOF_RESULT).run;
   assert.match(run, /test "\$DEPLOY_RESULT" = success && test "\$PROOF_RESULT" = passed && test "\$WEB_E2E_RESULT" = passed/);
+});
+
+test("the staging latency workflow measures the newest held nightly and records its verdict for Promote", () => {
+  const latencyWorkflow = workflow("staging-sfu-latency.yml");
+  assert.ok(latencyWorkflow.on.schedule?.length === 1, "daily schedule");
+  assert.ok("workflow_dispatch" in latencyWorkflow.on);
+  const { target, latency, record } = latencyWorkflow.jobs;
+  assert.equal(latency.uses, "./.github/workflows/real-call-proof.yml");
+  assert.deepEqual(needsOf(latency), ["target"]);
+  assert.match(latency.if, /needs\.target\.outputs\.sha != ''/);
+  assert.equal(latency.with.release_sha, "${{ needs.target.outputs.sha }}");
+  assert.equal(latency.with.media_plane, "chalk_sfu");
+  assert.equal(latency.with.latency_only, true);
+  assert.equal(latency.permissions.contents, "write", "the staging lease is a Git ref");
+  assert.match(target.steps.at(-1).run, /release\.py latency_target/);
+  assert.deepEqual(needsOf(record), ["target", "latency"]);
+  assert.equal(record.permissions.deployments, "write");
+  assert.match(record.steps.at(-1).run, /release\.py record_latency/);
+  const evaluate = record.steps.find((item) => item.id === "evaluate").run;
+  assert.doesNotMatch(evaluate, /--latency-deferred/, "the latency card must hold every gated metric");
+  assert.equal(latencyWorkflow.concurrency.group, "chalk-staging-sfu-latency-run", "a caller cannot share the callee's group");
 });
 
 test("the Cloudflare workflow runs after a successful cut, outside the nightly lock", () => {

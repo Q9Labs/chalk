@@ -264,7 +264,30 @@ def require_scorecard(info):
             f'scorecard_result={result}; gated metrics: {metrics}{missing_message}')
 
 
-def promotion_override(info):
+SCORECARD_RANK = {'passed': 0, 'gated-breach': 1, 'missing': 2}
+
+
+def with_latency(github, info):
+    """Promote reads the cut and the newest staging latency run of the same SHA together; no run yet is not a pass."""
+    records = github.deployments('nightly', 'nightly-latency', sha=info['target_sha'])
+    latency = payload(records[0]) if records else None
+    merged = dict(info)
+    proof = info.get('own_sfu_proof_result', 'missing')
+    if proof == 'passed':
+        merged['own_sfu_proof_result'] = 'latency-missing' if not latency else 'passed' if latency.get('result') == 'passed' else 'failed'
+    if latency:
+        scorecard_result = info.get('scorecard_result', 'missing')
+        results = [scorecard_result, latency.get('scorecard_result', 'missing')]
+        gated = info.get('scorecard_gated_metrics', [])
+        missing = info.get('scorecard_missing_items', ['nightly scorecard result'] if scorecard_result == 'missing' else [])
+        merged.update(scorecard_result=max(results, key=lambda result: SCORECARD_RANK.get(result, SCORECARD_RANK['missing'])),
+                      scorecard_gated_metrics=gated + [item for item in latency.get('scorecard_gated_metrics', []) if item not in gated],
+                      scorecard_missing_items=missing + [item for item in latency.get('scorecard_missing_items', []) if item not in missing])
+    return merged
+
+
+def promotion_override(github, info):
+    info = with_latency(github, info)
     reason = override_reason(os.environ.get('SCORECARD_OVERRIDE', ''))
     scorecard_result = info.get('scorecard_result', 'missing')
     if not reason or scorecard_result not in ('gated-breach', 'missing'):
@@ -300,7 +323,7 @@ def select(github, args):
     if expected:
         require(info['target_sha'] == expected,
                 f"cannot promote SHA {expected}: newest held nightly is SHA {info['target_sha']} from run {info['run_id']}")
-    audit = promotion_override(info)
+    audit = promotion_override(github, info)
     previous = previous_production(github)
     result = dict(deployment_id=selected['id'], selection=info, previous=previous)
     if audit:
@@ -309,6 +332,41 @@ def select(github, args):
     with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
         summary.write('## Exact promotion choice and rollback source\n\n```json\n' + json.dumps(result, indent=2) + '\n```\n')
     summarize_override(audit)
+
+
+def deployed_held_cut(github):
+    """The SHA of the newest held cut, while staging still runs it."""
+    held = held_candidates(github.deployments('nightly'))
+    require(held, 'no held nightly')
+    sha = payload(held[0])['target_sha']
+    marker = github.deployments('nightly', 'nightly-write')
+    require(marker and marker[0].get('sha') == sha, f'staging does not run the newest held nightly {sha}')
+    return sha
+
+
+def latency_target(github, args):
+    try:
+        outputs({'sha': deployed_held_cut(github)})
+    except ValueError as error:
+        outputs({'sha': ''})
+        with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
+            summary.write(f'No staging latency was measured: {error}.\n')
+
+
+def record_latency(github, args):
+    sha = env('TARGET_SHA')
+    require(deployed_held_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
+    scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
+    if scorecard:
+        require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
+                f"scorecard identity does not match SHA {sha} and latency run {env('GITHUB_RUN_ID')}")
+    scorecard_result = scorecard.get('result', 'missing')
+    latency_result = os.environ.get('LATENCY_RESULT', 'failed')
+    info = dict(channel='nightly-latency', target_sha=sha, run_id=env('GITHUB_RUN_ID'), latency_run_result=latency_result,
+                result='passed' if latency_result == 'passed' and scorecard_result == 'passed' else 'failed',
+                scorecard_result=scorecard_result, scorecard_gated_metrics=scorecard.get('gated_metrics', []),
+                scorecard_missing_items=scorecard.get('missing_items', ['staging latency scorecard'] if not scorecard else []))
+    outputs({'deployment_id': github.record_latency(sha, info)})
 
 
 def recheck(github, args):
@@ -320,7 +378,7 @@ def recheck(github, args):
     newest = held_candidates(github.deployments('nightly'))
     require(newest and newest[0]['id'] == item['id'], 'a newer held nightly replaced the selection')
     info = validate_choice(github, item)
-    audit = promotion_override(info)
+    audit = promotion_override(github, info)
     require(audit == selection.get('scorecard_override'), 'scorecard override changed after selection')
     manifest_bytes(github, selection['previous'])
     require(previous_production(github, retain_legacy=True) == selection['previous'], 'production rollback baseline changed')
@@ -403,7 +461,7 @@ def record(github, args):
     info['target_sha'] = env('TARGET_SHA')
     info['transcribed'] = os.environ.get('TRANSCRIBE') == 'true'
     info['web'] = json.loads(info.get('web') or '{}')
-    # The gate: the chalk_sfu real-call proof. own_sfu below adds the latency run and decides promotion only.
+    # The gate: the chalk_sfu real-call proof. own_sfu is the same proof; promotion adds the staging latency run of this SHA (with_latency).
     real_call = os.environ.get('PROOF_RESULT', 'failed')
     web_e2e = os.environ.get('WEB_E2E_RESULT', 'failed')
     own_sfu = os.environ.get('OWN_SFU_RESULT', 'skipped')
@@ -485,7 +543,7 @@ def verify_images(github, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
+    parser.add_argument('command', choices=('plan', 'select', 'recheck', 'require_gate', 'prepare', 'webrefs', 'record', 'latency_target', 'record_latency', 'invalidate', 'retain_production', 'complete_production', 'verify_images'))
     parser.add_argument('--directory', type=Path, default=Path('release-input'))
     parser.add_argument('--manual', action='store_true')
     parser.add_argument('--reuse', action='store_true')

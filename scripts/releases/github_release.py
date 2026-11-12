@@ -287,6 +287,11 @@ class GitHub:
         require(expected is None or digest(data) == expected, f'{filename} checksum mismatch')
         return data
 
+    def record_latency(self, sha, info):
+        item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-latency', 'auto_merge': False,
+                            'required_contexts': [], 'payload': info})
+        return item['id']
+
     def record(self, sha, info, passed):
         item = self.request('deployments', {'ref': sha, 'environment': 'nightly', 'task': 'nightly-cut', 'auto_merge': False,
                             'required_contexts': [], 'payload': info})
