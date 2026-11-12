@@ -439,7 +439,7 @@
     position: sticky;
     top: 64px;
     align-self: start;
-    padding: var(--space-12) var(--space-6) 0 0;
+    padding: var(--space-12) var(--space-8) 0 0;
   }
 
   & .toc h3 {
