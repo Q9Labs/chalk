@@ -8,6 +8,7 @@ import { cleanupRun, runLabel } from "./cleanup.mjs";
 import { createIntegratorSession } from "./integrator-session.mjs";
 import { installFixture } from "./fixture.mjs";
 import { check, createRun, errorEvidence, loadConfig, request, save, saveOwnership } from "./runtime.mjs";
+import { spacePayload } from "./space-fixture.mjs";
 
 export function integratorBrowserSource(config) {
   return `import {createSpaceClient} from './sdks/typescript/client/src/index.ts'; import {prepareBrowser} from './scripts/prod-proof/integrator-browser.mjs'; prepareBrowser(createSpaceClient,${installFixture.toString()},${JSON.stringify(config)}).catch(()=>{document.querySelector('pre').textContent='Media or client setup failed';});`;
@@ -104,18 +105,7 @@ async function createIntegratorFixture(run) {
   run.apiKey = key.secret;
   await saveOwnership(run);
   run.apiRequest = (method, path, body) => request(run.config, method, path, body, { Authorization: `Bearer ${run.apiKey}` });
-  return run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `prod-proof-${randomUUID()}`,
-    metadata: { proof_run_id: run.runId },
-    media_plane: "cf_sfu",
-    recording_policy: "manual",
-    transcription_policy: "on_demand",
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  return run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, metadata: { proof_run_id: run.runId }, mediaPlane: "cf_sfu" }));
 }
 
 export function createIntegratorAccessSession(run, space, chalk, getAccessRefreshState) {

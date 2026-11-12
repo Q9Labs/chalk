@@ -11,7 +11,8 @@ import { proveAudioDecoded } from "./audio-decode.mjs";
 import { check, command, mediaPlane, mediaProviders, ProofError, request, save, saveOwnership, waitFor } from "./runtime.mjs";
 import { list } from "./cleanup.mjs";
 import { proofServer, exposeWebhook, proveWebhookEvents } from "./webhooks.mjs";
-import { findOwnSfuSpace, manualPolicy, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { findOwnSfuSpace, ownSfuSpaceKind, ownSfuSpaces, spacePlane } from "./own-sfu-spaces.mjs";
+import { manualPolicy, spacePayload } from "./space-fixture.mjs";
 
 // Each key lives 55 minutes; a longer run creates another one and the earlier key stays valid until it expires.
 export async function createProofKey(run) {
@@ -55,17 +56,7 @@ export async function createSpace(run, plane = mediaPlane, policy = manualPolicy
     await save(`${run.directory}/space.json`, existing);
     return existing;
   }
-  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, {
-    name: run.label,
-    slug: `prod-proof-${randomUUID()}`,
-    metadata: { proof_run_id: run.runId },
-    recording_policy: policy.recording,
-    transcription_policy: policy.transcription,
-    default_episode_duration_seconds: 1800,
-    maximum_episode_duration_seconds: 1800,
-    linger_window_seconds: 60,
-    admission_policy: { mode: "open" },
-  });
+  const space = await run.apiRequest("POST", `${run.tenantPath}/spaces`, spacePayload({ name: run.label, slug: `prod-proof-${randomUUID()}`, policy, metadata: { proof_run_id: run.runId } }));
   checkSpacePlane(space, plane, pinName);
   checkSpacePolicy(space, policy);
   await save(`${run.directory}/space.json`, space);
