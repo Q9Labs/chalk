@@ -162,34 +162,69 @@ func (c *constrainedCall) last() delivery {
 	return samples[len(samples)-1]
 }
 
+// state names what the node forwards of the viewer's camera: its layer, or "paused".
+func (d delivery) state() string {
+	if !d.cameraOn || d.cameraRID == "" {
+		return "paused"
+	}
+	return d.cameraRID
+}
+
+// change is the camera moving to a layer, as an offset from the start of a phase.
+type change struct {
+	at    time.Duration
+	state string
+}
+
+func (c change) String() string { return fmt.Sprintf("%s@%dms", c.state, c.at.Milliseconds()) }
+
 // phaseReport is what one stretch of the run measured.
 type phaseReport struct {
-	name                    string
-	audioGap, videoFreeze   time.Duration
-	audioStarved            bool
-	lowerAfter, higherAfter time.Duration // from the start of the phase; -1 when it did not happen
+	name                  string
+	audioGap, videoFreeze time.Duration
+	audioSlowest          time.Duration // the longest time the node's audio count stood still
+	startState            string
+	changes               []change
 }
 
 func (r phaseReport) String() string {
-	return fmt.Sprintf("%-14s audio gap %4dms, video freeze %4dms, audio starved %v, low layer after %dms, high layer after %dms",
-		r.name, r.audioGap.Milliseconds(), r.videoFreeze.Milliseconds(), r.audioStarved, r.lowerAfter.Milliseconds(), r.higherAfter.Milliseconds())
+	return fmt.Sprintf("%-14s audio gap %4dms (node sent none for %4dms), video freeze %4dms, camera %s %v",
+		r.name, r.audioGap.Milliseconds(), r.audioSlowest.Milliseconds(), r.videoFreeze.Milliseconds(), r.startState, r.changes)
+}
+
+// firstChange is when the camera first moved to state during the phase, or -1.
+func (r phaseReport) firstChange(state string) time.Duration {
+	for _, c := range r.changes {
+		if c.state == state {
+			return c.at
+		}
+	}
+	return -1
 }
 
 // report measures the window [from, to] of the run.
 func (c *constrainedCall) report(name string, from, to time.Time) phaseReport {
-	samples := c.samples()
-	r := phaseReport{name: name, lowerAfter: -1, higherAfter: -1,
+	r := phaseReport{name: name,
 		audioGap:    c.arrivals.longestGap(webrtc.RTPCodecTypeAudio, from, to),
 		videoFreeze: c.arrivals.longestGap(webrtc.RTPCodecTypeVideo, from, to)}
-	if sample, ok := firstSample(samples, from, func(d delivery) bool { return d.cameraRID == "l" }); ok && sample.at.Before(to) {
-		r.lowerAfter = sample.at.Sub(from)
-	}
-	if sample, ok := firstSample(samples, from, func(d delivery) bool { return d.cameraRID == "h" && d.cameraOn }); ok && sample.at.Before(to) {
-		r.higherAfter = sample.at.Sub(from)
-	}
-	for _, sample := range samples {
-		if !sample.at.Before(from) && sample.at.Before(to) && !sample.audioOn {
-			r.audioStarved = true
+	state, standing := "", from
+	var audioSent uint64
+	for _, sample := range c.samples() {
+		if sample.at.Before(from) {
+			r.startState = sample.state()
+			state, audioSent, standing = r.startState, sample.audioSent, from
+			continue
+		}
+		if sample.at.After(to) {
+			break
+		}
+		if sample.state() != state {
+			state = sample.state()
+			r.changes = append(r.changes, change{sample.at.Sub(from), state})
+		}
+		if sample.audioSent != audioSent {
+			r.audioSlowest = max(r.audioSlowest, sample.at.Sub(standing))
+			audioSent, standing = sample.audioSent, sample.at
 		}
 	}
 	return r
