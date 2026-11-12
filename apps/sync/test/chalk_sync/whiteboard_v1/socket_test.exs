@@ -1014,6 +1014,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       )
 
       read(state)
+      episode = state.identity.episode
 
       for participant_id <- participants do
         socket = %{state | identity: %{state.identity | participant_id: participant_id}}
@@ -1022,7 +1023,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
                  SocketWhiteboardV1.handle_info({:whiteboard_v1_frame, update}, socket)
       end
 
-      refute_received {:episode_access_read, _episode}
+      refute_received {:episode_access_read, ^episode}
     end
   end
 
@@ -1035,10 +1036,13 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     )
   end
 
-  # Starts the Episode's poller for this test process and waits for its first read.
+  # Starts the Episode's poller for this test process and waits for its first read. A poller of
+  # another Episode that still runs from an earlier test also reports to this process, so the
+  # messages name the Episode.
   defp read(state) do
-    Authority.watch(state.identity.episode)
-    assert_receive {:episode_access_read, _episode}, 1_000
+    episode = state.identity.episode
+    Authority.watch(episode)
+    assert_receive {:episode_access_read, ^episode}, 1_000
 
     wait_for(fn ->
       :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(state.identity.episode))
