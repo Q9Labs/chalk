@@ -61,10 +61,14 @@ try {
   const developer = await get("/dashboard-api/developer");
   assert(developer.keys.some((key) => key.name === "Local development"));
   await visit("/dashboard/developer", "Developer", "developer");
-  await get("/dashboard-api/sessions");
-  await visit("/dashboard/sessions", "Sessions", "sessions");
-  await get("/dashboard-api/recordings");
-  await visit("/dashboard/recordings", "Recordings", "recordings");
+  for (const list of ["sessions", "recordings"]) {
+    await page.goto(`${origin}/dashboard/${list}?spaceId=${product.id}`);
+    await page.waitForURL(`${origin}/dashboard/call/${product.id}`, { timeout: 60000 });
+    await page.goto(`${origin}/dashboard/${list}`);
+    await page.waitForURL(`${origin}/dashboard`, { timeout: 60000 });
+    await page.getByRole("heading", { name: "Recent calls" }).waitFor({ timeout: 60000 });
+    results.push(`${list}-redirect`);
+  }
   for (const name of ["Design review", "Weekly catch-up"]) {
     const item = home.calls.find((entry) => entry.name === name);
     const detail = await get(`/dashboard-api/call?spaceId=${item.id}`);

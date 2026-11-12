@@ -642,6 +642,19 @@ function WhiteboardLoadError({ className, error }: { className: string; error: s
   );
 }
 
+/** The engine writes `dir` and `lang` on the document root when it mounts, which flips an RTL page to LTR. Its writes land in a child effect, so this parent effect runs after them and puts the page's values back. */
+function useKeepDocumentLanguage() {
+  const [root] = useState(() => document.documentElement);
+  const [page] = useState(() => ({ dir: root.getAttribute("dir"), lang: root.getAttribute("lang") }));
+  useEffect(() => {
+    for (const name of ["dir", "lang"] as const) {
+      const value = page[name];
+      if (value === null) root.removeAttribute(name);
+      else root.setAttribute(name, value);
+    }
+  }, [root, page]);
+}
+
 function WhiteboardScene({
   canDraw,
   collab,
@@ -667,6 +680,7 @@ function WhiteboardScene({
     welcomeScreen: boolean;
   };
 }): React.JSX.Element {
+  useKeepDocumentLanguage();
   return <excalidraw.Excalidraw excalidrawAPI={onApiReady} initialData={initialData} isCollaborating={collab} name="Chalk whiteboard" onChange={onChange} onPointerUpdate={onPointerUpdate} renderTopRightUI={() => null} theme={theme} UIOptions={uiOptions} viewModeEnabled={!canDraw} />;
 }
 

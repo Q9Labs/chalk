@@ -3,6 +3,7 @@
 //
 //   pnpm prod:latency                                  # 20 cycles on each plane, chalk_sfu and cf_sfu interleaved
 //   pnpm prod:latency --samples 3 --planes chalk_sfu
+//   pnpm prod:latency --planes chalk_sfu --path relay-tls   # force how guest 2 reaches the SFU (see latency-path.mjs)
 //   xvfb-run -a pnpm prod:latency --headed             # a visible browser instead of headless Chromium
 //
 // One cycle is one Episode in a new Space on that plane, with two guests: guest 1 acts and guest 2 watches.
@@ -24,6 +25,7 @@ import { installLatencyProbe } from "./latency-probe.mjs";
 import { diagnosticsFile, scorecard } from "./latency-card.mjs";
 import { audioPath, diagnosticsOf, joinStages, syncRoundTrip, toggleStages } from "./latency-stages.mjs";
 import { icePairOf } from "./latency-ice.mjs";
+import { ICE_PATHS, joinExpected, pathMismatch } from "./latency-path.mjs";
 import { budgetFailures, budgetWarnings, summarize } from "./latency-stats.mjs";
 import { diagnosticsFileName, diagnosticsMarkdown } from "../../features/scorecard/diagnostics.mjs";
 import { planeLimits, readBudgets } from "../../features/scorecard/budgets.mjs";
@@ -45,6 +47,7 @@ function options() {
       region: { type: "string", default: "unknown" },
       size: { type: "string", default: "unknown" },
       "lobby-dwell-ms": { type: "string", default: "0" },
+      path: { type: "string", default: "direct" },
     },
   });
   const samples = Number(values.samples);
@@ -54,8 +57,9 @@ function options() {
   check(values.environment, "--environment must name where the API runs: ci, staging or production", "configuration");
   const lobbyDwellMs = Number(values["lobby-dwell-ms"]);
   check(Number.isInteger(lobbyDwellMs) && lobbyDwellMs >= 0 && lobbyDwellMs <= 15000, "--lobby-dwell-ms must be a whole number from 0 to 15000 (preconnect keeps a socket ready for 16 s after its last call)", "configuration");
+  check(ICE_PATHS.includes(values.path), `--path must be one of ${ICE_PATHS.join(", ")}`, "configuration");
   const { tier, environment, region, size, headed } = values;
-  return { samples, planes, headed, lobbyDwellMs, scorecard: { tier, environment, region, size } };
+  return { samples, planes, headed, lobbyDwellMs, path: values.path, scorecard: { tier, environment, region, size } };
 }
 
 // measure arms the receiver's watches, runs the action on the sender, and returns each watch's delay in ms.
@@ -123,7 +127,7 @@ async function shareSteps(pages, participantId, sample, stages) {
   Object.assign(stages, await toggleTrace(pages, stop, stopped));
 }
 
-async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
+async function cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending) {
   const space = await createSpace(run, plane);
   const path = `${run.tenantPath}/spaces/${space.id}/episodes`;
   const createdAt = clock();
@@ -133,7 +137,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   ending.path = `${path}/${episode.id}`;
   await appendFile(`${run.directory}/episodes.jsonl`, `${JSON.stringify(episode.id)}\n`, { mode: 0o600 });
   ending.current = episodeEnd(run, ending.path);
-  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true, lobby: lobbyDwellMs > 0 });
+  const guests = await launchGuests(run, space, episode, null, origin, true, 2, { deferJoin: true, plane, headed, observeLeave: true, trace: true, lobby: lobbyDwellMs > 0, path: icePath, pathGuest: 1 });
   const landed = guests.admissions.map((admission) => admission.provider);
   check(
     landed.every((provider) => provider === providers[plane]),
@@ -150,10 +154,13 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   // only then joins, so the join timer starts after the dwell. Without the flag the join starts cold, as before.
   const lobbyStartedAt = clock();
   if (lobbyDwellMs > 0) await pages[1].evaluate(({ api, dwell }) => window.proofLobby(api, dwell), { api: run.config.api_url, dwell: lobbyDwellMs });
-  const second = await measure(pages[1], pages[1], "join", join(1), [
+  const joinSpecs = [
     { name: "action.join.first_audio_ms", kind: "frame", participantId: sender, source: "microphone" },
     { name: "action.join.first_video_ms", kind: "frame", participantId: sender, source: "camera" },
-  ]);
+  ];
+  // A path that cannot reach the SFU ends here: the join failing is the result, not a broken cycle.
+  if (!joinExpected(icePath)) return blockedJoin(pages[1], icePath, sample, join(1), joinSpecs);
+  const second = await measure(pages[1], pages[1], "join", join(1), joinSpecs);
   Object.assign(sample, second.delays);
   // The pair is read now, after the join's measured stages and before the next measured action, never inside either.
   await observe("ice pair", () => pages[1].evaluate(() => window.proofTrace.readIce()), undefined);
@@ -165,6 +172,8 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
     },
     { stages: {}, ice: null },
   );
+  const mismatch = pathMismatch(icePath, joined.ice);
+  if (mismatch) throw new Error(mismatch);
   const stages = joined.stages;
   ending.current.useSDK(pages[1]); // Guest 1 leaves at the end, so guest 2 ends the Episode. Until both joined, the owner ends it.
   for (const step of toggles(sender)) {
@@ -182,6 +191,7 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   // The SFU round trip is read while the call is steady, after the actions and before leave. The Sync round trip is the SDK's own
   // pings and the pongs that answer them, read from the trace afterwards: the kit sends nothing on the Sync socket.
   const rtt = await observe("round trip", async () => ({ sfu_ms: await pages[0].evaluate(() => window.proofTrace.sfuRtt()), sync_ms: syncRoundTrip(await takeTrace(pages[0], 0)) }), { sfu_ms: null, sync_ms: null });
+  const receive = await observe("receive stats", () => pages[1].evaluate(() => window.proofTrace.receiveStats()), {});
   const listenerRtt = await observe("listener round trip", () => pages[1].evaluate(() => window.proofTrace.sfuRtt()), null);
   // The estimate goes to the sidecar only, never into `sample`, so the card is the card it always was. One that could not be made is left out.
   const audio = audioBefore && audioAfter ? audioPath(audioBefore, audioAfter, { sender: rtt.sfu_ms, receiver: listenerRtt }) : undefined;
@@ -193,9 +203,41 @@ async function cycle(run, origin, plane, headed, lobbyDwellMs, ending) {
   Object.assign(sample, left.delays, { "action.leave_ack_ms": ack === null ? null : Math.round(ack - left.acted.at) });
   return {
     sample,
-    trace: { rtt, stages, ...(audio ? { audio } : {}), ...(joined.ice ? { ice: joined.ice } : {}) },
+    trace: { rtt, stages, ...(audio ? { audio } : {}), ...(joined.ice ? { ice: joined.ice } : {}), path: { mode: icePath, joined: true, ...receive } },
     browser: `chromium/${pages[0].context().browser()?.version()}`,
     parts: { createMs: Math.round(createMs), admitMs: Math.round(guests.admissions[0].ms), firstReadyMs: first.delays.firstReady },
+  };
+}
+
+// blockedJoin measures a join on a path with no way to the SFU. The page's join either rejects or never settles; both end the
+// watch at the timeout, so the sample holds nulls for the join and nothing after it runs.
+async function blockedJoin(page, icePath, sample, joinArgs, specs) {
+  const id = randomUUID();
+  await page.evaluate((watch) => window.proofLatency.arm(watch.id, watch.specs, watch.timeoutMs), { id, specs, timeoutMs });
+  const joinStartedAt = clock();
+  const settled = await page.evaluate(
+    (step) =>
+      window.proofLatency.act("join", step).then(
+        () => true,
+        () => false,
+      ),
+    joinArgs,
+  );
+  const seen = await page.evaluate((watch) => window.proofLatency.result(watch), id);
+  for (const { name, at } of seen) sample[name] = at === null ? null : Math.round(at - joinStartedAt);
+  const connected = await page.evaluate(() => (window.proofConnections ?? []).some((peer) => peer.connectionState === "connected"));
+  // A join that connected is held to the same evidence as any other: the selected pair must show the requested path.
+  if (connected && settled) {
+    await observe("ice pair", () => page.evaluate(() => window.proofTrace.readIce()), undefined);
+    const mismatch = pathMismatch(icePath, icePairOf(await takeTrace(page, 0), 0));
+    if (mismatch) throw new Error(mismatch);
+  }
+  const receive = await observe("receive stats", () => page.evaluate(() => window.proofTrace.receiveStats()), {});
+  return {
+    sample,
+    trace: { rtt: { sfu_ms: null, sync_ms: null }, stages: {}, path: { mode: icePath, joined: connected && settled, ...receive } },
+    browser: `chromium/${page.context().browser()?.version()}`,
+    parts: { createMs: 0, admitMs: 0, firstReadyMs: null },
   };
 }
 
@@ -211,13 +253,13 @@ async function endEpisode(run, ending) {
   }
 }
 
-async function attempt(run, origin, plane, headed, lobbyDwellMs) {
+async function attempt(run, origin, plane, headed, lobbyDwellMs, icePath) {
   const mark = run.resources.length;
   const ending = { current: null };
   const timestamp = new Date().toISOString();
   let outcome;
   try {
-    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, ending)) };
+    outcome = { plane, timestamp, ...(await cycle(run, origin, plane, headed, lobbyDwellMs, icePath, ending)) };
   } catch (error) {
     // A Space that cannot be on the requested plane is a setup error: every later cycle would fail the same way.
     if (error instanceof ProofError && error.reason === "media-plane-config") throw error;
@@ -233,7 +275,7 @@ async function attempt(run, origin, plane, headed, lobbyDwellMs) {
 }
 
 // Planes take turns, so a slow minute on the network or the host lands on both.
-async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs }, report) {
+async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs, path }, report) {
   const kept = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const tries = Object.fromEntries(planes.map((plane) => [plane, 0]));
   const limit = samples + 10;
@@ -242,7 +284,7 @@ async function measureAll(run, origin, { samples, planes, headed, lobbyDwellMs }
     if (!open.length) return;
     const plane = open[turn % open.length];
     tries[plane]++;
-    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs);
+    const outcome = await attempt(run, origin, plane, headed, lobbyDwellMs, path);
     report.cycles.push(outcome);
     if (!outcome.dropped) kept[plane]++;
     console.log(`${plane} cycle ${tries[plane]}: ${outcome.dropped ? `dropped (${outcome.dropped}): ${outcome.error}` : "kept"}`);

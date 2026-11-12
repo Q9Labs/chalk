@@ -36,10 +36,26 @@ test("the latency entry point runs a cycle and writes both the card and the diag
     assert.equal(sidecar.cycles[0].audio["media.network_jitter_one_way_ms"], 60);
     assert.deepEqual(sidecar.summary.audio["media.network_jitter_one_way_ms"], { n: 1, p50: 60, p95: 60 });
     assert.match(result.stdout, /Audio delay a listener adds/);
-    assert.deepEqual(sidecar.cycles[0].ice, { local_type: "host", remote_type: "srflx", requests_sent: 6, responses_received: 4, read_after_ms: 400 });
+    assert.deepEqual(sidecar.cycles[0].ice, { local_type: "host", remote_type: "srflx", protocol: "udp", relay_protocol: null, requests_sent: 6, responses_received: 4, read_after_ms: 400 });
     assert.deepEqual(sidecar.summary.ice, { pairs: { "host/srflx": 1 }, unanswered_checks: { n: 1, p50: 2, p95: 2 } });
     assert.equal(card.includes("srflx"), false, "the card holds no ICE reading");
     assert.match(result.stdout, /Selected pairs: host\/srflx 1\./);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+// The direct path keeps the TURN servers, so a call can end up on the relay. The cycle must be dropped, never kept as a direct sample.
+test("a cycle whose selected pair is the relay is dropped when the requested path is direct", () => {
+  const directory = mkdtempSync(join(tmpdir(), "latency-entry-"));
+  try {
+    const result = spawnSync(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(preload)}`, join(here, "latency.mjs"), "--samples", "1", "--planes", "chalk_sfu", "--environment", "ci", "--tier", "manual"], {
+      cwd: directory,
+      encoding: "utf8",
+      env: { ...process.env, CHALK_PROOF_RUN_ID: "entry-test-relay", FAKE_ICE_LOCAL: "relay" },
+    });
+    assert.match(result.stdout, /dropped \(cycle_failed\): direct: the selected pair is relay\/srflx/);
+    assert.notEqual(result.status, 0, "a run with no kept cycle does not pass");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

@@ -149,7 +149,7 @@ try {
     }
     // The privacy notice adds its link and dismiss button until the policy update takes effect.
     const notice = (await tab.locator(".privacy-notice").count()) === 1 ? ["See what's changing.", "Dismiss Privacy Policy notice"] : [];
-    const expected = ["Chalk, Home", "Home", "Sessions", "Recordings", "AI apps", "Developer", "Docs", "Account: Hasan Shoaib", ...notice, "Start a call", "Join with a link"];
+    const expected = ["Chalk, Home", "Home", "AI apps", "Developer", "Docs", "Account: Hasan Shoaib", ...notice, "Start a call", "Call link to join"];
     check("keyboard order on Home", order.slice(0, expected.length).join(" | ") === expected.join(" | "), order.join(" | "));
     await tab.getByRole("link", { name: /^Q9 team/ }).click();
     await tab.waitForURL(`**${CALL}`);
@@ -163,8 +163,8 @@ try {
     await tab.waitForURL(`**${CALL}/session/**`);
     await tab.waitForLoadState("networkidle");
     await tab.waitForTimeout(600);
-    check("Session row opens the past session", (await tab.getByRole("heading", { name: "Q9 team", level: 1 }).count()) === 1 && (await tab.getByRole("link", { name: "Sessions", exact: true }).count()) >= 1);
-    await tab.getByRole("link", { name: /^Open call/ }).click();
+    check("Session row opens the past session", (await tab.getByRole("heading", { name: "Q9 team", level: 1 }).count()) === 1 && (await tab.locator(".crumb a").count()) === 1);
+    await tab.locator(".crumb a").click();
     await tab.waitForURL(`**${CALL}`);
     await tab.getByRole("link", { name: "Developer" }).click();
     await tab.waitForURL("**/dashboard/developer");
@@ -202,7 +202,6 @@ try {
   // Dialogs: focus trap and Esc.
   {
     const { tab, context } = await open("/dashboard");
-    await dialogCheck(tab, "Join with a link", () => tab.getByRole("button", { name: "Join with a link" }).click(), "Join with a link");
     await dialogCheck(tab, "Your call is ready", () => tab.getByRole("button", { name: "Start a call" }).first().click(), "Start a call");
     await dialogCheck(tab, "Rename (Home)", async () => {
       await tab.getByRole("button", { name: "More actions for Q9 team" }).click();
