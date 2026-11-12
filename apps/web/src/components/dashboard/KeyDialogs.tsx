@@ -1,0 +1,229 @@
+import { useRef, useState } from "react";
+import { type DeveloperAction, type KeyDTO } from "../../lib/dashboard/contracts";
+import { act, errorMessage } from "../../lib/dashboard/client";
+import { fullDate } from "../../lib/dashboard/format";
+import { Dialog, Seg, useIntentKeys, useToast } from "./kit";
+import { Cancel, FieldError } from "./developer-dialog-parts";
+
+type CreateKey = Extract<DeveloperAction, { action: "create-key" }>;
+type Scope = CreateKey["scopes"][number];
+
+const RESOURCES = [
+  ["spaces", "Spaces"],
+  ["episodes", "Episodes"],
+  ["recordings", "Recordings"],
+  ["transcriptions", "Transcripts"],
+  ["webhooks", "Webhooks"],
+] as const;
+const ALL_SCOPES: readonly Scope[] = RESOURCES.flatMap(([resource]) => [`${resource}:read`, `${resource}:write`] as const);
+type Access = "full" | "read" | "custom";
+const ACCESS: readonly (readonly [Access, string])[] = [
+  ["full", "Full access"],
+  ["read", "Read only"],
+  ["custom", "Custom"],
+];
+const EXPIRY: readonly (readonly ["30" | "90" | "365", string])[] = [
+  ["30", "30 days"],
+  ["90", "90 days"],
+  ["365", "1 year"],
+];
+
+/** "Full access", "Read only", or the resources it touches. */
+export function accessLabel(scopes: readonly string[]): string {
+  if (ALL_SCOPES.every((scope) => scopes.includes(scope))) return "Full access";
+  if (scopes.every((scope) => scope.endsWith(":read")) && RESOURCES.every(([resource]) => scopes.includes(`${resource}:read`))) return "Read only";
+  return RESOURCES.filter(([resource]) => scopes.some((scope) => scope.startsWith(`${resource}:`)))
+    .map(([, label]) => label)
+    .join(", ");
+}
+
+export function CreateKeyDialog({ onClose, onCreated }: { readonly onClose: () => void; readonly onCreated: (secret: string) => void }) {
+  const [name, setName] = useState("");
+  const [access, setAccess] = useState<Access>("full");
+  const [expiry, setExpiry] = useState<"30" | "90" | "365">("90");
+  const [openedAt] = useState(Date.now);
+  const [custom, setCustom] = useState<readonly Scope[]>([]);
+  const [errors, setErrors] = useState<{ name?: boolean; scopes?: boolean }>({});
+  const [saving, setSaving] = useState(false);
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
+  const nameInput = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+  const expiresAt = new Date(openedAt + Number(expiry) * 24 * 60 * 60 * 1000).toISOString();
+
+  async function create() {
+    const trimmed = name.trim();
+    const scopes = access === "full" ? ALL_SCOPES : access === "read" ? ALL_SCOPES.filter((scope) => scope.endsWith(":read")) : custom;
+    if (!trimmed || !scopes.length) {
+      setErrors({ name: !trimmed, scopes: !scopes.length });
+      if (!trimmed) nameInput.current?.focus();
+      return;
+    }
+    setSaving(true);
+    try {
+      const request = { name: trimmed, scopes: [...scopes], expiresAt };
+      const { secret } = await act("developer", { action: "create-key", ...request, idempotencyKey: intents.key(JSON.stringify(request)) });
+      onCreated(secret);
+    } catch (error) {
+      toast(errorMessage(error), { icon: "alert" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog
+      icon="key"
+      title="Create API key"
+      description="Use the key on your server. It can do what its access allows, until it expires or you revoke it."
+      wide={access === "custom"}
+      onClose={onClose}
+      onSubmit={() => void create()}
+      actions={
+        <>
+          <Cancel onClose={onClose} />
+          <button type="submit" className="btn pri lg" disabled={saving}>
+            Create key
+          </button>
+        </>
+      }
+    >
+      <div className="field" style={{ marginTop: "var(--space-4)" }}>
+        <label className="lbl" htmlFor="key-name">
+          Name
+        </label>
+        <input
+          ref={nameInput}
+          id="key-name"
+          className={errors.name ? "inp bad" : "inp"}
+          value={name}
+          placeholder="For example, Production server"
+          maxLength={120}
+          autoComplete="off"
+          aria-invalid={Boolean(errors.name)}
+          aria-describedby={errors.name ? "key-name-error" : undefined}
+          onChange={(event) => {
+            setName(event.target.value);
+            setErrors((value) => ({ ...value, name: false }));
+          }}
+        />
+        {errors.name ? <FieldError id="key-name-error">Give the key a name, so you know where it’s used.</FieldError> : null}
+      </div>
+      <div className="field">
+        <span className="lbl" id="key-access">
+          Access
+        </span>
+        <Seg labelledBy="key-access" options={ACCESS} value={access} onChange={setAccess} />
+        <p className="help">{access === "full" ? "Reads and changes everything in this account." : access === "read" ? "Reads calls, sessions and recordings. Changes nothing." : "Pick what this key can read and change."}</p>
+        {access === "custom" ? (
+          <div className="scopes" role="group" aria-label="Scopes">
+            <span className="h">Resource</span>
+            <span className="h">Read</span>
+            <span className="h">Write</span>
+            {RESOURCES.map(([resource, label]) => (
+              <ScopeRow
+                key={resource}
+                resource={resource}
+                label={label}
+                chosen={custom}
+                onChange={(next) => {
+                  setCustom(next);
+                  setErrors((value) => ({ ...value, scopes: false }));
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        {errors.scopes ? <FieldError id="key-scope-error">Choose at least one scope.</FieldError> : null}
+      </div>
+      <div className="field">
+        <span className="lbl" id="key-expiry">
+          Expires
+        </span>
+        <Seg labelledBy="key-expiry" options={EXPIRY} value={expiry} onChange={setExpiry} />
+        <p className="help">On {fullDate(expiresAt)}.</p>
+      </div>
+    </Dialog>
+  );
+}
+
+function ScopeRow({ resource, label, chosen, onChange }: { readonly resource: (typeof RESOURCES)[number][0]; readonly label: string; readonly chosen: readonly Scope[]; readonly onChange: (scopes: readonly Scope[]) => void }) {
+  return (
+    <>
+      <span>{label}</span>
+      {(["read", "write"] as const).map((mode) => {
+        const scope: Scope = `${resource}:${mode}`;
+        return (
+          <label key={mode}>
+            <input type="checkbox" aria-label={`${label} ${mode}`} checked={chosen.includes(scope)} onChange={(event) => onChange(event.target.checked ? [...chosen, scope] : chosen.filter((item) => item !== scope))} />
+          </label>
+        );
+      })}
+    </>
+  );
+}
+
+export function RotateKeyDialog({ apiKey, onClose, onRotated }: { readonly apiKey: KeyDTO; readonly onClose: () => void; readonly onRotated: (secret: string) => void }) {
+  // Keyed by the request itself: a retry reuses the key, a changed request gets a new one.
+  const intents = useIntentKeys();
+  const toast = useToast();
+  return (
+    <Dialog
+      alert
+      icon="retry"
+      title={`Rotate the secret for ${apiKey.name}?`}
+      description="The current secret stops working at once. Anything still using it fails until you give it the new one."
+      onClose={onClose}
+      actions={
+        <>
+          <Cancel onClose={onClose} />
+          <button
+            type="button"
+            className="btn pri lg"
+            onClick={() =>
+              act("developer", { action: "rotate-key", keyId: apiKey.id, expiresAt: apiKey.expiresAt, idempotencyKey: intents.key("rotate") }).then(
+                ({ secret }) => onRotated(secret),
+                (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+              )
+            }
+          >
+            Rotate secret
+          </button>
+        </>
+      }
+    />
+  );
+}
+
+export function RevokeKeyDialog({ apiKey, onClose, onRevoked }: { readonly apiKey: KeyDTO; readonly onClose: () => void; readonly onRevoked: () => void }) {
+  const toast = useToast();
+  return (
+    <Dialog
+      alert
+      icon="trash"
+      title={`Revoke ${apiKey.name}?`}
+      description="Anything using this key stops working at once. You can’t undo this."
+      onClose={onClose}
+      actions={
+        <>
+          <Cancel onClose={onClose} />
+          <button
+            type="button"
+            className="btn dz lg"
+            onClick={() =>
+              act("developer", { action: "revoke-key", keyId: apiKey.id }).then(
+                () => {
+                  onRevoked();
+                  toast(`Revoked ${apiKey.name}`, { icon: "trash" });
+                },
+                (error: unknown) => toast(errorMessage(error), { icon: "alert" }),
+              )
+            }
+          >
+            Revoke key
+          </button>
+        </>
+      }
+    />
+  );
+}

@@ -2,7 +2,7 @@ import type { DeveloperDTO, KeyDTO } from "../../lib/dashboard/contracts";
 import { readPage } from "../../lib/dashboard/client";
 import { ago, expiresSoon, fullDate, hasExpired } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
-import { accessLabel } from "./DeveloperDialogs";
+import { accessLabel } from "./KeyDialogs";
 import type { FreshSecret } from "./DeveloperConnect";
 import { KEY_PREFIX_LENGTH, publicPrefix } from "./developer-snippets";
 import { Menu, MenuItem, MoreButton } from "./kit";
