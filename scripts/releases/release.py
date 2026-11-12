@@ -343,11 +343,17 @@ def select(github, args):
 
 
 def deployed_cut(github):
-    """The SHA staging runs now: the newest nightly write. A cut that fails its proofs still deploys and moves the
-    write, so a held cut is not a condition for measuring what staging runs."""
+    """The SHA staging runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
+    lease, so the newest cut record must belong to that same run and say its deploy succeeded. A cut that fails its proofs
+    still deploys, so its proof result does not matter here."""
     marker = github.deployments('nightly', 'nightly-write')
     require(marker, 'staging has no nightly write')
-    return marker[0]['sha']
+    run_id = payload(marker[0]).get('run_id')
+    cuts = github.deployments('nightly', passed_only=False)
+    cut = payload(cuts[0]) if cuts else {}
+    require(cut.get('run_id') == run_id and cut.get('deploy_result') == 'success',
+            f'staging does not run a finished nightly deploy: the newest write is run {run_id}')
+    return cut['target_sha']
 
 
 def latency_target(github, args):
@@ -476,7 +482,7 @@ def record(github, args):
         require(scorecard.get('target_sha') == info['target_sha'] and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
                 f"scorecard identity does not match SHA {info['target_sha']} and nightly run {env('GITHUB_RUN_ID')}")
     passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
-    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
+    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', deploy_result=os.environ.get('DEPLOY_RESULT', ''),
                 real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
                 proof_run_id=env('GITHUB_RUN_ID'))
     info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
