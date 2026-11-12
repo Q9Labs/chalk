@@ -17,6 +17,7 @@ export const FAILURES_BEFORE_PAGE = 2;
 const STATE_KEY = "join-probe";
 const STEP_TIMEOUT_MS = 10_000;
 const KV_WRITE_SPACING_MS = 1_000;
+const MAX_PENDING_CHARS = 1_800;
 
 export function transition(previous: ProbeState | null, result: JoinResult): { readonly next: ProbeState; readonly message?: string } {
   if (result.ok) {
@@ -122,6 +123,16 @@ export async function joinProbe(env: ProbeEnv, api: URL, sync: URL): Promise<Joi
 }
 
 /**
+ * An undelivered page stays in front of a newer message, so a recovery never replaces the outage page it follows.
+ * One webhook call carries the whole text and Discord refuses more than 2000 characters, so the oldest messages are dropped before the text gets that long; they describe states the newest message has already replaced.
+ */
+function appendPending(pending: string | undefined, message: string | undefined): string {
+  const parts = [...(pending ? pending.split("\n\n") : []), ...(message ? [message] : [])];
+  while (parts.length > 1 && parts.join("\n\n").length > MAX_PENDING_CHARS) parts.shift();
+  return parts.join("\n\n");
+}
+
+/**
  * Runs the probe, keeps its state, and delivers the one message the state change calls for.
  * The message is stored as `pending` before delivery and cleared after it, so a failed delivery is retried on the next cycle instead of being lost.
  */
@@ -132,8 +143,7 @@ export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: 
   const result = await joinProbe(env, api, sync);
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
-  // An undelivered page stays in front of a newer message, so a recovery never replaces the outage page it follows.
-  const pending = [previous?.pending, message].filter((part): part is string => typeof part === "string").join("\n\n");
+  const pending = appendPending(previous?.pending, message);
   await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
   const wroteAt = Date.now();
   console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");

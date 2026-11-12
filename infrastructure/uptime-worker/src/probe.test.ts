@@ -165,3 +165,40 @@ test("clearing a delivered page leaves a newer page that another cycle stored me
     globalThis.fetch = original;
   }
 });
+
+test("a webhook that stays down does not grow the pending text past what one message can carry", async () => {
+  const { env, store } = fakeKv();
+  const original = globalThis.fetch;
+  const sent: string[] = [];
+  try {
+    for (let round = 0; round < 30; round++) {
+      for (const healthy of [false, false, true]) {
+        globalThis.fetch = fakeJoin(healthy);
+        await runJoinProbe(env, api, sync, failing).catch(() => undefined);
+      }
+    }
+    const pending: string = JSON.parse(store.get("join-probe") ?? "null").pending;
+    assert.ok(pending.length <= 1_800);
+    assert.match(pending, /recovered[^\n]*$/);
+    await runJoinProbe(env, api, sync, async (message) => void sent.push(message));
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0], pending);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("clearing a delivered page keeps the status and failure count another cycle stored meanwhile", async () => {
+  const { env, store } = fakeKv();
+  const original = globalThis.fetch;
+  globalThis.fetch = fakeJoin(false);
+  try {
+    await runJoinProbe(env, api, sync, async () => undefined);
+    await runJoinProbe(env, api, sync, async (message) => {
+      store.set("join-probe", JSON.stringify({ status: "down", failures: 9, pending: message }));
+    });
+    assert.deepEqual(JSON.parse(store.get("join-probe") ?? "null"), { status: "down", failures: 9 });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
