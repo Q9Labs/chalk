@@ -602,3 +602,43 @@ func TestPublicationWithdrawalFollowsPresentListeners(t *testing.T) {
 		})
 	}
 }
+
+// A microphone muted in place is Enabled=false with its publication ID kept. It is not a close candidate,
+// so a listener report about its track neither inspects the publisher nor retires the publication.
+func TestConfirmRemoteTrackFailuresLeavesAPublicationMutedInPlace(t *testing.T) {
+	repository := &reconciliationRepositoryStub{}
+	service := newService(repository, time.Now)
+	tenantID, episodeID, participantID, identity := publishRemoteObservationFixture(t, service, repository)
+	snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
+	if err != nil || len(snapshot.Publications) != 1 {
+		t.Fatalf("read publication: snapshot=%+v error=%v", snapshot, err)
+	}
+	publicationID := snapshot.Publications[0].PublicationID
+	if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{
+		TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: "camera", PublicationID: publicationID,
+	}); err != nil {
+		t.Fatalf("mute in place: %v", err)
+	}
+	appended := len(repository.appendedInputs)
+
+	reads := 0
+	result, err := service.ConfirmRemoteTrackFailures(context.Background(), RemoteTrackFailureInput{
+		TenantID: tenantID, EpisodeID: episodeID, Failed: []RemoteTrackIdentity{identity},
+	}, func(context.Context, string) (PublisherSession, error) {
+		reads++
+		return PublisherSession{Found: true}, nil
+	})
+	if err != nil {
+		t.Fatalf("confirm failures: %v", err)
+	}
+	if reads != 0 || result != (RemoteTrackFailureResult{}) {
+		t.Fatalf("a muted publication was examined: reads=%d result=%+v", reads, result)
+	}
+	if len(repository.appendedInputs) != appended {
+		t.Fatalf("a muted publication was written to: %d appends, want %d", len(repository.appendedInputs), appended)
+	}
+	latest, err := service.Latest(context.Background(), tenantID, episodeID)
+	if err != nil || len(latest.Publications) != 1 || latest.Publications[0].PublicationID != publicationID || latest.Publications[0].Enabled {
+		t.Fatalf("muted publication changed: snapshot=%+v error=%v", latest, err)
+	}
+}

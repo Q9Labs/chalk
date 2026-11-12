@@ -802,6 +802,13 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	for _, track := range request.Body.Tracks {
 		tracks = append(tracks, mediaplane.CloseTrack{Mid: track.Mid, Source: track.Source, PublicationID: track.PublicationID})
 	}
+	slog.InfoContext(ctx, "media tracks close requested",
+		"event", "media_publication.tracks_close_requested",
+		"participant_id", request.ParticipantID.String(),
+		"connection_id", request.Body.ConnectionID,
+		"reason", closeReasonOf(request.Body),
+		"track_count", len(tracks),
+	)
 	if request.Body.ReceiveOnly {
 		return service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
 			Provider: service.Provider(), ConnectionID: request.Body.ConnectionID, Scope: sfuScope(ctx),
@@ -848,6 +855,29 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	}
 	response.Tracks = tracks
 	return response, nil
+}
+
+// closeReason names which kind of close a caller sent, so the log says why a track went away.
+type closeReason string
+
+const (
+	closeReasonReceiveOnly closeReason = "receive_only" // stops the caller's subscriptions and never a publication
+	closeReasonForce       closeReason = "force"        // stops the publication without waiting for the client's offer
+	closeReasonNegotiated  closeReason = "negotiated"   // stops the publication and answers the client's offer
+	closeReasonBare        closeReason = "bare"         // stops the publication with neither a force nor an offer
+)
+
+func closeReasonOf(body sfuCloseTracksRequest) closeReason {
+	switch {
+	case body.ReceiveOnly:
+		return closeReasonReceiveOnly
+	case body.Force:
+		return closeReasonForce
+	case body.SessionDescription != nil:
+		return closeReasonNegotiated
+	default:
+		return closeReasonBare
+	}
 }
 
 func listSFUPublications(ctx context.Context, request sfuPublicationsEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (sfuPublicationsResponse, error) {
