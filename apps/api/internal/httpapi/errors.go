@@ -63,10 +63,8 @@ var (
 	apiErrorMediaConnectionNotFound       = APIError{Status: http.StatusNotFound, Code: "media.connection_not_found", Message: "Media connection not found"}
 
 	apiErrorInvalidRecordingID        = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_id", Message: "Invalid recording id"}
-	apiErrorInvalidRecordingStatus    = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_status", Message: "Invalid recording status"}
 	apiErrorInvalidStorageProvider    = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_provider", Message: "Invalid storage provider"}
 	apiErrorInvalidStorageKey         = APIError{Status: http.StatusBadRequest, Code: "storage.invalid_key", Message: "Invalid storage key"}
-	apiErrorInvalidRecordingField     = APIError{Status: http.StatusBadRequest, Code: "recording.invalid_field", Message: "Invalid recording field"}
 	apiErrorInvalidURLExpiration      = APIError{Status: http.StatusBadRequest, Code: "url.invalid_expiration", Message: "Invalid url expiration"}
 	apiErrorRecordingNotReady         = APIError{Status: http.StatusBadRequest, Code: "recording.not_ready", Message: "Recording is not ready"}
 	apiErrorRecordingNotFound         = APIError{Status: http.StatusNotFound, Code: "recording.not_found", Message: "Recording not found"}

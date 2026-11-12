@@ -2,10 +2,6 @@
 
 package recordingpresentation
 
-var themeSkins = map[string]struct{}{"classic": {}, "chalk": {}}
-
-var themeTextures = map[string]struct{}{"none": {}, "paper": {}, "slate": {}}
-
 var themePalettes = map[string]struct{}{"light": {}, "warm-porcelain": {}, "cool-mist": {}, "paper-and-ink": {}, "cream-and-clay": {}, "studio-canvas": {}, "prism-daylight": {}, "signal-white": {}, "warm-charcoal": {}, "cool-graphite": {}, "high-contrast-ink": {}, "espresso-night": {}, "chalkboard-atelier": {}, "prism-nocturne": {}, "cosmic-chalk": {}, "oled-signal": {}}
 
 var reactionValues = map[string]struct{}{"👍": {}, "❤️": {}, "😂": {}, "😮": {}, "🎉": {}, "👏": {}, "😀": {}, "😅": {}, "🙏": {}, "🔥": {}, "✅": {}, "👀": {}, "💯": {}, "🤔": {}, "😢": {}, "🙌": {}, "🚀": {}, "👌": {}, "😍": {}, "🤝": {}, "💡": {}, "⭐": {}, "😎": {}, "🥳": {}}
