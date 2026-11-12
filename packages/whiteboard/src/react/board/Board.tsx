@@ -1,6 +1,6 @@
 import type { WhiteboardView as ChalkWhiteboardView } from "../../collab/view";
 import { useEngineHistory } from "./board-history";
-import { ViewVersions } from "./board-view-versions";
+import { ChalkWhiteboardViewVersions as ViewVersions } from "@q9labsai/chalk-client";
 import { WhiteboardCanvas, type WhiteboardEngineHandle } from "../WhiteboardCanvas";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { useMediaQuery, usePrefersReducedMotion } from "./useMediaQuery";
