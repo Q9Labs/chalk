@@ -89,6 +89,8 @@ test("a call nobody sends into is not silence, and a lone Participant who sends 
     verdictOf(rows).findings.map((finding) => finding.kind),
     ["publisher_silent"],
   );
+  assert.equal(verdictOf(rows).findings[0].side, "publisher");
+  assert.match(verdictOf(rows).findings[0].cause, /node's part is not proved/u);
   assert.deepEqual(verdictOf(callStats("publisher", "conn-pub", 0, 100, () => ({ send_bitrate_kbps: 0 }))).findings, []);
 });
 

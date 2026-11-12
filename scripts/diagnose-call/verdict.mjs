@@ -194,7 +194,7 @@ function publishCause(rows, run) {
   const stopped = events.findLast((row) => row.event === "sfu.publication.stopped" && row.time <= run.to);
   if (stopped) return cause(`the node stopped the publication (${attr(stopped, "reason") ?? "reason not logged"}) and the client sent nothing after it`, "publishing", "SFU");
   if (events.some((row) => row.event === "sfu.publication.started")) return cause("the node accepted the publication and the client's sender then sent 0 kbps", "publishing", "publisher");
-  if (events.length === 0) return cause("unknown: the SFU node logged no event for this connection, and the client's sender sent 0 kbps", "publishing", "unknown");
+  if (events.length === 0) return cause("the client's sender sent 0 kbps; the SFU node logged no event for this connection, so the node's part is not proved", "publishing", "publisher");
   return cause("the node logged no publication for this connection, and the client's sender sent 0 kbps", "publishing", "publisher");
 }
 

@@ -371,7 +371,7 @@ func publishCause(rows []logRow, r sampleRun) verdictCause {
 		}
 	}
 	if len(events) == 0 {
-		return verdictCause{"unknown: the SFU node logged no event for this connection, and the client's sender sent 0 kbps", "publishing", "unknown"}
+		return verdictCause{"the client's sender sent 0 kbps; the SFU node logged no event for this connection, so the node's part is not proved", "publishing", "publisher"}
 	}
 	return verdictCause{"the node logged no publication for this connection, and the client's sender sent 0 kbps", "publishing", "publisher"}
 }
