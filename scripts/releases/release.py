@@ -342,19 +342,26 @@ def select(github, args):
     summarize_override(audit)
 
 
-def deployed_held_cut(github):
-    """The SHA of the newest held cut, while staging still runs it."""
-    held = held_candidates(github.deployments('nightly'))
-    require(held, 'no held nightly')
-    sha = payload(held[0])['target_sha']
+def deployed_cut(github):
+    """The SHA staging runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
+    lease. So the newest cut record must be newer than that write (a rerun of only the deploy job writes again with the
+    same run, release and SHA), match its run, applied release and SHA, and say its deploy succeeded. A cut that fails its
+    proofs still deploys, so its proof result does not matter here."""
     marker = github.deployments('nightly', 'nightly-write')
-    require(marker and marker[0].get('sha') == sha, f'staging does not run the newest held nightly {sha}')
-    return sha
+    require(marker, 'staging has no nightly write')
+    write = payload(marker[0])
+    cuts = github.deployments('nightly', passed_only=False)
+    cut = payload(cuts[0]) if cuts else {}
+    require(cuts and int(cuts[0]['id']) > int(marker[0]['id'])
+            and cut.get('run_id') == write.get('run_id') and cut.get('applied_release_id') == write.get('release_id')
+            and cut.get('target_sha') == marker[0]['sha'] and cut.get('deploy_result') == 'success',
+            f"staging does not run a finished nightly deploy: the newest write is run {write.get('run_id')} release {write.get('release_id')}")
+    return cut['target_sha']
 
 
 def latency_target(github, args):
     try:
-        outputs({'sha': deployed_held_cut(github)})
+        outputs({'sha': deployed_cut(github)})
     except ValueError as error:
         outputs({'sha': ''})
         with open(env('GITHUB_STEP_SUMMARY'), 'a') as summary:
@@ -363,7 +370,7 @@ def latency_target(github, args):
 
 def record_latency(github, args):
     sha = env('TARGET_SHA')
-    require(deployed_held_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
+    require(deployed_cut(github) == sha, f'staging no longer runs the measured nightly {sha}; refusing a stale latency verdict')
     scorecard = json.loads(os.environ.get('SCORECARD_RESULT') or '{}')
     if scorecard:
         require(scorecard.get('target_sha') == sha and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
@@ -478,7 +485,7 @@ def record(github, args):
         require(scorecard.get('target_sha') == info['target_sha'] and scorecard.get('run_id') == env('GITHUB_RUN_ID'),
                 f"scorecard identity does not match SHA {info['target_sha']} and nightly run {env('GITHUB_RUN_ID')}")
     passed = os.environ.get('DEPLOY_RESULT') == 'success' and real_call == 'passed' and web_e2e == 'passed'
-    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed',
+    info.update(channel='nightly-cut', proof_result='passed' if passed else 'failed', deploy_result=os.environ.get('DEPLOY_RESULT', ''),
                 real_call_proof_result=real_call, web_e2e_result=web_e2e, own_sfu_proof_result=own_sfu,
                 proof_run_id=env('GITHUB_RUN_ID'))
     info.update(scorecard_result=scorecard.get('result', 'missing'), scorecard_gated_metrics=scorecard.get('gated_metrics', []),
