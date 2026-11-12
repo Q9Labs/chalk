@@ -66,3 +66,21 @@ test("a gap at or under the interruption limit is jitter", () => {
   assert.ok(gap.gap_ms <= INTERRUPTION_MS);
   assert.equal(recoveryOf(call({ silent: [[20_000, 20_000 + INTERRUPTION_MS - 200]] }), window).audio.interrupted, false);
 });
+
+test("a recovered interruption followed by one that never ends is not reported as recovered", () => {
+  // 10 s silence that ends, then 5 s of silence that runs to the end of the watch: the longest gap recovered, the media did not.
+  const result = recoveryOf(
+    call({
+      silent: [
+        [21_000, 31_000],
+        [54_000, 60_000],
+      ],
+    }),
+    window,
+  );
+  assert.equal(result.audio.interrupted, true);
+  assert.equal(result.audio.never_back, true);
+  assert.equal(result.audio.back_after_fault_end_s, null);
+  assert.equal(result.audio.back_after_fault_start_s, null);
+  assert.equal(result.video.never_back, false);
+});

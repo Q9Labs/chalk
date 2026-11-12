@@ -57,7 +57,7 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
           <div className="sub">Defaults for every call in this account.</div>
         </div>
       </div>
-      <div className="set">
+      <div className="set" id="recording-videos">
         <span className="tile">
           <Icon name="film" size={18} />
         </span>
@@ -67,7 +67,7 @@ export function CallsPanel({ renderMode, language, onRenderMode, onLanguage }: {
         </div>
         <Seg labelledBy="recording-render-mode-label" options={RENDER_MODES} value={renderMode} onChange={(mode) => void saveMode(mode)} />
       </div>
-      <div className="set">
+      <div className="set" id="transcript-language">
         <span className="tile">
           <Icon name="file" size={18} />
         </span>

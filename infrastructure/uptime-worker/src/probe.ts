@@ -9,12 +9,15 @@ export interface ProbeEnv {
 
 export type JoinResult = { readonly ok: true; readonly ms: number } | { readonly ok: false; readonly stage: ProbeStage; readonly detail: string };
 export type ProbeStage = "create episode" | "admit participant" | "sync handshake";
-export type ProbeState = { readonly status: "up" | "down"; readonly failures: number };
+/** `pending` is a message that was decided but not yet delivered; it stays in the state until the webhook accepts it. */
+export type ProbeState = { readonly status: "up" | "down"; readonly failures: number; readonly pending?: string };
 
 /** A single failed cycle is not paged: two in a row (ten minutes) are. */
 export const FAILURES_BEFORE_PAGE = 2;
 const STATE_KEY = "join-probe";
 const STEP_TIMEOUT_MS = 10_000;
+const KV_WRITE_SPACING_MS = 1_000;
+const MAX_PENDING_CHARS = 1_800;
 
 export function transition(previous: ProbeState | null, result: JoinResult): { readonly next: ProbeState; readonly message?: string } {
   if (result.ok) {
@@ -60,7 +63,7 @@ function field(value: unknown, key: string, stage: ProbeStage): string {
 }
 
 function isProbeState(value: unknown): value is ProbeState {
-  return typeof value === "object" && value !== null && "status" in value && "failures" in value && (value.status === "up" || value.status === "down") && typeof value.failures === "number";
+  return typeof value === "object" && value !== null && "status" in value && "failures" in value && (value.status === "up" || value.status === "down") && typeof value.failures === "number" && (!("pending" in value) || value.pending === undefined || typeof value.pending === "string");
 }
 
 function isWelcome(data: unknown): boolean {
@@ -119,15 +122,37 @@ export async function joinProbe(env: ProbeEnv, api: URL, sync: URL): Promise<Joi
   }
 }
 
-/** Runs the probe, keeps its state, and returns the one message to send when the state changed. */
-export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL): Promise<string | undefined> {
+/**
+ * An undelivered page stays in front of a newer message, so a recovery never replaces the outage page it follows.
+ * One webhook call carries the whole text and Discord refuses more than 2000 characters, so the oldest messages are dropped before the text gets that long; they describe states the newest message has already replaced.
+ */
+function appendPending(pending: string | undefined, message: string | undefined): string {
+  const parts = [...(pending ? pending.split("\n\n") : []), ...(message ? [message] : [])];
+  while (parts.length > 1 && parts.join("\n\n").length > MAX_PENDING_CHARS) parts.shift();
+  return parts.join("\n\n");
+}
+
+/**
+ * Runs the probe, keeps its state, and delivers the one message the state change calls for.
+ * The message is stored as `pending` before delivery and cleared after it, so a failed delivery is retried on the next cycle instead of being lost.
+ */
+export async function runJoinProbe(env: ProbeEnv, api: URL, sync: URL, deliver: (message: string) => Promise<void>): Promise<void> {
   if (!env.PROBE_STATE) throw new Error("PROBE_STATE must be bound when the join probe is configured");
   const stored = await env.PROBE_STATE.get(STATE_KEY, "json");
   const previous = isProbeState(stored) ? stored : null;
   const result = await joinProbe(env, api, sync);
   console.log("join probe", JSON.stringify(result));
   const { next, message } = transition(previous, result);
-  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(next));
-  console.log("join probe state", JSON.stringify(next), message ? "message" : "silent");
-  return message;
+  const pending = appendPending(previous?.pending, message);
+  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify(pending ? { ...next, pending } : next));
+  const wroteAt = Date.now();
+  console.log("join probe state", JSON.stringify(next), pending ? "message" : "silent");
+  if (!pending) return;
+  await deliver(pending);
+  // KV accepts one write per key per second, and a rejected clear would resend the delivered message every cycle.
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, KV_WRITE_SPACING_MS - (Date.now() - wroteAt))));
+  // Another cycle may have stored a newer state while the webhook was slow. Clear only the message that was delivered, from the state as it is now.
+  const current = await env.PROBE_STATE.get(STATE_KEY, "json");
+  if (!isProbeState(current) || current.pending !== pending) return;
+  await env.PROBE_STATE.put(STATE_KEY, JSON.stringify({ status: current.status, failures: current.failures }));
 }

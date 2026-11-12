@@ -57,7 +57,7 @@ It needs Java 11 or later and curl, and it downloads the pinned TLA+ tools (v1.7
 
 `run.sh --deep` adds 5 entry generations and 3 consumer nodes, a few seconds more. The full TLC logs go to the folder that the last line prints.
 
-CI runs `tools/formal/sync-entry-leave/run.sh` in `.github/workflows/formal-sync-entry-leave.yml` when a covered file or this model changes.
+CI runs `tools/formal/sync-entry-leave/run.sh` as the `formal-sync` Gate lane when a covered file or this model changes; the paths are `formalSyncPaths` in `scripts/gates/chalk-gate-plan.mjs`.
 
 ## Read a failure
 

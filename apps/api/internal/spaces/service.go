@@ -364,6 +364,11 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 			if err := s.planes.publicWriteAllowed(provider); err != nil {
 				return Space{}, err
 			}
+			if provider == MediaPlaneProviderChalkSFU {
+				// A public write naming the own SFU inherits; see PublicWriteAllowed.
+				input.MediaPlane = s.planes.legacyPlane(nil)
+				break
+			}
 		}
 		input.MediaPlaneSetting = &provider
 	case newSpacePlane:
@@ -432,7 +437,9 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 			if err := s.planes.publicWriteAllowed(provider); err != nil {
 				return Space{}, err
 			}
-			setting = &provider
+			if provider != MediaPlaneProviderChalkSFU { // naming the own SFU inherits; see PublicWriteAllowed
+				setting = &provider
+			}
 		}
 		stored := s.planes.legacyPlane(setting)
 		if stored == "" {

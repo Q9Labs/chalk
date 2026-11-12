@@ -13,6 +13,7 @@ Usage:
 Commands:
   run       Run the full gate. This is also the default.
   basic     Check locked dependencies, formatting, and compilation only.
+  deps      Fetch the locked dependencies only.
   describe  Describe what the gate checks.
   help      Show this help.
 
@@ -30,7 +31,7 @@ EOF
 
 command="${1:-${CHALK_SYNC_GATE_MODE:-run}}"
 case "$command" in
-  run | basic) ;;
+  run | basic | deps) ;;
   describe | help | -h | --help)
     describe
     exit 0
@@ -54,6 +55,11 @@ fetch_dependencies() {
   done
   return 1
 }
+
+if [[ "$command" == "deps" ]]; then
+  fetch_dependencies
+  exit
+fi
 
 run() {
   local label="$1"
