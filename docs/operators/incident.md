@@ -38,6 +38,8 @@ A rollback that cannot find its baseline fails closed and prints the manual inpu
 
 Before a binary rollback to a release older than `73c89bd5e` (the commit that made `chalk_sfu` an allowed platform default), restore `CHALK_DEFAULT_MEDIA_PLANE=cf_sfu` in the production API environment and move any Space that stored `chalk_sfu` back with `media-settings set --plane cf_sfu`. The older binary cannot start with a `chalk_sfu` default.
 
+Nobody restarts or stops the production node by hand during the day. The deploy path and the rollback path above are the only ways: they drain the services in order and leave a deploy record, while a hand restart cuts live calls and leaves no record. An alert pages Oncall when the node is stopped, started or rebooted, and when the API starts without a deploy record.
+
 ## Hotfix path
 
 Run the `Hotfix` workflow from master with the commit SHA of a fix that is already on master. It refuses a SHA that is not on master, has no green push Gate, or does not contain the release now running. Then it:
