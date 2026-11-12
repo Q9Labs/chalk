@@ -1,6 +1,6 @@
 import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { ClaimResponse, CleanupAssignment, FinalizeClaimResponse } from "./assignment-types.js";
-import type { ProviderPolicy, ProviderResult, TranscriptionProvider } from "./provider-types.js";
+import type { ProviderPolicy, ProviderResult, TranscriptProviderSummary, TranscriptionProvider } from "./provider-types.js";
 
 export interface JourneyContext {
   journeyId: string;

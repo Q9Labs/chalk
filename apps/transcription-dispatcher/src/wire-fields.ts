@@ -39,6 +39,11 @@ export function positiveInteger(value: unknown, label: string): number {
   return number;
 }
 
+export function literal<const Expected extends string>(value: unknown, expected: Expected, label: string): Expected {
+  if (value !== expected) throw new AssignmentError(`${label} is invalid`);
+  return expected;
+}
+
 export function checksum(value: unknown, label: string): string {
   const digest = text(value, label, 64).toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(digest)) throw new AssignmentError(`${label} is invalid`);
