@@ -414,7 +414,9 @@ func (r RecordingPipelineRepository) ExpireReservations(ctx context.Context, now
 	}
 	reservations := make([]recordingpipeline.Reservation, 0, len(rows))
 	for _, row := range rows {
-		reservations = append(reservations, mapExpiredReservation(row))
+		reservation := mapExpiredReservation(row)
+		reservations = append(reservations, reservation)
+		logExpiredRecordingReservation(ctx, reservation)
 	}
 	for _, metric := range metrics {
 		metric.Record(ctx)
@@ -939,7 +941,9 @@ func (r RecordingPipelineRepository) RecoverExpired(ctx context.Context) ([]reco
 	}
 	jobs := make([]recordingpipeline.Job, 0, len(rows))
 	for _, row := range rows {
-		jobs = append(jobs, mapRecoveredJob(row))
+		job := mapRecoveredJob(row)
+		jobs = append(jobs, job)
+		logRecoveredRecordingJob(ctx, job)
 	}
 	for _, metric := range metrics {
 		metric.Record(ctx)

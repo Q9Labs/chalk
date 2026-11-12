@@ -77,3 +77,7 @@ Process-local diagnostics, such as the listener publication sampler, reset on an
 ## Transcription
 
 Transcript failures carry a bounded `provider_*` reason (see `apps/transcription-dispatcher/src/errors.ts`) and never transcript text, provider bodies or audio. A silent source completes with no cues and no cost, so it is not a provider failure.
+
+## Recording maintenance events
+
+The API emits `recording.job_recovered` for each job that committed recovery returns, and `recording.reservation_expired` for each expired reservation. "Recovered" means the job row moved to a retry or a terminal failure, not that media was recovered. The `reason` is the committed row's code, not proof of which recovery predicate matched. The reservation event has no job ID, so join it to jobs by Recording ID. Events appear only after the enclosing transaction commits, and they never carry free text, payloads, leases, worker identity or storage paths.
