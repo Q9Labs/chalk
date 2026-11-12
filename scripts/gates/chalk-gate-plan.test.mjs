@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, laneGroup, selectCiJobs } from "./chalk-gate-plan.mjs";
+import { RegisterError } from "./register.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -117,4 +118,27 @@ test("q9gate's own gate-behavior classification does not widen a pull request th
   const context = { scope: "branch", classification: { fullRequired: true } };
   assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
   assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
+});
+
+test("a gate task with no register entry stops the selection, because running every job would fail on the same throw", () => {
+  assert.throws(
+    () => selectCiJobs("HEAD", () => {
+      throw new RegisterError('Gate task "new-lane" has no entry in scripts/gates/checks.json.');
+    }),
+    RegisterError,
+  );
+  assert.throws(
+    () => selectCiJobs("--full", () => {
+      throw new RegisterError("no entry");
+    }),
+    RegisterError,
+  );
+});
+
+test("a selection that fails for another reason runs every job in full", () => {
+  const plan = (files, options) => {
+    if (!options.full) throw new Error("bad revision 'origin/nothing'");
+    return { api: true, sync: true, rootGroups: ["checks"] };
+  };
+  assert.deepEqual(selectCiJobs("origin/nothing-resolves", plan), { api: true, sync: true, rootGroups: ["checks"], full: true });
 });
