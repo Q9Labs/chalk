@@ -44,7 +44,10 @@ export type SessionsQuery = z.infer<typeof sessionsQuery>;
 export type RecordingsQuery = z.infer<typeof recordingsQuery>;
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
 /** The one-time handle the API puts in the consent link. It is a secret until the request is decided. */
-const consentHandle = z.string().regex(/^chalk_oar_[A-Za-z0-9_-]{20,100}$/);
+const consentHandlePattern = "chalk_oar_[A-Za-z0-9_-]{20,100}";
+const consentHandle = z.string().regex(new RegExp(`^${consentHandlePattern}$`));
+/** A path `/auth/start` may send the person back to: a dashboard page, or one carrying a consent request. */
+export const DASHBOARD_RETURN_PATH = new RegExp(`^/dashboard(?:/[a-zA-Z0-9/_-]*)?(?:\\?request=${consentHandlePattern})?$`);
 export const connectQuery = z.strictObject({ request: consentHandle });
 export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
 export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });
@@ -223,3 +226,67 @@ export type CallStatusDTO = { latestEpisodeId: string | null; episode: Pick<Epis
 export type HomeStatusDTO = { live: LiveDTO[]; calls: Pick<HomeCallDTO, "id" | "archived" | "lastActiveAt" | "recentPeople">[]; first?: HomeDTO };
 
 export type CallMetadataDTO = { kind: "recording"; recording: RecordingDTO } | { kind: "transcript"; transcript: TranscriptDTO };
+
+/** Each dashboard page: what a read takes and returns, and the actions a POST accepts. The server's route table and the browser client are both typed from this. */
+export type DashboardPages = {
+  "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
+  "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
+  "call-invite": { query: { spaceId: string }; data: Pick<CallPageDTO, "inviteUrl">; action: never };
+  "home-status": { query: { spaceIds?: string; home?: "1" }; data: HomeStatusDTO; action: never };
+  home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
+  call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
+  "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
+  sessions: { query: SessionsQuery; data: SessionListDTO; action: never };
+  recordings: { query: RecordingsQuery; data: SessionListDTO; action: never };
+  developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
+  connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
+  connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };
+};
+export type DashboardPage = keyof DashboardPages;
+
+type Ok = { ok: true };
+export type DeliveryDetailDTO = { id: string; state: string; eventType: string; attemptCount: number; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
+
+/** What each action returns. */
+export type ActionResults = {
+  "create-call": { call: CallDTO };
+  "rename-call": { call: CallDTO };
+  "set-admission": { call: CallDTO };
+  "set-transcript-language": { call: CallDTO };
+  "set-default-transcript-language": TranscriptLanguageSettingsDTO;
+  "archive-call": { call: CallDTO };
+  "restore-call": { call: CallDTO };
+  join: OwnerAccessDTO;
+  "refresh-access": OwnerAccessDTO;
+  "rotate-link": { inviteUrl: string };
+  "extend-call": Ok;
+  "end-for-everyone": Ok;
+  "approve-knock": Ok;
+  "deny-knock": Ok;
+  "create-transcript": { transcript: TranscriptDTO };
+  "recording-url": ArtifactURLDTO;
+  "export-recording": { recording: RecordingDTO };
+  transcripts: { transcripts: TranscriptDTO[] };
+  "transcript-document": { cues: CueDTO[] };
+  "delete-transcript": Ok;
+  "allowed-websites": AllowedWebsitesDTO;
+  "set-allowed-websites": AllowedWebsitesDTO;
+  "set-recording-render-mode": RecordingRenderSettingsDTO;
+  "create-key": SecretDTO;
+  "rotate-key": SecretDTO;
+  "revoke-key": Ok;
+  "create-webhook": { webhook: WebhookDTO; secret: string };
+  "update-webhook": { webhook: WebhookDTO };
+  "delete-webhook": Ok;
+  "rotate-webhook-secret": SecretDTO;
+  "test-webhook": { deliveryId: string };
+  "webhook-deliveries": { deliveries: DeliveryDTO[]; nextCursor: string | null };
+  "webhook-delivery": DeliveryDetailDTO;
+  "redeliver-webhook": { deliveryId: string };
+  "approve-connection": { redirectUrl: string };
+  "deny-connection": { redirectUrl: string };
+  "revoke-connection": Ok;
+};
+
+/** What the action `A` returns, as a union over the actions it may be. */
+export type ActionResult<A extends { action: string }> = A extends { action: infer K } ? (K extends keyof ActionResults ? ActionResults[K] : never) : never;

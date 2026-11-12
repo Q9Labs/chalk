@@ -4,57 +4,21 @@ import { configuration } from "./config";
 import type { Authentication, Identity, IdentityProvider } from "./identity";
 import { binding, checkCsrf, clearSeatCookies, clearSession, csrfToken, readCookie, seal, setSession, unseal, writeCookie } from "./cookies";
 import { sealSession } from "./session";
-import { body, form, DashboardError, exactOrigin, json, redirect } from "./http";
+import { body, form, DashboardError, exactOrigin, json, query, redirect } from "./http";
 import { withSessionEngine, resolveTenant } from "./engine";
-import { homeMutation, homePage, homeStatus } from "./home";
-import { ownerAccess } from "./owner-access";
-import { viewerSeat } from "./owner-seats";
-import { callMutation, callPage, callStatus, callMetadata, callInvite } from "./call";
-import { pastMutation, pastSessionPage, pastTranscriptText } from "./past-session";
-import { developerMutation, developerPage } from "./developer";
-import { recordingsPage, sessionsPage } from "./sessions";
+import { pages, type Context } from "./pages";
 import { edgeCache, favicon } from "./favicon";
-import { connectMutation, connectPage, connectionsMutation, connectionsPage } from "./connect";
-import {
-  connectAction,
-  connectQuery,
-  connectionsAction,
-  transcriptTextQuery,
-  callAction,
-  callQuery,
-  callStatusQuery,
-  callMetadataQuery,
-  homeStatusQuery,
-  developerAction,
-  developerQuery,
-  homeAction,
-  pageQuery,
-  pastAction,
-  pastQuery,
-  recordingsQuery,
-  sessionsQuery,
-} from "../src/lib/dashboard/contracts";
+import { DASHBOARD_RETURN_PATH } from "../src/lib/dashboard/contracts";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({
   provider: z.enum(["google", "apple"]),
-  returnTo: z
-    .string()
-    .regex(/^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/)
-    .default("/dashboard"),
+  returnTo: z.string().regex(DASHBOARD_RETURN_PATH).default("/dashboard"),
 });
 const callbackQuery = z.object({ code: z.string().min(1).max(4096), state: z.string().min(1).max(1024), user: z.string().max(4096).optional() });
 const transaction = z.object({ state: z.string(), codeVerifier: z.string(), nonce: z.string(), previous: z.object({ userId: z.string(), name: z.string() }).optional(), returnTo: z.string(), provider: z.enum(["google", "apple"]), expiresAt: z.number() });
 const emptyBody = z.strictObject({});
 const faviconQuery = z.strictObject({ host: z.string().min(1).max(253) });
-function query(request: Request): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [key, value] of new URL(request.url).searchParams) {
-    if (Object.hasOwn(values, key)) throw new DashboardError(400, "duplicate_parameter");
-    values[key] = value;
-  }
-  return values;
-}
 async function current(request: Request, env: DashboardEnvironment, provider: IdentityProvider): Promise<Identity> {
   const sealed = readCookie(request, env, "session");
   if (!sealed) throw new DashboardError(401, "sign_in_required");
@@ -124,71 +88,12 @@ async function dashboard(request: Request, env: DashboardEnvironment, provider: 
   const person = await current(request, env, provider);
   if (request.method === "POST") await checkCsrf(request, person, env);
   if (request.method === "GET" && path === "/dashboard-api/favicon") return favicon(faviconQuery.parse(query(request)).host, { fetcher: fetch, cache: edgeCache() });
-  return withSessionEngine(request, env, person, async (client) => {
-    if (request.method === "GET") {
-      switch (path) {
-        case "/dashboard-api/home":
-          return json(await homePage(client, pageQuery.parse(query(request)).cursor));
-        case "/dashboard-api/call-status":
-          return json(await callStatus(client, callStatusQuery.parse(query(request)).spaceId));
-        case "/dashboard-api/call-invite":
-          return json(await callInvite(client, callStatusQuery.parse(query(request)).spaceId));
-        case "/dashboard-api/call-metadata":
-          return json(await callMetadata(client, callMetadataQuery.parse(query(request))));
-        case "/dashboard-api/home-status":
-          return json(await homeStatus(client, homeStatusQuery.parse(query(request))));
-        case "/dashboard-api/call": {
-          const input = callQuery.parse(query(request));
-          return json(await callPage(client, input.spaceId, input.cursor));
-        }
-        case "/dashboard-api/transcript-text":
-          return pastTranscriptText(client, env, transcriptTextQuery.parse(query(request)));
-        case "/dashboard-api/past-session": {
-          const input = pastQuery.parse(query(request));
-          return json(await pastSessionPage(client, input.spaceId, input.episodeId, input.cursor, await viewerSeat(request, env, person, input.spaceId, input.episodeId)));
-        }
-        case "/dashboard-api/sessions":
-          return json(await sessionsPage(client, sessionsQuery.parse(query(request))));
-        case "/dashboard-api/recordings":
-          return json(await recordingsPage(client, recordingsQuery.parse(query(request))));
-        case "/dashboard-api/developer":
-          return json(await developerPage(client, developerQuery.parse(query(request))));
-        case "/dashboard-api/connect":
-          return json(await connectPage(client, connectQuery.parse(query(request)).request));
-        case "/dashboard-api/connections":
-          return json(await connectionsPage(client, pageQuery.parse(query(request)).cursor));
-        default:
-          throw new DashboardError(404, "route_not_found");
-      }
-    }
-    const input = await body(request);
-    switch (path) {
-      case "/dashboard-api/home": {
-        const action = homeAction.parse(input);
-        return json(await homeMutation(client, action));
-      }
-      case "/dashboard-api/call": {
-        const action = callAction.parse(input);
-        if (action.action === "join" || action.action === "refresh-access") return ownerAccess(request, env, client, person, action);
-        const response = json(await callMutation(client, action));
-        if (action.action === "end-for-everyone") clearSeatCookies(response, request, env);
-        return response;
-      }
-      case "/dashboard-api/past-session": {
-        const action = pastAction.parse(input);
-        return json(await pastMutation(client, action));
-      }
-      case "/dashboard-api/developer": {
-        const action = developerAction.parse(input);
-        return json(await developerMutation(client, action));
-      }
-      case "/dashboard-api/connect":
-        return json(await connectMutation(client, connectAction.parse(input)));
-      case "/dashboard-api/connections":
-        return json(await connectionsMutation(client, connectionsAction.parse(input)));
-      default:
-        throw new DashboardError(404, "route_not_found");
-    }
+  const name = path.slice("/dashboard-api/".length);
+  const page = Object.hasOwn(pages, name) ? pages[name as keyof typeof pages] : undefined;
+  if (!page) throw new DashboardError(404, "route_not_found");
+  return withSessionEngine(request, env, person, async (engine) => {
+    const context: Context = { engine, request, env, person };
+    return request.method === "GET" ? page.read(context) : page.act(context, await body(request));
   });
 }
 function failure(error: unknown): Response {

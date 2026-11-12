@@ -1,103 +1,11 @@
 import { clearSignedInHint } from "../signed-in-hint";
-import type {
-  TranscriptLanguageSettingsDTO,
-  AllowedWebsitesDTO,
-  RecordingRenderSettingsDTO,
-  ArtifactURLDTO,
-  CallAction,
-  CallDTO,
-  CallPageDTO,
-  ConnectAction,
-  ConnectDTO,
-  ConnectionsAction,
-  ConnectionsDTO,
-  CallStatusDTO,
-  CallMetadataDTO,
-  CallMetadataQuery,
-  HomeStatusDTO,
-  CueDTO,
-  DeliveryDTO,
-  DeveloperAction,
-  DeveloperDTO,
-  HomeAction,
-  HomeDTO,
-  OwnerAccessDTO,
-  PastSessionAction,
-  PastSessionDTO,
-  RecordingDTO,
-  RecordingsQuery,
-  SecretDTO,
-  SessionDTO,
-  SessionListDTO,
-  SessionsQuery,
-  TranscriptDTO,
-  WebhookDTO,
-} from "./contracts";
+import type { ActionResults, DashboardPage, DashboardPages, SessionDTO } from "./contracts";
+import { DASHBOARD_RETURN_PATH } from "./contracts";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
 // the sealed session and every engine credential stay in HttpOnly cookies and the Pages Functions.
 
 export type Provider = "google" | "apple";
-
-type Pages = {
-  "call-metadata": { query: CallMetadataQuery; data: CallMetadataDTO; action: never };
-  "call-status": { query: { spaceId: string }; data: CallStatusDTO; action: never };
-  "call-invite": { query: { spaceId: string }; data: Pick<CallPageDTO, "inviteUrl">; action: never };
-  "home-status": { query: { spaceIds?: string; home?: "1" }; data: HomeStatusDTO; action: never };
-  home: { query: { cursor?: string }; data: HomeDTO; action: HomeAction };
-  call: { query: { spaceId: string; cursor?: string }; data: CallPageDTO; action: CallAction };
-  "past-session": { query: { spaceId: string; episodeId: string; cursor?: string }; data: PastSessionDTO; action: PastSessionAction };
-  sessions: { query: SessionsQuery; data: SessionListDTO; action: never };
-  recordings: { query: RecordingsQuery; data: SessionListDTO; action: never };
-  developer: { query: { keyCursor?: string; webhookCursor?: string }; data: DeveloperDTO; action: DeveloperAction };
-  connect: { query: { request: string }; data: ConnectDTO; action: ConnectAction };
-  connections: { query: { cursor?: string }; data: ConnectionsDTO; action: ConnectionsAction };
-};
-export type DashboardPage = keyof Pages;
-
-type Ok = { ok: true };
-type DeliveryDetailDTO = { id: string; state: string; eventType: string; attemptCount: number; attempts: { status: number | null; errorCode: string | null; finishedAt: string | null }[] };
-
-/** What each action returns, as the server branch's handlers build it. The contract doesn't export these yet. */
-type Results = {
-  "create-call": { call: CallDTO };
-  "rename-call": { call: CallDTO };
-  "set-admission": { call: CallDTO };
-  "set-transcript-language": { call: CallDTO };
-  "set-default-transcript-language": TranscriptLanguageSettingsDTO;
-  "archive-call": { call: CallDTO };
-  "restore-call": { call: CallDTO };
-  join: OwnerAccessDTO;
-  "refresh-access": OwnerAccessDTO;
-  "rotate-link": { inviteUrl: string };
-  "extend-call": Ok;
-  "end-for-everyone": Ok;
-  "approve-knock": Ok;
-  "deny-knock": Ok;
-  "create-transcript": { transcript: TranscriptDTO };
-  "recording-url": ArtifactURLDTO;
-  "export-recording": { recording: RecordingDTO };
-  transcripts: { transcripts: TranscriptDTO[] };
-  "transcript-document": { cues: CueDTO[] };
-  "delete-transcript": Ok;
-  "allowed-websites": AllowedWebsitesDTO;
-  "set-allowed-websites": AllowedWebsitesDTO;
-  "set-recording-render-mode": RecordingRenderSettingsDTO;
-  "create-key": SecretDTO;
-  "rotate-key": SecretDTO;
-  "revoke-key": Ok;
-  "create-webhook": { webhook: WebhookDTO; secret: string };
-  "update-webhook": { webhook: WebhookDTO };
-  "delete-webhook": Ok;
-  "rotate-webhook-secret": SecretDTO;
-  "test-webhook": { deliveryId: string };
-  "webhook-deliveries": { deliveries: DeliveryDTO[]; nextCursor: string | null };
-  "webhook-delivery": DeliveryDetailDTO;
-  "redeliver-webhook": { deliveryId: string };
-  "approve-connection": { redirectUrl: string };
-  "deny-connection": { redirectUrl: string };
-  "revoke-connection": Ok;
-};
 
 /** A failed dashboard request, with the server's error code. */
 export class DashboardRequestError extends Error {
@@ -111,11 +19,9 @@ export class DashboardRequestError extends Error {
   }
 }
 
-const RETURN_PATH = /^\/dashboard(?:\/[a-zA-Z0-9/_-]*)?(?:\?request=chalk_oar_[A-Za-z0-9_-]{20,100})?$/;
-
 /** The sign-in redirect for a provider. `returnTo` must be a dashboard path, as `/auth/start` accepts. */
 export function signInURL(provider: Provider, returnTo = "/dashboard"): string {
-  const query = new URLSearchParams({ provider, returnTo: RETURN_PATH.test(returnTo) ? returnTo : "/dashboard" });
+  const query = new URLSearchParams({ provider, returnTo: DASHBOARD_RETURN_PATH.test(returnTo) ? returnTo : "/dashboard" });
   return `/auth/start?${query}`;
 }
 
@@ -144,12 +50,12 @@ export async function clearOwnerSeats(): Promise<void> {
   if (!response.ok) throw toError(response, await readJSON(response));
 }
 
-export async function readPage<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<Pages[P]["data"]> {
+export async function readPage<P extends DashboardPage>(page: P, query: DashboardPages[P]["query"]): Promise<DashboardPages[P]["data"]> {
   return (await readPageTimed(page, query)).data;
 }
 
 /** A page read with the server's clock offset: its `Date` header minus this page's clock, or null without one. */
-export async function readPageTimed<P extends DashboardPage>(page: P, query: Pages[P]["query"]): Promise<{ data: Pages[P]["data"]; offset: number | null }> {
+export async function readPageTimed<P extends DashboardPage>(page: P, query: DashboardPages[P]["query"]): Promise<{ data: DashboardPages[P]["data"]; offset: number | null }> {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) if (typeof value === "string") search.set(key, value);
   const suffix = search.size ? `?${search}` : "";
@@ -159,7 +65,7 @@ export async function readPageTimed<P extends DashboardPage>(page: P, query: Pag
   return { data: await send(async () => response), offset };
 }
 
-export async function act<P extends DashboardPage, A extends Pages[P]["action"]>(page: P, action: A): Promise<Results[A["action"]]> {
+export async function act<P extends DashboardPage, A extends DashboardPages[P]["action"]>(page: P, action: A): Promise<ActionResults[A["action"]]> {
   if (!csrfToken) await loadSession();
   return send(() => post(`/dashboard-api/${page}`, action));
 }
