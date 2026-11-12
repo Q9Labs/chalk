@@ -303,7 +303,7 @@ export const ChatPanelSurface = React.memo(
           {messages.length === 0 && pendingMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <h3 className="mb-1 font-medium">No messages yet</h3>
-              <p className="max-w-[220px] text-sm text-[var(--chalk-app-text-muted)]">Messages are seen by everyone in the call.</p>
+              <p className="max-w-[220px] text-sm text-balance text-[var(--chalk-app-text-muted)]">Messages are seen by everyone in the call.</p>
             </div>
           ) : (
             grouped.map((group) => (

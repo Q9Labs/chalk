@@ -38,7 +38,7 @@ export function connectionQuality({ live, samples = [], link }: CallNetwork): Ca
   if ((loss ?? 0) >= UNSTABLE_LOSS_PCT) return { level: 2, tone: "warn", word: "Unstable", helper: `${rounded(loss, 0)}% of packets are getting lost. Audio may break up.` };
   if ((rtt ?? 0) >= UNSTABLE_RTT_MS) return { level: 2, tone: "warn", word: "Unstable", helper: "The connection is slow to respond. Audio may lag." };
   if ((loss ?? 0) >= FAIR_LOSS_PCT || (rtt ?? 0) >= FAIR_RTT_MS) return { level: 3, tone: "warn", word: "Fair" };
-  return latest ? { level: 4, tone: "good", word: "Excellent" } : { level: 4, tone: "good", word: "Connected" };
+  return latest ? { level: 4, tone: "good", word: "Good" } : { level: 4, tone: "good", word: "Connected" };
 }
 
 function weakHelper(link: LinkQuality, loss: number | null): string {

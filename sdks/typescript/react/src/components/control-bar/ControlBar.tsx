@@ -68,7 +68,7 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
       </ChalkTooltip>
     ) : null;
   return (
-    <div data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls">
+    <div data-part="dock" className={cn("chalk-shell-dock", props.className)} role="toolbar" aria-label="Space controls" onPointerDown={(event) => event.currentTarget.setAttribute("data-input", "pointer")} onKeyDown={(event) => event.currentTarget.setAttribute("data-input", "keyboard")}>
       <ShellStyles />
       {has("mic") ? (
         <DevicePopover

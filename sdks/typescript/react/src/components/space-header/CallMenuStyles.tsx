@@ -18,7 +18,7 @@ const CALL_MENU_CSS = `/* Every row shares one icon column and one label edge: t
 .chalk-details-recording time {color:var(--chalk-muted-text);font-size:var(--type-body-sm);font-weight:500;font-variant-numeric:tabular-nums;}
 .chalk-details-recording .chalk-details-recording-stop {height:32px;flex:none;padding-inline:var(--space-3);}
 .chalk-shell-detail-value {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
-.chalk-shell-detail-value[data-tone="good"] {color:var(--chalk-positive);}
+.chalk-shell-detail-value[data-tone="good"] {color:var(--chalk-text);}
 .chalk-shell-detail-value[data-tone="warn"] {color:var(--chalk-warning);}
 .chalk-shell-detail-value[data-tone="bad"] {color:var(--chalk-danger-text);}
 .chalk-shell-qr-card {margin:var(--space-1) 0;padding:var(--space-2) var(--space-4);display:grid;place-items:center;}

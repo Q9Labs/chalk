@@ -111,11 +111,15 @@ const styles = `.call-card-tabs {
 .lcard input::placeholder {
   color: var(--chalk-muted-text);
 }
+/* Rare bulk actions sit as small pills in one row above the list, not as the panel's biggest control. */
 .call-host-controls {
   flex: none;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--chalk-line);
-  background: var(--chalk-surface);
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+.call-host-controls .chalk-pill-button {
+  height: 36px;
 }
 .call-mute-confirm {
   width: 280px;
@@ -961,7 +965,6 @@ const styles = `.call-card-tabs {
  .call-wait-row { min-height: 60px; }
  .call-wait-actions .chalk-pill-button { height: 40px; }
  .call-wait-bulk .chalk-pill-button { height: 48px; }
- .call-host-controls { padding-bottom: var(--space-10); }
  .call-photo-viewer-bar { padding: var(--space-12) var(--space-2) var(--space-2) var(--space-4); }
  .call-photo-viewer-control { width: 44px; height: 44px; }
  .call-photo-viewer-stage img { inset: 0 0 108px; max-width: 100%; max-height: calc(100% - 108px); border-radius: 0; }
