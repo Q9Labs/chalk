@@ -8,23 +8,18 @@ import { catcherRequest } from "./webhook-transport.mjs";
 import { rotateAndPatchEndpoint } from "./webhook-endpoint.mjs";
 
 const { build } = createRequire(new URL("../../sdks/typescript/client/package.json", import.meta.url))("esbuild");
-// Every proof serves its guests from the one proof_origin the Tenant allows, so a proof that starts while another holds the
-// port waits for it. A wait that ends is a named reason, not an unknown error.
-async function listenWhenFree(server, port, waitMs, pollMs) {
-  const deadline = Date.now() + waitMs;
-  for (;;) {
-    server.listen(port, "127.0.0.1");
-    try {
-      await once(server, "listening");
-      return;
-    } catch (error) {
-      if (error.code !== "EADDRINUSE") throw error;
-      if (Date.now() + pollMs > deadline) throw new ProofError("proof-origin-busy", `Port ${port} of proof_origin stayed in use for ${waitMs / 1000} seconds`);
-      await delay(pollMs);
-    }
+// proof_origin is registered in the Tenant's CORS origins, so its port cannot be picked per run. A port already in use means two
+// proofs were given the same origin: say so by name instead of failing with an unknown error.
+async function listen(server, origin) {
+  server.listen(Number(origin.port), "127.0.0.1");
+  try {
+    await once(server, "listening");
+  } catch (error) {
+    if (error.code !== "EADDRINUSE") throw error;
+    throw new ProofError("proof-origin-busy", `Port ${origin.port} of proof_origin is in use; give each proof that runs at the same time its own proof_origin`);
   }
 }
-export async function proofServer(run, { waitMs = 20 * 60_000, pollMs = 1000 } = {}) {
+export async function proofServer(run) {
   const origin = new URL(run.config.proof_origin);
   check(origin.protocol === "http:" && ["127.0.0.1", "localhost"].includes(origin.hostname) && Number(origin.port) > 0, "proof_origin must be an HTTP loopback origin with an explicit port");
   const pages = { "/": "<!doctype html><title>Chalk production proof</title>" };
@@ -36,7 +31,7 @@ export async function proofServer(run, { waitMs = 20 * 60_000, pollMs = 1000 } =
     }
     response.writeHead(200, { "Content-Type": "text/html" }).end(pages[path]);
   });
-  await listenWhenFree(server, Number(origin.port), waitMs, pollMs);
+  await listen(server, origin);
   run.resources.push({
     kind: "proof-http-server",
     force: () => {

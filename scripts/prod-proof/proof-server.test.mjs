@@ -14,20 +14,10 @@ async function holdPort() {
 }
 const runOn = (port) => ({ config: { proof_origin: `http://127.0.0.1:${port}` }, resources: [] });
 
-test("a proof that finds the proof origin in use serves it once the other proof lets go", async () => {
-  const held = await holdPort();
-  const run = runOn(held.port);
-  const serving = proofServer(run, { waitMs: 5000, pollMs: 20 });
-  setTimeout(() => void held.release(), 100);
-  const receiver = await serving;
-  assert.equal(receiver.origin, `http://127.0.0.1:${held.port}`);
-  await run.resources[0].dispose();
-});
-
-test("a proof origin that stays in use fails with the named reason proof-origin-busy", async () => {
+test("a proof origin that is already in use fails with the named reason proof-origin-busy", async () => {
   const held = await holdPort();
   const lines = [];
-  await assert.rejects(proofServer(runOn(held.port), { waitMs: 100, pollMs: 20 }), (error) => {
+  await assert.rejects(proofServer(runOn(held.port)), (error) => {
     publicFailure("setup-or-capture", error, (line) => lines.push(line));
     return error instanceof ProofError;
   });
