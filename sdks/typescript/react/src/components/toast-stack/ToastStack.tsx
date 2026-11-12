@@ -93,6 +93,9 @@ export const ToastStack = memo(function ToastStack({ toasts: all, onDismiss, max
   const announcing = (onFold ? toasts : shown).filter((toast) => unheard.includes(toast.id));
   return (
     <>
+      <style href="chalk-toast-stack" precedence="default">
+        {STACK_CSS}
+      </style>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
           <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => dismiss(toast.id)} />
@@ -143,3 +146,18 @@ function useShortCall(stack: RefObject<HTMLElement | null>, enabled: boolean): b
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
+
+/* A call notice reads in two lines at most: it is as wide as the call allows (560px at most) and wraps evenly. On a phone, a notice with an action puts the pill under its sentence, so the sentence keeps the width. An open sheet owns the phone screen, so notices wait under it. */
+const PHONE_CSS = `
+  .chalk-toasts .chalk-toast:has(> .chalk-pill-button) {display:grid;grid-template-columns:auto minmax(0, 1fr) auto;align-items:start;row-gap:var(--space-1);padding-block:var(--space-2);}
+  .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > [data-part="toast-icon"] {grid-row:1;grid-column:1;}
+  .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > [data-part="toast-message"] {grid-row:1;grid-column:2;align-self:center;}
+  .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > .chalk-pill-button {grid-row:2;grid-column:2;justify-self:start;margin-bottom:var(--space-0-5);}
+  .chalk-toasts .chalk-toast:has(> .chalk-pill-button) > .chalk-dismiss {grid-row:1;grid-column:3;}
+`;
+const STACK_CSS = `.chalk-toasts .chalk-toast {max-width:min(560px, calc(100% - 32px));}
+.chalk-toasts [data-part="toast-message"] {text-wrap:pretty;}
+[data-chalk]:has(.chalk-sheet[data-open]:not([data-variant="reactions"])) .chalk-toasts {z-index:40;}
+@media (max-width: 640px) {${PHONE_CSS}}
+@container chalk-call (max-width: 640px) {${PHONE_CSS}}
+`;

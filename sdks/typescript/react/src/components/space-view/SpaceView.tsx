@@ -23,6 +23,7 @@ import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
+import { failedMediaNotice } from "../control-bar/control-bar-behavior";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
 import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
 import { useConnectionPhase } from "../connection-status/use-connection-phase";
@@ -305,25 +306,32 @@ export function SpaceView({
     }
     boardToastCount.current += 1;
     const id = `board-${boardToastCount.current}`;
-    setBoardToasts((current) => [...current.slice(-2), { ...toast, id }]);
+    // The same board message again replaces its notice instead of stacking a copy under it.
+    setBoardToasts((current) => [...current.filter((shown) => shown.message !== toast.message).slice(-2), { ...toast, id }]);
   }, []);
   const dismissCommandError = () => {
     if (commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(null);
     onDismissCommandError?.();
   };
+  // A microphone or camera that failed without an access card gets one notice in the call's stack, above the dock, until it recovers or is dismissed.
+  const mediaNotice = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
+  const [dismissedMediaNotice, setDismissedMediaNotice] = useState<string | undefined>(undefined);
+  const mediaToast: Toast[] = mediaNotice && mediaNotice !== dismissedMediaNotice ? [{ id: "media-notice", type: "error", duration: Infinity, message: mediaNotice }] : [];
   const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
   const toasts = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
+    ...mediaToast,
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
   ];
   const dismissToast = (id: string) => {
     if (id.startsWith("time-limit-")) setLimitWarning(null);
     else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
+    else if (id === "media-notice") setDismissedMediaNotice(mediaNotice);
     else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
     else callToasts.dismiss(id);
   };

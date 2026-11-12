@@ -366,8 +366,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. */
-function failedMediaNotice(media: ReturnType<typeof useMedia>["local"], deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>>): string | undefined {
-  if (media.microphone.state === "failed" && !deviceAccess.microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
-  if (media.camera.state === "failed" && !deviceAccess.camera) return "Camera didn’t reach the call. Turn it on to try again.";
+export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local"], "microphone" | "camera">, cards: Partial<Record<DeviceKind, unknown>>): string | undefined {
+  const microphone = media.microphone.state === "failed" && !cards.microphone;
+  const camera = media.camera.state === "failed" && !cards.camera;
+  if (microphone && camera) return "Microphone and camera didn’t reach the call. Turn them on to try again.";
+  if (microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
+  if (camera) return "Camera didn’t reach the call. Turn it on to try again.";
   return undefined;
 }
