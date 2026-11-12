@@ -26,7 +26,11 @@ test("a start during an open deploy record is explained, any other start pages",
 
 test("a completed deploy explains starts only until it finished", () => {
   const deployment = { created: at(5), finished: at(16) };
-  assert.equal(unexplainedStarts([{ time: at(10), previousBootEnd: "" }, { time: at(17), previousBootEnd: "" }], [deployment]).length, 0);
+  const during = [
+    { time: at(10), previousBootEnd: "" },
+    { time: at(17), previousBootEnd: "" },
+  ];
+  assert.equal(unexplainedStarts(during, [deployment]).length, 0);
   assert.equal(unexplainedStarts([{ time: at(25), previousBootEnd: "killed" }], [deployment]).length, 1);
 });
 
@@ -41,7 +45,13 @@ test("the check posts to Oncall and fails the run when something paged", async (
   const fetchImpl = async (url, init) => {
     if (url.includes("axiom")) return { ok: true, json: async () => ({ tables: [{ fields: [{ name: "_time" }], columns: [[new Date(Date.UTC(2026, 10, 12, 10, 55)).toISOString()]] }] }) };
     if (url.includes("/statuses")) return { ok: true, json: async () => [{ state: "success", created_at: at(40).toISOString() }] };
-    if (url.includes("github")) return { ok: true, json: async () => [{ id: 7, task: "production-release", created_at: at(30).toISOString() }, { id: 8, task: "other", created_at: at(54).toISOString() }] };
+    if (url.includes("github")) {
+      const records = [
+        { id: 7, task: "production-release", created_at: at(30).toISOString() },
+        { id: 8, task: "other", created_at: at(54).toISOString() },
+      ];
+      return { ok: true, json: async () => records };
+    }
     posts.push(JSON.parse(init.body));
     return { ok: true };
   };
