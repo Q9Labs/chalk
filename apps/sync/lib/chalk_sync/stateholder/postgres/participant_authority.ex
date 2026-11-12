@@ -13,12 +13,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantAuthority do
                 (is_integer(expected_generation) and expected_generation > 0)) do
     case UUID.dump(participant_id) do
       {:ok, participant_id} ->
-        read_participant_authority(
-          episode,
-          participant_id,
-          participant_id,
-          expected_generation
-        )
+        read_participant_authority(episode, participant_id, expected_generation)
 
       :error ->
         {:error, :participant_inactive}
@@ -29,7 +24,7 @@ defmodule ChalkSync.Stateholder.Postgres.ParticipantAuthority do
     :exit, _reason -> {:retryable, :dependency_unavailable}
   end
 
-  defp read_participant_authority(episode, participant_id, participant_id, expected) do
+  defp read_participant_authority(episode, participant_id, expected) do
     result =
       Postgrex.query(
         Database.connection(episode),

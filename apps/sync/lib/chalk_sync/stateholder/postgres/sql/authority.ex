@@ -35,18 +35,4 @@ defmodule ChalkSync.Stateholder.Postgres.SQL.Authority do
     for update
     """
   end
-
-  def lock_operation_episode do
-    """
-    select
-      status,
-      config_snapshot,
-      deadline_at,
-      deadline_generation,
-      created_at
-    from episodes
-    where tenant_id = $1 and space_id = $2 and id = $3
-    for update
-    """
-  end
 end
