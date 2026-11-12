@@ -245,7 +245,14 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
       stdout: result.stdout,
       stderr: result.stderr,
       ran: existsSync(join(dir, "ran")) ? readFileSync(join(dir, "ran"), "utf8").trim().split("\n") : [],
-      origins: existsSync(join(dir, "origins")) ? Object.fromEntries(readFileSync(join(dir, "origins"), "utf8").trim().split("\n").map((line) => line.split(" "))) : {},
+      origins: existsSync(join(dir, "origins"))
+        ? Object.fromEntries(
+            readFileSync(join(dir, "origins"), "utf8")
+              .trim()
+              .split("\n")
+              .map((line) => line.split(" ")),
+          )
+        : {},
       results: /^results=(.*)$/m.exec(output)?.[1],
     };
   } finally {
@@ -288,7 +295,10 @@ test("a proof API key reaches the log only in an unlabelled ::add-mask:: line", 
   const lines = run.stdout.split("\n");
   const keyLines = lines.filter((line) => line.includes("chalk_sk_fakekey"));
   assert.ok(keyLines.length >= 3);
-  assert.ok(keyLines.every((line) => line === "::add-mask::chalk_sk_fakekey.fakesecret"), keyLines.join("\n"));
+  assert.ok(
+    keyLines.every((line) => line === "::add-mask::chalk_sk_fakekey.fakesecret"),
+    keyLines.join("\n"),
+  );
   assert.ok(lines.includes("[camera-share] using chalk_sk_*** for camera-share"));
 });
 
