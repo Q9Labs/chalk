@@ -14,7 +14,7 @@ const nightly = workflow("nightly.yml");
 const cloudflare = workflow("nightly-cf-latency.yml");
 const proof = workflow("real-call-proof.yml");
 
-// The Cloudflare latency measurement is warn-only. It lives in its own workflow so it cannot hold the nightly
+// The Cloudflare latency measurement gates only its own history job. It lives in its own workflow so it cannot hold the nightly
 // deployment lock, delay the next cut, or change the conclusion of Cut nightly that the Android release reads.
 test("Cut nightly has no Cloudflare job and no job needs one", () => {
   assert.equal(nightly.concurrency.group, "chalk-environment-nightly");

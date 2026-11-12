@@ -52,8 +52,6 @@ const sfu = {
 };
 
 const proof = {
-  "proof.join_startup.retry_ms": { unit: "ms", description: "Join startup proof: time to a live connection when the first dial is refused" },
-  "proof.join_startup.lossy_stalled_ms": { unit: "ms", description: "Join startup proof: time to a live connection under loss and stalled dials" },
   "proof.leave_median_ms": { unit: "ms", description: "Leave proof: median time until the leave is confirmed" },
 };
 

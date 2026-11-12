@@ -1,37 +1,9 @@
 import { defineGate, lanes } from "@q9labsai/gates";
+import { gateTaskIds } from "./scripts/gates/register.mjs";
 import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = [
-  "self-test",
-  "workflow-graph",
-  "hygiene",
-  "secrets",
-  "generated",
-  "format",
-  "fallow",
-  "ast-grep",
-  "boundaries",
-  "osv",
-  "services",
-  "contracts",
-  "syncpack",
-  "types",
-  "explicit-any",
-  "react-tokens",
-  "native-quality",
-  "tests",
-  "browser-tests",
-  "dashboard-engine",
-  "dashboard-refresh",
-  "build",
-  "call-performance",
-  "call-leaks",
-  "recorder",
-  "proof-bundle",
-  "sfu",
-  "publint",
-  "attw",
-];
+// The checks register lists the lanes in run order; a lane without an entry cannot be planned.
+const taskIds = gateTaskIds();
 // Format is always on so documentation-only changes are still checked.
 // Raw color, spacing, radius, font-size and shadow values may only shrink. theme/tokens.ts defines the tokens.
 const designTokenOptions = {
