@@ -25,6 +25,10 @@ export type CallEvent =
  */
 export function callEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicrophoneOff = false): readonly CallEvent[] {
   if (previous.connection.status !== "live" || next.connection.status !== "live") return [];
+  return [...rosterEvents(previous, next), ...mutedByHostEvents(previous, next, ownMicrophoneOff), ...mediaRequestEvents(previous, next), ...recordingEvents(previous, next), ...deviceEvents(previous, next)];
+}
+
+function rosterEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const self = next.self.participantId;
   const before = new Map(previous.participants.roster.map((participant) => [participant.participantId, participant]));
   const after = new Map(next.participants.roster.map((participant) => [participant.participantId, participant]));
@@ -39,28 +43,43 @@ export function callEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicr
     if (participant.participantId === self) continue;
     const old = before.get(participant.participantId);
     if (!old) events.push({ kind: "joined", participant });
-    else {
-      if (!old.handRaised && participant.handRaised) events.push({ kind: "handRaised", participant });
-      if (old.media.screenShare === "active" && participant.media.screenShare === "inactive") events.push({ kind: "shareStopped", participant });
-    }
+    else events.push(...changedParticipantEvents(old, participant));
   }
   for (const participant of departed) if (participant !== departedHost) events.push({ kind: "left", participant });
+  return events;
+}
 
-  if (previous.media.local.microphone.state === "enabled" && next.media.local.microphone.state === "disabled" && !ownMicrophoneOff) {
-    const muters = next.participants.roster.filter((participant) => participant.participantId !== self && participant.capabilities.includes("muteOthers"));
-    events.push({ kind: "mutedByHost", by: muters.length === 1 ? (muters[0] ?? null) : null });
-  }
+function changedParticipantEvents(old: Participant, participant: Participant): CallEvent[] {
+  const events: CallEvent[] = [];
+  if (!old.handRaised && participant.handRaised) events.push({ kind: "handRaised", participant });
+  if (old.media.screenShare === "active" && participant.media.screenShare === "inactive") events.push({ kind: "shareStopped", participant });
+  return events;
+}
 
+function mutedByHostEvents(previous: SpaceSnapshot, next: SpaceSnapshot, ownMicrophoneOff: boolean): CallEvent[] {
+  if (previous.media.local.microphone.state !== "enabled" || next.media.local.microphone.state !== "disabled" || ownMicrophoneOff) return [];
+  const muters = next.participants.roster.filter((participant) => participant.participantId !== next.self.participantId && participant.capabilities.includes("muteOthers"));
+  return [{ kind: "mutedByHost", by: muters.length === 1 ? (muters[0] ?? null) : null }];
+}
+
+function mediaRequestEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
   const knownRequests = new Set(previous.media.incomingRequests.map((request) => request.requestId));
-  for (const request of next.media.incomingRequests) if (!knownRequests.has(request.requestId)) events.push({ kind: "mediaRequest", request });
+  return next.media.incomingRequests.filter((request) => !knownRequests.has(request.requestId)).map((request) => ({ kind: "mediaRequest", request }));
+}
 
+function recordingEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
+  const events: CallEvent[] = [];
   const wasRecording = previous.recording.current?.status === "recording";
   const isRecording = next.recording.current?.status === "recording";
   if (!wasRecording && isRecording) events.push({ kind: "recordingStarted" });
   if (wasRecording && !isRecording && next.recording.current?.status !== "failed") events.push({ kind: "recordingStopped" });
   const failure = next.recording.current;
   if (failure?.status === "failed" && (previous.recording.current?.status !== "failed" || previous.recording.current.recordingId !== failure.recordingId)) events.push({ kind: "recordingFailed", failureCode: failure.failureCode });
+  return events;
+}
 
+function deviceEvents(previous: SpaceSnapshot, next: SpaceSnapshot): CallEvent[] {
+  const events: CallEvent[] = [];
   for (const source of ["microphone", "camera"] as const) {
     const wasSelected = previous.media.selection[source];
     if (wasSelected === next.media.selection[source]) continue;
