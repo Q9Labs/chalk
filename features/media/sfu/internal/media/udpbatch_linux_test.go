@@ -273,6 +273,7 @@ func benchmarkSend(b *testing.B, mode string) {
 	target := sink.LocalAddr().(*net.UDPAddr).AddrPort()
 	payload := make([]byte, 1100)
 	var send func([]byte)
+	var dropped func() int64
 	switch mode {
 	case "plain":
 		conn := listenLoopback(b)
@@ -280,6 +281,7 @@ func benchmarkSend(b *testing.B, mode string) {
 	default:
 		conn := newTestBatchConn(b, mode == "segmented")
 		send = func(p []byte) { _, _ = conn.WriteToAddrPort(p, target) }
+		dropped = func() int64 { return conn.droppedAudio.Load() + conn.droppedVideo.Load() }
 	}
 	b.SetBytes(int64(len(payload)))
 	b.ResetTimer()
@@ -288,6 +290,10 @@ func benchmarkSend(b *testing.B, mode string) {
 		if i%8 == 7 {
 			time.Sleep(time.Microsecond)
 		}
+	}
+	if dropped != nil {
+		// The loop outruns the socket, so the share dropped says how much of the speed is waiting avoided.
+		b.ReportMetric(float64(dropped())/float64(b.N), "dropped/op")
 	}
 }
 
