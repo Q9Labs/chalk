@@ -376,8 +376,8 @@
         "apps/api/internal/httpapi/mcp_tenants.go",
         "apps/api/internal/httpapi/mcp_webhooks.go",
         "apps/api/internal/mcpauth",
+        "apps/api/internal/mcptools",
         "apps/api/internal/webhooks",
-        "features/mcp",
         "scripts/evals/mcp",
         "scripts/mcp-proof"
       ]

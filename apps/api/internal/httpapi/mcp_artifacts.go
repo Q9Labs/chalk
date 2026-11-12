@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	mcpapi "github.com/q9labs/chalk/features/mcp/api"
+	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 )
 
 func bindMCPArtifactTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.InspectRecordings, func(ctx context.Context, i mcpapi.RecordingsViewInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.InspectRecordings, func(ctx context.Context, i mcptools.RecordingsViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "recording":
@@ -20,10 +20,10 @@ func bindMCPArtifactTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, listRecordingsEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), listRecordingsRequest{TenantID: b.tenant, SpaceID: b.optionalID(i.SpaceID), EpisodeID: b.optionalID(i.EpisodeID), Page: b.page(i.PageInput)})
 		}
 	})
-	bindMCPEndpoint(server, mcpapi.ExportRecording, requestRecordingExportEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcpapi.RecordingInput) requestRecordingExportEndpointRequest {
+	bindMCPEndpoint(server, mcptools.ExportRecording, requestRecordingExportEndpoint(o.Recordings, o.RecordingExports, o.TenantAuthz), func(b *mcpRequest, i mcptools.RecordingInput) requestRecordingExportEndpointRequest {
 		return requestRecordingExportEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID)}
 	})
-	mcpapi.Bind(server, mcpapi.InspectTranscripts, func(ctx context.Context, i mcpapi.TranscriptViewInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.InspectTranscripts, func(ctx context.Context, i mcptools.TranscriptViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		ref := transcriptDocumentRequest{TenantID: b.tenant, TranscriptID: b.optionalID(i.TranscriptID)}
 		switch i.View {
@@ -39,10 +39,10 @@ func bindMCPArtifactTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, listTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), listTranscriptsRequest{TenantID: b.tenant, RecordingID: b.optionalID(i.RecordingID), Page: b.page(i.PageInput)})
 		}
 	})
-	bindMCPEndpoint(server, mcpapi.RequestTranscript, requestTranscriptEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcpapi.TranscriptRequestInput) requestTranscriptEndpointRequest {
+	bindMCPEndpoint(server, mcptools.RequestTranscript, requestTranscriptEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcptools.TranscriptRequestInput) requestTranscriptEndpointRequest {
 		return requestTranscriptEndpointRequest{TenantID: b.tenant, RecordingID: b.id(i.RecordingID), Body: requestTranscriptBody{IdempotencyKey: i.RequestKey, Language: i.Language, Languages: i.Languages}}
 	})
-	bindMCPEndpoint(server, mcpapi.DeleteTranscript, deleteTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcpapi.TranscriptIDInput) deleteTranscriptRequest {
+	bindMCPEndpoint(server, mcptools.DeleteTranscript, deleteTranscriptArtifactEndpoint(o.TranscriptArtifacts, o.TenantAuthz), func(b *mcpRequest, i mcptools.TranscriptIDInput) deleteTranscriptRequest {
 		return deleteTranscriptRequest{TenantID: b.tenant, TranscriptID: b.id(i.TranscriptID)}
 	})
 }

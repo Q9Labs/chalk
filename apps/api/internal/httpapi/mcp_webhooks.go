@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
-	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
 func bindMCPWebhookTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.InspectWebhooks, func(ctx context.Context, i mcpapi.WebhooksViewInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.InspectWebhooks, func(ctx context.Context, i mcptools.WebhooksViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "endpoint":
@@ -23,7 +23,7 @@ func bindMCPWebhookTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, listWebhookEndpoints(o.Webhooks, o.TenantAuthz), listWebhooksRequest{TenantID: b.tenant, Page: b.page(i.PageInput)})
 		}
 	})
-	mcpapi.Bind(server, mcpapi.ConfigureWebhook, func(ctx context.Context, i mcpapi.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.ConfigureWebhook, func(ctx context.Context, i mcptools.WebhookChangeInput[createWebhookBody, patchWebhookBody, rotateWebhookBody]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.Action {
 		case "create":
@@ -50,7 +50,7 @@ func bindMCPWebhookTools(server *mcp.Server, o Options) {
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
 	})
-	mcpapi.Bind(server, mcpapi.SendWebhook, func(ctx context.Context, i mcpapi.WebhookSendInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.SendWebhook, func(ctx context.Context, i mcptools.WebhookSendInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		endpointID := b.id(i.EndpointID)
 		switch i.Action {

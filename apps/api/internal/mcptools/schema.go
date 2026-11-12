@@ -1,4 +1,4 @@
-package mcpapi
+package mcptools
 
 // Schema is the small JSON Schema vocabulary used by the curated tool catalog.
 // It is deliberately independent of application and storage types.

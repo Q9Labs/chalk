@@ -228,12 +228,12 @@ fi
 if $capture_on; then
   echo "==> building chalk-recorder-capture at ${revision}"
   repo_root="$(git -C "$sfu_root" rev-parse --show-toplevel)"
-  if [[ -n "$(git -C "$repo_root" status --porcelain -- apps/api features/mcp/api)" ]]; then
-    echo "apps/api or features/mcp/api has uncommitted changes; the capture image must match ${revision}" >&2
+  if [[ -n "$(git -C "$repo_root" status --porcelain -- apps/api)" ]]; then
+    echo "apps/api has uncommitted changes; the capture image must match ${revision}" >&2
     exit 1
   fi
   docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
-    --build-context "api=${repo_root}/apps/api" --build-context "mcpapi=${repo_root}/features/mcp/api" \
+    --build-context "api=${repo_root}/apps/api" \
     --file "${deploy_dir}/Dockerfile.capture" --tag "chalk-recorder-capture:${revision}" --load "$deploy_dir" >/dev/null
   docker save "chalk-recorder-capture:${revision}" | as_sfu podman load --quiet >/dev/null
   capture_image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-recorder-capture:${revision}")"

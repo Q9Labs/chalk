@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/q9labs/chalk/apps/api/internal/mcptools"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpreparation"
-	mcpapi "github.com/q9labs/chalk/features/mcp/api"
 )
 
 func bindMCPSpaceTools(server *mcp.Server, o Options) {
-	mcpapi.Bind(server, mcpapi.InspectSpaces, func(ctx context.Context, i mcpapi.SpacesViewInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.InspectSpaces, func(ctx context.Context, i mcptools.SpacesViewInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		switch i.View {
 		case "settings":
@@ -22,10 +22,10 @@ func bindMCPSpaceTools(server *mcp.Server, o Options) {
 			return mcpInvoke(b, listSpacesEndpoint(o.Spaces, o.TenantAuthz), listSpacesRequest{TenantID: b.tenant, Page: b.page(i.PageInput), Archived: i.Archived})
 		}
 	})
-	bindMCPEndpoint(server, mcpapi.CreateSpace, createSpaceEndpoint(o.Spaces, o.TenantAuthz), func(b *mcpRequest, i mcpapi.BodyInput[createSpaceRequest]) createSpaceEndpointRequest {
+	bindMCPEndpoint(server, mcptools.CreateSpace, createSpaceEndpoint(o.Spaces, o.TenantAuthz), func(b *mcpRequest, i mcptools.BodyInput[createSpaceRequest]) createSpaceEndpointRequest {
 		return createSpaceEndpointRequest{TenantID: b.tenant, RequestKey: i.RequestKey, Body: i.Body}
 	})
-	mcpapi.Bind(server, mcpapi.ConfigureSpace, func(ctx context.Context, i mcpapi.SpaceChangeInput[updateSpaceRequest]) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.ConfigureSpace, func(ctx context.Context, i mcptools.SpaceChangeInput[updateSpaceRequest]) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		spaceID := b.id(i.SpaceID)
 		switch i.Action {
@@ -41,7 +41,7 @@ func bindMCPSpaceTools(server *mcp.Server, o Options) {
 			return nil, mcpError(apiErrorInvalidRequest)
 		}
 	})
-	mcpapi.Bind(server, mcpapi.SetSpaceArchived, func(ctx context.Context, i mcpapi.ArchiveInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.SetSpaceArchived, func(ctx context.Context, i mcptools.ArchiveInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		request := getSpaceRequest{TenantID: b.tenant, SpaceID: b.id(i.SpaceID)}
 		if i.Archived {
@@ -49,7 +49,7 @@ func bindMCPSpaceTools(server *mcp.Server, o Options) {
 		}
 		return mcpInvoke(b, restoreSpaceEndpoint(o.Spaces, o.TenantAuthz), request)
 	})
-	mcpapi.Bind(server, mcpapi.PrepareRecording, func(ctx context.Context, i mcpapi.PreparationInput) (json.RawMessage, error) {
+	mcptools.Bind(server, mcptools.PrepareRecording, func(ctx context.Context, i mcptools.PreparationInput) (json.RawMessage, error) {
 		b := newMCPRequest(ctx)
 		spaceID := b.id(i.SpaceID)
 		switch i.Action {
