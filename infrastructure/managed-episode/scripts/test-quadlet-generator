@@ -20,7 +20,7 @@ QUADLET_UNIT_DIRS="${work}/rendered/quadlet" "$quadlet" -dryrun -user >"${work}/
 
 for unit in "${work}"/rendered/quadlet/*.container; do
   service="$(basename "$unit" .container).service"
-  grep -Fq -- "${service}" "${work}/generated" || fail "the generator produced no ${service}"
+  grep -Fxq -- "---${service}---" "${work}/generated" || fail "the generator produced no ${service}"
 done
 # A relative path, or one with a stray prefix such as the "-" of systemd's optional files, lands beside the unit file.
 paths="$(grep -o -- '--env-file [^ ]*' "${work}/generated" | cut -d' ' -f2)"
