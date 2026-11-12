@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 
+import { docsContent } from "../../docs/content";
 import type { DocsPage } from "../../docs/manifest";
 import { getAdjacentDocsPages } from "../../docs/manifest";
 import { MDX_COMPONENTS } from "../../docs/mdx-components";
@@ -26,6 +27,7 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
   const [outline, setOutline] = useState<readonly OutlineItem[]>([]);
   const [currentId, setCurrentId] = useState<string>();
   const { previous, next } = getAdjacentDocsPages(page.slug);
+  const Content = docsContent(page.slug);
 
   useEffect(() => {
     const article = articleRef.current;
@@ -95,7 +97,7 @@ export function DocsArticle({ page }: { readonly page: DocsPage }) {
               </p>
             }
           >
-            <page.Content components={MDX_COMPONENTS} />
+            <Content components={MDX_COMPONENTS} />
           </Suspense>
         </div>
         {previous || next ? (
