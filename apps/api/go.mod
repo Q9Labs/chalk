@@ -172,9 +172,4 @@ require (
 	modernc.org/sqlite v1.49.1 // indirect
 )
 
-require (
-	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/q9labs/chalk/features/mcp/api v0.0.0
-)
-
-replace github.com/q9labs/chalk/features/mcp/api => ../../features/mcp/api
+require github.com/modelcontextprotocol/go-sdk v1.8.0
