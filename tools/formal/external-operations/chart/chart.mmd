@@ -1,0 +1,58 @@
+---
+title: "Taking publishing away from a speaker"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: speaker
+    lg1: cleanup
+    lg2: settled
+    lg3: Breaks DemotedPublishesOnlyWhileCleanupRuns or GivingUpLeavesNothingLive
+    lg4: Path to the DemotedPublishesOnlyWhileCleanupRuns or GivingUpLeavesNothingLive bug
+  }
+  class lg0 teal
+  class lg1 yellow
+  class lg2 purple
+  class lg3 breaks
+  class lg4 bugPath
+  s0: Can publish, mic off
+  s1: Can publish, mic off, mic request open
+  s2: Can publish, mic off, mic request expired
+  s3: Can publish, mic live, mic request open
+  s4: Can publish, mic live, mic request expired
+  s5: Cannot publish, mic live, mic request expired, mic stop waiting
+  s6: Cannot publish, mic off, mic request expired
+  s7: Cannot publish, mic live, mic request expired
+  s8: Cannot publish, mic live, mic request expired, mic stop given up
+  [*] --> s0
+  s0 --> s1: the speaker asks for the mic
+  s1 --> s1: the request handler stops or the request goes to the SFU
+  s1 --> s2: the request's 30 seconds run out
+  s1 --> s3: the SFU turns the mic on
+  s2 --> s2: the mic request is sent again or the request goes to the SFU
+  s3 --> s4: the request's 30 seconds run out
+  s4 --> s5: a host takes publishing away
+  s5 --> s5: Sync picks up the mic stop or Sync's 60 seconds run out or the Sync node stops or Sync asks the SFU to switch the mic off or Sync waits for the SFU's answer
+  s2 --> s6: a host takes publishing away [no mic seen, no open request]
+  s6 --> s7: the SFU turns the mic on
+  s5 --> s8: Sync gives up after its retries
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 teal
+  class s0 bugPath
+  class s1 teal
+  class s1 bugPath
+  class s2 teal
+  class s2 bugPath
+  class s3 teal
+  class s3 bugPath
+  class s4 teal
+  class s4 bugPath
+  class s5 yellow
+  class s5 bugPath
+  class s6 purple
+  class s6 bugPath
+  class s7 purple
+  class s7 breaks
+  class s7 bugPath
+  class s8 purple
+  class s8 breaks
+  class s8 bugPath
