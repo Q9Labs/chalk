@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import tempfile
@@ -109,6 +110,60 @@ class CaptureWorkerCertificateTest(unittest.TestCase):
             lapsing = run('capture-worker-check', 'sfu-1')
             self.assertNotEqual(lapsing.returncode, 0)
             self.assertIn('expires within 14 days', lapsing.stderr)
+
+
+class CaptureSecretsTest(unittest.TestCase):
+    def test_every_deploy_installs_the_worker_identity_it_just_issued(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = root / 'private'
+            bench = private / 'bench'
+            bench.mkdir(parents=True)
+            fake = root / 'bin'
+            fake.mkdir()
+            secrets = root / 'secrets'
+            secrets.mkdir()
+            rule = {'protocol': 'tcp', 'sources': {'addresses': ['192.0.2.0/24']}}
+            firewall = json.dumps([{'name': 'chalk-sfu-bench', 'inbound_rules': [{**rule, 'ports': '8443'}, {**rule, 'ports': '22'}]}])
+            # The fake node answers what deploy reads and keeps each Podman secret it is given; the run ends at daemon-reload.
+            ssh = f"""cmd="$*"
+case "$cmd" in
+  *"secret create"*) name="$(echo "$cmd" | sed -E 's/.*secret create +(--replace +)?([^ ]+) .*/\\2/')"; tee "{secrets}/$name" >/dev/null ;;
+  *MemTotal*) echo "MemTotal: 2097152 kB" ;;
+  *nproc*) echo 2 ;;
+  *"{{{{.Id}}}}"*) echo sha256:fakeimage ;;
+  *Labels*) echo fakerevision ;;
+  *daemon-reload*) exit 97 ;;
+  *) cat >/dev/null ;;
+esac
+"""
+            tools = {
+                'doctl': f"echo '{firewall}'\n",
+                'docker': 'cat >/dev/null\n',
+                'git': 'case "$*" in *rev-parse*) echo fakerevision;; esac\n',
+                'ssh': ssh,
+            }
+            for name, body in tools.items():
+                (fake / name).write_text(f'#!/bin/sh\n{body}')
+                (fake / name).chmod(0o755)
+            (root / 'key').write_text('x')
+            (root / 'home').mkdir()
+            for name in ('ca.crt', 'server.crt', 'server.key', 'bridge-ca.crt'):
+                (bench / name).write_text('x')
+            (bench / 'capture.conf').write_text('NODE_ID=sfu-1\nCONTROL_PLANE_URL=https://control.invalid\nSERVER_NAME=control.invalid\n')
+            env = {**os.environ, 'PATH': f'{fake}:{os.environ["PATH"]}', 'HOME': str(root / 'home'),
+                   'CHALK_SFU_PRIVATE_DIR': str(private), 'SFU_SSH_KEY': str(root / 'key')}
+            subprocess.run([str(DEPLOY.with_name('certs')), 'bench', 'capture-ca'], env=env, check=True, capture_output=True, timeout=60)
+
+            issued = []
+            for _ in range(2):
+                # Exit 97 is the fake node's daemon-reload, so every secret was created before it.
+                result = subprocess.run([str(DEPLOY), 'bench', '192.0.2.1'], env=env, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
+                self.assertEqual(result.returncode, 97, result.stderr)
+                for secret, file in (('worker-cert', 'capture-worker.crt'), ('worker-key', 'capture-worker.key')):
+                    self.assertEqual((secrets / f'chalk-capture-{secret}').read_bytes(), (bench / file).read_bytes())
+                issued.append((bench / 'capture-worker.crt').read_bytes())
+            self.assertNotEqual(issued[0], issued[1])
 
 
 if __name__ == '__main__':
