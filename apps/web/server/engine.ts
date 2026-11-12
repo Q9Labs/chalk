@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { HttpClientError } from "effect/unstable/http";
 import { createChalkEffectClient, TenantIdSchema, type Recording } from "@q9labsai/chalk-client/effect";
 import { z } from "zod";
-import { dashboardWebsiteOrigin } from "../src/lib/dashboard/contracts";
+import { SITE_ORIGIN } from "../src/lib/site-origin";
 import type { DashboardEnvironment } from "./config";
 import type { Identity } from "./identity";
 import type { AttendanceDTO, LiveDTO, RecordingDTO } from "../src/lib/dashboard/contracts";
@@ -34,7 +34,7 @@ export async function resolveTenant(env: DashboardEnvironment, person: Identity,
   const tenant = await run(api.tenants.findTenantByExternalID({ query: { external_id: externalId } }).pipe(Effect.catchTag("TenantNotFoundError", () => Effect.succeed(null))));
   if (tenant) return tenant.id;
   if (!provision) throw new DashboardError(409, "account_not_provisioned");
-  return (await run(api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([dashboardWebsiteOrigin, env.DASHBOARD_ORIGIN])] } }))).id;
+  return (await run(api.tenants.createTenant({ payload: { name: person.name || "Personal", external_id: externalId, cors_allowed_origins: [...new Set([SITE_ORIGIN, env.DASHBOARD_ORIGIN])] } }))).id;
 }
 export type Engine = { api: Awaited<ReturnType<typeof client>>; tenantId: Awaited<ReturnType<typeof resolveTenant>>; dashboardOrigin: string; /** Where AI apps connect to this environment's MCP server. */ mcpUrl: string };
 const tenantSession = z.object({ scope: z.string(), tenantId: z.uuid(), expiresAt: z.number() });

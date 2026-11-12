@@ -1,9 +1,9 @@
 export type ThemePreference = "light" | "dark";
 export type ThemeMode = ThemePreference;
 const INVITE_CODE_PATH_PATTERN = /^\/[a-z]+(?:-[a-z]+){2,3}$/;
-const THEME_COOKIE_NAME = "chalk_theme";
+export const THEME_COOKIE_NAME = "chalk_theme";
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-const THEME_COOKIE_PATTERN = /(?:^|;\s*)chalk_theme=([^;]*)/;
+const THEME_COOKIE_PATTERN = new RegExp(`(?:^|;\\s*)${THEME_COOKIE_NAME}=([^;]*)`);
 export function readThemePreference(cookie: string): ThemePreference {
   return THEME_COOKIE_PATTERN.exec(cookie)?.[1] === "light" ? "light" : "dark";
 }
