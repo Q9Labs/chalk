@@ -502,7 +502,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#deploy-current",
@@ -512,7 +512,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-back",
@@ -522,7 +522,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-forward",
@@ -532,7 +532,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#result",
@@ -542,7 +542,7 @@
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:gate.yml#sync",
