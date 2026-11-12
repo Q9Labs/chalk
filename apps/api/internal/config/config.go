@@ -277,9 +277,10 @@ type ChalkSFUConfig struct {
 	// joins without a web deploy. CHALK_API_DIRECT_URL.
 	DirectSignalingURL string
 
-	// NewEpisodesPaused is the kill switch, CHALK_SFU_NEW_EPISODES=off. Every new Episode
-	// then starts on Cloudflare, and Episodes already on the own SFU keep running there.
-	// Turning the own SFU off instead would also strand those live Episodes.
+	// NewEpisodesPaused is the deploy-time floor of the kill switch, CHALK_SFU_NEW_EPISODES=off.
+	// Every new Episode then starts on Cloudflare, and Episodes already on the own SFU keep
+	// running there. Turning the own SFU off instead would also strand those live Episodes.
+	// The live switch (media-settings new-episodes) pauses on top of this floor, with no restart.
 	NewEpisodesPaused bool
 
 	// CloudflareOverflow lets a new Episode start on Cloudflare when no node has
@@ -594,7 +595,7 @@ func Load() (Config, error) {
 	if err := validateTurnProcessConfig(cloudflareRealtime); err != nil {
 		return Config{}, err
 	}
-	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime); err != nil {
+	if err := validateMediaPlaneProcessConfig(defaultMediaPlane, cloudflareRealtime, chalkSFU); err != nil {
 		return Config{}, err
 	}
 	if err := validateProviderBridgeMediaPlaneProcessConfig(providerBridge, cloudflareRealtime); err != nil {
@@ -736,9 +737,6 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 	provider, err := spaces.ParseMediaPlaneProvider(value)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
-	}
-	if provider != spaces.MediaPlaneProviderCloudflareSFU {
-		return "", fmt.Errorf("%s must be %s because the Dashboard access-grant path requires Cloudflare SFU", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
 	}
 	return provider, nil
 }
@@ -895,24 +893,29 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 	return nodes, nil
 }
 
-func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig) error {
+// validateMediaPlaneProcessConfig checks what a platform default needs to run. Cloudflare is
+// needed under either default: it is the default itself, or the fallback for an SDK that
+// cannot run the own SFU, for the kill switch and for Episodes already bound to it.
+func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig, chalkSFU ChalkSFUConfig) error {
 	if provider == "" {
 		return nil
 	}
 	if processConfig.RequestTimeout <= 0 {
 		return fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
 	}
-
-	switch provider {
-	case spaces.MediaPlaneProviderCloudflareSFU:
-		if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
-			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
-		}
-		if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
-			return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
-		}
-	default:
-		return fmt.Errorf("%s must be %s", DefaultMediaPlane, spaces.MediaPlaneProviderCloudflareSFU)
+	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.Enabled {
+		return fmt.Errorf("%s=%s requires %s=true", DefaultMediaPlane, provider, ChalkSFUEnabled)
+	}
+	// A Space can turn recording or transcription on at any time, and an Episode on the own SFU
+	// has no capture path without this flag, so every inheriting Space would lose them.
+	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.CaptureEnabled {
+		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of an own-SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
+		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppID, DefaultMediaPlane, provider)
+	}
+	if strings.TrimSpace(processConfig.RealtimeAppSecret) == "" {
+		return fmt.Errorf("%s must be set when %s=%s", CloudflareRealtimeAppSecret, DefaultMediaPlane, provider)
 	}
 	return nil
 }

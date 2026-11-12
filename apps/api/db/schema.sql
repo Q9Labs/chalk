@@ -5121,3 +5121,18 @@ create table participant_device_hints (
     foreign key (tenant_id, space_id, episode_id, participant_id)
         references participants(tenant_id, space_id, episode_id, id) on delete cascade
 );
+
+create table media_plane_kill_switch (
+    singleton boolean primary key default true check (singleton),
+    paused boolean not null default false,
+    updated_at timestamptz not null default now()
+);
+
+create table media_plane_kill_switch_changes (
+    id bigint generated always as identity primary key,
+    changed_at timestamptz not null default now(),
+    paused_before boolean not null,
+    paused_after boolean not null,
+    operator text not null check (btrim(operator) <> ''),
+    reason text not null check (btrim(reason) <> '')
+);

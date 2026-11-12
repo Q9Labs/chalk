@@ -6,6 +6,9 @@ API request logs, API metrics and Sync event spans export to Axiom. The private 
 
 - Every operation is a trace and the request ID is the trace ID. Carry `traceparent` across every hop, including workers, the recorder and the dispatcher.
 - A session is one run of a Chalk app on one device. The SDK sends it as W3C `baggage: session.id=<uuid>` on every API request and in the Sync `hello` frame. The API and Sync copy a valid lowercase UUID onto spans and logs and ignore anything else. It is never an Episode, a Cloudflare session or a dashboard `sessionId`. It is not written to the ledger, to Sync frames sent back, or to durable rows.
+- Every API response names its request in the `x-chalk-journey-id` header, which CORS exposes. The same ID is `journey_id` on the request log line, on logs and spans started under the request, and on the ledger rows it writes. The client never sends one: the ledger keys one lifecycle by its journey ID, so an ID shared by a session would merge unrelated joins and recordings. Follow a device by `session.id` and one failure by its journey ID. The SDK keeps the latest failed response's journey ID (`lastFailedRequest`), and web problem reports print it as `Last failed request: <journey id> (HTTP <status>)`.
+- The `http.request` log line carries `route` (the matched pattern, `unmatched` when none), `status`, `tenant_id` when the route has a valid `{tenant_id}`, and `error_code`, the public API code of a failed response, so a 403 or 409 names the rule that refused it. When a provider's refusal sits behind another public status, the line and the `http.failure` line add `upstream_status` and `upstream_code`; a code that is not a short lowercase token is logged as `unsafe`. The server span and the `journey.phase.http` span carry `http.route` and `tenant.id`: group latency by `http.route`, never by path.
+- The API injects `traceparent`, never `baggage`, into its calls to the own SFU and into webhook deliveries, so the session ID stays inside Chalk.
 - Deploy the API and Sync before the SDK, and keep `Baggage` in the API's CORS allow list. An older Sync rejects a `hello` that carries baggage, and the SDK then retries once without it.
 - Dataset names, tokens and monitor IDs are private deployment inputs. This repo is public, so keep them out.
 
@@ -58,6 +61,21 @@ Check `samples` before you trust a percentile, because each sample covers about 
 A rising `recv_paused_videos` with low receive bitrate means the own SFU is protecting audio on a slow link. It is not a receive stall.
 
 A failed chat file upload is reported as `chat_upload_failed` (trigger `upload_failed`) on the connection-report endpoint, with `upload_failure` naming where it broke: `initiate_failed` or `finalize_failed` (an API error), `storage_rejected` (storage answered with `http_status`), or `storage_unreachable` (the browser got no HTTP answer from storage: a network failure or a CORS block). `storage_unreachable` from a browser that otherwise works means the bucket CORS rule is wrong. The report needs an open call connection, so a chat outside a call does not report.
+
+## Follow one Participant through the own SFU
+
+The own SFU ships its logs over OTLP to the dataset the API's logs go to (`service.name=chalk-sfu`), so a bad call is explained without SSH. Every event carries `event` (also the log body), `tenant_id`, `episode_id`, `participant_id`, `generation`, `connection_id`, `session_kind` and `node_incarnation`. When the API sends `traceparent` and `X-Chalk-Journey-ID` on a control request, the session's later events carry `trace_id` and `journey_id`; a malformed header is ignored. Only these events leave the node, by an allowlist in `features/media/sfu/internal/telemetry/export.go`: a record exports when its `event` names a row, with that row's fields only, and each field declares its source (server-assigned, enum, number or restricted id), and a value a Participant or peer chooses, such as an SDP `rid`, is mapped to an enum first, with the raw value left in the journal. Error strings, the standard library's own diagnostics (a TLS error names the peer address) and every other line stay in the node's journal, so an event reports a cause code, never the error text. A new event or field needs a row in that table, and a test fails until it has one.
+
+The events are `sfu.session.registered`, `sfu.session.refused` (`code`), `sfu.admission.refused` (`reason`), `sfu.peer.state`, `sfu.ice.state` (with `path` once connected), `sfu.dtls.state`, `sfu.publication.started` and `.stopped`, `sfu.subscription.started`, `.stopped`, `.paused`, `.resumed` (`reason`), `.layer` (`layer`: `high`, `low`, `single` or `other`) and `.congestion`, `sfu.camera.plan`, `sfu.source.lease_opened` and `.lease_lost` (`cause`), and `sfu.session.closed` (`cause`, the first cause to reach the session). A source lease that only expires logs no event; its subscribers show `reason=source_unauthorized` in `/inspect`.
+
+```apl
+| where ['episode_id'] == "<episode-id>" and ['service.name'] == "chalk-sfu"
+| where _time between (datetime(<from>) .. datetime(<to>))
+| project _time, event, participant_id, connection_id, state, cause, reason, path, source, layer, trace_id
+| sort by _time asc
+```
+
+Drop the `service.name` filter to see the API's and the SFU's lines together. Deploy installs the export when `~/.config/chalk-sfu/<env>/otlp-log-headers` exists (see the [SFU README](../features/media/sfu/README.md)); without it the node logs to its journal only.
 
 ## What an alert means
 

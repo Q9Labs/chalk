@@ -164,9 +164,9 @@ func Load(lookup Lookup) (Config, error) {
 		SourceLeaseTTL:             r.duration("SFU_SOURCE_LEASE_TTL", 15*time.Second, minSourceLeaseTTL, 2*time.Minute),
 		MaxSessions:                r.integer("SFU_MAX_SESSIONS", 64, 1, 1024),
 		MaxPublishedPerSession:     r.integer("SFU_MAX_PUBLISHED_PER_SESSION", 8, 1, 32),
-		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 32, 1, 128),
+		MaxSubscriptionsPerSession: r.integer("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", 0, 1, 512),
 		MaxCapturesPerEpisode:      r.integer("SFU_MAX_CAPTURES_PER_EPISODE", 2, 0, 8),
-		MaxCaptureSubscriptions:    r.integer("SFU_MAX_CAPTURE_SUBSCRIPTIONS", 64, 1, 128),
+		MaxCaptureSubscriptions:    r.integer("SFU_MAX_CAPTURE_SUBSCRIPTIONS", 0, 1, 512),
 		MaxRequestBytes:            int64(r.integer("SFU_MAX_REQUEST_BYTES", 384<<10, 4<<10, 1<<20)),
 		PacketBudget:               r.integer("SFU_PACKET_BUDGET", 16000, 1000, 1000000),
 		VideoStreamCost:            r.integer("SFU_VIDEO_STREAM_COST", 300, 1, 10000),
@@ -203,6 +203,7 @@ func Load(lookup Lookup) (Config, error) {
 		ConnectTimeout:     r.duration("SFU_CONNECT_TIMEOUT", 60*time.Second, 5*time.Second, 10*time.Minute),
 		ShutdownTimeout:    r.duration("SFU_SHUTDOWN_TIMEOUT", 15*time.Second, time.Second, time.Minute),
 	}
+	r.callShapeLimits(&cfg)
 	for _, ip := range cfg.AnnounceIPs {
 		if net.ParseIP(ip) == nil {
 			r.fail("SFU_ANNOUNCE_IPS", fmt.Errorf("%q is not an IP address", ip))
@@ -215,6 +216,30 @@ func Load(lookup Lookup) (Config, error) {
 		return Config{}, fmt.Errorf("invalid SFU configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// remoteTracksOf is the most tracks one session receives from a call of n sessions that
+// publish `cameras` cameras and a microphone each, plus a screen share and its audio.
+// A capture is not a session, so it receives every one of the n.
+func remoteTracksOf(n, cameras int) int { return n*(cameras+1) + 2 }
+
+// callShapeLimits sets the per-session subscription limits from the call shape the node admits
+// (SFU_MAX_EPISODE_PARTICIPANTS Participants with SFU_CAMERAS_PER_PARTICIPANT cameras each), and
+// refuses an explicit limit that would turn a call that admission accepted into silent
+// subscription failures. A 16-Participant call with 2 cameras needs 47 tracks per session.
+func (r *reader) callShapeLimits(cfg *Config) {
+	member := remoteTracksOf(cfg.MaxEpisodeParticipants-1, cfg.CamerasPerParticipant)
+	capture := remoteTracksOf(cfg.MaxEpisodeParticipants, cfg.CamerasPerParticipant)
+	if cfg.MaxSubscriptionsPerSession == 0 {
+		cfg.MaxSubscriptionsPerSession = member
+	} else if cfg.MaxSubscriptionsPerSession < member {
+		r.fail("SFU_MAX_SUBSCRIPTIONS_PER_SESSION", fmt.Errorf("%d cannot hold a call of %d Participants with %d cameras each, which needs %d; raise it or lower SFU_MAX_EPISODE_PARTICIPANTS or SFU_CAMERAS_PER_PARTICIPANT", cfg.MaxSubscriptionsPerSession, cfg.MaxEpisodeParticipants, cfg.CamerasPerParticipant, member))
+	}
+	if cfg.MaxCaptureSubscriptions == 0 {
+		cfg.MaxCaptureSubscriptions = max(capture, 64)
+	} else if cfg.MaxCaptureSubscriptions < capture {
+		r.fail("SFU_MAX_CAPTURE_SUBSCRIPTIONS", fmt.Errorf("%d cannot hold a capture of %d Participants with %d cameras each, which needs %d", cfg.MaxCaptureSubscriptions, cfg.MaxEpisodeParticipants, cfg.CamerasPerParticipant, capture))
+	}
 }
 
 type reader struct {

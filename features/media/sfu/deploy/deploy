@@ -186,6 +186,16 @@ if [[ -f "${dir}/otlp-headers" ]]; then
 else
   echo "warning: no ${dir}/otlp-headers, so the node exports no metrics" >&2
 fi
+# Logs go to the dataset the API's logs go to, with their own token and dataset header.
+otlp_log_secret="# Log export is off: the deploy found no otlp-log-headers."
+if [[ -f "${dir}/otlp-log-headers" && -n "$otlp_endpoint" ]]; then
+  replace=()
+  as_sfu podman secret inspect chalk-sfu-otlp-log-headers >/dev/null 2>&1 && replace=(--replace)
+  as_sfu podman secret create "${replace[@]}" chalk-sfu-otlp-log-headers - <"${dir}/otlp-log-headers" >/dev/null
+  otlp_log_secret="Secret=chalk-sfu-otlp-log-headers,type=env,target=OTEL_EXPORTER_OTLP_LOGS_HEADERS"
+else
+  echo "warning: no ${dir}/otlp-log-headers, so the node ships no logs" >&2
+fi
 if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" && "$environment" != bench ]]; then
   echo "SFU_MAX_EPISODE_PARTICIPANTS applies to the bench environment only" >&2
   exit 2
@@ -198,7 +208,7 @@ fi
   if [[ -n "${SFU_MAX_EPISODE_PARTICIPANTS:-}" ]]; then echo "SFU_MAX_EPISODE_PARTICIPANTS=${SFU_MAX_EPISODE_PARTICIPANTS}"; fi
 } |
   as_sfu sh -c "'mkdir -p .config/chalk-sfu && umask 077 && cat > .config/chalk-sfu/sfu.env'"
-sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" \
+sed -e "s|__IMAGE__|${image_id}|" -e "s|__MEMORY_LIMIT__|${memory_limit}|" -e "s|^__OTLP_HEADERS_SECRET__$|${otlp_secret}|" -e "s|^__OTLP_LOG_HEADERS_SECRET__$|${otlp_log_secret}|" \
   "${deploy_dir}/chalk-sfu.container.in" |
   as_sfu sh -c "'mkdir -p .config/containers/systemd && cat > .config/containers/systemd/chalk-sfu.container'"
 remote systemctl --user -M chalk-sfu@ daemon-reload

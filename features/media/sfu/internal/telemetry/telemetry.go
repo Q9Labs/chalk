@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
@@ -51,12 +50,12 @@ func Start(ctx context.Context, cfg config.Telemetry, instance string, read Read
 	if err != nil {
 		return nil, fmt.Errorf("create OTLP metric exporter: %w", err)
 	}
-	attributes, err := resource.New(ctx, resource.WithAttributes(
+	attributes, err := fixedResource(ctx,
 		semconv.ServiceName("chalk-sfu"),
 		semconv.ServiceVersion(cfg.Version),
 		semconv.ServiceInstanceID(instance),
 		semconv.DeploymentEnvironmentName(cfg.Environment),
-	))
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create telemetry resource: %w", err)
 	}

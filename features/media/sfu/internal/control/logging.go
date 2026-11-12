@@ -25,6 +25,16 @@ func (s *Server) logged(next http.Handler) http.Handler {
 		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
 			return
 		}
-		s.log.Info("control request", "method", r.Method, "route", r.Pattern, "status", recorder.status, "durationMs", time.Since(started).Milliseconds())
+		attrs := []any{"method", r.Method, "route", r.Pattern, "status", recorder.status, "durationMs", time.Since(started).Milliseconds()}
+		if id := r.PathValue("connectionId"); id != "" {
+			attrs = append(attrs, "connection_id", id)
+		}
+		if trace := traceOf(r); trace.TraceID != "" {
+			attrs = append(attrs, "trace_id", trace.TraceID)
+		}
+		if trace := traceOf(r); trace.JourneyID != "" {
+			attrs = append(attrs, "journey_id", trace.JourneyID)
+		}
+		s.log.Info("control request", attrs...)
 	})
 }

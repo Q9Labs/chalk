@@ -80,7 +80,9 @@ func (a spacePort) CreatePublicSpace(ctx context.Context, input publicinvites.Cr
 		return publicinvites.PublicSpace{}, fmt.Errorf("resolve managed Tenant for public Space: %w", err)
 	}
 	if a.config.RefuseClient != nil {
-		if err := a.config.RefuseClient(ctx, tenant, spaces.Space{MediaPlane: a.config.DefaultMediaPlane}, input.MediaClients); err != nil {
+		// The Space created below stores this plane as its own setting, so the check sees it too.
+		plane := spaces.MediaPlaneProvider(a.config.DefaultMediaPlane)
+		if err := a.config.RefuseClient(ctx, tenant, spaces.Space{MediaPlane: a.config.DefaultMediaPlane, MediaPlaneSetting: &plane}, input.MediaClients); err != nil {
 			return publicinvites.PublicSpace{}, fmt.Errorf("check the client before creating a public Space: %w", err)
 		}
 	}

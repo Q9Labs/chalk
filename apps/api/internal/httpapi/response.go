@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/q9labs/chalk/apps/api/internal/objectstorage"
+	"github.com/q9labs/chalk/apps/api/internal/observability"
 )
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
@@ -14,6 +15,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, code string, message string) {
+	observability.RecordErrorCode(w, code)
 	writeJSON(w, status, map[string]any{
 		"error": map[string]string{
 			"code":    code,

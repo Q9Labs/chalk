@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type DNSResolver interface {
@@ -102,6 +104,7 @@ func (c *DeliveryClient) Deliver(ctx context.Context, input DeliveryRequest) (De
 	request.Header.Set("webhook-id", input.EventID)
 	request.Header.Set("webhook-timestamp", input.Timestamp)
 	request.Header.Set("webhook-signature", input.Signature)
+	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(request.Header))
 	startedAt := time.Now()
 	response, err := client.Do(request)
 	if err != nil {

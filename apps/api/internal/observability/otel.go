@@ -121,7 +121,7 @@ func (r Runtime) Shutdown(ctx context.Context) error {
 
 func OTelHTTPMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		return otelhttp.NewHandler(next, "http.server.request")
+		return otelhttp.NewHandler(keepServerSpan(next), "http.server.request")
 	}
 }
 

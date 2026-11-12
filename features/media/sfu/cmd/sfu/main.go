@@ -16,9 +16,8 @@ import (
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(log); err != nil {
-		log.Error("sfu stopped", "error", err)
+	if err := run(); err != nil {
+		slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("sfu stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -26,11 +25,23 @@ func main() {
 // exportShutdown bounds the final export, inside the container's stop timeout.
 const exportShutdown = 3 * time.Second
 
-func run(log *slog.Logger) error {
+func run() error {
 	cfg, err := config.Load(os.LookupEnv)
 	if err != nil {
 		return err
 	}
+	log, closeLogs, err := telemetry.NewLogger(context.Background(), cfg.Telemetry, slog.NewJSONHandler(os.Stderr, nil))
+	if err != nil {
+		return err
+	}
+	// Closing last sends the final records, including the shutdown ones.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), exportShutdown)
+		defer cancel()
+		if err := closeLogs(ctx); err != nil {
+			slog.Warn("log shutdown failed", "error", err)
+		}
+	}()
 	server, err := control.Start(cfg, log)
 	if err != nil {
 		return err

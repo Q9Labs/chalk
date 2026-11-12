@@ -2,6 +2,7 @@
 # The nightly tier of the scorecard: compare scorecards from a real-node run with the median of the last seven nightly runs,
 # append them to the history branch, and keep one "scorecard regression" issue open while a gated metric is over its budget.
 # Usage: nightly.sh <scorecard.json>...   (run from the repository root; needs GH_TOKEN, GITHUB_REPOSITORY, GITHUB_STEP_SUMMARY)
+# With SCORECARD_KEEP_ISSUE=true it never closes the regression issue: the cut's cards hold no latency run, so only the latency workflow's full card may clear it.
 # With SCORECARD_WARN_ONLY=true it only compares and appends to the history: it never opens, edits or closes the regression issue, and a history push that stays rejected after three tries exits 0.
 set -euo pipefail
 
@@ -73,7 +74,7 @@ if [[ "${regressions}" -eq 1 ]]; then
     gh label create scorecard-regression --repo "${GITHUB_REPOSITORY}" --color B60205 --description "A gated performance metric is over its budget" 2> /dev/null || true
     gh issue create --repo "${GITHUB_REPOSITORY}" --title "Scorecard regression" --label scorecard-regression --body-file "${work}/issue.md"
   fi
-elif [[ -n "${number}" && "${inconclusive}" -eq 0 ]]; then
+elif [[ -n "${number}" && "${inconclusive}" -eq 0 && "${SCORECARD_KEEP_ISSUE:-}" != true ]]; then
   gh issue close "${number}" --repo "${GITHUB_REPOSITORY}" --comment "The latest nightly run has no gated metric over its budget."
 fi
 exit "${regressions}"

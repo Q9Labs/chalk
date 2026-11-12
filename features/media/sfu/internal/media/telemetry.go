@@ -1,6 +1,11 @@
 package media
 
-import "maps"
+import (
+	"log/slog"
+	"maps"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
+)
 
 // Refusal reasons label the joins and screen shares the node refused. They are a closed set, so a
 // metric can carry them as an attribute.
@@ -103,11 +108,17 @@ func (c *counted) take(total uint64) uint64 {
 	return grown
 }
 
-// refuse counts a refused join or screen share, logs why and returns its error. The reason is
-// a closed set and the log names no Tenant, Episode or Participant. The caller holds n.mu.
+// refuse counts a refusal that no one Participant owns, logs why and returns its error. The
+// caller holds n.mu.
 func (n *Node) refuse(reason string, err error) error {
+	return n.refuseFor(protocol.Scope{}, reason, err)
+}
+
+// refuseFor counts a refused join or screen share of the scope's Participant, logs why with the
+// ids and returns its error. The reason is a closed set. The caller holds n.mu.
+func (n *Node) refuseFor(scope protocol.Scope, reason string, err error) error {
 	n.refusals[reason]++
-	n.log.Warn("refused", "reason", reason, "sessions", len(n.sessions))
+	n.trail(slog.LevelWarn, "sfu.admission.refused", scope, "reason", reason, "sessions", len(n.sessions))
 	return err
 }
 

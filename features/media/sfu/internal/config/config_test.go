@@ -160,3 +160,44 @@ func TestTelemetrySettings(t *testing.T) {
 		}
 	}
 }
+
+// A call that admission accepts must fit the per-session subscription limits: 16 Participants
+// with 2 cameras and a microphone each is 15·3 = 45 remote tracks, plus a screen share and its audio.
+func TestSubscriptionLimitsFitTheAdmittedCallShape(t *testing.T) {
+	load := func(extra map[string]string) (Config, error) {
+		values := map[string]string{}
+		for key, value := range required {
+			values[key] = value
+		}
+		for key, value := range extra {
+			values[key] = value
+		}
+		return Load(lookupOf(values))
+	}
+	cfg, err := load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxSubscriptionsPerSession != 47 || cfg.MaxCaptureSubscriptions != 64 {
+		t.Errorf("defaults %d per session and %d per capture, want 47 and 64", cfg.MaxSubscriptionsPerSession, cfg.MaxCaptureSubscriptions)
+	}
+	cfg, err = load(map[string]string{"SFU_MAX_EPISODE_PARTICIPANTS": "32"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxSubscriptionsPerSession != 95 || cfg.MaxCaptureSubscriptions != 98 {
+		t.Errorf("a 32-Participant node gets %d per session and %d per capture, want 95 and 98", cfg.MaxSubscriptionsPerSession, cfg.MaxCaptureSubscriptions)
+	}
+	if _, err := load(map[string]string{"SFU_MAX_SUBSCRIPTIONS_PER_SESSION": "32"}); err == nil || !strings.Contains(err.Error(), "SFU_MAX_SUBSCRIPTIONS_PER_SESSION") {
+		t.Errorf("32 subscriptions for a 16-Participant call loaded: %v", err)
+	}
+	if _, err := load(map[string]string{"SFU_MAX_EPISODE_PARTICIPANTS": "12", "SFU_MAX_SUBSCRIPTIONS_PER_SESSION": "33"}); err == nil {
+		t.Error("33 tracks leave no room for the screen share of a 12-Participant call")
+	}
+	if _, err := load(map[string]string{"SFU_MAX_EPISODE_PARTICIPANTS": "12", "SFU_MAX_SUBSCRIPTIONS_PER_SESSION": "35"}); err != nil {
+		t.Errorf("35 subscriptions hold a 12-Participant call: %v", err)
+	}
+	if _, err := load(map[string]string{"SFU_MAX_CAPTURE_SUBSCRIPTIONS": "40"}); err == nil || !strings.Contains(err.Error(), "SFU_MAX_CAPTURE_SUBSCRIPTIONS") {
+		t.Errorf("40 capture subscriptions loaded: %v", err)
+	}
+}

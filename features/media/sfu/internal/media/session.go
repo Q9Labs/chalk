@@ -57,6 +57,14 @@ type Session struct {
 	// lastVoiced is the monotonic time this Participant's microphone last carried
 	// speech, or 0. The allocator keeps a recent speaker's camera longest.
 	lastVoiced atomic.Int64
+
+	// trace is the latest control request's trace, started is when the session was created,
+	// watching is set once the DTLS transport has a state watcher, and cause is why the session
+	// closed (see trail.go).
+	trace    atomic.Pointer[Trace]
+	started  time.Time
+	watching atomic.Bool
+	cause    atomic.Pointer[string]
 }
 
 // pendingOffer is a server offer waiting for the client's answer.
@@ -78,6 +86,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind ses
 		subscribed: map[string]*subscription{},
 		retired:    map[string]bool{},
 		transport:  transport,
+		started:    time.Now(),
 	}
 	if n.stopped {
 		s.transport.close()
@@ -88,11 +97,12 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind ses
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
 			n.log.Warn("session never connected", "connectionId", id)
-			s.Close()
+			s.CloseFor(CloseNeverConnected)
 		}
 	})
 	pc.OnTrack(s.onTrack)
 	pc.OnConnectionStateChange(s.onConnectionState)
+	pc.OnICEConnectionStateChange(s.onICEState)
 	return s, nil
 }
 
@@ -100,12 +110,15 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind ses
 func (s *Session) key() participantKey { return sessionKey(s.scope, s.kind) }
 
 func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
+	s.traceConnectionState(state)
 	switch state {
 	case webrtc.PeerConnectionStateConnected:
 		// The timer only guards a session that never connects. Later drops are ICE's to report.
 		s.connectTimer.Stop()
-	case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
-		s.Close()
+	case webrtc.PeerConnectionStateFailed:
+		s.CloseFor(ClosePeerFailed)
+	case webrtc.PeerConnectionStateClosed:
+		s.CloseFor(ClosePeerClosed)
 	}
 }
 
@@ -158,14 +171,18 @@ func (s *Session) media() ([]*publication, []*subscription) {
 	return slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
 }
 
-// Close tears the session down. It is idempotent.
-func (s *Session) Close() {
+// Close tears the session down for no named cause. It is idempotent.
+func (s *Session) Close() { s.CloseFor(CloseUnspecified) }
+
+// CloseFor tears the session down and logs why. It is idempotent: the first cause wins.
+func (s *Session) CloseFor(cause string) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return
 	}
 	s.closed = true
+	s.cause.Store(&cause)
 	s.node.closing.Add(1)
 	defer s.node.closing.Add(-1)
 	published, subscribed := slices.Collect(maps.Values(s.published)), slices.Collect(maps.Values(s.subscribed))
@@ -187,6 +204,7 @@ func (s *Session) Close() {
 	if err := s.pc.Close(); err != nil {
 		s.node.log.Warn("close peer connection", "connectionId", s.id, "error", err)
 	}
+	s.traceClosed(cause, len(published), len(subscribed))
 }
 
 func (s *Session) isClosed() bool {
@@ -413,7 +431,7 @@ func (s *Session) registerPublication(track protocol.Track, sections map[string]
 		return transceiver, protocol.TrackCodeDuplicate, "mid or track name is already published"
 	}
 	if transceiver.Kind() == webrtc.RTPCodecTypeVideo && track.Source != sourceScreen && s.cameras() >= s.node.cfg.CamerasPerParticipant {
-		s.node.refuseCamera()
+		s.node.refuseCamera(s)
 		return transceiver, protocol.TrackCodeLimitExceeded, "the Participant already publishes the cameras this node reserves for"
 	}
 	pub, err := newPublication(s, track, transceiver.Kind())
@@ -532,7 +550,7 @@ func (s *Session) offerExpired(pending *pendingOffer) {
 	s.mu.Unlock()
 	if current {
 		s.node.log.Warn("server offer was never answered", "connectionId", s.id)
-		s.Close()
+		s.CloseFor(CloseNegotiationFailed)
 	}
 }
 
@@ -847,6 +865,6 @@ func (s *Session) completeLocalDescription(ctx context.Context) (*protocol.Sessi
 // cannot return to a stable state, and the client replaces the connection.
 func (s *Session) failNegotiation(step string, cause error) error {
 	s.node.log.Warn("negotiation failed", "connectionId", s.id, "step", step, "error", cause)
-	s.Close()
+	s.CloseFor(CloseNegotiationFailed)
 	return fmt.Errorf("%w: %s: %w", ErrNegotiationFailed, step, cause)
 }

@@ -2,6 +2,7 @@ package media
 
 import (
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -94,6 +95,7 @@ func (n *Node) authorityFor(scope protocol.Scope, allocation int64, source strin
 		if allocation > authority.allocation {
 			authority.lapse()
 			authority.allocation = allocation
+			n.trail(slog.LevelWarn, "sfu.source.lease_lost", scope, "source", source, "cause", "newer_allocation")
 		}
 		return authority, authority.revision, authority.revoked, nil
 	}
@@ -231,6 +233,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 			authority.allocation = max(authority.allocation, allocation)
 			result.Applied = true
 			changed[index] = authority
+			n.trail(slog.LevelWarn, "sfu.source.lease_lost", protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: control.ParticipantID}, "source", control.Source, "cause", "revoked", "revision", control.Revision)
 		default:
 			current := authority.window.Load()
 			window := &leaseWindow{since: current.since, until: now + int64(lease), opens: current.opens}
@@ -238,6 +241,7 @@ func (n *Node) applySourceControls(request protocol.SourceControlRequest, result
 				window.since = now
 				window.opens++
 				changed[index] = authority
+				n.trail(slog.LevelInfo, "sfu.source.lease_opened", protocol.Scope{TenantID: request.TenantID, EpisodeID: request.EpisodeID, ParticipantID: control.ParticipantID}, "source", control.Source, "revision", control.Revision)
 			}
 			authority.revision, authority.revoked = control.Revision, false
 			authority.allocation = max(authority.allocation, allocation)

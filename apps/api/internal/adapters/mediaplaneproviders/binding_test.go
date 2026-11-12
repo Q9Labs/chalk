@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	runtimeconfig "github.com/q9labs/chalk/apps/api/internal/config"
@@ -63,8 +64,12 @@ func TestOldSDKInOwnSFUSpaceWithoutCloudflareIsRefused(t *testing.T) {
 	registry := NewRegistry(Config{DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU})
 	chalkSelected := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
 	binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, chalkSelected, mediaplane.ClientProviders{})
+	if !errors.Is(err, mediaplane.ErrClientUnsupported) || binding != nil {
+		t.Fatalf("an old SDK must be told to upgrade, not given an Episode without media: %#v %v", binding, err)
+	}
+	binding, err = registry.ResolveBinding(context.Background(), tenants.Tenant{}, chalkSelected, mediaplane.ParseClientProviders("chalk_sfu"))
 	if !errors.Is(err, providercontracts.ErrAdapterUnavailable) || binding != nil {
-		t.Fatalf("an old SDK must not get an Episode without media: %#v %v", binding, err)
+		t.Fatalf("a current SDK with no Cloudflare fallback must see a provider outage: %#v %v", binding, err)
 	}
 	disabled := tenants.Tenant{MediaPlaneProviderConfig: json.RawMessage(`{"enabled":false}`)}
 	binding, err = registry.ResolveBinding(context.Background(), disabled, chalkSelected, mediaplane.ClientProviders{})
@@ -216,5 +221,67 @@ func TestOldSDKNeverStartsANewEpisodeOnTheOwnSFU(t *testing.T) {
 		if err != nil || binding == nil || binding.Provider != string(cloudflare) {
 			t.Errorf("Space off the allowlist: %#v %v, want Cloudflare", binding, err)
 		}
+	}
+}
+
+type fakeSwitch struct {
+	paused bool
+	err    error
+	reads  int
+}
+
+func (f *fakeSwitch) NewEpisodesPaused(context.Context) (bool, error) {
+	f.reads++
+	return f.paused, f.err
+}
+
+func TestLiveKillSwitchSendsNewEpisodesToCloudflareWithoutARestart(t *testing.T) {
+	everyone, err := spaces.ParseChalkSFUAllowlist([]string{"*"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := &fakeSwitch{}
+	registry := NewRegistry(Config{
+		DefaultProvider: spaces.MediaPlaneProviderChalkSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
+		ChalkSFUSpaces: everyone, NewEpisodeSwitch: live,
+	})
+	runsOwnSFU := mediaplane.ParseClientProviders(string(mediaplane.ProviderChalkSFU))
+	resolve := func(ctx context.Context) (*mediaplane.Binding, error) {
+		return registry.ResolveBinding(ctx, tenants.Tenant{}, spaces.Space{MediaPlane: "cf_sfu"}, runsOwnSFU)
+	}
+
+	// The switch is on: the own SFU is tried (no fleet here, so it is unavailable).
+	if _, err := resolve(context.Background()); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+		t.Fatalf("switch on: err = %v, want the own SFU to be tried", err)
+	}
+	// The same registry sees the flip on the next call.
+	live.paused = true
+	binding, err := resolve(context.Background())
+	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("switch off: %#v %v, want Cloudflare", binding, err)
+	}
+	// A value read inside the caller's transaction wins, and no second read happens.
+	reads := live.reads
+	if _, err := resolve(spaces.WithNewEpisodesPaused(context.Background(), false)); !errors.Is(err, providercontracts.ErrAdapterUnavailable) {
+		t.Fatalf("carried switch on: err = %v, want the own SFU to be tried", err)
+	}
+	if live.reads != reads {
+		t.Fatal("a carried switch value must not cost another read")
+	}
+	// A switch that cannot be read fails the request instead of guessing.
+	live.err = errors.New("database down")
+	if _, err := resolve(context.Background()); err == nil || !strings.Contains(err.Error(), "read the new-Episode switch") {
+		t.Fatalf("unreadable switch: err = %v", err)
+	}
+}
+
+func TestCloudflareFallbackRunsUnderAnOwnSFUDefault(t *testing.T) {
+	registry := NewRegistry(Config{
+		DefaultProvider: spaces.MediaPlaneProviderChalkSFU, ProcessConfig: runtimeconfig.CloudflareRealtimeConfig{RealtimeAppID: "deployment-app"},
+		ChalkSFUNewEpisodesPaused: true,
+	})
+	binding, err := registry.ResolveBinding(context.Background(), tenants.Tenant{}, spaces.Space{MediaPlane: "cf_sfu"}, mediaplane.ClientProviders{})
+	if err != nil || binding == nil || binding.Provider != string(spaces.MediaPlaneProviderCloudflareSFU) {
+		t.Fatalf("an old SDK behind the switch must get Cloudflare: %#v %v", binding, err)
 	}
 }

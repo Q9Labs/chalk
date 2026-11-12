@@ -1,15 +1,49 @@
 name: Staging SFU latency
 
+# Own-SFU staging action latency for the newest held nightly. It runs outside Cut nightly so the 30-minute measurement
+# never lengthens a cut. It starts when a cut finishes, so its verdict arrives about 33 minutes later; the daily run and
+# a manual dispatch cover a cut whose start was missed. Promote reads the verdict this workflow records for the SHA it
+# selects, and refuses a SHA with no verdict (own_sfu_proof_result=latency-missing).
 on:
+  schedule:
+    - cron: "43 2 * * *"
+  workflow_run:
+    workflows: [Cut nightly]
+    types: [completed]
   workflow_dispatch:
 
 permissions: {}
 
+concurrency:
+  # The called proof workflow holds chalk-staging-sfu, and a caller and callee cannot share a group.
+  group: chalk-staging-sfu-latency-run
+  cancel-in-progress: false
+
 jobs:
-  staging-latency:
-    name: Own-SFU staging latency
+  target:
+    name: Find the nightly staging runs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
-      contents: write # The staging lease is a git-ref write; this workflow is latency-only.
+      contents: read
+      deployments: read
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+    steps:
+      - name: Refuse non-master dispatch before checkout
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/releases/release.py latency_target
+  latency:
+    needs: target
+    if: needs.target.outputs.sha != ''
+    permissions:
+      contents: write # The staging lease is a git-ref write.
     uses: ./.github/workflows/real-call-proof.yml
     with:
       environment: nightly
@@ -17,5 +51,56 @@ jobs:
       media_plane: chalk_sfu
       latency: true
       latency_only: true
+      release_sha: ${{ needs.target.outputs.sha }}
       scorecard_label: chalk_sfu
     secrets: inherit
+  record:
+    # Slow or failed runs matter most to the trend, so this job scores whatever card exists and records the verdict.
+    needs: [target, latency]
+    if: always() && needs.target.outputs.sha != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      deployments: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .tool-versions
+      - name: Download the latency card
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: scorecard-nightly-*
+          path: artifacts/nightly
+          merge-multiple: true
+      - name: Evaluate gated budgets for the measured SHA
+        id: evaluate
+        env:
+          TARGET_SHA: ${{ needs.target.outputs.sha }}
+        run: |
+          mapfile -t cards < <(find artifacts/nightly -name "scorecard-*.json")
+          node features/scorecard/evaluate.mjs "$TARGET_SHA" "$GITHUB_RUN_ID" "${cards[@]}"
+      - name: Score the run and add it to the history
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cards=$(find artifacts/nightly -name "scorecard-*.json" 2> /dev/null || true)
+          if [ -z "$cards" ]; then
+            echo "No latency scorecard in this run."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          features/scorecard/nightly.sh $cards
+      - name: Record the verdict for Promote
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ needs.target.outputs.sha }}
+          LATENCY_RESULT: ${{ needs.latency.result == 'success' && needs.latency.outputs.result || 'failed' }}
+          SCORECARD_RESULT: ${{ steps.evaluate.outputs.result }}
+        run: python3 scripts/releases/release.py record_latency

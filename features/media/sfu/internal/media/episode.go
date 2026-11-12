@@ -2,6 +2,7 @@ package media
 
 import (
 	"cmp"
+	"log/slog"
 	"maps"
 	"math"
 	"slices"
@@ -261,8 +262,7 @@ func (n *Node) shareHostState(sessions []*Session, now int64) probeBudget {
 // logCongestionPause logs a subscription's congestion pause when it starts and
 // when it ends, with the estimate that decided it and the evidence behind that
 // estimate: what the receiver acknowledged, the latest loss window, the delay
-// trend and the cause of the latest decrease. It names no Tenant, Episode or
-// Participant.
+// trend and the cause of the latest decrease. It carries the subscriber's ids and no address.
 func (n *Node) logCongestionPause(s *subscription, paused bool, now int64) {
 	if paused == s.pauseLogged {
 		return
@@ -275,12 +275,12 @@ func (n *Node) logCongestionPause(s *subscription, paused bool, now int64) {
 		message = "subscription paused for congestion"
 		reason = "insufficient_bandwidth"
 	}
-	n.log.Info(message, "connectionId", s.owner.id, "mid", s.mid, "rid", s.alloc.rid, "reason", reason,
+	n.log.Info(message, append(scopeAttrs(s.owner.scope), "event", "sfu.subscription.congestion", "connection_id", s.owner.id, "connectionId", s.owner.id, "mid", s.mid, "rid", s.alloc.rid, "layer", layerLabel(s.alloc.rid), "reason", reason,
 		"estimateBps", math.Round(reading.current), "provenBps", math.Round(reading.proven),
 		"deliveredShare", round2(reading.delivered), "probing", reading.probing, "hostPressure", reading.pressured,
 		"ackedBps", math.Round(reading.acked), "lossShare", round2(reading.lossShare), "lossy", reading.lossy,
 		"trend", reading.trend.String(), "decreaseCause", reading.decrease.cause, "decreaseAgoMs", reading.decrease.agoMs(now),
-		"decreaseFromBps", math.Round(reading.decrease.from), "decreaseToBps", math.Round(reading.decrease.to), "decreaseAckedBps", math.Round(reading.decrease.acked))
+		"decreaseFromBps", math.Round(reading.decrease.from), "decreaseToBps", math.Round(reading.decrease.to), "decreaseAckedBps", math.Round(reading.decrease.acked))...)
 }
 
 // plan predicts the Episode's packets/s from what its publishers send and
@@ -317,6 +317,9 @@ func (n *Node) plan(key episodeKey, episode *episodeTick, now int64) {
 	predicted := episode.base
 	episode.state.CeilingPackets = int(ceiling)
 	for pub, camera := range episode.cameras {
+		if pub.plan != camera.level {
+			pub.session.trail(slog.LevelInfo, "sfu.camera.plan", "level", planName(camera.level), "was", planName(pub.plan), "ceiling_packets", int(ceiling))
+		}
 		pub.plan = camera.level
 		predicted += camera.cost[camera.level]
 		switch camera.level {

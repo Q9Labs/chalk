@@ -28,7 +28,11 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 		if err := r.refuseAfterSunset(ctx, tenant, space, selected, clients); err != nil {
 			return nil, err
 		}
-		if !r.admitsNewChalkSFUEpisode(space) || !clients.Runs(mediaplane.ProviderChalkSFU) {
+		admits, err := r.admitsNewChalkSFUEpisode(ctx, space)
+		if err != nil {
+			return nil, fmt.Errorf("read the new-Episode switch: %w", err)
+		}
+		if !admits || !clients.Runs(mediaplane.ProviderChalkSFU) {
 			pin = spaces.MediaPlaneProviderCloudflareSFU
 		}
 	}
@@ -41,7 +45,13 @@ func (r Registry) ResolveBinding(ctx context.Context, tenant tenants.Tenant, spa
 		// disabled media, but a Space forced to Cloudflare with no Cloudflare
 		// application would join the own SFU Space without media.
 		if pin != "" && resolution.ConfigurationSource != providercontracts.ConfigurationSourceDisabled {
-			return nil, fmt.Errorf("%w: no Cloudflare application for a Space or SDK that cannot run the own SFU", providercontracts.ErrAdapterUnavailable)
+			if !clients.Runs(mediaplane.ProviderChalkSFU) {
+				// An SDK that cannot run the own SFU has no fallback here: tell it to upgrade,
+				// instead of a media outage that no retry would clear.
+				slog.InfoContext(ctx, "chalk sfu refused a client that cannot run it", "event", "chalk_sfu.client_refused", "reason", "no_fallback")
+				return nil, mediaplane.ErrClientUnsupported
+			}
+			return nil, fmt.Errorf("%w: no Cloudflare application for a Space that cannot start on the own SFU", providercontracts.ErrAdapterUnavailable)
 		}
 		return nil, nil
 	}
@@ -124,7 +134,14 @@ func (r Registry) RefuseClient(ctx context.Context, tenant tenants.Tenant, space
 // sunset has passed, in a Space that is on the allowlist. Disabled media is left
 // alone: that Episode has no binding, so no client has to run the own SFU.
 func (r Registry) refuseAfterSunset(ctx context.Context, tenant tenants.Tenant, space spaces.Space, selected spaces.MediaPlaneProvider, clients mediaplane.ClientProviders) error {
-	if selected != spaces.MediaPlaneProviderChalkSFU || !r.admitsNewChalkSFUEpisode(space) || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+	if selected != spaces.MediaPlaneProviderChalkSFU || clients.Runs(mediaplane.ProviderChalkSFU) || r.clientSunset.IsZero() || r.now().Before(r.clientSunset) {
+		return nil
+	}
+	admits, err := r.admitsNewChalkSFUEpisode(ctx, space)
+	if err != nil {
+		return fmt.Errorf("read the new-Episode switch: %w", err)
+	}
+	if !admits {
 		return nil
 	}
 	resolution := providercontracts.Resolution{ConfigurationSource: providercontracts.ConfigurationSourceNone, Mode: providercontracts.ModeUnknown}

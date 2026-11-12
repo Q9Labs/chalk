@@ -77,6 +77,8 @@ type reportOutcomeWriter struct {
 	status int
 }
 
+func (w *reportOutcomeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *reportOutcomeWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)

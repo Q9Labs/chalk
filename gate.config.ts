@@ -3,6 +3,7 @@ import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, lan
 
 const taskIds = [
   "self-test",
+  "workflow-graph",
   "hygiene",
   "secrets",
   "generated",
@@ -21,6 +22,7 @@ const taskIds = [
   "tests",
   "browser-tests",
   "dashboard-engine",
+  "dashboard-refresh",
   "build",
   "call-performance",
   "call-leaks",
