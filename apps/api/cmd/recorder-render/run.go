@@ -53,51 +53,23 @@ func runWorker(config renderWorkerConfig) error {
 	if err != nil {
 		return fmt.Errorf("load recorder render worker mTLS config: %w", err)
 	}
-	workRoot, err := existingRenderDirectory(config.WorkRoot, "render work root")
+	tools, err := resolveRenderTools(config, threads)
 	if err != nil {
 		return err
 	}
-	nodePath, err := renderExecutable(config.NodePath, "node")
+	control, err := newRenderControlClient(base, controlTransport)
 	if err != nil {
 		return err
 	}
-	ffmpegPath, err := renderExecutable(config.FFmpegPath, "ffmpeg")
-	if err != nil {
-		return err
-	}
-	ffprobePath, err := renderExecutable(config.FFprobePath, "ffprobe")
-	if err != nil {
-		return err
-	}
-	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
-	if encoder != recorderworker.EncoderLibX264 && encoder != recorderworker.EncoderVideoToolbox && encoder != recorderworker.EncoderNVENC {
-		return errors.New("native Export renderer requires libx264, h264_videotoolbox, or h264_nvenc")
-	}
-	composeScript, err := existingRenderFile(config.RendererScript, "recording compositor script")
-	if err != nil {
-		return err
-	}
-	compose := recorderworker.NodeComposeProducer{NodePath: nodePath, ScriptPath: composeScript, FFmpegPath: ffmpegPath, Encoder: encoder, Threads: threads}
-
-	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
-	objectHTTP := &http.Client{Transport: &http.Transport{
-		Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, IdleConnTimeout: time.Minute,
-		ResponseHeaderTimeout: 30 * time.Second, TLSClientConfig: nil,
-	}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
-	control, err := recorderworker.NewControlPlaneClientWithURLAndUploader(base, controlHTTP, objectHTTP)
-	if err != nil {
-		return fmt.Errorf("create recorder render control-plane client: %w", err)
-	}
-	commands := renderMediaCommands{ffmpeg: ffmpegPath, ffprobe: ffprobePath}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := recorderworker.ProbeVideoEncoder(ctx, commands, encoder); err != nil {
+	if err := recorderworker.ProbeVideoEncoder(ctx, tools.commands, tools.encoder); err != nil {
 		return err
 	}
 	factory, err := recorderworker.NewProductionRenderAttemptFactory(recorderworker.ProductionRenderAttemptConfig{
-		Control: control, WorkRoot: workRoot, Environment: config.Environment,
-		FFmpegPath: ffmpegPath, Encoder: encoder, Compose: compose,
-		Commands: commands,
+		Control: control, WorkRoot: tools.workRoot, Environment: config.Environment,
+		FFmpegPath: tools.commands.ffmpeg, Encoder: tools.encoder, Compose: tools.compose,
+		Commands: tools.commands,
 	})
 	if err != nil {
 		return fmt.Errorf("create production recording render factory: %w", err)
@@ -113,6 +85,60 @@ func runWorker(config renderWorkerConfig) error {
 	stopResources := recorderworker.StartProcessResourceLogs(ctx, "render")
 	defer stopResources()
 	return reporter.Run(ctx, daemon)
+}
+
+// renderTools is the work directory and the media programs the worker resolved on this host.
+type renderTools struct {
+	workRoot string
+	encoder  recorderworker.VideoEncoder
+	commands renderMediaCommands
+	compose  recorderworker.NodeComposeProducer
+}
+
+func resolveRenderTools(config renderWorkerConfig, threads int) (renderTools, error) {
+	workRoot, err := existingRenderDirectory(config.WorkRoot, "render work root")
+	if err != nil {
+		return renderTools{}, err
+	}
+	nodePath, err := renderExecutable(config.NodePath, "node")
+	if err != nil {
+		return renderTools{}, err
+	}
+	ffmpegPath, err := renderExecutable(config.FFmpegPath, "ffmpeg")
+	if err != nil {
+		return renderTools{}, err
+	}
+	ffprobePath, err := renderExecutable(config.FFprobePath, "ffprobe")
+	if err != nil {
+		return renderTools{}, err
+	}
+	encoder := recorderworker.VideoEncoder(strings.TrimSpace(config.Encoder))
+	if encoder != recorderworker.EncoderLibX264 && encoder != recorderworker.EncoderVideoToolbox && encoder != recorderworker.EncoderNVENC {
+		return renderTools{}, errors.New("native Export renderer requires libx264, h264_videotoolbox, or h264_nvenc")
+	}
+	composeScript, err := existingRenderFile(config.RendererScript, "recording compositor script")
+	if err != nil {
+		return renderTools{}, err
+	}
+	return renderTools{
+		workRoot: workRoot,
+		encoder:  encoder,
+		commands: renderMediaCommands{ffmpeg: ffmpegPath, ffprobe: ffprobePath},
+		compose:  recorderworker.NodeComposeProducer{NodePath: nodePath, ScriptPath: composeScript, FFmpegPath: ffmpegPath, Encoder: encoder, Threads: threads},
+	}, nil
+}
+
+func newRenderControlClient(base *url.URL, controlTransport http.RoundTripper) (*recorderworker.ControlPlaneClient, error) {
+	controlHTTP := &http.Client{Transport: controlTransport, Timeout: 30 * time.Second}
+	objectHTTP := &http.Client{Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, IdleConnTimeout: time.Minute,
+		ResponseHeaderTimeout: 30 * time.Second, TLSClientConfig: nil,
+	}, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	control, err := recorderworker.NewControlPlaneClientWithURLAndUploader(base, controlHTTP, objectHTTP)
+	if err != nil {
+		return nil, fmt.Errorf("create recorder render control-plane client: %w", err)
+	}
+	return control, nil
 }
 
 func parseComposeThreads(rawThreads string) (int, error) {

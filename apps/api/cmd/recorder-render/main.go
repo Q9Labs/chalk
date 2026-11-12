@@ -65,52 +65,58 @@ type captureFixture struct {
 }
 
 func run(dir string) error {
-	data, err := os.ReadFile(filepath.Join(dir, "capture-bundle.json"))
+	plaintext, err := decryptCaptureFixture(dir)
 	if err != nil {
 		return err
+	}
+	defer clear(plaintext)
+	return renderFixture(dir, plaintext)
+}
+
+// decryptCaptureFixture reads the encrypted capture bundle and its wrapped key from dir and returns the plaintext.
+func decryptCaptureFixture(dir string) ([]byte, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "capture-bundle.json"))
+	if err != nil {
+		return nil, err
 	}
 	var fixture captureFixture
 	if err := json.Unmarshal(data, &fixture); err != nil {
-		return err
+		return nil, err
 	}
 	if fixture.Bundle.Version != "capture-bundle.v1" || fixture.Envelope.Algorithm != "AES-256-GCM" {
-		return fmt.Errorf("capture fixture is not an encrypted versioned bundle")
+		return nil, fmt.Errorf("capture fixture is not an encrypted versioned bundle")
 	}
 	wrappedData, err := os.ReadFile(filepath.Join(dir, "capture-key.wrap.json"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var wrappedKey recorderworker.EncryptedBundle
 	if err := json.Unmarshal(wrappedData, &wrappedKey); err != nil {
-		return err
+		return nil, err
 	}
 	key, err := recorderworker.UnwrapFixtureKey(wrappedKey)
 	if err != nil {
-		return fmt.Errorf("unwrap fixture key: %w", err)
+		return nil, fmt.Errorf("unwrap fixture key: %w", err)
 	}
 	defer clear(key)
 	plaintext, metadata, err := recorderworker.DecryptBundle(key, fixture.Envelope)
 	if err != nil {
-		return fmt.Errorf("decrypt capture bundle: %w", err)
+		return nil, fmt.Errorf("decrypt capture bundle: %w", err)
 	}
-	defer clear(plaintext)
 	if metadata.Checksum != fixture.Bundle.Checksum || metadata.Bytes != fixture.Bundle.Bytes {
-		return fmt.Errorf("decrypted metadata does not match capture manifest")
+		clear(plaintext)
+		return nil, fmt.Errorf("decrypted metadata does not match capture manifest")
 	}
-	runner := recorderworker.ExecCommandRunner{}
-	sourceFile, err := os.CreateTemp(dir, "decrypted-source-*.ts")
+	return plaintext, nil
+}
+
+func renderFixture(dir string, plaintext []byte) error {
+	source, err := writeTempSource(dir, plaintext)
 	if err != nil {
 		return err
 	}
-	source := sourceFile.Name()
 	defer os.Remove(source)
-	if _, err := sourceFile.Write(plaintext); err != nil {
-		_ = sourceFile.Close()
-		return err
-	}
-	if err := sourceFile.Close(); err != nil {
-		return err
-	}
+	runner := recorderworker.ExecCommandRunner{}
 	output := filepath.Join(dir, "recording.mp4")
 	plan, err := recorderworker.BuildFFmpegPlan(source, output)
 	if err != nil {
@@ -128,4 +134,22 @@ func run(dir string) error {
 	}
 	planData = append(planData, '\n')
 	return os.WriteFile(filepath.Join(dir, "render-plan.json"), planData, 0o600)
+}
+
+// writeTempSource saves the decrypted bundle as a file in dir and returns its path; the caller removes it.
+func writeTempSource(dir string, plaintext []byte) (string, error) {
+	file, err := os.CreateTemp(dir, "decrypted-source-*.ts")
+	if err != nil {
+		return "", err
+	}
+	if _, err := file.Write(plaintext); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return "", err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(file.Name())
+		return "", err
+	}
+	return file.Name(), nil
 }
