@@ -343,3 +343,37 @@ func (r *reconciliationRepositoryStub) AppendPublicationObservation(ctx context.
 	}
 	return provideroperations.Observation{}, ErrInvalidPublication
 }
+
+func TestLatestReportsAPublicationMutedInPlaceAsHeldWhileItsOwnerIsStillThere(t *testing.T) {
+	for _, reason := range []string{"present", "left", "generation", "connection", "closed"} {
+		t.Run(reason, func(t *testing.T) {
+			repository := &reconciliationRepositoryStub{}
+			service := NewService(repository)
+			tenantID, episodeID, participantID, _ := publishRemoteObservationFixture(t, service, repository)
+			publicationID := repository.appended.Publications[0].PublicationID
+			if err := service.RecordPublicationAvailability(context.Background(), AvailabilityInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, Source: "camera", PublicationID: publicationID, Enabled: false}); err != nil {
+				t.Fatalf("hold: %v", err)
+			}
+			switch reason {
+			case "left":
+				repository.participants = []PublicationParticipant{}
+			case "generation":
+				repository.participants = []PublicationParticipant{{ID: participantID, Generation: 2}}
+			case "connection":
+				repository.participants = []PublicationParticipant{{ID: participantID, Generation: 1, ConnectionID: "replacement"}}
+			case "closed":
+				if err := service.RecordClosedPublication(context.Background(), CloseInput{TenantID: tenantID, EpisodeID: episodeID, ParticipantID: participantID, ParticipantGeneration: 1, ConnectionID: "publisher-connection", MID: "camera-mid", Source: "camera", PublicationID: publicationID}); err != nil {
+					t.Fatalf("close: %v", err)
+				}
+			}
+			snapshot, err := service.Latest(context.Background(), tenantID, episodeID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, held := snapshot.Held[publicationID]
+			if held != (reason == "present") {
+				t.Fatalf("held = %t for %q, snapshot %#v", held, reason, snapshot)
+			}
+		})
+	}
+}

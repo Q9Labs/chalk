@@ -94,6 +94,10 @@ type Snapshot struct {
 	Incarnation  int64
 	Sequence     int64
 	Publications []provideroperations.Publication
+	// Held holds the IDs of publications their owner muted in place: disabled, still open on the SFU, and owned by a
+	// participant who is still in the Episode on the connection that published them. A disabled publication whose owner
+	// left or reconnected is retired and is not held.
+	Held map[string]struct{}
 }
 
 type Registry interface {
@@ -195,31 +199,42 @@ func (s Service) Latest(ctx context.Context, tenantID, episodeID utilities.ID) (
 		}
 		publications := append([]provideroperations.Publication(nil), latest.Publications...)
 		changed := false
+		held := make(map[string]struct{})
 		for index := range publications {
 			publication := &publications[index]
-			if publication.PublicationID == "" || !publication.Enabled {
+			if publication.PublicationID == "" {
 				continue
 			}
 			reference, err := ParseReference(publication.PublicationID)
 			if err != nil {
+				if !publication.Enabled {
+					continue
+				}
 				return Snapshot{}, err
 			}
 			participant, active := current[publication.ParticipantID]
-			if active && (!reference.HasParticipantGeneration || reference.ParticipantGeneration == participant.Generation) &&
-				(participant.ConnectionID == "" || reference.ConnectionID == participant.ConnectionID) {
+			owned := active && (!reference.HasParticipantGeneration || reference.ParticipantGeneration == participant.Generation) &&
+				(participant.ConnectionID == "" || reference.ConnectionID == participant.ConnectionID)
+			if !publication.Enabled {
+				if owned {
+					held[publication.PublicationID] = struct{}{}
+				}
+				continue
+			}
+			if owned {
 				continue
 			}
 			publication.Enabled = false
 			changed = true
 		}
 		if !changed {
-			return Snapshot{Incarnation: latest.Incarnation, Sequence: latest.Sequence, Publications: publications}, nil
+			return Snapshot{Incarnation: latest.Incarnation, Sequence: latest.Sequence, Publications: publications, Held: held}, nil
 		}
 		// Retirement changes the snapshot, so it must advance the cursor too.
 		next := provideroperations.ObservationInput{TenantID: tenantID, EpisodeID: episodeID, Incarnation: latest.Incarnation, Sequence: latest.Sequence + 1, Publications: publications}
 		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
 			s.receiveHealth.recordCommittedPublications(next)
-			return Snapshot{Incarnation: next.Incarnation, Sequence: next.Sequence, Publications: publications}, nil
+			return Snapshot{Incarnation: next.Incarnation, Sequence: next.Sequence, Publications: publications, Held: held}, nil
 		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
 			return Snapshot{}, fmt.Errorf("retire media publications: %w", err)
 		}
