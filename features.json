@@ -626,7 +626,6 @@
         "apps/sync/test/chalk_sync/runtime_port_test.exs",
         "apps/sync/test/chalk_sync/source_control_revision_postgres_test.exs",
         "apps/sync/test/chalk_sync/stateholder",
-        "apps/sync/test/chalk_sync/test_process_test.exs",
         "apps/sync/test/chalk_sync/transport",
         "apps/sync/test/fixtures",
         "apps/sync/test/support",
