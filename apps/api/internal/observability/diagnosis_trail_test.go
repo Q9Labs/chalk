@@ -40,7 +40,7 @@ func decodeLogLines(t *testing.T, out *bytes.Buffer) []map[string]any {
 func spanAttributes(span tracetest.SpanStub) map[string]string {
 	attributes := map[string]string{}
 	for _, kv := range span.Attributes {
-		attributes[string(kv.Key)] = kv.Value.Emit()
+		attributes[string(kv.Key)] = kv.Value.String()
 	}
 	return attributes
 }
