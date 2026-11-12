@@ -45,8 +45,8 @@ func defaultsNode(t *testing.T) *Node {
 }
 
 // A 3-person class of two cameras each sends 6·(300+90) camera uplink packets/s and receives 12
-// camera streams at 300, plus audio and a screen share. Admission has to reserve all of it, so a
-// 16,000 packets/s budget holds two such classes, not the six that 150 packets/s per camera allowed.
+// camera streams at 300, plus audio and a screen share. Admission has to reserve all of it, so the
+// smallest node's budget holds three such classes, not the eight that 150 packets/s per camera allowed.
 func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
 	node := defaultsNode(t)
 	const people = 3
@@ -58,17 +58,19 @@ func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
 		t.Fatalf("a 3-person 2-camera class reserves %d packets/s, want the %d it sends and receives", got, want)
 	}
 
-	for class := range 2 {
+	budget, _ := node.Budget()
+	classes := budget / want
+	for class := range classes {
 		for person := range people {
 			node.newTestSession(t, episodeScope("class-"+itoa(class), "p"+itoa(person)))
 		}
 	}
-	if _, reserved := node.Budget(); reserved != 2*want {
-		t.Fatalf("two classes reserve %d, want %d", reserved, 2*want)
+	if _, reserved := node.Budget(); reserved != classes*want {
+		t.Fatalf("%d classes reserve %d, want %d", classes, reserved, classes*want)
 	}
-	_, err := node.Create("create-third-class", episodeScope("class-2", "p0"), ParticipantSession, nil)
+	_, err := node.Create("create-one-class-too-many", episodeScope("class-over", "p0"), ParticipantSession, nil)
 	if !errors.Is(err, errNodeFull) {
-		t.Fatalf("a third class on a 16,000 budget: %v, want the node full", err)
+		t.Fatalf("a class beyond %d on a %d budget: %v, want the node full", classes, budget, err)
 	}
 }
 

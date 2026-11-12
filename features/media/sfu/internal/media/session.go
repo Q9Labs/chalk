@@ -96,7 +96,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind *Se
 	n.wg.Go(s.transport.drain)
 	s.connectTimer = time.AfterFunc(n.cfg.ConnectTimeout, func() {
 		if pc.ConnectionState() != webrtc.PeerConnectionStateConnected {
-			n.log.Warn("session never connected", "connectionId", id)
+			n.log.Warn("session never connected", "connection_id", id)
 			s.CloseFor(CloseNeverConnected)
 		}
 	})
@@ -202,7 +202,7 @@ func (s *Session) CloseFor(cause string) {
 	s.node.remove(s)
 	s.transport.close()
 	if err := s.pc.Close(); err != nil {
-		s.node.log.Warn("close peer connection", "connectionId", s.id, "error", err)
+		s.node.log.Warn("close peer connection", "connection_id", s.id, "error", err)
 	}
 	s.traceClosed(cause, len(published), len(subscribed))
 }
@@ -335,7 +335,7 @@ func (s *Session) push(ctx context.Context, request protocol.TracksRequest) (pro
 	// no media, and the answer marks the section inactive.
 	for _, transceiver := range refused {
 		if err := transceiver.Stop(); err != nil {
-			s.node.log.Warn("stop refused section", "connectionId", s.id, "error", err)
+			s.node.log.Warn("stop refused section", "connection_id", s.id, "error", err)
 		}
 	}
 
@@ -544,7 +544,7 @@ func (s *Session) offerExpired(pending *pendingOffer) {
 	current := s.pending == pending
 	s.mu.Unlock()
 	if current {
-		s.node.log.Warn("server offer was never answered", "connectionId", s.id)
+		s.node.log.Warn("server offer was never answered", "connection_id", s.id)
 		s.CloseFor(CloseNegotiationFailed)
 	}
 }
@@ -859,7 +859,7 @@ func (s *Session) completeLocalDescription(ctx context.Context) (*protocol.Sessi
 // failNegotiation closes the session: after a failed step its peer connection
 // cannot return to a stable state, and the client replaces the connection.
 func (s *Session) failNegotiation(step string, cause error) error {
-	s.node.log.Warn("negotiation failed", "connectionId", s.id, "step", step, "error", cause)
+	s.node.log.Warn("negotiation failed", "connection_id", s.id, "step", step, "error", cause)
 	s.CloseFor(CloseNegotiationFailed)
 	return fmt.Errorf("%w: %s: %w", ErrNegotiationFailed, step, cause)
 }

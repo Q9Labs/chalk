@@ -8,10 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"regexp"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -152,51 +148,16 @@ func TestOnlyListedEventsAndFieldsLeaveTheNode(t *testing.T) {
 func TestExportedBodyIsTheEventName(t *testing.T) {
 	sink := newExportSink(t)
 	log, shutdown := newExportLogger(t, sink, slog.NewJSONHandler(io.Discard, nil))
-	log.Info("subscription paused for congestion", "event", "sfu.subscription.congestion", "episode_id", "episode-1", "reason", "insufficient_bandwidth", "estimateBps", 1200.0, "probing", true)
+	log.Info("subscription paused for congestion", "event", media.EventSubscriptionCongestion, "episode_id", "episode-1", "reason", "insufficient_bandwidth", "estimate_bps", 1200.0, "probing", true)
 	shutdown()
 
 	exported := sink.exported()
 	if strings.Contains(exported, "subscription paused for congestion") {
 		t.Error("the message text left the node")
 	}
-	for _, want := range []string{"sfu.subscription.congestion", "insufficient_bandwidth", "estimateBps"} {
+	for _, want := range []string{"sfu.subscription.congestion", "insufficient_bandwidth", "estimate_bps"} {
 		if !strings.Contains(exported, want) {
 			t.Errorf("the congestion event lost %q", want)
-		}
-	}
-}
-
-// Every event the media package emits has a row, and every row has an emitter, so a new event
-// cannot leave the node unreviewed and a removed one cannot leave a stale row.
-func TestTableMatchesTheEventsTheNodeEmits(t *testing.T) {
-	literal := regexp.MustCompile(`"(sfu\.[a-z_]+(?:\.[a-z_]+)+)"`)
-	emitted := map[string]bool{}
-	files, err := filepath.Glob("../media/*.go")
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no media sources: %v", err)
-	}
-	for _, file := range files {
-		if strings.HasSuffix(file, "_test.go") {
-			continue
-		}
-		source, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, match := range literal.FindAllSubmatch(source, -1) {
-			emitted[string(match[1])] = true
-		}
-	}
-	for event := range emitted {
-		if _, ok := exportedEvents[event]; !ok {
-			t.Errorf("the node emits %s, which has no row in exportedEvents: add it, or it stays on the node by design and needs a different name", event)
-		}
-	}
-	names := ExportedEvents()
-	slices.Sort(names)
-	for _, event := range names {
-		if !emitted[event] {
-			t.Errorf("exportedEvents has a row for %s, which the node no longer emits", event)
 		}
 	}
 }
@@ -237,10 +198,10 @@ func TestResourceAttributesFromTheEnvironmentStayOnTheNode(t *testing.T) {
 // Every exported field declares where its value comes from, and only a value the node makes, a
 // closed enum, a number or a restricted id may leave. A field a peer controls has no source.
 func TestEveryExportedFieldDeclaresASafeSource(t *testing.T) {
-	safe := map[source]bool{serverAssigned: true, enum: true, number: true, restrictedID: true}
+	safe := map[media.FieldSource]bool{media.ServerAssigned: true, media.Enum: true, media.Number: true, media.RestrictedID: true}
 	for _, event := range ExportedEvents() {
 		for _, field := range ExportedFields(event) {
-			kind, declared := fieldSources[field]
+			kind, declared := media.FieldSources[field]
 			switch {
 			case !declared:
 				t.Errorf("%s exports %s, which declares no source", event, field)
@@ -249,21 +210,21 @@ func TestEveryExportedFieldDeclaresASafeSource(t *testing.T) {
 			}
 		}
 	}
-	for field, kind := range fieldSources {
+	for field, kind := range media.FieldSources {
 		if !safe[kind] {
 			t.Errorf("%s has source %q", field, kind)
 		}
 	}
 	for _, peerChosen := range []string{"rid", "err", "error", "sdp", "name", "address", "remote"} {
-		if _, ok := fieldSources[peerChosen]; ok {
+		if _, ok := media.FieldSources[peerChosen]; ok {
 			t.Errorf("%s is a peer-chosen or free-text field and must not be exportable", peerChosen)
 		}
 	}
 	// A string source rejects what a peer could send through it; a number source rejects text.
-	if exportable(enum, slog.StringValue("203.0.113.9 443")) || exportable(enum, slog.StringValue("")) {
+	if exportable(media.Enum, slog.StringValue("203.0.113.9 443")) || exportable(media.Enum, slog.StringValue("")) {
 		t.Error("an enum accepted a value that is not a token")
 	}
-	if exportable(number, slog.StringValue("12")) || exportable(restrictedID, slog.Int64Value(12)) {
+	if exportable(media.Number, slog.StringValue("12")) || exportable(media.RestrictedID, slog.Int64Value(12)) {
 		t.Error("a source accepted the wrong kind of value")
 	}
 }

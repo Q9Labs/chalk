@@ -95,7 +95,7 @@ func (s *Session) watchTransport() {
 			if state == webrtc.DTLSTransportStateFailed {
 				level = slog.LevelWarn
 			}
-			s.trail(level, "sfu.dtls.state", "state", state.String())
+			s.trail(level, EventDTLSState, "state", state.String())
 		})
 		return
 	}
@@ -115,7 +115,7 @@ func (s *Session) onICEState(state webrtc.ICEConnectionState) {
 		path, protocol := s.selectedPath()
 		attrs = append(attrs, "path", path, "protocol", protocol)
 	}
-	s.trail(level, "sfu.ice.state", attrs...)
+	s.trail(level, EventICEState, attrs...)
 }
 
 // selectedPath is the candidate type of each end of the selected ICE pair, such as "host/relay",
@@ -154,7 +154,7 @@ func (s *Session) traceConnectionState(state webrtc.PeerConnectionState) {
 	if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateDisconnected {
 		level = slog.LevelWarn
 	}
-	s.trail(level, "sfu.peer.state", "state", state.String())
+	s.trail(level, EventPeerState, "state", state.String())
 }
 
 func (s *Session) traceClosed(cause string, publications, subscriptions int) {
@@ -163,12 +163,12 @@ func (s *Session) traceClosed(cause string, publications, subscriptions int) {
 	case ClosePeerFailed, CloseNeverConnected, CloseNegotiationFailed:
 		level = slog.LevelWarn
 	}
-	s.trail(level, "sfu.session.closed", "cause", cause, "lifetime_ms", time.Since(s.started).Milliseconds(),
+	s.trail(level, EventSessionClosed, "cause", cause, "lifetime_ms", time.Since(s.started).Milliseconds(),
 		"publications", publications, "subscriptions", subscriptions)
 }
 
 func (s *Session) tracePublicationStarted(source string, kind webrtc.RTPCodecType) {
-	s.trail(slog.LevelInfo, "sfu.publication.started", "source", source, "media_kind", kind.String())
+	s.trail(slog.LevelInfo, EventPublicationStarted, "source", source, "media_kind", kind.String())
 }
 
 func (s *Session) tracePublicationStopped(p *publication) {
@@ -179,7 +179,7 @@ func (s *Session) tracePublicationStopped(p *publication) {
 	if s.cause.Load() != nil {
 		reason = "session_closed"
 	}
-	s.trail(slog.LevelInfo, "sfu.publication.stopped", "source", p.source, "media_kind", p.kind.String(), "reason", reason)
+	s.trail(slog.LevelInfo, EventPublicationStopped, "source", p.source, "media_kind", p.kind.String(), "reason", reason)
 }
 
 // A subscription's attributes name the subscriber (the session logging) and the publisher whose
@@ -192,16 +192,16 @@ func (s *Session) traceSubscriptionStarted(sub *subscription) {
 	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
 		return
 	}
-	s.trail(slog.LevelInfo, "sfu.subscription.started", s.subscriptionAttrs(sub)...)
+	s.trail(slog.LevelInfo, EventSubscriptionStarted, s.subscriptionAttrs(sub)...)
 }
 
 func (s *Session) traceSubscriptionPause(sub *subscription, was, now string) {
 	if s == nil || sub.pub.session == nil { // a bench or unit subscription has no session
 		return
 	}
-	event, attrs := "sfu.subscription.paused", append(s.subscriptionAttrs(sub), "reason", now)
+	event, attrs := EventSubscriptionPaused, append(s.subscriptionAttrs(sub), "reason", now)
 	if now == "" {
-		event, attrs = "sfu.subscription.resumed", append(s.subscriptionAttrs(sub), "was", was)
+		event, attrs = EventSubscriptionResumed, append(s.subscriptionAttrs(sub), "was", was)
 	}
 	s.trail(slog.LevelInfo, event, attrs...)
 }
@@ -215,7 +215,7 @@ func (s *Session) traceSubscriptionLayer(sub *subscription, target int) {
 		rid, layer = picked.rid, layerLabel(picked.rid)
 	}
 	// The publisher chooses its rid, so only the journal keeps it; the export carries the label.
-	s.trail(slog.LevelInfo, "sfu.subscription.layer", append(s.subscriptionAttrs(sub), "rid", rid, "layer", layer)...)
+	s.trail(slog.LevelInfo, EventSubscriptionLayer, append(s.subscriptionAttrs(sub), "rid", rid, "layer", layer)...)
 }
 
 // layerLabel names a simulcast layer by the fixed set the node knows ("h" and "l" are the
@@ -244,7 +244,7 @@ func (s *Session) traceSubscriptionStopped(sub *subscription) {
 	case sub.pub.closed.Load():
 		reason = "source_closed"
 	}
-	s.trail(slog.LevelInfo, "sfu.subscription.stopped", append(s.subscriptionAttrs(sub), "reason", reason)...)
+	s.trail(slog.LevelInfo, EventSubscriptionStopped, append(s.subscriptionAttrs(sub), "reason", reason)...)
 }
 
 func planName(level uint8) string {
@@ -259,7 +259,7 @@ func planName(level uint8) string {
 
 // Registered logs a created session. A retry of the same operation logs again with the same ids.
 func (s *Session) Registered() {
-	s.trail(slog.LevelInfo, "sfu.session.registered", "allocation", s.allocation)
+	s.trail(slog.LevelInfo, EventSessionRegistered, "allocation", s.allocation)
 }
 
 // SessionRefused logs a create the node refused, with the closed code the API sees. The
@@ -275,7 +275,7 @@ func (n *Node) SessionRefused(scope protocol.Scope, kind, code string, trace Tra
 	if trace.JourneyID != "" {
 		attrs = append(attrs, "journey_id", trace.JourneyID)
 	}
-	n.trail(slog.LevelWarn, "sfu.session.refused", scope, attrs...)
+	n.trail(slog.LevelWarn, EventSessionRefused, scope, attrs...)
 }
 
 func kindLabel(kind string) string {

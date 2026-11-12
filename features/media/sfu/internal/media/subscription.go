@@ -555,6 +555,6 @@ func (s *subscription) close() {
 		return
 	}
 	if err := s.transceiver.Stop(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-		s.pub.session.node.log.Warn("stop subscription", "connectionId", s.pub.session.id, "error", err)
+		s.pub.session.node.log.Warn("stop subscription", "connection_id", s.pub.session.id, "error", err)
 	}
 }
