@@ -9,7 +9,7 @@ async function startVisibleRead(tab, started) {
 }
 
 // The call page lists its sessions in the shared row, where the transcript column says "Processing".
-const processing = (tab) => tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Processing" }).last();
+const processing = (tab) => tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Processing" }).last();
 
 export async function pendingMetadataChecks({ open, fixture, check, CALL }) {
   const reads = async (page) => (await fixture("log")).filter((entry) => entry.method === "GET" && entry.path === `/dashboard-api/${page}`).length;
@@ -50,10 +50,10 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
     const { tab, context } = await open(CALL, { set: "live=0&knocks=0&metadataDiscovery=pending", clock: true });
     try {
       const full = await reads("call");
-      check("completed recording waits for pending automatic transcription", (await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).count()) === 0);
+      check("completed recording waits for pending automatic transcription", (await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).count()) === 0);
       await fixture("set?metadataDiscovery=ready");
       await metadataTick(tab);
-      await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).first().waitFor();
+      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).first().waitFor();
       const status = await reads("call-status");
       await tab.clock.runFor(15000);
       check("Call discovers a new automatic transcript and stops polling without a full reload", (await reads("call")) === full && (await reads("call-status")) === status);
@@ -69,7 +69,7 @@ export async function artifactRecoveryChecks({ open, fixture, check, CALL }) {
       await fixture("set?metadataComplete=complete");
       await metadataTick(tab);
       await processing(tab).waitFor({ state: "hidden" });
-      await tab.locator(".slist .lr:not(.head) .tc .bdg", { hasText: "Transcript" }).first().waitFor();
+      await tab.locator(".slist .lr:not(.head) > .dsk:nth-child(6) .bdg", { hasText: "Transcript" }).first().waitFor();
       check("retryable transcripts keep polling until automatic recovery completes", (await reads("call")) === full);
     } finally {
       await context.close();

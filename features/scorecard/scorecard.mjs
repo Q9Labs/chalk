@@ -10,7 +10,7 @@ import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { planeBudgets, readBudgets, validateBudgetEntries } from "./budgets.mjs";
 import { deviceMetrics } from "./adapters/device.mjs";
-import { joinStartupMetrics, leaveMedianMetrics } from "./adapters/proof.mjs";
+import { leaveMedianMetrics } from "./adapters/proof.mjs";
 import { goTestMetrics, liveSampleMetrics, nodeLoadMetrics } from "./adapters/sfu.mjs";
 import { webMetrics } from "./adapters/web.mjs";
 import { sectionComment, sectionMarker } from "./comment.mjs";
@@ -33,7 +33,6 @@ const INPUTS = {
   "sfu-tests": (path) => goTestMetrics(read(path)),
   "sfu-live": (path) => liveSampleMetrics(read(path)),
   "sfu-load": (path) => nodeLoadMetrics(readJson(path)),
-  "proof-join": (path) => joinStartupMetrics(readJson(path)),
   "proof-leave": (path) => leaveMedianMetrics(readJson(path)),
   device: (path) => deviceMetrics(readJson(path)),
 };

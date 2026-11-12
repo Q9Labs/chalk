@@ -46,3 +46,14 @@ test("an unreachable sample fails the call", () => {
   ticks[7].guests[0] = { reachable: false, status: "unreachable", errorCode: null, remotes: [] };
   assert.match(judgeCall(ticks, 3).join(";"), /guest 1 was unreachable/);
 });
+
+test("a counter that restarts on a new peer connection counts as audio once it grows", () => {
+  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, i < 10 ? 100000 + i * 100 : (i - 9) * 100));
+  assert.deepEqual(judgeCall(ticks, 3), []);
+  assert.equal(longestGaps(ticks, 0).ms, 500);
+});
+
+test("a counter that restarts and then stays still still fails the call", () => {
+  const ticks = Array.from({ length: 20 }, (_, i) => steady(i * 500, i < 5 ? 100000 + i * 100 : 100));
+  assert.match(judgeCall(ticks, 3).join(";"), /receives no audio/);
+});
