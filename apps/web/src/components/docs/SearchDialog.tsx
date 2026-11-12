@@ -56,7 +56,10 @@ function SearchFooter() {
         <span className="kbd">↵</span>Open
       </span>
       <span>
-        <span className="kbd">esc</span>Close
+        <span className="kbd" data-word>
+          esc
+        </span>
+        Close
       </span>
     </div>
   );
