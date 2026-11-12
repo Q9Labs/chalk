@@ -1,4 +1,4 @@
-import type { ASSET_KINDS, REACTIONS, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
+import type { ASSET_KINDS, REACTIONS, THEME_COLOR_SCHEMES, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
 
 export const RECORDING_PRESENTATION_SCHEMA_VERSION = "recording_presentation.v1";
 
@@ -21,7 +21,7 @@ export interface RecordingPresentationViewportV1 {
 }
 
 export interface RecordingPresentationThemeV1 {
-  readonly colorScheme: "light" | "dark";
+  readonly colorScheme: (typeof THEME_COLOR_SCHEMES)[number];
   readonly skin: (typeof THEME_SKINS)[number];
   readonly palette: (typeof THEME_PALETTES)[number];
   readonly texture: (typeof THEME_TEXTURES)[number];

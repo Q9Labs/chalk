@@ -1,12 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-// The recording presentation schema owns these value lists. Go emits only the lists it validates against (goUnused marks the TypeScript-only ones). Go and TypeScript
-// validate against the generated copies, so a new theme lands in the schema only.
+// The recording presentation schema owns these value lists. Go and TypeScript validate against the generated copies, so a new theme value lands in the schema only.
 const schema = JSON.parse(await readFile("contract/schema/recording-presentation-v1.json", "utf8"));
 const defs = schema.$defs;
 const enums = [
-  { name: "themeSkins", ts: "THEME_SKINS", goUnused: true, values: defs.theme.properties.skin.enum },
-  { name: "themeTextures", ts: "THEME_TEXTURES", goUnused: true, values: defs.theme.properties.texture.enum },
+  { name: "themeColorSchemes", ts: "THEME_COLOR_SCHEMES", values: defs.theme.properties.colorScheme.enum },
+  { name: "themeSkins", ts: "THEME_SKINS", values: defs.theme.properties.skin.enum },
+  { name: "themeTextures", ts: "THEME_TEXTURES", values: defs.theme.properties.texture.enum },
   { name: "themePalettes", ts: "THEME_PALETTES", values: defs.theme.properties.palette.enum },
   { name: "reactionValues", ts: "REACTIONS", values: defs.reaction.properties.value.enum },
   { name: "assetKinds", ts: "ASSET_KINDS", values: defs.asset.properties.kind.enum },
@@ -22,10 +22,7 @@ const go = `// ${header}
 
 package recordingpresentation
 
-${enums
-  .filter(({ goUnused }) => !goUnused)
-  .map(({ name, values }) => `var ${name} = map[string]struct{}{${values.map((value) => `${JSON.stringify(value)}: {}`).join(", ")}}`)
-  .join("\n\n")}
+${enums.map(({ name, values }) => `var ${name} = map[string]struct{}{${values.map((value) => `${JSON.stringify(value)}: {}`).join(", ")}}`).join("\n\n")}
 `;
 // Same layout oxfmt gives the file at the repo print width, so the format check passes on generated output.
 const PRINT_WIDTH = 300;

@@ -185,9 +185,10 @@ func (profile Profile) validate() error {
 		}
 		fontIDs[assetID] = struct{}{}
 	}
-	if (profile.Theme.ColorScheme != "light" && profile.Theme.ColorScheme != "dark") ||
-		(profile.Theme.Skin != "classic" && profile.Theme.Skin != "chalk") ||
-		(profile.Theme.Texture != "none" && profile.Theme.Texture != "paper" && profile.Theme.Texture != "slate") {
+	_, colorSchemeKnown := themeColorSchemes[profile.Theme.ColorScheme]
+	_, skinKnown := themeSkins[profile.Theme.Skin]
+	_, textureKnown := themeTextures[profile.Theme.Texture]
+	if !colorSchemeKnown || !skinKnown || !textureKnown {
 		return invalid("invalid presentation theme")
 	}
 	if _, exists := themePalettes[profile.Theme.Palette]; !exists {

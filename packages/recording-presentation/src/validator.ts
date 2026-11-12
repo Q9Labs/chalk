@@ -14,11 +14,12 @@ import {
   type RecordingPresentationTimelineV1,
   type RecordingSharedContentV1,
 } from "./types.js";
-import { ASSET_KINDS, REACTIONS, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
+import { ASSET_KINDS, REACTIONS, THEME_COLOR_SCHEMES, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
 
 const MEDIA_SOURCE_KINDS = new Set(["microphone", "camera", "screen_share"]);
 const REACTION_SET = new Set<string>(REACTIONS);
 const ASSET_KIND_SET = new Set<string>(ASSET_KINDS);
+const THEME_COLOR_SCHEME_SET = new Set<string>(THEME_COLOR_SCHEMES);
 const THEME_SKIN_SET = new Set<string>(THEME_SKINS);
 const THEME_TEXTURE_SET = new Set<string>(THEME_TEXTURES);
 const THEME_PALETTE_SET = new Set<string>(THEME_PALETTES);
@@ -120,7 +121,7 @@ const VIEWPORT_SCHEMA: ObjectSchema = {
 const THEME_SCHEMA: ObjectSchema = {
   keys: ["colorScheme", "skin", "palette", "texture", "stageBackground", "generatedAvatars"],
   checks: [
-    checkField("colorScheme", knownString(new Set(["light", "dark"]))),
+    checkField("colorScheme", knownString(THEME_COLOR_SCHEME_SET)),
     checkField("skin", knownString(THEME_SKIN_SET)),
     checkField("palette", knownString(THEME_PALETTE_SET)),
     checkField("texture", knownString(THEME_TEXTURE_SET)),
