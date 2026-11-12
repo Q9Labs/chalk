@@ -1,368 +1,68 @@
-# Managed Release
+# Managed release
 
-`Release` is the backend and web entry point. It has no push trigger.
-Manual `managed_environment` defaults to **nightly**, never production.
-Choose `production` explicitly for an operator production release.
+Three workflows ship the managed backend and web: `Release` (`.github/workflows/ci.yml`), `Cut nightly` (`.github/workflows/nightly.yml`) and `Promote newest held nightly` (`.github/workflows/promote.yml`). The workflows hold the exact steps and inputs. This page keeps the reasons and the rules you must not break.
 
-For backend-only nightly bring-up, set `enable_recorder_control=false`. Release
-omits recorder control, media builds and dispatcher binding, even if the build
-baseline enabled them. Set `CHALK_RECORDING_ENABLED=false` and
-`CHALK_TRANSCRIPTION_ENABLED=false` in nightly's API runtime configuration first;
-this input does not rewrite SSM values. This mode is not a held nightly. Cut still
-enables recording and requires the own-SFU (`chalk_sfu`) real-call proof (`camera-share`, `call-artifacts`, `long-call`) plus the web-call proof on the same plane.
-Promote rejects held records without immutable media. Release also rejects any
-production manifest without recorder control
-before writing the deployment envelope or acquiring deployment credentials.
-Production preserves recorder control from its baseline even when the input is
-false. Legacy direct production releases need no media sidecar; Promote still
-requires one for a selected nightly.
+## Principles
+
+- Production never builds. Nightly builds and proves a release once. Promote ships those exact bytes: image digests, web archive, recorder archives and the dispatcher ZIP. A rebuild would ship something nobody proved.
+- Nightly is isolated. It has its own AWS role, state, Pages project, bucket and recorder config. No nightly credential may touch production, and nightly config never points at production state.
+- Rollback comes from durable evidence, not from Actions artifacts. Before host mutation, a production deploy stores the exact manifest bytes and their SHA256 in a `production-release` GitHub deployment payload. Only a complete, healthy deploy marks it successful. Rollback verifies the hash, builds a fresh envelope from the previous source, and restores the web through Pages' native rollback.
+- Nothing is invented. A missing proof, an unreadable baseline or an expired artifact fails closed with a message that names what to do. No code path fabricates a proof result.
+- Nightly never rolls back by itself. A failed nightly deploy or call stays unheld, and an operator fixes it forward.
+- A direct `Release` dispatch defaults to `nightly`. Production must be chosen explicitly.
 
 ## Nightly cut
 
-`Cut nightly` checks master's current tip hourly, at 17 minutes past the hour.
-Automatic cuts ship the newest master commit whose push Gate passed, require commits
-newer than the last completed cut, and need at least 6 hours since the last cut attempt.
-Pushes to master share one Gate group, so a newer push cancels the Gate run that is still
-queued and the tip may have no Gate; the plan never waits for one and takes the newest green commit.
-Each check reads the current tip and requires its workflow revision to match.
-A queued older scheduled workflow waits for the next check. A stale manual
-request queues a fresh manual run on master, retaining its deliberate override.
-A manual cut ships the tip and refuses at once when its Gate has not passed; the error names the newest commit that has.
-A tip skipped during the cooldown is retried without another push.
-The 6-hour interval starts at reservation, not at completion. Completed cuts
-supply the timestamp only when no reservation exists from older workflows.
-Failures do not advance the baseline. The shared nightly lock retains queued
-checks, including manual dispatches, instead of replacing the pending request.
-An expired or unavailable build baseline triggers a full build of the saved enabled
-component set instead of forwarding dead artifact IDs. Passed cut records preserve
-recorder enablement for this fallback. A pre-upgrade baseline without readable bytes
-or saved component metadata fails closed rather than silently disabling recording;
-a new explicit Release baseline is required.
-A manual dispatch always attempts a cut, including an unchanged source.
-Manual cuts still require the latest master Gate run/attempt for the pinned SHA to pass.
-A direct Release dispatch that builds fresh artifacts has the same rule: its first
-job fails unless the latest push, schedule or manual Gate run on master for
-`target_sha` passed. A Release that scheduled nightly starts checks only push
-Gate runs, the same rule its plan used. Pull request Gate runs do not count. Only a run that builds
-nothing new skips it: reuse (`manifest_run_id`) deploys artifacts that an earlier
-run built. A `pages_rollback_id` alone does not skip it, because the fresh builds
-still run.
+`Cut nightly` runs hourly and at most once per six hours. The six-hour gap starts when an attempt is reserved, not when it ends. A cut ships the newest master commit whose push Gate passed. A manual dispatch always attempts a cut, but still requires the Gate of the pinned SHA to pass. Both workflows refuse a non-master ref.
 
-The path-filtered Release contracts PR workflow runs the pre-deploy checks without
-cloud credentials. Release's planning job uses the same `check-contracts.sh --plan`
-entry point for source, controller and managed-deployment checks. The full check
-also covers retained releases, media, recorder validation, dispatcher tests and
-configuration, and workflow lint. It collects all failures before exiting.
-`qualify-image.py --validate --root <image-root>` verifies manifest/file bytes
-without executing a worker; it does not claim signed boot qualification.
+A cut becomes held only when the own-SFU (`chalk_sfu`) real-call proof and the web-call proof both pass on the freshly deployed nightly. The latency run never holds a cut, but Promote needs it. Each nightly write records a durable marker under the nightly lock and invalidates older held releases, so retrying an old record job cannot revive it.
 
-Release builds capture and render archives on the Ubuntu 24.04 runner. The base
-snapshots stay unchanged. Capture carries static Go; render includes pinned Node,
-the compositor and its native modules. New nodes run no build preparation.
-Archives are conditional uploads to `recorder/<role>/<sha256>.tar.gz` in the
-existing media artifact bucket. The controller uses its host role to issue a
-short-lived GET; no AWS credentials go on a recorder. Cloud-init verifies the
-archive, stages a release directory and switches `current` before the unchanged
-bootstrap verifies installed files and obtains identity.
+If the saved build baseline has expired, the cut rebuilds the saved set of enabled components. A baseline too old to say which components were enabled fails closed instead of turning recording off. Fix it with a new explicit `Release` baseline.
 
-The backend artifact includes `<release_id>.media.json`: base snapshot IDs,
-archive keys and SHA256, installed-manifest digests, recorder release IDs,
-source/input hashes and the versioned dispatcher ZIP identity. Promote retains
-this sidecar unchanged, copies and verifies exact archives into the production
-bucket, and selects that bucket through runtime pins. It never rebuilds payloads.
-`retain_runtime` reads existing production pins only for the first promotion's
-legacy rollback source; it does not create or modify a snapshot. Base rebuilds
-remain separate infrastructure operations.
+`enable_recorder_control=false` gives a backend-only nightly bring-up. Set `CHALK_RECORDING_ENABLED=false` and `CHALK_TRANSCRIPTION_ENABLED=false` in nightly's runtime config first, because the input does not rewrite SSM values. Production ignores the input and keeps recorder control from its baseline.
 
-Before either fleet pin changes, deployment reads both snapshots from DigitalOcean
-using each environment's existing fleet token. Each snapshot must be available in
-its role's configured region and fit its configured fleet size's disk.
-
-Snapshot v2 contains no environment hostname or CA. Fleet cloud-init installs the
-target environment's public bootstrap CA and hostname before signed bootstrap.
-Production and nightly keep their own certificates, private keys, tags and state.
-After nightly deploy, two isolated cold-boot diagnostics verify signed identity;
-workers cannot take live work during those diagnostics. A failed diagnostic fails
-the cut. Production Promote records the previous media members before mutation,
-including the legacy first-promotion baseline, and rollback restores those pins.
-
-Release builds changed backend images and two target-specific web archives.
-After nightly deployment, the real-call workflow runs `camera-share`, `call-artifacts`
-and `long-call` on the own SFU (`chalk_sfu`) under the staging SFU lease, and the
-web-call proof runs on the same plane. The latency run is a separate job: it blocks
-Promote, never the cut. A lease that stays busy for the whole 30-minute wait fails
-the gate as `staging-sfu-lease-timeout`; a lease lost mid-run is
-`staging-sfu-lease-lost`, and a lease tool failure before the lease is taken is
-`staging-sfu-lease-error`. The `record` job prints the name.
-A passed call and the controller's checked applied release ID create a held
-`nightly` deployment record. It contains the source SHA, run/artifact IDs,
-SHA256 hashes, applied identity and proof result. Actions artifacts are retained for 90 days (the public-repository maximum).
-Every nightly backend or web write first records a durable current-write marker
-under the nightly lock and invalidates older held identities. Manual web-only
-releases count too. Recording or selecting held proof requires that newest marker
-to match the run and applied identity; retrying an older record job cannot revive it.
-Completed-cut history remains.
-Failed nightly deployments/calls stay unheld; nightly never auto-rolls back.
+Recorder archives are content-addressed (`recorder/<role>/<sha256>.tar.gz`) and built on the runner without DigitalOcean credentials. A recorder host gets a short-lived download URL from the controller, so no AWS credentials live on a host. Snapshot v2 holds no hostname or CA: cloud-init installs the environment's own. The sidecar `<release_id>.media.json` binds snapshots, archives, hashes and the dispatcher ZIP identity to the release.
 
 ## Promote
 
-Dispatch `Promote newest held nightly` from master with one required input,
-`expected_sha` (the held release revision you approve), and the optional `scorecard_override`. `capture_proofs` (default true) runs `call-artifacts`; set it false only when this deploy does not turn the capture flags on.
-Selection fails before deployment if the newest held release is not `expected_sha`.
-It selects the newest successful, proof-passed nightly, breaking timestamp ties
-by deployment ID. Deployment lookups filter environment and task, stop at the
-first decisive record, and fetch statuses only for matching candidates. Nightly
-records use only their dedicated tasks; no legacy nightly records exist.
-There is no age cutoff and no fallback to an older choice.
-The exact selection, all three artifacts, ancestry, latest Gate and rollback
-manifest are checked before approval. Missing/expired/corrupt files fail clearly; an expired web archive says "cut a new nightly".
-Both Nightly and Promote refuse non-master dispatches in their first step.
-The exact status, payload and previous production source are rechecked after approval.
-The nightly proof step runs every proof in its list even when one fails, and the held cut prints each proof's result
-(`passed`, `failed` or `not-run`); a lease failure stops it, since the next proof would wait for the lease again.
-The cut is held by the `chalk_sfu` real-call proof (recorded as `real_call_proof_result`)
-and the web-call proof on `chalk_sfu` (`web_e2e_result`). Nightly also records `own_sfu_proof_result`
-(`passed`, `failed` or `skipped`), the proof together with the latency run,
-bound to the cut's `target_sha` and `proof_run_id`. A failed latency run never holds
-the cut. Promote requires a passed
-own-SFU proof for that exact SHA, both at selection and in the approval recheck.
-Missing results (including older cuts), skipped proofs and failed proofs block
-promotion with an error naming the SHA and nightly run unless the existing
-`scorecard_override` input supplies a written reason. Promote's own production
-proof runs on `chalk_sfu`: `leave-own-sfu` (the current client leaves; the acknowledgement,
-the released microphone and camera, and the removal of the participant and its media are
-checked), `camera-share` and `call-artifacts` (the call, the Recording and the Transcript).
-The old `smoke` and `transcript` proofs and the Leave comparison with the published 5.2.6
-client need Cloudflare and no longer run in Promote; `pnpm prod:proof leave` still runs by hand.
+Dispatch from master with `expected_sha`, the held revision you approve. Selection fails if the newest held release is not that SHA, and there is no fallback to an older one. The parent holds `chalk-environment-production` through approval, deploy, call and rollback, so a pending approval blocks other production releases.
 
-The proof reuses two Spaces of the production proof Tenant, found by slug
-(`promote-proof-chalk-sfu`, `promote-proof-chalk-sfu-automatic`). The `own-sfu-spaces` job
-creates them if missing and moves them to `chalk_sfu` before `release` starts, so the
-release that is still in production does it: its public API accepts `chalk_sfu` for a
-Space in `CHALK_SFU_ALLOWED_SPACES`, the release with the per-Space setting refuses it, and
-a plane stored by the older release survives the upgrade. If the API refuses, Promote stops
-before it deploys and names the Space. One-time operator step, off the Promote path: add
-the two Spaces to `CHALK_SFU_ALLOWED_SPACES` (or run `media-settings` where the setting
-exists). Only these two Spaces move, so live Spaces keep their plane. The undo is to revert
-the change; the two Spaces can go back to `cf_sfu` with `media-settings set --plane cf_sfu`.
-A held release cut before this change lacks the `leave-own-sfu` proof, so cut a nightly after it merges.
-The scorecard job evaluates every `gate: true` budget before the cut is recorded.
-It reads `perf/budgets.json` from the scored SHA with `git show`, not from the
-newer workflow checkout, and records that SHA as `scorecard_budgets_revision`.
-It saves `scorecard_result` (`passed`, `gated-breach` or `missing`),
-`scorecard_gated_metrics` and `scorecard_missing_items` against the same SHA and nightly run.
-A missing own-SFU card is missing evidence, even when a Cloudflare card exists,
-and so is any gated `chalk_sfu.action.*` metric that no own-SFU card measures.
-Selection and
-recheck reject gated breaches with the metric names unless `scorecard_override`
-supplies a written reason. Missing scorecard evidence also blocks unless a
-written override names the accepted missing items in the audit record.
-Budgets with `gate: false` remain warnings. History or issue publication cannot
-erase the saved verdict. Contended measurements are not performance evidence;
-their failed own-SFU result requires an override to promote.
-Empty and whitespace-only reasons do not override either check. A reason has no
-other length, format or user-role rule; dispatch permissions and production
-approval remain unchanged. The accepted proof results, gated metric names,
-missing evidence, reason and actor are labelled as a scorecard override in the run summary and
-retained production release record. Approval rechecks the same override; it
-cannot bypass SHA, artifact, Gate or rollback-source validation.
+Promote blocks, naming the SHA and nightly run, when:
 
-The parent holds `chalk-environment-production` across approval, deploy, call
-and rollback. **Pending approval holds this lock**, blocking other production
-Releases. Children use a separate run lock; the backend keeps its deploy lock.
+- the own-SFU proof for that exact SHA did not pass or is missing;
+- a `gate: true` budget in `perf/budgets.json` is breached, or its evidence is missing. The budgets come from the scored SHA, not the newer workflow checkout.
 
-Production receives the selected image digests and prebuilt production web.
-There is no image/web rebuild or staging web upload during promotion.
-The source manifest hash is verified before the existing manifest generator
-creates a fresh envelope: a new top-level release ID, unchanged image digests
-and component source identities, including migration requirements and exact
-`runtime_artifacts`. SSM downloads `archive/$SSM_SourceRevision.tar.gz` from the
-manifest source revision. It verifies the old controller hash before execution;
-the controller verifies scripts and contracts from that same source archive.
-The workflow checkout never supplies replacement runtime hashes. A fresh request ID includes this release ID.
-The deployment result and job summary record source and applied identities.
-The controller's verified identity plus the call are the served-identity evidence.
-No additional observer service or host exact-replay support is required.
+`scorecard_override` accepts a written reason for those two checks only. It cannot bypass SHA, artifact, Gate or rollback-source validation. The run summary and release record keep the reason and actor.
+
+Promote's production proof runs on `chalk_sfu` through the two Spaces `promote-proof-chalk-sfu` and `promote-proof-chalk-sfu-automatic`. The `own-sfu-spaces` job moves them to `chalk_sfu` while the old release still runs. If the API refuses, an operator adds both Spaces to `CHALK_SFU_ALLOWED_SPACES`. Live Spaces keep their plane.
 
 ## Recovery
 
-Before host mutation, every production deployment stores exact manifest bytes
-(base64) and their SHA256 in a `production-release` GitHub deployment payload.
-Only a complete, healthy deployment marks that record successful. Selection uses
-the newest healthy record, and rollback verifies its hash and source identity
-before generating a fresh envelope. Neither manifest download nor rollback needs
-retained Actions artifacts or even the old Actions run.
+A failed production deploy or call runs `Release` again with the verified previous manifest, a fresh request ID and the saved Pages deployment ID. If recovery evidence is missing, skipped, cancelled or failed, the run stays red with `RECOVERY NOT RUN — manual recovery required` and the exact manual inputs in the summary. A verified recovery still leaves the promotion red.
 
-The first selection can adopt the existing production Release only after checking
-its successful deploy result and exact retained manifest. It copies those bytes
-into the same durable deployment payload during approved recheck, under the
-production lock and before host mutation. Nightly planning only reads this evidence. If those legacy files
-are already missing, perform a manual production release to establish the durable
-baseline; selection fails closed. No proof result is invented.
-GitHub documents `payload` as JSON deployment data with no smaller payload limit
-listed in its [REST deployment reference](https://docs.github.com/en/rest/deployments/deployments#create-a-deployment).
-Deploy manifests already fit the SSM document's 48,000-character base64 bound.
-A rejected payload fails before host mutation; no bucket or new storage service is added.
-It saves the production Pages project's canonical deployment ID before upload.
-The saved backend references and Pages ID also appear in a 90-day rollback artifact;
-that artifact is a convenience copy, not the backend rollback source of truth.
-
-A failed production deploy/call invokes Release again with the verified previous
-manifest, another fresh envelope/request ID, and the saved Pages deployment ID.
-Pages' native rollback restores the old web; no old web archive is needed.
-Recovery jobs and their mutation steps use `always()` semantics even on cancellation.
-Recovery requires the applied ID to match the fresh recovery envelope that preserves
-the previous production source, plus the canonical Pages ID to match the saved ID.
-Missing, skipped, cancelled or failed recovery evidence keeps the run red with
-`RECOVERY NOT RUN — manual recovery required` and exact manual Release inputs in
-the summary. A verified recovery also leaves the promotion red. No nightly rollback exists.
+When the legacy production baseline has no retained manifest, a manual production release creates the durable baseline.
 
 ## Iterate on the deployed staging build
 
-A Cut nightly only confirms. To find and fix a failure, deploy master to staging alone and run single proofs against it.
-
-Deploy without proofs (about 22 minutes: builds 7, SSM deploy 11, web 2). The Gate of `target_sha` on master must have passed, and the run queues behind a running cut in the `nightly` environment lock:
+A cut only confirms. To debug a failure, deploy master to nightly alone, then run single proofs against it. The Gate of `target_sha` must have passed, and the run queues behind a running cut.
 
 ```sh
 gh workflow run ci.yml -R Q9Labs/chalk --ref master -f target_sha=<master sha> -f release_managed=true -f deploy_managed=true -f deploy_web=true -f managed_environment=nightly -f enable_recorder_control=true
 ```
 
-Without `stable_manifest_run_id` the run rebuilds every enabled component, which costs no extra wall time.
+`.github/workflows/real-call-proof.yml` runs only proof code already on master, so a fix to a proof merges first. Until then, run `pnpm prod:proof <name>` from the branch. Dispatch it with `-f environment=nightly -f media_plane=chalk_sfu -f proofs=<name>`. Runs share the staging SFU lease and wait up to 30 minutes. A busy lease fails as `staging-sfu-lease-timeout`. `latency_samples` only shortens the latency run, so its p95 is not the gate value.
 
-Run one proof against that build. `.github/workflows/real-call-proof.yml` refuses a ref other than master and runs only proof code that master already contains, so a fix to proof or harness code merges first. Until then, run the proof from the branch with `pnpm prod:proof <name>`. All runs use `-f environment=nightly -f media_plane=chalk_sfu` and share the staging-SFU lease, so they queue one at a time:
+## Environment setup
 
-| Check                       | `-f` flags                                                    | Run time     |
-| --------------------------- | ------------------------------------------------------------- | ------------ |
-| camera-share                | `proofs=camera-share`                                         | about 10 min |
-| call-artifacts              | `proofs=call-artifacts`                                       | about 11 min |
-| long-call                   | `proofs=long-call`                                            | about 14 min |
-| leave-own-sfu               | `proofs=leave-own-sfu`                                        | about 6 min  |
-| own-sfu-spaces              | `proofs=own-sfu-spaces`                                       | about 5 min  |
-| latency rows, short         | `proofs=own-sfu-spaces -f latency=true -f latency_samples=10` | about 12 min |
-| latency rows, full gate run | `proofs=own-sfu-spaces -f latency=true`                       | about 40 min |
-
-Each run adds about 4 minutes of job setup to the proof itself. The latency run measures every action row; `latency_samples` (1 to 60) only shortens it, so a p95 over 10 cycles is a quick check and not the gate value.
-
-## Manual Release and setup
-
-Run the [manual hosted integrator proof](../scripts/prod-proof/README.md#manual-hosted-integrator-proof)
-alone. Prepare both browser clients before Join and create the Episode only on
-the first access request. Complete SDK end-for-everyone and owned-resource cleanup
-before starting the other browser proofs; never run these phases in parallel.
-
-`deploy_web=true` builds and uploads web without any extra build switch, including
-web-only releases with `release_managed=false`. Tooling stays at the workflow
-revision; an explicit source root holds the requested full SHA and must match it.
-The served service-worker commit, target API health and release marker retry within
-90 seconds. Production's `chalk` Pages destination comes from the existing web
-release constant, passed explicitly for upload, capture and rollback; no fallback exists.
-Reuse accepts exact manifest run,
-artifact, source release ID and hash, plus the prebuilt target web artifact/hash.
-Production keeps its existing Pages account/project, credentials and legacy
-`--adopt-existing-release` behavior. New configuration is nightly-only.
-
-Before enabling managed nightly deployment, merge the real-call proof and
-nightly environment changes. Configure nightly deployment variables and proof
-Tenant credentials as listed in the lane report and proof workflow. Give nightly
-its own Pages account/project and token. Point its recorder configuration at
-the nightly dispatcher caller and nightly state
-(`transcription/terraform.tfstate` in the nightly backend bucket). The first
-Release installs the dispatcher and enables its one-minute scheduler. Enable
-the Cut nightly workflow only after first-cut approval.
-Never point nightly configuration at production state or credentials.
-
-## Environment configuration and deployment evidence
-
-Each environment needs `CHALK_MANAGED_AWS_REGION`, `CHALK_MANAGED_DEPLOY_ROLE_ARN`,
-`CHALK_MANAGED_INSTANCE_ID`, `CHALK_MANAGED_LOG_GROUP_NAME`,
-`CHALK_MANAGED_PARAMETER_PREFIX`, and `CHALK_MANAGED_SSM_DOCUMENT_NAME` variables.
-The role's OIDC trust must name that exact GitHub environment. Names use at most
-32 lowercase letters or digits, separated by single hyphens and starting with a letter. The default
-is owned by the Release workflow; select `nightly` explicitly for the isolated stack.
-Choosing a name does not provision its infrastructure.
-
-All environments require their own recorder configuration at
-`/chalk/<environment>/release/recorder.json`. Override this with the optional
-`CHALK_MANAGED_RECORDER_CONFIG_PARAMETER`, scoped to the same environment.
-The configuration must match the target instance and runtime prefix.
-`CHALK_MANAGED_SECRET_EXCLUSIONS` can hold approved comma-separated canonical
-input IDs. A nonempty `managed_secret_exclusions` dispatch input overrides it.
-Missing inputs otherwise fail closed; never copy exclusions from another host.
-
-The deployment role needs the constrained SSM document/host permissions **and**
-the dispatcher module's read/apply permissions: configuration read, exact state
-read/write and `.tflock` management, versioned ZIP read/copy, Lambda binding and
-log tagging. Full plans also refresh existing IAM, queue, schedule and alarm
-state. No role/policy creation or scheduler updates belong in this binding.
-See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
-
-## Failure evidence
-
-The job logs the SSM command ID before waiting. It saves host proof before
-dispatcher changes; `deployment_phase=dispatcher-failed` means the host is ready
-but dispatcher binding failed. Inspect that partial proof before retrying.
-Use the command ID in the environment's
-deployment log group; GitHub's SSM error text can be truncated. The summary only
-reports success after host health and dispatcher verification both pass. The
-host poll cancels after 30 minutes; the one-hour job allows dispatcher plans.
-If a build succeeds but deployment fails, fix the cause and redispatch with the
-healthy manifest baseline. Do not bypass CI to turn a failed release green.
-For read-only diagnosis, `deploy-managed-release.mjs --dry-run` validates inputs
-and reads dispatcher configuration/state without sending a host command.
-Release runs this preflight before invalidating a held cut or changing fleet pins.
-The media path rejects changes under `infrastructure/nightly/transcription/`
-before builds or deployment mutations. Installed dispatcher updates reconstruct
-their root from state, so root-input changes require a separately reviewed
-infrastructure migration before updating the supported configuration checksum.
-
-## Media build configuration
-
-The GitHub nightly environment permits only `master`. Recorder archive builds
-run on the GitHub runner without DigitalOcean credentials. Cold-boot qualification
-still uses the environment-scoped provider credentials. Set
-`CHALK_MEDIA_ARTIFACT_BUCKET` and the approved `CHALK_TRANSCRIPTION_CORPUS_DIGEST`.
-The host role must read both `recorder/capture/*` and `recorder/render/*` object
-prefixes. The deploy role must read source recorder archives and conditionally
-write target recorder archives. It must read recorder envs and the public bootstrap CA, update only
-its two recorder env parameters, read the selected versioned source ZIP, write
-its dispatcher artifact/state prefixes, and apply its own dispatcher module.
-Nightly cold-boot checks additionally require scoped host RunShellScript and
-private `bootdiag/` evidence access. No nightly authority may mutate production.
-
-The first Promote after this upgrade replaces production's capture and render
-base and archive pins with the exact payloads tested on nightly, then deploys nightly's
-ZIP bytes to the production dispatcher and keeps its scheduler enabled. It
-retains production's previous pins and ZIP for rollback. Existing workers drain
-through the normal fleet release lifecycle; no cross-environment deletion is added.
+- Each GitHub environment needs the `CHALK_MANAGED_*` variables the workflows read. The deploy role's OIDC trust must name that exact environment. Creating the name does not provision infrastructure.
+- Each environment has its own recorder config at `/chalk/<environment>/release/recorder.json`. Never copy secret exclusions from another host.
+- The deploy role needs the SSM document permissions and the dispatcher module permissions (state read and write, `.tflock`, versioned ZIP read and copy, Lambda binding). It never creates roles, policies or scheduler updates. See [dispatcher binding](recording-transcription.md#dispatcher-binding-during-managed-releases).
+- Changes under `infrastructure/nightly/transcription/` are rejected by the media path. A root-input change needs a separately reviewed infrastructure migration.
+- If a deploy fails after the host is ready, `deployment_phase=dispatcher-failed` shows the host is fine and only the dispatcher binding failed. Read the partial proof, then retry. The SSM command ID in the job log finds the full error in the environment's deployment log group. Do not bypass CI to turn a failed release green. `deploy-managed-release.mjs --dry-run` diagnoses without touching a host.
+- First Promote after a media upgrade replaces production's recorder pins and dispatcher ZIP with the nightly-tested ones and keeps the previous pins for rollback. Existing workers drain through the normal fleet lifecycle.
 
 ## Immutable web vendor assets
 
-Provision `chalk-vendor-assets` and `chalk-vendor-assets-nightly` in Chalk's
-Cloudflare account without object expiration. Set `CLOUDFLARE_R2_API_TOKEN`
-as a separate secret in each GitHub environment, with Object Read & Write
-permission on that environment's bucket only. Set its token ID as the
-environment variable `CLOUDFLARE_R2_ACCESS_KEY_ID`. The uploader derives the
-S3 signing secret from the token; the Pages token is never an R2 fallback.
-Signed conditional PUTs use `If-None-Match: *`; 412 means the key already
-exists. Uploads never replace or delete an object.
+Vendor files live in the R2 buckets `chalk-vendor-assets` and `chalk-vendor-assets-nightly` with no lifecycle deletion, and uploads never replace or delete an object, so an old web build always finds its files ([runtime assets](../apps/web/docs/runtime-assets.md)). `apps/web/scripts/prepare-vendor-store.ts` uploads the vendor trees and checks the routes before Pages publication. A failed upload or probe stops the release. Keep the independent vendor Worker and its binding through rollback.
 
-Before Pages publication, `apps/web/scripts/prepare-vendor-store.ts` uploads verified vendor
-trees and two small content-addressed probe objects. It deploys the independent
-Worker idempotently, then checks both vendor routes for exact probe bytes,
-JavaScript MIME, immutable caching, and an uncached missing-key 404. A failed
-upload, deployment or probe stops Pages publication. Legacy archives use the
-same probe objects and need no vendor manifest.
-
-Wrangler uses `CLOUDFLARE_API_TOKEN` for Worker and route deployment; it never
-uses the bucket-scoped object token for that operation. This deployment
-credential must permit Workers Scripts and Workers Routes in Chalk's account
-and zone, as well as Pages. A missing permission stops the release.
-The current CI credential has only Cloudflare Pages permission, so CI sets
-`CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY=true`. This fallback checks both existing
-routes and their binding and fails closed if the Worker is absent. CI cannot
-deploy the Worker using its bucket-scoped R2 tokens or its Pages-only token.
-Local releases deploy the Worker by default. A deployment credential with
-Workers Scripts and Workers Routes permission allows CI to use the same path
-by removing the verify-only setting.
-Native Pages rollback also checks both existing routes before restoring the
-saved Pages deployment. Keep this independent Worker and binding through rollback.
+CI's Cloudflare token only has Pages permission, so CI sets `CLOUDFLARE_VENDOR_WORKER_VERIFY_ONLY=true`. It checks the existing Worker routes and fails closed if the Worker is absent. A token that can deploy Workers lets CI deploy the Worker; then remove the setting.

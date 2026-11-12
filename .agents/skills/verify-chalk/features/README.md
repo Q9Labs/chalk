@@ -5,11 +5,8 @@ This directory is the maintained source for verifying the user-facing behavior o
 ## Baseline preconditions
 
 - Launch with `pnpm dev` as described in [SKILL.md](../SKILL.md) and require `pnpm dev:doctor` to report `"ok": true`.
-- The launcher seeds one tenant and one Space with the `cf_sfu` media plane and an enabled public invite. Its path is `invite.path` in .private/chalk-dev/seed.json.
-- The seeded user is a guest. Chalk has no password accounts in this flow: a person arrives through the invite, types a name and joins.
-- Run Chromium with the fake camera and microphone from `scripts/web-proof/media.mjs` (`webMediaFixture(<n>)` as a context init script). Give each participant its own browser context and fixture number.
-- Use `localhost` or HTTPS as the web origin. The guest cookie is `Secure`.
-- Never drive a runtime this run did not start.
+- The seed has one tenant and one Space with the `cf_sfu` media plane and an enabled public invite (`invite.path` in .private/chalk-dev/seed.json). The user is a guest: arrive through the invite, type a name, join.
+- Give each participant its own browser context and fake camera and microphone fixture number from `scripts/web-proof/media.mjs` (`webMediaFixture(<n>)` as a context init script).
 
 ## Driving conventions
 
@@ -17,11 +14,9 @@ This directory is the maintained source for verifying the user-facing behavior o
 - Prefer ARIA roles and accessible names over CSS selectors or DOM position. Use `exact: true` on names.
 - Stage controls hide until you hover the region named `Space stage`. Hover it before every control click.
 - Treat quoted names as literal. `Video tile for <name>` is the accessible name of a participant's tile.
-- Do not remove proof artifacts during cleanup.
 
 ## Proof and skip reporting
 
-- Capture the user action and the resulting state, not only the final screen.
 - Video proof means the decoded frame count of the remote tile increases between two reads at least three seconds apart.
 - Mutation proof includes a second view: read the Episode's attendance from the API with the system token from the seed.
 - Record the feature ID and entry point with every artifact in result.json.

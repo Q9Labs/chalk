@@ -1,153 +1,29 @@
 # Transcription dispatcher
 
-This is the private Node 22 Lambda package for scale-to-zero transcription. It
-claims fenced jobs through the recorder control API, reads only job-scoped R2
-URLs, invokes one provider at a time, and conditionally writes one normalized
-`transcript.v1` JSON document.
+The private Node 22 Lambda package for scale-to-zero transcription. It claims fenced jobs through the recorder control API, reads only job-scoped R2 URLs, invokes one provider at a time, and conditionally writes one normalized `transcript.v1` JSON document. Provider responses, audio, display names, URLs, object keys and tokens are never logged or persisted.
 
-The package fails closed unless the environment explicitly supplies provider
-policy bounds, the privacy gate, and qualification evidence for each enabled
-provider. DeepInfra requires the native adapter contract and corpus digest when
-enabled; execution-identity and model-version pins are optional assertions only
-when the provider actually returns stable observed values. Cloudflare requires
-its own slug, adapter contract, and corpus digest when enabled. DeepInfra is
-omitted entirely when `DEEPINFRA_ENABLED=false`.
-Provider responses, audio, display names, URLs, object keys, and tokens are
-never logged or persisted by this package.
+The package fails closed unless the environment supplies provider policy bounds, the privacy gate and qualification evidence for each enabled provider (the package's `src/config.ts` lists them). DeepInfra is omitted entirely when `DEEPINFRA_ENABLED=false`.
 
-## Runtime boundary
+Check it with `pnpm --dir apps/transcription-dispatcher run check-types` and `run test`. The tests use injected fetch, control and provider boundaries, so they prove no live provider qualification, quota, DPA or production credentials. Release scripts are in `scripts/transcription-dispatcher/README.md`.
 
-The exported Lambda handler creates the pinned SSM client during cold start.
-Tests and local harnesses can call `buildHandlerFromSsm` with an injected AWS
-SSM client. The control credential ARN is always passed; provider credential
-ARNs are passed only for enabled providers:
+## Boundaries
 
-- `DEEPINFRA_TOKEN_PARAMETER_ARN` (only when DeepInfra is enabled)
-- `CLOUDFLARE_AI_TOKEN_PARAMETER_ARN` (only when Cloudflare is enabled)
-- `CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN`
-
-The loader requests exactly those ARNs with decryption and returns values only
-in process memory. The SSM role is the Lambda execution role; no token is
-accepted from a production Lambda environment variable.
-
-The control API boundary assumed by this package is:
-
-- `POST /internal/v1/transcription/jobs/claim` with `{batch_size}` and
-  job-scoped FLAC plus canonical source-manifest GET authorities (URL, expiry,
-  content type, size, checksum), the chunk's committed object and authenticated
-  participant/track provenance, and never inline manifest bytes;
-- `POST /internal/v1/transcription/jobs/heartbeat` with fenced snake_case
-  fields including `job_id`;
-- `POST /internal/v1/transcription/jobs/retry` with fenced snake_case fields
-  including `job_id` and bounded `error_code`;
-- `POST /internal/v1/transcription/jobs/complete` with fenced snake_case fields,
-  including `job_id`, result
-  checksum/size/content type, provider/model/version facts, observed identity,
-  provider request identity when available, local measured audio milliseconds,
-  provider-observed duration milliseconds, language, and bounded quality
-  metadata. It does not claim provider billing: `billed_audio_seconds` is
-  omitted unless a provider exposes an authoritative billing fact.
-
-The API independently verifies the selected result object before its
-compare-and-set completion. Completion does not send a URL or object key. A
-retry after a successful conditional PUT reuses the existing object by
-resubmitting its checksum and letting that same API verification decide.
-
-The downloaded source must be exactly `recording-transcription-source.v1` in
-snake_case. The dispatcher rejects unknown fields and requires its selected
-chunk to match the claim's allocation, version, ETag, checksum, size,
-recording-relative/source offsets, participant generation, track identity,
-display-name snapshot, and overlap fact. Only committed 16 kHz mono FLAC
-microphone tracks receive speaker attribution; no diarization or mixed-audio
-fallback exists. Source retention expiry is database-owned and therefore is
-not embedded in the pre-commit manifest. Worker leases and signed URLs are
-capped by the persisted source hard deadline.
-
-Final transcript composition is a separate fenced queue. The EventBridge
-payload `{\"source\":\"eventbridge.scheduler\",\"kind\":\"transcription-reconcile\"}`
-allocates one bounded claim budget across transcription, finalization, and
-cleanup when those control methods are available. Finalizer claims use
-`/internal/v1/transcription/finalize/claim`; each assignment contains result
-GET authorities with exact size/checksum metadata and one conditional final
-document PUT authority. The worker verifies every chunk document, retains
-overlapping source-track cues, sorts deterministically, summarizes
-heterogeneous provider facts as `mixed`, and calls
-`/internal/v1/transcription/finalize/complete` with the final checksum, size,
-content type, provider/model/version summary, and sorted language set. If a
-prior invocation already uploaded the final object, the worker submits the
-same completion and lets the API verify the existing object before accepting
-it; a `409` is late fenced work. Invalid chunk schema/bounds are terminal;
-bounded download failures use `/internal/v1/transcription/finalize/retry`.
-
-Explicit cleanup events use `source: "cleanup"`; the minute reconciliation
-event also reserves part of its bounded claim budget for cleanup so a steady
-transcription backlog cannot starve retention work. Cleanup claims use fenced
-transcription-object cleanup assignments through
-`/internal/v1/transcription/cleanup/claim`, issue only the short-lived DELETE
-authority, treat an absent object as success, and call cleanup completion so
-the API independently HEAD-verifies absence. Cleanup completion/retry bodies
-contain only fenced snake_case job fields; no object key or reusable storage
-credential is accepted.
-
-## Local verification
-
-From the repository root or this directory:
-
-```sh
-pnpm --dir apps/transcription-dispatcher run check-types
-pnpm --dir apps/transcription-dispatcher run test
-```
-
-The tests are deterministic and use injected fetch/control/provider boundaries;
-they do not claim live provider qualification, quota proof, DPA acceptance, or
-production credentials.
+- **Secrets.** The handler loads the control credential ARN (`CONTROL_API_WORKLOAD_AUTH_PARAMETER_ARN`) and the ARNs of enabled providers (`DEEPINFRA_TOKEN_PARAMETER_ARN`, `CLOUDFLARE_AI_TOKEN_PARAMETER_ARN`, `OPENROUTER_TOKEN_PARAMETER_ARN`) from SSM with decryption, into process memory only. No token is accepted from a production Lambda environment variable.
+- **Control API.** The routes are in the package's `src/control-api.ts` (`/internal/v1/transcription/{jobs,finalize,cleanup}/...`). The API verifies the selected result object itself before its compare-and-set completion, and completion carries a checksum, never a URL or object key. A retry after a successful conditional PUT reuses the existing object by resubmitting its checksum. It does not claim provider billing: `billed_audio_seconds` is omitted unless a provider exposes an authoritative fact.
+- **Source.** The downloaded source must be exactly `recording-transcription-source.v1`, and the selected chunk must match the claim's allocation, version, ETag, checksum, size, offsets, participant generation, track identity, name snapshot and overlap fact. Only committed 16 kHz mono FLAC microphone tracks get speaker attribution; there is no diarization and no mixed-audio fallback. Leases and signed URLs are capped by the persisted source hard deadline.
+- **Finalization.** Final transcript composition is a separate fenced queue. The EventBridge payload `{"source":"eventbridge.scheduler","kind":"transcription-reconcile"}` splits one bounded claim budget across transcription, finalization and cleanup, so a steady transcription backlog cannot starve retention cleanup. The finalizer verifies every chunk document, sorts deterministically, summarizes mixed provider facts as `mixed`, and completes with the final checksum. If a prior invocation already uploaded the final object, it resubmits the same completion; a `409` is late fenced work. Invalid chunk schema is terminal and bounded download failures retry.
+- **Cleanup.** It uses only a short-lived DELETE authority, treats an absent object as success, and the API HEAD-verifies absence itself. No object key or reusable storage credential is accepted.
 
 ## Language routing
 
-Claims carry `transcript_language` (`auto` or a supported Whisper v3 primary
-code). Missing fields from an older API default to auto. The worker parses this
-into an auto/fixed mode, forwards fixed codes as `language` on both Whisper
-adapters, and records the mode alongside actual provider facts in chunk and final
-documents. Auto uses `CODESWITCH_PROVIDER=mai` with its own SSM-resolved
-`OPENROUTER_TOKEN_PARAMETER_ARN`. Without that slot Auto retries as unavailable;
-it never falls back to Whisper. Fixed languages retain the existing qualified
-Whisper primary/fallback. Provider privacy, corpus, version, and identity
-requirements remain mandatory for Whisper.
+Claims carry `transcript_language` (`auto` or a supported Whisper v3 primary code; older APIs default to auto). Fixed codes go to the qualified Whisper primary and fallback as `language`. Auto uses `CODESWITCH_PROVIDER=mai` through OpenRouter. Without the OpenRouter secret slot, Auto retries as unavailable and never falls back to Whisper.
 
-MAI receives only retained speech from the renderer's 16 kHz mono FLAC. The
-worker removes silence below -45 dB lasting at least one second, keeps 150 ms
-context, and packs at most 60 speech seconds per WAV request. Each batch retains
-a source-offset map: word and segment timestamps are mapped back before cue
-normalization. An entirely silent source completes with no cues and no paid
-request. Missing word timings for nonempty speech fail validation rather than
-inventing timestamps.
+MAI receives only retained speech: silence below -45 dB lasting at least one second is removed, 150 ms of context is kept, and at most 60 speech seconds go into each WAV request. A source-offset map restores timestamps before cue normalization. An entirely silent source completes with no cues and no paid request, and missing word timings for nonempty speech fail validation rather than inventing timestamps. Devanagari tokens alone go to GPT-4.1 Mini for Urdu-script transliteration; both requests set `provider.zdr=true` and `data_collection=deny`. If strict ZDR is required, production key privacy settings must exclude Safety Retention.
 
-If MAI emits Devanagari, only those tokens go to GPT-4.1 Mini for Urdu-script
-transliteration; English and existing Urdu are never sent for rewriting. The
-same mapping updates words and segments without changing their timing. Both
-requests require `provider.zdr=true` and `data_collection=deny`; production key
-privacy settings must exclude Safety Retention if strict ZDR is required.
-
-The module's optional `codeswitch_provider` and `openrouter_token_parameter_arn`
-inputs require a separate infrastructure configuration migration before enabling
-Auto. Ordinary media releases retain that binding from state. Disable the slot
-to pause Auto while fixed languages continue; never route Auto to Whisper as an
-undo. Keep the new API reader deployed so already-produced MAI artifacts remain
-readable.
-
-After deploying the API reader and dispatcher ZIP, enable the independently
-checked secret grant without changing code:
+Enabling Auto needs a separate infrastructure migration, because `codeswitch_provider` and `openrouter_token_parameter_arn` are optional module inputs and ordinary media releases keep them from state. After deploying the API reader and dispatcher ZIP:
 
 ```sh
 python3 scripts/transcription-dispatcher/configure-mai.py --environment production --secret-parameter-arn <environment-scoped-arn> --apply
 ```
 
-Undo keeps the new reader and fixed-language behavior, but pauses Auto:
-
-```sh
-python3 scripts/transcription-dispatcher/configure-mai.py --environment production --disable --apply
-```
-
-Omit `--apply` to review the plan. This migration permits only the named secret's
-read grant and the matching Lambda environment change; it rejects code changes,
-replacement resources and unrelated permissions. Its plan and state stay private.
+To pause Auto, run it with `--disable --apply`. Fixed languages continue, and the new API reader stays deployed so MAI artifacts already produced remain readable. Never route Auto to Whisper as an undo. Omit `--apply` to review the plan; the migration permits only the named secret's read grant and the matching Lambda environment change, and rejects code changes, replacement resources and unrelated permissions. The environment is `nightly` or `production`.

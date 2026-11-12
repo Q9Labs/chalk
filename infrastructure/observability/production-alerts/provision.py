@@ -13,15 +13,14 @@ from urllib.request import Request, urlopen
 
 # Thresholds of the own-SFU rules, set only here. The APL files read them as ${NAME}.
 THRESHOLDS = {
-    # docs/observability.md, retirement debt: "Alert when the oldest unpaid debt is above 15 minutes
-    # for 5 minutes". The branch reads four of five minute samples, like the readiness rules.
+    # A healthy fleet pays a retirement debt within seconds, so one older than 15 minutes means a
+    # silent node. The branch reads four of five minute samples, like the readiness rules.
     "SFU_RETIREMENT_DEBT_MAX_AGE_SECONDS": "900",
-    # docs/observability.md, TURN mint failures: "Any value above zero over a few minutes means
-    # clients on UDP-blocked networks cannot connect media". One failed mint is a blip, so page on
-    # three failed mints (either provider) in five minutes.
+    # Failed TURN mints leave clients on UDP-blocked networks without media. One failed mint is a
+    # blip, so page on three failed mints (either provider) in five minutes.
     "TURN_MINT_FAILURES_IN_5M": "3",
-    # docs/observability.md, recovery: "A sustained refused_* rate means live calls cannot leave a
-    # lost node". Callers retry, so sustained means refusals in three distinct minutes of the last five.
+    # A sustained refusal means live calls cannot leave a lost node. Callers retry, so sustained
+    # means refusals in three distinct minutes of the last five.
     "RECOVERY_REFUSED_MINUTES_IN_5M": "3",
 }
 

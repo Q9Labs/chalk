@@ -10,7 +10,7 @@ The same model also holds a switchable variant, `current`, that reproduces how t
 
 ## Result
 
-Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The current SDK variant violates P2 and P4. The rows below come from `results/summary.md`, produced by `./run.sh`.
+Under the decided rule all four properties hold at the checked bounds, for the Cloudflare SFU, for an idealized own SFU and for the own SFU as a separate service. The current SDK variant violates P2 and P4. `./run.sh` reproduces them.
 
 | Property | Meaning                                                                                                            | `decided` | `current`    |
 | -------- | ------------------------------------------------------------------------------------------------------------------ | --------- | ------------ |
@@ -21,29 +21,7 @@ Under the decided rule all four properties hold at the checked bounds, for the C
 
 P1 and P3 hold for `current` because the SDK stops capture locally and shows on only from a Sync snapshot. The failure is purely an off that Sync never receives.
 
-All 17 runs matched their expected outcome (`pass` or `violated`). Columns after `check` are the bounds: sources, revisions per source (`seq`), link drops, lost messages, host mutes, failed closes.
-
-| run                         | check  | sources     | seq | drops | loss | mutes | cfails | rule      | ui    | sfu             | expect   | outcome  | states   | distinct | depth | seconds |
-| --------------------------- | ------ | ----------- | --- | ----- | ---- | ----- | ------ | --------- | ----- | --------------- | -------- | -------- | -------- | -------- | ----- | ------- |
-| cf-decided-safety-1src      | safety | mic         | 3   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 7165145  | 1176766  | 35    | 38      |
-| cf-decided-live-1src        | P4     | mic         | 3   | 1     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 1660460  | 298666   | 31    | 41      |
-| cf-decided-live-1src-d2     | P4     | mic         | 2   | 2     | 2    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 1328652  | 224087   | 31    | 29      |
-| own-decided-safety-1src     | safety | mic         | 3   | 2     | 2    | 1     | 0      | decided   | FALSE | own             | pass     | pass     | 2096638  | 396511   | 31    | 12      |
-| own-decided-live-1src       | P4     | mic         | 3   | 1     | 2    | 1     | 0      | decided   | FALSE | own             | pass     | pass     | 597155   | 119445   | 28    | 16      |
-| own-dist-safety-1src        | safety | mic         | 3   | 2     | 2    | 1     | 1      | decided   | FALSE | own-distributed | pass     | pass     | 7165145  | 1176766  | 35    | 12      |
-| own-dist-live-1src          | P4     | mic         | 3   | 1     | 2    | 1     | 1      | decided   | FALSE | own-distributed | pass     | pass     | 1660460  | 298666   | 30    | 16      |
-| cf-current-P2-1src          | P2     | mic         | 2   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 550      | 250      | 8     | 0       |
-| cf-current-P4-1src          | P4     | mic         | 2   | 0     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 1128     | 362      | 15    | 1       |
-| cf-current-P4-drop-1src     | P4     | mic         | 3   | 1     | 1    | 0     | 0      | current   | FALSE | cloudflare      | violated | violated | 37604    | 8732     | 22    | 3       |
-| cf-current-P1-1src          | P1     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare      | pass     | pass     | 8807336  | 1474009  | 36    | 35      |
-| cf-current-P3-1src          | P3     | mic         | 3   | 2     | 2    | 1     | 1      | current   | FALSE | cloudflare      | pass     | pass     | 8807336  | 1474009  | 35    | 35      |
-| mutant-adoptSync-P1         | P1     | mic         | 2   | 1     | 1    | 0     | 0      | adoptSync | FALSE | cloudflare      | violated | violated | 2570     | 788      | 12    | 1       |
-| mutant-optimisticUi-P3      | P3     | mic         | 1   | 0     | 0    | 0     | 0      | decided   | TRUE  | cloudflare      | violated | violated | 2        | 2        | 2     | 1       |
-| witness-on                  | W1     | mic         | 2   | 0     | 0    | 0     | 0      | decided   | FALSE | cloudflare      | violated | violated | 136      | 48       | 13    | 1       |
-| witness-hostmute            | W2     | mic         | 2   | 0     | 0    | 1     | 0      | decided   | FALSE | cloudflare      | violated | violated | 819      | 261      | 11    | 0       |
-| deep-cf-decided-live-2src   | P4     | mic,cam     | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 2494203  | 342256   | 32    | 81      |
-| deep-cf-decided-safety-2src | safety | mic,cam     | 2   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 46590684 | 5644562  | 40    | 240     |
-| deep-cf-decided-safety-3src | safety | mic,cam,scr | 1   | 1     | 1    | 1     | 1      | decided   | FALSE | cloudflare      | pass     | pass     | 41996446 | 4068999  | 44    | 293     |
+`runs.txt` lists every run with its bounds and expected outcome (`pass` or `violated`). `./run.sh` runs them and fails if any outcome differs.
 
 ## Counterexample for the current SDK
 
@@ -116,7 +94,7 @@ DEEP=1 ./run.sh          # plus the multi-source runs
 node trace-diff.mjs results/cf-current-P2-1src.txt   # a counterexample, one line per step
 ```
 
-It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. Every model under `tools/formal` reads one pin, stable v1.7.4 with its checksum, from `tools/formal/tla2tools.sh`, so a re-published release fails the checksum for all of them at once. The committed results were produced with a v1.8.0 pre-release (TLC 2026.10.30, rev 090e85c). v1.7.4 (TLC 2.19) reproduces the outcome of every run. MediaControl pass runs give the same state counts, but MediaHeal runs find more distinct states (1,867,947 against 1,617,232 for `heal-decided-safety`), with or without the written-out fairness, so the count depends on the TLC version. Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to `results/summary.md`. The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
+It needs Java 11 or newer and `curl`. The first run downloads TLC (`tla2tools.jar`) into `~/.cache/chalk-tla/` and checks its SHA-256. Every model under `tools/formal` reads one pin, stable v1.7.4 with its checksum, from `tools/formal/tla2tools.sh`, so a re-published release fails the checksum for all of them at once. The committed results were produced with a v1.8.0 pre-release (TLC 2026.10.30, rev 090e85c). v1.7.4 (TLC 2.19) reproduces the outcome of every run. MediaControl pass runs give the same state counts, but MediaHeal runs find more distinct states (1,867,947 against 1,617,232 for `heal-decided-safety`), with or without the written-out fairness, so the count depends on the TLC version. Each run writes its exact configuration to `results/<run>.cfg`, the TLC output to `results/<run>.txt` and a row to the run summary (regenerated by each full run). The script exits non-zero if any run does not match its expectation in `runs.txt` (`pass` or `violated`).
 
 Files:
 
@@ -185,7 +163,7 @@ Weak fairness only, on every repair step: deliveries, resends, reconnects, the h
 
 ### Mutants
 
-Each removes one mechanism and runs the same property set; the results are in `tools/formal/media-control/results/heal-summary.md`.
+Each removes one mechanism and runs the same property set; a full run writes the results to a heal summary table in `results/`.
 
 - No flat-packet drop and re-pull, no receive-session reconnect, no server dead path, give up after 2 failures: each breaks P5src.
 - No SFU expiry of silent tracks breaks P5src unless the publisher also detects its own lost track (`heal-nogc-selfdetect-P5src` passes).
@@ -209,4 +187,4 @@ DEEP=1 ./run.sh             # plus the deep rows of both models
 node trace-diff.mjs results/heal-sdk-today-P5src.txt   # the counterexample, one line per step
 ```
 
-`heal-runs.txt` has one row per run: `name | check | expect | overrides`. The defaults are in `run.sh`; each run writes `results/<run>.cfg` and `results/<run>.txt`, and a full run writes `tools/formal/media-control/results/heal-summary.md`. The last full run was on an Instabox machine (4 vCPU, 8 GB).
+`heal-runs.txt` has one row per run: `name | check | expect | overrides`. The defaults are in `run.sh`; each run writes `results/<run>.cfg` and `results/<run>.txt`, and a full run writes the heal summary table. Run it on Instabox.

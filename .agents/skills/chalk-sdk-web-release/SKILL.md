@@ -14,40 +14,13 @@ Ship only the requested targets. Use one pre-push gate, let each release workflo
 - `sdk+web`: Dispatch both workflows from the same release SHA before waiting for either one.
 - `managed`: Deploy API and Sync through the Release workflow. Follow [managed releases](../../../docs/managed-release.md).
 
-Managed backend changes and recorder input reloads must use `deploy_managed=true`
-and the intended `managed_environment`. Never use a build-only Release followed
-by a local SSM command, `release:recorder deploy`, or a non-dry-run managed
-controller. Local `--dry-run` remains available for read-only diagnosis.
-Use the last healthy manifest run as `stable_manifest_run_id`. To reconcile the
-already-live images through CI, use that manifest's own source SHA and run ID;
-the workflow retains the component images and creates a fresh release envelope.
-Require a successful managed job, its health/dispatcher proof artifact, and the
-environment's real-call proof before declaring the backend released. Never
-interpret a skipped managed job as deployment success.
+Managed backend changes and recorder input reloads must use `deploy_managed=true` and the intended `managed_environment`. Never use a build-only Release followed by a local SSM command, `release:recorder deploy`, or a non-dry-run managed controller. Never read a skipped managed job as deployment success. The rest is in [managed releases](../../../docs/managed-release.md).
 
 An SDK release without an explicit version uses the next patch version. A web request means staging first and then production only when the active thread explicitly approves production shipping.
 
 ## Gate Mode
 
-Choose the gate mode from the changed files, not from a release mode name. The
-automatic command is `pnpm run gate`; it preserves the affected-workspace and
-reverse-dependent plan. A target-compatible web app or web-platform change may
-use `pnpm run gate -- --target web`, and a target-compatible mobile app or
-React Native change may use `pnpm run gate -- --target mobile`. Use
-`pnpm run gate -- --full` for the full safety net.
-
-The CLI accepts `--target web|mobile` and `--target=web|mobile`.
-`GATE_TARGET=web|mobile` provides the same target for automation. If both are
-set, they must match. A missing, unknown, or repeated target, a CLI/environment
-conflict, or `--full` with either a CLI target or `GATE_TARGET` is rejected
-before checks start. Direct
-opposite-platform changes, mixed web-and-mobile changes, gate definitions,
-root dependency or workspace configuration, unknown paths, and other
-full-required changes are also rejected for target mode. Follow the printed
-`Run instead:` instruction: target mismatch and input errors use
-`pnpm run gate`; full-required changes use `pnpm run gate -- --full`. Target
-selection only bounds validation. It never changes the packages published or
-the app deployed.
+Choose the gate mode from the changed files, not from the release mode name: `pnpm run gate` by default, `pnpm run gate -- --target web|mobile` for a target-compatible change, `pnpm run gate -- --full` for the full safety net. Target mode rejects mixed or full-required changes; follow the printed `Run instead:` line. The `sdk` and `sdk+web` modes always use the automatic command. Target selection only bounds validation and never changes what ships. Details are in [gate operations](../../../scripts/gates/README.md).
 
 ## Waste Budget
 
@@ -84,12 +57,6 @@ git diff --check
 ```bash
 pnpm run gate
 ```
-
-For a target-compatible platform-only release, use the matching target command
-from the Gate Mode section. The synchronized `sdk` and `sdk+web` release modes
-always use the automatic command because they change both platform lanes,
-release tooling, and lock data. They never infer a web target. If target
-validation refuses the change, run the command in its `Run instead:` line.
 
 9. Commit the passing staged diff. Fetch `origin/master` again and stop if it moved. Rebase the release on the new revision and rerun the gate only if the release inputs changed.
 10. Push the exact release commit to `master`, then store its full SHA:

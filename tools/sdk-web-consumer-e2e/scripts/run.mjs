@@ -102,9 +102,9 @@ try {
             process.stdout.write(`[agreement] browser=${browserName}${browserName === "webkit" ? " profile=iPad Pro 11" : ""}\n`);
             // Linux WebKit: GStreamer "Switching from passthrough to parsebin"
             // / "not-negotiated (-4)"; VP8 also stalls outbound encoding.
-            // Evidence: ../camera-engine-evidence.md. macOS keeps frame checks.
+            // macOS keeps frame checks. Re-enable the check on Linux WebKit once the GStreamer stall is gone.
             const checkCameraFrames = browserName !== "webkit" || process.platform !== "linux";
-            if (!checkCameraFrames) process.stdout.write("[agreement] camera-frame assertion: known Linux WebKit engine stall (camera-engine-evidence.md); mic, controls, projections and badges remain required\n");
+            if (!checkCameraFrames) process.stdout.write("[agreement] camera-frame assertion: known Linux WebKit engine stall; mic, controls, projections and badges remain required\n");
             await proveAgreementMatrix(browser, baseURL, { invoke, waitForState, device: browserName === "webkit" ? devices["iPad Pro 11"] : undefined, fast: arguments_.has("--agreement-fast"), checkCameraFrames });
           }
         } finally {

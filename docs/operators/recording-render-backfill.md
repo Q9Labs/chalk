@@ -1,59 +1,36 @@
 # Backfill recording renders
 
-Tenants can opt in to automatic rendering; on demand is the default. This command
-inspects older successful captures for opted-in Tenants. It never retries an
-existing failed job or renews retention. Deployment never runs this backfill.
+Tenants opt in to automatic rendering with `recording_render_mode: automatic`;
+`on_demand` is the default. This command finds older successful captures of
+opted-in Tenants and can queue their renders. It never retries a failed job or
+renews retention, and a deployment never runs it.
 
-Inject `CHALK_DATABASE_URL` and the normal `CHALK_R2_*` configuration through the
-operator environment. Do not paste credentials into arguments or logs.
-The command uses `CHALK_API_OTLP_ENDPOINT` and `CHALK_API_OTLP_INSECURE` for
-the normal telemetry exporter. Each queued job's journey event links to its
-backfill span. Without an endpoint, local runs retain trace and span IDs in the
-ledger but do not export telemetry. Exporter shutdown failures print a warning
-to stderr without changing the backfill result or exit code. Backfill failures
-still exit non-zero.
+Inject `CHALK_DATABASE_URL` and the `CHALK_R2_*` settings through the operator
+environment, never in arguments or logs.
 
-## Inspect one batch
+## Inspect, then apply
 
 ```sh
 bash scripts/recording-backfill.sh --batch-size 25
-```
-
-Dry-run is the default and uses read-only database sessions. Each invocation
-inspects at most the explicit batch size (1–100), with a 15-minute deadline
-(`--timeout` can reduce it or increase it to at most 20 minutes). It checks source
-retention, the capture key and manifest records, then HEADs every referenced
-bundle, presentation, asset manifest and presentation asset. A missing or empty
-object is not recoverable; a storage error is reported as unverifiable, not as
-missing. Counts include already queued, expired and missing-source captures.
-
-## Queue a reviewed batch
-
-```sh
 bash scripts/recording-backfill.sh --batch-size 25 --apply
 ```
 
-Apply uses the same canonical render operation as the API, with manual retries
-disabled. The transaction
-rechecks eligibility and reuses any job created concurrently. Repeating a batch
-cannot duplicate a render. The existing fleet cap, job deadlines and source
-expiry apply; this command does not change capture admission or fleet settings.
+The default is a dry run on read-only sessions. It checks retention, the capture
+key and manifest records, then HEADs every referenced object. A storage error is
+reported as unverifiable, not as missing. Apply uses the same render operation as
+the API, rechecks eligibility under the Tenant lock and reuses a job created
+concurrently, so repeating a batch cannot duplicate a render. Fleet caps, job
+deadlines and source expiry still apply.
 
-The JSON report includes `next_after_recording`. To continue inventory in UUID
-order, pass that value as `--after-recording`. Keep that operator cursor private.
-If storage could not be verified, rerun that batch without advancing its cursor.
-An interrupted apply can be repeated; no rollback of already queued work is
-necessary. Start with a small reviewed batch and observe render completion before
-continuing. This command has not been run against production as part of the fix.
+Start with a small batch and watch renders finish before you continue. Continue
+with `--after-recording` set to the report's `next_after_recording`, and keep
+that cursor private. If storage could not be verified, rerun the same batch
+without moving the cursor. An interrupted apply is safe to repeat.
 
-## Tenant opt-in
+If a Tenant switches back to `on_demand` or a source expires after the
+inventory, the candidate counts as `no_longer_eligible` and no retry is used.
+Read or change the mode with `GET` or `PATCH /v1/tenants/{tenant_id}`; the
+command never changes it.
 
-Only Tenants with `recording_render_mode: automatic` appear in the inventory.
-The API defaults every existing and new Tenant to `on_demand`; this tool does not change that setting.
-`--apply` rechecks the opt-in while locking the Tenant row before inserting a job.
-If the Tenant switches back to on demand or the source expires after inventory,
-`no_longer_eligible` counts that skipped candidate. No manual retry is consumed.
-
-Read or change the mode with `GET` / `PATCH /v1/tenants/{tenant_id}` using the
-existing tenant settings permission (`tenants:write` for scoped callers,
-collaborator or owner for members). The Developer dashboard offers the same setting.
+Telemetry uses `CHALK_API_OTLP_ENDPOINT`. Without it, trace IDs stay in the
+ledger and nothing is exported.

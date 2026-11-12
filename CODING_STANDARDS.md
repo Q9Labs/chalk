@@ -20,7 +20,7 @@ When a change takes more than one lock, row lock, or advisory lock, check the or
 
 ## Failure paths leave evidence
 
-A new terminal failure, rejection, or timeout must say why, in a bounded and redacted form, in the signal that `docs/observability.md` names for that service. A bare status or a generic message sends the next person to the wrong place.
+A new terminal failure, rejection, or timeout must say why, in a bounded and redacted form, in the log, span or metric that service already uses (see `docs/observability.md`). A bare status or a generic message sends the next person to the wrong place.
 
 ## Generated outputs come from their generators
 
