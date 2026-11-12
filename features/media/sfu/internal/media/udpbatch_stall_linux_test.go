@@ -44,7 +44,7 @@ func TestIsVideoReadsTheRTPPayloadTypeOfAnSRTPPacket(t *testing.T) {
 // writes one audio datagram to wake it, so every later write meets a stalled socket.
 func stallWriter(t *testing.T, conn *batchConn, to netip.AddrPort) (release func()) {
 	t.Helper()
-	held, gate := make(chan struct{}), make(chan struct{})
+	held, gate := make(chan struct{}, 1), make(chan struct{})
 	conn.stalled = func() {
 		select {
 		case held <- struct{}{}:
@@ -71,14 +71,15 @@ type arrival struct {
 	seq   uint32
 }
 
-// listen collects what a peer receives until it has been quiet for 300 ms.
+// listen collects what a peer receives until it has been quiet for 300 ms. A stalled writer sends
+// nothing for a while, so the wait for the first datagram is longer.
 func listen(peer *net.UDPConn) <-chan []arrival {
 	out := make(chan []arrival, 1)
 	go func() {
 		var got []arrival
 		buf := make([]byte, 2048)
-		for {
-			_ = peer.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+		for quiet := 5 * time.Second; ; quiet = 300 * time.Millisecond {
+			_ = peer.SetReadDeadline(time.Now().Add(quiet))
 			n, _, err := peer.ReadFromUDPAddrPort(buf)
 			if err != nil {
 				out <- got
