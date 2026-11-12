@@ -1,0 +1,43 @@
+[Unit]
+Description=Chalk recording capture worker beside the SFU
+After=network-online.target chalk-sfu.service
+Wants=network-online.target
+
+[Container]
+Image=__IMAGE__
+Pull=never
+ContainerName=chalk-recorder-capture
+# Host networking: the worker reaches the SFU's announced address from the same host, and the
+# control plane and object store over the host's outbound route.
+Network=host
+EnvironmentFile=%h/.config/chalk-sfu/capture.env
+Secret=chalk-capture-worker-cert,type=mount,target=/run/chalk-capture/worker.crt,uid=65532,gid=65532,mode=0400
+Secret=chalk-capture-worker-key,type=mount,target=/run/chalk-capture/worker.key,uid=65532,gid=65532,mode=0400
+Secret=chalk-capture-server-ca,type=mount,target=/run/chalk-capture/server-ca.crt,uid=65532,gid=65532,mode=0400
+User=65532
+Group=65532
+ReadOnly=true
+DropCapability=all
+NoNewPrivileges=true
+PidsLimit=256
+# The SFU keeps the CPU it was admitted against: the worker runs at lower priority and under a
+# hard memory ceiling, so it is the one that gives way when the node is short.
+PodmanArgs=--memory=__MEMORY_LIMIT__
+PodmanArgs=--cpus=__CPU_LIMIT__
+PodmanArgs=--cpu-shares=128
+LogDriver=journald
+PodmanArgs=--log-opt=tag=chalk-recorder-capture
+PodmanArgs=--stop-signal=SIGTERM
+PodmanArgs=--stop-timeout=30
+
+[Service]
+Restart=always
+RestartSec=2s
+StartLimitIntervalSec=120
+StartLimitBurst=10
+TimeoutStartSec=60
+TimeoutStopSec=40
+Nice=10
+
+[Install]
+WantedBy=default.target

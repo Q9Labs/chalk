@@ -282,7 +282,10 @@ select pg_advisory_xact_lock(hashtextextended(sqlc.arg(claim_request_id)::text, 
 select recording_id from recording_jobs where id = sqlc.arg(job_id) and kind = 'capture';
 
 -- name: ClaimRecordingJob :one
-with candidate as (
+with claimant as (
+    select sfu_node from recording_colocated_capture_workers
+    where worker_id::text = sqlc.arg(lease_owner)::text
+), candidate as (
     select recording_jobs.id, recovery.source_expires_at as recovery_expires_at,
         (recording_jobs.kind = 'capture' and recording_capture_completion_available(recording_jobs.recording_id))::boolean as completion_only,
         recording_pipelines.capture_completed_at +
@@ -319,6 +322,17 @@ with candidate as (
       and (recording_jobs.kind not in ('render', 'transcription') or
           coalesce((select max(history.retried_at) from recording_job_failure_history history where history.job_id = recording_jobs.id), recording_jobs.created_at) + sqlc.arg(maximum_render_seconds)::integer * interval '1 second' > clock_timestamp())
       and recording_jobs.available_at <= now()
+      -- A colocated worker takes only the captures of its own node. Everyone else leaves a capture
+      -- to the colocated worker for the grace while that worker is healthy.
+      and (recording_jobs.kind <> 'capture' or case
+          when exists (select 1 from claimant)
+              then sqlc.arg(colocated_grace_seconds)::integer > 0
+                  and episodes.config_snapshot->'media_plane_binding'->>'provider' = 'chalk_sfu'
+                  and episodes.config_snapshot->'media_plane_binding'->>'node' = (select sfu_node from claimant)
+                  and not recording_capture_colocated_attempted(recording_jobs.id)
+          else not (sqlc.arg(colocated_grace_seconds)::integer > 0
+                  and recording_capture_colocated(recording_jobs.recording_id, sqlc.arg(colocated_grace_seconds)::integer))
+          end)
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or sqlc.arg(supports_completion_only)::boolean)
       and (recording_jobs.kind <> 'capture' or recording_pipelines.stop_requested_at is null or (completion.attempts < 3 or recovery.job_id is not null))
       and (recording_jobs.attempt_count < recording_jobs.attempt_limit or
@@ -1627,3 +1641,27 @@ from recording_jobs job
 where job.kind = 'capture' and job.state = 'leased'
 order by claimed_at, job.id
 limit sqlc.arg(row_limit);
+
+-- name: InsertRecordingClaimedEvent :exec
+-- The claim lag is the time the capture waited, from becoming available to this claim. The event
+-- joins the Recording's start journey, so a slow start reads off the Episode's own timeline.
+insert into observability_journey_events (
+    event_id, journey_id, sequence, occurred_at, name, phase, state,
+    origin_kind, first_observed_layer, upstream_visibility, parent_event_id, trace_id, span_id, attributes
+)
+select gen_random_uuid(), coalesce(start_operation.journey_id, job.recording_id),
+    coalesce((select max(sequence) + 1 from observability_journey_events
+              where journey_id = coalesce(start_operation.journey_id, job.recording_id)), 0),
+    now(), 'recording.claimed', 'capture_claim', 'succeeded', 'server', 'api', 'visible',
+    start_operation.parent_journey_event_id, sqlc.narg(trace_id), sqlc.narg(span_id),
+    jsonb_build_object('recording_id', job.recording_id, 'job_id', job.id, 'attempt_count', job.attempt_count,
+        'claim_lag_ms', greatest(0, floor(extract(epoch from (clock_timestamp() - job.available_at)) * 1000))::bigint,
+        'placement', case when exists (select 1 from recording_colocated_capture_workers node
+                                       where node.worker_id::text = sqlc.arg(lease_owner)::text)
+                          then 'colocated' else 'fleet' end)
+from recording_jobs job
+left join sync_recordings recording on recording.recording_id = job.recording_id and recording.tenant_id = job.tenant_id
+left join sync_external_operations start_operation on start_operation.external_operation_id = recording.start_external_operation_id
+    and start_operation.tenant_id = job.tenant_id and start_operation.episode_id = job.episode_id
+    and start_operation.recording_id = job.recording_id and start_operation.operation_name = 'start_recording'
+where job.id = sqlc.arg(job_id) and job.kind = 'capture';

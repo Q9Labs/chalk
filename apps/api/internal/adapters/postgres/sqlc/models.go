@@ -584,6 +584,22 @@ type RecordingCaptureStopPublication struct {
 	ResolvedAt       pgtype.Timestamptz `json:"resolved_at"`
 }
 
+type RecordingColocatedCaptureWorker struct {
+	Environment     string             `json:"environment"`
+	SfuNode         string             `json:"sfu_node"`
+	WorkerID        pgtype.UUID        `json:"worker_id"`
+	State           string             `json:"state"`
+	Ready           bool               `json:"ready"`
+	AdmissionOpen   bool               `json:"admission_open"`
+	ReadyCapacity   int32              `json:"ready_capacity"`
+	ResourcesLatest []byte             `json:"resources_latest"`
+	PeakRssBytes    int64              `json:"peak_rss_bytes"`
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	RevokedAt       pgtype.Timestamptz `json:"revoked_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type RecordingCompletionRecovery struct {
 	JobID             pgtype.UUID        `json:"job_id"`
 	RequestID         pgtype.UUID        `json:"request_id"`
