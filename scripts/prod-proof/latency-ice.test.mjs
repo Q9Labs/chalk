@@ -74,7 +74,7 @@ function pageWith(now = () => 100, extra = {}) {
   return context;
 }
 
-const ice = (local_type, remote_type, requests_sent, responses_received, read_after_ms = null) => ({ local_type, remote_type, requests_sent, responses_received, read_after_ms });
+const ice = (local_type, remote_type, requests_sent, responses_received, read_after_ms = null) => ({ local_type, remote_type, relay_protocol: null, requests_sent, responses_received, read_after_ms });
 
 test("a connecting peer leaves only a marker, and the pair is read later by readIce", async () => {
   let reads = 0;

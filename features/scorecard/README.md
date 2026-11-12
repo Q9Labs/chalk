@@ -24,6 +24,7 @@ The latency kit also writes `latency-diagnostics-<plane>.json` next to the card.
 - `stages` (named in `stages.mjs`) splits each action into pieces between wire events. A stage counts from the last stage reached, so a step the SDK skips is null and its time moves to the next one. Retired stage ids stay valid in older sidecars (`RETIRED_STAGE_IDS`).
 - `audio` holds `media.network_jitter_one_way_ms`, an estimate from the listener's WebRTC stats: half of each guest's SFU round trip plus the jitter buffer's average wait. It assumes a symmetric path, is not mouth to ear, and lives only in the sidecar.
 - `ice` records the selected candidate pair type and request/response counters of the joining guest, read after the join's measured stages and never inside a measured interval. Requests far above responses on the winning pair mean early ICE checks were lost, and `relay` means TURN carries the media. No address or candidate id is kept.
+- `path` and `ice.relay_protocol` come from `--path` (see [prod-proof](../../scripts/prod-proof/README.md)): the mode, whether the joining guest connected, and the loss share and jitter it received over the call. `ice.relay_protocol` is `udp`, `tcp` or `tls` when the selected pair is a relay.
 - Both guests run on one host, so readings use `performance.timeOrigin + performance.now()`. `scripts/prod-proof/latency-trace.mjs` is an init script only the latency kit installs; the product SDK carries no trace code, and a failed trace read nulls that action's stage fields without dropping the cycle.
 
 ## Staging contention

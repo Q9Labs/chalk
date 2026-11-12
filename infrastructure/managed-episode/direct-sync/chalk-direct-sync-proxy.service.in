@@ -2,6 +2,8 @@
 Description=Chalk direct Sync TLS proxy
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
 
 [Service]
 Type=simple
@@ -26,8 +28,6 @@ TasksMax=256
 LimitNOFILE=65536
 Restart=on-failure
 RestartSec=3s
-StartLimitIntervalSec=120
-StartLimitBurst=10
 
 [Install]
 WantedBy=multi-user.target

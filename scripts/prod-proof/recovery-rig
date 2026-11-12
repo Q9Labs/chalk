@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Faults on one guest's network for recovery.mjs, on a Linux host where the user can sudo (an Instabox machine).
+#
+#   recovery-rig up            # make namespace "c2" with two uplinks and print the launcher for --guest2-chromium
+#   recovery-rig blackout      # c2's packets vanish, links stay up (a stalled Wi-Fi)
+#   recovery-rig restore       # undo blackout
+#   recovery-rig change        # c2 loses its address and default route and takes a new one on another uplink (Wi-Fi to another network)
+#   recovery-rig down          # remove the namespace, the uplinks and the NAT rule
+#
+# Guest 2's Chromium runs inside c2 through the launcher; guest 1 stays on the host's own network, so only guest 2 loses its network.
+set -euo pipefail
+[[ $EUID -eq 0 ]] || exec sudo -E env "PATH=$PATH" "$0" "$@"
+
+export PATH="$PATH:/usr/sbin:/sbin"
+ns=c2
+dir=/tmp/recovery-rig
+launcher="$dir/chromium-c2"
+
+nat() { # nat <add|del> <subnet>: masquerade the subnet and let it through a default-drop FORWARD chain (Docker sets one)
+  local flag=-A forward=-I; [[ "$1" == del ]] && { flag=-D; forward=-D; }
+  iptables -t nat "$flag" POSTROUTING -s "$2" -j MASQUERADE 2> /dev/null || true
+  iptables "$forward" FORWARD -s "$2" -j ACCEPT 2> /dev/null || true
+  iptables "$forward" FORWARD -d "$2" -j ACCEPT 2> /dev/null || true
+}
+
+uplink() { # uplink <n>: host side 10.200.<n>.1, guest side 10.200.<n>.2
+  ip link add "h$1" type veth peer name "g$1"
+  ip link set "g$1" netns "$ns"
+  ip addr add "10.200.$1.1/24" dev "h$1"
+  ip link set "h$1" up
+  nat add "10.200.$1.0/24"
+}
+
+case "${1:-}" in
+  up)
+    ip netns add "$ns"
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    ip netns exec "$ns" ip link set lo up
+    mkdir -p "/etc/netns/$ns"
+    echo "nameserver 1.1.1.1" > "/etc/netns/$ns/resolv.conf"
+    uplink 1
+    uplink 2
+    ip netns exec "$ns" ip link set g1 up
+    ip netns exec "$ns" ip addr add 10.200.1.2/24 dev g1
+    ip netns exec "$ns" ip route add default via 10.200.1.1
+    # The harness serves the guests' page on the host's 127.0.0.1:$port. Inside c2 that address is c2's own, so send it to the host.
+    port="${PROOF_PORT:-4567}"
+    echo 1 > /proc/sys/net/ipv4/conf/h1/route_localnet
+    iptables -t nat -A PREROUTING -i h1 -p tcp --dport "$port" -j DNAT --to-destination "127.0.0.1:$port"
+    ip netns exec "$ns" sh -c "echo 1 > /proc/sys/net/ipv4/conf/all/route_localnet; echo 1 > /proc/sys/net/ipv4/conf/lo/route_localnet; iptables -t nat -A OUTPUT -p tcp -d 127.0.0.1 --dport $port -j DNAT --to-destination 10.200.1.1:$port; iptables -t nat -A POSTROUTING -o g1 -j MASQUERADE"
+    mkdir -p "$dir"
+    chromium="$(cd sdks/typescript/client && node -e 'console.log(require("playwright").chromium.executablePath())')"
+    # The browser runs as the user who called the rig, not as root.
+    # Playwright talks to Chromium over file descriptors 3 and 4, and sudo closes those unless sudoers allows -C.
+    echo "Defaults closefrom_override" > /etc/sudoers.d/recovery-rig
+    chmod 440 /etc/sudoers.d/recovery-rig
+    printf '#!/usr/bin/env bash\nexec sudo -C 10 ip netns exec %s setpriv --reuid=%s --regid=%s --init-groups env HOME=%q %q "$@"\n' "$ns" "${SUDO_UID:-0}" "${SUDO_GID:-0}" "${HOME}" "$chromium" > "$launcher"
+    chmod 755 "$dir"
+    chmod +x "$launcher"
+    echo "$launcher"
+    ;;
+  blackout)
+    ip netns exec "$ns" iptables -I OUTPUT -j DROP
+    ip netns exec "$ns" iptables -I INPUT -j DROP
+    ;;
+  restore)
+    ip netns exec "$ns" iptables -D OUTPUT -j DROP
+    ip netns exec "$ns" iptables -D INPUT -j DROP
+    ;;
+  change)
+    ip netns exec "$ns" ip link set g1 down
+    ip netns exec "$ns" ip link set g2 up
+    ip netns exec "$ns" ip addr add 10.200.2.2/24 dev g2
+    ip netns exec "$ns" ip route add default via 10.200.2.1
+    ;;
+  down)
+    ip netns del "$ns" 2> /dev/null || true
+    iptables -t nat -D PREROUTING -i h1 -p tcp --dport "${PROOF_PORT:-4567}" -j DNAT --to-destination "127.0.0.1:${PROOF_PORT:-4567}" 2> /dev/null || true
+    for n in 1 2; do
+      ip link del "h$n" 2> /dev/null || true
+      nat del "10.200.$n.0/24"
+    done
+    rm -rf "$dir" "/etc/netns/$ns" /etc/sudoers.d/recovery-rig
+    ;;
+  *)
+    echo "usage: recovery-rig up|blackout|restore|change|down" >&2
+    exit 2
+    ;;
+esac
