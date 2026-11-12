@@ -1483,6 +1483,9 @@ release_already_active() {
   [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
   load_active_pointer
   [[ "$(sha256_file "$manifest_path")" == "$(jq -er '.manifest_sha256' "$active_pointer")" ]] || fail "release ${request_release_id} is already active with a different manifest"
+  jq -e --arg environment "$request_environment" --arg region "$request_region" --arg prefix "$request_prefix" --argjson excluded "$excluded_json" \
+    '.environment == $environment and .aws_region == $region and .parameter_prefix == $prefix and .excluded_secrets == $excluded' "$active_pointer" >/dev/null ||
+    fail "release ${request_release_id} is already active with different deployment settings"
   # An interrupted promotion can leave this pointer behind a different release that is healthy and running.
   local live_manifest="${run_root}/release/release-manifest.json"
   [[ -f "$live_manifest" && ! -L "$live_manifest" && "$(sha256_file "$live_manifest")" == "$(sha256_file "$manifest_path")" ]] || fail "release ${request_release_id} is the active pointer but the running release differs"
