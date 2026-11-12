@@ -17,8 +17,9 @@ import (
 	"github.com/q9labs/chalk/features/media/sfu/internal/config"
 )
 
-// NewLogger returns the node's logger. Every record goes to local, and over OTLP/HTTP to the store
-// the API's logs go to when an endpoint is configured, so one query by Episode id reads both sides.
+// NewLogger returns the node's logger. Every record goes to local. When an endpoint is configured,
+// the diagnosis trail also goes over OTLP/HTTP to the store the API's logs go to, so one query by
+// Episode id reads both sides. Only the events in exportedEvents leave, with their listed fields.
 // The exporter reads its token and dataset from OTEL_EXPORTER_OTLP_LOGS_HEADERS. The returned
 // function sends the last records and stops the exporter.
 func NewLogger(ctx context.Context, cfg config.Telemetry, local slog.Handler) (*slog.Logger, func(context.Context) error, error) {
@@ -44,7 +45,7 @@ func NewLogger(ctx context.Context, cfg config.Telemetry, local slog.Handler) (*
 	}
 	provider := sdklog.NewLoggerProvider(sdklog.WithResource(attributes), sdklog.WithProcessor(sdklog.NewBatchProcessor(exporter)))
 	remote := otelslog.NewHandler(scope, otelslog.WithLoggerProvider(provider), otelslog.WithVersion(cfg.Version))
-	return slog.New(fanout{local, remote}), provider.Shutdown, nil
+	return slog.New(fanout{local, newExportOnly(remote)}), provider.Shutdown, nil
 }
 
 func logsURL(endpoint string) string {
