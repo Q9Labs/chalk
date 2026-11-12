@@ -40,6 +40,7 @@ func TestIsVideoReadsTheSSRCOfAnSRTPPacket(t *testing.T) {
 		"VP8":                   {rtpDatagram(vp8PayloadType, videoSSRC, 1, 100), true},
 		"VP8 with marker":       {rtpDatagram(vp8PayloadType|0x80, videoSSRC, 1, 100), true},
 		"VP8 as Firefox has it": {rtpDatagram(120, videoSSRC, 1, 100), true},
+		"VP8 on a low type":     {rtpDatagram(45, videoSSRC, 1, 100), true},
 		"RTX as Firefox has it": {rtpDatagram(124, videoRTXSSRC, 1, 100), true},
 		"Opus":                  {rtpDatagram(opusPayloadType, audioSSRC, 1, 100), false},
 		"Opus on a video type":  {rtpDatagram(vp8PayloadType, audioSSRC, 1, 100), false},

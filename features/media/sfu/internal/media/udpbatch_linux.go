@@ -124,11 +124,11 @@ func (c *batchConn) markVideo(ssrc uint32, on bool) {
 }
 
 // isVideo reports whether b is an RTP packet of a marked video SSRC. The RTP header is not
-// encrypted, so the SSRC is readable on an SRTP packet. A type below 96 is not a dynamic RTP type;
-// it keeps an RTCP packet (types 200 to 207 read as 72 to 79) from being read as RTP. The caller
-// holds c.mu.
+// encrypted, so the SSRC is readable on an SRTP packet. Types 64 to 95 are the range RTCP shares
+// with RTP on one port (RTCP types 200 to 207 read as 72 to 79); they keep an RTCP packet from being
+// read as RTP. The caller holds c.mu.
 func (c *batchConn) isVideo(b []byte) bool {
-	if len(b) < 12 || b[0]>>6 != 2 || b[1]&0x7f < 96 {
+	if len(b) < 12 || b[0]>>6 != 2 || b[1]&0x7f >= 64 && b[1]&0x7f < 96 {
 		return false
 	}
 	_, video := c.video[binary.BigEndian.Uint32(b[8:])]
