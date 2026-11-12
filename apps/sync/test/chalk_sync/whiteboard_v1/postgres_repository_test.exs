@@ -20,7 +20,6 @@ defmodule ChalkSync.WhiteboardV1.PostgresRepositoryTest do
   @database_url System.get_env("CHALK_SYNC_TEST_DATABASE_URL") ||
                   System.get_env("CHALK_DATABASE_URL")
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
   setup_all do
     if @database_url do

@@ -41,20 +41,16 @@ defmodule ChalkSync.Operations.Probe do
   end
 
   defp production_modules do
-    adapter = Application.fetch_env!(:chalk_sync, :stateholder)
     verifier = Application.fetch_env!(:chalk_sync, :token_verifier)
     require_auth? = Application.get_env(:chalk_sync, :require_production_auth, false)
 
-    with :ok <- validate_production_modules(adapter, verifier, require_auth?) do
+    with :ok <- validate_production_modules(verifier, require_auth?) do
       validate_provider_bridge_config(require_auth?)
     end
   end
 
-  defp validate_production_modules(adapter, verifier, require_auth?) do
+  defp validate_production_modules(verifier, require_auth?) do
     cond do
-      adapter != ChalkSync.Stateholder.Postgres ->
-        {:error, :non_production_stateholder}
-
       require_auth? and verifier == ChalkSync.Auth.DevTokenVerifier ->
         {:error, :development_token_verifier}
 

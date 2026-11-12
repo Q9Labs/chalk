@@ -12,7 +12,6 @@ defmodule ChalkSync.Application do
         {ChalkSync.Operations.Metrics, []},
         nil,
         database_child(),
-        stateholder_child(),
         observability_child(),
         {Task.Supervisor, [name: ChalkSync.CommandTaskSupervisor]},
         {ChalkSync.Episodes.CommandIntake, []},
@@ -76,48 +75,33 @@ defmodule ChalkSync.Application do
     }
   end
 
-  defp stateholder_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Memory -> {ChalkSync.Stateholder.Memory, []}
-      _adapter -> nil
-    end
-  end
+  # Tests turn the database workers off and start their own connections per module.
+  defp database_workers?, do: Application.fetch_env!(:chalk_sync, :database_workers)
 
   defp database_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.Database,
-         url: Application.fetch_env!(:chalk_sync, :database_url),
-         pool_size: Application.fetch_env!(:chalk_sync, :database_pool_size)}
-
-      _adapter ->
-        nil
+    if database_workers?() do
+      {ChalkSync.Database,
+       url: Application.fetch_env!(:chalk_sync, :database_url),
+       pool_size: Application.fetch_env!(:chalk_sync, :database_pool_size)}
     end
   end
 
   defp lifecycle_consumer_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres -> {ChalkSync.LifecycleConsumer, []}
-      _adapter -> nil
-    end
+    if database_workers?(), do: {ChalkSync.LifecycleConsumer, []}
   end
 
   defp external_operation_consumer_children do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        adapter_timeout_ms =
-          Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms)
+    if database_workers?() do
+      adapter_timeout_ms =
+        Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms)
 
-        ChalkSync.ExternalOperationConsumer.child_specs(
-          adapter_timeout_ms: adapter_timeout_ms,
-          poll_interval_ms:
-            Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
-          media_plane: media_plane(adapter_timeout_ms),
-          recording_plane: recording_plane(adapter_timeout_ms)
-        )
-
-      _adapter ->
-        nil
+      ChalkSync.ExternalOperationConsumer.child_specs(
+        adapter_timeout_ms: adapter_timeout_ms,
+        poll_interval_ms:
+          Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
+        media_plane: media_plane(adapter_timeout_ms),
+        recording_plane: recording_plane(adapter_timeout_ms)
+      )
     end
   end
 
@@ -136,37 +120,23 @@ defmodule ChalkSync.Application do
   end
 
   defp fanout_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.Fanout.PostgresNotifications,
-         url: Application.fetch_env!(:chalk_sync, :database_url)}
-
-      _adapter ->
-        nil
+    if database_workers?() do
+      {ChalkSync.Fanout.PostgresNotifications,
+       url: Application.fetch_env!(:chalk_sync, :database_url)}
     end
   end
 
   defp collaboration_fanout_child do
     transport =
-      case Application.fetch_env!(:chalk_sync, :stateholder) do
-        ChalkSync.Stateholder.Postgres ->
-          {ChalkSync.Fanout.Collaboration.PostgresNotifications, nil}
-
-        _adapter ->
-          nil
-      end
+      if database_workers?(), do: {ChalkSync.Fanout.Collaboration.PostgresNotifications, nil}
 
     {ChalkSync.Fanout.Collaboration, transport: transport}
   end
 
   defp whiteboard_fanout_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.WhiteboardV1.Fanout,
-         url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
-
-      _adapter ->
-        nil
+    if database_workers?() do
+      {ChalkSync.WhiteboardV1.Fanout,
+       url: Application.fetch_env!(:chalk_sync, :database_url), source_id: instance_id()}
     end
   end
 
@@ -176,13 +146,9 @@ defmodule ChalkSync.Application do
   end
 
   defp retention_scheduler_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.Retention.Scheduler,
-         interval_ms: Application.fetch_env!(:chalk_sync, :retention_cleanup_interval_ms)}
-
-      _adapter ->
-        nil
+    if database_workers?() do
+      {ChalkSync.Retention.Scheduler,
+       interval_ms: Application.fetch_env!(:chalk_sync, :retention_cleanup_interval_ms)}
     end
   end
 
@@ -223,13 +189,9 @@ defmodule ChalkSync.Application do
   def websocket_options, do: [max_fragmented_message_size: @max_fragmented_message_size]
 
   defp presence_runtime_child do
-    case Application.fetch_env!(:chalk_sync, :stateholder) do
-      ChalkSync.Stateholder.Postgres ->
-        {ChalkSync.Stateholder.Postgres.PresenceRuntime,
-         url: Application.fetch_env!(:chalk_sync, :database_url)}
-
-      _adapter ->
-        nil
+    if database_workers?() do
+      {ChalkSync.Stateholder.Postgres.PresenceRuntime,
+       url: Application.fetch_env!(:chalk_sync, :database_url)}
     end
   end
 end

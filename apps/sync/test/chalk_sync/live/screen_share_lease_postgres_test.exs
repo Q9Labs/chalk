@@ -12,7 +12,6 @@ defmodule ChalkSync.Live.ScreenShareLeasePostgresTest do
                   System.get_env("CHALK_DATABASE_URL")
   @now ~U[2026-07-12 12:00:00.000000Z]
 
-  if is_nil(@database_url), do: @moduletag(skip: "set CHALK_SYNC_TEST_DATABASE_URL")
 
   setup_all do
     if @database_url do
