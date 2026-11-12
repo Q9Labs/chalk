@@ -1331,6 +1331,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     this.#receiveHealth.roster(advertised.values());
     this.#pruneRemotePullState(advertised);
     const desired = this.#visibleRemotePublications(advertised);
+    // Only the authoritative roster counts: the early-pull pass sees the Sync projection, which is empty while Sync is down.
+    this.#hiddenVideos = advertised.size - desired.size;
     this.#pollFailedPull = true;
     const epoch = this.#connectionEpoch;
     const hidden = [...this.#remoteTracks].filter(([key, publication]) => isVideoPublication(publication) && advertised.get(key)?.publicationId === publication.publicationId && !desired.has(key));
@@ -1439,7 +1441,6 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       return track?.publicationId === publicationId && floating.has(track.track);
     };
     const visible = new Map([...advertised].filter(([key, publication]) => !isVideoPublication(publication) || wanted.has(publication.publicationId) || isFloating(key, publication.publicationId)));
-    this.#hiddenVideos = advertised.size - visible.size;
     return visible;
   }
   /** The SFU can stop an off-screen video without renegotiating, so scrolling back costs one update instead of a pull. */
