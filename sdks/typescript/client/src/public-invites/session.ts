@@ -32,16 +32,22 @@ export type PublicSpaceSession = {
   readonly leave: (options?: PublicLeaveOptions) => Promise<void>;
 };
 
+/**
+ * What a refresh needs from the client's request. The media token it names is the binding the server checks,
+ * since the public refresh endpoint has no separate expected-binding field.
+ */
+type SessionAccessRequest = Pick<ConnectionAccessRequest, "reason" | "replaceMediaConnection"> & { readonly currentMediaToken?: string | undefined; readonly signal?: AbortSignal | undefined };
+
 export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHandle, access: first }: AdmittedArrival, options: PublicSpaceSessionOptions = {}): PublicSpaceSession {
   const reference = { arrivalHandle, guestCredential: options.guestCredential };
   const listeners = new Set<() => void>();
   let current = first;
-  let mediaProof = parseParsedAccessGrant(first).media.token;
+  let mediaProof: string = parseParsedAccessGrant(first).media.token;
   let initial = true;
   let left = false;
   let leaving: Promise<void> | undefined;
 
-  const refresh = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
+  const refresh = async (request?: SessionAccessRequest): Promise<AccessGrant> => {
     mediaProof = request?.currentMediaToken ?? mediaProof;
     try {
       current = await client.refreshSpacePublicInviteAccess({ ...reference, mediaProof, replaceMediaConnection: request?.replaceMediaConnection, signal: request?.signal });
@@ -55,7 +61,7 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
     return current;
   };
 
-  const connectionAccess = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
+  const connectionAccess = async (request?: SessionAccessRequest): Promise<AccessGrant> => {
     if (left) throw new Error("This Space access has been released.");
     if (initial && (!request || request.reason === "join")) {
       initial = false;
@@ -66,7 +72,7 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
 
   return {
     connectionAccess,
-    getAccess: ({ reason, replaceMediaConnection, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection, signal }),
+    getAccess: ({ reason, replaceMediaConnection, currentMediaToken, signal }) => connectionAccess({ reason: reason === "join" ? "join" : reason === "refresh" ? "scheduled_refresh" : "access_retry", replaceMediaConnection, currentMediaToken, signal }),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {

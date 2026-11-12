@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseParsedAccessGrant } from "../access/grant";
 import { opaqueAccessGrant } from "../space-client/core.test.helpers";
 import { createPublicSpaceSession } from "./session";
 import type { ChalkPublicClient } from "./types";
@@ -51,6 +52,27 @@ describe("public Space session", () => {
     await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: false });
     await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: true });
     expect(refreshes.map((request) => request.replaceMediaConnection)).toEqual([true, false, true]);
+  });
+
+  it("keeps the media binding when only the Sync credential is refreshed", async () => {
+    const { client, refreshes } = fakeClient();
+    const session = createPublicSpaceSession(client, { arrivalHandle: "handle-1", access: opaqueAccessGrant(1) });
+    const binding = session.mediaProof();
+
+    await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: false });
+    await session.connectionAccess({ reason: "sync_recovery", replaceMediaConnection: false });
+    expect(refreshes).toEqual([expect.objectContaining({ mediaProof: binding, replaceMediaConnection: false }), expect.objectContaining({ replaceMediaConnection: false })]);
+  });
+
+  it("sends the token of the binding it expects when the client replaces the media connection", async () => {
+    const { client, refreshes } = fakeClient();
+    const session = createPublicSpaceSession(client, { arrivalHandle: "handle-1", access: opaqueAccessGrant(1) });
+    const expected = parseParsedAccessGrant(opaqueAccessGrant(7)).media.token;
+    const other = parseParsedAccessGrant(opaqueAccessGrant(8)).media.token;
+
+    await session.getAccess({ space: "s", reason: "retry", replaceMediaConnection: true, currentMediaToken: expected, expectedMediaConnectionId: "connection-7" });
+    await session.connectionAccess({ reason: "media_recovery", replaceMediaConnection: true, currentMediaToken: other, expectedMediaConnectionId: "connection-8" });
+    expect(refreshes).toEqual([expect.objectContaining({ mediaProof: expected, replaceMediaConnection: true }), expect.objectContaining({ mediaProof: other, replaceMediaConnection: true })]);
   });
 
   it("reports a failed refresh and keeps the old token", async () => {
