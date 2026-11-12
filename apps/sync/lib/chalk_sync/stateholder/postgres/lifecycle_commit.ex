@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.LifecycleCommit do
   @moduledoc false
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.Stateholder.LifecycleDecision
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.Scope

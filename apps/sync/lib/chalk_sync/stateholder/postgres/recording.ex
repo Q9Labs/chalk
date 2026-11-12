@@ -8,10 +8,6 @@ defmodule ChalkSync.Stateholder.Postgres.Recording do
   alias ChalkSync.Stateholder.Postgres.SQL.ExternalOperationPlanner, as: PlannerSQL
   require OperationTable
 
-  @maximum_duration_seconds 4 * 60 * 60
-
-  def maximum_duration_seconds, do: @maximum_duration_seconds
-
   def prepare_capture_ready(connection, episode, operation) do
     recording_id = operation.payload["recordingId"]
     start_operation_id = operation.payload["startOperationId"]

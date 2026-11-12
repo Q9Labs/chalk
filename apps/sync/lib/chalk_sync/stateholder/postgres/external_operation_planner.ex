@@ -2,6 +2,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   @moduledoc false
 
   alias ChalkSync.Episodes.Reducer
+  alias ChalkSync.RecordingPlane
   alias ChalkSync.Stateholder.Decision
   alias ChalkSync.Stateholder.ExternalOperation
   alias ChalkSync.Stateholder.OperationDecision
@@ -13,7 +14,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
-  alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.JoinSeats
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
@@ -31,7 +31,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     Transaction.configure(connection)
     control = Authority.lock_control(connection, identity.episode)
     policy = Authority.lock_episode(connection, identity.episode)
-    FaultHooks.external_operation(:after_acceptance_authority_lock, identity.episode, operation)
 
     case fetch_operation_receipt(connection, identity, operation) do
       {:ok, row} ->
@@ -70,7 +69,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
     Transaction.configure(connection)
     control = Authority.lock_control(connection, episode)
     policy = Authority.lock_episode(connection, episode)
-    FaultHooks.external_operation(:after_acceptance_authority_lock, episode, operation)
 
     case fetch_internal_operation(connection, episode, operation) do
       {:ok, existing} when existing.request_fingerprint != operation.fingerprint ->
@@ -459,7 +457,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationPlanner do
            "space_id" => episode.space_id,
            "participant_count" => 10,
            "max_duration_seconds" =>
-             min(Recording.maximum_duration_seconds(), max_duration_seconds),
+             min(RecordingPlane.maximum_duration_seconds(), max_duration_seconds),
            "input_bitrate_bps" => 4_000_000,
            "policy_snapshot_version" => artifact_policy["schema_version"]
          }}

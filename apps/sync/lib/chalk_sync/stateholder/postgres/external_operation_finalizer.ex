@@ -8,7 +8,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.Control
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
-  alias ChalkSync.Stateholder.Postgres.FaultHooks
   alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.PublicationFences
@@ -495,7 +494,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
         )
 
         WebhookProducer.produce_external(connection, episode, external, event, webhook_object)
-        FaultHooks.external_operation(:after_webhook_production, episode, external)
         Control.notify_head(connection, episode, event.revision)
 
         applied = %{

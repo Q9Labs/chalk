@@ -206,11 +206,9 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
     case result do
       {:confirmed, authority} ->
-        execution_checkpoint(:after_provider_confirmation_before_finalize, episode, operation)
         finalize_confirmed(episode, operation, authority, finalize)
 
       {:terminal_failure, reason} ->
-        execution_checkpoint(:after_provider_terminal_failure_before_finalize, episode, operation)
         finalize_terminal_failure(episode, operation, reason, finalize)
 
       :pending ->
@@ -485,21 +483,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
     case finalize.(episode, operation.external_operation_id, {:failed, reason}) do
       {:ok, _decision} -> :terminal_failure
       result -> finalization_failure(operation.name, result)
-    end
-  end
-
-  defp execution_checkpoint(point, episode, operation) do
-    case Application.get_env(:chalk_sync, :external_operation_fault_hook) do
-      hook when is_function(hook, 2) ->
-        hook.(point, %{
-          tenant_id: episode.tenant_id,
-          episode_id: episode.episode_id,
-          external_operation_id: operation.external_operation_id,
-          operation: operation.name
-        })
-
-      _ ->
-        :ok
     end
   end
 
