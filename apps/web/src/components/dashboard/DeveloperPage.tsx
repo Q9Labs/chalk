@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
-import type { DeveloperDTO } from "../../lib/dashboard/contracts";
 import { SITE_ORIGIN } from "../../lib/site-origin";
 import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { expiresSoon, hasExpired } from "../../lib/dashboard/format";

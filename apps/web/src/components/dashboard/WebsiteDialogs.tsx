@@ -123,4 +123,3 @@ export function RemoveWebsiteDialog({ origin, origins, onClose, onSaved }: { rea
     />
   );
 }
-

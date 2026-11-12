@@ -7,7 +7,7 @@ import { clock } from "../../lib/dashboard/format";
 import { Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { useLoad } from "./use-dashboard";
-import { RenameDialog } from "./HomePage";
+import { RenameDialog } from "./HomeDialogs";
 import { AdmissionKnocks } from "./AdmissionKnocks";
 import { SessionRow, SessionsHead } from "./ListParts";
 import { useJumpTarget } from "./jump";

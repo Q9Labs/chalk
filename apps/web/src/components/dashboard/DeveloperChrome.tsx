@@ -15,7 +15,6 @@ const SECTIONS: readonly { readonly id: string; readonly label: string; readonly
   { id: "apps", label: "AI apps", icon: "grid" },
 ];
 
-
 /** The page frame: the section nav beside the heading and the panels. */
 export function Shell({ nav, children }: { readonly nav?: ReactNode; readonly children: ReactNode }) {
   return (
@@ -203,4 +202,3 @@ export function LiveKeySearch({ cursor, onPage }: { readonly cursor: string; rea
   }, [cursor]);
   return null;
 }
-

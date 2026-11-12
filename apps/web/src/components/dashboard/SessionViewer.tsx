@@ -110,7 +110,7 @@ const NEWER_NOTE = {
 /** A newer recording than the one playing, and what the viewer can do to get it. */
 function NewerNote({ newer, exporting, onPrepare }: { readonly newer: RecordingDTO; readonly exporting: boolean; readonly onPrepare: (target: RecordingDTO) => void }) {
   const action = VIDEO[videoState(newer)].action;
-  const note = NEWER_NOTE[action ?? "waiting"];
+  const note = NEWER_NOTE[action === null ? "waiting" : action === "retry" ? "retry" : "prepare"];
   return (
     <div className="pnote" role="status">
       <div>
@@ -152,11 +152,7 @@ function RecordingMedia({ ids, recording, unreadable, newer, exporting, onTime, 
         {video === "capturing" || video === "preparing" ? <span className="spin" aria-hidden="true" /> : <Icon name={note.action === "prepare" ? "film" : "recOff"} />}
         <b>{note.title}</b>
         <p>{recording.failureMessage || note.detail}</p>
-        {note.action === "prepare" || note.action === "retry" ? (
-          <PrepareButton action={note.action} exporting={exporting} onClick={() => onPrepare(recording)} />
-        ) : video === "capture_failed" || video === "export_failed" ? (
-          <ContactSupport problem={note.title} size="lg" />
-        ) : null}
+        {note.action === "prepare" || note.action === "retry" ? <PrepareButton action={note.action} exporting={exporting} onClick={() => onPrepare(recording)} /> : video === "capture_failed" || video === "export_failed" ? <ContactSupport problem={note.title} size="lg" /> : null}
         {video === "preparable" ? (
           <p className="pnote-more">
             <Link to="/dashboard/developer" hash="recording-videos">
