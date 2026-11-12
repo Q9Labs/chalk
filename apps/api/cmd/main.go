@@ -62,7 +62,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recordings"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 
-	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 	"github.com/q9labs/chalk/apps/api/internal/synctokens"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/transcripts"
@@ -681,11 +681,11 @@ func run() error {
 		executor := providerbridge.NewSFUExecutor(mediaPublicationService, managedSFU, recordingController)
 		executor = executor.WithChalkSFU(postgres.NewEpisodeBindings(pool), chalkNodes).WithRetiredAllocations(mediaPlaneRegistry.EndRetiredAllocations)
 		providerBridgeService := providerbridge.NewService(providerOperationRepository, executor)
-		verifier, err := syncidentity.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
+		verifier, err := spiffe.NewVerifier(cfg.ProviderBridge.SPIFFETrustDomain, cfg.Observability.Environment)
 		if err != nil {
 			return fmt.Errorf("configure provider bridge Sync identity: %w", err)
 		}
-		providerBridgeHandler := httpapi.NewProviderBridgeHandler(providerBridgeService, verifier)
+		providerBridgeHandler := httpapi.NewProviderBridgeHandler(providerBridgeService, verifier.ForRole(spiffe.RoleSync))
 		privateWorkerHandler := diagnostics.WrapHTTP(httpapi.NewPrivateWorkerRouter(providerBridgeHandler, routerOptions))
 		providerBridgeServer, err = providerbridgeserver.New(cfg.ProviderBridge, privateWorkerHandler)
 		if err != nil {

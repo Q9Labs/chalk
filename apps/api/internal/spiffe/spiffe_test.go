@@ -1,4 +1,4 @@
-package syncidentity_test
+package spiffe_test
 
 import (
 	"crypto/rand"
@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/q9labs/chalk/apps/api/internal/syncidentity"
+	"github.com/q9labs/chalk/apps/api/internal/spiffe"
 )
 
 type certificateAuthority struct {
@@ -59,7 +59,7 @@ func TestVerifierRejectsAnIdentityFromAnotherTrustDomainEnvironmentOrRole(t *tes
 	for name, identity := range map[string]string{
 		"another trust domain": "spiffe://other.example/environment/nightly/sync/" + syncID,
 		"another environment":  "spiffe://chalkmeet.com/environment/production/sync/" + syncID,
-		"another role":         "spiffe://chalkmeet.com/environment/nightly/api/" + syncID,
+		"another role":         "spiffe://chalkmeet.com/environment/nightly/capture/" + syncID,
 		"no identity":          "",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -90,13 +90,13 @@ func TestVerifierRejectsUntrustedClientCertificateDuringMTLSHandshake(t *testing
 
 func syncIdentityServer(t *testing.T, ca certificateAuthority, clientCertificate tls.Certificate) (*http.Client, *httptest.Server) {
 	t.Helper()
-	verifier, err := syncidentity.NewVerifier("chalkmeet.com", "nightly")
+	verifier, err := spiffe.NewVerifier("chalkmeet.com", "nightly")
 	if err != nil {
 		t.Fatalf("new verifier: %v", err)
 	}
 	serverCertificate := signedCertificate(t, ca, "", true)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if err := verifier.Verify(request); err != nil {
+		if _, err := verifier.Verify(request, spiffe.RoleSync); err != nil {
 			http.Error(response, "sync authentication required", http.StatusUnauthorized)
 			return
 		}
