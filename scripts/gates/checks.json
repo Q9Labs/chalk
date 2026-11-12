@@ -291,6 +291,16 @@
       "sample": "Root cells on pull requests: 11 of 183 failed (10 real catches, 1 noise); the split by lane is not recorded."
     },
     {
+      "id": "gate:diagnose-call",
+      "owner": "Call",
+      "catches": "A change to the call diagnosis command or its verdict thresholds that no longer joins client, API, Sync and SFU rows by id or no longer names the failing stage.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "merge",
+      "minutes": null,
+      "record": "unmeasured",
+      "sample": "New lane: no runs recorded yet."
+    },
+    {
       "id": "gate:proof-bundle",
       "owner": "Release chain",
       "catches": "A production proof script that no longer bundles against the Leave baseline client.",
