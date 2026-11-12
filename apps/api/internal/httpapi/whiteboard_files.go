@@ -54,7 +54,6 @@ func whiteboardFileEndpoints(service WhiteboardFileService, verifier WhiteboardP
 func downloadWhiteboardFileEndpoint(service WhiteboardFileService) Endpoint[downloadWhiteboardFileRequest, whiteboardFileDownloadResponse] {
 	return Get(
 		"/v1/whiteboard/files/{fileId}/download",
-		"/whiteboard/files/{fileId}/download",
 		"getWhiteboardFileDownload",
 		decodeDownloadWhiteboardFileRequest,
 		func(ctx context.Context, request downloadWhiteboardFileRequest) (whiteboardFileDownloadResponse, error) {

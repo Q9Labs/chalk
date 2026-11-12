@@ -24,7 +24,7 @@ type transcriptTextResponse struct {
 }
 
 func transcriptTextEndpoint(service TranscriptArtifactService, objects RecordingObjectService, metadata TranscriptTextMetadataService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptTextResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/text", "/tenants/{tenant_id}/transcripts/{transcript_id}/text", "getTranscriptText", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptTextResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/text", "getTranscriptText", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptTextResponse, error) {
 		if metadata == nil {
 			return transcriptTextResponse{}, apiErrorServiceUnavailable
 		}

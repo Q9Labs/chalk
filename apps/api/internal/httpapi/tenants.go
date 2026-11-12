@@ -130,7 +130,7 @@ func tenantEndpoints(service TenantService, authorizer TenantAuthorizer) []Route
 }
 
 func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, tenantResponse] {
-	return Post("/v1/tenants", "/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
+	return Post("/v1/tenants", "createTenant", decodeJSONBody[createTenantRequest], func(ctx context.Context, request createTenantRequest) (tenantResponse, error) {
 		if service == nil {
 			return tenantResponse{}, apiErrorServiceUnavailable
 		}
@@ -168,7 +168,7 @@ func createTenantEndpoint(service TenantService) Endpoint[createTenantRequest, t
 }
 
 func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, tenantListResponse] {
-	return Get("/v1/tenants", "/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
+	return Get("/v1/tenants", "listTenants", decodeListTenantsRequest, func(ctx context.Context, request listTenantsRequest) (tenantListResponse, error) {
 		if service == nil {
 			return tenantListResponse{}, apiErrorServiceUnavailable
 		}
@@ -214,7 +214,7 @@ func listTenantsEndpoint(service TenantService) Endpoint[listTenantsRequest, ten
 }
 
 func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, tenantResponse] {
-	return Get("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
+	return Get("/v1/tenants/{tenant_id}", "getTenant", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (tenantResponse, error) {
 		if service == nil {
 			return tenantResponse{}, apiErrorServiceUnavailable
 		}
@@ -247,7 +247,7 @@ func getTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpo
 }
 
 func updateTenantEndpoint(service TenantService, authorizer TenantAuthorizer) Endpoint[updateTenantEndpointRequest, tenantResponse] {
-	return Patch("/v1/tenants/{tenant_id}", "/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
+	return Patch("/v1/tenants/{tenant_id}", "updateTenant", decodeUpdateTenantRequest, func(ctx context.Context, request updateTenantEndpointRequest) (tenantResponse, error) {
 		if service == nil {
 			return tenantResponse{}, apiErrorServiceUnavailable
 		}
@@ -494,7 +494,7 @@ func authorizeTenantCollection(ctx context.Context, scope authentication.Scope) 
 type findServiceTenantRequest struct{ ExternalID string }
 
 func findServiceTenantEndpoint(service TenantService) Endpoint[findServiceTenantRequest, tenantResponse] {
-	return Get("/v1/tenants/by-external-id", "/tenants/by-external-id", "findTenantByExternalID", func(r *http.Request) (findServiceTenantRequest, error) {
+	return Get("/v1/tenants/by-external-id", "findTenantByExternalID", func(r *http.Request) (findServiceTenantRequest, error) {
 		externalID := r.URL.Query().Get("external_id")
 		if !tenants.ValidExternalID(externalID) {
 			return findServiceTenantRequest{}, apiErrorInvalidTenantField

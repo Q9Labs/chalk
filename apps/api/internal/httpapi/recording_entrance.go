@@ -32,7 +32,7 @@ func recordingEntranceEndpoints(preparer RecordingEntrancePreparer, invites Entr
 }
 
 func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, entrancePreparationResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
 			return entrancePreparationResponse{}, err
 		}
@@ -48,7 +48,7 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 	if origin != nil {
 		middlewares = append(middlewares, origin)
 	}
-	return Post("/v1/public/space-invite-entrance", "/public/space-invite-entrance", "preparePublicSpaceEntrance", func(r *http.Request) (entranceInviteBody, error) {
+	return Post("/v1/public/space-invite-entrance", "preparePublicSpaceEntrance", func(r *http.Request) (entranceInviteBody, error) {
 		body, err := decodeJSONBody[entranceInviteBody](r)
 		if err != nil {
 			return body, err

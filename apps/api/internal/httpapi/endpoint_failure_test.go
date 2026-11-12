@@ -35,10 +35,10 @@ func TestOwnSFUPlacementRefusalLogsItsReason(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(observability.RequestMiddleware(slog.New(slog.NewJSONHandler(&logs, nil))))
 	refusal := fmt.Errorf("resolve episode media binding: %w: %w: %w", mediaplane.ErrPlaneUnavailable, mediaplane.ErrProviderRateLimited, mediaplane.ErrPlacementRefused)
-	endpoint := Post("/v1/refusal", "/v1/refusal", "placementRefusal", func(*http.Request) (struct{}, error) { return struct{}{}, nil }, func(context.Context, struct{}) (struct{}, error) {
+	endpoint := Post("/v1/refusal", "placementRefusal", func(*http.Request) (struct{}, error) { return struct{}{}, nil }, func(context.Context, struct{}) (struct{}, error) {
 		return struct{}{}, refusal
 	}).MapErrors(episodeLifecycleEndpointAPIError)
-	endpoint.Mount(router, RateLimitOptions{})
+	router.Route(apiPrefix, func(r chi.Router) { endpoint.Mount(r, RateLimitOptions{}) })
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/refusal", nil))
 	if response.Code != http.StatusServiceUnavailable || !strings.Contains(response.Body.String(), "media.unavailable") {

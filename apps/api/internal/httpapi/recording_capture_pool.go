@@ -38,7 +38,7 @@ func mountRecordingCapturePoolRoute(r chi.Router, service RecordingCapturePoolSe
 // Capture pool is shared, so a slot held by a stuck job blocks every Tenant.
 // Slots held for other Tenants are counted without identifiers.
 func getRecordingCapturePoolEndpoint(service RecordingCapturePoolService, authorizer TenantAuthorizer) Endpoint[getTenantRequest, recordingCapturePoolResponse] {
-	return Get("/v1/tenants/{tenant_id}/recording-capture-pool", "/tenants/{tenant_id}/recording-capture-pool", "getRecordingCapturePool", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (recordingCapturePoolResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/recording-capture-pool", "getRecordingCapturePool", decodeGetTenantRequest, func(ctx context.Context, request getTenantRequest) (recordingCapturePoolResponse, error) {
 		if service == nil {
 			return recordingCapturePoolResponse{}, apiErrorServiceUnavailable
 		}

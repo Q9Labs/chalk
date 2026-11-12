@@ -82,7 +82,7 @@ func transcriptArtifactEndpoints(service TranscriptArtifactService, objects Reco
 }
 
 func requestTranscriptEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[requestTranscriptEndpointRequest, requestTranscriptResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "requestTranscript", decodeRequestTranscriptEndpointRequest, func(ctx context.Context, request requestTranscriptEndpointRequest) (requestTranscriptResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/transcripts", "requestTranscript", decodeRequestTranscriptEndpointRequest, func(ctx context.Context, request requestTranscriptEndpointRequest) (requestTranscriptResponse, error) {
 		if service == nil {
 			return requestTranscriptResponse{}, apiErrorServiceUnavailable
 		}
@@ -142,7 +142,7 @@ func (body requestTranscriptBody) input(tenantID, recordingID utilities.ID) (tra
 }
 
 func listTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[listTranscriptsRequest, transcriptArtifactListResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts", "/tenants/{tenant_id}/transcripts", "listTranscripts", decodeListTranscriptsRequest, func(ctx context.Context, request listTranscriptsRequest) (transcriptArtifactListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/transcripts", "listTranscripts", decodeListTranscriptsRequest, func(ctx context.Context, request listTranscriptsRequest) (transcriptArtifactListResponse, error) {
 		if service == nil {
 			return transcriptArtifactListResponse{}, apiErrorServiceUnavailable
 		}
@@ -166,7 +166,7 @@ func listTranscriptArtifactEndpoint(service TranscriptArtifactService, authorize
 }
 
 func getTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[getTranscriptRequest, transcriptArtifactResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "getTranscript", decodeGetTranscriptRequest, func(ctx context.Context, request getTranscriptRequest) (transcriptArtifactResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "getTranscript", decodeGetTranscriptRequest, func(ctx context.Context, request getTranscriptRequest) (transcriptArtifactResponse, error) {
 		if service == nil {
 			return transcriptArtifactResponse{}, apiErrorServiceUnavailable
 		}
@@ -182,7 +182,7 @@ func getTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer
 }
 
 func deleteTranscriptArtifactEndpoint(service TranscriptArtifactService, authorizer TenantAuthorizer) Endpoint[deleteTranscriptRequest, struct{}] {
-	return Delete("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "/tenants/{tenant_id}/transcripts/{transcript_id}", "deleteTranscript", decodeDeleteTranscriptRequest, func(ctx context.Context, request deleteTranscriptRequest) (struct{}, error) {
+	return Delete("/v1/tenants/{tenant_id}/transcripts/{transcript_id}", "deleteTranscript", decodeDeleteTranscriptRequest, func(ctx context.Context, request deleteTranscriptRequest) (struct{}, error) {
 		if service == nil {
 			return struct{}{}, apiErrorServiceUnavailable
 		}
@@ -207,7 +207,7 @@ func decodeDeleteTranscriptRequest(r *http.Request) (deleteTranscriptRequest, er
 }
 
 func transcriptArtifactDownloadEndpoint(service TranscriptArtifactService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createTranscriptDownloadRequest, transcriptDownloadResponse] {
-	return Post("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "createTranscriptDownloadURL", decodeCreateTranscriptDownloadRequest, func(ctx context.Context, request createTranscriptDownloadRequest) (transcriptDownloadResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/download-url", "createTranscriptDownloadURL", decodeCreateTranscriptDownloadRequest, func(ctx context.Context, request createTranscriptDownloadRequest) (transcriptDownloadResponse, error) {
 		if service == nil || downloads == nil {
 			return transcriptDownloadResponse{}, apiErrorServiceUnavailable
 		}

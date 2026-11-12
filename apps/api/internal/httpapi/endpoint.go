@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/q9labs/chalk/apps/api/internal/observability"
@@ -34,33 +35,32 @@ type Endpoint[Request any, Response any] struct {
 	limits   RateLimitOptions
 }
 
-func Get[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodGet, path, mountPath, operationID, decode, handle)
+func Get[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodGet, path, operationID, decode, handle)
 }
 
-func Post[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPost, path, mountPath, operationID, decode, handle)
+func Post[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPost, path, operationID, decode, handle)
 }
 
-func Put[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPut, path, mountPath, operationID, decode, handle)
+func Put[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPut, path, operationID, decode, handle)
 }
 
-func Patch[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodPatch, path, mountPath, operationID, decode, handle)
+func Patch[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodPatch, path, operationID, decode, handle)
 }
 
-func Delete[Request any, Response any](path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
-	return newEndpoint(http.MethodDelete, path, mountPath, operationID, decode, handle)
+func Delete[Request any, Response any](path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+	return newEndpoint(http.MethodDelete, path, operationID, decode, handle)
 }
 
-func newEndpoint[Request any, Response any](method string, path string, mountPath string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
+func newEndpoint[Request any, Response any](method string, path string, operationID string, decode EndpointDecoder[Request], handle EndpointHandler[Request, Response]) Endpoint[Request, Response] {
 	return Endpoint[Request, Response]{
 		contract: APIRouteContract{
 			OperationID: operationID,
 			Method:      method,
 			Path:        path,
-			MountPath:   mountPath,
 		},
 		decode: decode,
 		handle: handle,
@@ -182,7 +182,7 @@ func (e Endpoint[Request, Response]) Mount(r chi.Router, limits RateLimitOptions
 	for i := len(e.middlewares) - 1; i >= 0; i-- {
 		handler = e.middlewares[i](handler)
 	}
-	r.Method(e.contract.Method, e.contract.MountPath, handler)
+	r.Method(e.contract.Method, strings.TrimPrefix(e.contract.Path, apiPrefix), handler)
 }
 
 func (e Endpoint[Request, Response]) RouteContract() APIRouteContract {

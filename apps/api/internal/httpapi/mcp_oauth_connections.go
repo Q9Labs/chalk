@@ -106,7 +106,7 @@ func requireDashboardService(ctx context.Context, scope authentication.Scope) (a
 }
 
 func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentResponse] {
-	return Post("/v1/mcp-oauth/requests/inspect", "/mcp-oauth/requests/inspect", "inspectMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentResponse, error) {
+	return Post("/v1/mcp-oauth/requests/inspect", "inspectMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentResponse, error) {
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsRead); err != nil {
 			return mcpConsentResponse{}, err
 		}
@@ -128,7 +128,7 @@ func inspectMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLooku
 }
 
 func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConsentApproveBody, mcpConsentRedirectResponse] {
-	return Post("/v1/mcp-oauth/requests/approve", "/mcp-oauth/requests/approve", "approveMCPConsentRequest", decodeJSONBody[mcpConsentApproveBody], func(ctx context.Context, request mcpConsentApproveBody) (mcpConsentRedirectResponse, error) {
+	return Post("/v1/mcp-oauth/requests/approve", "approveMCPConsentRequest", decodeJSONBody[mcpConsentApproveBody], func(ctx context.Context, request mcpConsentApproveBody) (mcpConsentRedirectResponse, error) {
 		principal, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite)
 		if err != nil {
 			return mcpConsentRedirectResponse{}, err
@@ -159,7 +159,7 @@ func approveMCPConsentEndpoint(service MCPOAuthService, authorizer TenantAuthori
 }
 
 func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBody, mcpConsentRedirectResponse] {
-	return Post("/v1/mcp-oauth/requests/deny", "/mcp-oauth/requests/deny", "denyMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentRedirectResponse, error) {
+	return Post("/v1/mcp-oauth/requests/deny", "denyMCPConsentRequest", decodeJSONBody[mcpConsentLookupBody], func(ctx context.Context, request mcpConsentLookupBody) (mcpConsentRedirectResponse, error) {
 		if _, err := requireDashboardService(ctx, authentication.ScopeTenantsWrite); err != nil {
 			return mcpConsentRedirectResponse{}, err
 		}
@@ -181,7 +181,7 @@ func denyMCPConsentEndpoint(service MCPOAuthService) Endpoint[mcpConsentLookupBo
 }
 
 func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[listMCPConnectionsRequest, mcpConnectionListResponse] {
-	return Get("/v1/tenants/{tenant_id}/mcp-connections", "/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeListMCPConnectionsRequest, func(ctx context.Context, request listMCPConnectionsRequest) (mcpConnectionListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/mcp-connections", "listMCPConnections", decodeListMCPConnectionsRequest, func(ctx context.Context, request listMCPConnectionsRequest) (mcpConnectionListResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readTenantPermission); err != nil {
 			return mcpConnectionListResponse{}, err
 		}
@@ -211,7 +211,7 @@ func listMCPConnectionsEndpoint(service MCPOAuthService, authorizer TenantAuthor
 }
 
 func revokeMCPConnectionEndpoint(service MCPOAuthService, authorizer TenantAuthorizer) Endpoint[mcpConnectionIDsRequest, noResponse] {
-	return Delete("/v1/tenants/{tenant_id}/mcp-connections/{connection_id}", "/tenants/{tenant_id}/mcp-connections/{connection_id}", "revokeMCPConnection", func(r *http.Request) (mcpConnectionIDsRequest, error) {
+	return Delete("/v1/tenants/{tenant_id}/mcp-connections/{connection_id}", "revokeMCPConnection", func(r *http.Request) (mcpConnectionIDsRequest, error) {
 		tenantID, err := tenantIDRequest(r)
 		if err != nil {
 			return mcpConnectionIDsRequest{}, err

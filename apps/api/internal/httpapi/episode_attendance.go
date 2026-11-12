@@ -22,7 +22,7 @@ type episodeAttendanceResponse struct {
 }
 
 func getEpisodeAttendanceEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[getEpisodeRequest, episodeAttendanceResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "getEpisodeAttendance", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeAttendanceResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/attendance", "getEpisodeAttendance", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeAttendanceResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
 			return episodeAttendanceResponse{}, err
 		}

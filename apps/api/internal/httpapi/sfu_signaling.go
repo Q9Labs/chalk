@@ -143,7 +143,6 @@ func sfuSignalingEndpoints(spaces SpaceService, episodeLookup EpisodeLookup, ten
 func sfuAddTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks",
 		"addCloudflareSFUTracks",
 		decodeSFUTracksRequest,
 		func(ctx context.Context, request sfuTracksEndpointRequest) (mediaplane.TracksResponse, error) {
@@ -491,7 +490,6 @@ func remoteTrackObservation(request sfuTracksEndpointRequest, missing []mediapla
 func sfuCloseTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuCloseTracksEndpointRequest, mediaplane.CloseTracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/close",
 		"closeCloudflareSFUTracks",
 		decodeSFUCloseTracksRequest,
 		func(ctx context.Context, request sfuCloseTracksEndpointRequest) (mediaplane.CloseTracksResponse, error) {
@@ -540,7 +538,6 @@ func attachPublishedReferences(response *mediaplane.TracksResponse, references [
 func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuPublicationsEndpointRequest, sfuPublicationsResponse] {
 	return Get(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/publications",
 		"listCloudflareSFUPublications",
 		decodeSFUPublicationsRequest,
 		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuPublicationsResponse, error) {
@@ -563,7 +560,6 @@ func sfuListPublicationsEndpoint(spaces SpaceService, episodeLookup EpisodeLooku
 func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuPublicationsEndpointRequest, sfuSubscriptionsResponse] {
 	return Get(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/subscriptions",
 		"listSFUSubscriptions",
 		decodeSFUPublicationsRequest,
 		func(ctx context.Context, request sfuPublicationsEndpointRequest) (sfuSubscriptionsResponse, error) {
@@ -582,7 +578,6 @@ func sfuListSubscriptionsEndpoint(spaces SpaceService, episodeLookup EpisodeLook
 func sfuUpdateTracksEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) Endpoint[sfuUpdateTracksEndpointRequest, mediaplane.TracksResponse] {
 	return Put(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/tracks/update",
 		"updateCloudflareSFUTracks",
 		decodeSFUUpdateTracksRequest,
 		func(ctx context.Context, request sfuUpdateTracksEndpointRequest) (mediaplane.TracksResponse, error) {
@@ -656,7 +651,6 @@ func holdLocalTracks(ctx context.Context, request sfuUpdateTracksEndpointRequest
 func sfuRenegotiateEndpoint(spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver) Endpoint[sfuRenegotiateEndpointRequest, sfuRenegotiateResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/media/sfu/renegotiate",
 		"renegotiateCloudflareSFU",
 		decodeSFURenegotiateRequest,
 		func(ctx context.Context, request sfuRenegotiateEndpointRequest) (sfuRenegotiateResponse, error) {
