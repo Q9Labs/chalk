@@ -82,8 +82,8 @@ async function measureJourney({ page, cdp, errors }, run, journey, injection, re
     await waitForToastTeardown(page);
   }
   const baseline = warmupCycles === 1 ? cold : await sample(page, cdp, budgets.settleMs);
-      // Warm-up must not hide retained resources, even if their growth later stops.
-      const warmupFailures = Object.entries(budgets.metrics).flatMap(([metric, limit]) => (metric !== "heapMiB" && baseline[metric] - cold[metric] > limit.allowance ? [`${metric}: warm-up excess ${(baseline[metric] - cold[metric]).toFixed(4)} > ${limit.allowance}`] : []));
+  // Warm-up must not hide retained resources, even if their growth later stops.
+  const warmupFailures = Object.entries(budgets.metrics).flatMap(([metric, limit]) => (metric !== "heapMiB" && baseline[metric] - cold[metric] > limit.allowance ? [`${metric}: warm-up excess ${(baseline[metric] - cold[metric]).toFixed(4)} > ${limit.allowance}`] : []));
   const samples = [baseline];
   for (let index = 0; index < cycles; index++) {
     await cycle();

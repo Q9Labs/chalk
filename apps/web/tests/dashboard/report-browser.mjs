@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { strict as assert } from "node:assert";
 import { mkdir, writeFile } from "node:fs/promises";
