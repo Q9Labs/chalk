@@ -33,6 +33,20 @@ for (const relativePath of packageJsonPaths) {
   }
 }
 
+// Each SDK package lists its entrypoints in the tsup build, in `exports` and in `typesVersions`; the three must agree.
+for (const sdk of ["client", "react", "react-native"]) {
+  const relativePath = `sdks/typescript/${sdk}/package.json`;
+  const pkg = readJson(relativePath);
+  const built = new Set([...String(pkg.scripts?.build).matchAll(/\.\/src\/([\w./-]+)\.tsx?/g)].map((match) => `./dist/${match[1]}.js`));
+  const exported = new Set([...JSON.stringify(pkg.exports).matchAll(/"(\.\/dist\/[^"]+\.js)"/g)].map((match) => match[1]));
+  for (const target of built) if (!exported.has(target)) errors.push(`${relativePath}: the build makes ${target} but \`exports\` does not list it`);
+  for (const target of exported) if (!built.has(target)) errors.push(`${relativePath}: \`exports\` lists ${target} but the build does not make it`);
+  const typed = pkg.typesVersions?.["*"] ?? {};
+  for (const subpath of Object.keys(pkg.exports)) {
+    if (subpath !== "." && !(subpath.slice(2) in typed)) errors.push(`${relativePath}: \`typesVersions\` has no entry for ${subpath}`);
+  }
+}
+
 const rootPackage = readJson("package.json");
 const commitScript = readFileSync(path.join(repoRoot, "scripts/gates/commit.sh"), "utf8");
 const referencedScripts = [...commitScript.matchAll(/pnpm run ([A-Za-z0-9:_-]+)/g)].map((match) => match[1]);

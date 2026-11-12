@@ -28,6 +28,12 @@
       "utils": [
         "./dist/utils/index.d.ts"
       ],
+      "toast": [
+        "./dist/toast.d.ts"
+      ],
+      "headless": [
+        "./dist/headless.d.ts"
+      ],
       "*": [
         "./dist/index.d.ts"
       ],
