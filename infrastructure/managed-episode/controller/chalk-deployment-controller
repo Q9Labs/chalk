@@ -1476,6 +1476,21 @@ rollback_to_stable() {
   run_candidate "$stable_runtime"
 }
 
+# A job re-run repeats a deploy this host already promoted. It passes on health alone and changes nothing; the same
+# release id with another manifest is refused, as is any other active release.
+release_already_active() {
+  [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || return 1
+  [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
+  load_active_pointer
+  [[ "$(sha256_file "$manifest_path")" == "$(jq -er '.manifest_sha256' "$active_pointer")" ]] || fail "release ${request_release_id} is already active with a different manifest"
+  jq -e --arg environment "$request_environment" --arg region "$request_region" --arg prefix "$request_prefix" --argjson excluded "$excluded_json" \
+    '.environment == $environment and .aws_region == $region and .parameter_prefix == $prefix and .excluded_secrets == $excluded' "$active_pointer" >/dev/null ||
+    fail "release ${request_release_id} is already active with different deployment settings"
+  # An interrupted promotion can leave this pointer behind a different release that is healthy and running.
+  local live_manifest="${run_root}/release/release-manifest.json"
+  [[ -f "$live_manifest" && ! -L "$live_manifest" && "$(sha256_file "$live_manifest")" == "$(sha256_file "$manifest_path")" ]] || fail "release ${request_release_id} is the active pointer but the running release differs"
+}
+
 deploy() {
   if ((EUID != 0)) && [[ "$allow_non_root_tests" != true ]]; then
     fail "deployment controller must run as root"
@@ -1487,6 +1502,11 @@ deploy() {
   validate_inventory "${managed_root}/contracts/runtime-inputs.json"
   validate_manifest "$managed_root"
   prepare_stage
+  if release_already_active; then
+    health_runtime || fail "release ${request_release_id} is already active but its health check failed"
+    emit_result deployed passed false
+    return
+  fi
   fetch_deployment_inputs
   inject_runtime_identity
   local rendered_root="${stage_root}/runtime"
