@@ -7,6 +7,8 @@ defmodule ChalkSync.Reactions do
   alias ChalkSync.UUID
 
   @reactions ChalkSync.Contract.GeneratedV1.metadata()["collaboration"]["reactions"]
+  # Protocol v1 clients know only these six, so the set is frozen.
+  @version_1_reactions ["👍", "❤️", "😂", "😮", "😢", "🎉"]
   @reaction_ttl_ms 5_000
 
   @type options :: [
@@ -76,7 +78,7 @@ defmodule ChalkSync.Reactions do
   defp validate_reaction(reaction, options) do
     allowed =
       if Keyword.get(options, :version, 2) == 1,
-        do: ["👍", "❤️", "😂", "😮", "😢", "🎉"],
+        do: @version_1_reactions,
         else: @reactions
 
     if reaction in allowed, do: :ok, else: {:error, :invalid_payload}

@@ -213,10 +213,14 @@ defmodule ChalkSync.Application do
   end
 
   # Bandit buffers fragmented messages up to 8 MB by default. The largest inbound message any
-  # socket accepts is the whiteboard's 256 KiB (decodedInboundFrameBytes), so a larger fragmented
-  # message is closed with 1009 instead of buffered. The option is per listener, not per upgrade.
+  # socket accepts is the whiteboard's, so a larger fragmented message is closed with 1009
+  # instead of buffered. The option is per listener, not per upgrade.
+  @max_fragmented_message_size ChalkSync.Contract.GeneratedWhiteboardV1.limits()[
+                                 "decodedInboundFrameBytes"
+                               ]
+
   @spec websocket_options() :: keyword()
-  def websocket_options, do: [max_fragmented_message_size: 262_144]
+  def websocket_options, do: [max_fragmented_message_size: @max_fragmented_message_size]
 
   defp presence_runtime_child do
     case Application.fetch_env!(:chalk_sync, :stateholder) do

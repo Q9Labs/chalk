@@ -1,6 +1,8 @@
 defmodule ChalkSync.WhiteboardV1.SQL do
   @moduledoc false
 
+  alias ChalkSync.Contract.GeneratedWhiteboardV1
+
   def transaction_settings do
     """
     select
@@ -315,6 +317,12 @@ defmodule ChalkSync.WhiteboardV1.SQL do
     """
   end
 
-  def notify_head, do: "select pg_notify('chalk_whiteboard_v1_heads', $1)"
-  def notify_access, do: "select pg_notify('chalk_whiteboard_v1_access', $1)"
+  @head_channel GeneratedWhiteboardV1.metadata()["notifications"]["durableHeadChannel"]
+  @access_channel "chalk_whiteboard_v1_access"
+
+  def head_channel, do: @head_channel
+  def access_channel, do: @access_channel
+
+  def notify_head, do: "select pg_notify('#{@head_channel}', $1)"
+  def notify_access, do: "select pg_notify('#{@access_channel}', $1)"
 end
