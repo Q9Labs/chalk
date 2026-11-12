@@ -33,7 +33,7 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 `pnpm gate -- --target web|mobile` scopes to a shipment. Chalk's planner keeps dependency-aware workspace exclusions and rejects incompatible mixed-platform changes. Do not infer a shipment target from a branch, release mode or directory.
 
-Documentation-only changes keep the hygiene, secrets, generated-output and format checks and do not force unrelated service or workspace checks. Workspace builds run through Turbo with their dependency closure and are forced, never trusted from cache. The boundary gate rejects relative reach-through into another workspace's private source and packages or SDKs importing applications; it does not enforce intra-workspace cycles or orphans. `infrastructure/managed-episode` and `infrastructure/nightly` run the API, Sync and recorder gates because those tests read them.
+Documentation-only changes keep the hygiene, secrets, feature-map, generated-output and format checks and do not force unrelated service or workspace checks. Workspace builds run through Turbo with their dependency closure and are forced, never trusted from cache. The boundary gate rejects relative reach-through into another workspace's private source and packages or SDKs importing applications; it does not enforce intra-workspace cycles or orphans. `infrastructure/managed-episode` and `infrastructure/nightly` run the API, Sync and recorder gates because those tests read them.
 
 ## Design-token ratchet
 

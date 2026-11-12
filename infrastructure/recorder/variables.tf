@@ -141,20 +141,6 @@ variable "multipart_abort_rule_id" {
   default     = "incomplete-multipart-expire"
 }
 
-variable "whiteboard_allowed_origins" {
-  description = "Exact browser origins allowed to use whiteboard-v1 presigned GET and PUT URLs."
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition = length(var.whiteboard_allowed_origins) <= 8 && alltrue([
-      for origin in var.whiteboard_allowed_origins :
-      origin != "*" && can(regex("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$", origin))
-    ])
-    error_message = "whiteboard_allowed_origins must contain at most eight exact HTTP(S) origins without paths, trailing slashes, or wildcards."
-  }
-}
-
 variable "temporary_bundle_prefix" {
   description = "Compatibility input for the fixed temporary/ prefix containing encrypted capture bundles and wrapped-key metadata."
   type        = string

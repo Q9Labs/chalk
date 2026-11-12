@@ -51,8 +51,9 @@ type Telemetry struct {
 	UDPReceiveErrors, UDPSendErrors uint64
 	UDPErrorsKnown                  bool
 	// UDPSendRefused counts datagrams the kernel refused to send and UDPReceiveTruncated those
-	// it cut short on receipt, both from the node's own batched socket.
-	UDPSendRefused, UDPReceiveTruncated uint64
+	// it cut short on receipt, both from the node's own batched socket. UDPDroppedAudio and
+	// UDPDroppedVideo count datagrams its send rings overwrote because the socket stalled.
+	UDPSendRefused, UDPReceiveTruncated, UDPDroppedAudio, UDPDroppedVideo uint64
 	// CongestionPaused counts video subscriptions a subscriber's own downlink pauses, and
 	// PlannerPaused those an Episode plan pauses to hold its ceiling. CappedCameras and
 	// PausedCameras are the cameras the Episode ceilings lower or pause.
@@ -142,9 +143,9 @@ func (n *Node) Telemetry() Telemetry {
 	}
 
 	if socket, ok := n.media.(interface {
-		counters() (refused, truncated uint64)
+		counters() (refused, truncated, droppedAudio, droppedVideo uint64)
 	}); ok {
-		telemetry.UDPSendRefused, telemetry.UDPReceiveTruncated = socket.counters()
+		telemetry.UDPSendRefused, telemetry.UDPReceiveTruncated, telemetry.UDPDroppedAudio, telemetry.UDPDroppedVideo = socket.counters()
 	}
 
 	stats := n.stats.Load()

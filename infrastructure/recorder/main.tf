@@ -338,7 +338,7 @@ resource "cloudflare_r2_bucket_cors" "whiteboard" {
     {
       id = var.whiteboard_cors_rule_id
       allowed = {
-        origins = var.whiteboard_allowed_origins
+        origins = ["*"]
         methods = ["GET", "PUT"]
         headers = local.whiteboard_cors_allowed_headers
       }

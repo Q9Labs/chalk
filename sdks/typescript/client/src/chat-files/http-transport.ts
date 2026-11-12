@@ -88,7 +88,7 @@ async function responseError(response: Response, operation: ChalkChatFileOperati
     const value: unknown = await response.json().catch(() => null);
     if (isRecord(value) && isRecord(value.error) && value.error.code === "chat.storage_unavailable") message = "Chat attachment storage is unavailable.";
   }
-  return chatFileError(operation, code, response.status === 429 || response.status >= 500, message);
+  return new ChalkChatFileError({ operation, code, recoverable: response.status === 429 || response.status >= 500, message, httpStatus: response.status });
 }
 
 function responseErrorCode(status: number): ChalkChatFileFailure["code"] {
