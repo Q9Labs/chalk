@@ -56,7 +56,10 @@ test("a publisher whose sender reports 0 kbps while the viewer waits is the publ
 });
 
 test("a node that paused the subscription for congestion is the network, for the viewer's own pause it is the viewer", () => {
-  const paused = (reason) => [...dormantReplacementCall().filter((row) => !String(row.attributes.event).startsWith("media.")), { _time: at(100), "service.name": "chalk-sfu", attributes: { event: "sfu.subscription.paused", episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", reason } }];
+  const paused = (reason) => [
+    ...dormantReplacementCall().filter((row) => !String(row.attributes.event).startsWith("media.")),
+    { _time: at(100), "service.name": "chalk-sfu", attributes: { event: "sfu.subscription.paused", episode_id: EPISODE, participant_id: "participant-viewer", connection_id: "conn-view-2", reason } },
+  ];
   const silence = (reason) => verdictOf(paused(reason)).findings.find((finding) => finding.kind === "media_silence");
   assert.equal(silence("congestion").side, "network");
   assert.equal(silence("viewer").side, "viewer");
@@ -155,7 +158,10 @@ test("evidence the rows lack is listed: a Participant with no inbound rows and n
 test("a viewer that hid the video itself is named as its own choice, not as a bad call, and without the field the same rows are silence", () => {
   const withField = (hidden) => [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, ...(hidden ? { recv_hidden_videos: 1 } : {}) }))];
   const hidden = verdictOf(withField(true)).findings;
-  assert.deepEqual(hidden.map((finding) => [finding.kind, finding.benign, finding.side]), [["viewer_hid_video", true, "viewer"]]);
+  assert.deepEqual(
+    hidden.map((finding) => [finding.kind, finding.benign, finding.side]),
+    [["viewer_hid_video", true, "viewer"]],
+  );
   assert.match(verdictLine(hidden), /^No bad call found by the rules.*Participant [0-9a-f]{8} hid its own video.*side: viewer, by choice/u);
   assert.equal(verdictOf(withField(false)).findings[0]?.kind, "media_silence");
 });
