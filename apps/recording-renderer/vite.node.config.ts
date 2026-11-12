@@ -3,8 +3,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { EXCALIDRAW_FONTS } from "./src/compose/excalidraw-fonts.ts";
 
 const source = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+const nativeExternals = ["@napi-rs/canvas", "happy-dom"];
 const excalidrawRoot = dirname(createRequire(source("../../packages/whiteboard/package.json")).resolve("@excalidraw/excalidraw"));
 
 export default defineConfig({
@@ -13,7 +15,7 @@ export default defineConfig({
     outDir: "dist/node",
     emptyOutDir: true,
     rollupOptions: {
-      external: ["@napi-rs/canvas", "happy-dom"],
+      external: nativeExternals,
       input: {
         compose: "src/compose-cli.ts",
         "compose-fixture": "src/compose-fixture.ts",
@@ -33,7 +35,7 @@ export default defineConfig({
         for (const file of await readdir(source("src/compose/font-assets"))) {
           if (file.endsWith(".woff2")) await cp(join(source("src/compose/font-assets"), file), join(fonts, "Figtree", file));
         }
-        for (const folder of ["Excalifont", "Virgil", "Cascadia", "Nunito", "Lilita", "ComicShanns", "Liberation", "Assistant"]) {
+        for (const [folder] of EXCALIDRAW_FONTS) {
           await cp(join(excalidrawRoot, "fonts", folder), join(fonts, "excalidraw", folder), { recursive: true });
         }
       },
@@ -51,6 +53,6 @@ export default defineConfig({
     // Bundle transitive dependencies too: chunks resolve imports from the renderer,
     // not from the original package's pnpm dependency directory.
     noExternal: true,
-    external: ["@napi-rs/canvas", "happy-dom"],
+    external: nativeExternals,
   },
 });

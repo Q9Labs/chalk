@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { loadImage, type Image } from "@napi-rs/canvas";
 import { denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
 import { COMPOSE_RESULT_VERSION, VIDEO_ENCODERS, type VideoEncoder } from "./generated/render-contract.js";
-import { registerSubsetFamily, registerTextFallback } from "./compose/fonts.js";
+import { createFontRegistry } from "./compose/fonts.js";
 import { createPainter } from "./compose/paint.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
 import { createWhiteboardRenderer } from "./compose/whiteboard.js";
@@ -114,8 +114,8 @@ async function main(): Promise<void> {
 }
 
 async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: VerifiedRenderInputs, output: ComposeOutput, workDirectory: string): Promise<ReadonlyMap<string, string>> {
-  await registerTextFallback(join(FONTS_DIRECTORY, "excalidraw", "Liberation"));
-  const fontFamilies = await registerSubsetFamily("Figtree", join(FONTS_DIRECTORY, "Figtree"));
+  const fonts = await createFontRegistry(join(FONTS_DIRECTORY, "excalidraw", "Liberation"));
+  const fontFamilies = await fonts.registerSubsetFamily("Figtree", join(FONTS_DIRECTORY, "Figtree"));
   const images = new Map<string, Promise<Image>>();
   const assetPath = (assetId: string): string => {
     const asset = inputs.assets.get(assetId);
@@ -135,6 +135,7 @@ async function paintOverlays(spans: ReturnType<typeof buildSceneSpans>, inputs: 
       return image;
     },
     renderWhiteboard: createWhiteboardRenderer({
+      fonts,
       fontsDirectory: join(FONTS_DIRECTORY, "excalidraw"),
       loadAsset: async (assetId) => ({ bytes: await readFile(assetPath(assetId)), contentType: inputs.assets.get(assetId)!.contentType }),
     }),
