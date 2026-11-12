@@ -6,7 +6,7 @@ import { ChalkIconButton, ChalkTooltip } from "../chalk-ui";
 import { cn } from "../../utils/cn";
 import { HandIcon, VolumeHighIcon } from "../../utils/icons";
 import { DevicePopover, preloadDeviceSheet } from "../device-popover/DevicePopover";
-import { CommandErrorAlert } from "../composite/CommandErrorAlert";
+import { ToastStack, type Toast } from "../toast-stack/ToastStack";
 import { LeaveMenu } from "./LeaveMenu";
 import { DockLayout } from "./DockLayout";
 import { ShareControl } from "./ShareControl";
@@ -210,13 +210,19 @@ export const ControlBarSurface = React.memo((props: ControlBarSurfaceProps) => {
   );
 });
 ControlBarSurface.displayName = "ControlBarSurface";
+/** A standalone dock has no call toast stack, so its media notice or command failure gets one of its own, dismissible until the message changes. */
+function ControlBarNotice({ message }: { readonly message: string | undefined }): React.JSX.Element {
+  const [dismissed, setDismissed] = useState<string | undefined>(undefined);
+  const toasts: Toast[] = message && message !== dismissed ? [{ id: "control-bar-notice", type: "error", duration: Infinity, message }] : [];
+  return <ToastStack toasts={toasts} onDismiss={() => setDismissed(message)} />;
+}
 export function ControlBar(props: ControlBarProps): React.JSX.Element {
   const { surfaceProps, commandError, commandSource, commandAction, mediaNotice, requestingDevice, cardUnavailable } = useConnectedControlBarBehavior(props);
   const failure = !props.onCommandError && commandError && (cardUnavailable || !isDeviceAccessFailure(commandError, commandSource)) ? commandFailureMessage(commandError, commandSource, commandAction) : undefined;
   return (
     <>
       <ControlBarSurface {...surfaceProps} />
-      <CommandErrorAlert message={mediaNotice ?? failure} />
+      <ControlBarNotice message={mediaNotice ?? failure} />
       {requestingDevice ? (
         <Suspense fallback={null}>
           <LazyDeviceAccessWaiting device={requestingDevice} />
