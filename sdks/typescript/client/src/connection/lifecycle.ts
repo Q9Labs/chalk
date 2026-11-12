@@ -513,7 +513,7 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
                     replaceMediaConnection: () =>
                       model.closed || model.state === "leaving" || model.state === "left"
                         ? Promise.reject(lifecycleFailure("invalid_state", false, "The media connection is not replaced while leaving"))
-                        : toPromise(access.refresh("media_recovery", true)).then((replacement) => {
+                        : toPromise(access.replaceMedia()).then(({ access: replacement }) => {
                             if (media === model.media) mediaAttempt.expiresAt = platform.clock.now() + MEDIA_RECOVERY_TIMEOUT_MS;
                             return replacement.media;
                           }),
@@ -859,7 +859,10 @@ export const makeConnectionLifecycleLayerFromServices = (options: Omit<Connectio
             if (typeof document !== "undefined" && document.visibilityState === "hidden") attempt.expiresAt = now + MEDIA_RECOVERY_TIMEOUT_MS;
             if (now < attempt.expiresAt) return yield* waitForMediaLive(media);
           }
-          const grant = yield* access.refresh("media_recovery", true).pipe(Effect.mapError(accessFailure));
+          const replacement = yield* access.replaceMedia().pipe(Effect.mapError(accessFailure));
+          // The caller that created this binding adopts it. Restarting the media client on it again would rebuild a connection it already negotiates.
+          if (!replacement.created) return yield* Effect.fail(lifecycleFailure("media_start_failed", true, "Another caller replaced the media connection and is recovering on it"));
+          const grant = replacement.access;
           attempt.expiresAt = (yield* Clock.currentTimeMillis) + MEDIA_RECOVERY_TIMEOUT_MS;
           yield* foreign(() => media.restart(grant.media), "media_start_failed", "Media transport could not restart");
           yield* waitForMediaLive(media);
