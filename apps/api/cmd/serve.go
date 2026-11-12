@@ -30,7 +30,6 @@ type jobResult struct {
 
 // serve runs the API until a signal arrives or a job stops, then shuts down.
 func (w *wiring) serve() error {
-	logger := w.obs.logger
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -41,22 +40,43 @@ func (w *wiring) serve() error {
 		close(receiveHealthDone)
 	}()
 
-	if w.providerBridge != nil {
-		bridgeErr, err := w.providerBridge.Start()
-		if err != nil {
-			return fmt.Errorf("start provider bridge listener: %w", err)
-		}
-		logger.Info("provider bridge listening", "event", "provider_bridge.listening", "address", w.providerBridge.Address())
-		w.jobs = append(w.jobs, backgroundJob{name: "provider bridge", awaited: true, run: func(context.Context) error {
-			err := <-bridgeErr
-			if err != nil {
-				logger.Error("provider bridge listen failed", "event", "provider_bridge.listen_failed", "error", err.Error())
-			}
-			return err
-		}})
+	if err := w.addProviderBridgeJob(); err != nil {
+		return err
 	}
 	server := w.newServer()
-	w.jobs = append(w.jobs, backgroundJob{name: "api server", awaited: true, run: func(context.Context) error {
+	w.jobs = append(w.jobs, w.apiServerJob(server))
+
+	runErr, err := w.superviseJobs(ctx, stop, server)
+	if err != nil {
+		return err
+	}
+	<-receiveHealthDone
+	return runErr
+}
+
+func (w *wiring) addProviderBridgeJob() error {
+	if w.providerBridge == nil {
+		return nil
+	}
+	logger := w.obs.logger
+	bridgeErr, err := w.providerBridge.Start()
+	if err != nil {
+		return fmt.Errorf("start provider bridge listener: %w", err)
+	}
+	logger.Info("provider bridge listening", "event", "provider_bridge.listening", "address", w.providerBridge.Address())
+	w.jobs = append(w.jobs, backgroundJob{name: "provider bridge", awaited: true, run: func(context.Context) error {
+		err := <-bridgeErr
+		if err != nil {
+			logger.Error("provider bridge listen failed", "event", "provider_bridge.listen_failed", "error", err.Error())
+		}
+		return err
+	}})
+	return nil
+}
+
+func (w *wiring) apiServerJob(server *http.Server) backgroundJob {
+	logger := w.obs.logger
+	return backgroundJob{name: "api server", awaited: true, run: func(context.Context) error {
 		logger.Info("api listening", "event", "api.listening", "address", w.cfg.API.Address)
 		err := server.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -64,8 +84,12 @@ func (w *wiring) serve() error {
 			return err
 		}
 		return nil
-	}})
+	}}
+}
 
+// superviseJobs runs every job until the first one stops or the context ends, then shuts the server down and
+// waits for the awaited jobs. It returns the first job error; a shutdown failure comes back as the second value.
+func (w *wiring) superviseJobs(ctx context.Context, stop context.CancelFunc, server *http.Server) (runErr error, shutdownErr error) {
 	results := make(chan jobResult, len(w.jobs))
 	for _, job := range w.jobs {
 		go func() { results <- jobResult{job: job, err: job.run(ctx)} }()
@@ -76,8 +100,6 @@ func (w *wiring) serve() error {
 			pending++
 		}
 	}
-
-	var runErr error
 	select {
 	case first := <-results:
 		runErr = first.err
@@ -89,7 +111,7 @@ func (w *wiring) serve() error {
 	stop()
 
 	if err := w.shutdown(server); err != nil {
-		return err
+		return nil, err
 	}
 	for pending > 0 {
 		result := <-results
@@ -101,8 +123,7 @@ func (w *wiring) serve() error {
 			runErr = result.err
 		}
 	}
-	<-receiveHealthDone
-	return runErr
+	return runErr, nil
 }
 
 func (w *wiring) newServer() *http.Server {
