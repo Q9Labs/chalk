@@ -125,7 +125,6 @@ RECONCILE
 [[ "$mode" == --firewall-only ]] && exit 0
 
 # A node created before the send buffer was configured lacks its sysctl. Setting it again is harmless.
-udp_buffer="$(node_table .udpBufferBytes)"
 remote "printf 'net.core.wmem_max = ${udp_buffer}\nnet.core.wmem_default = ${udp_buffer}\n' > /etc/sysctl.d/91-chalk-sfu-send.conf && sysctl -q --system"
 
 # The node's size picks its settings from the SFU's node table (packet budget, steal limit, memory),
@@ -219,7 +218,8 @@ if $capture_on; then
   fi
   docker buildx build --quiet --platform linux/amd64 --build-arg "SOURCE_REVISION=${revision}" \
     --build-context "api=${repo_root}/apps/api" --build-context "mcpapi=${repo_root}/features/mcp/api" \
-    --file "${deploy_dir}/Dockerfile.capture" --tag "chalk-recorder-capture:${revision}" --load "$deploy_dir" >/dev/null
+    --build-context "protocol=${sfu_root}/protocol" \
+    --file "${node_dir}/Dockerfile.capture" --tag "chalk-recorder-capture:${revision}" --load "$node_dir" >/dev/null
   docker save "chalk-recorder-capture:${revision}" | as_sfu podman load --quiet >/dev/null
   capture_image_id="$(as_sfu podman image inspect --format '{{.Id}}' "chalk-recorder-capture:${revision}")"
   loaded="$(as_sfu podman image inspect --format "'{{index .Labels \"org.opencontainers.image.revision\"}}'" "$capture_image_id")"
@@ -229,8 +229,8 @@ if $capture_on; then
   # lapses, and refuses to install one that is not this node's, from the capture CA, with 14 days left.
   node_id="$(sed -n 's/^NODE_ID=//p' "${dir}/capture.conf")"
   [[ -n "$node_id" ]] || { echo "${dir}/capture.conf needs NODE_ID=" >&2; exit 1; }
-  "${deploy_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
-  "${deploy_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
+  "${node_dir}/certs" "$environment" capture-worker "$node_id" >/dev/null
+  "${node_dir}/certs" "$environment" capture-worker-check "$node_id" >/dev/null
   for pair in worker-cert:capture-worker.crt worker-key:capture-worker.key server-ca:bridge-ca.crt; do
     name="chalk-capture-${pair%%:*}"
     replace=()
@@ -247,10 +247,10 @@ if $capture_on; then
   capture_gomemlimit="$(node_table --arg size "$node_size" '.sizes[$size].capture.goMemLimit')"
   capture_cpus="$(node_table --arg size "$node_size" '.sizes[$size].capture.cpus')"
   sed -e "s|__ENVIRONMENT__|${spiffe_environment}|" -e "s|__CONTROL_PLANE_URL__|${control_plane_url}|" -e "s|__SERVER_NAME__|${server_name}|" \
-    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${deploy_dir}/capture.env.in" |
+    -e "s|__SLOTS__|${slots:-2}|" -e "s|__GOMEMLIMIT__|${capture_gomemlimit}|" "${node_dir}/capture.env.in" |
     as_sfu sh -c "'umask 077 && cat > .config/chalk-sfu/capture.env'"
   sed -e "s|__IMAGE__|${capture_image_id}|" -e "s|__MEMORY_LIMIT__|${capture_memory}|" -e "s|__CPU_LIMIT__|${capture_cpus}|" \
-    "${deploy_dir}/chalk-recorder-capture.container.in" |
+    "${node_dir}/chalk-recorder-capture.container.in" |
     as_sfu sh -c "'cat > .config/containers/systemd/chalk-recorder-capture.container'"
 else
   echo "==> no capture.conf: the capture worker is off on this node"

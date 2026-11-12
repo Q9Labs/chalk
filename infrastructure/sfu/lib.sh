@@ -12,6 +12,7 @@ export SFU_SSH_KEY="${SFU_SSH_KEY:-$HOME/.ssh/chalk-sfu-operator_ed25519}"
 node_table() { jq -r "$@" "$sfu_table"; }
 control_port="$(node_table .ports.control)"
 media_port="$(node_table .ports.media)"
+udp_buffer="$(node_table .udpBufferBytes)"
 
 # sfu_ssh_options <known_hosts file> [ssh option...] sets ssh_options for the operator.
 sfu_ssh_options() {

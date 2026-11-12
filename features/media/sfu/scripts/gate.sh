@@ -17,6 +17,8 @@ printf '\n==> Bench reaper tests (fake doctl only)\n'
 python3 scripts/bench/test_bench.py
 printf '\n==> Deploy script start tests (fake ssh only)\n'
 python3 "${repo_root}/infrastructure/sfu/test_deploy.py"
+printf '\n==> Template render and deploy branch tests (mocked ssh, doctl, docker)\n'
+python3 "${repo_root}/infrastructure/sfu/test_templates.py"
 printf '\n==> Shared staging lease and contention tests\n'
 python3 "${repo_root}/scripts/staging-sfu/test_staging_lock.py"
 node "${repo_root}/scripts/test/run.mjs" node --test "${repo_root}/features/scorecard/contention.test.mjs" "${repo_root}/features/scorecard/own-sfu.test.mjs" "${repo_root}/features/scorecard/cf-sfu-card.test.mjs" "${repo_root}/features/scorecard/nightly-graph.test.mjs" "${repo_root}/features/scorecard/staging-metrics.test.mjs" "${repo_root}/features/scorecard/staging-latency.test.mjs" "${repo_root}/features/scorecard/diagnostics.test.mjs" "${repo_root}/scripts/prod-proof/latency-stages.test.mjs"

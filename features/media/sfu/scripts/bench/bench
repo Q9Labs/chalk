@@ -123,16 +123,16 @@ host_cidr() {
 }
 
 # render_cloud_init renders infrastructure/sfu/node/cloud-init.yaml.tftpl the way OpenTofu does, for the two
-# loops it has: one rule line per address in control_addresses and ssh_addresses. The ports come from the node table.
+# loops it has: one rule line per address in control_addresses and ssh_addresses. The ports and the UDP buffer come from the node table.
 render_cloud_init() {
-  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" '
+  awk -v control="$1" -v ssh="$2" -v control_port="$control_port" -v media_port="$media_port" -v udp_buffer="$udp_buffer" '
     /^%\{ for address in [a-z_]+ ~\}$/ { list = ($0 ~ /control_addresses/) ? control : ssh; body = ""; looping = 1; next }
     /^%\{ endfor ~\}$/ {
       count = split(list, addresses, ",")
       for (i = 1; i <= count; i++) { line = body; gsub(/\$\{address\}/, addresses[i], line); printf "%s", line }
       looping = 0; next
     }
-    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); if (looping) body = body $0 "\n"; else print }
+    { gsub(/\$\{control_port\}/, control_port); gsub(/\$\{media_port\}/, media_port); gsub(/\$\{udp_buffer\}/, udp_buffer); if (looping) body = body $0 "\n"; else print }
   ' "${node_dir}/node/cloud-init.yaml.tftpl"
 }
 
