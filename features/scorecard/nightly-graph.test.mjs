@@ -216,11 +216,8 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
     const cases = Object.entries(failing)
       .map(([name, code]) => `${name}) exit ${code} ;;`)
       .join(" ");
-    // call-artifacts marks its start; camera-share fails unless that mark appears while it runs, which proves the two overlap.
-    writeFileSync(
-      pnpm,
-      `#!/usr/bin/env bash\necho "$2" >> ran\nif [ "$2" = call-artifacts ]; then touch call-artifacts-started; sleep 1; fi\nif [ "$2" = camera-share ] && [ -n "$NEED_OVERLAP" ]; then for _ in $(seq 1 50); do [ -f call-artifacts-started ] && break; sleep 0.1; done; [ -f call-artifacts-started ] || exit 9; fi\ncase "$2" in ${cases} esac\n`,
-    );
+    // Every proof serves the one proof origin on a fixed loopback port, so two proofs at once fail with EADDRINUSE: a proof exits 9 when another is still running.
+    writeFileSync(pnpm, `#!/usr/bin/env bash\necho "$2" >> ran\nmkdir busy 2>/dev/null || exit 9\nsleep 0.3\nrmdir busy\ncase "$2" in ${cases} esac\n`);
     for (const file of [lease, pnpm]) chmodSync(file, 0o755);
     const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", proofStep.run], {
       cwd: dir,
@@ -231,7 +228,6 @@ function runProofStep({ nightly: isNightly, plane, proofs, failing = {}, leaseSt
         PROOFS: proofs,
         CHALK_PROOF_MEDIA_PLANE: plane,
         STAGING_SFU_PROOF: String(isNightly),
-        NEED_OVERLAP: isNightly ? "1" : "",
         RUN_PREFIX: "abc",
         GITHUB_OUTPUT: join(dir, "output"),
         GITHUB_STEP_SUMMARY: join(dir, "summary"),

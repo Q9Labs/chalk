@@ -259,8 +259,8 @@ jobs:
           results=()
           failed=()
           if [[ "$STAGING_SFU_PROOF" == true ]]; then
-            # The nightly proofs are independent, so one failure must not hide the others' results. One lease covers the whole group:
-            # call-artifacts runs on its own Space beside the other proofs (see run-proofs). A lease problem (exit 75) leaves a proof
+            # The nightly proofs are independent, so one failure must not hide the others' results. One lease covers the whole group, and run-proofs
+            # runs the proofs one after another, because they share one proof origin port. A lease problem (exit 75) leaves a proof
             # without a status, so it is not-run, and gate-lease names the reason in the step output `failure`.
             status_dir=.private/proof-status
             for proof in "${proofs[@]}"; do echo "${RUN_PREFIX}-${proof}" >> .private/proof-run-ids; done

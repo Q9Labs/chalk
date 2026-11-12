@@ -3,9 +3,9 @@
 #
 #   run-proofs <run-prefix> <status-dir> <proof>...
 #
-# A Space holds one live Episode, so proofs on one Space run one after another. call-artifacts has its own Space
-# (the automatic Recording and Transcript one), so it runs beside the others. Each proof's exit status goes to
-# <status-dir>/<proof>, and a failed proof does not stop the rest. Exit 0 means every proof passed.
+# Proofs run one after another: every proof serves the one proof origin on a fixed loopback port that the Tenant
+# allows, so two at once fail with EADDRINUSE. Each proof's exit status goes to <status-dir>/<proof>, and a failed
+# proof does not stop the rest. Exit 0 means every proof passed.
 set -uo pipefail
 
 if [ "$#" -lt 3 ]; then
@@ -24,24 +24,10 @@ prove() {
   echo "$status" > "${status_dir}/${proof}"
 }
 
-# Output is labelled by proof, because two proofs print at the same time.
-lane() {
-  local proof
-  for proof in "$@"; do
-    prove "$proof" | sed -u "s/^/[${proof}] /"
-  done
-}
-
 mkdir -p "$status_dir"
-shared=()
-own=()
 for proof in "$@"; do
-  if [ "$proof" = call-artifacts ]; then own+=("$proof"); else shared+=("$proof"); fi
+  prove "$proof" | sed -u "s/^/[${proof}] /"
 done
-
-lane ${own[@]+"${own[@]}"} &
-lane ${shared[@]+"${shared[@]}"} &
-wait
 
 for proof in "$@"; do
   [ "$(cat "${status_dir}/${proof}" 2> /dev/null || echo 1)" = 0 ] || exit 1
