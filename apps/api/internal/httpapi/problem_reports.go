@@ -38,13 +38,13 @@ var (
 )
 
 func problemReportEndpoints(service ProblemReportService, verifier ParticipantMediaVerifier, limits RateLimitOptions) []RouteEndpoint {
-	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
+	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
 		func(r *http.Request) (struct{}, error) { _, err := tenantIDRequest(r); return struct{}{}, err },
 		func(context.Context, struct{}) (problemReportAvailability, error) {
 			return problemReportAvailability{Available: service != nil && service.Available()}, nil
 		},
 	).Parameters(tenantIDParameter()).Responds(http.StatusOK, "ProblemReportAvailability", problemReportAvailability{}).Errors(apiErrorInvalidTenantID)
-	submit := Post("/v1/tenants/{tenant_id}/problem-reports", "/tenants/{tenant_id}/problem-reports", "sendProblemReport",
+	submit := Post("/v1/tenants/{tenant_id}/problem-reports", "sendProblemReport",
 		func(r *http.Request) (problemreports.Report, error) {
 			r.Body = http.MaxBytesReader(nil, r.Body, reportBodyLimitBytes)
 			decoder := json.NewDecoder(r.Body)
@@ -83,19 +83,11 @@ func problemReportEndpoints(service ProblemReportService, verifier ParticipantMe
 		RequestBodyWithLimit("ProblemReportRequest", problemreports.Report{}, reportBodyLimitBytes).
 		Responds(http.StatusOK, "ProblemReportSent", problemReportSent{}).
 		Errors(apiErrorInvalidTenantID, apiErrorUnauthenticated, apiErrorForbidden, apiErrorInvalidRequest, apiErrorPayloadTooLarge, apiErrorRateLimited, apiErrorServiceUnavailable, apiErrorReportsUnavailable, apiErrorReportDelivery, apiErrorInternal).
-		MapErrors(func(err error) (APIError, bool) {
-			switch {
-			case errors.Is(err, problemreports.ErrInvalid):
-				return apiErrorInvalidRequest, true
-			case errors.Is(err, problemreports.ErrForbidden):
-				return apiErrorForbidden, true
-			case errors.Is(err, problemreports.ErrUnavailable):
-				return apiErrorReportsUnavailable, true
-			case errors.Is(err, problemreports.ErrDelivery):
-				return apiErrorReportDelivery, true
-			default:
-				return APIError{}, false
-			}
+		ErrorRules(errorRules{
+			ruleFor(apiErrorInvalidRequest, problemreports.ErrInvalid),
+			ruleFor(apiErrorForbidden, problemreports.ErrForbidden),
+			ruleFor(apiErrorReportsUnavailable, problemreports.ErrUnavailable),
+			ruleFor(apiErrorReportDelivery, problemreports.ErrDelivery),
 		})
 	return []RouteEndpoint{availability, submit}
 }

@@ -247,7 +247,7 @@ func logConnectionReport(ctx context.Context, subject accessgrants.Subject, repo
 // A still-valid signed credential is enough: a failed join or expired presence
 // must be able to report without active-participant or readiness authorization.
 func connectionReportEndpoint(verifier ParticipantMediaVerifier) Endpoint[connectionReportRequest, struct{}] {
-	return Post("/v1/tenants/{tenant_id}/connection-reports", "/tenants/{tenant_id}/connection-reports", "reportConnectionFailure", func(r *http.Request) (connectionReportRequest, error) {
+	return Post("/v1/tenants/{tenant_id}/connection-reports", "reportConnectionFailure", func(r *http.Request) (connectionReportRequest, error) {
 		tenantID, err := tenantIDRequest(r)
 		if err != nil {
 			return connectionReportRequest{}, err

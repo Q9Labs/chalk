@@ -27,19 +27,12 @@ type entrancePreparationResponse struct {
 	Prepared bool `json:"prepared"`
 }
 
-func recordingEntranceEndpoints(preparer RecordingEntrancePreparer, invites EntranceInviteResolver, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) []RouteEndpoint {
-	return []RouteEndpoint{recordingEntranceEndpoint(preparer, authorizer), publicRecordingEntranceEndpoint(preparer, invites, origin)}
-}
-
 func recordingEntranceEndpoint(preparer RecordingEntrancePreparer, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, entrancePreparationResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
-		if err := authorizeTenant(ctx, authorizer, request.TenantID, readSpacesPermission); err != nil {
-			return entrancePreparationResponse{}, err
-		}
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/entrance", "prepareSpaceEntrance", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (entrancePreparationResponse, error) {
 		return prepareEntrance(ctx, preparer, request.TenantID, request.SpaceID)
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Permission(authorizer, readSpacesPermission).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
-		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).MapErrors(spaceEndpointAPIError).
+		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited)...).ErrorRules(spaceRules).
 		Middleware(noStoreResponses)
 }
 
@@ -48,7 +41,7 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 	if origin != nil {
 		middlewares = append(middlewares, origin)
 	}
-	return Post("/v1/public/space-invite-entrance", "/public/space-invite-entrance", "preparePublicSpaceEntrance", func(r *http.Request) (entranceInviteBody, error) {
+	return Post("/v1/public/space-invite-entrance", "preparePublicSpaceEntrance", func(r *http.Request) (entranceInviteBody, error) {
 		body, err := decodeJSONBody[entranceInviteBody](r)
 		if err != nil {
 			return body, err
@@ -58,18 +51,15 @@ func publicRecordingEntranceEndpoint(preparer RecordingEntrancePreparer, invites
 		}
 		return body, nil
 	}, func(ctx context.Context, body entranceInviteBody) (entrancePreparationResponse, error) {
-		if invites == nil {
-			return entrancePreparationResponse{}, apiErrorServiceUnavailable
-		}
 		invite, _, err := invites.ResolveInviteToken(ctx, strings.TrimSpace(body.SpaceInviteToken))
 		if err != nil {
 			return entrancePreparationResponse{}, err
 		}
 		return prepareEntrance(ctx, preparer, invite.TenantID, invite.SpaceID)
-	}).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
+	}).Needs(invites).RateLimit(authenticatedWriteRateLimit).Middleware(middlewares...).
 		RequestBody("EntranceInvite", entranceInviteBody{}).Responds(http.StatusOK, "EntrancePreparation", entrancePreparationResponse{}).
 		Errors(apiErrorInvalidPublicInviteToken, apiErrorPublicInviteUnavailable, apiErrorSpaceNotFound, apiErrorServiceUnavailable, apiErrorInternal, apiErrorRateLimited).
-		MapErrors(publicInviteEndpointAPIError)
+		ErrorRules(publicInviteRules)
 }
 
 func prepareEntrance(ctx context.Context, preparer RecordingEntrancePreparer, tenantID, spaceID utilities.ID) (entrancePreparationResponse, error) {
