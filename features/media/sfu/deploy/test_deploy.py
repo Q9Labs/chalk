@@ -67,5 +67,20 @@ class DeployStartTest(unittest.TestCase):
         self.assertIn(f'-i {key}', calls.read_text())
 
 
+class CaptureWorkerCertificateTest(unittest.TestCase):
+    def test_worker_identity_names_the_id_the_api_derives_for_the_node(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = {**os.environ, 'CHALK_SFU_PRIVATE_DIR': directory}
+            certs = DEPLOY.with_name('certs')
+            for command in (['capture-ca'], ['capture-worker', 'sfu-1']):
+                subprocess.run([str(certs), 'bench', *command], env=env, check=True, capture_output=True, timeout=60)
+            bench = Path(directory) / 'bench'
+            names = subprocess.run(['openssl', 'x509', '-in', str(bench / 'capture-worker.crt'), '-noout', '-ext', 'subjectAltName'],
+                                   check=True, capture_output=True, text=True).stdout
+            # apps/api/internal/workeridentity/colocated_test.go pins the same value.
+            self.assertIn('URI:spiffe://chalkmeet.com/environment/bench/capture/5bf8647d-4fac-8dd9-86a0-411de7850d79', names)
+            subprocess.run(['openssl', 'verify', '-CAfile', str(bench / 'capture-ca.crt'), str(bench / 'capture-worker.crt')], check=True, capture_output=True)
+
+
 if __name__ == '__main__':
     unittest.main()

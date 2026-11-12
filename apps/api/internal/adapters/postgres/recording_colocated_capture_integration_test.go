@@ -42,9 +42,6 @@ func newColocatedScenario(t *testing.T) colocatedScenario {
 	execCleanupFixture(t, tx, `update recording_jobs set state='pending', lease_token=null, lease_owner=null, lease_expires_at=null,
 		available_at=now()-interval '1 second' where id=$1`, fixture.jobID.Bytes())
 	execCleanupFixture(t, tx, `update recording_pipelines set state='reserved', capture_completed_at=null where recording_id=$1`, fixture.recordingID.Bytes())
-	execCleanupFixture(t, tx, `update episodes set config_snapshot = config_snapshot ||
-		jsonb_build_object('media_plane_binding', jsonb_build_object('provider','chalk_sfu','node',$2::text))
-		where id=(select episode_id from recordings where id=$1)`, fixture.recordingID.Bytes(), node)
 	workerID := workeridentity.ColocatedWorkerID(colocatedTestEnvironment, node)
 	queries := sqlc.New(tx)
 	if err := queries.EnsureRecordingColocatedCaptureWorker(t.Context(), sqlc.EnsureRecordingColocatedCaptureWorkerParams{
@@ -53,8 +50,20 @@ func newColocatedScenario(t *testing.T) colocatedScenario {
 		t.Fatalf("register colocated worker: %v", err)
 	}
 	s := colocatedScenario{tx: tx, queries: queries, fixture: fixture, node: node, worker: workerID.String()}
+	s.setBinding(t, `update episodes set config_snapshot = config_snapshot ||
+		jsonb_build_object('media_plane_binding', jsonb_build_object('provider','chalk_sfu','node',$2::text))
+		where id=(select episode_id from recordings where id=$1)`, fixture.recordingID.Bytes(), node)
 	s.reportWorker(t, "now()", true)
 	return s
+}
+
+// setBinding rewrites the Episode's media plane binding, which the config_snapshot trigger
+// otherwise refuses; the claim query only reads it.
+func (s colocatedScenario) setBinding(t *testing.T, update string, args ...any) {
+	t.Helper()
+	execCleanupFixture(t, s.tx, `set local session_replication_role = replica`)
+	execCleanupFixture(t, s.tx, update, args...)
+	execCleanupFixture(t, s.tx, `set local session_replication_role = origin`)
 }
 
 func (s colocatedScenario) reportWorker(t *testing.T, observedAt string, open bool) {
@@ -120,13 +129,13 @@ func TestColocatedCaptureClaimPlacement(t *testing.T) {
 	})
 	t.Run("a worker never takes another node's capture", func(t *testing.T) {
 		s := newColocatedScenario(t)
-		execCleanupFixture(t, s.tx, `update episodes set config_snapshot = jsonb_set(config_snapshot, '{media_plane_binding,node}', '"other-node"')
+		s.setBinding(t, `update episodes set config_snapshot = jsonb_set(config_snapshot, '{media_plane_binding,node}', '"other-node"')
 			where id=(select episode_id from recordings where id=$1)`, s.fixture.recordingID.Bytes())
 		s.wantNoClaim(t, s.worker, colocatedTestGrace)
 	})
 	t.Run("a Cloudflare-plane capture stays with the fleet", func(t *testing.T) {
 		s := newColocatedScenario(t)
-		execCleanupFixture(t, s.tx, `update episodes set config_snapshot = config_snapshot - 'media_plane_binding'
+		s.setBinding(t, `update episodes set config_snapshot = config_snapshot - 'media_plane_binding'
 			where id=(select episode_id from recordings where id=$1)`, s.fixture.recordingID.Bytes())
 		s.wantNoClaim(t, s.worker, colocatedTestGrace)
 		s.wantClaim(t, fleetTestWorker, colocatedTestGrace)

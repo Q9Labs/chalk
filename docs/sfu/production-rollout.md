@@ -28,6 +28,20 @@ Apply the allowlist to the running API by host edit and restart before dispatchi
 
 Add the capture flag only if the staging `call-artifacts` proof passed with the same flags. Otherwise dispatch Promote with `capture_proofs=false` and add the flag in a second deploy. With capture on and the recorder fleet missing, the API refuses to start. The deploy controller then rolls back and Promote restores the Pages deployment, media pins and npm tags. The environment file rollback is not proved, so remove the faulty line in SSM too.
 
+## Recording beside the node
+
+Recording starts fast when a capture worker runs on the SFU node, and the on-demand fleet stays as the fallback. The design and its limits are in `docs/recording-transcription.md`. The node's CPU and memory per recorded Episode, the effect on the call and the number of concurrent recordings a node holds are measured in the pull request that added it; read those before changing the worker's limits in `features/media/sfu/deploy/deploy`.
+
+To turn it on:
+
+1. Create the environment's capture CA once (`certs <env> capture-ca`) and add its certificate to the provider bridge's client CA bundle.
+2. Issue the worker identity for each node (`certs <env> capture-worker <node id>`) and put `capture.conf` (the bridge URL and TLS name), the identity and the bridge's server CA in the node's operator directory. `deploy` then builds and starts the worker after the node is ready.
+3. Set `CHALK_SFU_COLOCATED_CAPTURE=true` and deploy the API. It registers the worker rows at start.
+
+The undo is two independent steps, either of which is enough. Set `CHALK_SFU_COLOCATED_CAPTURE=false` and restart the API: the next claim and the next demand read go back to the fleet at once, and a capture a worker already holds finishes. Or revoke the node's row in `recording_fleet_nodes` to cut one worker off without touching the others. To remove a worker from a node, delete `capture.conf` from its operator directory and deploy, which stops and removes the unit.
+
+A deploy of the node waits for zero allocations first, and a capture session holds one, so a recording in progress delays the deploy instead of being cut. `--force` cuts it: the worker's lease lapses and the capture retries from the last committed bundle, on the node's worker when it returns or on the fleet after the grace.
+
 ## The node ships before any SDK that raises the offer size
 
 The node accepts offers up to 256 KiB (`maxSDPBytes`) and its request limit defaults to 384 KiB (`SFU_MAX_REQUEST_BYTES`; a node that sets it must stay at or above 384 KiB). Older SDKs keep offers under 64 KiB, so they work against either node. An SDK that lets an offer pass 64 KiB gets a 400 from a node with the old cap. So:

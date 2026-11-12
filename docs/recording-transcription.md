@@ -48,6 +48,18 @@ every reported object independently before it commits completion.
 The render worker image and the API's allowed presentation UI hash must move
 together. Treat them as one release tuple.
 
+## Capture beside the SFU
+
+An Episode on the own SFU can have its capture run in a worker that stays on the SFU's node, so a Recording starts when that worker next polls, not when an on-demand machine boots. The worker is the same `recorder-capture` binary and the same claim, lease, fencing and bundle path as a fleet worker. What differs is placement and identity.
+
+- **Placement is in the claim query.** A worker registered for an SFU node claims only the captures of Episodes bound to that node. Every other worker leaves a capture to the node's worker while it reports ready within the last 35 seconds, for `CHALK_SFU_COLOCATED_CAPTURE_GRACE_SECONDS` after the capture became available. After the grace, or at once when the worker is stale or closed, the fleet claims it as before. The database cannot see that a worker's slots are all busy, so a full worker looks the same as a slow one and costs the grace, never the Recording.
+- **Demand ignores held captures.** A capture the node's worker holds, or can take within the grace, adds no fleet demand, so the reconciler does not boot a machine for it. When the grace passes the capture counts again and the fleet scales for it.
+- **Identity matches the fleet's.** The worker presents a client certificate with one SPIFFE URI `environment/<env>/capture/<worker id>`, verified by the same `workeridentity.Verifier`. The ID is derived from the environment and node (`workeridentity.ColocatedWorkerID`), and the API registers that ID in `recording_fleet_nodes` at start, so the claim route authorizes it by the same row check as a fleet worker. The row is revocable: revoking it stops the worker at its next claim or heartbeat, and a restart of the API never reactivates it. The certificate comes from a capture CA of its own, apart from the SFU service CA, that the bridge trusts. It lasts 30 days and each deploy renews it, where a fleet worker's lasts 12 hours and renews itself.
+- **The fleet never lists it.** Colocated rows are excluded from the fleet reconciler's observations, so it can neither scale nor delete them.
+- **The ledger shows the claim.** A claimed capture writes `recording.claimed` to the start journey, with `claim_lag_ms` (available to claimed), `placement` (`colocated` or `fleet`) and the attempt number.
+
+The switch is `CHALK_SFU_COLOCATED_CAPTURE`. Off, the claim and demand queries behave exactly as before and the on-demand fleet takes every capture.
+
 ## Recording preparation
 
 Preparation is a revisioned intent on a Space. A newer revision fences stale
