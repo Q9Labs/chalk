@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import { AssignmentError, ControlApiError, isTerminalFailure, safeErrorCode } from "./errors.js";
-export { mergeTranscriptDocuments } from "./finalizer-merge.js";
 import { mergeTranscriptDocuments } from "./finalizer-merge.js";
 import type { ChunkDocument } from "./finalizer-merge.js";
 import { loggerOf, reportRetry } from "./queue.js";
 import type { JobQueue } from "./queue.js";
-import { fetchAudioChunk, conditionalPutJson } from "./storage.js";
+import { fetchVerified, conditionalPutJson } from "./storage.js";
 import type { DispatcherContext, DispatcherDependencies, FinalizeAssignment, JourneyContext, NormalizedTranscriptDocument } from "./types.js";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -33,7 +32,7 @@ async function processFinalizeAssignment(assignment: FinalizeAssignment, journey
         await dependencies.control.heartbeat({ assignment, context: journey });
         lastHeartbeat = now();
       }
-      const fetched = await fetchAudioChunk({
+      const fetched = await fetchVerified({
         fetch: dependencies.fetch,
         url: chunk.inputUrl,
         expectedContentType: chunk.inputContentType,

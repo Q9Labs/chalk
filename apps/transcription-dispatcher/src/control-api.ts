@@ -1,5 +1,5 @@
 import { ControlApiError } from "./errors.js";
-import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./urls.js";
+import { validateAssignment, validateCleanupAssignment, validateFinalizeAssignment } from "./assignment.js";
 import type { ClaimResponse, CleanupAssignment, CompletionInput, ControlApi, FinalizeAssignment, FinalizeCompletionInput, FinalizeClaimResponse, JourneyContext, RetryInput, TranscriptionAssignment } from "./types.js";
 import type { WorkloadSigner } from "./workload-auth.js";
 

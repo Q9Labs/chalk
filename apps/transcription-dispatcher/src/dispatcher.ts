@@ -3,8 +3,8 @@ import { AssignmentError, ControlApiError, ProviderError, isTerminalFailure, pro
 import { isReasonWord } from "./provider-utils.js";
 import { InvocationCircuit, transcribeWithFallback } from "./retry.js";
 import { normalizeTranscriptChunk, serializeTranscript } from "./normalize.js";
-import { validateSpeakerTurnManifest } from "./urls.js";
-import { conditionalPutJson, fetchAudioChunk } from "./storage.js";
+import { validateSpeakerTurnManifest } from "./speaker-turn-manifest.js";
+import { conditionalPutJson, fetchVerified } from "./storage.js";
 import { cleanupQueue } from "./cleanup.js";
 import { finalizeQueue } from "./finalizer.js";
 import { drainQueue, journeyFor, loggerOf, reportRetry, splitBudget } from "./queue.js";
@@ -57,7 +57,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
     await dependencies.control.heartbeat({ assignment, context: journey });
     const chunkDurationSeconds = (assignment.chunk.episodeEndMs - assignment.chunk.episodeStartMs) / 1_000;
     if (chunkDurationSeconds > dependencies.config.provider.maxAudioSeconds) throw new AssignmentError("audio duration bound exceeded");
-    const audio = await fetchAudioChunk({
+    const audio = await fetchVerified({
       fetch: dependencies.fetch,
       url: assignment.chunk.inputUrl,
       expectedContentType: assignment.chunk.inputContentType,
@@ -65,7 +65,7 @@ async function processAssignment(assignment: TranscriptionAssignment, journey: J
       expectedSha256: assignment.chunk.inputSha256,
       maxBytes: dependencies.config.provider.maxAudioBytes,
     });
-    const manifestBytes = await fetchAudioChunk({
+    const manifestBytes = await fetchVerified({
       fetch: dependencies.fetch,
       url: assignment.manifest.inputUrl,
       expectedContentType: assignment.manifest.contentType,
