@@ -38,6 +38,17 @@ export function allows(header, wanted) {
   return listed.includes("*") || wanted.every((name) => listed.includes(name));
 }
 
+// The any-origin CORS rule is safe only while the bucket is private: a request with no signature must be refused.
+export function unsigned(url) {
+  const bare = new URL(url);
+  bare.search = "";
+  return bare.toString();
+}
+
+export function refusedWithoutSignature(status) {
+  return [400, 401, 403, 404].includes(status);
+}
+
 function allowsOrigin(response) {
   return ["*", unlistedOrigin].includes(response.headers.get("access-control-allow-origin") ?? "");
 }
@@ -92,7 +103,9 @@ export async function chatUploadProof(run) {
     const read = await fetch(download.downloadUrl, { headers: { Origin: unlistedOrigin }, signal: timeout() });
     measured(read.ok && allowsOrigin(read), corsRefusal("download", read, "the signed GET was refused"));
     measured(Buffer.from(await read.arrayBuffer()).equals(Buffer.from(body)), "Chat upload download returned different bytes than the upload");
-    const result = { preflight: preflight.status, put: put.status, download: read.status, origin: unlistedOrigin };
+    const anonymous = await fetch(unsigned(upload.uploadUrl), { signal: timeout() });
+    measured(refusedWithoutSignature(anonymous.status), `The uploaded chat object can be read without a signature (HTTP ${anonymous.status}). The any-origin CORS rule is only safe on a private bucket: turn off public access and remove custom domains before anything else.`);
+    const result = { preflight: preflight.status, put: put.status, download: read.status, unsigned: anonymous.status, origin: unlistedOrigin };
     await save(`${run.directory}/chat-upload.json`, result);
     return result;
   } finally {

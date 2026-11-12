@@ -2,19 +2,21 @@
 | where ['service.name'] == 'chalk-api' and ['attributes.event'] == 'sdk.connection_report'
 | extend tenant_id=tostring(['attributes.tenant_id']), episode_id=tostring(['attributes.episode_id']), provider=iff(tostring(['attributes.provider']) in ('cloudflare_sfu', 'chalk_sfu'), tostring(['attributes.provider']), 'unknown'), participant=tostring(['attributes.participant_id_hash']), trigger=tostring(['attributes.trigger']), report=parse_json(tostring(['attributes.report']))
 | where trigger in ('join_failed', 'recovery_exhausted', 'media_projection_mismatch', 'audio_receive_stuck', 'upload_failed')
+| extend report_provider=provider, provider=iff(trigger == 'upload_failed', 'any', provider)
 | extend diagnostic=toarray(report.events)
 | mv-expand diagnostic
 | where trigger !in ('media_projection_mismatch', 'audio_receive_stuck') or (trigger == 'audio_receive_stuck' and diagnostic.event == 'audio_receive_stuck' and diagnostic.source in ('microphone', 'screen_audio')) or (diagnostic.event == 'media_projection_mismatch' and diagnostic.source in ('microphone', 'camera') and ((diagnostic.publication_state == 'on' and diagnostic.projection_state == 'off') or (diagnostic.publication_state == 'off' and diagnostic.projection_state == 'on')))
 | where trigger != 'upload_failed' or diagnostic.event == 'chat_upload_failed'
 | extend source=case(trigger in ('media_projection_mismatch', 'audio_receive_stuck'), tostring(diagnostic.source), trigger == 'upload_failed', tostring(diagnostic.upload_failure), ''), publication_state=tostring(diagnostic.publication_state), projection_state=tostring(diagnostic.projection_state), receive_state=tostring(diagnostic.receive_state), duration_ms=tostring(diagnostic.duration_ms), attempt=tostring(diagnostic.attempt)
 | extend media_error_kind=tostring(diagnostic.media_error_kind), media_error_step=tostring(diagnostic.media_error_step), cause_order=iff(trigger in ('media_projection_mismatch', 'audio_receive_stuck') or isnotempty(diagnostic.media_error_kind) or isnotempty(diagnostic.media_error_step), tolong(diagnostic.elapsed_ms), -1)
-| summarize media_start=countif(diagnostic.code == 'media_start_failed'), media_recovery=countif(diagnostic.code == 'media_recovery_exhausted'), arg_max(cause_order, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by _time, tenant_id, episode_id, provider, participant, trigger, source
+| summarize media_start=countif(diagnostic.code == 'media_start_failed'), media_recovery=countif(diagnostic.code == 'media_recovery_exhausted'), arg_max(cause_order, report_provider, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by _time, tenant_id, episode_id, provider, participant, trigger, source
 | extend failure=case(trigger == 'join_failed' and media_start > 0, 'media_start_failed', trigger == 'join_failed', 'join_failed', trigger == 'recovery_exhausted' and media_recovery > 0, 'media_recovery_exhausted', trigger == 'media_projection_mismatch', 'media_projection_mismatch', trigger == 'audio_receive_stuck', 'audio_receive_stuck', trigger == 'upload_failed', 'chat_upload_failed', '')
 | where isnotempty(failure)
 | extend episode_id=iff(failure == 'chat_upload_failed', 'several episodes', episode_id)
-| summarize first_seen=min(_time), last_seen=max(_time), arg_max(_time, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by tenant_id, episode_id, provider, failure, source, participant
-| summarize value=count(), first_seen=min(first_seen), arg_max(last_seen, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by tenant_id, episode_id, provider, failure, source
+| summarize first_seen=min(_time), last_seen=max(_time), arg_max(_time, report_provider, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by tenant_id, episode_id, provider, failure, source, participant
+| summarize value=count(), first_seen=min(first_seen), arg_max(last_seen, report_provider, media_error_kind, media_error_step, publication_state, projection_state, receive_state, duration_ms, attempt) by tenant_id, episode_id, provider, failure, source
 | where failure != 'chat_upload_failed' or value >= 3
+| extend provider=iff(failure == 'chat_upload_failed', report_provider, provider)
 | join kind=leftouter (
     ['${LOG_DATASET}']
     | where chalk_alert_stream == 'production-state-v2' and isnotempty(chalk_alert_tenant)
