@@ -3,7 +3,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadImage, type Image } from "@napi-rs/canvas";
-import { denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeEncoder, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
+import { denseKeyframeArgs, keyframeProbeArgs, muxArgs, needsDenseKeyframes, overlayListFor, segmentArgs, segmentListFor, type ComposeOutput, type PlannedSource } from "./compose/plan.js";
+import { COMPOSE_RESULT_VERSION, VIDEO_ENCODERS, type VideoEncoder } from "./generated/render-contract.js";
 import { registerSubsetFamily, registerTextFallback } from "./compose/fonts.js";
 import { createPainter } from "./compose/paint.js";
 import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment } from "./compose/scene.js";
@@ -12,7 +13,6 @@ import { loadVerifiedRenderInputs, type VerifiedRenderInputs } from "./node/inpu
 import { isMainModule } from "./node/main-module.js";
 import { readFrameRenderRequest, validateResultPath } from "./node/request.js";
 
-const COMPOSE_RESULT_VERSION = "recording-compose-result.v1";
 const FONTS_DIRECTORY = fileURLToPath(new URL("./fonts/", import.meta.url));
 
 interface Arguments {
@@ -20,7 +20,7 @@ interface Arguments {
   readonly resultPath: string;
   readonly outputPath: string;
   readonly ffmpegPath: string;
-  readonly encoder: ComposeEncoder;
+  readonly encoder: VideoEncoder;
   readonly threads?: number;
 }
 
@@ -257,7 +257,7 @@ function composeOptions(values: readonly string[]): ReadonlyMap<string, string> 
   while (index < values.length) {
     const key = values[index];
     const value = values[index + 1];
-    if (key === undefined || value === undefined || !key.startsWith("--") || options.has(key)) throw new TypeError("usage: compose --request <path> --result <path> --output <path> [--ffmpeg <path>] [--encoder libx264|h264_videotoolbox|h264_nvenc] [--threads <n>]");
+    if (key === undefined || value === undefined || !key.startsWith("--") || options.has(key)) throw new TypeError(`usage: compose --request <path> --result <path> --output <path> [--ffmpeg <path>] [--encoder ${VIDEO_ENCODERS.join("|")}] [--threads <n>]`);
     options.set(key, value);
     index += 2;
   }
@@ -275,8 +275,8 @@ function absoluteOption(options: ReadonlyMap<string, string>, key: string): stri
 
 export function parseArguments(values: readonly string[]): Arguments {
   const options = composeOptions(values);
-  const encoder = options.get("--encoder") ?? "libx264";
-  if (encoder !== "libx264" && encoder !== "h264_videotoolbox" && encoder !== "h264_nvenc") throw new TypeError(`unsupported compose encoder ${encoder}`);
+  const encoder = VIDEO_ENCODERS.find((candidate) => candidate === (options.get("--encoder") ?? "libx264"));
+  if (encoder === undefined) throw new TypeError(`unsupported compose encoder ${options.get("--encoder")}`);
   const threads = options.has("--threads") ? Number(options.get("--threads")) : undefined;
   if (threads !== undefined && (!Number.isSafeInteger(threads) || threads < 1 || threads > 64)) throw new TypeError("--threads must be between 1 and 64");
   return {

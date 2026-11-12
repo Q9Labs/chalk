@@ -1,10 +1,9 @@
+import { DECODED_AUDIO_SAMPLE_RATE_HZ, DECODED_DISCONTINUITY_REASONS, DECODED_MEDIA_SCHEMA_VERSION, DECODED_MICROPHONE_CHANNELS, DECODED_MIX_CHANNELS, type DecodedDiscontinuityReason } from "./generated/render-contract.js";
 import { exactKeys, field, integerField as validatedIntegerField, literalField, objectValue, patternedStringField as validatedPatternedStringField, stringField as validatedStringField } from "./validation.js";
-
-const DECODED_MEDIA_SCHEMA_VERSION = "decoded_media.v1";
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const SOURCE_ID_PATTERN = /^rps_[0-9a-f]{64}$/;
-const DISCONTINUITY_REASONS: ReadonlySet<string> = new Set(["packet_loss", "source_gap", "attempt_recovery", "decode_failure"]);
+const DISCONTINUITY_REASONS: ReadonlySet<string> = new Set(DECODED_DISCONTINUITY_REASONS);
 
 export interface DecodedMediaClockV1 {
   readonly origin: "capture_ready";
@@ -36,8 +35,8 @@ export interface DecodedVisualSourceV1 extends DecodedMediaSourceBaseV1 {
 
 export interface DecodedMicrophoneSourceV1 extends DecodedMediaSourceBaseV1 {
   readonly kind: "microphone";
-  readonly sampleRateHz: 48_000;
-  readonly channels: 1;
+  readonly sampleRateHz: typeof DECODED_AUDIO_SAMPLE_RATE_HZ;
+  readonly channels: typeof DECODED_MICROPHONE_CHANNELS;
 }
 
 export type DecodedMediaSourceV1 = DecodedVisualSourceV1 | DecodedMicrophoneSourceV1;
@@ -47,15 +46,15 @@ export interface DecodedAudioMixV1 {
   readonly codec: "pcm_s16le";
   readonly container: "wav";
   readonly contentType: "audio/wav";
-  readonly sampleRateHz: 48_000;
-  readonly channels: 2;
+  readonly sampleRateHz: typeof DECODED_AUDIO_SAMPLE_RATE_HZ;
+  readonly channels: typeof DECODED_MIX_CHANNELS;
   readonly byteSize: number;
   readonly sha256: string;
   readonly startMs: 0;
   readonly endMs: number;
 }
 
-export type DecodedMediaDiscontinuityReasonV1 = "packet_loss" | "source_gap" | "attempt_recovery" | "decode_failure";
+export type DecodedMediaDiscontinuityReasonV1 = DecodedDiscontinuityReason;
 
 export interface DecodedMediaDiscontinuityV1 {
   readonly sourceId: string;
@@ -179,9 +178,9 @@ function decodeMicrophoneSource(source: object, base: DecodedMediaSourceBaseV1):
   decodedLiteralField(source, "codec", "pcm_s16le");
   decodedLiteralField(source, "container", "wav");
   decodedLiteralField(source, "content_type", "audio/wav");
-  literalNumberField(source, "sample_rate_hz", 48_000);
-  literalNumberField(source, "channels", 1);
-  return { ...base, kind: "microphone", codec: "pcm_s16le", container: "wav", contentType: "audio/wav", sampleRateHz: 48_000, channels: 1 };
+  literalNumberField(source, "sample_rate_hz", DECODED_AUDIO_SAMPLE_RATE_HZ);
+  literalNumberField(source, "channels", DECODED_MICROPHONE_CHANNELS);
+  return { ...base, kind: "microphone", codec: "pcm_s16le", container: "wav", contentType: "audio/wav", sampleRateHz: DECODED_AUDIO_SAMPLE_RATE_HZ, channels: DECODED_MICROPHONE_CHANNELS };
 }
 
 function decodeMix(value: unknown, durationMs: number): DecodedAudioMixV1 {
@@ -190,8 +189,8 @@ function decodeMix(value: unknown, durationMs: number): DecodedAudioMixV1 {
   decodedLiteralField(mix, "codec", "pcm_s16le");
   decodedLiteralField(mix, "container", "wav");
   decodedLiteralField(mix, "content_type", "audio/wav");
-  literalNumberField(mix, "sample_rate_hz", 48_000);
-  literalNumberField(mix, "channels", 2);
+  literalNumberField(mix, "sample_rate_hz", DECODED_AUDIO_SAMPLE_RATE_HZ);
+  literalNumberField(mix, "channels", DECODED_MIX_CHANNELS);
   literalNumberField(mix, "start_ms", 0);
   literalNumberField(mix, "end_ms", durationMs);
   return {
@@ -199,8 +198,8 @@ function decodeMix(value: unknown, durationMs: number): DecodedAudioMixV1 {
     codec: "pcm_s16le",
     container: "wav",
     contentType: "audio/wav",
-    sampleRateHz: 48_000,
-    channels: 2,
+    sampleRateHz: DECODED_AUDIO_SAMPLE_RATE_HZ,
+    channels: DECODED_MIX_CHANNELS,
     byteSize: integerField(mix, "byte_size", 1),
     sha256: patternedStringField(mix, "sha256", SHA256_PATTERN),
     startMs: 0,

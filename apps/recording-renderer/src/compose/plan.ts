@@ -1,12 +1,11 @@
+import type { VideoEncoder } from "../generated/render-contract.js";
 import type { VideoPlacement, VideoSegment } from "./scene.js";
-
-export type ComposeEncoder = "libx264" | "h264_videotoolbox" | "h264_nvenc";
 
 export interface ComposeOutput {
   readonly width: number;
   readonly height: number;
   readonly fps: number;
-  readonly encoder: ComposeEncoder;
+  readonly encoder: VideoEncoder;
   /** FFmpeg thread cap for every run; undefined lets FFmpeg use every core. */
   readonly threads?: number;
 }
@@ -21,7 +20,7 @@ export interface PlannedSource {
 
 const COMMON_ARGS = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error"];
 
-function encoderArgs(encoder: ComposeEncoder): readonly string[] {
+function encoderArgs(encoder: VideoEncoder): readonly string[] {
   // ultrafast measured SSIM 0.998 against medium at 2 Mb/s for about a third of
   // its CPU; the cost is roughly 14% larger files.
   if (encoder === "libx264") return ["-c:v", "libx264", "-preset", "ultrafast", "-profile:v", "high"];
