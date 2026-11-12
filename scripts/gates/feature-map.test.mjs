@@ -17,7 +17,7 @@ function mapWith(...featurePaths) {
   };
 }
 
-test("the checked-in feature map claims every source directory", () => {
+test("the checked-in feature map covers every source directory by prefix", () => {
   const featureMap = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "features.json"), "utf8"));
   const result = validateFeatureMap(featureMap);
   assert.deepEqual(result.errors, []);
@@ -31,10 +31,19 @@ test("every mapped path must exist", (t) => {
   assert.ok(result.errors.some((error) => error.includes("path does not exist: src/missing")));
 });
 
-test("an unclaimed nested source directory points its author to features.json", (t) => {
+test("a feature directory prefix covers all nested source directories", (t) => {
   const root = fixture(t);
-  fs.mkdirSync(path.join(root, "src", "new-package"), { recursive: true });
+  fs.mkdirSync(path.join(root, "src", "known", "new-package"), { recursive: true });
   const result = validateFeatureMap(mapWith(["calls", ["src"]]), { root, roots: ["src"], excludedSubtrees: [] });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.directoryCount, 3);
+});
+
+test("an unclaimed directory below a split source directory points to features.json", (t) => {
+  const root = fixture(t);
+  fs.mkdirSync(path.join(root, "src", "known"), { recursive: true });
+  fs.mkdirSync(path.join(root, "src", "new-package"), { recursive: true });
+  const result = validateFeatureMap(mapWith(["calls", ["src/known"]]), { root, roots: ["src"], excludedSubtrees: [] });
   assert.ok(result.errors.some((error) => error === "Unclaimed source directory: src/new-package. Add this directory to features.json."));
 });
 
@@ -45,14 +54,13 @@ test("a directory owned by more than three features fails with the shared-code h
   assert.ok(result.errors.some((error) => error.includes("Directory src/shared is claimed by 4 features") && error.includes("move shared code to the shared entry")));
 });
 
-test("the source scan has no maximum directory depth", (t) => {
+test("a prefix claim covers source directories at any depth", (t) => {
   const root = fixture(t);
   const deepDirectory = path.join(root, "src", "one", "two", "three", "four");
   fs.mkdirSync(deepDirectory, { recursive: true });
-  const paths = ["src", "src/one", "src/one/two", "src/one/two/three", "src/one/two/three/four"];
-  const result = validateFeatureMap(mapWith(["calls", paths]), { root, roots: ["src"], excludedSubtrees: [] });
+  const result = validateFeatureMap(mapWith(["calls", ["src"]]), { root, roots: ["src"], excludedSubtrees: [] });
   assert.deepEqual(result.errors, []);
-  assert.equal(result.directoryCount, paths.length);
+  assert.equal(result.directoryCount, 5);
 });
 
 test("installed dependencies are not source directories", (t) => {

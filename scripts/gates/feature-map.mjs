@@ -117,9 +117,10 @@ export function validateFeatureMap(featureMap, options = {}) {
   const scan = listDirectories(root, scanRoots, excludedSubtrees);
   errors.push(...scan.errors);
   for (const directory of scan.directories) {
-    if (!directoryOwners.has(directory)) {
-      errors.push(`Unclaimed source directory: ${directory}. Add this directory to features.json.`);
-    }
+    const hasPrefixOwner = [...directoryOwners.keys()].some((claim) => isWithin(directory, claim));
+    if (hasPrefixOwner) continue;
+    const isSplit = [...featuresByName.values()].some((feature) => Array.isArray(feature.paths) && feature.paths.some((claim) => claim.startsWith(`${directory}/`)));
+    if (!isSplit) errors.push(`Unclaimed source directory: ${directory}. Add this directory to features.json.`);
   }
 
   return { errors, directoryCount: scan.directories.length };
