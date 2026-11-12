@@ -44,6 +44,8 @@ jobs:
       api: ${{ steps.select.outputs.api }}
       sync: ${{ steps.select.outputs.sync }}
       root_groups: ${{ steps.select.outputs.root_groups }}
+      group_timeouts: ${{ steps.select.outputs.group_timeouts }}
+      browser_groups: ${{ steps.select.outputs.browser_groups }}
       full: ${{ steps.select.outputs.full }}
     steps:
       - name: Check out source
@@ -109,8 +111,8 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
-    timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
+    # chalk-gate-plan.mjs owns the timeout of each group; without its answer every group gets the longest.
+    timeout-minutes: ${{ fromJSON(needs.changes.outputs.group_timeouts || '{}')[matrix.group] || 57 }}
     strategy:
       fail-fast: false
       # One run holds at most eight root runners, so a full run takes 10 of the organisation's 20 hosted-runner slots
@@ -203,7 +205,7 @@ jobs:
 
       # Browser tests, the call bundle budget (in the build group) and leak journeys all drive Chromium.
       - name: Install browser runtime
-        if: contains(fromJSON('["browser-tests", "dashboard-refresh", "build", "call-leaks-1", "call-leaks-2", "call-leaks-3"]'), matrix.group)
+        if: needs.changes.result != 'success' || contains(fromJSON(needs.changes.outputs.browser_groups), matrix.group)
         timeout-minutes: 12
         uses: ./.github/actions/setup-playwright
         with:

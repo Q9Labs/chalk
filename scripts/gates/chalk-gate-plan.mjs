@@ -7,7 +7,8 @@ import process from "node:process";
 import { gitLines } from "../lib/git.mjs";
 import { repositoryRoot } from "../lib/repository.mjs";
 
-const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
+export const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
+const CALL_LEAK_SHARDS = 3;
 const sourceExtensions = new Set([".cjs", ".ex", ".exs", ".go", ".js", ".jsx", ".kt", ".mjs", ".ts", ".tsx"]);
 const formatExtensions = new Set([".css", ".html", ".js", ".json", ".jsonc", ".jsx", ".md", ".mdx", ".mjs", ".ts", ".tsx", ".yaml", ".yml"]);
 const dependencyBasenames = new Set(["go.mod", "go.sum", "mix.exs", "mix.lock", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]);
@@ -430,8 +431,7 @@ export function createGatePlan(files, options = {}) {
       "scripts/test/run.mjs",
       "node",
       "--test",
-      "features/scorecard/promote-graph.test.mjs",
-      "features/scorecard/nightly-graph.test.mjs",
+      "features/scorecard/*-graph.test.mjs",
       "features/scorecard/lease-arguments.test.mjs",
     ]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
@@ -477,7 +477,7 @@ export function createGatePlan(files, options = {}) {
       "--leaks-only",
       "--out",
       process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? `artifacts/${process.env.GATE_LANE_GROUP}.json` : "artifacts/call-leaks.json",
-      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/3`] : []),
+      ...(process.env.GATE_LANE_GROUP?.startsWith("call-leaks-") ? ["--shard", `${process.env.GATE_LANE_GROUP.slice("call-leaks-".length)}/${CALL_LEAK_SHARDS}`] : []),
     ]),
     task("recorder", "Recorder infrastructure", recorder, recorder ? "recorder inputs changed" : "no recorder inputs changed", ["pnpm", "run", "recorder:gate"]),
     task("proof-bundle", "Proof bundle builds against the Leave baseline client", proofBundle, proofBundle ? "proof or client inputs changed" : "proof bundles are unaffected", ["node", "--test", "scripts/prod-proof/sdk-bundle.test.mjs"]),
@@ -572,34 +572,40 @@ export function emptyScopeResult(context, environment = process.env) {
 
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
+// timeoutMinutes includes up to 12m of browser setup (usually under a minute): tests and bundles take ~12m each, leaks ~27m.
+const CHECKS_TIMEOUT_MINUTES = 30;
 const rootLaneGroups = {
-  "browser-tests": ["browser-tests"],
-  "dashboard-engine": ["dashboard-engine"],
-  "dashboard-refresh": ["dashboard-refresh"],
-  // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.
-  sfu: ["sfu"],
-  "call-leaks-1": ["call-leaks"],
-  "call-leaks-2": ["call-leaks"],
-  "call-leaks-3": ["call-leaks"],
-  build: ["call-performance", "build", "publint", "attw"],
+  "browser-tests": { lanes: ["browser-tests"], timeoutMinutes: 27, browser: true },
+  "dashboard-engine": { lanes: ["dashboard-engine"], timeoutMinutes: 27, browser: false },
+  "dashboard-refresh": { lanes: ["dashboard-refresh"], timeoutMinutes: 27, browser: true },
+  sfu: { lanes: ["sfu"], timeoutMinutes: CHECKS_TIMEOUT_MINUTES, browser: false },
+  ...Object.fromEntries(Array.from({ length: CALL_LEAK_SHARDS }, (_, index) => [`call-leaks-${index + 1}`, { lanes: ["call-leaks"], timeoutMinutes: 57, browser: true }])),
+  build: { lanes: ["call-performance", "build", "publint", "attw"], timeoutMinutes: CHECKS_TIMEOUT_MINUTES, browser: true },
 };
+const groupNames = Object.keys(rootLaneGroups);
 
 export function laneGroup(laneId) {
-  return Object.keys(rootLaneGroups).find((group) => rootLaneGroups[group].includes(laneId)) ?? "checks";
+  return groupNames.find((group) => rootLaneGroups[group].lanes.includes(laneId)) ?? "checks";
 }
 
 export function laneGroupLanes(lanes, group) {
   if (group === undefined) return lanes;
   if (group !== "checks" && !Object.hasOwn(rootLaneGroups, group)) throw new GatePlanningError("invalid-lane-group", `Unknown lane group: ${group}`);
-  return lanes.filter((lane) => (group === "checks" ? laneGroup(lane.id) === group : rootLaneGroups[group].includes(lane.id)));
+  return lanes.filter((lane) => (group === "checks" ? laneGroup(lane.id) === group : rootLaneGroups[group].lanes.includes(lane.id)));
 }
 
 // The checks group always runs; the other root groups and the service gates run only when the plan selects them.
 export function ciJobs(files, options = {}) {
   const plan = createGatePlan(files, { scope: "merge base to HEAD", services: "external", ...options });
-  const groups = Object.keys(rootLaneGroups).filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].includes(task.id)));
+  const groups = groupNames.filter((group) => plan.full || plan.tasks.some((task) => task.selected && rootLaneGroups[group].lanes.includes(task.id)));
   return { api: plan.services.api, sync: plan.services.sync, rootGroups: ["checks", ...groups] };
 }
+
+// What the Gate workflow needs to know about a group beyond its name, so the workflow keeps no copy of this table.
+export const groupSettings = {
+  timeoutMinutes: Object.fromEntries([["checks", CHECKS_TIMEOUT_MINUTES], ...groupNames.map((group) => [group, rootLaneGroups[group].timeoutMinutes])]),
+  browserGroups: groupNames.filter((group) => rootLaneGroups[group].browser),
+};
 
 function changedFiles(base) {
   return gitLines(["diff", "--name-only", `${base}...HEAD`]);
@@ -617,6 +623,10 @@ function selectCiJobs(base) {
   }
 }
 
+// Format is always on so documentation-only changes are still checked.
+export const alwaysTaskIds = new Set(["self-test", "feature-map", "hygiene", "secrets", "generated", "format"]);
+export const gateTaskIds = createGatePlan([], { full: true, workspaces: [] }).tasks.map((planned) => planned.id);
+
 if (import.meta.main) {
   const [flag, base] = process.argv.slice(2);
   if (flag !== "--ci-jobs" || !base) {
@@ -625,4 +635,5 @@ if (import.meta.main) {
   }
   const jobs = selectCiJobs(base);
   console.log(`api=${jobs.api}\nsync=${jobs.sync}\nroot_groups=${JSON.stringify(jobs.rootGroups)}\nfull=${jobs.full}`);
+  console.log(`group_timeouts=${JSON.stringify(groupSettings.timeoutMinutes)}\nbrowser_groups=${JSON.stringify(groupSettings.browserGroups)}`);
 }

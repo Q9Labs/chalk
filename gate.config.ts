@@ -1,47 +1,12 @@
 import { defineGate, lanes } from "@q9labsai/gates";
-import { createGatePlan, emptyScopeResult, gatePlanOptions, laneEnvironment, laneGroupLanes, laneResult } from "./scripts/gates/chalk-gate-plan.mjs";
+import { alwaysTaskIds, createGatePlan, emptyScopeResult, gatePlanOptions, gateTaskIds, laneEnvironment, laneGroupLanes, laneResult, workspaceRoots } from "./scripts/gates/chalk-gate-plan.mjs";
 
-const taskIds = [
-  "self-test",
-  "feature-map",
-  "workflow-graph",
-  "hygiene",
-  "secrets",
-  "generated",
-  "format",
-  "fallow",
-  "ast-grep",
-  "boundaries",
-  "osv",
-  "services",
-  "contracts",
-  "syncpack",
-  "types",
-  "explicit-any",
-  "mock-calls",
-  "react-tokens",
-  "native-quality",
-  "tests",
-  "browser-tests",
-  "dashboard-engine",
-  "dashboard-refresh",
-  "build",
-  "call-performance",
-  "call-leaks",
-  "recorder",
-  "proof-bundle",
-  "sfu",
-  "publint",
-  "attw",
-];
-// Format is always on so documentation-only changes are still checked.
 // Raw color, spacing, radius, font-size and shadow values may only shrink. theme/tokens.ts defines the tokens.
 const designTokenOptions = {
   baselinePath: "scripts/gates/design-tokens-baseline.json",
   roots: ["apps/web/src", "packages/ui/src", "sdks/typescript/react/src", "sdks/typescript/react-native/src", "apps/mobile"],
   ignore: ["**/theme/tokens.ts"],
 };
-const alwaysIds = new Set(["self-test", "feature-map", "hygiene", "secrets", "generated", "format"]);
 const sharedTargetRoots = [
   "apps/api",
   "apps/sync",
@@ -72,12 +37,12 @@ function chalkPlan(context: GateContext) {
   return createGatePlan([...context.allChangedFiles], gatePlanOptions(context));
 }
 
-const chalkLanes = taskIds.map((id) =>
+const chalkLanes = gateTaskIds.map((id) =>
   lanes.custom({
     id,
     title: `Chalk ${id}`,
     exclusive: true,
-    triggers: alwaysIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
+    triggers: alwaysTaskIds.has(id) ? "always" : (context) => chalkPlan(context).tasks.some((task) => task.id === id && task.selected),
     run: async (context) => {
       const task = chalkPlan(context).tasks.find((candidate) => candidate.id === id);
       if (!task?.command) return { status: "skipped" };
@@ -98,7 +63,7 @@ const emptyScopeLane = lanes.custom({
 });
 
 export default defineGate({
-  workspaceRoots: ["apps", "infrastructure", "packages", "sdks/typescript", "tools"],
+  workspaceRoots,
   targets: { web: ["apps/web", ...sharedTargetRoots], mobile: ["apps/mobile", ...sharedTargetRoots] },
   classifiers: {
     docs: ["*.md", "*.mdx", "*.txt"],

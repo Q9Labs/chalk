@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { repositoryRoot } from "../lib/repository.mjs";
 export { repositoryRoot };
 
-export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/workflows", "docs", "features"];
+export const sourceRoots = ["apps/api/internal", "apps/sync", "sdks/typescript", "packages", "apps/web", "apps/mobile", "infrastructure", ".github/actions", ".github/workflows", "contract", "docs", "features", "perf", "release", "scripts", "tests", "tools"];
 
 // This directory contains data-only snapshots, not source packages; its generated identifier stays out of the map.
 const dataOnlySubtrees = ["apps/sync/test/fixtures"];

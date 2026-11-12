@@ -405,6 +405,9 @@
       "name": "release-and-deploy",
       "summary": "Builds, gates, publishes, and deploys Chalk services and packages.",
       "paths": [
+        ".github/action-pins.json",
+        ".github/actionlint.yaml",
+        ".github/actions",
         ".github/workflows/boot-smoke.yml",
         ".github/workflows/cache-warm.yml",
         ".github/workflows/ci.yml",
@@ -425,6 +428,8 @@
         "infrastructure/.gitignore",
         "infrastructure/host-change-alert",
         "infrastructure/README.md",
+        "release",
+        "scripts",
         "scripts/deploy",
         "scripts/gates",
         "scripts/releases"
@@ -685,6 +690,7 @@
         "apps/web/web-space-journey.html",
         "apps/web/wrangler.toml",
         "apps/web/wrangler.vendor-assets.toml",
+        "contract",
         "docs/agent-participant.md",
         "docs/contract-codegen.md",
         "docs/effect-ts.md",
@@ -835,7 +841,9 @@
         "sdks/typescript/react/src/utils",
         "sdks/typescript/react/tsconfig.check-types.json",
         "sdks/typescript/react/tsconfig.json",
-        "sdks/typescript/react/vitest.config.ts"
+        "sdks/typescript/react/vitest.config.ts",
+        "tests",
+        "tools"
       ]
     }
   ]

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ciJobs, createGatePlan, gatePlanOptions, laneGroup } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions, groupSettings, laneGroup } from "./chalk-gate-plan.mjs";
+import { repositoryRoot } from "../lib/repository.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -76,7 +78,7 @@ test("an API test-only change still runs the API gate", () => {
 });
 
 test("the merge queue selects the dashboard engine and every leak shard for any change beyond documentation", () => {
-  assert.deepEqual(jobs(["scripts/dev/doctor.sh"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
+  assert.deepEqual(jobs(["scripts/dev/chalk.mjs"], "merge_group").rootGroups, ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]);
   assert.deepEqual(jobs(["docs/observability.md"], "merge_group").rootGroups, ["checks"]);
 });
 
@@ -108,4 +110,13 @@ test("q9gate's own gate-behavior classification does not widen a pull request th
   const context = { scope: "branch", classification: { fullRequired: true } };
   assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
   assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
+});
+
+test("every lane group that gate.yml names still exists in the planner", () => {
+  const workflow = readFileSync(`${repositoryRoot}/.github/workflows/gate.yml`, "utf8");
+  const named = new Set(workflow.match(/\b(?:call-leaks-\d+|dashboard-engine|dashboard-refresh|browser-tests)\b/gu));
+  const known = new Set(Object.keys(groupSettings.timeoutMinutes));
+  for (const group of named) assert.ok(known.has(group), `${group} is in gate.yml but not in the planner`);
+  const fallback = JSON.parse(workflow.match(/\|\| '(\["checks"[^']*\])'/u)[1]);
+  assert.deepEqual([...fallback].sort(), [...known].sort());
 });
