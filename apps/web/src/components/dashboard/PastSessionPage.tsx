@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { AttendanceDTO } from "../../lib/dashboard/contracts";
 import { errorMessage } from "../../lib/dashboard/client";
 import { clock, duration, longDay } from "../../lib/dashboard/format";
-import { completedTranscript, videoGroup, videoState, type VideoState } from "../../lib/dashboard/recording";
+import { videoGroup, videoState, type VideoState } from "../../lib/dashboard/recording";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
 import { BadgeView } from "./ListParts";
@@ -218,7 +218,7 @@ function NoRecording() {
 function Detail({ ids, page, parts, crumb, onDeleted }: { readonly ids: Ids; readonly page: Loaded; readonly parts: Parts; readonly crumb: ReactNode; readonly onDeleted: () => void }) {
   const [deleting, setDeleting] = useState(false);
   const { episode, attendance } = page.session;
-  const { recording, playable, downloadableTranscript, media, panel } = parts;
+  const { recording, playable, downloadableTranscript, shownTranscript, media, panel } = parts;
   const end = episode.endedAt ?? episode.startedAt;
   const video = recording ? videoState(recording) : null;
   const stat = VIDEO_STAT[video ?? "off"];
@@ -237,12 +237,12 @@ function Detail({ ids, page, parts, crumb, onDeleted }: { readonly ids: Ids; rea
       }
     >
       <SessionStats startedAt={episode.startedAt} end={end} participants={attendance.participants} video={stat} transcript={words} />
-      {recording ? <RecordingSplit video={video} media={media} panel={panel} onDelete={downloadableTranscript ? () => setDeleting(true) : null} /> : <NoRecording />}
+      {recording ? <RecordingSplit video={video} media={media} panel={panel} onDelete={shownTranscript ? () => setDeleting(true) : null} /> : <NoRecording />}
       <WhoJoined attendance={attendance} startedAt={episode.startedAt} endedAt={end} />
-      {deleting ? (
+      {deleting && shownTranscript ? (
         <DeleteTranscript
           ids={ids}
-          transcriptIds={page.attempts.flatMap((item) => (item.recording.transcripts ?? []).filter(completedTranscript).map((transcript) => transcript.id))}
+          transcriptId={shownTranscript.id}
           onClose={() => setDeleting(false)}
           onDeleted={() => {
             setDeleting(false);

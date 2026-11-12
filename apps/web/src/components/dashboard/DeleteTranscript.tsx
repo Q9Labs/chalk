@@ -5,15 +5,15 @@ import { Icon } from "../site/Icon";
 import type { Ids } from "./session-reads";
 import { Dialog, useToast } from "./kit";
 
-/** Deletes every finished transcript of the session, so no older one takes the deleted one's place. */
-export function DeleteTranscript({ ids, transcriptIds, onClose, onDeleted }: { readonly ids: Ids; readonly transcriptIds: readonly string[]; readonly onClose: () => void; readonly onDeleted: () => void }) {
+/** Deletes only the transcript on screen. An older attempt's transcript then takes its place, so nothing goes unseen. */
+export function DeleteTranscript({ ids, transcriptId, onClose, onDeleted }: { readonly ids: Ids; readonly transcriptId: string; readonly onClose: () => void; readonly onDeleted: () => void }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function remove() {
     if (busy) return;
     setBusy(true);
     try {
-      for (const transcriptId of transcriptIds) await act("past-session", { action: "delete-transcript", ...ids, transcriptId });
+      await act("past-session", { action: "delete-transcript", ...ids, transcriptId });
       toast("Transcript deleted.", { icon: "check" });
       onDeleted();
     } catch (error) {
