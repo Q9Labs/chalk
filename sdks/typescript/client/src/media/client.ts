@@ -1,3 +1,4 @@
+import { closeReasonOf } from "./plane";
 import type { ClientMediaPlane, LocalPublicationRetirementCause, MediaConnectionReplacementCause, MediaPlaneResult, MediaPlaneTarget, MediaPublication, MediaPublicationSource } from "./plane";
 import { ReceiveStallRecovery } from "./receive-stall";
 import { AudioReceiveHealth } from "./audio-receive-health";
@@ -825,6 +826,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
           sessionDescription: undefined,
           tracks: [{ ...handle, source: publication.state.source }],
           force: true,
+          reason: closeReasonOf(phase.cause),
         }),
       { generation: this.#generation, connectionId: publication.connectionId },
     );
@@ -906,7 +908,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       phase.detached = true;
       const sessionDescription = closed ? undefined : await this.#createLocalOffer(connection, "close");
-      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed }), { generation: this.#generation, connectionId });
+      const response = await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, sessionDescription, tracks: [{ ...handle, source: state.source }], force: closed, reason: closeReasonOf(phase.cause) }), { generation: this.#generation, connectionId });
       // The API has committed the disabled observation even if applying SDP fails.
       publication.lifecycle = { kind: "retired" };
       this.#ownedPublications.delete(publication);
@@ -1655,7 +1657,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const connectionId = this.#bootstrap.connectionId;
     // The SFU rejects a request of more than 16 tracks. A forced close of a closed track answers alreadyClosed, so a retry after a partial failure is safe.
     for (const batch of chunks(receivers, TRACKS_PER_REQUEST)) {
-      await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
+      await this.#signal(() => this.#requireTransport().closeTracks({ connectionId, receiveOnly: true, force: true, reason: "replacement", tracks: batch.map(({ publication, mid }) => ({ mid, source: publication.source, publicationId: publication.publicationId })) }), { generation, connectionId });
       this.#requireGeneration(generation);
       for (const { transceiver } of batch) {
         this.#closedReceiverTracks.add(transceiver.receiver.track);

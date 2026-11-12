@@ -333,6 +333,9 @@ func (a Adapter) ResumeJoin(ctx context.Context, input mediaplane.ResumeJoinInpu
 	return a.joinForConnection(input.Episode.Ref, input.ExternalParticipantID, input.ConnectionRef, a.iceServers(ctx, input.AllowRelay)), nil
 }
 
+// sessionTrackCountDeadline bounds the extra read after a rejected add_tracks, which must never hold the answer back.
+const sessionTrackCountDeadline = 2 * time.Second
+
 func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) (mediaplane.TracksResponse, error) {
 	// Cloudflare answers a call on a dropped session only after about 5 s, so a connection that is likely
 	// expired gets a fresh session before the call. A failed creation falls through to the 410 path below.
@@ -370,8 +373,26 @@ func (a Adapter) AddTracks(ctx context.Context, input mediaplane.TracksRequest) 
 	if err == nil || (mediaplane.IsPartialRemoteTrackResponse(err) && result.SessionDescription != nil) {
 		a.sessions.negotiated(input.ConnectionID)
 	}
+	attempt.sessionTrackCount = a.rejectedSessionTrackCount(ctx, input.ConnectionID, err)
 	logAddTracksCall(ctx, input, result.TrackErrors, attempt, err, retry, false)
 	return a.toClientIDs(result), a.errorWithClientIDs(err)
+}
+
+// rejectedSessionTrackCount reads how many tracks the provider holds on a session whose add_tracks the
+// provider rejected, so a failure shows whether the session was full. A transport failure skips it,
+// because the provider would not answer either, and so does a success. It is -1 when unknown.
+func (a Adapter) rejectedSessionTrackCount(ctx context.Context, connectionID string, err error) int {
+	var failure providerFailure
+	if err == nil || !errors.As(err, &failure) || failure.stage == failureStageTransport {
+		return -1
+	}
+	ctx, cancel := context.WithTimeout(ctx, sessionTrackCountDeadline)
+	defer cancel()
+	state, inspectErr := a.InspectSession(ctx, mediaplane.InspectSessionRequest{ConnectionID: connectionID})
+	if inspectErr != nil || !state.Found {
+		return -1
+	}
+	return len(state.Tracks)
 }
 
 func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, session string) (mediaplane.TracksResponse, addTracksAttempt, error) {
@@ -392,7 +413,7 @@ func (a Adapter) addTracks(ctx context.Context, input mediaplane.TracksRequest, 
 	ageMs, negotiated := a.sessions.sessionContext(input.ConnectionID, session)
 	started := time.Now()
 	statusCode, err := a.requestStatus(ctx, http.MethodPost, fmt.Sprintf("/sessions/%s/tracks/new", url.PathEscape(session)), request, &response, "add_tracks")
-	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode, sessionAgeMs: ageMs, sessionNegotiated: negotiated}, err
+	return response.toMediaPlane(), addTracksAttempt{latency: time.Since(started), statusCode: statusCode, sessionAgeMs: ageMs, sessionNegotiated: negotiated, sessionTrackCount: -1}, err
 }
 
 func (a Adapter) InspectSession(ctx context.Context, input mediaplane.InspectSessionRequest) (mediaplane.SessionState, error) {

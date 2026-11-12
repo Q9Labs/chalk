@@ -1,5 +1,5 @@
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
-import type { MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
+import type { MediaCloseReason, MediaConnectionReplacementCause, MediaPublication, MediaPublicationSource } from "./plane";
 export type CloudflareSFUIceServer = {
   readonly urls: readonly string[];
   readonly username?: string;
@@ -102,7 +102,14 @@ export type CloudflareSFUSignalingTransport = {
     readonly allowPartialRemoteTracks?: boolean;
     readonly replacementCause?: MediaConnectionReplacementCause;
   }) => Promise<CloudflareSFUTracksResponse>;
-  readonly closeTracks: (input: { readonly connectionId: string; readonly sessionDescription?: CloudflareSFUSessionDescription; readonly tracks: readonly CloudflareSFUCloseTrackRequest[]; readonly force: boolean; readonly receiveOnly?: boolean }) => Promise<CloudflareSFUTracksResponse>;
+  readonly closeTracks: (input: {
+    readonly connectionId: string;
+    readonly sessionDescription?: CloudflareSFUSessionDescription;
+    readonly tracks: readonly CloudflareSFUCloseTrackRequest[];
+    readonly force: boolean;
+    readonly receiveOnly?: boolean;
+    readonly reason?: MediaCloseReason;
+  }) => Promise<CloudflareSFUTracksResponse>;
   /** Changes the simulcast layer of tracks already pulled, or pauses them in place, without renegotiating. Transports without it keep the layer chosen at pull time. */
   readonly updateTracks?: (input: { readonly connectionId: string; readonly tracks: readonly CloudflareSFUTrackRequest[] }) => Promise<CloudflareSFUTracksResponse>;
   readonly renegotiate: (input: { readonly connectionId: string; readonly sessionDescription: CloudflareSFUSessionDescription }) => Promise<void>;
