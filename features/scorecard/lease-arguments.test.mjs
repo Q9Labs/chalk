@@ -12,7 +12,9 @@ const gateLease = /staging-sfu\/gate-lease\s+(\S+)\s+("[^"]*"|\S+)\s+("[^"]*"|\S
 const stagingLock = /staging-sfu\/staging-lock\s.*?--holder\s+(\S+)\s.*?--purpose\s+(\S+)\s.*?--run-id\s+("[^"]*"|\S+)/u;
 
 function workflowFiles() {
-  const workflows = readdirSync(new URL(".github/workflows/", root)).filter((name) => name.endsWith(".yml")).map((name) => `.github/workflows/${name}`);
+  const workflows = readdirSync(new URL(".github/workflows/", root))
+    .filter((name) => name.endsWith(".yml"))
+    .map((name) => `.github/workflows/${name}`);
   const actions = readdirSync(new URL(".github/actions/", root)).map((name) => `.github/actions/${name}/action.yml`);
   return [...workflows, ...actions.filter((path) => existsSync(new URL(path, root)))];
 }
@@ -41,7 +43,10 @@ test("every workflow lease call passes staging-lock's label check", () => {
   assert.ok(calls.length >= 4, `the scan found only ${calls.length} lease calls`);
   for (const { where, holder, purpose, runId } of calls) {
     // A holder and a purpose are literal labels: an expansion such as ${proofs[*]} can hold spaces.
-    for (const [name, value] of [["holder", holder], ["purpose", purpose]]) {
+    for (const [name, value] of [
+      ["holder", holder],
+      ["purpose", purpose],
+    ]) {
       assert.ok(labelPattern.test(value), `${where}: the ${name} ${JSON.stringify(value)} is not a plain label`);
     }
     assert.ok(labelPattern.test(runId.replace(/\$\{?[A-Za-z_]+\}?/gu, "1")), `${where}: the run id ${JSON.stringify(runId)} is not a plain label`);
