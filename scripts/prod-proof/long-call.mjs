@@ -36,7 +36,7 @@ async function browserSample() {
   };
 }
 
-const sampleGuest = (page) => Promise.race([page.evaluate(browserSample), new Promise((resolve) => setTimeout(() => resolve(unreachableSample), sampleTimeoutMs))]).catch(() => unreachableSample);
+export const sampleGuest = (page) => Promise.race([page.evaluate(browserSample), new Promise((resolve) => setTimeout(() => resolve(unreachableSample), sampleTimeoutMs))]).catch(() => unreachableSample);
 
 /** The plan `pnpm prod:proof long-call --dry-run` prints; it needs no configuration and opens no connection. */
 export function longCallPlan() {
