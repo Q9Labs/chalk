@@ -69,6 +69,11 @@ function healthyCall() {
   return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, () => ({ recv_bitrate_kbps: 1400, recv_height: 720 }))];
 }
 
+/** A viewer whose tab hid the video receives nothing on purpose; the rule must not call that silence or starvation. */
+function hiddenByViewerCall() {
+  return [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, recv_hidden_videos: second < 20 ? 0 : 1 }))];
+}
+
 /** Every scenario the verdict rules must name, as raw rows. The Go collector reads the same file, so the two implementations agree. */
 export const scenarios = {
   "dormant replacement then silence": dormantReplacementCall,
@@ -76,4 +81,5 @@ export const scenarios = {
   "failed join": failedJoinCall,
   "replacement soon after join": earlyReplacementCall,
   "healthy call": healthyCall,
+  "viewer hid the video itself": hiddenByViewerCall,
 };

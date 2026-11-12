@@ -3251,5 +3251,1092 @@
       }
     ],
     "verdict": "No bad call found by the rules: no failed join, media silence, starved viewer or early replacement."
+  },
+  {
+    "name": "viewer hid the video itself",
+    "episode": "9feb0ff6-1111-4222-8333-444455556666",
+    "rows": [
+      {
+        "_time": "2026-11-11T10:00:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 10000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 20000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 30000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 40000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 50000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 60000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 70000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 80000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 90000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 100000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 110000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 120000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 130000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 140000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 150000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 160000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 170000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 180000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 190000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 200000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 210000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 220000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 230000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 240000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 250000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 260000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 270000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 280000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 290000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:05:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "153be25ca59b8cd0f8902d13c75d31a0a567ea8e0187ba24153f03d44d9d4f55",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-pub",
+          "provider_session_id": "conn-pub",
+          "elapsed_ms": 300000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "send_bitrate_kbps": 1500
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 10000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 1200,
+          "recv_height": 720,
+          "recv_hidden_videos": 0
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 20000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 1200,
+          "recv_height": 720,
+          "recv_hidden_videos": 0
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 30000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 40000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:00:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 50000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 60000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 70000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 80000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 90000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 100000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:01:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 110000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 120000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 130000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 140000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 150000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 160000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:02:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 170000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 180000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 190000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 200000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 210000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 220000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:03:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 230000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 240000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:10.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 250000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:20.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 260000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:30.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 270000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:40.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 280000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:04:50.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 290000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      },
+      {
+        "_time": "2026-11-11T10:05:00.000Z",
+        "service.name": "chalk-api",
+        "attributes": {
+          "event": "sdk.call_stats",
+          "episode_id": "9feb0ff6-1111-4222-8333-444455556666",
+          "participant_id_hash": "3c7e85ea5a6951052f4e23e952fbb0d612affd05ecacc88b1fa540c6568f05c6",
+          "provider": "chalk_sfu",
+          "connection_id": "conn-view",
+          "provider_session_id": "conn-view",
+          "elapsed_ms": 300000,
+          "window_ms": 10000,
+          "rtt_ms": 40,
+          "recv_loss_pct": 0,
+          "recv_bitrate_kbps": 0,
+          "recv_height": 720,
+          "recv_hidden_videos": 1
+        }
+      }
+    ],
+    "verdict": "No bad call found by the rules: no failed join, media silence, starved viewer or early replacement."
   }
 ]

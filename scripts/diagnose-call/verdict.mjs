@@ -49,6 +49,9 @@ const number = (row, name) => {
   return value === undefined ? undefined : Number(value);
 };
 
+/** Videos the viewer chose not to receive send nothing on purpose, so a quiet sample with any is not a fault. */
+const hiddenByViewer = (row) => number(row, "recv_hidden_videos") > 0;
+
 function senderWasSending(samples, run) {
   return samples.some((sample) => sample.participant !== run.participant && sample.end > run.from && sample.start < run.to && number(sample.row, "send_bitrate_kbps") > 0);
 }
@@ -107,7 +110,7 @@ export function diagnose(rows, thresholds) {
     });
   }
 
-  for (const run of runsOf(samples, (row) => number(row, "recv_bitrate_kbps") === 0)) {
+  for (const run of runsOf(samples, (row) => number(row, "recv_bitrate_kbps") === 0 && !hiddenByViewer(row))) {
     if (run.to - run.from <= thresholds.silence_ms) continue;
     if (!senderWasSending(samples, run) || !receivedBefore(samples, run)) continue;
     findings.push({
@@ -121,7 +124,7 @@ export function diagnose(rows, thresholds) {
   }
 
   const healthy = (row) => (number(row, "recv_loss_pct") ?? 0) <= thresholds.healthy_loss_pct && (number(row, "rtt_ms") ?? 0) <= thresholds.healthy_rtt_ms && (number(row, "available_incoming_kbps") ?? Infinity) >= 4 * thresholds.starved_floor_kbps;
-  const starved = (row) => attr(row, "recv_height") !== undefined && number(row, "recv_bitrate_kbps") > 0 && number(row, "recv_bitrate_kbps") < thresholds.starved_floor_kbps && healthy(row);
+  const starved = (row) => attr(row, "recv_height") !== undefined && number(row, "recv_bitrate_kbps") > 0 && number(row, "recv_bitrate_kbps") < thresholds.starved_floor_kbps && healthy(row) && !hiddenByViewer(row);
   for (const run of runsOf(samples, starved)) {
     if (run.to - run.from > thresholds.starved_ms) {
       const peak = Math.max(...run.samples.map((sample) => number(sample.row, "recv_bitrate_kbps")));

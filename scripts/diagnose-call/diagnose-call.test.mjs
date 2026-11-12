@@ -118,3 +118,9 @@ test("evidence the rows lack is listed: a Participant with no inbound rows and n
   assert.ok(missing.some((line) => /no sfu rows/u.test(line)));
   assert.ok(missing.some((line) => /no sync rows/u.test(line)));
 });
+
+test("a viewer that hid the video itself is neither silent nor starved, and without the field the same rows are silence", () => {
+  const withField = (hidden) => [...flow("conn-pub"), ...callStats("viewer", "conn-view", 0, 300, (second) => ({ recv_bitrate_kbps: second < 20 ? 1200 : 0, recv_height: 720, ...(hidden ? { recv_hidden_videos: 1 } : {}) }))];
+  assert.deepEqual(verdictOf(withField(true)).findings, []);
+  assert.equal(verdictOf(withField(false)).findings[0]?.kind, "media_silence");
+});

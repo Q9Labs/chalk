@@ -119,6 +119,8 @@ type sample struct {
 	recv, send         *float64
 	height, rtt, loss  *float64
 	availableIncomingK *float64
+	// hidden counts videos the viewer chose not to receive; they send nothing on purpose.
+	hidden *float64
 }
 
 func optional(row *logRow, name string) *float64 {
@@ -159,12 +161,14 @@ func samplesOf(rows []logRow) []sample {
 			row: row, participant: row.participant, conn: row.connection, start: end.Add(-ms(window)), end: end,
 			recv: optional(row, "recv_bitrate_kbps"), send: optional(row, "send_bitrate_kbps"),
 			height: optional(row, "recv_height"), rtt: optional(row, "rtt_ms"), loss: optional(row, "recv_loss_pct"),
-			availableIncomingK: optional(row, "available_incoming_kbps"),
+			availableIncomingK: optional(row, "available_incoming_kbps"), hidden: optional(row, "recv_hidden_videos"),
 		})
 	}
 	sort.SliceStable(samples, func(a, b int) bool { return samples[a].start.Before(samples[b].start) })
 	return samples
 }
+
+func hiddenByViewer(s sample) bool { return s.hidden != nil && *s.hidden > 0 }
 
 type sampleRun struct {
 	participant, conn string
@@ -232,7 +236,7 @@ func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 		findings = append(findings, finding{kind: "failed_join", participant: report.participant, from: report.time, to: report.time, experience: "could not join", cause: cause})
 	}
 
-	for _, r := range runsOf(samples, func(s sample) bool { return s.recv != nil && *s.recv == 0 }) {
+	for _, r := range runsOf(samples, func(s sample) bool { return s.recv != nil && *s.recv == 0 && !hiddenByViewer(s) }) {
 		duration := r.to.Sub(r.from)
 		if duration <= time.Duration(t.SilenceMS)*time.Millisecond || !senderWasSending(samples, r) || !receivedBefore(samples, r) {
 			continue
@@ -246,7 +250,7 @@ func diagnoseRows(rows []logRow, t verdictThresholds) []finding {
 			(s.availableIncomingK == nil || *s.availableIncomingK >= 4*t.StarvedFloorKbps)
 	}
 	starved := func(s sample) bool {
-		return s.height != nil && s.recv != nil && *s.recv > 0 && *s.recv < t.StarvedFloorKbps && healthy(s)
+		return s.height != nil && s.recv != nil && *s.recv > 0 && *s.recv < t.StarvedFloorKbps && healthy(s) && !hiddenByViewer(s)
 	}
 	for _, r := range runsOf(samples, starved) {
 		duration := r.to.Sub(r.from)
