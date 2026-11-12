@@ -266,7 +266,7 @@ Every call control follows the same rules, so a new control needs no new decisio
 
 The header is transparent over the canvas, `60px` high (`52px` on a phone), with `24px` of padding on the left and `16px` on the right. It carries no logo and no Invite button.
 
-- On the left, the call name and the timer form one button with a `14px` chevron after the timer. It has a `40px` pill shape, a `raised` hover background, a pressed state, the tooltip "Call details", and opens the call details popover. While recording, a `32px` pill reading "Recording" with an `8px` dot follows it, in `danger-text` on a `14%` `danger` tint. On a phone it is a dot-only `32px` circle.
+- On the left, the call name and the timer form one button with a `14px` chevron after the timer. It has a `40px` pill shape, a `raised` hover background, a pressed state, the tooltip "Call details", and opens the call details popover. The header shows no recording pill or dot at any width: recording shows in the call details and on the dock.
 - When your own connection is weak, a borderless `32px` pill on `raised` appears beside the name with signal bars and "Weak connection", or "Very poor connection" in `danger-text`. It has no reason text, chevron or dismiss: the reason lives in its accessible name and in the Connection helper of the call details. When the link is poor and video is on, a "Turn off video" action follows it. It enters over `180ms` with a `4px` rise, and with reduced motion it appears at once. On a phone it sits under the header at the left edge.
 - On the right, the people pill is `40px` high on `surface`. It shows up to three overlapping `24px` faces (overlap `7px`, each ringed in the pill color) and the count in tabular figures, and it opens the People tab.
 - Next to it, one `40px` round button switches between Spotlight and Grid. Its tooltip names the layout it switches to.
@@ -350,7 +350,7 @@ The tab row is `46px` high. "People" shows the count, "Chat" shows a `7px` blue 
 
 ### Call details popover
 
-The call name button opens one popover that holds everything about the call itself. It is `368px` wide, opens under the button `12px` from the left edge, and scrolls when it is taller than the call minus `150px`. It uses the menu surface and opens in `180ms` with a fade and a `6px` drop. On a phone it is a bottom sheet. Esc closes it and returns focus to the name button. A title row shows the call name and a close button, and hairlines separate these sections:
+The call name button opens one popover that holds everything about the call itself. It is `368px` wide, opens under the button `12px` from the left edge, and scrolls when it is taller than the call minus `150px`. It uses the menu surface and opens in `180ms` with a fade and a `6px` drop. On a phone it is a bottom sheet. Esc closes it and returns focus to the name button. A title row shows the call name and a close button. While the call is recorded, a Recording row sits at the top, above Share: an `8px` `danger` dot, "Recording", and the elapsed time in tabular figures, and for the host a Stop action at the end of the row. Hairlines separate these sections:
 
 1. **Share.** The link `chalkmeet.com/q9-team` sits in a `44px` pill with a copy button. Below it, a `112px` QR code with an `8px` radius, black modules on a white quiet zone in both themes, sits beside the line "Scan with a phone camera to join this call."
 2. **Connection.** A row shows signal bars and "Connection: good" or "Connection: weak", with a line such as "Audio and video are clear" or "Video quality is lowered to keep audio clear". The helper line (such as "Audio may break up") sits inside the row under the Connection label, so the row's focus ring never crosses it. The row expands to a list of round trip, upload, download, packet loss, region, video resolution, frame rate and codec, audio codec, and the selected microphone, speaker, and camera. At the end of the expanded section, Copy diagnostics is a `32px` round icon button (`44px` on a phone) with the copy glyph, the check morph on success, and the tooltip "Copy diagnostics".
@@ -371,7 +371,7 @@ A toast is one line: a `20px` icon or `28px` avatar, a short sentence, at most o
 - Info toasts cover requests and events: "Akash asks you to unmute" with Unmute, "Nora Patel joined", "Nora muted you. Unmute when you're ready.", "Nora left. You're now the host.", "Nora stopped sharing", and the start and stop of recording.
 - A hint above the microphone says "You're muted. Press ⌘D to unmute." when you speak while muted.
 - A banner under the header reads "Your browser paused the sound. Click to hear the call." It is an inverted `44px` pill.
-- When a call is recorded, the header shows the Recording pill, and the Name needed, Joining, and Knocking cards carry the line "This call is recorded. By joining, you agree to be recorded."
+- When recording starts, everyone sees the "Recording started" toast. While a call is recorded, the call details show the Recording row, the dock's record button is solid `danger`, and the Name needed, Joining, and Knocking cards tell people who join mid-recording "This call is recorded. By joining, you agree to be recorded."
 
 ### Alone at the start
 
