@@ -164,24 +164,30 @@ class OwnSfuPromotionTests(unittest.TestCase):
         release.select(api, None)
         api.deployments.assert_any_call('nightly', 'nightly-latency', sha=SHA)
 
-    def staging(self, cut=None, write_run=RUN):
-        """A GitHub whose newest nightly write is `write_run` and whose newest cut record (any proof result) is `cut`."""
+    def staging(self, cut=None, sha=OTHER_SHA):
+        """A GitHub whose newest nightly write is run RUN, release 'release', at `sha`, and whose newest cut record (any
+        proof result) is `cut`."""
         api = Mock(spec=GitHub)
-        write = dict(sha=OTHER_SHA, payload=dict(channel='nightly-write', run_id=write_run))
+        write = dict(sha=sha, payload=dict(channel='nightly-write', run_id=RUN, release_id='release'))
         api.deployments.side_effect = lambda environment, task='nightly-cut', **kwargs: (
             [write] if task == 'nightly-write' else [] if cut is None else [cut])
         return api
 
+    def cut(self, sha=OTHER_SHA, **changes):
+        return dict(payload={**held(None)['payload'], 'deploy_result': 'success', 'target_sha': sha, **changes})
+
     def test_latency_target_is_the_cut_staging_runs_even_when_that_cut_failed_its_proofs(self):
-        cut = dict(payload=dict(held(None)['payload'], proof_result='failed', deploy_result='success', target_sha=OTHER_SHA))
-        release.latency_target(self.staging(cut), None)
+        release.latency_target(self.staging(self.cut(proof_result='failed')), None)
         self.assertIn(f'sha={OTHER_SHA}\n', self.output.read_text())
 
     def test_latency_target_is_empty_when_the_newest_write_never_finished_deploying(self):
-        for cut in (None, dict(payload=dict(held(None)['payload'], deploy_result='failure', target_sha=OTHER_SHA)),
-                    dict(payload=dict(held(None)['payload'], deploy_result='success', run_id='122'))):
-            release.latency_target(self.staging(cut), None)
-            self.assertIn('sha=\n', self.output.read_text())
+        cuts = (None, self.cut(deploy_result='failure'), self.cut(run_id='122'),
+                self.cut(applied_release_id='an-earlier-attempt-of-this-run'), self.cut(SHA))
+        for cut in cuts:
+            with self.subTest(cut=cut):
+                self.output.write_text('')
+                release.latency_target(self.staging(cut), None)
+                self.assertEqual(self.output.read_text(), 'sha=\n')
 
     def test_latency_target_is_empty_when_staging_has_no_nightly_write(self):
         api = Mock(spec=GitHub)
@@ -191,7 +197,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
 
     def test_record_latency_binds_the_verdict_to_the_measured_sha_and_run(self):
         scorecard = dict(target_sha=SHA, run_id='77', result='passed', gated_metrics=[], missing_items=[])
-        api = self.staging(dict(payload=dict(held(None)['payload'], deploy_result='success', target_sha=SHA)))
+        api = self.staging(self.cut(SHA), SHA)
         api.record_latency.return_value = 5
         environment = dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT=json.dumps(scorecard))
         with patch.dict(os.environ, environment):
@@ -210,7 +216,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
             self.assertEqual(api.record_latency.call_args.args[1]['scorecard_result'], 'missing')
 
     def test_record_latency_refuses_a_sha_staging_no_longer_runs(self):
-        api = self.staging(dict(payload=dict(held(None)['payload'], deploy_result='success', target_sha=OTHER_SHA)))
+        api = self.staging(self.cut(OTHER_SHA), OTHER_SHA)
         with patch.dict(os.environ, dict(TARGET_SHA=SHA, GITHUB_RUN_ID='77', LATENCY_RESULT='passed', SCORECARD_RESULT='')):
             with self.assertRaises(ValueError):
                 release.record_latency(api, None)

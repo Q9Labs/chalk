@@ -344,15 +344,16 @@ def select(github, args):
 
 def deployed_cut(github):
     """The SHA staging runs now. The newest nightly write is only an attempt: it is made before the deploy waits for its
-    lease, so the newest cut record must belong to that same run and say its deploy succeeded. A cut that fails its proofs
-    still deploys, so its proof result does not matter here."""
+    lease. So the newest cut record must belong to that same attempt (same run, applied release and SHA) and say its deploy
+    succeeded. A cut that fails its proofs still deploys, so its proof result does not matter here."""
     marker = github.deployments('nightly', 'nightly-write')
     require(marker, 'staging has no nightly write')
-    run_id = payload(marker[0]).get('run_id')
+    write = payload(marker[0])
     cuts = github.deployments('nightly', passed_only=False)
     cut = payload(cuts[0]) if cuts else {}
-    require(cut.get('run_id') == run_id and cut.get('deploy_result') == 'success',
-            f'staging does not run a finished nightly deploy: the newest write is run {run_id}')
+    require(cut.get('run_id') == write.get('run_id') and cut.get('applied_release_id') == write.get('release_id')
+            and cut.get('target_sha') == marker[0]['sha'] and cut.get('deploy_result') == 'success',
+            f"staging does not run a finished nightly deploy: the newest write is run {write.get('run_id')} release {write.get('release_id')}")
     return cut['target_sha']
 
 
