@@ -34,7 +34,10 @@ test("a workflow job, hook command or budget group without an entry is a problem
   assert.ok(findProblems(without("scorecard:web.laptop")).some((problem) => problem.startsWith("scorecard:web.laptop:")));
   assert.ok(findProblems(without("gate:types")).some((problem) => problem.startsWith("gate:types:")));
   for (const lane of ["scope", "depcruise", "design-tokens"]) {
-    assert.ok(findProblems(without(`gate:${lane}`)).some((problem) => problem.startsWith(`gate:${lane}: no register entry`)), lane);
+    assert.ok(
+      findProblems(without(`gate:${lane}`)).some((problem) => problem.startsWith(`gate:${lane}: no register entry`)),
+      lane,
+    );
   }
 });
 
