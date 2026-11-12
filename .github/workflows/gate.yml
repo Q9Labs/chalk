@@ -35,8 +35,8 @@ concurrency:
 env:
   CI: "true"
   # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
-  npm_config_fetch_retries: "5"
-  npm_config_fetch_retry_mintimeout: "10000"
+  PNPM_CONFIG_FETCH_RETRIES: "5"
+  PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
 
 jobs:
   changes:
