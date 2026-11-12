@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Icon } from "./Icon";
 
-/** The call's copy control: a round button whose icon turns into a check for two seconds. */
+/** The site's copy control: a round button whose copy icon morphs into a check for two seconds. Its name stays put; the status line says what happened. */
 export function CopyButton({ text, label = "Copy" }: { readonly text: string | (() => string); readonly label?: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
 
@@ -24,8 +24,9 @@ export function CopyButton({ text, label = "Copy" }: { readonly text: string | (
   const copied = state === "copied";
   return (
     <>
-      <button type="button" className={copied ? "ib ok" : "ib"} aria-label={copied ? "Copied" : label} data-tip onClick={() => void copy()}>
-        <Icon name={copied ? "check" : "copy"} />
+      <button type="button" className="ib copy" data-copied={copied || undefined} aria-label={label} data-tip onClick={() => void copy()}>
+        <Icon name="copy" />
+        <Icon name="check" />
       </button>
       <span className="sr" role="status">
         {copied ? "Copied" : state === "failed" ? "Copy failed. Select the text to copy it." : ""}
