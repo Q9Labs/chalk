@@ -149,11 +149,12 @@ it("undoes the head start at the first retryable refusal only, and the final gra
   expect(calls).toEqual(["prepare", "cancel:camera", "set"]);
 });
 
-it("undoes the head start when the grant is refused for good, after the head start has finished", async () => {
+it("undoes the head start at once when the grant is refused for good, without waiting for the head start to finish", async () => {
   const calls: string[] = [];
   const headStart = Promise.withResolvers<void>();
   const { coordinator } = harness({
     prepareLocalPublicationTarget: async () => {
+      calls.push("prepare");
       await headStart.promise;
       calls.push("prepared");
     },
@@ -162,14 +163,26 @@ it("undoes the head start when the grant is refused for good, after the head sta
 
   const enabling = coordinator.send("set_camera_enabled", "camera", true);
   const refused = expect(enabling).rejects.toMatchObject({ code: "terminal_failure" });
+  await settle();
+  coordinator.receive(result("terminal_failure", "not_allowed"));
+  await refused;
+  expect(calls).toEqual(["prepare", "cancel"]);
+
+  headStart.resolve();
+  await settle();
+  expect(calls).toEqual(["prepare", "cancel", "prepared"]);
+});
+
+it("never starts a head start that the refusal overtook", async () => {
+  const { calls, plane } = headStartPlane();
+  const { coordinator } = harness(plane);
+
+  const enabling = coordinator.send("set_camera_enabled", "camera", true);
+  const refused = expect(enabling).rejects.toMatchObject({ code: "terminal_failure" });
   coordinator.receive(result("terminal_failure", "not_allowed"));
   await refused;
   await settle();
   expect(calls).toEqual([]);
-
-  headStart.resolve();
-  await settle();
-  expect(calls).toEqual(["prepared", "cancel"]);
 });
 
 it("undoes the head start when the retry budget runs out and when the local step times out", async () => {

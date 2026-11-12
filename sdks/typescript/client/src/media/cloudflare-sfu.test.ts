@@ -5112,6 +5112,76 @@ it("parks the resumed microphone again at the first retryable refusal, and the f
   }
 });
 
+// A cancelled head start is silent at once, with no request: a resume that is still in flight or got no answer cannot delay it.
+// The SFU hold follows when the resume request has settled, and it is sent even when the resume was not acknowledged.
+it("silences the resumed microphone the moment a retryable refusal arrives, and parks it once the resume request settles", async () => {
+  const call = await parkedMicrophoneCall();
+  const gate = Promise.withResolvers<void>();
+  try {
+    const { transport } = call.harness;
+    transport.holdTrackUpdates = gate.promise;
+    const enabling = call.enable();
+    await vi.waitFor(() => expect(transport.log).toContain("update paused=false"));
+    expect(call.track.enabled).toBe(true);
+
+    call.answer("retryable_failure", "busy");
+    expect(call.track.enabled).toBe(false);
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false"]);
+
+    gate.resolve();
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(transport.log).toEqual(["update paused=true", "update returned paused=true", "update paused=false", "update returned paused=false", "update paused=true", "update returned paused=true"]);
+    expect(call.track.enabled).toBe(false);
+
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    call.answer("confirmed", null);
+    expect(await enabling).toBe("enabled");
+    expect(call.resumes()).toHaveLength(2);
+    expect(call.track.enabled).toBe(true);
+    expect(transport.closeInputs).toHaveLength(0);
+  } finally {
+    gate.resolve();
+    call.dispose();
+  }
+});
+
+// The node applies the resume, then the response is lost: the SFU may be forwarding, so the hold is sent all the same.
+function loseFirstResumeResponse(transport: Awaited<ReturnType<typeof parkedMicrophoneCall>>["harness"]["transport"]) {
+  const update = transport.updateTracks.bind(transport);
+  let lost = false;
+  transport.updateTracks = async (input) => {
+    const response = await update(input);
+    if (lost || !input.tracks.some((track) => track.location === "local" && track.paused === false)) return response;
+    lost = true;
+    throw new CloudflareSFUError("response lost", "signaling_failed");
+  };
+}
+
+it("parks the microphone when a retryable refusal follows a resume whose response was lost", async () => {
+  const call = await parkedMicrophoneCall();
+  try {
+    const { transport } = call.harness;
+    loseFirstResumeResponse(transport);
+    const enabling = call.enable();
+    await vi.waitFor(() => expect(transport.log).toContain("update returned paused=false"));
+    expect(call.track.enabled).toBe(true);
+
+    call.answer("retryable_failure", "busy");
+    expect(call.track.enabled).toBe(false);
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(transport.log.filter((entry) => entry === "update paused=true")).toHaveLength(2);
+    expect(transport.closeInputs).toHaveLength(0);
+
+    await vi.waitFor(() => expect(call.answers.frames).toHaveLength(1));
+    call.answer("confirmed", null);
+    expect(await enabling).toBe("enabled");
+    expect(call.resumes()).toHaveLength(2);
+    expect(call.track.enabled).toBe(true);
+  } finally {
+    call.dispose();
+  }
+});
+
 it("keeps the microphone parked then closed when the retries run out", async () => {
   const call = await parkedMicrophoneCall();
   const { clock } = call.platform.dependencies;
@@ -5183,6 +5253,34 @@ it("parks a microphone the head start resumed when a refusal reaches the coordin
     expect(microphone.enabled).toBe(false);
     expect(transport.closeInputs).toHaveLength(0);
   } finally {
+    coordinator.disconnect("test_cleanup");
+    harness.client.stop();
+  }
+});
+
+it.each(["still in flight", "response lost"] as const)("silences and parks a microphone at a terminal refusal through the coordinator when the resume is %s", async (resume) => {
+  const { harness, microphone, coordinator, refuse, resumes } = await directParkedMicrophone();
+  const gate = Promise.withResolvers<void>();
+  try {
+    const { transport } = harness;
+    if (resume === "still in flight") transport.holdTrackUpdates = gate.promise;
+    else loseFirstResumeResponse(transport);
+    const enabling = coordinator.send("set_microphone_enabled", "microphone", true);
+    const refused = expect(enabling).rejects.toMatchObject({ code: "terminal_failure" });
+    await vi.waitFor(() => expect(transport.log).toContain(resume === "still in flight" ? "update paused=false" : "update returned paused=false"));
+    expect(microphone.enabled).toBe(true);
+
+    refuse("terminal_failure");
+    expect(microphone.enabled).toBe(false);
+    await refused;
+    if (resume === "still in flight") expect(transport.log.at(-1)).toBe("update paused=false");
+    gate.resolve();
+    await vi.waitFor(() => expect(transport.log.at(-1)).toBe("update returned paused=true"));
+    expect(resumes()).toHaveLength(1);
+    expect(microphone.enabled).toBe(false);
+    expect(transport.closeInputs).toHaveLength(0);
+  } finally {
+    gate.resolve();
     coordinator.disconnect("test_cleanup");
     harness.client.stop();
   }

@@ -26,8 +26,8 @@ type LiveDeferred = V1Deferred<V1SelfMediaTargetResult> & {
   readonly enabled: boolean;
   serverResult?: SuccessfulLiveTargetResult;
   serverResultSignature?: string;
-  // The plane's head start for this enable, until the enable is executed or its head start is undone.
-  headStart?: { readonly target: MediaPlaneTarget; readonly done: Promise<void> };
+  // The plane's head start for this enable, until the head start is undone. It is `started` once the plane has been asked to begin it.
+  headStart?: { readonly target: MediaPlaneTarget; started: boolean };
 };
 
 type V1LiveTargetOptions = { readonly requestId?: string };
@@ -111,22 +111,32 @@ export class V1LiveTargetCoordinator {
     const prepare = this.#options.mediaPlane?.prepareLocalPublicationTarget;
     if (!prepare) return;
     const target = { operationId: deferred.frame.operation_id, participantId, source: deferred.source, enabled: true };
+    const headStart = { target, started: false };
+    deferred.headStart = headStart;
     // #executeLocal redoes whatever the head start left undone and reports its failure, so a failed head start needs no handling here.
-    const done = Promise.resolve()
-      .then(() => prepare.call(this.#options.mediaPlane, target))
+    void Promise.resolve()
+      .then(() => {
+        if (deferred.headStart !== headStart) return;
+        headStart.started = true;
+        return prepare.call(this.#options.mediaPlane, target);
+      })
       .catch(() => {});
-    deferred.headStart = { target, done };
   }
 
-  // Parks again what the head start resumed, after the head start has finished, so the resume can never land after the cancel.
+  // Undoes the head start at once, without waiting for it: the plane silences the sender locally, then parks the track on the SFU
+  // after its resume request has settled, even when that request got no answer. A head start that has not begun never does.
   // A listener must not hear audio the authority refuses, and the lease forwards it until this runs.
   #cancelHeadStart(deferred: LiveDeferred): void {
     const headStart = deferred.headStart;
-    const cancel = this.#options.mediaPlane?.cancelPreparedLocalPublicationTarget;
     deferred.headStart = undefined;
-    if (!headStart || !cancel) return;
+    const cancel = this.#options.mediaPlane?.cancelPreparedLocalPublicationTarget;
+    if (!headStart?.started || !cancel) return;
     // A failed cancel leaves the publication to the caller's own failure cleanup, which closes it.
-    void headStart.done.then(() => cancel.call(this.#options.mediaPlane, headStart.target)).catch(() => {});
+    try {
+      void cancel.call(this.#options.mediaPlane, headStart.target).catch(() => {});
+    } catch {
+      // A plane that throws instead of rejecting is handled the same way.
+    }
   }
 
   receive(frame: V1LiveTargetResult): void {

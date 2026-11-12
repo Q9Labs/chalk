@@ -144,10 +144,13 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   readonly #closedReceiverTracks = new WeakSet<MediaStreamTrack>();
   // Layer and pause updates reach the SFU in the order the client decided them, so a layer update cannot resume a pause.
   #trackUpdates: Promise<unknown> = Promise.resolve();
-  // The unmute of a parked track that started before Sync answered, one per source. It never rejects.
+  // The steps of a parked track's unmute that run before Sync answers (resume, park again), in order, one chain per source. It never rejects.
   readonly #headStarts = new Map<MediaPublicationSource, Promise<void>>();
+  // A head start the caller has cancelled, by operation: a step still queued must not start, and one under way must stop short of the request.
+  readonly #headStartCancelled = new Map<string, { cancelled: boolean }>();
   readonly #resumesInFlight = new WeakMap<OwnedLocalPublication, Promise<unknown>>();
-  // The publication each source's head start resumed, until that source's enable has used it.
+  // The publication each source's head start tried to resume, set before the request goes out, until that source's enable has used it.
+  // A lost response leaves the node's state unknown, so an attempt counts as a resume.
   readonly #resumedAhead = new Map<MediaPublicationSource, OwnedLocalPublication>();
   #viewerLayerUpdating = false;
   #viewerLayerUpdateAt = Number.NEGATIVE_INFINITY;
@@ -601,12 +604,11 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     const resolved = resolveMediaTarget(this.#participantId, this.#stopped, this.#localTracks, target);
     if (resolved.kind !== "state") return;
     if (this.#heldPublication(target.source) && !this.#replacement) {
-      const headStart = (this.#headStarts.get(target.source) ?? Promise.resolve()).then(() => this.#resumeHeldAheadOfGrant(resolved.value));
-      this.#headStarts.set(target.source, headStart);
-      void headStart.then(() => {
-        if (this.#headStarts.get(target.source) === headStart) this.#headStarts.delete(target.source);
+      const head = { cancelled: false };
+      this.#headStartCancelled.set(target.operationId, head);
+      return this.#enqueueHeadStart(target.source, () => this.#resumeHeldAheadOfGrant(resolved.value, head)).finally(() => {
+        if (this.#headStartCancelled.get(target.operationId) === head) this.#headStartCancelled.delete(target.operationId);
       });
-      return headStart;
     }
     const generation = this.#generation;
     const attemptedBefore = this.#replacementAttemptedGeneration === generation;
@@ -623,20 +625,44 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     }
   }
   /**
-   * Parks again what `prepareLocalPublicationTarget` resumed, through the hold path a user mute takes (the sender is
-   * detached and the SFU track is paused), once any resume in flight has reached the SFU. It does nothing when nothing
-   * was resumed ahead, or when the enable has already taken the publication over: that enable owns its own failure.
+   * Silences what `prepareLocalPublicationTarget` resumed, and parks it again the way a user mute does. The sender goes quiet
+   * at once and locally (the track is disabled; no request, so a lost response cannot delay it), and a queued head start of the
+   * same operation never starts. The SFU hold follows once any resume request has settled, whether or not it was acknowledged,
+   * because a lost response may still have reached the node. It does nothing when nothing was resumed ahead, or when the enable
+   * has already taken the publication over: that enable owns its own failure.
    */
-  async cancelPreparedLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
-    await this.#headStarts.get(target.source);
+  cancelPreparedLocalPublicationTarget(target: MediaPlaneTarget): Promise<void> {
+    const head = this.#headStartCancelled.get(target.operationId);
+    if (head) head.cancelled = true;
     const publication = this.#resumedAhead.get(target.source);
-    if (!publication) return;
-    this.#resumedAhead.delete(target.source);
+    if (!publication) return Promise.resolve();
+    const state = this.#localTracks.get(target.source);
+    if (state && !state.desiredEnabled) state.track.enabled = false;
+    return this.#enqueueHeadStart(target.source, () => this.#parkResumedAhead(target.source, publication));
+  }
+  async #parkResumedAhead(source: MediaPublicationSource, publication: OwnedLocalPublication): Promise<void> {
+    if (this.#resumedAhead.get(source) !== publication) return;
+    this.#resumedAhead.delete(source);
     const { state } = publication;
-    if (state.desiredEnabled || publication.lifecycle.kind !== "confirmed") return;
+    if (state.desiredEnabled) return;
     state.track.enabled = false;
+    // A resume that failed or got no answer may still have reached the node, so the publication is parked as a resumed one.
+    if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle: publication.lifecycle.handle };
+    if (publication.lifecycle.kind !== "confirmed") return;
     this.#markPublicationRetiring(publication, "user_pause");
-    await this.#retireOwnedPublications(undefined, { sources: [target.source], goneIsComplete: true });
+    await this.#retireOwnedPublications(undefined, { sources: [source], goneIsComplete: true });
+  }
+  #enqueueHeadStart<T>(source: MediaPublicationSource, step: () => Promise<T>): Promise<T> {
+    const run = (this.#headStarts.get(source) ?? Promise.resolve()).then(step);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#headStarts.set(source, settled);
+    void settled.then(() => {
+      if (this.#headStarts.get(source) === settled) this.#headStarts.delete(source);
+    });
+    return run;
   }
   async setLocalPublicationTarget(target: MediaPlaneTarget): Promise<MediaPlaneResult> {
     if (!target.enabled) return this.#pausePublicationTarget(target);
@@ -1129,17 +1155,17 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   // Resumes a parked track on the SFU before Sync answers. It leaves the track's own state (enabled, published ID) to the
   // grant-gated enable, so nothing local shows the source on until Sync has granted it. A failed resume is left to that enable.
-  async #resumeHeldAheadOfGrant(state: LocalTrackState): Promise<void> {
+  async #resumeHeldAheadOfGrant(state: LocalTrackState, head: { readonly cancelled: boolean }): Promise<void> {
     const held = this.#heldPublication(state.source);
-    if (!held || this.#locallyPausedSources.has(state.source)) return;
+    if (!held || head.cancelled || this.#locallyPausedSources.has(state.source)) return;
+    this.#resumedAhead.set(state.source, held.publication);
     try {
       state.track.enabled = true;
       await this.#boundPeerOperation(held.publication.transceiver.sender.replaceTrack(state.track));
-      if (this.#heldPublication(state.source)?.publication === held.publication && !this.#locallyPausedSources.has(state.source)) {
+      if (!head.cancelled && this.#heldPublication(state.source)?.publication === held.publication && !this.#locallyPausedSources.has(state.source)) {
         const resuming = this.#resumeHeldPublication(held.publication, held.handle, state);
         this.#resumesInFlight.set(held.publication, resuming);
         await resuming;
-        if (held.publication.lifecycle.kind === "confirmed") this.#resumedAhead.set(state.source, held.publication);
       }
       const cause = this.#locallyPausedSources.get(state.source);
       if (cause) {
