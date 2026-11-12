@@ -92,7 +92,6 @@ type Querier interface {
 	CreateMCPOAuthGrant(ctx context.Context, arg CreateMCPOAuthGrantParams) error
 	CreateMCPOAuthToken(ctx context.Context, arg CreateMCPOAuthTokenParams) error
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (CreateMembershipRow, error)
-	CreateRecording(ctx context.Context, arg CreateRecordingParams) (Recording, error)
 	CreateRecordingReservation(ctx context.Context, arg CreateRecordingReservationParams) (CreateRecordingReservationRow, error)
 	CreateRecordingTranscriptionSource(ctx context.Context, arg CreateRecordingTranscriptionSourceParams) (RecordingTranscriptionSource, error)
 	CreateRecordingTranscriptionSourceChunk(ctx context.Context, arg CreateRecordingTranscriptionSourceChunkParams) (RecordingTranscriptionSourceChunk, error)
@@ -375,7 +374,6 @@ type Querier interface {
 	MarkTenantExternalEpisodeEnding(ctx context.Context, arg MarkTenantExternalEpisodeEndingParams) (Episode, error)
 	MarkTranscriptionTranscribing(ctx context.Context, arg MarkTranscriptionTranscribingParams) (Transcription, error)
 	MarkTranscriptionVerifying(ctx context.Context, arg MarkTranscriptionVerifyingParams) (Transcription, error)
-	MaterializeRecording(ctx context.Context, arg MaterializeRecordingParams) (Recording, error)
 	// Count by the fenced journal worker, not by a fleet-row join: a lost row
 	// must not hide live work. Refuse any conflicting provider or worker binding.
 	ObserveRecordingFleetIdentityLeases(ctx context.Context, arg ObserveRecordingFleetIdentityLeasesParams) (ObserveRecordingFleetIdentityLeasesRow, error)
@@ -447,7 +445,6 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, arg UpdateTenantParams) (UpdateTenantRow, error)
 	UpdateTenantEpisode(ctx context.Context, arg UpdateTenantEpisodeParams) (Episode, error)
 	UpdateTenantMembership(ctx context.Context, arg UpdateTenantMembershipParams) (UpdateTenantMembershipRow, error)
-	UpdateTenantRecording(ctx context.Context, arg UpdateTenantRecordingParams) (Recording, error)
 	UpdateTenantSpace(ctx context.Context, arg UpdateTenantSpaceParams) (Space, error)
 	UpdateTenantTranscription(ctx context.Context, arg UpdateTenantTranscriptionParams) (Transcription, error)
 	UpdateWebhookEndpoint(ctx context.Context, arg UpdateWebhookEndpointParams) (WebhookEndpoint, error)
