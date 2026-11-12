@@ -20,8 +20,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
   require Logger
 
   alias ChalkSync.Observability
-  alias ChalkSync.ProviderBridge.MediaPlane, as: ProviderBridgeMediaPlane
-  alias ChalkSync.ProviderBridge.RecordingPlane, as: ProviderBridgeRecordingPlane
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.ExternalOperation
@@ -321,11 +320,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_media_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_media_plane({module, adapter}, episode, operation, timeout_ms) do
-    adapter =
-      if module == ProviderBridgeMediaPlane,
-        do: ProviderBridgeMediaPlane.with_control_revision(adapter, operation.control_revision),
-        else: adapter
-
     arguments = media_arguments(adapter, episode, operation)
     invoke_adapter(module, arguments, :provider, timeout_ms)
   end
@@ -366,11 +360,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
   defp invoke_recording_plane(nil, _episode, _operation, _timeout_ms), do: :pending
 
   defp invoke_recording_plane({module, adapter}, episode, operation, timeout_ms) do
-    adapter =
-      if module == ProviderBridgeRecordingPlane and is_map(operation.payload),
-        do: ProviderBridgeRecordingPlane.with_operation_payload(adapter, operation.payload),
-        else: adapter
-
     arguments =
       {operation.name,
        [adapter, operation.external_operation_id, episode, operation.recording_id]}
@@ -553,19 +542,19 @@ defmodule ChalkSync.ExternalOperationConsumer do
   end
 
   defp dispatch_provider_context(episode, operation, media_plane, recording_plane, timeout_ms) do
-    if provider_bridge_adapter?(media_plane) or provider_bridge_adapter?(recording_plane) do
+    if ProviderCall.contextual?(media_plane) or ProviderCall.contextual?(recording_plane) do
       Observability.with_worker_span(
         persisted_provider_context(operation),
         "sync.external_operation.provider_bridge",
         %{operation: operation.name},
         fn worker_context ->
-          headers = Observability.frame_fields(worker_context)
+          call = provider_call(operation, Observability.frame_fields(worker_context))
 
           dispatch(
             episode,
             operation,
-            contextual_adapter(media_plane, operation, headers),
-            contextual_adapter(recording_plane, operation, headers),
+            ProviderCall.attach(media_plane, call),
+            ProviderCall.attach(recording_plane, call),
             timeout_ms
           )
         end
@@ -575,31 +564,18 @@ defmodule ChalkSync.ExternalOperationConsumer do
     end
   end
 
-  defp provider_bridge_adapter?({module, _adapter})
-       when module in [ProviderBridgeMediaPlane, ProviderBridgeRecordingPlane],
-       do: true
+  defp provider_call(operation, headers) do
+    call = %{
+      headers: headers,
+      control_revision: operation.control_revision,
+      participant_id: operation.target_participant_id,
+      participant_generation: operation.target_participant_generation
+    }
 
-  defp provider_bridge_adapter?(_adapter), do: false
-
-  defp contextual_adapter(nil, _operation, _headers), do: nil
-
-  defp contextual_adapter({ProviderBridgeMediaPlane, adapter}, operation, headers) do
-    adapter =
-      adapter
-      |> ProviderBridgeMediaPlane.with_context(headers)
-      |> ProviderBridgeMediaPlane.with_participant_generation(
-        operation.target_participant_id,
-        operation.target_participant_generation
-      )
-
-    {ProviderBridgeMediaPlane, adapter}
+    if OperationTable.is_recording_name(operation.name) and is_map(operation.payload),
+      do: Map.put(call, :payload, operation.payload),
+      else: call
   end
-
-  defp contextual_adapter({ProviderBridgeRecordingPlane, adapter}, _operation, headers) do
-    {ProviderBridgeRecordingPlane, ProviderBridgeRecordingPlane.with_context(adapter, headers)}
-  end
-
-  defp contextual_adapter(adapter, _operation, _headers), do: adapter
 
   defp persisted_provider_context(operation) do
     case operation do

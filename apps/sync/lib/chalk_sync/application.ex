@@ -95,27 +95,22 @@ defmodule ChalkSync.Application do
       adapter_timeout_ms =
         Application.fetch_env!(:chalk_sync, :external_operation_adapter_timeout_ms)
 
+      install_provider_planes(adapter_timeout_ms)
+
       ChalkSync.ExternalOperationConsumer.child_specs(
         adapter_timeout_ms: adapter_timeout_ms,
         poll_interval_ms:
           Application.fetch_env!(:chalk_sync, :external_operation_poll_interval_ms),
-        media_plane: media_plane(adapter_timeout_ms),
-        recording_plane: recording_plane(adapter_timeout_ms)
+        media_plane: Application.get_env(:chalk_sync, :media_plane),
+        recording_plane: Application.get_env(:chalk_sync, :recording_plane)
       )
     end
   end
 
-  defp media_plane(adapter_timeout_ms) do
+  defp install_provider_planes(adapter_timeout_ms) do
     case Application.get_env(:chalk_sync, :provider_bridge) do
-      nil -> Application.get_env(:chalk_sync, :media_plane)
-      options -> ProviderBridgeConfig.install_media_plane!(options, adapter_timeout_ms)
-    end
-  end
-
-  defp recording_plane(adapter_timeout_ms) do
-    case Application.get_env(:chalk_sync, :provider_bridge) do
-      nil -> Application.get_env(:chalk_sync, :recording_plane)
-      options -> ProviderBridgeConfig.recording_plane!(options, adapter_timeout_ms)
+      nil -> :ok
+      options -> ProviderBridgeConfig.install_planes!(options, adapter_timeout_ms)
     end
   end
 
