@@ -1,8 +1,6 @@
 import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { TranscriptLanguageMode } from "@chalk/transcript-language";
 
-export type FetchLike = typeof fetch;
-
 export interface JourneyContext {
   journeyId: string;
   traceparent?: string;
@@ -276,11 +274,6 @@ export interface ReleaseConfig {
         corpusDigest: string;
       };
   provider: ProviderPolicy;
-}
-
-export interface WorkloadHeaders {
-  authorization: string;
-  [name: string]: string;
 }
 
 export interface CompletionInput {

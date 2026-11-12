@@ -42,7 +42,6 @@ async function parseError(response: Response, policy: ProviderPolicy, provider: 
 }
 
 export class DeepInfraWhisperProvider implements TranscriptionProvider {
-  // fallow-ignore-next-line unused-class-member
   readonly name = "deepinfra" as const;
   private readonly options: DeepInfraOptions;
 
@@ -104,7 +103,6 @@ export class DeepInfraWhisperProvider implements TranscriptionProvider {
 }
 
 export class CloudflareWhisperProvider implements TranscriptionProvider {
-  // fallow-ignore-next-line unused-class-member
   readonly name = "cloudflare" as const;
   private readonly options: CloudflareOptions;
 
@@ -155,5 +153,3 @@ export class CloudflareWhisperProvider implements TranscriptionProvider {
     });
   }
 }
-
-export type ProviderFactory = () => TranscriptionProvider;
