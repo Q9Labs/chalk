@@ -2,6 +2,7 @@ package artifactpolicy
 
 import (
 	"errors"
+	"slices"
 	"time"
 )
 
@@ -66,25 +67,29 @@ func (document Document) Validate() error {
 	if err := document.Transcription.Mode.Validate(); err != nil {
 		return err
 	}
-	if document.Recording.RetentionSeconds < 0 ||
-		document.Recording.RetentionSeconds > MaximumRetentionSeconds ||
-		document.Transcription.RetentionSeconds < 0 ||
-		document.Transcription.RetentionSeconds > MaximumRetentionSeconds {
+	retentions := []int64{document.Recording.RetentionSeconds, document.Transcription.RetentionSeconds}
+	if slices.ContainsFunc(retentions, func(seconds int64) bool { return seconds < 0 || seconds > MaximumRetentionSeconds }) {
 		return ErrInvalidRetention
 	}
-	if document.Transcription.SourceWindowSeconds < 0 || document.Transcription.SourceWindowSeconds > int64(MaximumSourceWindow/time.Second) {
+	return document.Transcription.validateSourceWindow()
+}
+
+func (transcription TranscriptionDocument) validateSourceWindow() error {
+	window := transcription.SourceWindowSeconds
+	if window < 0 || window > int64(MaximumSourceWindow/time.Second) {
 		return ErrInvalidSourceWindow
 	}
-	if document.Transcription.Mode == TranscriptionDisabled && document.Transcription.SourceWindowSeconds != 0 {
-		return ErrInvalidSourceWindow
-	}
-	if document.Transcription.Mode != TranscriptionDisabled {
-		if document.Transcription.SourceWindowSeconds == 0 {
+	if transcription.Mode == TranscriptionDisabled {
+		if window != 0 {
 			return ErrInvalidSourceWindow
 		}
-		if document.Transcription.ProviderPolicyVersion == "" {
-			return ErrMissingProviderPolicy
-		}
+		return nil
+	}
+	if window == 0 {
+		return ErrInvalidSourceWindow
+	}
+	if transcription.ProviderPolicyVersion == "" {
+		return ErrMissingProviderPolicy
 	}
 	return nil
 }
