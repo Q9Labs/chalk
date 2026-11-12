@@ -149,7 +149,7 @@ export const ParticipantTileSurface = React.memo(function ParticipantTileSurface
             </span>
           ) : null}
           {onClick || onFollow ? (
-            <span data-part="tile-menu" className="absolute top-2 right-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100">
+            <span data-part="tile-menu" className={cn("absolute top-2 z-30 transition-opacity duration-150 min-[641px]:opacity-0 group-hover/tile:opacity-100 focus-within:opacity-100", primary && phone ? "left-2" : "right-2")}>
               <TileOptions name={participant.displayName} actions={[...(onClick ? [{ label: actionLabel, run: onClick }] : []), ...(onFollow ? [{ label: followLabel, run: onFollow }] : [])]} />
             </span>
           ) : null}
