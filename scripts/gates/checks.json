@@ -509,51 +509,51 @@
       "id": "workflow:rollback-rehearsal.yml#plan",
       "owner": "Release",
       "catches": "A weekly rehearsal with no passed cut to deploy or roll back to.",
-      "runs": ["weekly"],
+      "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#deploy-current",
       "owner": "Release",
       "catches": "The newest passed cut failing to deploy on nightly.",
-      "runs": ["weekly"],
+      "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-back",
       "owner": "Release",
       "catches": "A rollback to the previous cut that fails, such as an older controller that cannot read a newer pointer.",
-      "runs": ["weekly"],
+      "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#roll-forward",
       "owner": "Release",
       "catches": "Rolling forward again after a rollback failing.",
-      "runs": ["weekly"],
+      "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:rollback-rehearsal.yml#result",
       "owner": "Release",
       "catches": "A rehearsal whose outcome is not reported.",
-      "runs": ["weekly"],
+      "runs": ["weekly", "manual"],
       "blocks": "alert",
       "minutes": null,
       "record": "unmeasured",
-      "sample": "Weekly rehearsal; no failure history recorded yet."
+      "sample": "Weekly rehearsal; no failure history recorded yet. Only the weekly run pages Oncall; a manual run fails on its own run page."
     },
     {
       "id": "workflow:gate.yml#sync",
