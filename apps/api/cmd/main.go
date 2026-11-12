@@ -560,10 +560,7 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("configure public invite Accounts port: %w", err)
 		}
-		linksPort, err := publicinviteapp.NewLinkPort(publicInviteConfig.WebOrigin)
-		if err != nil {
-			return fmt.Errorf("configure public invite link port: %w", err)
-		}
+		linksPort := publicinviteapp.NewLinkPort(publicInviteConfig.WebOrigin)
 		runtime, err := publicinvites.NewRuntimeWithConfig(service, spacePort, publicInviteRepository, accessPort, accountsPort, linksPort, publicinvites.RuntimeConfig{
 			AutoLifecycleLifetime: publicInviteConfig.AutoLifecycleLifetime,
 		})
@@ -941,7 +938,10 @@ func resolvePublicInviteConfig(ctx context.Context, cfg config.Config, tenantSer
 	if tenantService == nil {
 		return config.PublicInviteConfig{}, errors.New("local public invite Tenant service unavailable")
 	}
-	webOrigin := localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins)
+	webOrigin, err := publicinvites.ParseWebOrigin(localPublicInviteWebOrigin(cfg.API.CORSAllowedOrigins))
+	if err != nil {
+		return config.PublicInviteConfig{}, fmt.Errorf("local public invite web origin: %w", err)
+	}
 	managedTenant, err := ensureLocalPublicInviteTenant(ctx, tenantService)
 	if err != nil {
 		return config.PublicInviteConfig{}, err

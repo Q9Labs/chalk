@@ -17,6 +17,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
 	"github.com/q9labs/chalk/apps/api/internal/authentication"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
+	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/tenantlimits"
@@ -341,7 +342,7 @@ type PublicInviteConfig struct {
 	Enabled               bool
 	ManagedTenantID       string
 	DefaultMediaPlane     string
-	WebOrigin             string
+	WebOrigin             publicinvites.WebOrigin
 	KeyID                 string
 	PrivateKey            ed25519.PrivateKey
 	VerificationKeys      map[string]ed25519.PublicKey
@@ -1202,13 +1203,13 @@ var publicInviteUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a
 func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	managedTenantID := strings.TrimSpace(envOrDefault(PublicInviteManagedTenantID, ""))
 	defaultMediaPlane := strings.TrimSpace(envOrDefault(PublicInviteDefaultMediaPlane, ""))
-	webOrigin := strings.TrimSpace(envOrDefault(PublicInviteWebOrigin, ""))
+	rawWebOrigin := strings.TrimSpace(envOrDefault(PublicInviteWebOrigin, ""))
 	keyID := strings.TrimSpace(envOrDefault(PublicInviteKeyID, ""))
 	encodedPrivateKey := strings.TrimSpace(envOrDefault(PublicInvitePrivateKey, ""))
 	encodedVerificationKeys := strings.TrimSpace(envOrDefault(PublicInviteVerificationKeys, ""))
 
 	coreConfigured := 0
-	for _, value := range []string{managedTenantID, defaultMediaPlane, webOrigin, keyID, encodedPrivateKey, encodedVerificationKeys} {
+	for _, value := range []string{managedTenantID, defaultMediaPlane, rawWebOrigin, keyID, encodedPrivateKey, encodedVerificationKeys} {
 		if value != "" {
 			coreConfigured++
 		}
@@ -1239,7 +1240,8 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	if !validPublicInviteMediaPlane(defaultMediaPlane) {
 		return PublicInviteConfig{}, fmt.Errorf("%s must be a non-empty ASCII media plane", PublicInviteDefaultMediaPlane)
 	}
-	if err := validatePublicInviteWebOrigin(environment, webOrigin); err != nil {
+	webOrigin, err := parsePublicInviteWebOrigin(environment, rawWebOrigin)
+	if err != nil {
 		return PublicInviteConfig{}, err
 	}
 	if err := validatePublicInviteKeyID(keyID); err != nil {
@@ -1289,18 +1291,15 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	}, nil
 }
 
-func validatePublicInviteWebOrigin(environment, origin string) error {
-	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" || parsed.Hostname() == "" || parsed.Opaque != "" || parsed.User != nil || parsed.Path != "" || parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.Contains(origin, "#") {
-		return fmt.Errorf("%s must be an absolute origin with scheme and host and no credentials, path, query, or fragment", PublicInviteWebOrigin)
+func parsePublicInviteWebOrigin(environment, raw string) (publicinvites.WebOrigin, error) {
+	origin, err := publicinvites.ParseWebOrigin(raw)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", PublicInviteWebOrigin, err)
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("%s must use http or https", PublicInviteWebOrigin)
+	if environment != DefaultEnvironment && !origin.Secure() {
+		return "", fmt.Errorf("%s must use https outside local environments", PublicInviteWebOrigin)
 	}
-	if environment != DefaultEnvironment && parsed.Scheme != "https" {
-		return fmt.Errorf("%s must use https outside local environments", PublicInviteWebOrigin)
-	}
-	return nil
+	return origin, nil
 }
 
 func parsePublicInviteVerificationKeys(encoded string) (map[string]ed25519.PublicKey, error) {

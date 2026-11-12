@@ -137,7 +137,7 @@ func classifyDeliveryError(ctx context.Context, err error) DeliveryError {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		return DeliveryError{Code: "timeout", Retryable: true}
 	}
-	if strings.Contains(err.Error(), "server response headers exceeded") {
+	if isResponseHeadersTooLarge(err) {
 		return DeliveryError{Code: "response_headers_too_large", Retryable: false}
 	}
 	var certificateInvalid x509.CertificateInvalidError
@@ -155,6 +155,13 @@ func classifyDeliveryError(ctx context.Context, err error) DeliveryError {
 		return DeliveryError{Code: "connect_failed", Retryable: true}
 	}
 	return DeliveryError{Code: "network_failed", Retryable: true}
+}
+
+// isResponseHeadersTooLarge reports net/http's MaxResponseHeaderBytes abort. The
+// standard library returns it as an untyped error, so the text is the only
+// signal; TestDeliveryClassifiesOversizedResponseHeaders fails if it changes.
+func isResponseHeadersTooLarge(err error) bool {
+	return strings.Contains(err.Error(), "server response headers exceeded")
 }
 
 func boundedRetryAfter(value string, now time.Time) time.Duration {
