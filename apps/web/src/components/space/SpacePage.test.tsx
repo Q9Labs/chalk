@@ -66,14 +66,15 @@ async function entry(code: string, slug: string | undefined = "design-lab", stat
   await act(async () => view?.render(<RouterProvider router={router} />));
 }
 
-it("joins fresh when window.open inherits a copy of the reload marker", async () => {
+it("treats a window.open copy of the reload marker as a new entry: the device step shows and nothing is restored", async () => {
   localStorage.setItem("chalk.display-name", "Ada");
   localStorage.setItem("chalk.prejoin-devices", JSON.stringify({ microphone: false, camera: false }));
   writeReloadRejoin(sessionStorage, marker);
   window.name = "";
   await entry("access.media_proof_rejected");
-  await expectMessage("Asking to join Design Lab");
-  expect(requests).toEqual(["fresh"]);
+  await expectMessage("Join call");
+  expect(document.querySelector<HTMLInputElement>("#join-display-name")?.value).toBe("Ada");
+  expect(requests).toEqual([]);
 });
 
 it.each([
