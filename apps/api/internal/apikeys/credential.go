@@ -15,6 +15,11 @@ const (
 	secretByteCount = 32
 )
 
+// LooksLikeRawKey reports whether a bearer credential has the shape of a tenant API key.
+func LooksLikeRawKey(credential string) bool {
+	return strings.HasPrefix(credential, rawKeyMarker)
+}
+
 type credential struct {
 	prefix string
 	secret string
@@ -44,7 +49,7 @@ func newCredential(random io.Reader) (credential, error) {
 }
 
 func parseCredential(raw string) (string, string, bool) {
-	if !strings.HasPrefix(raw, rawKeyMarker) {
+	if !LooksLikeRawKey(raw) {
 		return "", "", false
 	}
 

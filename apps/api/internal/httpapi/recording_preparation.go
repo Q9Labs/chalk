@@ -62,7 +62,7 @@ func getRecordingPreparationEndpoint(service RecordingPreparationService, author
 		}
 		preparation, err := service.Get(ctx, request.TenantID, request.SpaceID)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).
+	}).Auth(APIAuthSessionOrBearer).
 		Parameters(tenantIDParameter(), spaceIDParameter()).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceReadErrors(apiErrorInvalidSpaceID, apiErrorPreparationNotFound, apiErrorInvalidPreparation)...).
@@ -79,7 +79,7 @@ func prepareRecordingEndpoint(service RecordingPreparationService, authorizer Te
 		}
 		preparation, err := service.Prepare(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("PrepareRecordingRequest", preparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorSpaceNotFound, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationConflict, apiErrorPreparationPolicy)...).
@@ -96,7 +96,7 @@ func cancelRecordingPreparationEndpoint(service RecordingPreparationService, aut
 		}
 		preparation, err := service.Cancel(ctx, input)
 		return newPreparationResponse(preparation), err
-	}).Auth(APIAuthCookieOrBearer).RateLimit(authenticatedWriteRateLimit).
+	}).Auth(APIAuthSessionOrBearer).RateLimit(authenticatedWriteRateLimit).
 		Parameters(tenantIDParameter(), spaceIDParameter()).RequestBody("CancelRecordingPreparationRequest", cancelPreparationBody{}).
 		Responds(http.StatusOK, "RecordingPreparation", preparationResponse{}).
 		Errors(spaceWriteErrors(apiErrorInvalidSpaceID, apiErrorRateLimited, apiErrorInvalidPreparation, apiErrorPreparationNotFound, apiErrorPreparationConflict)...).

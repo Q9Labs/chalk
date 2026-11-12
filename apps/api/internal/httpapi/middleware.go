@@ -46,7 +46,7 @@ func requireTenantAuthentication(apiKeys APIKeyAuthenticator, clientIPs ClientIP
 				return
 			}
 
-			if credential, ok := bearerToken(r.Header.Get("Authorization")); ok && strings.HasPrefix(credential, "chalk_sk_") {
+			if credential, ok := bearerToken(r.Header.Get("Authorization")); ok && apikeys.LooksLikeRawKey(credential) {
 				if apiKeys == nil {
 					writeServiceUnavailable(w)
 					return
