@@ -274,7 +274,7 @@
     "scripts/dev/multi-device-proof.mjs": 495,
     "scripts/dev/receive-partial.mjs": 353,
     "scripts/evals/mcp/run.py": 317,
-    "scripts/gates/chalk-gate-plan.mjs": 644,
+    "scripts/gates/chalk-gate-plan.mjs": 655,
     "scripts/gates/remote-queue.py": 794,
     "scripts/gates/remote.sh": 332,
     "scripts/integration-smoke/run.mjs": 320,
