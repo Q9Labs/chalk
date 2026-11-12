@@ -10,6 +10,7 @@ import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useP
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
+import { useRecordingSeconds } from "../../internal/useRecordingSeconds";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
@@ -165,6 +166,7 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
+  const recordingSeconds = useRecordingSeconds(recording.current?.status, episodeDuration);
   const deadline = connection.episode?.deadline;
   const [now, setNow] = useState(Date.now);
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
@@ -372,6 +374,8 @@ export function SpaceView({
               duration: episodeDuration,
               timeLeft: countdown.seconds,
               isRecording: recording.current?.status === "recording",
+              recordingSeconds,
+              onStopRecording: feature("recording") && canManageRecording ? () => void runCommand(() => client.recording.stop()) : undefined,
               layout: headerLayout,
               onLayoutChange: updateLayout,
               notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
