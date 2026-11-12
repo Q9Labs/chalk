@@ -537,8 +537,8 @@ it("keeps the remote microphone a publisher mutes in place and takes it back on 
     h.transport.snapshot = { incarnation: 1, sequence: 1, publications: [publication] };
     await h.client.refreshRemotePublications();
     expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
-    const pulls = vi.spyOn(h.transport, "addTracks");
-    const closes = vi.spyOn(h.transport, "closeTracks");
+    const pulls = h.transport.addInputs.length;
+    const closes = h.transport.closeInputs.length;
 
     h.transport.snapshot = { incarnation: 1, sequence: 2, publications: [{ ...publication, paused: true }] };
     await h.client.refreshRemotePublications();
@@ -546,8 +546,8 @@ it("keeps the remote microphone a publisher mutes in place and takes it back on 
     await h.client.refreshRemotePublications();
 
     expect(h.client.getSnapshot().remoteTracks).toHaveLength(1);
-    expect(pulls).not.toHaveBeenCalled();
-    expect(closes).not.toHaveBeenCalled();
+    expect(h.transport.addInputs).toHaveLength(pulls);
+    expect(h.transport.closeInputs).toHaveLength(closes);
     expect(h.peers).toHaveLength(1);
   } finally {
     h.client.stop();

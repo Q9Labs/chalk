@@ -86,6 +86,7 @@
         "apps/api/internal/httpapi/media_client_preflight_test.go",
         "apps/api/internal/httpapi/participant_media_auth.go",
         "apps/api/internal/httpapi/sfu_hold_test.go",
+        "apps/api/internal/httpapi/sfu_list_test.go",
         "apps/api/internal/httpapi/sfu_liveness_test.go",
         "apps/api/internal/httpapi/sfu_pull_published_test.go",
         "apps/api/internal/httpapi/sfu_signal.go",
