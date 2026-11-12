@@ -61,8 +61,10 @@ export interface DevicePopoverProps {
 }
 
 function DeviceSwitch({ label, checked, onChange }: { readonly label: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
+  // A switch the app can't act on would read as on-but-disabled, so it isn't shown at all.
+  if (!onChange) return null;
   return (
-    <Menu.CheckboxItem className="chalk-menu-item" checked={checked} onCheckedChange={onChange} disabled={!onChange} closeOnClick={false}>
+    <Menu.CheckboxItem className="chalk-menu-item" checked={checked} onCheckedChange={onChange} closeOnClick={false}>
       <span>{label}</span>
       <span className="chalk-shell-menu-switch" aria-hidden="true">
         <span className="chalk-switch" aria-checked={checked}>

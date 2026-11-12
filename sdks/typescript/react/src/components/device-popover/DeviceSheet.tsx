@@ -79,8 +79,10 @@ function DeviceRow({ checked, disabled, onClick, children }: { readonly checked:
 }
 
 function SwitchRow({ label, hint, checked, onChange }: { readonly label: string; readonly hint?: string; readonly checked: boolean; readonly onChange?: (enabled: boolean) => void }) {
+  // A switch the app can't act on would read as on-but-disabled, so it isn't shown at all.
+  if (!onChange) return null;
   return (
-    <button type="button" role="switch" aria-checked={checked} className="chalk-sheet-row" disabled={!onChange} onClick={() => onChange?.(!checked)}>
+    <button type="button" role="switch" aria-checked={checked} className="chalk-sheet-row" onClick={() => onChange(!checked)}>
       <span className="chalk-shell-device-label">
         {label}
         {hint ? <small>{hint}</small> : null}

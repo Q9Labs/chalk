@@ -97,7 +97,8 @@ it("opens the microphone sheet after a 400 ms hold and leaves the mute state alo
     await act(async () => vi.advanceTimersByTime(1));
     await settle();
     expect(sheet()?.textContent).toContain("Audio");
-    expect(sheet()?.textContent).toContain("Noise suppression");
+    // The fixture passes no noise-suppression handler, so the switch is not offered.
+    expect(sheet()?.textContent).not.toContain("Noise suppression");
     await press(mic, "pointerup");
     await click(mic);
     expect(mic.getAttribute("aria-pressed")).toBe(muted);
@@ -138,7 +139,7 @@ it("lists the device rows in the More sheet, which opens the same pickers, and l
   const audio = [...(sheet()?.querySelectorAll<HTMLButtonElement>("button.chalk-sheet-row") ?? [])].find((row) => row.textContent?.startsWith("Microphone and speaker"));
   await click(audio);
   await settle();
-  expect(sheet()?.textContent).toContain("Noise suppression");
+  expect(sheet()?.textContent).toContain("Audio");
   expect(sheet()?.textContent).not.toContain("Flip camera");
 });
 
