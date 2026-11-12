@@ -10,15 +10,15 @@ import (
 
 func TestFenceTableNeverEvictsALiveParticipant(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.fenceLimit = 4
+	node.fences.limit = 4
 	live := node.newTestSession(t, testScope("alice", 2))
 
 	// Enough other Participants come and go to push every older fence out of a table of 4.
 	for index := range 10 {
 		node.newTestSession(t, testScope(fmt.Sprintf("visitor-%d", index), 1)).Close()
 	}
-	if len(node.fences) != node.fenceLimit {
-		t.Fatalf("%d fences, want the table full at %d", len(node.fences), node.fenceLimit)
+	if node.fences.Len() != node.fences.limit {
+		t.Fatalf("%d fences, want the table full at %d", node.fences.Len(), node.fences.limit)
 	}
 
 	if _, err := node.CreateSession("delayed-create", testScope("alice", 1)); !errors.Is(err, ErrStaleGeneration) {
@@ -31,7 +31,7 @@ func TestFenceTableNeverEvictsALiveParticipant(t *testing.T) {
 
 func TestFullFenceTableOfLiveSessionsRefusesInsteadOfEvicting(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.fenceLimit = 3
+	node.fences.limit = 3
 	for _, name := range []string{"alice", "bob", "carol"} {
 		node.newTestSession(t, testScope(name, 1))
 	}
@@ -49,7 +49,7 @@ func TestFullFenceTableOfLiveSessionsRefusesInsteadOfEvicting(t *testing.T) {
 
 func TestARefusedCreateLeavesEveryFence(t *testing.T) {
 	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 1 })
-	node.fenceLimit = 2
+	node.fences.limit = 2
 	node.newTestSession(t, testScope("bob", 2)).Close()
 	alice := node.newTestSession(t, testScope("alice", 1)) // the fence table and the node are both full
 
@@ -88,7 +88,7 @@ func TestCreateReplayOutlivesTheSession(t *testing.T) {
 
 func TestClosedCreateRecordsAreBounded(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.createLimit = 2
+	node.closedCreates.limit = 2
 	for _, name := range []string{"alice", "bob", "carol"} {
 		node.newTestSession(t, testScope(name, 1)).Close()
 	}

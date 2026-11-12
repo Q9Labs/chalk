@@ -59,7 +59,7 @@ func (n *Node) allocations() int {
 func (n *Node) sourceLeases() int {
 	count := 0
 	now := monotonic()
-	for _, authority := range n.sources {
+	for _, authority := range n.sources.All() {
 		if authority.window.Load().open(now) {
 			count++
 		}

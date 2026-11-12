@@ -171,10 +171,10 @@ func TestAFullTableOfFloorsNeverForgetsOneAndClosesAdmission(t *testing.T) {
 		t.Fatalf("a retire of a new Episode on a full table: %v, want capacity exceeded", err)
 	}
 	f.node.mu.Lock()
-	known, queued := len(f.node.retired), len(f.node.retiredOrder)
+	known := f.node.retired.Len()
 	f.node.mu.Unlock()
-	if known != retiredLimit || queued != known {
-		t.Fatalf("%d floors and %d queued, want equal and %d", known, queued, retiredLimit)
+	if known != retiredLimit {
+		t.Fatalf("%d floors, want %d", known, retiredLimit)
 	}
 	if reason := f.node.Host().AdmissionReason; reason != reasonRetirementsFull {
 		t.Fatalf("admission reason %q, want %q", reason, reasonRetirementsFull)
@@ -313,10 +313,10 @@ func TestRetireAtALowerGenerationKeepsTheFloorOfAFullTable(t *testing.T) {
 		t.Fatalf("a create under generation 2 after the lower retry: %v, want stale generation", err)
 	}
 	f.node.mu.Lock()
-	known, queued := len(f.node.retired), len(f.node.retiredOrder)
+	known := f.node.retired.Len()
 	f.node.mu.Unlock()
-	if known != retiredLimit || queued != known {
-		t.Fatalf("%d retirements and %d queued, want equal and %d", known, queued, retiredLimit)
+	if known != retiredLimit {
+		t.Fatalf("%d retirements, want %d", known, retiredLimit)
 	}
 }
 
