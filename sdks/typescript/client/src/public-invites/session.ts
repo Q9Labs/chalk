@@ -41,12 +41,7 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
   let left = false;
   let leaving: Promise<void> | undefined;
 
-  const connectionAccess = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
-    if (left) throw new Error("This Space access has been released.");
-    if (initial && (!request || request.reason === "join")) {
-      initial = false;
-      return current;
-    }
+  const refresh = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
     mediaProof = request?.currentMediaToken ?? mediaProof;
     try {
       current = await client.refreshSpacePublicInviteAccess({ ...reference, mediaProof, replaceMediaConnection: request?.replaceMediaConnection, signal: request?.signal });
@@ -58,6 +53,15 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
     mediaProof = parseParsedAccessGrant(current).media.token;
     listeners.forEach((listener) => listener());
     return current;
+  };
+
+  const connectionAccess = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
+    if (left) throw new Error("This Space access has been released.");
+    if (initial && (!request || request.reason === "join")) {
+      initial = false;
+      return current;
+    }
+    return refresh(request);
   };
 
   return {
