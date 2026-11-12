@@ -1483,6 +1483,9 @@ release_already_active() {
   [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
   load_active_pointer
   [[ "$(sha256_file "$manifest_path")" == "$(jq -er '.manifest_sha256' "$active_pointer")" ]] || fail "release ${request_release_id} is already active with a different manifest"
+  # An interrupted promotion can leave this pointer behind a different release that is healthy and running.
+  local live_manifest="${run_root}/release/release-manifest.json"
+  [[ -f "$live_manifest" && ! -L "$live_manifest" && "$(sha256_file "$live_manifest")" == "$(sha256_file "$manifest_path")" ]] || fail "release ${request_release_id} is the active pointer but the running release differs"
 }
 
 deploy() {

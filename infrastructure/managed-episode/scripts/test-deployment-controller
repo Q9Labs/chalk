@@ -1180,6 +1180,12 @@ if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture
   fail "a repeated release id with a different manifest passed"
 fi
 grep -Fq 'is already active with a different manifest' "${fixture_root}/retry-changed.log" || fail "a changed manifest for the active release was not named"
+# A promotion cut short after another release started leaves the pointer on this one: health alone must not pass it.
+cp "${fixture_root}/retry-changed-manifest.json" "${fixture_root}/run/release/release-manifest.json"
+if run_controller "$retry_state" "${fixture_root}/retry-request.json" "${fixture_root}/retry-manifest.json" ok >"${fixture_root}/retry-interrupted.log" 2>&1; then
+  fail "a repeated deploy passed while another release was running"
+fi
+grep -Fq 'the running release differs' "${fixture_root}/retry-interrupted.log" || fail "a running release that differs from the active pointer was not named"
 fi
 make_manifest candidate >"${fixture_root}/candidate-manifest.json"
 if group_enabled rollback; then
