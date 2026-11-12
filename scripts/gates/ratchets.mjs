@@ -16,7 +16,7 @@ const maxLines = 300;
 const sourceFile = /\.(go|ex|exs|ts|tsx|mjs|cjs|js|py|sh)$/;
 const generatedFile = /(^|\/)(generated|sqlc)\/|\.gen\.ts$|\.generated\.|(^|\/)routeTree\.gen\.ts$|(^|\/)pnpm-lock\.yaml$|\/node_modules\//;
 
-const generatedExclusions = [":!**/generated/**", ":!**/*.gen.ts", ":!**/*.generated.*", ":!pnpm-lock.yaml", ":!**/sqlc/**", ":!**/routeTree.gen.ts"];
+const generatedExclusions = [":!scripts/gates/ratchets.*", ":!**/generated/**", ":!**/*.gen.ts", ":!**/*.generated.*", ":!pnpm-lock.yaml", ":!**/sqlc/**", ":!**/routeTree.gen.ts"];
 
 // Each entry counts the lines that match `regex` in the files that `paths` select. Lower is better.
 const copies = {
