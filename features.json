@@ -824,7 +824,6 @@
         "sdks/typescript/react/src/bindings",
         "sdks/typescript/react/src/components/atomic",
         "sdks/typescript/react/src/components/audio-output",
-        "sdks/typescript/react/src/components/composite/CommandErrorAlert.tsx",
         "sdks/typescript/react/src/components/composite/ReactionPicker.tsx",
         "sdks/typescript/react/src/components/composite/ReactionSheet.tsx",
         "sdks/typescript/react/src/components/composite/ReactionTray.tsx",

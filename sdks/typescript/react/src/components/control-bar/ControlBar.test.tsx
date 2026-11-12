@@ -30,3 +30,21 @@ it("never shows a raw server reason as the notice", () => {
   expect(commandFailureMessage(rejected("external_operation_failed"))).toBe("That didn’t work. Try again in a moment.");
   expect(commandFailureMessage(rejected("Recording is not allowed for this Participant"))).toBe("Recording is not allowed for this Participant");
 });
+
+it("lets a host leave or end the call for everyone from the Leave call menu", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const calls: string[] = [];
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  const render = () => root.render(<ControlBarSurface buttons={["leave"]} detectDevices={false} onLeft={() => void calls.push("leave")} onEndForEveryone={() => void calls.push("end")} />);
+  const choose = async (name: string) => {
+    await act(async () => document.querySelector<HTMLButtonElement>("[aria-label='Leave call']")?.click());
+    const item = [...document.querySelectorAll<HTMLElement>("[role=menuitem]")].find((element) => element.textContent === name);
+    expect(item, `${name} in the menu`).toBeDefined();
+    await act(async () => item?.click());
+  };
+  act(render);
+  await choose("Leave call");
+  await choose("End call for everyone");
+  expect(calls).toEqual(["leave", "end"]);
+  act(() => root.unmount());
+});
