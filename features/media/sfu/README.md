@@ -28,7 +28,7 @@ go run ./cmd/sfu
 
 ## Deploy
 
-Set `net.core.rmem_max`, `rmem_default`, `wmem_max` and `wmem_default` to 8 MiB on the host (for example in `/etc/sysctl.d/90-chalk-sfu.conf`). Linux defaults to about 208 KiB, which bursts of video overflow as UDP receive errors. The node logs the sizes it requested and got, and `/readyz` reports them with the host's drop counters.
+Set `net.core.rmem_max`, `rmem_default`, `wmem_max` and `wmem_default` to `udpBufferBytes` of `internal/config/node.json` on the host (`infrastructure/sfu` sets them). Linux defaults to about 208 KiB, which bursts of video overflow as UDP receive errors. The node logs the sizes it requested and got, and `/readyz` reports them with the host's drop counters.
 
 `POST /v1/drain` (or SIGUSR1) drains the node and keeps it running: `/readyz` answers 503 with `draining: true`, the API places no new Episode on it, and live calls continue. `POST /v1/undrain` reopens admission for a called-off restart. A restart interrupts no call once `allocations` and `cleanupDebt` are zero. `sourceLeases` only informs, because leases are soft state a restart drops and the API keeps renewing standing grants. SIGINT or SIGTERM finishes in-flight requests and closes everything.
 

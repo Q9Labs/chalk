@@ -31,6 +31,7 @@ resource "digitalocean_droplet" "node" {
     control_addresses = var.control_addresses
     ssh_addresses     = var.ssh_addresses
     control_port      = local.control_port
+    udp_buffer        = local.table.udpBufferBytes
     media_port        = local.media_port
   })
 

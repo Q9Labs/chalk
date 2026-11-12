@@ -10,11 +10,11 @@ write_files:
   - path: /etc/sysctl.d/90-chalk-sfu.conf
     content: |
       # A burst of video from many publishers overflows the default ~208 KiB.
-      net.core.rmem_max = 8388608
-      net.core.rmem_default = 8388608
+      net.core.rmem_max = ${udp_buffer}
+      net.core.rmem_default = ${udp_buffer}
       # The pacers send in bursts; a full send buffer drops outgoing media.
-      net.core.wmem_max = 8388608
-      net.core.wmem_default = 8388608
+      net.core.wmem_max = ${udp_buffer}
+      net.core.wmem_default = ${udp_buffer}
   - path: /etc/ssh/sshd_config.d/90-chalk-sfu.conf
     content: |
       PasswordAuthentication no
