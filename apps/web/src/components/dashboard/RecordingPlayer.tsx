@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
 import { errorMessage } from "../../lib/dashboard/client";
 import { clock, duration, sessionDay } from "../../lib/dashboard/format";
 import type { RowModel } from "../../lib/dashboard/lists";
-import { trapDialogFocus } from "../docs/dialog-focus";
+import { trapDialogFocus } from "../../lib/dialog-focus";
 import { Icon } from "../site/Icon";
 import { people } from "./ListParts";
 import { DownloadMenu, SessionViewer, usePastSession } from "./SessionViewer";
