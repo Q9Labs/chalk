@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { PreviousPrivacyPolicy } from "./PreviousPrivacyPolicy";
 import { PRIVACY_EFFECTIVE_DATE_LABEL } from "../../lib/privacy-policy";
+import { THEME_COOKIE_NAME } from "../../lib/theme";
 import { Logo } from "@q9labsai/chalk-react";
 
 type LegalPageKind = "privacy" | "privacy-previous" | "terms";
@@ -174,7 +175,7 @@ function PrivacyPolicy() {
         <tbody>
           <tr>
             <td>
-              <code>chalk_theme</code>
+              <code>{THEME_COOKIE_NAME}</code>
             </td>
             <td>Remembers your light or dark theme preference (Client-readable)</td>
             <td>1 year</td>

@@ -1,6 +1,7 @@
 import { whisperLanguageCodes, type TranscriptLanguage } from "@chalk/transcript-language";
 import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
+import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
 import type { VideoGroup, VideoState } from "./recording";
 import { recordingStatuses, sessionShows } from "./search";
@@ -104,7 +105,6 @@ const eventType = z.enum([
   "space.updated",
 ]);
 const webhookFields = { name, url: z.url().refine((value) => new URL(value).protocol === "https:", "HTTPS required"), enabled: z.boolean(), eventTypes: z.array(eventType).min(1).max(14) };
-export const dashboardWebsiteOrigin = "https://chalkmeet.com";
 const websiteOrigin = z
   .string()
   .max(2048)
@@ -123,7 +123,7 @@ const websiteOrigin = z
 const allowedWebsites = z
   .array(websiteOrigin)
   .max(32)
-  .transform((origins) => [...new Set([dashboardWebsiteOrigin, ...origins])])
+  .transform((origins) => [...new Set([SITE_ORIGIN, ...origins])])
   .refine((origins) => origins.length <= 32, "At most 32 origins including chalkmeet.com");
 export const developerAction = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("set-default-transcript-language"), transcriptLanguage }),

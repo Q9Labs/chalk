@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { DeveloperDTO, KeyDTO, WebhookDTO } from "../../lib/dashboard/contracts";
-import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
+import { SITE_ORIGIN } from "../../lib/site-origin";
 import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, expiresSoon, hasExpired } from "../../lib/dashboard/format";
 import { Icon, type IconName } from "../site/Icon";
@@ -69,7 +69,7 @@ export function DeveloperPage() {
   const listed = data.keys.filter((key) => !key.revokedAt);
   // Expired keys stay in the table so they can be rotated or revoked, but they are not usable, so they are not counted or offered for the snippets.
   const keys = listed.filter((key) => !hasExpired(key.expiresAt));
-  const origins = data.allowedWebsites.filter((origin) => origin !== dashboardWebsiteOrigin);
+  const origins = data.allowedWebsites.filter((origin) => origin !== SITE_ORIGIN);
   const opened = expanded === undefined ? (data.webhooks[0]?.id ?? null) : expanded;
   const setWebsites = (allowedWebsites: readonly string[]) => update((value): DeveloperDTO => ({ ...value, allowedWebsites }));
   const soon = keys.filter((key) => expiresSoon(key.expiresAt));

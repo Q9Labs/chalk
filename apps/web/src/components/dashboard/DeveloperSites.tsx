@@ -1,11 +1,11 @@
-import { dashboardWebsiteOrigin } from "../../lib/dashboard/contracts";
+import { SITE_ORIGIN } from "../../lib/site-origin";
 import { Icon } from "../site/Icon";
 import { Favicon, hostOf } from "./Favicon";
 
 const DEVELOPMENT_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
 export function SitesPanel({ origins, onAdd, onRemove }: { readonly origins: readonly string[]; readonly onAdd: () => void; readonly onRemove: (origin: string) => void }) {
-  const all = [dashboardWebsiteOrigin, ...origins];
+  const all = [SITE_ORIGIN, ...origins];
   return (
     <section className="panel card" id="websites" aria-labelledby="websites-title">
       <div className="ph">
@@ -25,7 +25,7 @@ export function SitesPanel({ origins, onAdd, onRemove }: { readonly origins: rea
       </div>
       <div className="rows sites">
         {all.map((origin) => (
-          <SiteRow key={origin} origin={origin} fixed={origin === dashboardWebsiteOrigin} onRemove={onRemove} />
+          <SiteRow key={origin} origin={origin} fixed={origin === SITE_ORIGIN} onRemove={onRemove} />
         ))}
       </div>
     </section>
