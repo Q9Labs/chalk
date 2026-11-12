@@ -34,7 +34,7 @@ func TestLiveKillSwitchSendsTheNextEpisodeToCloudflare(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repository := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, policyResolver{spaces.PlanePolicy{Platform: spaces.MediaPlaneProviderCloudflareSFU, Allowed: everyone}})
+	repository := NewEpisodeLifecycleRepositoryWithMediaBinding(pool, policyResolver{spaces.PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU, Allowed: everyone}})
 	boundProvider := func() string {
 		t.Helper()
 		var stored []byte

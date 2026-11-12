@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/q9labs/chalk/apps/api/internal/artifactpolicy"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/pagination"
 	"github.com/q9labs/chalk/apps/api/internal/tenants"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
@@ -96,7 +97,7 @@ type Space struct {
 	// MediaPlane is what the previous release reads. The Space's own choice is
 	// MediaPlaneSetting, and nil means it inherits.
 	MediaPlane                    string
-	MediaPlaneSetting             *MediaPlaneProvider
+	MediaPlaneSetting             *mediaplane.Provider
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
@@ -172,7 +173,7 @@ const (
 // omits. A zero field leaves that field to the deployment default, or to the
 // database default for the two policies.
 type NewSpaceDefaults struct {
-	MediaPlane          MediaPlaneProvider
+	MediaPlane          mediaplane.Provider
 	RecordingPolicy     artifactpolicy.RecordingMode
 	TranscriptionPolicy artifactpolicy.TranscriptionMode
 }
@@ -190,7 +191,7 @@ type CreateSpaceInput struct {
 	MediaPlaneFromConfig bool
 	// MediaPlaneSetting is the Space's own choice; nil inherits. The service fills
 	// it and MediaPlane from the request, so a caller sets only MediaPlane.
-	MediaPlaneSetting             *MediaPlaneProvider
+	MediaPlaneSetting             *mediaplane.Provider
 	Metadata                      json.RawMessage
 	RecurringPolicy               json.RawMessage
 	AdmissionPolicy               json.RawMessage
@@ -228,7 +229,7 @@ type UpdateSpaceInput struct {
 // OptionalMediaPlaneSetting is an omitted, cleared (Value nil) or concrete setting.
 type OptionalMediaPlaneSetting struct {
 	Set   bool
-	Value *MediaPlaneProvider
+	Value *mediaplane.Provider
 }
 
 // OptionalInt32 preserves omitted, explicit null, and concrete numeric JSON
@@ -274,7 +275,7 @@ func NewService(repository Repository) Service {
 	return Service{repository: repository}
 }
 
-func NewServiceWithDefaultProvider(repository Repository, defaultProvider MediaPlaneProvider) Service {
+func NewServiceWithDefaultProvider(repository Repository, defaultProvider mediaplane.Provider) Service {
 	return Service{repository: repository, planes: PlanePolicy{Platform: defaultProvider}}
 }
 
@@ -304,7 +305,7 @@ func (s Service) WithNewSpaceDefaults(defaults NewSpaceDefaults, tenants TenantR
 // planeForNewSpace returns the plane for a Space whose request names none, and
 // whether it is the configured new-Space plane. A Tenant that pins its own
 // provider keeps the deployment default.
-func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (plane MediaPlaneProvider, newSpacePlane bool, err error) {
+func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (plane mediaplane.Provider, newSpacePlane bool, err error) {
 	if s.newSpace.MediaPlane != "" {
 		tenant, err := s.tenants.GetTenant(ctx, tenantID)
 		if err != nil {
@@ -317,14 +318,10 @@ func (s Service) planeForNewSpace(ctx context.Context, tenantID utilities.ID) (p
 	return s.planes.Platform, false, nil
 }
 
-// tenantModeChalkManaged is mediaplaneproviders.ModeChalkManaged, which this
-// package cannot import because that package imports this one.
-const tenantModeChalkManaged = "chalk_managed"
-
 // tenantServesNewSpacePlane is true when Chalk runs every provider for the Tenant
 // and the Tenant names no plane of its own. A Tenant default plane is its own choice.
 func tenantServesNewSpacePlane(tenant tenants.Tenant) bool {
-	return tenantDefault(tenant) == nil && tenantRunsEveryProvider(tenant)
+	return tenantDefault(tenant) == nil && mediaplane.TenantRunsEveryProvider(tenant.MediaPlaneProviderConfig)
 }
 
 func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space, error) {
@@ -341,7 +338,7 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 		if err != nil {
 			return Space{}, err
 		}
-		input.MediaPlane, newSpacePlane = string(plane), isNewSpacePlane
+		input.MediaPlane, newSpacePlane = plane.SettingName(), isNewSpacePlane
 	}
 	if newSpacePlane && !input.RecordingPolicySet && s.newSpace.RecordingPolicy != "" {
 		input.RecordingPolicy, input.RecordingPolicySet = s.newSpace.RecordingPolicy, true
@@ -357,7 +354,10 @@ func (s Service) CreateSpace(ctx context.Context, input CreateSpaceInput) (Space
 	}
 	// The request names a plane only when the caller may; a Space that names none
 	// inherits, except that the configured new-Space plane is the Space's own choice.
-	provider := MediaPlaneProvider(input.MediaPlane)
+	provider, err := mediaplane.ParseSettingName(input.MediaPlane)
+	if err != nil {
+		return Space{}, ErrInvalidMediaPlane
+	}
 	switch {
 	case explicitPlane:
 		if !input.MediaPlaneFromConfig {
@@ -431,9 +431,12 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 	}
 	input.MediaPlaneSetting = OptionalMediaPlaneSetting{}
 	if input.MediaPlane.Set {
-		var setting *MediaPlaneProvider
+		var setting *mediaplane.Provider
 		if input.MediaPlane.Value != nil {
-			provider := MediaPlaneProvider(*input.MediaPlane.Value)
+			provider, err := mediaplane.ParseSettingName(*input.MediaPlane.Value)
+			if err != nil {
+				return Space{}, ErrInvalidMediaPlane
+			}
 			if err := s.planes.publicWriteAllowed(provider); err != nil {
 				return Space{}, err
 			}
@@ -445,7 +448,7 @@ func (s Service) UpdateSpace(ctx context.Context, tenantID utilities.ID, spaceID
 		if stored == "" {
 			// Clearing with no platform default: the column is not null, and Cloudflare is what a
 			// public write may name anyway.
-			stored = string(s.planes.PublicWritePlane())
+			stored = s.planes.PublicWritePlane().SettingName()
 		}
 		input.MediaPlaneSetting = OptionalMediaPlaneSetting{Set: true, Value: setting}
 		input.MediaPlane.Value = &stored
@@ -497,11 +500,11 @@ func prepareCreateSpaceInput(input *CreateSpaceInput) error {
 	if err != nil {
 		return ErrInvalidMediaPlane
 	}
-	provider, err := ParseMediaPlaneProvider(mediaPlane)
+	provider, err := mediaplane.ParseSettingName(mediaPlane)
 	if err != nil {
 		return ErrInvalidMediaPlane
 	}
-	input.MediaPlane = string(provider)
+	input.MediaPlane = provider.SettingName()
 
 	input.Metadata, err = utilities.JSON(input.Metadata)
 	if err != nil {
@@ -554,11 +557,11 @@ func prepareUpdateSpaceInput(input *UpdateSpaceInput) error {
 		return err
 	}
 	if input.MediaPlane.Set && input.MediaPlane.Value != nil {
-		provider, parseErr := ParseMediaPlaneProvider(*input.MediaPlane.Value)
+		provider, parseErr := mediaplane.ParseSettingName(*input.MediaPlane.Value)
 		if parseErr != nil {
 			return ErrInvalidMediaPlane
 		}
-		value := string(provider)
+		value := provider.SettingName()
 		input.MediaPlane.Value = &value
 	}
 	input.Metadata, err = utilities.OptionalNullableJSON(input.Metadata)

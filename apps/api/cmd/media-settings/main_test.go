@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/q9labs/chalk/apps/api/internal/config"
+	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 )
@@ -43,7 +44,7 @@ func TestParseRequestRefusesWhatItCannotDo(t *testing.T) {
 		t.Fatalf("inherit = %+v, %v", inherit, err)
 	}
 	own, err := parseRequest("set", someID, "", "chalk_sfu", false)
-	if err != nil || own.plane == nil || *own.plane != spaces.MediaPlaneProviderChalkSFU {
+	if err != nil || own.plane == nil || *own.plane != mediaplane.ProviderChalkSFU {
 		t.Fatalf("chalk_sfu = %+v, %v", own, err)
 	}
 }
@@ -212,7 +213,7 @@ func TestOperatorCommandsAgainstPostgres(t *testing.T) {
 
 	// The backfill writes only a Space that still qualifies when the write runs.
 	exec(`update spaces set media_plane_setting_written=null, media_plane_setting_against=null, media_plane='chalk_sfu' where id=$1`, listed.Bytes())
-	settings := newSettings(pool, spaces.PlanePolicy{Platform: spaces.MediaPlaneProviderCloudflareSFU}, &bytes.Buffer{})
+	settings := newSettings(pool, spaces.PlanePolicy{Platform: mediaplane.ProviderCloudflareSFU}, &bytes.Buffer{})
 	exec(`update spaces set media_plane_setting_written='cf_sfu', media_plane_setting_against='cf_sfu', media_plane='cf_sfu' where id=$1`, listed.Bytes())
 	if wrote, err := settings.operator.AdoptStoredChalkSFU(t.Context(), tenantID, listed, false); err != nil || wrote {
 		t.Fatalf("a Space that pinned Cloudflare after it was listed: wrote=%v err=%v", wrote, err)

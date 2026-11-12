@@ -7,7 +7,6 @@ import (
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplaneproviders"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -55,7 +54,7 @@ func NewMediaPlaneResolutionTelemetry(logger *slog.Logger) MediaPlaneResolutionT
 // Episode-creation transaction, so a rolled-back creation still counts. Labels are bounded: the node
 // role comes from the reason, never from a node name, and no Tenant, Episode or
 // Participant identity is attached.
-func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, provider spaces.MediaPlaneProvider, reason mediaplane.PlacementReason) {
+func (t MediaPlaneResolutionTelemetry) RecordPlacement(ctx context.Context, provider mediaplane.Provider, reason mediaplane.PlacementReason) {
 	role, bounded := boundedPlacement(reason)
 	t.placements.Add(ctx, 1, otelmetric.WithAttributes(
 		attribute.String("chalk.media_plane.provider", boundedMediaPlaneProvider(provider)),
@@ -138,10 +137,10 @@ func (t MediaPlaneResolutionTelemetry) RecordResolution(ctx context.Context, res
 	)
 }
 
-func boundedMediaPlaneProvider(provider spaces.MediaPlaneProvider) string {
+func boundedMediaPlaneProvider(provider mediaplane.Provider) string {
 	switch provider {
-	case spaces.MediaPlaneProviderCloudflareSFU, spaces.MediaPlaneProviderChalkSFU:
-		return string(provider)
+	case mediaplane.ProviderCloudflareSFU, mediaplane.ProviderChalkSFU:
+		return provider.SettingName()
 	default:
 		return "unknown"
 	}
@@ -163,10 +162,10 @@ func boundedMediaPlaneConfigurationSource(source string) string {
 
 func boundedMediaPlaneMode(mode string) string {
 	switch mode {
-	case mediaplaneproviders.ModeChalkManaged,
-		mediaplaneproviders.ModeTenantManaged,
-		mediaplaneproviders.ModeDisabled,
-		mediaplaneproviders.ModeUnknown:
+	case mediaplane.ModeChalkManaged,
+		mediaplane.ModeTenantManaged,
+		mediaplane.ModeDisabled,
+		mediaplane.ModeUnknown:
 		return mode
 	default:
 		return "unknown"

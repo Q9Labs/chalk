@@ -24,7 +24,7 @@ func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T)
 	fleet := startSFU(t, nil).fleet(t)
 	fleet.Probe(context.Background())
 	sunset := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 
 	otherSpace, err := utilities.NewID()
 	if err != nil {
@@ -44,23 +44,22 @@ func TestConformanceClientSunsetRefusesAnOldClientInAnAllowedSpace(t *testing.T)
 		sunset    time.Time
 		now       time.Time
 		clients   mediaplane.ClientProviders
-		want      spaces.MediaPlaneProvider
+		want      mediaplane.Provider
 		wantError error
 	}{
-		{"old client before the sunset gets Cloudflare", tenants.Tenant{}, everySpace, sunset, sunset.Add(-time.Second), oldClient, spaces.MediaPlaneProviderCloudflareSFU, nil},
+		{"old client before the sunset gets Cloudflare", tenants.Tenant{}, everySpace, sunset, sunset.Add(-time.Second), oldClient, mediaplane.ProviderCloudflareSFU, nil},
 		{"old client at the sunset is refused", tenants.Tenant{}, everySpace, sunset, sunset, oldClient, "", mediaplane.ErrClientUnsupported},
 		{"old client after the sunset is refused", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), oldClient, "", mediaplane.ErrClientUnsupported},
-		{"no sunset set never refuses", tenants.Tenant{}, everySpace, time.Time{}, sunset.Add(time.Hour), oldClient, spaces.MediaPlaneProviderCloudflareSFU, nil},
-		{"declaring client after the sunset gets the own SFU", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), ownSFUClients, spaces.MediaPlaneProviderChalkSFU, nil},
+		{"no sunset set never refuses", tenants.Tenant{}, everySpace, time.Time{}, sunset.Add(time.Hour), oldClient, mediaplane.ProviderCloudflareSFU, nil},
+		{"declaring client after the sunset gets the own SFU", tenants.Tenant{}, everySpace, sunset, sunset.Add(time.Hour), ownSFUClients, mediaplane.ProviderChalkSFU, nil},
 		{"old client with tenant media disabled still starts a media-free Episode", disabledMedia, everySpace, sunset, sunset.Add(time.Hour), oldClient, "", nil},
-		{"old client in a Space off the allowlist keeps Cloudflare after the sunset", tenants.Tenant{}, onlyOther, sunset, sunset.Add(time.Hour), oldClient, spaces.MediaPlaneProviderCloudflareSFU, nil},
+		{"old client in a Space off the allowlist keeps Cloudflare after the sunset", tenants.Tenant{}, onlyOther, sunset, sunset.Add(time.Hour), oldClient, mediaplane.ProviderCloudflareSFU, nil},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-				ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
-				ChalkSFU: fleet, ChalkSFUSpaces: test.allowed, ChalkSFUClientSunset: test.sunset,
-				Now: func() time.Time { return test.now },
+				ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU,
+				ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: test.allowed, ClientSunset: test.sunset, Now: func() time.Time { return test.now }},
 			})
 			binding, err := registry.ResolveBinding(context.Background(), test.tenant, chalkSpace, test.clients)
 			if !errors.Is(err, test.wantError) {
@@ -91,7 +90,7 @@ func TestConformanceRefuseClientBeforeASpaceExists(t *testing.T) {
 	fleet := startSFU(t, nil).fleet(t)
 	fleet.Probe(context.Background())
 	sunset := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
-	newSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	newSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	otherSpace, err := utilities.NewID()
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +110,8 @@ func TestConformanceRefuseClientBeforeASpaceExists(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-				ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
-				ChalkSFU: fleet, ChalkSFUSpaces: test.allowed, ChalkSFUClientSunset: sunset, Now: func() time.Time { return sunset },
+				ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU,
+				ChalkSFU: fleet, Rollout: mediaplaneproviders.Rollout{Spaces: test.allowed, ClientSunset: sunset, Now: func() time.Time { return sunset }},
 			})
 			if err := registry.RefuseClient(context.Background(), tenants.Tenant{}, newSpace, test.clients); !errors.Is(err, test.want) {
 				t.Fatalf("error %v, want %v", err, test.want)
@@ -130,10 +129,10 @@ func TestConformanceClientSunsetRefusalLogsItsReason(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	sunset := time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC)
 	registry := mediaplaneproviders.NewRegistry(mediaplaneproviders.Config{
-		ProcessConfig: withCloudflare, DefaultProvider: spaces.MediaPlaneProviderCloudflareSFU,
-		ChalkSFU: startSFU(t, nil).fleet(t), ChalkSFUSpaces: everySpace, ChalkSFUClientSunset: sunset, Now: func() time.Time { return sunset },
+		ProcessConfig: withCloudflare, DefaultProvider: mediaplane.ProviderCloudflareSFU,
+		ChalkSFU: startSFU(t, nil).fleet(t), Rollout: mediaplaneproviders.Rollout{Spaces: everySpace, ClientSunset: sunset, Now: func() time.Time { return sunset }},
 	})
-	chalkSpace := spaces.Space{MediaPlane: string(spaces.MediaPlaneProviderChalkSFU)}
+	chalkSpace := spaces.Space{MediaPlane: mediaplane.ProviderChalkSFU.SettingName()}
 	if err := registry.RefuseClient(context.Background(), tenants.Tenant{}, chalkSpace, mediaplane.ParseClientProviders("")); !errors.Is(err, mediaplane.ErrClientUnsupported) {
 		t.Fatalf("error %v, want a refusal", err)
 	}

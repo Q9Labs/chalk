@@ -27,13 +27,6 @@ var (
 	ErrInvalidCredential        = errors.New("invalid media plane credential")
 )
 
-type Provider string
-
-const (
-	ProviderCloudflareSFU Provider = "cloudflare_sfu"
-	ProviderChalkSFU      Provider = "chalk_sfu"
-)
-
 type Plane interface {
 	EnsureEpisode(ctx context.Context, input EnsureEpisodeInput) (Episode, error)
 	CreateJoin(ctx context.Context, input CreateJoinInput) (Join, error)
@@ -379,15 +372,6 @@ func requireEpisodeUsageInput(input *EpisodeUsageInput) error {
 	input.EpisodeRef = episodeRef
 
 	return nil
-}
-
-func validProvider(provider Provider) bool {
-	switch provider {
-	case ProviderCloudflareSFU, ProviderChalkSFU:
-		return true
-	default:
-		return false
-	}
 }
 
 func requiredString(value string) (string, error) {

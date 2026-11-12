@@ -340,7 +340,7 @@ type SyncTokenConfig struct {
 type PublicInviteConfig struct {
 	Enabled               bool
 	ManagedTenantID       string
-	DefaultMediaPlane     string
+	DefaultMediaPlane     mediaplane.Provider
 	WebOrigin             string
 	KeyID                 string
 	PrivateKey            ed25519.PrivateKey
@@ -384,7 +384,7 @@ type Config struct {
 	Capabilities       CapabilityConfig
 	CloudflareRealtime CloudflareRealtimeConfig
 	ChalkSFU           ChalkSFUConfig
-	DefaultMediaPlane  spaces.MediaPlaneProvider
+	DefaultMediaPlane  mediaplane.Provider
 	// NewSpace holds what a Create Space request gets for the fields it omits.
 	// Each field is empty when new Spaces keep the existing default.
 	NewSpace          spaces.NewSpaceDefaults
@@ -737,13 +737,13 @@ func LoadPlanePolicy() (spaces.PlanePolicy, error) {
 	return spaces.PlanePolicy{Platform: platform, Allowed: allowed, NewEpisodesPaused: paused}, nil
 }
 
-func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
+func loadDefaultMediaPlane() (mediaplane.Provider, error) {
 	value, ok := os.LookupEnv(DefaultMediaPlane)
 	if !ok || strings.TrimSpace(value) == "" {
 		return "", nil
 	}
 
-	provider, err := spaces.ParseMediaPlaneProvider(value)
+	provider, err := mediaplane.ParseSettingName(value)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", DefaultMediaPlane, err)
 	}
@@ -758,7 +758,7 @@ func loadDefaultMediaPlane() (spaces.MediaPlaneProvider, error) {
 func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, error) {
 	var defaults spaces.NewSpaceDefaults
 	if value := strings.TrimSpace(os.Getenv(NewSpaceMediaPlane)); value != "" {
-		provider, err := spaces.ParseMediaPlaneProvider(value)
+		provider, err := mediaplane.ParseSettingName(value)
 		if err != nil {
 			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceMediaPlane, err)
 		}
@@ -776,7 +776,7 @@ func loadNewSpaceDefaults(chalkSFU ChalkSFUConfig) (spaces.NewSpaceDefaults, err
 			return spaces.NewSpaceDefaults{}, fmt.Errorf("%s: %w", NewSpaceTranscriptionPolicy, err)
 		}
 	}
-	if defaults.MediaPlane != spaces.MediaPlaneProviderChalkSFU {
+	if defaults.MediaPlane != mediaplane.ProviderChalkSFU {
 		return defaults, nil
 	}
 	if !chalkSFU.Enabled || chalkSFU.AllowedSpaces.Size() != -1 {
@@ -927,19 +927,19 @@ func parseChalkSFUNodes(entries []string) ([]ChalkSFUNode, error) {
 // validateMediaPlaneProcessConfig checks what a platform default needs to run. Cloudflare is
 // needed under either default: it is the default itself, or the fallback for an SDK that
 // cannot run the own SFU, for the kill switch and for Episodes already bound to it.
-func validateMediaPlaneProcessConfig(provider spaces.MediaPlaneProvider, processConfig CloudflareRealtimeConfig, chalkSFU ChalkSFUConfig) error {
+func validateMediaPlaneProcessConfig(provider mediaplane.Provider, processConfig CloudflareRealtimeConfig, chalkSFU ChalkSFUConfig) error {
 	if provider == "" {
 		return nil
 	}
 	if processConfig.RequestTimeout <= 0 {
 		return fmt.Errorf("%s must be greater than zero", CloudflareRealtimeRequestTimeoutMS)
 	}
-	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.Enabled {
+	if provider == mediaplane.ProviderChalkSFU && !chalkSFU.Enabled {
 		return fmt.Errorf("%s=%s requires %s=true", DefaultMediaPlane, provider, ChalkSFUEnabled)
 	}
 	// A Space can turn recording or transcription on at any time, and an Episode on the own SFU
 	// has no capture path without this flag, so every inheriting Space would lose them.
-	if provider == spaces.MediaPlaneProviderChalkSFU && !chalkSFU.CaptureEnabled {
+	if provider == mediaplane.ProviderChalkSFU && !chalkSFU.CaptureEnabled {
 		return fmt.Errorf("%s=%s requires %s=true, because recording and transcription of an own-SFU Episode need capture", DefaultMediaPlane, provider, ChalkSFUCaptureEnabled)
 	}
 	if strings.TrimSpace(processConfig.RealtimeAppID) == "" {
@@ -1236,8 +1236,9 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	if !publicInviteUUIDPattern.MatchString(canonicalTenantID) {
 		return PublicInviteConfig{}, fmt.Errorf("%s must be a canonical UUID", PublicInviteManagedTenantID)
 	}
-	if !validPublicInviteMediaPlane(defaultMediaPlane) {
-		return PublicInviteConfig{}, fmt.Errorf("%s must be a non-empty ASCII media plane", PublicInviteDefaultMediaPlane)
+	plane, err := mediaplane.ParseSettingName(defaultMediaPlane)
+	if err != nil {
+		return PublicInviteConfig{}, fmt.Errorf("%s: %w", PublicInviteDefaultMediaPlane, err)
 	}
 	if err := validatePublicInviteWebOrigin(environment, webOrigin); err != nil {
 		return PublicInviteConfig{}, err
@@ -1278,7 +1279,7 @@ func loadPublicInviteConfig(environment string) (PublicInviteConfig, error) {
 	return PublicInviteConfig{
 		Enabled:               true,
 		ManagedTenantID:       canonicalTenantID,
-		DefaultMediaPlane:     defaultMediaPlane,
+		DefaultMediaPlane:     plane,
 		WebOrigin:             webOrigin,
 		KeyID:                 keyID,
 		PrivateKey:            privateKey,
@@ -1335,18 +1336,6 @@ func validatePublicInviteKeyID(keyID string) error {
 		}
 	}
 	return nil
-}
-
-func validPublicInviteMediaPlane(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, character := range value {
-		if character > 0x7f || character == ' ' || character == '\t' || character == '\r' || character == '\n' {
-			return false
-		}
-	}
-	return true
 }
 
 func validateOTLPEndpoint(environment string, endpoint string, insecure bool) error {

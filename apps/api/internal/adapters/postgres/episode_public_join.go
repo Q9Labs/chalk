@@ -13,7 +13,6 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/episodes"
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
 	"github.com/q9labs/chalk/apps/api/internal/publicinvites"
-	"github.com/q9labs/chalk/apps/api/internal/spaces"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
 	"github.com/q9labs/chalk/apps/api/internal/webhooks"
 )
@@ -412,7 +411,7 @@ func requireClientRunsBinding(episode episodes.Episode, clients mediaplane.Clien
 	if err != nil {
 		return err
 	}
-	if binding != nil && spaces.MediaPlaneProvider(binding.Provider) == spaces.MediaPlaneProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
+	if binding != nil && mediaplane.Provider(binding.Provider) == mediaplane.ProviderChalkSFU && !clients.Runs(mediaplane.ProviderChalkSFU) {
 		return mediaplane.ErrClientUnsupported
 	}
 	return nil
