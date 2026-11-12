@@ -13,7 +13,7 @@ import { repositoryRoot } from "./lib/repository.mjs";
 
 const registry = "https://registry.npmjs.org/";
 const githubRepository = "Q9Labs/chalk";
-const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs"]);
+const releaseRootFiles = new Set(["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "CHANGELOG.md", ".github/workflows/npm-publish.yml", "scripts/npm-release.mjs", "scripts/lib/release-packages.mjs", "scripts/lib/repository.mjs", ".attw.json"]);
 
 const packageByName = new Map(releasePackages.map((releasePackage) => [releasePackage.name, releasePackage]));
 
