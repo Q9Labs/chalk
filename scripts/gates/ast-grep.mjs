@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -182,14 +183,21 @@ for (const [suffix, language] of [["yaml", "Yaml"], ...sourceLanguages]) {
 }
 
 // ast-grep honors `// ast-grep-ignore` on or above a line, and a trailing one hides the comment itself too, so a rule cannot
-// guard against it. Check the text instead: a suppression must name its rule, and may not name the own-module mock ban.
+// guard against it. Check the comments as text instead: a suppression must name its rule, and may not name the own-module mock ban.
+// A block comment can carry the rule list over several lines, so whole comments are read, not lines.
 const sourceFile = /\.[cm]?[jt]sx?$/u;
-const ownModuleBanSuppressed = /ast-grep-ignore\s*:[^\n]*forbid-own-module-mocks/u;
-const blanketSuppression = /ast-grep-ignore(?!\s*:)/u;
+const comment = /\/\/[^\n]*|\/\*[\s\S]*?\*\//gu;
+const forbiddenSuppression = /ast-grep-ignore(?!\s*:)|ast-grep-ignore\s*:[\s\S]*forbid-own-module-mocks/u;
 function forbiddenSuppressions(paths) {
-  const found = spawnSync("git", ["grep", "--no-index", "--exclude-standard", "-n", "-E", "ast-grep-ignore", "--", ...(paths.length > 0 ? paths : ["."]), ":!scripts/gates/ast-grep*"], { encoding: "utf8", maxBuffer: 1 << 26 });
-  if (found.status !== 0 && found.status !== 1) throw new Error(`git grep failed: ${found.stderr}`);
-  return found.stdout.split("\n").filter((line) => sourceFile.test(line.split(":", 1)[0]) && (blanketSuppression.test(line) || ownModuleBanSuppressed.test(line)));
+  const listed = spawnSync("git", ["grep", "--no-index", "--exclude-standard", "-l", "-E", "ast-grep-ignore", "--", ...(paths.length > 0 ? paths : ["."]), ":!scripts/gates/ast-grep*"], { encoding: "utf8", maxBuffer: 1 << 26 });
+  if (listed.status !== 0 && listed.status !== 1) throw new Error(`git grep failed: ${listed.stderr}`);
+  return listed.stdout
+    .split("\n")
+    .filter((file) => sourceFile.test(file))
+    .flatMap((file) => {
+      const text = readFileSync(file, "utf8");
+      return [...text.matchAll(comment)].filter(([match]) => forbiddenSuppression.test(match)).map((match) => `${file}:${text.slice(0, match.index).split("\n").length}: ${match[0].split("\n", 1)[0]}`);
+    });
 }
 
 const args = process.argv.slice(2);
