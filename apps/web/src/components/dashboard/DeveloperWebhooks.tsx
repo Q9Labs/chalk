@@ -47,12 +47,14 @@ export function WebhooksPanel({ webhooks, nextCursor, opened, onToggle, onAdd, o
         <Icon name="hook" size={18} />
         <h2 id="webhooks-title">Webhook endpoints</h2>
         {webhooks.length ? <span className="pill">{webhooks.length}</span> : null}
-        <span className="end">
-          <button type="button" className="btn out" onClick={onAdd}>
-            <Icon name="plus" size={16} />
-            Add endpoint
-          </button>
-        </span>
+        {webhooks.length ? (
+          <span className="end">
+            <button type="button" className="btn out" onClick={onAdd}>
+              <Icon name="plus" size={16} />
+              Add endpoint
+            </button>
+          </span>
+        ) : null}
       </div>
       {webhooks.length === 0 ? (
         <div className="blank">

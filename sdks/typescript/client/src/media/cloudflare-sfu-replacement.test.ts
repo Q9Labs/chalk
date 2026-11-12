@@ -504,6 +504,40 @@ it("starts no head start for an off target or a source the user paused", async (
   );
 });
 
+const idleSessionBootstrap: CloudflareSFUBootstrap = { ...bootstrap("connection-1"), capabilities: { serverLayerAdaptation: true, subscriptionState: true, iceRestart: true, keepsIdleSession: true } };
+
+it("keeps the connection nobody has used for the first offer when the SFU keeps idle sessions", async () => {
+  const replaceMediaConnection = async () => bootstrap("replacement");
+  await withTimedHarness(
+    async (h) => {
+      await startDormantWithCamera(h);
+
+      await h.client.prepareLocalPublicationTarget(CAMERA_ON);
+      await expect(h.client.setLocalPublicationTarget(CAMERA_ON)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+      expect(h.peers).toHaveLength(1);
+      expect(h.transport.addInputs.map((input) => input.connectionId)).toEqual(["connection-1"]);
+    },
+    { bootstrap: idleSessionBootstrap, replaceMediaConnection },
+  );
+});
+
+it("replaces the kept connection when the SFU reports it gone at the first offer", async () => {
+  let replacements = 0;
+  const replaceMediaConnection = async () => bootstrap(`replacement-${++replacements}`);
+  await withTimedHarness(
+    async (h) => {
+      await startDormantWithCamera(h);
+      h.transport.nextLocalPublishFailure = new CloudflareSFUError("session gone", "signaling_failed", { status: 404 });
+
+      await expect(h.client.setLocalPublicationTarget(CAMERA_ON)).resolves.toEqual({ outcome: "confirmed", errorCode: null });
+
+      expect(h.transport.addInputs.at(-1)?.connectionId).toBe("replacement-1");
+    },
+    { bootstrap: idleSessionBootstrap, replaceMediaConnection },
+  );
+});
+
 it("starts ICE candidate gathering when the peer connection is created", () => {
   const { peerConnectionFactory } = createHarness();
   expect(peerConnectionFactory).toHaveBeenCalledWith(expect.objectContaining({ bundlePolicy: "max-bundle", iceCandidatePoolSize: 1 }));

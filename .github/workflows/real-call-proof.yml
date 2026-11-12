@@ -232,6 +232,7 @@ jobs:
           CHALK_PROOF_API_URL: ${{ vars.CHALK_PROOF_API_URL }}
           CHALK_PROOF_WEB_URL: ${{ vars.CHALK_PROOF_WEB_URL }}
           CHALK_PROOF_PROOF_ORIGIN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN }}
+          CHALK_PROOF_PROOF_ORIGIN_OWN: ${{ vars.CHALK_PROOF_PROOF_ORIGIN_OWN }}
           CHALK_PROOF_WEBHOOK_ENDPOINT_ID: ${{ vars.CHALK_PROOF_WEBHOOK_ENDPOINT_ID }}
           CHALK_PROOF_WEBHOOK_SERVICE_URL: ${{ vars.CHALK_PROOF_WEBHOOK_SERVICE_URL }}
         run: |
@@ -260,7 +261,7 @@ jobs:
           failed=()
           if [[ "$STAGING_SFU_PROOF" == true ]]; then
             # The nightly proofs are independent, so one failure must not hide the others' results. One lease covers the whole group:
-            # call-artifacts runs on its own Space beside the other proofs (see run-proofs). A lease problem (exit 75) leaves a proof
+            # call-artifacts runs on its own Space beside the other proofs when it has its own proof origin (see run-proofs). A lease problem (exit 75) leaves a proof
             # without a status, so it is not-run, and gate-lease names the reason in the step output `failure`.
             status_dir=.private/proof-status
             for proof in "${proofs[@]}"; do echo "${RUN_PREFIX}-${proof}" >> .private/proof-run-ids; done

@@ -31,6 +31,7 @@ func newTestBatchConn(t testing.TB, segmentation bool) *batchConn {
 	}
 	t.Cleanup(func() { _ = batch.Close() })
 	batch.gso = batch.gso && segmentation
+	batch.markVideo(videoSSRC, true)
 	return batch
 }
 

@@ -3,6 +3,8 @@ Description=Chalk outbound-only Cloudflare Tunnel connector
 After=network-online.target chalk-api.service chalk-sync.service
 Wants=chalk-api.service chalk-sync.service
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=10
 
 [Container]
 Image=__CLOUDFLARED_IMAGE_REFERENCE__
@@ -30,8 +32,6 @@ PodmanArgs=--stop-timeout=30
 [Service]
 Restart=on-failure
 RestartSec=3s
-StartLimitIntervalSec=120
-StartLimitBurst=10
 TimeoutStartSec=60
 TimeoutStopSec=40
 

@@ -16,7 +16,9 @@ let theme = "dark";
 
 const trigger = (name) => page.getByRole("button", { name: new RegExp(`^${name}`) });
 const search = () => page.getByRole("combobox", { name: "Search languages", exact: true });
-const save = () => page.getByRole("button", { name: "Save transcript language", exact: true });
+const readyDialog = () => page.getByRole("dialog").filter({ hasText: "Your call is ready" });
+// Starting a call and choosing its language in the ready dialog both post to the home endpoint; the action tells them apart.
+const homeAction = (action) => page.waitForResponse((response) => response.url().endsWith("/dashboard-api/home") && response.request().method() === "POST" && response.status() === 200 && response.request().postDataJSON()?.action === action);
 
 async function setLook(nextTheme, nextSize) {
   theme = nextTheme;
@@ -76,46 +78,46 @@ try {
   // Behavior first: the account language, one call's language, and a new call started in a chosen language.
   await setLook("dark", "desktop");
   await page.goto(`${origin}/dashboard/developer`);
-  const account = page.getByRole("region", { name: "Transcripts", exact: true });
+  const account = page.getByRole("region", { name: "Calls", exact: true });
   await trigger("Transcript language").waitFor();
   assert.match(await trigger("Transcript language").innerText(), /Auto-detect/);
   await trigger("Transcript language").click();
   assert.equal(await page.getByRole("option", { name: /Use account default/ }).count(), 0);
   await pickByTyping("urdu");
-  await save().click();
   await page.getByText("Transcript language saved", { exact: true }).waitFor();
   await page.reload();
   await trigger("Transcript language").waitFor();
   assert.match(await trigger("Transcript language").innerText(), /Urdu/);
 
+  // Home starts a call in the remembered language; the ready dialog changes it, and the next call starts with that choice.
   await page.goto(`${origin}/dashboard`);
-  await trigger("Transcript for new calls").waitFor();
-  assert.match(await trigger("Transcript for new calls").innerText(), /Use account default/);
-  const defaultCall = page.waitForResponse((response) => response.url().endsWith("/dashboard-api/home") && response.request().method() === "POST" && response.status() === 200);
+  const defaultCall = homeAction("create-call");
   await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
   const inherited = (await (await defaultCall).json()).call;
   assert.equal(inherited.transcriptLanguage, null, "a call started on the account default inherits");
+  await readyDialog().waitFor();
+  assert.match(await trigger("Transcript language").innerText(), /Use account default/);
+  await trigger("Transcript language").click();
+  const chosen = homeAction("set-transcript-language");
+  await pickByTyping("arabic");
+  assert.equal((await (await chosen).json()).call.transcriptLanguage, "ar", "the ready dialog saves the call's language");
+  assert.match(await trigger("Transcript language").innerText(), /Arabic/);
   await closeReadyDialog();
 
-  await trigger("Transcript for new calls").click();
-  await pickByTyping("arabic");
-  assert.match(await trigger("Transcript for new calls").innerText(), /Arabic/);
-  const arabicCall = page.waitForResponse((response) => response.url().endsWith("/dashboard-api/home") && response.request().method() === "POST" && response.status() === 200);
+  await page.reload();
+  const arabicCall = homeAction("create-call");
   await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
   const made = (await (await arabicCall).json()).call;
-  assert.equal(made.transcriptLanguage, "ar", "a call started with a chosen language keeps it");
+  assert.equal(made.transcriptLanguage, "ar", "the next call starts with the last choice, even after a reload");
   await closeReadyDialog();
-  await page.reload();
-  await trigger("Transcript for new calls").waitFor();
-  assert.match(await trigger("Transcript for new calls").innerText(), /Arabic/, "the choice survives a reload");
 
   await page.goto(`${origin}/dashboard/call/${made.id}`);
   await trigger("Transcript language").waitFor();
   assert.match(await trigger("Transcript language").innerText(), /Arabic/);
   await trigger("Transcript language").click();
+  const saved = page.waitForResponse((response) => response.url().endsWith("/dashboard-api/call") && response.request().method() === "POST" && response.status() === 200);
   await page.getByRole("option", { name: /Use account default/ }).click();
-  await save().click();
-  await page.getByText("Transcript language saved", { exact: true }).waitFor();
+  await saved;
   await page.reload();
   await trigger("Transcript language").waitFor();
   assert.match(await trigger("Transcript language").innerText(), /Use account default/);
@@ -131,7 +133,6 @@ try {
       if (!/Auto-detect/.test(await trigger("Transcript language").innerText())) {
         await trigger("Transcript language").click();
         await page.getByRole("option", { name: /Auto-detect/ }).click();
-        await save().click();
         const saved = page.getByText("Transcript language saved", { exact: true });
         await saved.waitFor();
         await saved.waitFor({ state: "detached" });
@@ -149,18 +150,17 @@ try {
       await shot("account-keyboard", account);
       await search().press("Escape");
       await trigger("Transcript language").click();
-      await pickByTyping("urdu");
-      await shot("account-selected", account);
       await slowly("dashboard-api/developer", "POST", async () => {
-        await save().click();
+        await pickByTyping("urdu");
         await page.locator("[aria-busy=true]").waitFor();
         await shot("account-loading", account);
       });
       await page.getByText("Transcript language saved", { exact: true }).waitFor();
+      await shot("account-selected", account);
 
       await page.goto(`${origin}/dashboard/call/${spaceId}`);
       await trigger("Transcript language").waitFor();
-      const section = page.getByRole("region", { name: "Transcripts", exact: true });
+      const section = page.locator("#transcript-language");
       await shot("space-closed", section);
       await trigger("Transcript language").click();
       await shot("space-open", section);
@@ -169,18 +169,18 @@ try {
       // Home starts every look on the account default, whatever an earlier journey chose.
       await page.evaluate(() => window.localStorage.removeItem("chalk.transcript-language.new-call"));
       await page.goto(`${origin}/dashboard`);
-      await trigger("Transcript for new calls").waitFor();
-      const head = page.locator(".hhead");
-      await shot("home-default", head);
-      await trigger("Transcript for new calls").click();
-      await shot("home-open", head);
-      await pickByTyping("urdu");
-      await shot("home-selected", head);
       await slowly("dashboard-api/home", "POST", async () => {
         await page.getByRole("button", { name: "Start a call", exact: true }).first().click();
         await page.locator("[aria-busy=true]").first().waitFor();
-        await shot("home-disabled", head);
+        await shot("home-disabled", page.locator(".hhead"));
       });
+      const ready = readyDialog();
+      await ready.waitFor();
+      await shot("home-ready", ready);
+      await trigger("Transcript language").click();
+      await shot("home-open", ready);
+      await pickByTyping("urdu");
+      await shot("home-selected", ready);
       await closeReadyDialog();
     }
   }

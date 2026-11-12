@@ -65,15 +65,15 @@ export function keptRecording<T extends { readonly status: string }>(recordings:
 
 export type TranscriptState = "ready" | "preparing" | "failed" | "deleted" | "expired" | "creatable" | "none";
 
-/** What the transcript panel says, and whether it may offer to make a transcript. */
-export const TRANSCRIPT: Record<TranscriptState, { readonly copy: string; readonly action: "download" | "create" | null }> = {
-  ready: { copy: "", action: "download" },
-  preparing: { copy: "The transcript is being prepared.", action: null },
-  failed: { copy: "The transcript couldn’t be made", action: null },
-  deleted: { copy: "This transcript was deleted.", action: null },
-  expired: { copy: "A transcript can no longer be made for this recording.", action: null },
-  creatable: { copy: "There’s no transcript for this recording.", action: "create" },
-  none: { copy: "There’s no transcript for this recording.", action: null },
+/** What the transcript panel says when there is no transcript to read, and whether it may offer to make one. */
+export const TRANSCRIPT: Record<TranscriptState, { readonly title: string; readonly detail: string; readonly action: "download" | "create" | null }> = {
+  ready: { title: "", detail: "", action: "download" },
+  preparing: { title: "Making the transcript", detail: "It shows here when it’s ready. You can leave this page.", action: null },
+  failed: { title: "The transcript couldn’t be made", detail: "Something went wrong while it was being made.", action: null },
+  deleted: { title: "This transcript was deleted", detail: "A deleted transcript can’t be brought back.", action: null },
+  expired: { title: "A transcript can’t be made now", detail: "The audio for this recording is no longer kept.", action: null },
+  creatable: { title: "No transcript yet", detail: "Make one from this recording. It takes a few minutes.", action: "create" },
+  none: { title: "No transcript", detail: "Transcription was off when this session was recorded.", action: null },
 };
 
 const IN_PROGRESS = new Set(["preparing", "transcribing", "verifying", "retryable_failure", "pending", "processing"]);

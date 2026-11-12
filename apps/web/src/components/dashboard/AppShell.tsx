@@ -23,7 +23,7 @@ function useSignInRedirect(): () => void {
   }, [router]);
 }
 
-export type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
+type Load<T> = { readonly kind: "loading" } | { readonly kind: "error"; readonly error: unknown } | { readonly kind: "ready"; readonly data: T };
 
 /** A polling answer applied to the page's latest data, so a write made while the read was in flight is kept and no answer is dropped. */
 export class Change<T> {
@@ -206,7 +206,8 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
 
 function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const section = pathname.startsWith("/dashboard/developer") ? "developer" : pathname.startsWith("/dashboard/apps") ? "apps" : pathname.startsWith("/dashboard/sessions") || pathname.includes("/session/") ? "sessions" : pathname.startsWith("/dashboard/recordings") ? "recordings" : "home";
+  // A call, its sessions and their recordings all live under Home.
+  const section = pathname.startsWith("/dashboard/developer") ? "developer" : pathname.startsWith("/dashboard/apps") ? "apps" : "home";
   return (
     <header className="topb">
       <Link to="/dashboard" activeOptions={{ exact: true }} aria-label="Chalk, Home">
@@ -216,14 +217,6 @@ function TopBar({ profile }: { readonly profile: ProfileDTO | null }) {
         <Link to="/dashboard" activeOptions={{ exact: true }} aria-label="Home" aria-current={section === "home" ? "page" : undefined}>
           <Icon name="home" size={16} />
           <span>Home</span>
-        </Link>
-        <Link to="/dashboard/sessions" aria-label="Sessions" aria-current={section === "sessions" ? "page" : undefined}>
-          <Icon name="calendar" size={16} />
-          <span>Sessions</span>
-        </Link>
-        <Link to="/dashboard/recordings" aria-label="Recordings" aria-current={section === "recordings" ? "page" : undefined}>
-          <Icon name="film" size={16} />
-          <span>Recordings</span>
         </Link>
         <Link to="/dashboard/apps" aria-label="AI apps" aria-current={section === "apps" ? "page" : undefined}>
           <Icon name="grid" size={16} />
