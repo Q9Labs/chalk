@@ -9,6 +9,7 @@ defmodule ChalkSync.Episodes.Coordinator do
 
   use GenServer
   alias ChalkSync.Live.Episode, as: LiveEpisode
+  alias ChalkSync.ProviderCall
   alias ChalkSync.Stateholder
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
@@ -192,7 +193,7 @@ defmodule ChalkSync.Episodes.Coordinator do
     GenServer.call(
       coordinator,
       {:live_target, socket, identity, target},
-      provider_call_timeout()
+      ProviderCall.deadline_ms()
     )
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
@@ -230,7 +231,7 @@ defmodule ChalkSync.Episodes.Coordinator do
   @doc false
   @spec reconcile_live(pid()) :: :ok | {:error, atom()}
   def reconcile_live(coordinator) do
-    GenServer.call(coordinator, :reconcile_live, provider_call_timeout())
+    GenServer.call(coordinator, :reconcile_live, ProviderCall.deadline_ms())
   catch
     :exit, _reason -> {:error, :coordinator_unavailable}
   end
@@ -662,10 +663,6 @@ defmodule ChalkSync.Episodes.Coordinator do
       pid ->
         {:ok, pid}
     end
-  end
-
-  defp provider_call_timeout do
-    Application.get_env(:chalk_sync, :external_operation_adapter_timeout_ms, 5000) + 1000
   end
 
   defp repair(%{head: nil} = state) do

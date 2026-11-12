@@ -17,6 +17,28 @@ defmodule ChalkSync.ProviderCall do
 
   @type plane :: {module(), term()} | nil
 
+  @default_timeout_ms 5_000
+  # A caller waits this long beyond the adapter budget, so the adapter's own timeout answers first.
+  @deadline_slack_ms 1_000
+
+  @doc "The adapter budget a consumer starts with when nothing configures one."
+  @spec default_timeout_ms() :: pos_integer()
+  def default_timeout_ms, do: @default_timeout_ms
+
+  @doc "How long one provider call may run; the application environment sets it."
+  @spec timeout_ms() :: pos_integer()
+  def timeout_ms,
+    do:
+      Application.get_env(
+        :chalk_sync,
+        :external_operation_adapter_timeout_ms,
+        @default_timeout_ms
+      )
+
+  @doc "How long a process may wait on a provider call before it gives up on the answer."
+  @spec deadline_ms() :: pos_integer()
+  def deadline_ms, do: timeout_ms() + @deadline_slack_ms
+
   @spec contextual?(plane()) :: boolean()
   def contextual?({module, _adapter}),
     do: Code.ensure_loaded?(module) and function_exported?(module, :with_call, 2)

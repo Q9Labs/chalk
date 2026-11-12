@@ -31,7 +31,6 @@ defmodule ChalkSync.ExternalOperationConsumer do
 
   @local_page_size 32
   @default_max_backoff_ms 5_000
-  @default_adapter_timeout_ms 5_000
   @health_timeout_ms 500
   @worker_completion_grace_ms 5_000
   @max_attempts 100
@@ -95,7 +94,8 @@ defmodule ChalkSync.ExternalOperationConsumer do
     state = %{
       page_size: Keyword.get(options, :page_size, lane.page_size),
       concurrency: lane.concurrency,
-      adapter_timeout_ms: Keyword.get(options, :adapter_timeout_ms, @default_adapter_timeout_ms),
+      adapter_timeout_ms:
+        Keyword.get(options, :adapter_timeout_ms, ProviderCall.default_timeout_ms()),
       poll_interval_ms: poll_interval_ms,
       max_backoff_ms: Keyword.get(options, :max_backoff_ms, @default_max_backoff_ms),
       claim_operations:
@@ -188,7 +188,7 @@ defmodule ChalkSync.ExternalOperationConsumer do
         media_plane,
         recording_plane,
         finalize,
-        adapter_timeout_ms \\ @default_adapter_timeout_ms
+        adapter_timeout_ms \\ ProviderCall.default_timeout_ms()
       )
       when is_function(finalize, 3) and is_integer(adapter_timeout_ms) and
              adapter_timeout_ms > 0 do
