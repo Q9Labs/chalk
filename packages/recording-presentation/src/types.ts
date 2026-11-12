@@ -1,3 +1,5 @@
+import type { ASSET_KINDS, REACTIONS, THEME_PALETTES, THEME_SKINS, THEME_TEXTURES } from "./schema-enums.gen.js";
+
 export const RECORDING_PRESENTATION_SCHEMA_VERSION = "recording_presentation.v1";
 
 export const RECORDING_PRESENTATION_LIMITS = {
@@ -20,25 +22,9 @@ export interface RecordingPresentationViewportV1 {
 
 export interface RecordingPresentationThemeV1 {
   readonly colorScheme: "light" | "dark";
-  readonly skin: "classic" | "chalk";
-  readonly palette:
-    | "light"
-    | "warm-porcelain"
-    | "cool-mist"
-    | "paper-and-ink"
-    | "cream-and-clay"
-    | "studio-canvas"
-    | "prism-daylight"
-    | "signal-white"
-    | "warm-charcoal"
-    | "cool-graphite"
-    | "high-contrast-ink"
-    | "espresso-night"
-    | "chalkboard-atelier"
-    | "prism-nocturne"
-    | "cosmic-chalk"
-    | "oled-signal";
-  readonly texture: "none" | "paper" | "slate";
+  readonly skin: (typeof THEME_SKINS)[number];
+  readonly palette: (typeof THEME_PALETTES)[number];
+  readonly texture: (typeof THEME_TEXTURES)[number];
   readonly stageBackground: boolean;
   readonly generatedAvatars: boolean;
 }
@@ -116,7 +102,7 @@ export interface RecordingPresentationReactionV1 {
   readonly id: string;
   readonly participantId: string;
   readonly displayName: string;
-  readonly value: "👍" | "❤️" | "😂" | "😮" | "🎉" | "👏" | "😀" | "😅" | "🙏" | "🔥" | "✅" | "👀" | "💯" | "🤔" | "😢" | "🙌" | "🚀" | "👌" | "😍" | "🤝" | "💡" | "⭐" | "😎" | "🥳";
+  readonly value: (typeof REACTIONS)[number];
   readonly occurredAtMs: number;
   readonly expiresAtMs: number;
 }
@@ -159,7 +145,7 @@ export interface RecordingPresentationSnapshotV1 {
 
 export interface RecordingPresentationAssetV1 {
   readonly id: string;
-  readonly kind: "logo" | "avatar" | "chat_attachment" | "whiteboard_state" | "whiteboard_file" | "font";
+  readonly kind: (typeof ASSET_KINDS)[number];
   readonly objectKey: string;
   readonly contentType: string;
   readonly byteSize: number;

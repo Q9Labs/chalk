@@ -9,6 +9,7 @@ const checks = [
   { name: "Camera background URLs", command: ["node", "--experimental-strip-types", "scripts/codegen/camera-background-urls.mjs"] },
   { name: "Camera background URL proof", command: ["node", "--import", "tsx", "--test", "scripts/codegen/camera-background-urls.test.mjs"] },
   { name: "Invite words", command: ["node", "scripts/codegen/invite-words.mjs"] },
+  { name: "Recording presentation enums", command: ["node", "scripts/codegen/recording-presentation-enums.mjs"] },
   { name: "OpenAPI, SDK, and Sync contract", command: ["pnpm", "run", "check:sdk-generated"] },
   { name: "sqlc", command: ["bash", "apps/api/scripts/db-generate.sh", "check"] },
   { name: "Migration LatestVersion", command: ["node", "scripts/codegen/migration-latest-version.mjs"] },
