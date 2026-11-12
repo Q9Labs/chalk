@@ -7,7 +7,7 @@ import { attempt, dueReads, failed, nextDue, nextRead, reread, selection, succee
 import { clock, playbackTime } from "../../lib/dashboard/format";
 import { Avatar } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { Change, useLoad } from "./AppShell";
+import { Change, useLoad } from "./use-dashboard";
 import { ErrorPanel, Menu, MenuItem, useIntentKeys, useToast } from "./kit";
 
 export type Ids = { readonly spaceId: string; readonly episodeId: string };

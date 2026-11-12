@@ -4,7 +4,7 @@ import type { DeliveryDTO, DeveloperDTO, WebhookDTO } from "../../lib/dashboard/
 import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { clock, sessionDay } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { Favicon, hostOf } from "./Favicon";
 import { ErrorPanel, MoreButton, SkeletonRows, useIntentKeys, usePhone, useToast } from "./kit";
 

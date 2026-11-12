@@ -5,7 +5,7 @@ import { act, errorMessage, readPage } from "../../lib/dashboard/client";
 import { ago, fullDate } from "../../lib/dashboard/format";
 import { Icon } from "../site/Icon";
 import { AppLogo } from "./AppLogo";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { DisconnectPrompt } from "./DisconnectPrompt";
 import { CopyAction, ErrorPanel, MoreButton, Sk, useToast } from "./kit";
 import { McpClients } from "./McpClients";

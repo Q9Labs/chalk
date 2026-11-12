@@ -7,7 +7,7 @@ import { bounds, dayValue, mergeFirstPage, RANGE_LABEL, recordingBadge, timeInCa
 import type { RangeKind } from "../../lib/dashboard/search";
 import { errorMessage } from "../../lib/dashboard/client";
 import { Icon, type IconName } from "../site/Icon";
-import { Change, type Load } from "./AppShell";
+import { Change, type Load } from "./use-dashboard";
 import { useToast } from "./kit";
 
 /* The parts the Sessions list, the Recordings list and the call page's own list have in common. */

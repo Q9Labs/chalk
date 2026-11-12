@@ -6,7 +6,7 @@ import { errorMessage, readPage } from "../../lib/dashboard/client";
 import { appendPage, bounds, rowModel, sessionsQueryOf } from "../../lib/dashboard/lists";
 import type { SessionsSearch } from "../../lib/dashboard/search";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { useShown, Chips, Cutoff, FilterNav, ListMore, ListTools, SessionRow, SessionsHead, TimeValue, type Chip, type NavItem, type RangeChoice } from "./ListParts";
 import { ErrorPanel, Sk, SkeletonRows } from "./kit";
 import { Page, Stat } from "./Page";

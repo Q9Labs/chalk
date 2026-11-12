@@ -6,7 +6,7 @@ import { act, errorMessage, intentKey, readPage } from "../../lib/dashboard/clie
 import { displayLink, lastActive } from "../../lib/dashboard/format";
 import { Avatar, Faces } from "../site/Avatar";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { CopyAction, Dialog, Menu, MenuItem, MoreButton, SkeletonRows, usePhone, useToast } from "./kit";
 import { LanguagePicker } from "./LanguagePicker";
 import { createCallAction, readNewCallLanguage, rememberLanguage, saveNewCallLanguage, type NewCallLanguage } from "./transcript-languages";

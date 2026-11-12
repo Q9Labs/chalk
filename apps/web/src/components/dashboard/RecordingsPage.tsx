@@ -8,7 +8,7 @@ import { appendPage, bounds, recordingsQueryOf, refreshable, rowModel, VIDEO_BAD
 import type { RecordingsSearch } from "../../lib/dashboard/search";
 import { VIDEO, videoGroup, videoState, type VideoGroup } from "../../lib/dashboard/recording";
 import { Icon } from "../site/Icon";
-import { useLoad } from "./AppShell";
+import { useLoad } from "./use-dashboard";
 import { useShown, BadgeView, Chips, Cutoff, FilterNav, ListMore, ListTools, people, refreshed, TimeValue, type Chip, type NavItem, type RangeChoice } from "./ListParts";
 import { Page, Stat } from "./Page";
 import { RecordingPlayer } from "./RecordingPlayer";
