@@ -463,7 +463,7 @@ jobs:
   proof:
     name: Gate proof
     needs: [changes, root-lanes, api, sync]
-    if: ${{ github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.root-lanes.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.api.result) && contains(fromJSON('["success", "skipped"]'), needs.sync.result) }}
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.root-lanes.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.api.result) && contains(fromJSON('["success", "skipped"]'), needs.sync.result) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:

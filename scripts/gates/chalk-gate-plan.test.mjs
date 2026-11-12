@@ -127,6 +127,7 @@ test("the leak shards are skipped together or not at all", () => {
 test("nothing is shared when master changed the Gate itself, or the plan failed", () => {
   assert.deepEqual(shareProvenGroups(queueJobs, proof, { ...noDrift, planFull: true }).rootGroups, queueJobs.rootGroups);
   assert.deepEqual(shareProvenGroups({ ...queueJobs, full: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
+  assert.deepEqual(shareProvenGroups({ ...queueJobs, planFull: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
 });
 
 test("the checks group always runs", () => {

@@ -635,7 +635,7 @@ function changedFiles(base) {
 // leak shards (all three or none, because the Root gate checks their reports together) and any drift that changes the
 // Gate itself are never skipped.
 export function shareProvenGroups(jobs, proof, drift) {
-  if (jobs.full || drift.planFull) return { ...jobs, shared: [] };
+  if (jobs.full || jobs.planFull || drift.planFull) return { ...jobs, shared: [] };
   const proven = new Set(proof.rootGroups);
   const reusable = (group) => proven.has(group) && !drift.rootGroups.includes(group);
   const leakShards = jobs.rootGroups.filter((group) => group.startsWith("call-leaks-"));
@@ -670,7 +670,7 @@ function applyProof(jobs, base, proofPath) {
     const proof = JSON.parse(readFileSync(proofPath, "utf8"));
     const valid = typeof proof.base === "string" && /^[0-9a-f]{40}$/u.test(proof.base) && typeof proof.api === "boolean" && typeof proof.sync === "boolean" && Array.isArray(proof.rootGroups) && proof.rootGroups.every((group) => typeof group === "string");
     if (!valid) throw new GatePlanningError("invalid-proof", "The Gate proof is malformed");
-    const driftFiles = gitLines(["diff", "--name-only", proof.base, base]);
+    const driftFiles = gitLines(["diff", "--name-only", "--no-renames", proof.base, base]);
     const drift = ciJobs(driftFiles, { base, snapshot: { mode: "ref", ref: "HEAD" } });
     const shared = shareProvenGroups(jobs, proof, drift);
     console.error(`Shared with the pull request's Gate run (${driftFiles.length} files of drift since ${proof.base.slice(0, 12)}): ${shared.shared.join(", ") || "nothing"}`);
