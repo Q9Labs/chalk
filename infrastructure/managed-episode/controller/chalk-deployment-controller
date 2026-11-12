@@ -1467,6 +1467,15 @@ rollback_to_stable() {
   run_candidate "$stable_runtime"
 }
 
+# A job re-run repeats a deploy this host already promoted. It passes on health alone and changes nothing; the same
+# release id with another manifest is refused, as is any other active release.
+release_already_active() {
+  [[ -f "$active_pointer" && ! -L "$active_pointer" ]] || return 1
+  [[ "$(jq -r '.release_id // empty' "$active_pointer" 2>/dev/null)" == "$request_release_id" ]] || return 1
+  load_active_pointer
+  [[ "$(sha256_file "$manifest_path")" == "$(jq -er '.manifest_sha256' "$active_pointer")" ]] || fail "release ${request_release_id} is already active with a different manifest"
+}
+
 deploy() {
   if ((EUID != 0)) && [[ "$allow_non_root_tests" != true ]]; then
     fail "deployment controller must run as root"
@@ -1478,6 +1487,11 @@ deploy() {
   validate_inventory "${managed_root}/contracts/runtime-inputs.json"
   validate_manifest "$managed_root"
   prepare_stage
+  if release_already_active; then
+    health_runtime || fail "release ${request_release_id} is already active but its health check failed"
+    emit_result deployed passed false
+    return
+  fi
   fetch_deployment_inputs
   inject_runtime_identity
   local rendered_root="${stage_root}/runtime"
