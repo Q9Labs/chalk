@@ -2,6 +2,8 @@ name: Rollback rehearsal
 # Weekly, on nightly: deploy the newest passed cut, roll back to the one before it with the Release job production uses, and roll forward again.
 # The rollback on 23 Oct failed because the older release's controller could not read the pointer the newer one wrote. This run fails when that happens again.
 on:
+  push:
+    branches: [ops/hotfix-proof]
   schedule:
     - cron: "23 3 * * 0"
   workflow_dispatch:

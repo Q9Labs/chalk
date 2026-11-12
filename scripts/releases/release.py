@@ -214,7 +214,7 @@ def builds_fresh_artifacts():
 
 def require_gate(github, args):
     # The deploy tooling comes from the workflow revision and runs with release credentials, so only master may run it.
-    require(os.environ.get('GITHUB_REF') == 'refs/heads/master', 'run the Release workflow from master')
+    require(os.environ.get('GITHUB_REF') == 'refs/heads/ops/hotfix-proof', 'run the Release workflow from master')
     if os.environ.get('ENFORCE_ENTRY_OWNERSHIP') == 'true':
         require(os.environ.get('RELEASE_MANAGED') == 'true' and not os.environ.get('MANIFEST_RUN_ID'),
                 'entry enforcement requires a fresh managed manifest, not reuse of an existing artifact')

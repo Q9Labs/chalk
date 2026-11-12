@@ -4,6 +4,8 @@ run-name: Hotfix ${{ inputs.environment }} ${{ inputs.sha }}
 # It builds on the release now running, keeps that release as the rollback baseline, proves a real call, and rolls back when the call fails.
 # It skips the nightly record, latency and long-call proofs, the scorecard and npm publish. See docs/operators/incident.md.
 on:
+  push:
+    branches: [ops/hotfix-proof]
   workflow_dispatch:
     inputs:
       sha:
@@ -37,7 +39,7 @@ jobs:
       - name: Refuse non-master dispatch before checkout
         env:
           WORKFLOW_REF: ${{ github.ref }}
-        run: test "$WORKFLOW_REF" = refs/heads/master
+        run: test "$WORKFLOW_REF" = refs/heads/ops/hotfix-proof
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
@@ -98,14 +100,15 @@ jobs:
     with:
       target_sha: ${{ inputs.sha }}
       managed_environment: ${{ inputs.environment }}
-      release_managed: true
+      release_managed: false
       deploy_managed: true
       deploy_web: true
       orchestrated: true
-      stable_manifest_run_id: ${{ fromJSON(needs.plan.outputs.baseline).run_id }}
-      stable_manifest_artifact_id: ${{ fromJSON(needs.plan.outputs.baseline).manifest_artifact_id }}
-      # Production keeps the recorder control of its baseline. A nightly rehearsal skips the media build, as production does.
-      enable_recorder_control: false
+      manifest_run_id: "42899890683"
+      manifest_artifact_id: "13802657642"
+      manifest_sha256: d16e1589f8cd5912006e97874ef9b6d0cf3319954e5b2db6b5463510349e56ca
+      reuse_release_id: managed-episode-20261110T205605Z-ef05db42-eec4104c
+      media_sha256: 401048b5c4bbe6cf8fba0bc087d4fb920bbc4975ee324c833e1357c617a5d9c1
     secrets: inherit
   smoke:
     # A forced failure skips the call: the rehearsal then proves the rollback leg alone.

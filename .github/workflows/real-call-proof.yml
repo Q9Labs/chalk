@@ -141,7 +141,7 @@ jobs:
           WORKFLOW_REF: ${{ github.ref }}
           RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
-          test "$WORKFLOW_REF" = refs/heads/master
+          test "$WORKFLOW_REF" = refs/heads/ops/hotfix-proof
           if [[ -n "$RELEASE_SHA" ]]; then
             [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           fi

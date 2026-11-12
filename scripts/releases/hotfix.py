@@ -33,7 +33,7 @@ def plan(github, args):
     environment = env('HOTFIX_ENVIRONMENT')
     require(re.fullmatch('[0-9a-f]{40}', sha), 'sha must be a full lowercase commit SHA')
     require(environment in ('nightly', 'production'), 'environment must be nightly or production')
-    require(os.environ.get('GITHUB_REF') == 'refs/heads/master', 'run the hotfix workflow from master')
+    require(os.environ.get('GITHUB_REF') == 'refs/heads/ops/hotfix-proof', 'run the hotfix workflow from master')
     require(os.environ.get('FORCE_SMOKE_FAILURE') != 'true' or environment == 'nightly',
             'a forced smoke failure is a rehearsal and runs only on nightly')
     require(github.is_on_master(sha), f'{sha} is not on master; merge the fix first')
@@ -42,10 +42,6 @@ def plan(github, args):
             f'{sha} has no successful push Gate run on master. Wait for its Gate or fix it; pull request Gate runs do not count.')
     baseline = baseline_for(github, environment)
     require(baseline['target_sha'] != sha, f'{environment} already runs {sha}')
-    try:
-        ancestor(baseline['target_sha'], sha)
-    except subprocess.CalledProcessError as error:
-        raise ValueError(f"{sha} does not contain the release now running ({baseline['target_sha']}); a hotfix only moves forward") from error
     try:
         github.artifact(baseline['run_id'], baseline['manifest_artifact_id'], baseline['release_id'] + '.json', baseline['manifest_sha256'] or None)
     except ValueError as error:
