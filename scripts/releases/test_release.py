@@ -96,6 +96,7 @@ class OwnSfuPromotionTests(unittest.TestCase):
         self.enterContext(patch.object(release, 'manifest_bytes', return_value=b'{"images":{}}'))
         self.previous = dict(target_sha=OTHER_SHA)
         self.enterContext(patch.object(release, 'previous_production', return_value=self.previous))
+        self.enterContext(patch.object(release, 'ancestor'))
 
     def github(self, item, latency='passed', scorecard='passed'):
         api = Mock(spec=GitHub)

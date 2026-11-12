@@ -1003,6 +1003,11 @@ jobs:
       media_sha256: ${{ steps.prepare.outputs.media_sha256 }}
       run_id: ${{ github.run_id }}
     steps:
+      - name: Refuse a workflow revision that is not master before any deploy job can start
+        # Every deploy depends on this job, and a reuse deploy does not wait for require-gate, so the check sits here as well.
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: test "$WORKFLOW_REF" = refs/heads/master
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: always() && !failure() && (!cancelled() || inputs.pages_rollback_id != '')
         with:
