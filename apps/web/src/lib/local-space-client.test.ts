@@ -7,7 +7,7 @@ function platformFor(credential: { readonly syncURL: string; readonly syncDirect
   let seen: SpaceClientPlatform | undefined;
   expect(() =>
     createLocalSpaceClient(
-      { credential: { apiBaseURL: "https://api.example.test", space: "design-lab", ...credential }, getAccess: () => Promise.reject(new Error("unused")) },
+      { credential: { apiBaseURL: "https://api.example.test", space: "design-lab", ...credential }, session: { getAccess: () => Promise.reject(new Error("unused")), connectionAccess: () => Promise.reject(new Error("unused")) } },
       {
         createSpaceClient: (_options, platform) => {
           seen = platform;
@@ -22,17 +22,18 @@ function platformFor(credential: { readonly syncURL: string; readonly syncDirect
 
 describe("local Space client direct Sync path", () => {
   it("passes no direct URL unless the credential carries one", () => {
-    expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync" })).toEqual({ syncUrl: "wss://sync.example.test/v1/sync" });
+    expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync" })).toEqual({ syncUrl: "wss://sync.example.test/v1/sync", connectionAccess: expect.any(Function) });
   });
 
   it("passes the direct URL next to the Tunnel URL when configured", () => {
     expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync", syncDirectURL: "wss://direct.example.test/v1/sync" })).toEqual({
       syncUrl: "wss://sync.example.test/v1/sync",
       syncDirectUrl: "wss://direct.example.test/v1/sync",
+      connectionAccess: expect.any(Function),
     });
   });
 
   it("passes the control-arm switch so the SDK keeps every call on the Tunnel", () => {
-    expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync", directPath: "off" })).toEqual({ syncUrl: "wss://sync.example.test/v1/sync", directPath: "off" });
+    expect(platformFor({ syncURL: "wss://sync.example.test/v1/sync", directPath: "off" })).toEqual({ syncUrl: "wss://sync.example.test/v1/sync", directPath: "off", connectionAccess: expect.any(Function) });
   });
 });

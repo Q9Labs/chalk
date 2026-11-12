@@ -1,57 +1,48 @@
 import { reloadRejoinPresence, reloadRejoinStorageKey, sessionExit, writeReloadRejoin, type ClientFailure, type JoinOptions } from "@q9labsai/chalk-client";
 import { Chalk } from "@q9labsai/chalk-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { PreparedPublicSpace, PublicSpaceCredential, SpaceAccessCleanupOptions } from "../../lib/chalk-access";
-import { createLocalSpaceClient, createLocalSpaceRelease } from "../../lib/local-space-client";
+import type { PublicSpaceAdmission } from "../../lib/chalk-access";
+import { createLocalSpaceClient } from "../../lib/local-space-client";
 import { problemReporter, type ReportProblem } from "../../lib/problem-reports";
 import { useTheme } from "../../lib/theme-context";
-import type { ExitPhase, SpaceEntryAccess } from "./SpacePage";
+import type { EndedCall, ExitPhase } from "./entrance-machine";
 
 // The call UI and media stack, which SpacePage loads only once the participant asks to join.
 export { ReportProblemDialog, StatusSurface } from "@q9labsai/chalk-react";
 
 export function LocalSpace({
-  reportCredential,
-  reportCredentialExpiresAt,
+  admission,
   reportsAvailable,
   reportUnavailableReason,
   onOpenReportProblem,
-  reloadMarker,
-  credential,
-  hostCanExtend,
   displayName,
   defaults,
-  getAccess,
-  connectionAccess,
-  onFinish,
   spaceName,
   inviteLink,
-  onTerminal,
+  onEnded,
 }: {
-  readonly reportCredential: () => string;
-  readonly reportCredentialExpiresAt: () => number;
+  readonly admission: PublicSpaceAdmission;
   readonly reportsAvailable: boolean;
   readonly reportUnavailableReason?: string;
   readonly onOpenReportProblem: (send: ReportProblem, diagnostics: string) => void;
-  readonly reloadMarker: SpaceEntryAccess["reloadMarker"];
-  readonly credential: PublicSpaceCredential;
-  readonly hostCanExtend: boolean;
   readonly displayName: string;
   readonly defaults: Pick<JoinOptions, "microphone" | "camera" | "microphoneDeviceId" | "cameraDeviceId" | "speakerDeviceId">;
-  readonly getAccess: PreparedPublicSpace["getAccess"];
-  readonly connectionAccess?: PreparedPublicSpace["connectionAccess"];
   readonly inviteLink?: string;
-  readonly onFinish: (options?: SpaceAccessCleanupOptions) => Promise<void>;
   readonly spaceName?: string;
-  readonly onTerminal: (phase: ExitPhase, cleanup: () => Promise<void>, failure?: ClientFailure | null, reportProblem?: ReportProblem, reportExpiresAt?: number, endReason?: string) => void;
+  readonly onEnded: (call: EndedCall) => void;
 }) {
   const { mode, setPreference } = useTheme();
-  const client = useMemo(() => createLocalSpaceClient({ credential, getAccess, connectionAccess }), [connectionAccess, credential, getAccess]);
-  const release = useMemo(() => createLocalSpaceRelease(client, () => onFinish()), [client, onFinish]);
+  const { session, credential, arrival } = admission;
+  const hostCanExtend = (arrival.space?.maximum_episode_duration_seconds ?? 3600) > 3600;
+  const client = useMemo(() => createLocalSpaceClient({ credential, session }), [credential, session]);
+  const release = useCallback(async () => {
+    await client.close();
+    await session.leave();
+  }, [client, session]);
   const [homeError, setHomeError] = useState<string | null>(null);
   const connection = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot).connection;
-  const tenantId = reloadMarker().tenantId;
-  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: reportCredential, connection: () => client.getSnapshot().connection }), [credential.apiBaseURL, tenantId, reportCredential, client]);
+  const tenantId = session.reloadMarker().tenantId;
+  const reportProblem = useMemo(() => problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: session.mediaProof, connection: () => client.getSnapshot().connection }), [credential.apiBaseURL, tenantId, session, client]);
   const pendingRelease = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(undefined);
   const intentionallyLeft = useRef(false);
   const endObserved = useRef(false);
@@ -65,10 +56,20 @@ export function LocalSpace({
       } catch {
         /* Storage may be disabled. */
       }
-      const terminalProof = reportCredential();
-      onTerminal(phase, release, failure, problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }), reportCredentialExpiresAt(), client.getSnapshot().connection.episodeEndReason);
+      const terminalProof = session.mediaProof();
+      onEnded({
+        phase,
+        failure,
+        release,
+        hostCanExtend,
+        tenantId,
+        callName: spaceName,
+        endReason: client.getSnapshot().connection.episodeEndReason,
+        reportProblem: problemReporter({ baseURL: credential.apiBaseURL, tenantId, mediaProof: () => terminalProof, connection: () => ({ status: phase, lastError: failure ?? null }) }),
+        reportExpiresAt: session.mediaExpiresAt(),
+      });
     },
-    [client, onTerminal, release, credential.apiBaseURL, tenantId, reportCredential, reportCredentialExpiresAt],
+    [client, onEnded, release, credential.apiBaseURL, tenantId, session, hostCanExtend, spaceName],
   );
   useEffect(() => {
     const exit = sessionExit(connection);
@@ -94,18 +95,18 @@ export function LocalSpace({
       if (snapshot.connection.status !== "live" && snapshot.connection.status !== "reconnecting") return;
       try {
         writeReloadRejoin(globalThis.sessionStorage, {
-          ...reloadMarker(),
+          ...session.reloadMarker(),
           space: globalThis.location.pathname.split("/").at(-1) ?? credential.space,
           ...reloadRejoinPresence(snapshot, displayName),
         });
       } catch {
         // Without a recoverable tab marker, retain the existing release behavior.
-        void onFinish({ keepalive: true }).catch(() => undefined);
+        void session.leave({ keepalive: true }).catch(() => undefined);
       }
     };
     globalThis.addEventListener("pagehide", releaseOnPageHide);
     return () => globalThis.removeEventListener("pagehide", releaseOnPageHide);
-  }, [client, credential.space, displayName, onFinish, reloadMarker]);
+  }, [client, credential.space, displayName, session]);
   return (
     <main className="h-full min-h-0 w-full overflow-hidden">
       {homeError ? <p role="alert">{homeError}</p> : null}

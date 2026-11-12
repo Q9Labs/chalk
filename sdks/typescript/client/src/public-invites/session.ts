@@ -28,7 +28,7 @@ export type PublicSpaceSession = {
   /** Epoch milliseconds at which the current media token expires. */
   readonly mediaExpiresAt: () => number;
   readonly reloadMarker: () => Pick<ReloadRejoinMarker, "episodeId" | "participantId" | "participantGeneration" | "mediaProof" | "arrivalHandle" | "tenantId">;
-  /** Gives the arrival back. A second call, or a call for an arrival the server already dropped, does nothing. */
+  /** Gives the arrival back. Calls that overlap share one request, a call after it succeeded does nothing, and a failed leave can be tried again. An arrival the server already dropped counts as left. */
   readonly leave: (options?: PublicLeaveOptions) => Promise<void>;
 };
 
@@ -39,6 +39,7 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
   let mediaProof = parseParsedAccessGrant(first).media.token;
   let initial = true;
   let left = false;
+  let leaving: Promise<void> | undefined;
 
   const connectionAccess = async (request?: ConnectionAccessRequest): Promise<AccessGrant> => {
     if (left) throw new Error("This Space access has been released.");
@@ -71,14 +72,19 @@ export function createPublicSpaceSession(client: ChalkPublicClient, { arrivalHan
     mediaProof: () => mediaProof,
     mediaExpiresAt: () => Date.parse(parseParsedAccessGrant(current).media.expiresAt),
     reloadMarker: () => ({ ...reloadRejoinAccess(current), arrivalHandle }),
-    leave: async (leaveOptions) => {
-      if (left) return;
-      try {
-        await client.leaveSpacePublicInviteArrival(reference, leaveOptions);
-      } catch (cause) {
-        if (!isTerminalArrivalError(cause)) throw cause;
-      }
-      left = true;
+    leave: (leaveOptions) => {
+      if (left) return Promise.resolve();
+      leaving ??= client.leaveSpacePublicInviteArrival(reference, leaveOptions).then(
+        () => {
+          left = true;
+        },
+        (cause: unknown) => {
+          leaving = undefined;
+          if (!isTerminalArrivalError(cause)) throw cause;
+          left = true;
+        },
+      );
+      return leaving;
     },
   };
 }
