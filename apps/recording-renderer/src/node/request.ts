@@ -1,15 +1,15 @@
 import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, sep } from "node:path";
 
-import { FRAME_RENDER_REQUEST_VERSION, MAXIMUM_RECORDING_DURATION_MS, MAXIMUM_RENDER_FPS, MAXIMUM_RENDER_HEIGHT, MAXIMUM_RENDER_WIDTH } from "../generated/render-contract.js";
+import { COMPOSE_REQUEST_VERSION, MAXIMUM_RECORDING_DURATION_MS, MAXIMUM_RENDER_FPS, MAXIMUM_RENDER_HEIGHT, MAXIMUM_RENDER_WIDTH } from "../generated/render-contract.js";
 import { exactKeys, integerField as validatedIntegerField, literalField, objectValue, patternedStringField as validatedPatternedStringField, stringField as validatedStringField } from "../validation.js";
 
 const MAXIMUM_REQUEST_BYTES = 64 << 10;
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-export interface FrameRenderRequestV1 {
-  readonly schemaVersion: typeof FRAME_RENDER_REQUEST_VERSION;
+export interface ComposeRequestV1 {
+  readonly schemaVersion: typeof COMPOSE_REQUEST_VERSION;
   readonly recordingId: string;
   readonly episodeId: string;
   readonly workspaceDirectory: string;
@@ -24,10 +24,10 @@ export interface FrameRenderRequestV1 {
   readonly durationMs: number;
 }
 
-export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 {
-  const request = objectValue(value, "frame render request");
-  exactKeys(request, ["schema_version", "recording_id", "episode_id", "workspace_directory", "presentation_path", "presentation_sha256", "asset_directory", "decoded_media_path", "decoded_media_sha256", "width", "height", "fps", "duration_ms"], "frame render request");
-  literalField(request, "schema_version", FRAME_RENDER_REQUEST_VERSION, "frame render schema_version is invalid");
+export function parseComposeRequestV1(value: unknown): ComposeRequestV1 {
+  const request = objectValue(value, "compose request request");
+  exactKeys(request, ["schema_version", "recording_id", "episode_id", "workspace_directory", "presentation_path", "presentation_sha256", "asset_directory", "decoded_media_path", "decoded_media_sha256", "width", "height", "fps", "duration_ms"], "compose request request");
+  literalField(request, "schema_version", COMPOSE_REQUEST_VERSION, "compose request schema_version is invalid");
   const workspaceDirectory = absolutePathField(request, "workspace_directory");
   const presentationPath = absolutePathField(request, "presentation_path");
   const assetDirectory = absolutePathField(request, "asset_directory");
@@ -36,9 +36,9 @@ export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 
   const height = requestIntegerField(request, "height", 2, MAXIMUM_RENDER_HEIGHT);
   const fps = requestIntegerField(request, "fps", 1, MAXIMUM_RENDER_FPS);
   const durationMs = requestIntegerField(request, "duration_ms", 1, MAXIMUM_RECORDING_DURATION_MS);
-  if (width % 2 !== 0 || height % 2 !== 0) throw new TypeError("frame render dimensions must be even");
+  if (width % 2 !== 0 || height % 2 !== 0) throw new TypeError("compose request dimensions must be even");
   return {
-    schemaVersion: FRAME_RENDER_REQUEST_VERSION,
+    schemaVersion: COMPOSE_REQUEST_VERSION,
     recordingId: requestStringField(request, "recording_id"),
     episodeId: requestStringField(request, "episode_id"),
     workspaceDirectory,
@@ -56,24 +56,24 @@ export function parseFrameRenderRequestV1(value: unknown): FrameRenderRequestV1 
 
 function absolutePathField(value: object, key: string): string {
   const candidate = requestStringField(value, key);
-  if (!isAbsolute(candidate)) throw new TypeError(`frame render ${key} must be absolute`);
+  if (!isAbsolute(candidate)) throw new TypeError(`compose request ${key} must be absolute`);
   return candidate;
 }
 
-const requestStringField = (value: object, key: string): string => validatedStringField(value, key, "frame render", 4_096);
-const requestPatternedStringField = (value: object, key: string, pattern: RegExp): string => validatedPatternedStringField(value, key, pattern, "frame render", 4_096);
-const requestIntegerField = (value: object, key: string, minimum: number, maximum: number): number => validatedIntegerField(value, key, minimum, maximum, "frame render");
+const requestStringField = (value: object, key: string): string => validatedStringField(value, key, "compose request", 4_096);
+const requestPatternedStringField = (value: object, key: string, pattern: RegExp): string => validatedPatternedStringField(value, key, pattern, "compose request", 4_096);
+const requestIntegerField = (value: object, key: string, minimum: number, maximum: number): number => validatedIntegerField(value, key, minimum, maximum, "compose request");
 
-export async function readFrameRenderRequest(path: string): Promise<FrameRenderRequestV1> {
+export async function readComposeRequest(path: string): Promise<ComposeRequestV1> {
   const facts = await stat(path);
-  if (!facts.isFile() || facts.size < 1 || facts.size > MAXIMUM_REQUEST_BYTES) throw new TypeError("frame render request exceeds its byte bound");
+  if (!facts.isFile() || facts.size < 1 || facts.size > MAXIMUM_REQUEST_BYTES) throw new TypeError("compose request request exceeds its byte bound");
   const value: unknown = JSON.parse(await readFile(path, "utf8"));
-  return parseFrameRenderRequestV1(value);
+  return parseComposeRequestV1(value);
 }
 
 export async function validateResultPath(path: string, workspace: string): Promise<void> {
-  if (!isAbsolute(path)) throw new TypeError("frame render result path must be absolute");
+  if (!isAbsolute(path)) throw new TypeError("compose request result path must be absolute");
   const [workspaceRoot, resultParent] = await Promise.all([realpath(workspace), realpath(dirname(path))]);
   const pathFromWorkspace = relative(workspaceRoot, resultParent);
-  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`)) throw new TypeError("frame render result path escapes the attempt workspace");
+  if (pathFromWorkspace === ".." || pathFromWorkspace.startsWith(`..${sep}`)) throw new TypeError("compose request result path escapes the attempt workspace");
 }

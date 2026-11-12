@@ -11,7 +11,7 @@ import { buildSceneSpans, frameCountFor, groupVideoSegments, type VideoSegment }
 import { createWhiteboardRenderer } from "./compose/whiteboard.js";
 import { loadVerifiedRenderInputs, type VerifiedRenderInputs } from "./node/inputs.js";
 import { isMainModule } from "./node/main-module.js";
-import { readFrameRenderRequest, validateResultPath } from "./node/request.js";
+import { readComposeRequest, validateResultPath } from "./node/request.js";
 
 const FONTS_DIRECTORY = fileURLToPath(new URL("./fonts/", import.meta.url));
 
@@ -49,7 +49,7 @@ const running = new Set<ChildProcess>();
 async function main(): Promise<void> {
   const args = parseArguments(process.argv.slice(2));
   const started = performance.now();
-  const request = await readFrameRenderRequest(args.requestPath);
+  const request = await readComposeRequest(args.requestPath);
   await Promise.all([validateResultPath(args.resultPath, request.workspaceDirectory), validateResultPath(args.outputPath, request.workspaceDirectory)]);
   const inputs = await loadVerifiedRenderInputs(request);
   const output: ComposeOutput = { width: request.width, height: request.height, fps: request.fps, encoder: args.encoder, ...(args.threads === undefined ? {} : { threads: args.threads }) };
