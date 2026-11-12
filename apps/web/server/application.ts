@@ -8,7 +8,7 @@ import { body, form, DashboardError, exactOrigin, json, query, redirect } from "
 import { withSessionEngine, resolveTenant } from "./engine";
 import { pages, type Context } from "./pages";
 import { edgeCache, favicon } from "./favicon";
-import { DASHBOARD_RETURN_PATH } from "../src/lib/dashboard/contracts";
+import { DASHBOARD_RETURN_PATH } from "../src/lib/dashboard/return-path";
 import type { SessionDTO } from "../src/lib/dashboard/contracts";
 
 const startQuery = z.strictObject({

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AccessGrant, Recording, Tenant } from "@q9labsai/chalk-client/effect";
 import { SITE_ORIGIN } from "../site-origin";
 import { ChalkCodePointLimits } from "@q9labsai/chalk-client/effect";
+import { CONSENT_HANDLE_PATTERN } from "./return-path";
 import type { VideoGroup, VideoState } from "./recording";
 
 const id = z.uuid();
@@ -50,11 +51,7 @@ export const recordingsQuery = z.strictObject({ ...listFilters, status: z.enum(r
 export type SessionsQuery = z.infer<typeof sessionsQuery>;
 export type RecordingsQuery = z.infer<typeof recordingsQuery>;
 export const developerQuery = z.strictObject({ keyCursor: z.string().max(1024).optional(), webhookCursor: z.string().max(1024).optional() });
-/** The one-time handle the API puts in the consent link. It is a secret until the request is decided. */
-const consentHandlePattern = "chalk_oar_[A-Za-z0-9_-]{20,100}";
-const consentHandle = z.string().regex(new RegExp(`^${consentHandlePattern}$`));
-/** A path `/auth/start` may send the person back to: a dashboard page, or one carrying a consent request. */
-export const DASHBOARD_RETURN_PATH = new RegExp(`^/dashboard(?:/[a-zA-Z0-9/_-]*)?(?:\\?request=${consentHandlePattern})?$`);
+const consentHandle = z.string().regex(new RegExp(`^${CONSENT_HANDLE_PATTERN}$`));
 export const connectQuery = z.strictObject({ request: consentHandle });
 export const connectAction = z.discriminatedUnion("action", [z.strictObject({ action: z.literal("approve-connection"), request: consentHandle, scope: z.enum(["chalk:read", "chalk:manage"]) }), z.strictObject({ action: z.literal("deny-connection"), request: consentHandle })]);
 export const connectionsAction = z.strictObject({ action: z.literal("revoke-connection"), connectionId: id });

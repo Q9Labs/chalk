@@ -1,6 +1,6 @@
 import { clearSignedInHint } from "../signed-in-hint";
 import type { ActionResults, DashboardPage, DashboardPages, SessionDTO } from "./contracts";
-import { DASHBOARD_RETURN_PATH } from "./contracts";
+import { DASHBOARD_RETURN_PATH } from "./return-path";
 
 // The browser half of the dashboard. It holds only the session-bound CSRF token, never a secret:
 // the sealed session and every engine credential stay in HttpOnly cookies and the Pages Functions.
