@@ -242,7 +242,7 @@ func (s settings) get(ctx context.Context, r request) error {
 	}
 	policy := s.policy.Paused(live)
 	attributes := []any{"scope", "tenant", "tenant_id", r.tenant.String(), "tenant_default", valueOrInherit(tenant.DefaultMediaPlane),
-		"platform_default", string(s.policy.Platform), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
+		"platform_default", s.policy.Platform.SettingName(), "kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused}
 	if !r.space.IsZero() {
 		space, err := s.spaces.GetSpace(ctx, r.tenant, r.space)
 		if err != nil {
@@ -254,8 +254,8 @@ func (s settings) get(ctx context.Context, r request) error {
 		}
 		attributes = []any{"scope", "space", "tenant_id", r.tenant.String(), "space_id", r.space.String(),
 			"space_setting", valueOrInherit(mediaplane.OptionalSettingName(space.MediaPlaneSetting)), "space_stored_media_plane", space.MediaPlane,
-			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", string(s.policy.Platform),
-			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", string(effective)}
+			"tenant_default", valueOrInherit(tenant.DefaultMediaPlane), "platform_default", s.policy.Platform.SettingName(),
+			"kill_switch_on", policy.NewEpisodesPaused, "kill_switch_floor", s.policy.NewEpisodesPaused, "on_allowlist", s.policy.Allowed.Allows(space.ID), "effective_plane", effective.SettingName()}
 	}
 	s.log.Info("media plane settings", attributes...)
 	return nil
