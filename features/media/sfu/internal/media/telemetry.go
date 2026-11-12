@@ -57,6 +57,9 @@ type Telemetry struct {
 	// PlannerPaused those an Episode plan pauses to hold its ceiling. CappedCameras and
 	// PausedCameras are the cameras the Episode ceilings lower or pause.
 	CongestionPaused, PlannerPaused, CappedCameras, PausedCameras int
+	// SourceUnauthorized counts subscriptions paused because their source holds no live lease.
+	// Inspection derives this pause on read, so no trail event marks it.
+	SourceUnauthorized int
 	// In is what publishers send the node, by kind; Out is what the node sends subscribers, by
 	// packet class. Each flow has its rate over the last second and its total since start.
 	In, Out []Flow
@@ -84,6 +87,9 @@ type Totals struct {
 	RTXReceived uint64
 	// LayerSwitches is the layer switches video subscriptions began, each one's first layer included.
 	LayerSwitches uint64
+	// LeaseLapses is the forwarding leases that ran out without a renewal. A revoke or a newer
+	// allocation ends a lease with a trail event; a lapse has none, so this is its only trace.
+	LeaseLapses uint64
 }
 
 // flowTotals are one flow's packets and bytes since start.
@@ -152,7 +158,7 @@ func (n *Node) Telemetry() Telemetry {
 		stats = &mediaStats{}
 	}
 	telemetry.Episodes = len(stats.episodes)
-	telemetry.CongestionPaused, telemetry.PlannerPaused = stats.congested, stats.plannerPaused
+	telemetry.CongestionPaused, telemetry.PlannerPaused, telemetry.SourceUnauthorized = stats.congested, stats.plannerPaused, stats.sourceUnauthorized
 	for _, episode := range stats.episodes {
 		telemetry.CappedCameras += episode.CappedCameras
 		telemetry.PausedCameras += episode.PausedCameras
@@ -167,6 +173,20 @@ func (n *Node) Telemetry() Telemetry {
 	}
 	telemetry.Totals = stats.totals.counts
 	return telemetry
+}
+
+// countLeaseLapses adds each forwarding lease that ran out since the last tick to the node's
+// totals, once per window. Only the control loop calls it.
+func (n *Node) countLeaseLapses(now int64) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, authority := range n.sources {
+		window := authority.window.Load()
+		if window.until != 0 && now >= window.until && authority.lapsed < window.opens {
+			authority.lapsed = window.opens
+			n.totals.counts.LeaseLapses++
+		}
+	}
 }
 
 // tallyIngress samples one publisher layer and adds what it received since the last tick to the

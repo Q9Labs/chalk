@@ -126,6 +126,8 @@ type mediaStats struct {
 	// congested counts video subscriptions their own downlink pauses; plannerPaused those an
 	// Episode plan pauses to hold its packet ceiling, however good the downlink is.
 	congested, plannerPaused int
+	// sourceUnauthorized counts subscriptions, of any media, whose source holds no live lease.
+	sourceUnauthorized int
 	// in and out are the node's media rates over the last second; totals its counts since start.
 	in     [ingressKinds]flowRate
 	out    [packetClasses]flowRate
@@ -154,6 +156,7 @@ func (n *Node) allocate() {
 
 	episodes := map[episodeKey]*episodeTick{}
 	stats := &mediaStats{episodes: make(map[episodeKey]protocol.EpisodeState, len(sessions))}
+	n.countLeaseLapses(now)
 	for _, session := range sessions {
 		if session.kind == kindCapture {
 			n.tallyCapture(session, stats, now)
@@ -203,6 +206,9 @@ func (n *Node) allocate() {
 			allocateSession(session, episode.room, &probes, now)
 		}
 		for _, subscription := range episode.subscriptions {
+			if !subscription.pub.authority.allows(now, now) {
+				stats.sourceUnauthorized++
+			}
 			link := subscription.alloc.limit()
 			if !subscription.pub.video() {
 				link = serverLimit{}

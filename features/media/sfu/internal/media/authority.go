@@ -65,6 +65,8 @@ type sourceAuthority struct {
 	// above it, or a publication under a newer generation, ends the lease it left behind.
 	allocation int64
 	window     atomic.Pointer[leaseWindow]
+	// lapsed is the newest window whose end by lapse the control loop counted, so each lapse counts once.
+	lapsed uint64
 }
 
 // lapse ends the forwarding lease and keeps the revision and the revoke, so a control
