@@ -7,6 +7,7 @@ import { ensureOwnSfuSpaces } from "./own-sfu-spaces.mjs";
 import { offReasonProof } from "./off-reason.mjs";
 import { chatUploadProof } from "./chat-upload.mjs";
 import { longCallPlan, longCallProof } from "./long-call.mjs";
+import { deployHoldProof } from "./deploy-hold.mjs";
 import { toggleOffersPlan, toggleOffersProof } from "./toggle-offers.mjs";
 import { resolve } from "node:path";
 import { mkdir } from "node:fs/promises";
@@ -75,6 +76,13 @@ const plans = {
     webhooks: false,
     proofs: ["long-call"],
   },
+  // Three calls of three guests held open while an operator deploys the API host (DEPLOY_HOLD_STARTED_FILE, DEPLOY_HOLD_DONE_FILE). Opt-in: nightly only.
+  "deploy-hold": {
+    media: false,
+    longCall: true,
+    webhooks: false,
+    proofs: ["deploy-hold"],
+  },
   // Three guests toggle the microphone and camera 50 times and the offers they send must not grow; the deafness probe runs in the same calls. Opt-in, own SFU.
   "toggle-offers": {
     media: false,
@@ -84,7 +92,7 @@ const plans = {
   },
 };
 const dryRuns = { "long-call": longCallPlan, "toggle-offers": toggleOffersPlan };
-const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
+const usage = `Usage: pnpm prod:proof [all|smoke|camera-share|recording-rejoin|export|transcript|call-artifacts|long-call|deploy-hold|toggle-offers|leave|leave-own-sfu|own-sfu-spaces|offreason|chat-upload] [--force-layer-switch|--no-layer-switch] [long-call|toggle-offers --dry-run]
 Cleanup: pnpm prod:proof cleanup <run-id>
 Default: all, with forced layer switch. Each subcommand creates and cleans its own run.
 Requirements: op (vault dev, local configuration only), ffmpeg, ffprobe, ImageMagick, Chromium,
@@ -132,6 +140,7 @@ async function runProofs(run, plan, report, forceLayerSwitch) {
   const actions = {
     "long-call": () => longCallProof(run, receiver),
     "toggle-offers": () => toggleOffersProof(run, receiver),
+    "deploy-hold": () => deployHoldProof(run, receiver),
     leave: () => leaveProof(run),
     "leave-own-sfu": () => leaveOwnSfuProof(run),
     "own-sfu-spaces": () => ensureOwnSfuSpaces(run),
