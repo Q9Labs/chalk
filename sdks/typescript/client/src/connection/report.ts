@@ -177,21 +177,25 @@ export class ConnectionReporter {
     }
   }
   #report(trigger: ConnectionReport["trigger"]): void {
-    if (this.#disposed || !this.#canReport(trigger)) return;
-    const access = this.#options.access();
-    // Never turn diagnostics into an anonymous ingestion or credential-refresh path.
+    const access = this.#accessToReport(trigger);
     if (!access) return;
     const summary = trigger === "audio_receive_summary";
-    const now = this.#options.now();
-    if (!summary && !reserveParticipantReport(access, now)) return;
     const events = this.#eventsFor(summary);
     const report = boundedReport(trigger, events);
     if (!report) return;
     if (summary) {
-      this.#lastSummaryAt = now;
+      this.#lastSummaryAt = this.#options.now();
       for (const event of events) if (isTiming(event)) this.#sentTimings.add(event);
     }
     this.#enqueue({ access, report, attempts: 0 });
+  }
+  /** Never turn diagnostics into an anonymous ingestion or credential-refresh path. */
+  #accessToReport(trigger: ConnectionReport["trigger"]) {
+    if (this.#disposed || !this.#canReport(trigger)) return undefined;
+    const access = this.#options.access();
+    if (!access) return undefined;
+    if (trigger !== "audio_receive_summary" && !reserveParticipantReport(access, this.#options.now())) return undefined;
+    return access;
   }
   #eventsFor(summary: boolean): ReportEvent[] {
     return summary ? this.#events.filter((event) => isAudioReceive(event) && !this.#sentTimings.has(event)) : this.#events.slice();

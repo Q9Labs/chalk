@@ -189,20 +189,26 @@ function bindAudioSink(track, element) {
   element.chalkObservation = window.proofClient.media?.observeAudioElement?.(track, element);
 }
 
+function proofElement(remote) {
+  const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
+  return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
+}
+
+/** Puts one received track on its element and returns whether the element took a new track. */
+function attachProofTrack(remote, element) {
+  element.dataset.participantId = remote.participantId;
+  element.dataset.proofSource = remote.source;
+  const rebound = element.srcObject?.getTracks()[0] !== remote.track;
+  if (rebound) element.srcObject = new MediaStream([remote.track]);
+  if (element instanceof HTMLVideoElement) element.muted = true;
+  document.body.append(element);
+  if (rebound) bindAudioSink(remote.track, element);
+}
+
 export async function playProofMedia() {
-  function proofElement(remote) {
-    const existing = [...document.querySelectorAll("[data-proof-source]")].find((element) => element.dataset.participantId === remote.participantId && element.dataset.proofSource === remote.source);
-    return existing ?? (remote.track.kind === "audio" ? new Audio() : document.createElement("video"));
-  }
   for (const remote of window.proofClient.getSnapshot().media.remote) {
     const element = proofElement(remote);
-    element.dataset.participantId = remote.participantId;
-    element.dataset.proofSource = remote.source;
-    const rebound = element.srcObject?.getTracks()[0] !== remote.track;
-    if (rebound) element.srcObject = new MediaStream([remote.track]);
-    if (element instanceof HTMLVideoElement) element.muted = true;
-    document.body.append(element);
-    if (rebound) bindAudioSink(remote.track, element);
+    attachProofTrack(remote, element);
     await element.play().then(
       () => element.chalkObservation?.played(undefined),
       (cause) => {
