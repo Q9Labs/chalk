@@ -15180,7 +15180,8 @@
                     "audio_receive_stuck",
                     "audio_receive_summary",
                     "receivers_closed",
-                    "access_retry"
+                    "access_retry",
+                    "chat_upload_failed"
                   ],
                   "type": "string"
                 },
@@ -15305,6 +15306,10 @@
                 "track_state": {
                   "enum": ["live", "muted", "ended"],
                   "type": "string"
+                },
+                "upload_failure": {
+                  "enum": ["initiate_failed", "storage_unreachable", "storage_rejected", "finalize_failed"],
+                  "type": "string"
                 }
               },
               "required": ["elapsed_ms", "event"],
@@ -15315,7 +15320,7 @@
             "type": "array"
           },
           "trigger": {
-            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary"],
+            "enum": ["join_failed", "connection_lost", "recovery_exhausted", "media_projection_mismatch", "audio_receive_stuck", "audio_receive_summary", "upload_failed"],
             "type": "string"
           },
           "version": {

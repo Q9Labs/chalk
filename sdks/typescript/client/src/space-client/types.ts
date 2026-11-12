@@ -93,6 +93,8 @@ export type ClientFailure = {
   /** Set on `media.permission_denied` when the browser says the operating system refused capture. */
   readonly permissionBlock?: "system";
   readonly sync?: import("../sync/connect-diagnostics").SyncConnectDiagnostic;
+  /** Set when a chat file upload failed: where it broke, and the storage HTTP status when storage answered. */
+  readonly uploadFailure?: { readonly kind: import("../chat-files/types").ChatUploadFailureKind; readonly httpStatus?: number };
 };
 export type EpisodeSummary = {
   readonly id: string;

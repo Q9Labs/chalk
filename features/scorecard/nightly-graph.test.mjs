@@ -36,7 +36,7 @@ test("Cut nightly gates on a chalk_sfu proof and carries no latency run", () => 
   assert.equal(nightly.jobs.latency, undefined, "latency runs in staging-sfu-latency.yml, off the cut");
   assert.equal(gate.uses, "./.github/workflows/real-call-proof.yml");
   assert.equal(gate.with.media_plane, "chalk_sfu");
-  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call"]);
+  assert.deepEqual(gate.with.proofs.split(" "), ["camera-share", "call-artifacts", "long-call", "chat-upload"]);
   assert.equal(gate.with.latency, undefined, "the gate carries no latency measurement");
   assert.equal(gate.permissions.contents, "write", "the staging lease is a Git ref");
   assert.deepEqual(needsOf(gate), ["plan", "release"]);
