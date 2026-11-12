@@ -100,7 +100,7 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
 
 const queueJobs = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"], full: false };
 const proof = { api: true, sync: false, rootGroups: ["checks", "dashboard-engine", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"] };
-const noDrift = { api: false, sync: false, rootGroups: ["checks"], planFull: false };
+const noDrift = { api: false, sync: false, rootGroups: ["checks"], planFull: false, entries: 1 };
 
 test("a queue group skips what its pull request proved and master did not touch since", () => {
   const shared = shareProvenGroups(queueJobs, proof, noDrift);
@@ -128,6 +128,11 @@ test("nothing is shared when master changed the Gate itself, or the plan failed"
   assert.deepEqual(shareProvenGroups(queueJobs, proof, { ...noDrift, planFull: true }).rootGroups, queueJobs.rootGroups);
   assert.deepEqual(shareProvenGroups({ ...queueJobs, full: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
   assert.deepEqual(shareProvenGroups({ ...queueJobs, planFull: true }, proof, noDrift).rootGroups, queueJobs.rootGroups);
+});
+
+test("a group that holds more than one pull request shares nothing", () => {
+  assert.deepEqual(shareProvenGroups(queueJobs, proof, { ...noDrift, entries: 2 }).rootGroups, queueJobs.rootGroups);
+  assert.equal(shareProvenGroups(queueJobs, proof, { ...noDrift, entries: 2 }).api, true);
 });
 
 test("the checks group always runs", () => {

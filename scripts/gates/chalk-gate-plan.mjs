@@ -632,10 +632,10 @@ function changedFiles(base) {
 // A merge queue group repeats the checks its pull request's own Gate run passed. A group is skipped when that run
 // proved it and nothing master gained since (the drift) is an input of it. The drift is selected by input, with test
 // files counting, so a change that only the queue's wider rules would have run is still run. The checks group, the
-// leak shards (all three or none, because the Root gate checks their reports together) and any drift that changes the
-// Gate itself are never skipped.
+// leak shards (all three or none, because the Root gate checks their reports together), any drift that changes the
+// Gate itself and any group that holds more than one pull request are never skipped.
 export function shareProvenGroups(jobs, proof, drift) {
-  if (jobs.full || jobs.planFull || drift.planFull) return { ...jobs, shared: [] };
+  if (jobs.full || jobs.planFull || drift.planFull || drift.entries !== 1) return { ...jobs, shared: [] };
   const proven = new Set(proof.rootGroups);
   const reusable = (group) => proven.has(group) && !drift.rootGroups.includes(group);
   const leakShards = jobs.rootGroups.filter((group) => group.startsWith("call-leaks-"));
@@ -671,7 +671,9 @@ function applyProof(jobs, base, proofPath) {
     const valid = typeof proof.base === "string" && /^[0-9a-f]{40}$/u.test(proof.base) && typeof proof.api === "boolean" && typeof proof.sync === "boolean" && Array.isArray(proof.rootGroups) && proof.rootGroups.every((group) => typeof group === "string");
     if (!valid) throw new GatePlanningError("invalid-proof", "The Gate proof is malformed");
     const driftFiles = gitLines(["diff", "--name-only", "--no-renames", proof.base, base]);
-    const drift = ciJobs(driftFiles, { base, snapshot: { mode: "ref", ref: "HEAD" } });
+    // The proof belongs to one pull request; a group that holds more than one carries changes the proof never saw.
+    const entries = Number(gitLines(["rev-list", "--count", `${base}..HEAD`])[0]);
+    const drift = { ...ciJobs(driftFiles, { base, snapshot: { mode: "ref", ref: "HEAD" } }), entries };
     const shared = shareProvenGroups(jobs, proof, drift);
     console.error(`Shared with the pull request's Gate run (${driftFiles.length} files of drift since ${proof.base.slice(0, 12)}): ${shared.shared.join(", ") || "nothing"}`);
     return shared;
