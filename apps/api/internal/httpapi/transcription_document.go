@@ -43,7 +43,7 @@ type transcriptDocumentCueIdentity struct {
 }
 
 func transcriptDocumentEndpoint(service TranscriptArtifactService, objects RecordingObjectService, authorizer TenantAuthorizer) Endpoint[transcriptDocumentRequest, transcriptDocumentResponse] {
-	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/transcripts/{transcript_id}/document", "getTranscriptDocument", decodeTranscriptDocumentRequest, func(ctx context.Context, request transcriptDocumentRequest) (transcriptDocumentResponse, error) {
 		transcript, document, err := readTranscriptDocument(ctx, service, objects, authorizer, request)
 		if err != nil {
 			return transcriptDocumentResponse{}, err

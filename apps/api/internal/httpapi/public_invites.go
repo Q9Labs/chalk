@@ -241,7 +241,7 @@ func publicInvitePublicEndpoints(service PublicInviteService, origin func(http.H
 }
 
 func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer) Endpoint[publicInvitePathRequest, publicInviteResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "/tenants/{tenant_id}/spaces/{space_id}/public-invite", "getSpacePublicInvite", decodePublicInvitePath, func(ctx context.Context, request publicInvitePathRequest) (publicInviteResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "getSpacePublicInvite", decodePublicInvitePath, func(ctx context.Context, request publicInvitePathRequest) (publicInviteResponse, error) {
 		if service == nil {
 			return publicInviteResponse{}, apiErrorServiceUnavailable
 		}
@@ -259,7 +259,7 @@ func getSpacePublicInviteEndpoint(service PublicInviteService, authorizer Tenant
 }
 
 func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[updatePublicInviteRequest, publicInviteResponse] {
-	endpoint := Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "/tenants/{tenant_id}/spaces/{space_id}/public-invite", "updateSpacePublicInvite", decodeUpdatePublicInviteRequest, func(ctx context.Context, request updatePublicInviteRequest) (publicInviteResponse, error) {
+	endpoint := Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite", "updateSpacePublicInvite", decodeUpdatePublicInviteRequest, func(ctx context.Context, request updatePublicInviteRequest) (publicInviteResponse, error) {
 		if service == nil {
 			return publicInviteResponse{}, apiErrorServiceUnavailable
 		}
@@ -286,7 +286,7 @@ func updateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 }
 
 func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler) Endpoint[rotatePublicInviteRequest, publicInviteResponse] {
-	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "rotateSpacePublicInvite", decodeRotatePublicInviteRequest, func(ctx context.Context, request rotatePublicInviteRequest) (publicInviteResponse, error) {
+	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-invite/rotations", "rotateSpacePublicInvite", decodeRotatePublicInviteRequest, func(ctx context.Context, request rotatePublicInviteRequest) (publicInviteResponse, error) {
 		if service == nil {
 			return publicInviteResponse{}, apiErrorServiceUnavailable
 		}
@@ -311,7 +311,7 @@ func rotateSpacePublicInviteEndpoint(service PublicInviteService, authorizer Ten
 }
 
 func listPublicAdmissionRequestsEndpoint(service PublicInviteService, authorizer TenantAuthorizer) Endpoint[listPublicAdmissionRequestsRequest, publicAdmissionRequestPageResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests", "/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests", "listSpacePublicAdmissionRequests", decodeListPublicAdmissionRequestsRequest, func(ctx context.Context, request listPublicAdmissionRequestsRequest) (publicAdmissionRequestPageResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests", "listSpacePublicAdmissionRequests", decodeListPublicAdmissionRequestsRequest, func(ctx context.Context, request listPublicAdmissionRequestsRequest) (publicAdmissionRequestPageResponse, error) {
 		if service == nil {
 			return publicAdmissionRequestPageResponse{}, apiErrorServiceUnavailable
 		}
@@ -338,7 +338,7 @@ func denyPublicAdmissionRequestEndpoint(service PublicInviteService, authorizer 
 }
 
 func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorizer TenantAuthorizer, origin func(http.Handler) http.Handler, action, operationID string, decision publicinvites.AdmissionDecision) Endpoint[decidePublicAdmissionRequestRequest, publicAdmissionRequestResponse] {
-	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, "/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, operationID, decodeDecidePublicAdmissionRequest, func(ctx context.Context, request decidePublicAdmissionRequestRequest) (publicAdmissionRequestResponse, error) {
+	endpoint := Post("/v1/tenants/{tenant_id}/spaces/{space_id}/public-admission-requests/{request_handle}/"+action, operationID, decodeDecidePublicAdmissionRequest, func(ctx context.Context, request decidePublicAdmissionRequestRequest) (publicAdmissionRequestResponse, error) {
 		if service == nil {
 			return publicAdmissionRequestResponse{}, apiErrorServiceUnavailable
 		}
@@ -372,7 +372,7 @@ func decidePublicAdmissionRequestEndpoint(service PublicInviteService, authorize
 }
 
 func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteArrivalRequest, publicSpaceCreatedResponse] {
-	endpoint := Post("/v1/public/spaces", "/public/spaces", "createPublicSpace", decodePublicSpaceCreateRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceCreatedResponse, error) {
+	endpoint := Post("/v1/public/spaces", "createPublicSpace", decodePublicSpaceCreateRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceCreatedResponse, error) {
 		if service == nil {
 			return publicSpaceCreatedResponse{}, apiErrorServiceUnavailable
 		}
@@ -393,7 +393,7 @@ func createPublicSpaceEndpoint(service PublicInviteService, origin func(http.Han
 }
 
 func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteArrivalRequest, publicSpaceArrivalResponse] {
-	endpoint := Post("/v1/public/space-invite-arrivals", "/public/space-invite-arrivals", "arriveBySpacePublicInvite", decodePublicInviteArrivalRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceArrivalResponse, error) {
+	endpoint := Post("/v1/public/space-invite-arrivals", "arriveBySpacePublicInvite", decodePublicInviteArrivalRequest, func(ctx context.Context, request publicInviteArrivalRequest) (publicSpaceArrivalResponse, error) {
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
@@ -415,7 +415,7 @@ func arriveByPublicInviteEndpoint(service PublicInviteService, origin func(http.
 }
 
 func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[publicInviteStatusRequest, publicSpaceArrivalResponse] {
-	return Get("/v1/public/space-invite-arrival", "/public/space-invite-arrival", "getSpacePublicInviteArrival", decodePublicInviteStatusRequest, func(ctx context.Context, request publicInviteStatusRequest) (publicSpaceArrivalResponse, error) {
+	return Get("/v1/public/space-invite-arrival", "getSpacePublicInviteArrival", decodePublicInviteStatusRequest, func(ctx context.Context, request publicInviteStatusRequest) (publicSpaceArrivalResponse, error) {
 		if service == nil {
 			return publicSpaceArrivalResponse{}, apiErrorServiceUnavailable
 		}
@@ -430,7 +430,7 @@ func publicInviteArrivalStatusEndpoint(service PublicInviteService) Endpoint[pub
 }
 
 func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteRefreshRequest, publicAccessGrantResponse] {
-	endpoint := Post("/v1/public/space-invite-arrival/access-grants", "/public/space-invite-arrival/access-grants", "refreshSpacePublicInviteAccess", decodePublicInviteRefreshRequest, func(ctx context.Context, request publicInviteRefreshRequest) (publicAccessGrantResponse, error) {
+	endpoint := Post("/v1/public/space-invite-arrival/access-grants", "refreshSpacePublicInviteAccess", decodePublicInviteRefreshRequest, func(ctx context.Context, request publicInviteRefreshRequest) (publicAccessGrantResponse, error) {
 		if service == nil {
 			return publicAccessGrantResponse{}, apiErrorServiceUnavailable
 		}
@@ -452,7 +452,7 @@ func refreshPublicInviteAccessEndpoint(service PublicInviteService, origin func(
 }
 
 func leavePublicInviteArrivalEndpoint(service PublicInviteService, origin func(http.Handler) http.Handler) Endpoint[publicInviteLeaveRequest, struct{}] {
-	endpoint := Delete("/v1/public/space-invite-arrival", "/public/space-invite-arrival", "leaveSpacePublicInviteArrival", decodePublicInviteLeaveRequest, func(ctx context.Context, request publicInviteLeaveRequest) (struct{}, error) {
+	endpoint := Delete("/v1/public/space-invite-arrival", "leaveSpacePublicInviteArrival", decodePublicInviteLeaveRequest, func(ctx context.Context, request publicInviteLeaveRequest) (struct{}, error) {
 		if service == nil {
 			return struct{}{}, apiErrorServiceUnavailable
 		}

@@ -60,7 +60,7 @@ func decodeListSpaceLiveEpisodesRequest(r *http.Request) (listSpaceLiveEpisodesR
 }
 
 func listSpaceLiveEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceLiveEpisodesRequest, spaceLiveEpisodeListResponse] {
-	return Get("/v1/tenants/{tenant_id}/live-episodes", "/tenants/{tenant_id}/live-episodes", "listSpaceLiveEpisodes", decodeListSpaceLiveEpisodesRequest, func(ctx context.Context, request listSpaceLiveEpisodesRequest) (spaceLiveEpisodeListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/live-episodes", "listSpaceLiveEpisodes", decodeListSpaceLiveEpisodesRequest, func(ctx context.Context, request listSpaceLiveEpisodesRequest) (spaceLiveEpisodeListResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
 			return spaceLiveEpisodeListResponse{}, err
 		}

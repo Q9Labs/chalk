@@ -38,13 +38,13 @@ var (
 )
 
 func problemReportEndpoints(service ProblemReportService, verifier ParticipantMediaVerifier, limits RateLimitOptions) []RouteEndpoint {
-	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
+	availability := Get("/v1/tenants/{tenant_id}/problem-reports/availability", "getProblemReportAvailability",
 		func(r *http.Request) (struct{}, error) { _, err := tenantIDRequest(r); return struct{}{}, err },
 		func(context.Context, struct{}) (problemReportAvailability, error) {
 			return problemReportAvailability{Available: service != nil && service.Available()}, nil
 		},
 	).Parameters(tenantIDParameter()).Responds(http.StatusOK, "ProblemReportAvailability", problemReportAvailability{}).Errors(apiErrorInvalidTenantID)
-	submit := Post("/v1/tenants/{tenant_id}/problem-reports", "/tenants/{tenant_id}/problem-reports", "sendProblemReport",
+	submit := Post("/v1/tenants/{tenant_id}/problem-reports", "sendProblemReport",
 		func(r *http.Request) (problemreports.Report, error) {
 			r.Body = http.MaxBytesReader(nil, r.Body, reportBodyLimitBytes)
 			decoder := json.NewDecoder(r.Body)

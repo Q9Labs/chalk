@@ -149,7 +149,7 @@ func recordingEndpoints(service RecordingService, exports RecordingExportService
 }
 
 func requestRecordingExportEndpoint(service RecordingService, exports RecordingExportService, authorizer TenantAuthorizer) Endpoint[requestRecordingExportEndpointRequest, requestRecordingExportResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/export", "/tenants/{tenant_id}/recordings/{recording_id}/export", "requestRecordingExport", decodeRequestRecordingExportEndpointRequest, func(ctx context.Context, request requestRecordingExportEndpointRequest) (requestRecordingExportResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/export", "requestRecordingExport", decodeRequestRecordingExportEndpointRequest, func(ctx context.Context, request requestRecordingExportEndpointRequest) (requestRecordingExportResponse, error) {
 		if service == nil || exports == nil {
 			return requestRecordingExportResponse{}, apiErrorServiceUnavailable
 		}
@@ -190,7 +190,7 @@ func decodeRequestRecordingExportEndpointRequest(r *http.Request) (requestRecord
 }
 
 func listRecordingsEndpoint(service RecordingService, artifacts RecordingExportService, authorizer TenantAuthorizer) Endpoint[listRecordingsRequest, recordingListResponse] {
-	return Get("/v1/tenants/{tenant_id}/recordings", "/tenants/{tenant_id}/recordings", "listRecordings", decodeListRecordingsRequest, func(ctx context.Context, request listRecordingsRequest) (recordingListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/recordings", "listRecordings", decodeListRecordingsRequest, func(ctx context.Context, request listRecordingsRequest) (recordingListResponse, error) {
 		if service == nil || artifacts == nil {
 			return recordingListResponse{}, apiErrorServiceUnavailable
 		}
@@ -212,7 +212,7 @@ func listRecordingsEndpoint(service RecordingService, artifacts RecordingExportS
 }
 
 func getRecordingEndpoint(service RecordingService, artifacts RecordingExportService, authorizer TenantAuthorizer) Endpoint[getRecordingRequest, recordingResponse] {
-	return Get("/v1/tenants/{tenant_id}/recordings/{recording_id}", "/tenants/{tenant_id}/recordings/{recording_id}", "getRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (recordingResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/recordings/{recording_id}", "getRecording", decodeGetRecordingRequest, func(ctx context.Context, request getRecordingRequest) (recordingResponse, error) {
 		if service == nil || artifacts == nil {
 			return recordingResponse{}, apiErrorServiceUnavailable
 		}
@@ -238,7 +238,7 @@ func getRecordingEndpoint(service RecordingService, artifacts RecordingExportSer
 }
 
 func createRecordingDownloadURLEndpoint(service RecordingService, exports RecordingExportService, downloads RecordingDownloadService, authorizer TenantAuthorizer) Endpoint[createRecordingDownloadURLEndpointRequest, recordingDownloadURLResponse] {
-	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/recordings/{recording_id}/download-url", "createRecordingDownloadURL", decodeCreateRecordingDownloadURLRequest, func(ctx context.Context, request createRecordingDownloadURLEndpointRequest) (recordingDownloadURLResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readRecordingsPermission); err != nil {
 			return recordingDownloadURLResponse{}, err
 		}

@@ -87,7 +87,6 @@ func issueAccessGrantEndpoint(
 ) Endpoint[issueAccessGrantRequest, accessGrantResponse] {
 	return Post(
 		"/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/access-grant",
 		"issueAccessGrant",
 		decodeIssueAccessGrantRequest,
 		func(ctx context.Context, request issueAccessGrantRequest) (_ accessGrantResponse, failure error) {

@@ -129,7 +129,7 @@ func apiKeyEndpoints(service APIKeyService, authorizer TenantAuthorizer) []Route
 }
 
 func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[createAPIKeyRequest, apiKeyWithSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/api-keys", "createAPIKey", decodeCreateAPIKeyRequest, func(ctx context.Context, request createAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
 		}
@@ -169,7 +169,7 @@ func createAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 }
 
 func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[listAPIKeysRequest, apiKeyListResponse] {
-	return Get("/v1/tenants/{tenant_id}/api-keys", "/tenants/{tenant_id}/api-keys", "listAPIKeys", decodeListAPIKeysRequest, func(ctx context.Context, request listAPIKeysRequest) (apiKeyListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/api-keys", "listAPIKeys", decodeListAPIKeysRequest, func(ctx context.Context, request listAPIKeysRequest) (apiKeyListResponse, error) {
 		if service == nil {
 			return apiKeyListResponse{}, apiErrorServiceUnavailable
 		}
@@ -192,7 +192,7 @@ func listAPIKeysEndpoint(service APIKeyService, authorizer TenantAuthorizer) End
 }
 
 func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[rotateAPIKeyRequest, apiKeyWithSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/api-keys/{api_key_id}/rotate", "rotateAPIKey", decodeRotateAPIKeyRequest, func(ctx context.Context, request rotateAPIKeyRequest) (apiKeyWithSecretResponse, error) {
 		if service == nil {
 			return apiKeyWithSecretResponse{}, apiErrorServiceUnavailable
 		}
@@ -225,7 +225,7 @@ func rotateAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) En
 }
 
 func revokeAPIKeyEndpoint(service APIKeyService, authorizer TenantAuthorizer) Endpoint[apiKeyIDsRequest, noResponse] {
-	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
+	return Delete("/v1/tenants/{tenant_id}/api-keys/{api_key_id}", "revokeAPIKey", decodeAPIKeyIDsRequest, func(ctx context.Context, request apiKeyIDsRequest) (noResponse, error) {
 		if service == nil {
 			return noResponse{}, apiErrorServiceUnavailable
 		}

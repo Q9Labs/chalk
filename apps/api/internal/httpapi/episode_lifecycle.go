@@ -248,7 +248,7 @@ func episodeLifecycleEndpoints(spacesService SpaceService, tenantsService Tenant
 }
 
 func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[createEpisodeEndpointRequest, episodeResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes", "/tenants/{tenant_id}/spaces/{space_id}/episodes", "createEpisode", decodeCreateEpisodeRequest, func(ctx context.Context, request createEpisodeEndpointRequest) (episodeResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes", "createEpisode", decodeCreateEpisodeRequest, func(ctx context.Context, request createEpisodeEndpointRequest) (episodeResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return episodeResponse{}, err
 		}
@@ -267,7 +267,7 @@ func createEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAut
 }
 
 func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listEpisodesRequest, episodeListResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes", "/tenants/{tenant_id}/spaces/{space_id}/episodes", "listEpisodes", decodeListEpisodesRequest, func(ctx context.Context, request listEpisodesRequest) (episodeListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes", "listEpisodes", decodeListEpisodesRequest, func(ctx context.Context, request listEpisodesRequest) (episodeListResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
 			return episodeListResponse{}, err
 		}
@@ -293,7 +293,7 @@ func listEpisodesEndpoint(service EpisodeLifecycleService, authorizer TenantAuth
 }
 
 func getEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[getEpisodeRequest, episodeResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}", "getEpisode", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}", "getEpisode", decodeGetEpisodeRequest, func(ctx context.Context, request getEpisodeRequest) (episodeResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
 			return episodeResponse{}, err
 		}
@@ -311,7 +311,7 @@ func getEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 }
 
 func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAuthorizer) Endpoint[issueSyncTokenEndpointRequest, syncTokenResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token", "issueEpisodeParticipantSyncToken", decodeIssueSyncTokenRequest, func(ctx context.Context, request issueSyncTokenEndpointRequest) (syncTokenResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/sync-token", "issueEpisodeParticipantSyncToken", decodeIssueSyncTokenRequest, func(ctx context.Context, request issueSyncTokenEndpointRequest) (syncTokenResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return syncTokenResponse{}, err
 		}
@@ -329,7 +329,7 @@ func issueSyncTokenEndpoint(service SyncTokenRefreshIssuer, authorizer TenantAut
 }
 
 func admitParticipantEndpoint(service EpisodeLifecycleService, tokens SyncTokenIssuer, refresh SyncTokenRefreshIssuer, mediaTokens ParticipantMediaIssuer, generations ParticipantGenerationAuthorizer, spacesService SpaceService, tenantsService TenantService, media MediaPlaneResolver, authorizer TenantAuthorizer) Endpoint[admitParticipantEndpointRequest, participantLifecycleResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants", "admitEpisodeParticipant", decodeAdmitParticipantRequest, func(ctx context.Context, request admitParticipantEndpointRequest) (participantLifecycleResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return participantLifecycleResponse{}, err
 		}
@@ -421,7 +421,7 @@ func participantScope(participant episodes.Participant) mediaplane.Scope {
 }
 
 func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[removeParticipantEndpointRequest, participantRemovalResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove", "removeEpisodeParticipant", decodeRemoveParticipantRequest, func(ctx context.Context, request removeParticipantEndpointRequest) (participantRemovalResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/remove", "removeEpisodeParticipant", decodeRemoveParticipantRequest, func(ctx context.Context, request removeParticipantEndpointRequest) (participantRemovalResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return participantRemovalResponse{}, err
 		}
@@ -440,7 +440,7 @@ func removeParticipantEndpoint(service EpisodeLifecycleService, authorizer Tenan
 }
 
 func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[endEpisodeEndpointRequest, episodeControlResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end", "endEpisode", decodeEndEpisodeRequest, func(ctx context.Context, request endEpisodeEndpointRequest) (episodeControlResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/end", "endEpisode", decodeEndEpisodeRequest, func(ctx context.Context, request endEpisodeEndpointRequest) (episodeControlResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return episodeControlResponse{}, err
 		}
@@ -458,7 +458,7 @@ func endEpisodeEndpoint(service EpisodeLifecycleService, authorizer TenantAuthor
 }
 
 func setDeadlineEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[setDeadlineEndpointRequest, episodeControlResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline", "/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline", "setEpisodeDeadline", decodeSetDeadlineRequest, func(ctx context.Context, request setDeadlineEndpointRequest) (episodeControlResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/deadline", "setEpisodeDeadline", decodeSetDeadlineRequest, func(ctx context.Context, request setDeadlineEndpointRequest) (episodeControlResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, writeEpisodesPermission); err != nil {
 			return episodeControlResponse{}, err
 		}

@@ -2,6 +2,9 @@ package httpapi
 
 import "github.com/q9labs/chalk/apps/api/internal/ratelimit"
 
+// apiPrefix is where the public API mounts; every route Path starts with it.
+const apiPrefix = "/v1"
+
 type APIAuth string
 
 const (
@@ -47,7 +50,6 @@ type APIRouteContract struct {
 	OperationID    string
 	Method         string
 	Path           string
-	MountPath      string
 	Auth           APIAuth
 	RateLimit      ratelimit.Policy
 	BodyLimitBytes int64

@@ -86,7 +86,7 @@ func membershipEndpoints(service MembershipService, authorizer TenantAuthorizer)
 }
 
 func createMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[createMembershipEndpointRequest, membershipResponse] {
-	return Post("/v1/tenants/{tenant_id}/memberships", "/tenants/{tenant_id}/memberships", "createMembership", decodeCreateMembershipRequest, func(ctx context.Context, request createMembershipEndpointRequest) (membershipResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/memberships", "createMembership", decodeCreateMembershipRequest, func(ctx context.Context, request createMembershipEndpointRequest) (membershipResponse, error) {
 		if service == nil {
 			return membershipResponse{}, apiErrorServiceUnavailable
 		}
@@ -124,7 +124,7 @@ func createMembershipEndpoint(service MembershipService, authorizer TenantAuthor
 }
 
 func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[listMembershipsRequest, membershipListResponse] {
-	return Get("/v1/tenants/{tenant_id}/memberships", "/tenants/{tenant_id}/memberships", "listMemberships", decodeListMembershipsRequest, func(ctx context.Context, request listMembershipsRequest) (membershipListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/memberships", "listMemberships", decodeListMembershipsRequest, func(ctx context.Context, request listMembershipsRequest) (membershipListResponse, error) {
 		if service == nil {
 			return membershipListResponse{}, apiErrorServiceUnavailable
 		}
@@ -154,7 +154,7 @@ func listMembershipsEndpoint(service MembershipService, authorizer TenantAuthori
 }
 
 func updateMembershipEndpoint(service MembershipService, authorizer TenantAuthorizer) Endpoint[updateMembershipEndpointRequest, membershipResponse] {
-	return Patch("/v1/tenants/{tenant_id}/memberships/{membership_id}", "/tenants/{tenant_id}/memberships/{membership_id}", "updateMembership", decodeUpdateMembershipRequest, func(ctx context.Context, request updateMembershipEndpointRequest) (membershipResponse, error) {
+	return Patch("/v1/tenants/{tenant_id}/memberships/{membership_id}", "updateMembership", decodeUpdateMembershipRequest, func(ctx context.Context, request updateMembershipEndpointRequest) (membershipResponse, error) {
 		if service == nil {
 			return membershipResponse{}, apiErrorServiceUnavailable
 		}

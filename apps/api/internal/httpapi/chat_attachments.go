@@ -95,7 +95,6 @@ func chatAttachmentEndpoints(service ChatAttachmentService, verifier ChatPartici
 func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[initiateChatAttachmentRequest, chatAttachmentUploadResponse] {
 	return Post(
 		"/v1/chat/attachments/uploads",
-		"/chat/attachments/uploads",
 		"initiateChatAttachmentUpload",
 		decodeInitiateChatAttachmentRequest,
 		func(ctx context.Context, request initiateChatAttachmentRequest) (chatAttachmentUploadResponse, error) {
@@ -132,7 +131,6 @@ func initiateChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[init
 func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[finalizeChatAttachmentRequest, chatAttachmentResponse] {
 	return Post(
 		"/v1/chat/attachments/uploads/{uploadId}/finalize",
-		"/chat/attachments/uploads/{uploadId}/finalize",
 		"finalizeChatAttachmentUpload",
 		decodeFinalizeChatAttachmentRequest,
 		func(ctx context.Context, request finalizeChatAttachmentRequest) (chatAttachmentResponse, error) {
@@ -161,7 +159,6 @@ func finalizeChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[fina
 func downloadChatAttachmentEndpoint(service ChatAttachmentService) Endpoint[downloadChatAttachmentRequest, chatAttachmentDownloadResponse] {
 	return Get(
 		"/v1/chat/attachments/{attachmentId}/download",
-		"/chat/attachments/{attachmentId}/download",
 		"getChatAttachmentDownload",
 		decodeDownloadChatAttachmentRequest,
 		func(ctx context.Context, request downloadChatAttachmentRequest) (chatAttachmentDownloadResponse, error) {

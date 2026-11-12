@@ -152,7 +152,7 @@ func spaceEndpoints(service SpaceService, authorizer TenantAuthorizer) []RouteEn
 }
 
 func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[createSpaceEndpointRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces", "/tenants/{tenant_id}/spaces", "createSpace", decodeCreateSpaceRequest, func(ctx context.Context, request createSpaceEndpointRequest) (spaceResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces", "createSpace", decodeCreateSpaceRequest, func(ctx context.Context, request createSpaceEndpointRequest) (spaceResponse, error) {
 		if service == nil {
 			return spaceResponse{}, apiErrorServiceUnavailable
 		}
@@ -180,7 +180,7 @@ func createSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 }
 
 func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[listSpacesRequest, spaceListResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces", "/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces", "listSpaces", decodeListSpacesRequest, func(ctx context.Context, request listSpacesRequest) (spaceListResponse, error) {
 		if service == nil {
 			return spaceListResponse{}, apiErrorServiceUnavailable
 		}
@@ -212,7 +212,7 @@ func listSpacesEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpo
 }
 
 func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}", "/tenants/{tenant_id}/spaces/{space_id}", "getSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}", "getSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 		if service == nil {
 			return spaceResponse{}, apiErrorServiceUnavailable
 		}
@@ -234,7 +234,7 @@ func getSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoin
 }
 
 func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[updateSpaceEndpointRequest, spaceResponse] {
-	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}", "/tenants/{tenant_id}/spaces/{space_id}", "updateSpace", decodeUpdateSpaceRequest, func(ctx context.Context, request updateSpaceEndpointRequest) (spaceResponse, error) {
+	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}", "updateSpace", decodeUpdateSpaceRequest, func(ctx context.Context, request updateSpaceEndpointRequest) (spaceResponse, error) {
 		if service == nil {
 			return spaceResponse{}, apiErrorServiceUnavailable
 		}
@@ -262,7 +262,7 @@ func updateSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endp
 }
 
 func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/archive", "/tenants/{tenant_id}/spaces/{space_id}/archive", "archiveSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/archive", "archiveSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 		archive, ok := service.(SpaceArchiveService)
 		if !ok {
 			return spaceResponse{}, apiErrorServiceUnavailable
@@ -281,7 +281,7 @@ func archiveSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) End
 }
 
 func restoreSpaceEndpoint(service SpaceService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, spaceResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/restore", "/tenants/{tenant_id}/spaces/{space_id}/restore", "restoreSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/restore", "restoreSpace", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (spaceResponse, error) {
 		restore, ok := service.(SpaceArchiveService)
 		if !ok {
 			return spaceResponse{}, apiErrorServiceUnavailable

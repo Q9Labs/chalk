@@ -59,7 +59,7 @@ func decodeListSpaceActivityRequest(r *http.Request) (listSpaceActivityRequest, 
 }
 
 func listSpaceActivityEndpoint(service EpisodeLifecycleService, authorizer TenantAuthorizer) Endpoint[listSpaceActivityRequest, spaceActivityListResponse] {
-	return Get("/v1/tenants/{tenant_id}/space-activity", "/tenants/{tenant_id}/space-activity", "listSpaceActivity", decodeListSpaceActivityRequest, func(ctx context.Context, request listSpaceActivityRequest) (spaceActivityListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/space-activity", "listSpaceActivity", decodeListSpaceActivityRequest, func(ctx context.Context, request listSpaceActivityRequest) (spaceActivityListResponse, error) {
 		if err := authorizeTenant(ctx, authorizer, request.TenantID, readEpisodesPermission); err != nil {
 			return spaceActivityListResponse{}, err
 		}

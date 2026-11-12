@@ -53,7 +53,7 @@ func recordingPreparationEndpoints(service RecordingPreparationService, authoriz
 }
 
 func getRecordingPreparationEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[getSpaceRequest, preparationResponse] {
-	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "getSpaceRecordingPreparation", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (preparationResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "getSpaceRecordingPreparation", decodeGetSpaceRequest, func(ctx context.Context, request getSpaceRequest) (preparationResponse, error) {
 		if service == nil {
 			return preparationResponse{}, apiErrorServiceUnavailable
 		}
@@ -70,7 +70,7 @@ func getRecordingPreparationEndpoint(service RecordingPreparationService, author
 }
 
 func prepareRecordingEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
-	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "prepareSpaceRecording", decodePreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
+	return Patch("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation", "prepareSpaceRecording", decodePreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
 		if service == nil {
 			return preparationResponse{}, apiErrorServiceUnavailable
 		}
@@ -87,7 +87,7 @@ func prepareRecordingEndpoint(service RecordingPreparationService, authorizer Te
 }
 
 func cancelRecordingPreparationEndpoint(service RecordingPreparationService, authorizer TenantAuthorizer) Endpoint[recordingpreparation.Input, preparationResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation/cancel", "/tenants/{tenant_id}/spaces/{space_id}/recording-preparation/cancel", "cancelSpaceRecordingPreparation", decodeCancelPreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/recording-preparation/cancel", "cancelSpaceRecordingPreparation", decodeCancelPreparationRequest, func(ctx context.Context, input recordingpreparation.Input) (preparationResponse, error) {
 		if service == nil {
 			return preparationResponse{}, apiErrorServiceUnavailable
 		}

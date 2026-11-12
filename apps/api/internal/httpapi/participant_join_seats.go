@@ -23,8 +23,7 @@ type cancelParticipantJoinResponse struct {
 // The signed grant authorizes only cancellation of its own pending generation.
 // Do not require active authority: expired/cancelled retries must be idempotent.
 func cancelParticipantJoinEndpoint(service ParticipantJoinService, verifier ParticipantMediaVerifier) Endpoint[cancelParticipantJoinRequest, cancelParticipantJoinResponse] {
-	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join",
-		"/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "cancelEpisodeParticipantJoin",
+	return Post("/v1/tenants/{tenant_id}/spaces/{space_id}/episodes/{episode_id}/participants/{participant_id}/cancel-join", "cancelEpisodeParticipantJoin",
 		func(r *http.Request) (cancelParticipantJoinRequest, error) {
 			route, err := decodeIssueSyncTokenRequest(r)
 			if err != nil {

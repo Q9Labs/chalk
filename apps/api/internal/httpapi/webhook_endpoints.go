@@ -10,7 +10,7 @@ import (
 type noResponse struct{}
 
 func createWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[createWebhookRequest, webhookEndpointWithSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/webhook-endpoints", "/tenants/{tenant_id}/webhook-endpoints", "createWebhookEndpoint", decodeCreateWebhookRequest, func(ctx context.Context, request createWebhookRequest) (webhookEndpointWithSecretResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/webhook-endpoints", "createWebhookEndpoint", decodeCreateWebhookRequest, func(ctx context.Context, request createWebhookRequest) (webhookEndpointWithSecretResponse, error) {
 		if service == nil {
 			return webhookEndpointWithSecretResponse{}, apiErrorServiceUnavailable
 		}
@@ -26,7 +26,7 @@ func createWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 }
 
 func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhooksRequest, webhookEndpointListResponse] {
-	return Get("/v1/tenants/{tenant_id}/webhook-endpoints", "/tenants/{tenant_id}/webhook-endpoints", "listWebhookEndpoints", decodeListWebhooksRequest, func(ctx context.Context, request listWebhooksRequest) (webhookEndpointListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/webhook-endpoints", "listWebhookEndpoints", decodeListWebhooksRequest, func(ctx context.Context, request listWebhooksRequest) (webhookEndpointListResponse, error) {
 		if service == nil {
 			return webhookEndpointListResponse{}, apiErrorServiceUnavailable
 		}
@@ -50,7 +50,7 @@ func listWebhookEndpoints(service WebhookService, authorizer TenantAuthorizer) E
 }
 
 func getWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookIDsRequest, webhookEndpointResponse] {
-	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "getWebhookEndpoint", decodeWebhookIDsRequest, func(ctx context.Context, request webhookIDsRequest) (webhookEndpointResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "getWebhookEndpoint", decodeWebhookIDsRequest, func(ctx context.Context, request webhookIDsRequest) (webhookEndpointResponse, error) {
 		if service == nil {
 			return webhookEndpointResponse{}, apiErrorServiceUnavailable
 		}
@@ -63,7 +63,7 @@ func getWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) End
 }
 
 func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[patchWebhookRequest, webhookEndpointResponse] {
-	return Patch("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "updateWebhookEndpoint", decodePatchWebhookRequest, func(ctx context.Context, request patchWebhookRequest) (webhookEndpointResponse, error) {
+	return Patch("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "updateWebhookEndpoint", decodePatchWebhookRequest, func(ctx context.Context, request patchWebhookRequest) (webhookEndpointResponse, error) {
 		if service == nil {
 			return webhookEndpointResponse{}, apiErrorServiceUnavailable
 		}
@@ -76,7 +76,7 @@ func patchWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) E
 }
 
 func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[deleteWebhookRequest, noResponse] {
-	return Delete("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "deleteWebhookEndpoint", decodeDeleteWebhookRequest, func(ctx context.Context, request deleteWebhookRequest) (noResponse, error) {
+	return Delete("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}", "deleteWebhookEndpoint", decodeDeleteWebhookRequest, func(ctx context.Context, request deleteWebhookRequest) (noResponse, error) {
 		if service == nil {
 			return noResponse{}, apiErrorServiceUnavailable
 		}
@@ -88,7 +88,7 @@ func deleteWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) 
 }
 
 func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[rotateWebhookRequest, rotateWebhookSecretResponse] {
-	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret", "rotateWebhookEndpointSecret", decodeRotateWebhookRequest, func(ctx context.Context, request rotateWebhookRequest) (rotateWebhookSecretResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/rotate-secret", "rotateWebhookEndpointSecret", decodeRotateWebhookRequest, func(ctx context.Context, request rotateWebhookRequest) (rotateWebhookSecretResponse, error) {
 		if service == nil {
 			return rotateWebhookSecretResponse{}, apiErrorServiceUnavailable
 		}
@@ -101,7 +101,7 @@ func rotateWebhookSecretEndpoint(service WebhookService, authorizer TenantAuthor
 }
 
 func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookActionRequest, webhookDeliveryCreatedResponse] {
-	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test", "testWebhookEndpoint", decodeWebhookActionRequest, func(ctx context.Context, request webhookActionRequest) (webhookDeliveryCreatedResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/test", "testWebhookEndpoint", decodeWebhookActionRequest, func(ctx context.Context, request webhookActionRequest) (webhookDeliveryCreatedResponse, error) {
 		if service == nil {
 			return webhookDeliveryCreatedResponse{}, apiErrorServiceUnavailable
 		}
@@ -114,7 +114,7 @@ func testWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) En
 }
 
 func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[listWebhookDeliveriesRequest, webhookDeliveryListResponse] {
-	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries", "listWebhookDeliveries", decodeListWebhookDeliveriesRequest, func(ctx context.Context, request listWebhookDeliveriesRequest) (webhookDeliveryListResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries", "listWebhookDeliveries", decodeListWebhookDeliveriesRequest, func(ctx context.Context, request listWebhookDeliveriesRequest) (webhookDeliveryListResponse, error) {
 		if service == nil {
 			return webhookDeliveryListResponse{}, apiErrorServiceUnavailable
 		}
@@ -138,7 +138,7 @@ func listWebhookDeliveriesEndpoint(service WebhookService, authorizer TenantAuth
 }
 
 func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryIDsRequest, webhookDeliveryDetailResponse] {
-	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}", "getWebhookDelivery", decodeWebhookDeliveryIDsRequest, func(ctx context.Context, request webhookDeliveryIDsRequest) (webhookDeliveryDetailResponse, error) {
+	return Get("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}", "getWebhookDelivery", decodeWebhookDeliveryIDsRequest, func(ctx context.Context, request webhookDeliveryIDsRequest) (webhookDeliveryDetailResponse, error) {
 		if service == nil {
 			return webhookDeliveryDetailResponse{}, apiErrorServiceUnavailable
 		}
@@ -154,7 +154,7 @@ func getWebhookDeliveryEndpoint(service WebhookService, authorizer TenantAuthori
 }
 
 func redeliverWebhookEndpoint(service WebhookService, authorizer TenantAuthorizer) Endpoint[webhookDeliveryActionRequest, webhookDeliveryCreatedResponse] {
-	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver", "/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver", "redeliverWebhookDelivery", decodeWebhookDeliveryActionRequest, func(ctx context.Context, request webhookDeliveryActionRequest) (webhookDeliveryCreatedResponse, error) {
+	return Post("/v1/tenants/{tenant_id}/webhook-endpoints/{endpoint_id}/deliveries/{delivery_id}/redeliver", "redeliverWebhookDelivery", decodeWebhookDeliveryActionRequest, func(ctx context.Context, request webhookDeliveryActionRequest) (webhookDeliveryCreatedResponse, error) {
 		if service == nil {
 			return webhookDeliveryCreatedResponse{}, apiErrorServiceUnavailable
 		}
