@@ -72,7 +72,7 @@ test("a round avatar that fits its tile is not cut off", async () => {
 });
 
 test("a face that stops short of its round frame is found, a centered icon is not", async () => {
-  const circle = (child) => `<p>Nora</p><div aria-label="Avatar for Nora" style="width:28px;height:28px;border-radius:9999px;overflow:hidden">${child}</div>`;
+  const circle = (child) => `<p>Nora</p><div aria-label="Avatar for Nora"><div aria-hidden="true" style="width:28px;height:28px;border-radius:9999px;overflow:hidden">${child}</div></div>`;
   assert.ok((await checksFor(circle(`<div style="width:24px;height:24px;background:#456"></div>`))).includes("frame-unfilled"));
   assert.deepEqual(await checksFor(circle(`<div style="width:28px;height:28px;background:#456"></div>`)), []);
   assert.deepEqual(await checksFor(circle(`<div style="width:20px;height:20px;margin:4px;background:#456"></div>`)), []);

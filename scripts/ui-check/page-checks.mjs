@@ -155,7 +155,8 @@ export function pageChecks(options) {
   // frame-unfilled: a round frame that clips (an avatar) whose one child sits flush against one side and stops short of the
   // other, such as a face drawn 24px wide in a 28px circle. A child centered in its frame has equal gaps and is fine.
   for (const frame of everything) {
-    if (inertOrHidden(frame) || frame.children.length !== 1) continue;
+    // aria-hidden is fine here: a face is decorative to a screen reader and still seen by people.
+    if (frame.children.length !== 1) continue;
     const own = style(frame);
     const box = frame.getBoundingClientRect();
     if (box.width < 16 || box.height < 16 || own.overflowX === "visible" || Number.parseFloat(own.borderTopLeftRadius) < Math.min(box.width, box.height) / 2 - 1) continue;
