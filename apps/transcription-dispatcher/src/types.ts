@@ -1,3 +1,4 @@
+import type { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { TranscriptLanguageMode } from "@chalk/transcript-language";
 
 export type FetchLike = typeof fetch;
@@ -262,7 +263,7 @@ export interface ReleaseConfig {
     modelVersionPin?: string;
     adapterContractVersion?: string;
     corpusDigest?: string;
-    model: "openai/whisper-large-v3-turbo";
+    model: typeof DEEPINFRA_MODEL;
   };
   cloudflare:
     | { enabled: false }
@@ -270,7 +271,7 @@ export interface ReleaseConfig {
         enabled: true;
         token: string;
         accountId: string;
-        modelSlug: "@cf/openai/whisper-large-v3-turbo";
+        modelSlug: typeof CLOUDFLARE_MODEL;
         adapterContractVersion: string;
         corpusDigest: string;
       };

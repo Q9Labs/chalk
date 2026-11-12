@@ -1,9 +1,7 @@
 import { ConfigError } from "./errors.js";
+import { CLOUDFLARE_MODEL, DEEPINFRA_MODEL } from "./models.js";
 import type { DispatcherSecrets } from "./secrets.js";
 import type { ProviderPolicy, ReleaseConfig } from "./types.js";
-
-const CF_MODEL = "@cf/openai/whisper-large-v3-turbo" as const;
-const DI_MODEL = "openai/whisper-large-v3-turbo" as const;
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
   const value = env[key];
@@ -54,7 +52,6 @@ function policyFromEnv(env: NodeJS.ProcessEnv): ProviderPolicy {
 }
 
 export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
-  if (config.codeswitchProvider !== undefined && config.codeswitchProvider !== "mai") throw new ConfigError("code-switching provider is not release-qualified");
   if (config.codeswitchProvider === "mai" && !config.openRouterToken) throw new ConfigError("OpenRouter token is required for MAI");
   if (config.environment === "nightly" && (config.controlApiBaseUrl !== "https://nightly-api.chalkmeet.com" || config.controlApiAudience !== "chalk-nightly-control-api")) {
     throw new ConfigError("nightly requires its own control API URL and audience");
@@ -66,7 +63,6 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
   if (config.timeoutReserveMs < 60_000) throw new ConfigError("timeout reserve must be at least 60 seconds");
   if (!config.deepInfra.enabled && !config.cloudflare.enabled) throw new ConfigError("at least one transcription provider must be enabled");
   if (config.cloudflare.enabled) {
-    if (config.cloudflare.modelSlug !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
     if (!config.cloudflare.adapterContractVersion || !/^[A-Za-z0-9._-]+$/.test(config.cloudflare.adapterContractVersion)) {
       throw new ConfigError("Cloudflare adapter contract version is required");
     }
@@ -77,7 +73,6 @@ export function validateReleaseConfig(config: ReleaseConfig): ReleaseConfig {
     if (config.deepInfra.adapterContractVersion !== "deepinfra-native-whisper-turbo.v1") throw new ConfigError("DeepInfra adapter contract is not supported");
     if (!config.deepInfra.corpusDigest || !/^[a-f0-9]{32,128}$/i.test(config.deepInfra.corpusDigest)) throw new ConfigError("DeepInfra corpus digest is required when enabled");
   }
-  if (config.deepInfra.model !== DI_MODEL) throw new ConfigError("DeepInfra model is not release-qualified");
   return config;
 }
 
@@ -103,7 +98,7 @@ export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?
       ...(deepInfraEnabled ? { adapterContractVersion: required(env, "DEEPINFRA_ADAPTER_CONTRACT_VERSION"), corpusDigest: required(env, "DEEPINFRA_CORPUS_DIGEST") } : {}),
       ...(deepInfraEnabled && env.DEEPINFRA_EXECUTION_IDENTITY_PIN ? { executionIdentityPin: env.DEEPINFRA_EXECUTION_IDENTITY_PIN } : {}),
       ...(deepInfraEnabled && env.DEEPINFRA_MODEL_VERSION_PIN ? { modelVersionPin: env.DEEPINFRA_MODEL_VERSION_PIN } : {}),
-      model: DI_MODEL,
+      model: DEEPINFRA_MODEL,
     },
     cloudflare: cloudflareEnabled
       ? {
@@ -120,9 +115,9 @@ export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?
   return validateReleaseConfig(config);
 }
 
-function cloudflareModel(env: NodeJS.ProcessEnv): typeof CF_MODEL {
+function cloudflareModel(env: NodeJS.ProcessEnv): typeof CLOUDFLARE_MODEL {
   const model = required(env, "CLOUDFLARE_MODEL_SLUG");
-  if (model !== CF_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
+  if (model !== CLOUDFLARE_MODEL) throw new ConfigError("Cloudflare model slug is not release-qualified");
   return model;
 }
 
