@@ -1,5 +1,12 @@
 defmodule ChalkSync.Episodes.Coordinator do
-  @moduledoc "Disposable node-local delivery coordinator for one durable Episode.\n\nPostgreSQL remains authoritative. The coordinator owns only bounded socket\nqueues, coalesced head repair, and exact-next local delivery. Losing this\nprocess forces normal recovery and cannot lose a durable event or decision.\n"
+  @moduledoc """
+  Disposable node-local delivery coordinator for one durable Episode.
+
+  PostgreSQL remains authoritative. The coordinator owns only bounded socket queues, coalesced
+  head repair, and exact-next local delivery. Losing this process forces normal recovery and
+  cannot lose a durable event or decision.
+  """
+
   use GenServer
   alias ChalkSync.DeliveryGate
   alias ChalkSync.Live.Episode, as: LiveEpisode
