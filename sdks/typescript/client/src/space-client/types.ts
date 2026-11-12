@@ -12,18 +12,8 @@ import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
-export type AccessReason = "join" | "refresh" | "retry";
-export type AccessContext = {
-  readonly space: string;
-  readonly reason: AccessReason;
-  /** Forward to the access endpoint so media recovery can obtain a fresh connection. */
-  readonly replaceMediaConnection: boolean;
-  /** Automatic replacement succeeds only while this media binding is current. Omit for explicit takeover. */
-  readonly expectedMediaConnectionId?: string;
-  /** Forward unchanged for replay-safe recovery. Never log credentials. */
-  readonly currentMediaToken?: string;
-  readonly signal?: AbortSignal;
-};
+import type { AccessContext, AccessReason } from "../access/context";
+export type { AccessContext, AccessReason };
 /**
  * What `getAccess` resolves with: the server-minted grant returned unchanged, either as the
  * `Response` that carries it or as its decoded JSON. Chalk validates it before use; the
