@@ -541,7 +541,8 @@ function workspaceConcurrencyFrom(value) {
 
 export function gatePlanOptions(context, environment = process.env) {
   return {
-    full: context.scope === "full" || context.classification.fullRequired,
+    // q9gate marks every workflow file as gate behavior. The planner decides that itself, so a pull request that edits a release workflow keeps its narrow lanes.
+    full: context.scope === "full",
     scope: context.scope === "branch" ? "merge base to HEAD" : "staged",
     base: context.base ?? environment.GATE_BASE_REF ?? "origin/master",
     target: resolveGateTarget(environment.GATE_TARGET, context.target),

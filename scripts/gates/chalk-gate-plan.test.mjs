@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ciJobs, createGatePlan } from "./chalk-gate-plan.mjs";
+import { ciJobs, createGatePlan, gatePlanOptions } from "./chalk-gate-plan.mjs";
 
 const jobs = (files, event) => ciJobs(files, { event });
 const selected = (files, event) =>
@@ -95,4 +95,10 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
   assert.ok(selected(["features/scorecard/budgets.mjs"], "pull_request").includes("workflow-graph"));
   assert.ok(createGatePlan([], { full: true, scope: "merge base to HEAD", services: "external" }).tasks.find((task) => task.id === "workflow-graph").selected);
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("workflow-graph"));
+});
+
+test("q9gate's own gate-behavior classification does not widen a pull request that the planner narrows", () => {
+  const context = { scope: "branch", classification: { fullRequired: true } };
+  assert.equal(gatePlanOptions(context, { GATE_EVENT: "pull_request" }).full, false);
+  assert.equal(gatePlanOptions({ ...context, scope: "full" }, { GATE_EVENT: "pull_request" }).full, true);
 });
