@@ -73,8 +73,8 @@ writes. Failed or empty transactions emit no per-row transition event. A later
 expiry error cannot hide already committed job recovery. The aggregate
 `recording.pipeline_maintenance.completed` event remains unchanged. These events
 use the caller's context and introduce no durable journey event or lifecycle change.
-The repository diagnostics tests cover maintenance, preclaim recovery, expiry,
-no-op retries, transaction failure, and telemetry redaction with synthetic fixtures.
+The focused diagnostics regression checks that private job fields stay out of logs.
+Go compilation and vet cover the event wiring; no database fixture is required.
 
 ### Recording stopped callbacks
 
