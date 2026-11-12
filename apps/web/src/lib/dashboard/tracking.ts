@@ -118,23 +118,35 @@ export function selection(attempts: readonly Attempt[]) {
 
 export type TranscriptView = { readonly kind: "loading" } | { readonly kind: "unreadable"; readonly message: string } | { readonly kind: "ready"; readonly transcript: TranscriptDTO; readonly cues: readonly CueDTO[] } | { readonly kind: Exclude<TranscriptState, "ready"> };
 
-/** The transcript panel for one attempt. A failed read marks only this panel, and a transient one keeps the last good answer. */
-export function transcriptView(item: Attempt): TranscriptView {
-  const { read, listRead, recording } = item;
-  if (listRead.failure?.kind === "terminal") return { kind: "unreadable", message: listRead.failure.message };
-  const listed = recording.transcripts;
-  if (listed === undefined) return listRead.failure ? { kind: "unreadable", message: listRead.failure.message } : { kind: "loading" };
-  const transcript = listed.find(completedTranscript) ?? listed[0] ?? null;
-  // Without a transcript the recording's own preparation decides, so a recording that can't be read can't decide it.
-  if (!transcript && read.failure?.kind === "terminal") return { kind: "unreadable", message: read.failure.message };
-  // Nor can a list that failed or that a recording's answer came without, since it may have missed a new transcript.
-  if (!transcript && listRead.failure) return { kind: "unreadable", message: listRead.failure.message };
-  if (!transcript && listRead.stale) return { kind: "loading" };
-  const kind = transcriptState(recording, transcript);
-  if (kind !== "ready" || !transcript) return { kind: kind === "ready" ? "failed" : kind };
+const unreadable = (message: string): TranscriptView => ({ kind: "unreadable", message });
+
+/** Without a transcript the recording's own preparation decides, so a read that failed, or that may have missed a new transcript, can't decide it. */
+function undecided({ read, listRead }: Attempt): TranscriptView | undefined {
+  if (read.failure?.kind === "terminal") return unreadable(read.failure.message);
+  if (listRead.failure) return unreadable(listRead.failure.message);
+  return listRead.stale ? { kind: "loading" } : undefined;
+}
+
+function cuesView(item: Attempt, transcript: TranscriptDTO): TranscriptView {
   const lines = item.lines?.transcriptId === transcript.id ? item.lines : null;
   if (lines?.cues) return { kind: "ready", transcript, cues: lines.cues };
-  return lines?.read.failure ? { kind: "unreadable", message: lines.read.failure.message } : { kind: "loading" };
+  return lines?.read.failure ? unreadable(lines.read.failure.message) : { kind: "loading" };
+}
+
+/** The transcript panel for one attempt. A failed read marks only this panel, and a transient one keeps the last good answer. */
+export function transcriptView(item: Attempt): TranscriptView {
+  const { listRead, recording } = item;
+  if (listRead.failure?.kind === "terminal") return unreadable(listRead.failure.message);
+  const listed = recording.transcripts;
+  if (listed === undefined) return listRead.failure ? unreadable(listRead.failure.message) : { kind: "loading" };
+  const transcript = listed.find(completedTranscript) ?? listed[0] ?? null;
+  if (!transcript) {
+    const blocked = undecided(item);
+    if (blocked) return blocked;
+  }
+  const kind = transcriptState(recording, transcript);
+  if (kind !== "ready" || !transcript) return { kind: kind === "ready" ? "failed" : kind };
+  return cuesView(item, transcript);
 }
 
 function readable(read: Read, now: number): boolean {
