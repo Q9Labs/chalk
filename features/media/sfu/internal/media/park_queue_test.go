@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/sdp/v3"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
 	"github.com/q9labs/chalk/features/media/sfu/protocol"
@@ -32,82 +32,15 @@ func TestParkFencesQueuedPackets(t *testing.T) {
 // resume unmutes at once, so the pacer sees an unparked publication: what was queued before the
 // mute still must not go out.
 func parkWithQueuedPacket(t *testing.T, repair, resume bool) {
-	engine := &webrtc.MediaEngine{}
-	if err := engine.RegisterDefaultCodecs(); err != nil {
-		t.Fatal(err)
-	}
-	if err := engine.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.TransportCCURI}, webrtc.RTPCodecTypeVideo); err != nil {
-		t.Fatal(err)
-	}
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(engine))
-	server, err := api.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
-	viewer, err := api.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer viewer.Close()
 	received := make(chan uint16, 64)
-	viewer.OnTrack(func(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-		for {
-			packet, _, readErr := track.ReadRTP()
-			if readErr != nil {
-				return
-			}
-			received <- packet.SequenceNumber
-		}
-	})
-	connected := make(chan struct{}, 1)
-	server.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		if state == webrtc.PeerConnectionStateConnected {
-			select {
-			case connected <- struct{}{}:
-			default:
-			}
-		}
-	})
+	pair := newPionPair(t, func(packet *rtp.Packet) { received <- packet.SequenceNumber })
 	authority := &sourceAuthority{}
 	authority.window.Store(&leaseWindow{until: monotonic() + int64(time.Minute)})
 	publisher := &Session{kind: ParticipantSession, id: "publisher", node: &Node{log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
 	pub := &publication{session: publisher, name: "camera", source: "camera", kind: webrtc.RTPCodecTypeVideo, authority: authority}
 	transport := newTransport(&delayHistogram{}, 128<<10, make(chan struct{}))
 	track := newEgressTrack(pub, transport)
-	tx, err := server.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionSendonly})
-	if err != nil {
-		t.Fatal(err)
-	}
-	offer, err := server.CreateOffer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gathered := webrtc.GatheringCompletePromise(server)
-	if err = server.SetLocalDescription(offer); err != nil {
-		t.Fatal(err)
-	}
-	<-gathered
-	if err = viewer.SetRemoteDescription(*server.LocalDescription()); err != nil {
-		t.Fatal(err)
-	}
-	answer, err := viewer.CreateAnswer(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gathered = webrtc.GatheringCompletePromise(viewer)
-	if err = viewer.SetLocalDescription(answer); err != nil {
-		t.Fatal(err)
-	}
-	<-gathered
-	if err = server.SetRemoteDescription(*viewer.LocalDescription()); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-connected:
-	case <-time.After(10 * time.Second):
-		t.Fatal("peer did not connect")
-	}
+	tx := pair.connect(t, track)
 	owner := &Session{kind: ParticipantSession, subscribed: map[string]*subscription{}}
 	sub := newSubscription(owner, pub, tx, track, layerRequest{}, nil)
 	sub.mid = tx.Mid()

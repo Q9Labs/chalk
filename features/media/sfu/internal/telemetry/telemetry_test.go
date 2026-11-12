@@ -35,32 +35,38 @@ func collect(t *testing.T, read Read) map[string][]point {
 	points := map[string][]point{}
 	for _, scopeMetrics := range data.ScopeMetrics {
 		for _, m := range scopeMetrics.Metrics {
-			switch data := m.Data.(type) {
-			case metricdata.Gauge[int64]:
-				for _, p := range data.DataPoints {
-					points[m.Name] = append(points[m.Name], point{float64(p.Value), attrs(p.Attributes.ToSlice())})
-				}
-			case metricdata.Gauge[float64]:
-				for _, p := range data.DataPoints {
-					points[m.Name] = append(points[m.Name], point{p.Value, attrs(p.Attributes.ToSlice())})
-				}
-			case metricdata.Sum[int64]:
-				if !data.IsMonotonic || data.Temporality != metricdata.CumulativeTemporality {
-					t.Errorf("%s is not a cumulative counter", m.Name)
-				}
-				for _, p := range data.DataPoints {
-					points[m.Name] = append(points[m.Name], point{float64(p.Value), attrs(p.Attributes.ToSlice())})
-				}
-			case metricdata.Sum[float64]:
-				for _, p := range data.DataPoints {
-					points[m.Name] = append(points[m.Name], point{p.Value, attrs(p.Attributes.ToSlice())})
-				}
-			default:
-				t.Fatalf("%s has unexpected data %T", m.Name, m.Data)
-			}
+			points[m.Name] = append(points[m.Name], pointsOf(t, m)...)
 		}
 	}
 	return points
+}
+
+// pointsOf reads one metric's data points; a counter must be cumulative and monotonic.
+func pointsOf(t *testing.T, m metricdata.Metrics) []point {
+	switch data := m.Data.(type) {
+	case metricdata.Gauge[int64]:
+		return numbers(data.DataPoints)
+	case metricdata.Gauge[float64]:
+		return numbers(data.DataPoints)
+	case metricdata.Sum[int64]:
+		if !data.IsMonotonic || data.Temporality != metricdata.CumulativeTemporality {
+			t.Errorf("%s is not a cumulative counter", m.Name)
+		}
+		return numbers(data.DataPoints)
+	case metricdata.Sum[float64]:
+		return numbers(data.DataPoints)
+	default:
+		t.Fatalf("%s has unexpected data %T", m.Name, m.Data)
+		return nil
+	}
+}
+
+func numbers[N int64 | float64](dataPoints []metricdata.DataPoint[N]) []point {
+	out := make([]point, 0, len(dataPoints))
+	for _, p := range dataPoints {
+		out = append(out, point{float64(p.Value), attrs(p.Attributes.ToSlice())})
+	}
+	return out
 }
 
 func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
@@ -100,6 +106,25 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 	if got := points["chalk.sfu.admission.closed"]; len(got) == 1 && got[0].attrs[keyAdmission] != "cpu_steal" {
 		t.Errorf("admission reason %v, want cpu_steal", got[0].attrs)
 	}
+	checkFlows(t, points)
+	checkByReason(t, points, "chalk.sfu.udp.send_dropped", map[string]float64{"audio_ring_full": 2, "video_ring_full": 9})
+	checkByReason(t, points, "chalk.sfu.refusals", map[string]float64{"node_full": 2, "cpu_steal": 1})
+	if len(points["process.cpu.time"]) != 1 {
+		t.Error("process CPU time is missing")
+	}
+	for name, series := range points {
+		for _, p := range series {
+			for key := range p.attrs {
+				if !allowedKeys[key] {
+					t.Errorf("%s carries attribute %q outside the closed set", name, key)
+				}
+			}
+		}
+	}
+}
+
+// checkFlows checks the in/audio and out/repair flows of the snapshot, keyed by direction and kind.
+func checkFlows(t *testing.T, points map[string][]point) {
 	flows := map[string]float64{}
 	for _, name := range []string{"chalk.sfu.packets", "chalk.sfu.bytes", "chalk.sfu.packet_rate", "chalk.sfu.bitrate"} {
 		for _, p := range points[name] {
@@ -114,30 +139,21 @@ func TestEveryNodeCounterIsExportedUnderClosedLabels(t *testing.T) {
 			t.Errorf("%s = %v, want %v", key, flows[key], value)
 		}
 	}
-	dropped := map[string]float64{}
-	for _, p := range points["chalk.sfu.udp.send_dropped"] {
-		dropped[p.attrs[keyReason]] = p.value
+}
+
+// checkByReason checks that a metric has exactly the wanted points, one per reason.
+func checkByReason(t *testing.T, points map[string][]point, name string, want map[string]float64) {
+	got := map[string]float64{}
+	for _, p := range points[name] {
+		got[p.attrs[keyReason]] = p.value
 	}
-	if len(dropped) != 2 || dropped["audio_ring_full"] != 2 || dropped["video_ring_full"] != 9 {
-		t.Errorf("send drops %v, want audio_ring_full 2 and video_ring_full 9", dropped)
+	if len(got) != len(want) {
+		t.Errorf("%s by reason %v, want %v", name, got, want)
+		return
 	}
-	refusals := map[string]float64{}
-	for _, p := range points["chalk.sfu.refusals"] {
-		refusals[p.attrs[keyReason]] = p.value
-	}
-	if len(refusals) != 2 || refusals["node_full"] != 2 || refusals["cpu_steal"] != 1 {
-		t.Errorf("refusals %v, want node_full 2 and cpu_steal 1", refusals)
-	}
-	if len(points["process.cpu.time"]) != 1 {
-		t.Error("process CPU time is missing")
-	}
-	for name, series := range points {
-		for _, p := range series {
-			for key := range p.attrs {
-				if !allowedKeys[key] {
-					t.Errorf("%s carries attribute %q outside the closed set", name, key)
-				}
-			}
+	for reason, value := range want {
+		if got[reason] != value {
+			t.Errorf("%s by reason %v, want %v", name, got, want)
 		}
 	}
 }

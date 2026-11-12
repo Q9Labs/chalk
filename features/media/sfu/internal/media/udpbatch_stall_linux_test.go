@@ -138,6 +138,29 @@ func TestStalledSocketNeverBlocksAForwarderAndKeepsAudio(t *testing.T) {
 	// A writer that waits for the socket would wait until here, so the test ends instead of hanging.
 	time.AfterFunc(1500*time.Millisecond, release)
 
+	slowest := floodStalledSocket(t, conn, addrs, audioFrames, floodVideo)
+	// The socket was stalled for the whole run, so a write that waited for it would have waited here.
+	if slowest > 100*time.Millisecond {
+		t.Fatalf("a forwarder waited %s for the stalled socket", slowest)
+	}
+	release()
+
+	droppedAudio, droppedVideo := conn.droppedAudio.Load(), conn.droppedVideo.Load()
+	if droppedAudio != 0 || droppedVideo != floodVideo-videoRing {
+		t.Fatalf("dropped %d audio and %d video datagrams, want 0 and %d", droppedAudio, droppedVideo, floodVideo-videoRing)
+	}
+	delivered := 0
+	for i, channel := range arrivals {
+		delivered += checkReceiverArrivals(t, i, <-channel, audioFrames, floodVideo)
+	}
+	if delivered != videoRing {
+		t.Errorf("%d video datagrams delivered, want the newest %d", delivered, videoRing)
+	}
+}
+
+// floodStalledSocket writes audioFrames audio datagrams to every receiver on a 20 ms cadence and
+// floodVideo video datagrams across them, all at once, and returns the slowest single write.
+func floodStalledSocket(t *testing.T, conn *batchConn, addrs []netip.AddrPort, audioFrames, floodVideo int) time.Duration {
 	var mu sync.Mutex
 	var slowest time.Duration
 	write := func(b []byte, to netip.AddrPort) {
@@ -162,53 +185,42 @@ func TestStalledSocketNeverBlocksAForwarderAndKeepsAudio(t *testing.T) {
 	}
 	forwarders.Go(func() {
 		for seq := range floodVideo {
-			write(rtpDatagram(vp8PayloadType, videoSSRC, uint32(seq), 1100), addrs[seq%receivers])
+			write(rtpDatagram(vp8PayloadType, videoSSRC, uint32(seq), 1100), addrs[seq%len(addrs)])
 		}
 	})
 	forwarders.Wait()
-	// The socket was stalled for the whole run, so a write that waited for it would have waited here.
-	if slowest > 100*time.Millisecond {
-		t.Fatalf("a forwarder waited %s for the stalled socket", slowest)
-	}
-	release()
+	return slowest
+}
 
-	droppedAudio, droppedVideo := conn.droppedAudio.Load(), conn.droppedVideo.Load()
-	if droppedAudio != 0 || droppedVideo != floodVideo-videoRing {
-		t.Fatalf("dropped %d audio and %d video datagrams, want 0 and %d", droppedAudio, droppedVideo, floodVideo-videoRing)
-	}
-	delivered := 0
-	for i, channel := range arrivals {
-		got := <-channel
-		var audio, video []uint32
-		for _, a := range got {
-			if a.video {
-				video = append(video, a.seq)
-			} else {
-				audio = append(audio, a.seq)
-			}
-		}
-		if i == 0 {
-			audio = audio[1:] // the datagram that woke the writer
-		}
-		if len(audio) != audioFrames || !slices.IsSorted(audio) {
-			t.Errorf("receiver %d got %d audio datagrams (sorted %v), want all %d in order", i, len(audio), slices.IsSorted(audio), audioFrames)
-		}
-		if !slices.IsSorted(video) {
-			t.Errorf("receiver %d got its video out of order", i)
-		}
-		for _, seq := range video {
-			if seq < floodVideo-videoRing {
-				t.Errorf("receiver %d got video %d, which is older than the %d newest the ring keeps", i, seq, videoRing)
-			}
-		}
-		delivered += len(video)
-		if first := slices.IndexFunc(got, func(a arrival) bool { return a.video }); first >= 0 && slices.ContainsFunc(got[first:], func(a arrival) bool { return !a.video }) {
-			t.Errorf("receiver %d got audio after video in the same flush", i)
+// checkReceiverArrivals checks one receiver's datagrams: all audio in order, video in order and
+// from the newest the ring keeps, and no audio behind video in a flush. It returns the video count.
+func checkReceiverArrivals(t *testing.T, receiver int, got []arrival, audioFrames, floodVideo int) int {
+	var audio, video []uint32
+	for _, a := range got {
+		if a.video {
+			video = append(video, a.seq)
+		} else {
+			audio = append(audio, a.seq)
 		}
 	}
-	if delivered != videoRing {
-		t.Errorf("%d video datagrams delivered, want the newest %d", delivered, videoRing)
+	if receiver == 0 {
+		audio = audio[1:] // the datagram that woke the writer
 	}
+	if len(audio) != audioFrames || !slices.IsSorted(audio) {
+		t.Errorf("receiver %d got %d audio datagrams (sorted %v), want all %d in order", receiver, len(audio), slices.IsSorted(audio), audioFrames)
+	}
+	if !slices.IsSorted(video) {
+		t.Errorf("receiver %d got its video out of order", receiver)
+	}
+	for _, seq := range video {
+		if seq < uint32(floodVideo-videoRing) {
+			t.Errorf("receiver %d got video %d, which is older than the %d newest the ring keeps", receiver, seq, videoRing)
+		}
+	}
+	if first := slices.IndexFunc(got, func(a arrival) bool { return a.video }); first >= 0 && slices.ContainsFunc(got[first:], func(a arrival) bool { return !a.video }) {
+		t.Errorf("receiver %d got audio after video in the same flush", receiver)
+	}
+	return len(video)
 }
 
 // A full audio ring drops its oldest datagram for the newest and counts it as audio.

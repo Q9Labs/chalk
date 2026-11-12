@@ -1,14 +1,11 @@
 package tests
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,89 +27,6 @@ const (
 	// captureCoverage is the share of expected node CPU samples a full run must have.
 	captureCoverage = 0.9
 )
-
-// nodeCPUSample is one line of the node's CPU capture (scripts/node-cpu-capture): the host's steal
-// and the SFU process's own CPU over the interval, both as a percent of the node.
-type nodeCPUSample struct {
-	At           time.Time `json:"at"`
-	StealPercent float64   `json:"stealPercent"`
-	OwnPercent   float64   `json:"ownPercent"`
-}
-
-// series summarises one metric over the run.
-type series struct {
-	Count int     `json:"count"`
-	Mean  float64 `json:"mean"`
-	P90   float64 `json:"p90"`
-	P99   float64 `json:"p99"`
-	Max   float64 `json:"max"`
-}
-
-func summarize(values []float64) series {
-	if len(values) == 0 {
-		return series{}
-	}
-	sorted := slices.Sorted(slices.Values(values))
-	sum := 0.0
-	for _, value := range sorted {
-		sum += value
-	}
-	at := func(q float64) float64 { return sorted[min(len(sorted)-1, int(math.Ceil(q*float64(len(sorted))))-1)] }
-	return series{Count: len(sorted), Mean: sum / float64(len(sorted)), P90: at(0.9), P99: at(0.99), Max: sorted[len(sorted)-1]}
-}
-
-// nodeCPUResult is the 10 s capture over the hold. Demand is own CPU over the CPU steal leaves,
-// own / (1 - steal), the figure the capacity model is fitted to (stalls began near 75%).
-type nodeCPUResult struct {
-	Steal  series `json:"stealPercent"`
-	Own    series `json:"ownPercent"`
-	Demand series `json:"demandPercent"`
-}
-
-func readNodeCPU(path string, from, to time.Time) ([]nodeCPUSample, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	var samples []nodeCPUSample
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if strings.TrimSpace(scanner.Text()) == "" {
-			continue
-		}
-		var sample nodeCPUSample
-		if err := json.Unmarshal(scanner.Bytes(), &sample); err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
-		if !sample.At.Before(from) && !sample.At.After(to) {
-			samples = append(samples, sample)
-		}
-	}
-	return samples, scanner.Err()
-}
-
-func summarizeNodeCPU(samples []nodeCPUSample) nodeCPUResult {
-	var steal, own, demand []float64
-	for _, sample := range samples {
-		steal = append(steal, sample.StealPercent)
-		own = append(own, sample.OwnPercent)
-		demand = append(demand, 100*sample.OwnPercent/max(100-sample.StealPercent, 1))
-	}
-	return nodeCPUResult{Steal: summarize(steal), Own: summarize(own), Demand: summarize(demand)}
-}
-
-// marksCrossed counts the :00 and :30 UTC marks inside the window.
-func marksCrossed(from, to time.Time) (hours, halves int) {
-	for mark := from.UTC().Truncate(30 * time.Minute).Add(30 * time.Minute); !mark.After(to); mark = mark.Add(30 * time.Minute) {
-		if mark.Minute() == 0 {
-			hours++
-		} else {
-			halves++
-		}
-	}
-	return hours, halves
-}
 
 // soakResult is the JSON result file: the acceptance numbers and the verdict.
 type soakResult struct {
@@ -160,16 +74,7 @@ func judgeSoak(e soakEvidence) soakResult {
 	if full {
 		result.Mode = "soak"
 	}
-	var pps, steal []float64
-	for _, sample := range e.samples {
-		if sample.Ready == nil {
-			continue
-		}
-		pps = append(pps, sample.Ready.Host.PacketsPerSecond)
-		if sample.Ready.Host.StealPercent != nil {
-			steal = append(steal, *sample.Ready.Host.StealPercent)
-		}
-	}
+	pps, steal := readyzSeries(e.samples)
 	result.PacketsPerSec, result.ReadyzSteal = summarize(pps), summarize(steal)
 	if e.last.Ready != nil {
 		result.PacketBudget, result.ReservedPackets, result.Sessions = e.last.Ready.PacketBudget, e.last.Ready.ReservedPackets, e.last.Ready.Sessions
@@ -187,22 +92,44 @@ func judgeSoak(e soakEvidence) soakResult {
 		result.NodeCPU = &cpu
 	}
 	if full {
-		if e.load.every > soakInterval {
-			failures = append(failures, fmt.Sprintf("SFU_LIVE_SAMPLE is %v; the soak samples at most every %v", e.load.every, soakInterval))
-		}
-		if hours == 0 || halves == 0 {
-			failures = append(failures, fmt.Sprintf("the run crossed %d :00 and %d :30 marks; it must cover both", hours, halves))
-		}
-		expected := int(e.ended.Sub(e.started) / soakInterval)
-		switch {
-		case e.nodeCPUErr != nil:
-			failures = append(failures, fmt.Sprintf("the node CPU capture (SFU_LIVE_NODE_CPU) is unreadable: %v", e.nodeCPUErr))
-		case float64(len(e.nodeCPU)) < captureCoverage*float64(expected):
-			failures = append(failures, fmt.Sprintf("the node CPU capture has %d samples in the window, want at least %d for 10 s spacing", len(e.nodeCPU), int(captureCoverage*float64(expected))))
-		}
+		failures = append(failures, fullRunFailures(e, hours, halves)...)
 	}
 	result.Failures, result.Pass = failures, len(failures) == 0
 	return result
+}
+
+// readyzSeries collects the node's packet rate and the host's CPU steal from the samples that have readiness data.
+func readyzSeries(samples []liveSample) (pps, steal []float64) {
+	for _, sample := range samples {
+		if sample.Ready == nil {
+			continue
+		}
+		pps = append(pps, sample.Ready.Host.PacketsPerSecond)
+		if sample.Ready.Host.StealPercent != nil {
+			steal = append(steal, *sample.Ready.Host.StealPercent)
+		}
+	}
+	return pps, steal
+}
+
+// fullRunFailures judges what only a run of fullRunHold or more owes: the sample interval, the
+// :00 and :30 marks and the node's CPU capture.
+func fullRunFailures(e soakEvidence, hours, halves int) []string {
+	var failures []string
+	if e.load.every > soakInterval {
+		failures = append(failures, fmt.Sprintf("SFU_LIVE_SAMPLE is %v; the soak samples at most every %v", e.load.every, soakInterval))
+	}
+	if hours == 0 || halves == 0 {
+		failures = append(failures, fmt.Sprintf("the run crossed %d :00 and %d :30 marks; it must cover both", hours, halves))
+	}
+	expected := int(e.ended.Sub(e.started) / soakInterval)
+	switch {
+	case e.nodeCPUErr != nil:
+		failures = append(failures, fmt.Sprintf("the node CPU capture (SFU_LIVE_NODE_CPU) is unreadable: %v", e.nodeCPUErr))
+	case float64(len(e.nodeCPU)) < captureCoverage*float64(expected):
+		failures = append(failures, fmt.Sprintf("the node CPU capture has %d samples in the window, want at least %d for 10 s spacing", len(e.nodeCPU), int(captureCoverage*float64(expected))))
+	}
+	return failures
 }
 
 func writeSoakResult(t *testing.T, path string, result soakResult) {

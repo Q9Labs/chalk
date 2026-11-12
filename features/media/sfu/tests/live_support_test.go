@@ -6,11 +6,7 @@ package tests
 import (
 	"cmp"
 	"context"
-	"encoding/binary"
 	"fmt"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -68,54 +64,24 @@ func cameraTrack(index int) string {
 	return fmt.Sprintf("%s%d", cameraName, index+1)
 }
 
+// videoSender is one video source and the RTP sender that carries it.
+type videoSender struct {
+	publisher *simulcastPublisher
+	rtp       *webrtc.RTPSender
+}
+
 // publish pushes the participant's sources and starts sending until the test ends.
 func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 	t.Helper()
 	high, low := readIVF(t, "high.ivf"), readIVF(t, "low.ivf")
-	var tracks []protocol.Track
-	type sender struct {
-		publisher *simulcastPublisher
-		rtp       *webrtc.RTPSender
-	}
-	var video []sender
+	var video []videoSender
 	for index := range what.cameras {
-		camera := &simulcastPublisher{fixtures: [2]layerFixture{{rid: "h", frames: high}, {rid: "l", frames: low}}, enabled: [2]bool{true, true}, chunks: what.chunks,
-			frameBytes: [2]int{what.frameBytes[0], what.frameBytes[1]}, sent: &p.sent}
-		for layer, fixture := range camera.fixtures {
-			track, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, cameraTrack(index), p.name, webrtc.WithRTPStreamID(fixture.rid))
-			if err != nil {
-				t.Fatal(err)
-			}
-			camera.tracks[layer] = track
-		}
-		rtpSender, err := p.peer.pc.AddTrack(camera.tracks[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := rtpSender.AddEncoding(camera.tracks[1]); err != nil {
-			t.Fatal(err)
-		}
-		video = append(video, sender{camera, rtpSender})
+		video = append(video, p.addCamera(t, what, index, high, low))
 	}
 	if what.screen {
-		screen := &simulcastPublisher{fixtures: [2]layerFixture{{frames: high}}, enabled: [2]bool{true}, chunks: [2]int{cmp.Or(what.screenChunk, 160)},
-			frameBytes: [2]int{what.frameBytes[2]}, sent: &p.sent}
-		p.screen = screen
-		track, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, screenName, p.name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		screen.tracks[0] = track
-		rtpSender, err := p.peer.pc.AddTrack(track)
-		if err != nil {
-			t.Fatal(err)
-		}
-		video = append(video, sender{screen, rtpSender})
+		video = append(video, p.addScreen(t, what, high))
 	}
-	mic, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, micName, p.name)
-	if err != nil {
-		t.Fatal(err)
-	}
+	mic := newLocalTrack(t, webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, micName, p.name)
 	micSender, err := p.peer.pc.AddTrack(mic)
 	if err != nil {
 		t.Fatal(err)
@@ -126,13 +92,14 @@ func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 		t.Fatal(err)
 	}
 	pushOffer := p.peer.complete(t, offer)
+	tracks := make([]protocol.Track, 0, len(video)+1)
 	for _, v := range video {
 		v.publisher.mid = p.peer.mid(t, v.publisher.tracks[0])
-		source, name := "camera", v.publisher.tracks[0].ID()
+		source := "camera"
 		if v.publisher.tracks[1] == nil {
 			source = "screen"
 		}
-		tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: v.publisher.mid, TrackName: name, Source: source})
+		tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: v.publisher.mid, TrackName: v.publisher.tracks[0].ID(), Source: source})
 	}
 	tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: p.peer.mid(t, mic), TrackName: micName, Source: "microphone"})
 	var pushed protocol.TracksResponse
@@ -143,7 +110,52 @@ func (p *participant) publish(t *testing.T, svc *service, what publishing) {
 	if err := p.peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
 		t.Fatal(err)
 	}
+	p.startSending(t, video, mic, micSender)
+}
 
+// newLocalTrack makes a static RTP track of the participant's stream.
+func newLocalTrack(t *testing.T, codec webrtc.RTPCodecCapability, id, stream string, options ...func(*webrtc.TrackLocalStaticRTP)) *webrtc.TrackLocalStaticRTP {
+	track, err := webrtc.NewTrackLocalStaticRTP(codec, id, stream, options...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return track
+}
+
+var vp8Codec = webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}
+
+// addCamera adds the participant's index-th simulcast camera: an h and an l encoding.
+func (p *participant) addCamera(t *testing.T, what publishing, index int, high, low [][]byte) videoSender {
+	camera := &simulcastPublisher{fixtures: [2]layerFixture{{rid: "h", frames: high}, {rid: "l", frames: low}}, enabled: [2]bool{true, true}, chunks: what.chunks,
+		frameBytes: [2]int{what.frameBytes[0], what.frameBytes[1]}, sent: &p.sent}
+	for layer, fixture := range camera.fixtures {
+		camera.tracks[layer] = newLocalTrack(t, vp8Codec, cameraTrack(index), p.name, webrtc.WithRTPStreamID(fixture.rid))
+	}
+	rtpSender, err := p.peer.pc.AddTrack(camera.tracks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rtpSender.AddEncoding(camera.tracks[1]); err != nil {
+		t.Fatal(err)
+	}
+	return videoSender{camera, rtpSender}
+}
+
+// addScreen adds the participant's screen share, which has one encoding.
+func (p *participant) addScreen(t *testing.T, what publishing, frames [][]byte) videoSender {
+	screen := &simulcastPublisher{fixtures: [2]layerFixture{{frames: frames}}, enabled: [2]bool{true}, chunks: [2]int{cmp.Or(what.screenChunk, 160)},
+		frameBytes: [2]int{what.frameBytes[2]}, sent: &p.sent}
+	p.screen = screen
+	screen.tracks[0] = newLocalTrack(t, vp8Codec, screenName, p.name)
+	rtpSender, err := p.peer.pc.AddTrack(screen.tracks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return videoSender{screen, rtpSender}
+}
+
+// startSending sends the sources until the test ends and reads the senders' RTCP.
+func (p *participant) startSending(t *testing.T, video []videoSender, mic *webrtc.TrackLocalStaticRTP, micSender *webrtc.RTPSender) {
 	ctx, stop := context.WithCancel(context.Background())
 	var sending sync.WaitGroup
 	t.Cleanup(func() { stop(); sending.Wait() })
@@ -234,145 +246,3 @@ const (
 	vp8Chunk    = 300 // payload bytes per packet, so every frame spans several packets
 	vp8DescSize = 5   // X|S, I|L, 15-bit picture ID, TL0PICIDX
 )
-
-type layerFixture struct {
-	rid    string
-	frames [][]byte
-}
-
-func readIVF(t *testing.T, name string) [][]byte {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(data) < 32 || string(data[:4]) != "DKIF" {
-		t.Fatalf("%s is not IVF", name)
-	}
-	var frames [][]byte
-	for rest := data[binary.LittleEndian.Uint16(data[6:8]):]; len(rest) >= 12; {
-		size := int(binary.LittleEndian.Uint32(rest[:4]))
-		frames = append(frames, rest[12:12+size])
-		rest = rest[12+size:]
-	}
-	return frames
-}
-
-func keyframe(frame []byte) bool { return frame[0]&0x01 == 0 }
-
-// simulcastPublisher sends the two fixtures as one simulcast camera, with the
-// MID and RID header extensions a browser stamps. Each layer starts its
-// sequence numbers and timestamps just before they wrap, reorders packets in
-// every frame and puts each keyframe's first packet second, and ignores
-// keyframe requests, so a switch waits for the layer's next natural keyframe.
-type simulcastPublisher struct {
-	tracks     [2]*webrtc.TrackLocalStaticRTP // a single-encoding source leaves the second nil
-	fixtures   [2]layerFixture
-	midID      uint8
-	ridID      uint8 // 0 for a single-encoding source
-	mid        string
-	chunks     [2]int        // payload bytes per packet of each layer; 0 is vp8Chunk
-	frameBytes [2]int        // pads each layer's frames to at least this size; 0 keeps them
-	sent       *atomic.Int64 // counts every packet written, when set
-
-	mu      sync.Mutex
-	enabled [2]bool
-}
-
-func (p *simulcastPublisher) enable(layer int, on bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.enabled[layer] = on
-}
-
-func (p *simulcastPublisher) on(layer int) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.enabled[layer]
-}
-
-func (p *simulcastPublisher) run(ctx context.Context, done *sync.WaitGroup) {
-	for layer, track := range p.tracks {
-		if track != nil {
-			done.Go(func() { p.send(ctx, layer) })
-		}
-	}
-}
-
-func (p *simulcastPublisher) send(ctx context.Context, layer int) {
-	ticker := time.NewTicker(time.Second / 30)
-	defer ticker.Stop()
-	fixture := p.fixtures[layer]
-	if size := p.frameBytes[layer]; size > 0 {
-		fixture.frames = padFrames(fixture.frames, size)
-	}
-	chunk := cmp.Or(p.chunks[layer], vp8Chunk)
-	seq := uint16(65500 - 100*layer)
-	timestamp := uint32(0xFFFFFFFF - 20*frameTicks)
-	pictureID := uint16(0x7FF0) // the 15-bit picture ID wraps too
-	tl0 := uint8(250)
-	for frame := 0; ; frame++ {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-		// A disabled layer is an encoder that stopped: its clock and counters
-		// run on, and it resumes mid-GOP.
-		data := fixture.frames[frame%len(fixture.frames)]
-		var packets []*rtp.Packet
-		for start := 0; start < len(data); start += chunk {
-			end := min(start+chunk, len(data))
-			descriptor := []byte{0x80, 0xC0, 0x80 | byte(pictureID>>8), byte(pictureID), tl0}
-			if start == 0 {
-				descriptor[0] |= 0x10
-			}
-			packet := &rtp.Packet{
-				Header:  rtp.Header{Version: 2, PayloadType: 96, SequenceNumber: seq, Timestamp: timestamp, Marker: end == len(data)},
-				Payload: append(descriptor, data[start:end]...),
-			}
-			_ = packet.Header.SetExtension(p.midID, []byte(p.mid))
-			if p.ridID != 0 {
-				_ = packet.Header.SetExtension(p.ridID, []byte(fixture.rid))
-			}
-			packets = append(packets, packet)
-			seq++
-		}
-		if len(packets) > 1 && (keyframe(data) || frame%3 == 0) {
-			packets[0], packets[1] = packets[1], packets[0]
-		}
-		if p.on(layer) {
-			for _, packet := range packets {
-				if err := p.tracks[layer].WriteRTP(packet); err != nil {
-					return
-				}
-				if p.sent != nil {
-					p.sent.Add(1)
-				}
-			}
-		}
-		timestamp += frameTicks
-		pictureID = (pictureID + 1) & 0x7FFF
-		tl0++
-	}
-}
-
-// padFrames returns the frames with zeros appended to at least size bytes.
-func padFrames(frames [][]byte, size int) [][]byte {
-	padded := make([][]byte, len(frames))
-	for index, frame := range frames {
-		padded[index] = append(slices.Clone(frame), make([]byte, max(0, size-len(frame)))...)
-	}
-	return padded
-}
-
-func extensionID(t *testing.T, sender *webrtc.RTPSender, uri string) uint8 {
-	t.Helper()
-	for _, extension := range sender.GetParameters().HeaderExtensions {
-		if extension.URI == uri {
-			return uint8(extension.ID)
-		}
-	}
-	t.Fatalf("header extension %s was not negotiated", uri)
-	return 0
-}

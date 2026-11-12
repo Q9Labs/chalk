@@ -125,7 +125,7 @@ const lateBudgetPercent = 10
 // whatever happens, and fails if the node does not return to the load it had before.
 func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	t.Helper()
-	evidence := liveEvidence{revision: "unread", audioGain: -1, videoGain: -1, audioLate: -1, videoLate: -1, audioPackets: -1, videoPackets: -1, sessions: -1, allocations: -1, cleanup: -1}
+	evidence := &liveEvidence{revision: "unread", audioGain: -1, videoGain: -1, audioLate: -1, videoLate: -1, audioPackets: -1, videoPackets: -1, sessions: -1, allocations: -1, cleanup: -1}
 	defer func() { evidence.log(t, duration) }()
 	before := svc.readyOK(t)
 	evidence.revision = before.Revision
@@ -154,48 +154,15 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	}
 	defer endEpisode()
 
-	revision := int64(1)
-	svc.grantSourcesAt(t, revision, alice, bob)
+	svc.grantSourcesAt(t, 1, alice, bob)
 	connA := svc.createSession(t, "create-"+id+"-alice", alice)
 	connB := svc.createSession(t, "create-"+id+"-bob", bob)
 	published := publishKnownMedia(t, svc, connA, alice)
 	defer published.stop()
 	_, received := subscribeKnownMedia(t, svc, connB, bob, connA)
 
-	const arrived = 30
-	eventually(t, fmt.Sprintf("%d audio and %d video packets at the subscriber", arrived, arrived), 20*time.Second, func() bool {
-		return received.count(webrtc.RTPCodecTypeAudio) >= arrived && received.count(webrtc.RTPCodecTypeVideo) >= arrived
-	})
-	audioStart, videoStart := received.count(webrtc.RTPCodecTypeAudio), received.count(webrtc.RTPCodecTypeVideo)
-
-	// Media keeps flowing for the whole window. Each renewal is a newer revision, so a short
-	// source lease never ends the publication under the test.
-	deadline := time.Now().Add(duration)
-	for time.Now().Before(deadline) {
-		time.Sleep(time.Second)
-		revision++
-		svc.grantSourcesAt(t, revision, alice, bob)
-	}
-	audioEnd, videoEnd := received.count(webrtc.RTPCodecTypeAudio), received.count(webrtc.RTPCodecTypeVideo)
-	evidence.audioGain, evidence.videoGain = audioEnd-audioStart, videoEnd-videoStart
-	// The sender writes 100 packets a second per kind; a fifth of that over the window is far
-	// above what a stalled forwarder delivers and far below what ordinary loss costs.
-	floor := int(duration.Seconds()) * 20
-	if evidence.audioGain < floor || evidence.videoGain < floor {
-		t.Fatalf("media did not keep advancing: audio %d to %d, video %d to %d, want at least %d more of each", audioStart, audioEnd, videoStart, videoEnd, floor)
-	}
-	// The internet reorders UDP and the subscriber NACKs, so some packets arrive late or twice;
-	// a changed payload or sequence number is not allowed.
-	audioPackets, videoPackets := received.snapshot(webrtc.RTPCodecTypeAudio), received.snapshot(webrtc.RTPCodecTypeVideo)
-	evidence.audioPackets, evidence.videoPackets = len(audioPackets), len(videoPackets)
-	evidence.audioLate = countLate(t, "audio", audioPackets, 'a')
-	evidence.videoLate = countLate(t, "video", videoPackets, 'v')
-	if evidence.audioLate*100 > lateBudgetPercent*evidence.audioPackets || evidence.videoLate*100 > lateBudgetPercent*evidence.videoPackets {
-		t.Fatalf("more than %d%% of packets arrived late or repeated", lateBudgetPercent)
-	}
-	if audioSent, videoSent := published.audioSent.Load(), published.videoSent.Load(); audioSent == 0 || videoSent == 0 {
-		t.Fatalf("the publisher sent audio %d and video %d packets", audioSent, videoSent)
-	}
+	holdSmokeWindow(t, svc, duration, evidence, received, alice, bob)
+	checkSmokeMedia(t, evidence, received, published)
 	for _, track := range svc.inspect(t, connA, alice) {
 		if !track.Active {
 			t.Fatalf("published track %s is not active", track.TrackName)
@@ -215,5 +182,47 @@ func runLiveSmoke(t *testing.T, svc *service, duration time.Duration) {
 	}
 	if status, code := svc.call(t, "/v1/sessions/"+connA+"/inspect", protocol.InspectRequest{Scope: alice}, nil); status != http.StatusNotFound || code != protocol.CodeSessionGone {
 		t.Fatalf("the publisher's session survived the end of its Episode: status %d code %q", status, code)
+	}
+}
+
+// holdSmokeWindow waits for the first packets, then holds the window while media must keep
+// advancing. Each renewal is a newer revision, so a short source lease never ends the
+// publication under the test.
+func holdSmokeWindow(t *testing.T, svc *service, duration time.Duration, evidence *liveEvidence, received *receiver, scopes ...protocol.Scope) {
+	t.Helper()
+	const arrived = 30
+	eventually(t, fmt.Sprintf("%d audio and %d video packets at the subscriber", arrived, arrived), 20*time.Second, func() bool {
+		return received.count(webrtc.RTPCodecTypeAudio) >= arrived && received.count(webrtc.RTPCodecTypeVideo) >= arrived
+	})
+	audioStart, videoStart := received.count(webrtc.RTPCodecTypeAudio), received.count(webrtc.RTPCodecTypeVideo)
+	revision := int64(1)
+	for deadline := time.Now().Add(duration); time.Now().Before(deadline); {
+		time.Sleep(time.Second)
+		revision++
+		svc.grantSourcesAt(t, revision, scopes...)
+	}
+	audioEnd, videoEnd := received.count(webrtc.RTPCodecTypeAudio), received.count(webrtc.RTPCodecTypeVideo)
+	evidence.audioGain, evidence.videoGain = audioEnd-audioStart, videoEnd-videoStart
+	// The sender writes 100 packets a second per kind; a fifth of that over the window is far
+	// above what a stalled forwarder delivers and far below what ordinary loss costs.
+	floor := int(duration.Seconds()) * 20
+	if evidence.audioGain < floor || evidence.videoGain < floor {
+		t.Fatalf("media did not keep advancing: audio %d to %d, video %d to %d, want at least %d more of each", audioStart, audioEnd, videoStart, videoEnd, floor)
+	}
+}
+
+// checkSmokeMedia checks what arrived. The internet reorders UDP and the subscriber NACKs, so
+// some packets arrive late or twice; a changed payload or sequence number is not allowed.
+func checkSmokeMedia(t *testing.T, evidence *liveEvidence, received *receiver, published *publication) {
+	t.Helper()
+	audioPackets, videoPackets := received.snapshot(webrtc.RTPCodecTypeAudio), received.snapshot(webrtc.RTPCodecTypeVideo)
+	evidence.audioPackets, evidence.videoPackets = len(audioPackets), len(videoPackets)
+	evidence.audioLate = countLate(t, "audio", audioPackets, 'a')
+	evidence.videoLate = countLate(t, "video", videoPackets, 'v')
+	if evidence.audioLate*100 > lateBudgetPercent*evidence.audioPackets || evidence.videoLate*100 > lateBudgetPercent*evidence.videoPackets {
+		t.Fatalf("more than %d%% of packets arrived late or repeated", lateBudgetPercent)
+	}
+	if audioSent, videoSent := published.audioSent.Load(), published.videoSent.Load(); audioSent == 0 || videoSent == 0 {
+		t.Fatalf("the publisher sent audio %d and video %d packets", audioSent, videoSent)
 	}
 }
