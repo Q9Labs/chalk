@@ -12,13 +12,13 @@ const RUNS = new Set(["commit", "local", "pull_request", "merge_queue", "cut", "
 // action is work that is not a check (a build, a deploy, a cache warm).
 const BLOCKS = new Set(["merge", "release", "commit", "alert", "advisory", "action"]);
 const RECORDS = new Set(["caught", "noise", "never-failed", "unmeasured"]);
-const FIELDS = ["id", "area", "catches", "runs", "blocks", "minutes", "record", "sample", "reason", "builtin"];
+const FIELDS = ["id", "owner", "catches", "runs", "blocks", "minutes", "record", "sample", "reason", "builtin"];
 
 function shapeProblems(entry) {
   const problems = [];
   const where = entry.id ?? JSON.stringify(entry).slice(0, 60);
   for (const key of Object.keys(entry)) if (!FIELDS.includes(key)) problems.push(`${where}: unknown field ${key}`);
-  for (const key of ["id", "area", "catches", "sample"]) {
+  for (const key of ["id", "owner", "catches", "sample"]) {
     if (typeof entry[key] !== "string" || entry[key].trim() === "") problems.push(`${where}: ${key} must be a non-empty string`);
   }
   if (typeof entry.catches === "string" && (!entry.catches.endsWith(".") || entry.catches.includes("\n") || entry.catches.length > 220)) {

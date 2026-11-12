@@ -2,7 +2,7 @@
   "checks": [
     {
       "id": "hook:pre-commit/fast-gate",
-      "area": "Developer workflow",
+      "owner": "Developer workflow",
       "catches": "Unformatted code, hygiene breaks, leaked secrets, broken document links and tracker drift in staged files reach a commit.",
       "runs": ["commit"],
       "blocks": "commit",
@@ -12,7 +12,7 @@
     },
     {
       "id": "gate:self-test",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "A change to the Gate's selection rules or network isolation makes it skip or run the wrong checks.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -22,7 +22,7 @@
     },
     {
       "id": "gate:workflow-graph",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A workflow or scorecard edit breaks the cut, proof, Promote or scorecard graph that releases depend on.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -32,7 +32,7 @@
     },
     {
       "id": "gate:register",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "A workflow job, Gate lane, hook command or budget group exists without a purpose, owner and consequence in the register, or an entry outlives its check.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -42,7 +42,7 @@
     },
     {
       "id": "gate:hygiene",
-      "area": "Repository",
+      "owner": "Repository",
       "catches": "A public package without a license, a placeholder script or another repository hygiene break.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -52,7 +52,7 @@
     },
     {
       "id": "gate:secrets",
-      "area": "Security",
+      "owner": "Security",
       "catches": "A credential committed in the diff, or in any commit a merge queue group brings in.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -62,7 +62,7 @@
     },
     {
       "id": "gate:generated",
-      "area": "Contracts",
+      "owner": "Contracts",
       "catches": "Generated output (API contract, SDK types, tracker views) that is stale against its source.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -72,7 +72,7 @@
     },
     {
       "id": "gate:format",
-      "area": "Code style",
+      "owner": "Code style",
       "catches": "Source or documents that the formatter would change.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -82,7 +82,7 @@
     },
     {
       "id": "gate:fallow",
-      "area": "Code quality",
+      "owner": "Code quality",
       "catches": "Dead, duplicated or over-complex code in the changed files.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -92,7 +92,7 @@
     },
     {
       "id": "gate:ast-grep",
-      "area": "Security",
+      "owner": "Security",
       "catches": "A banned structural pattern, such as unsafe API use or a quality rule, in changed code.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -102,7 +102,7 @@
     },
     {
       "id": "gate:formal-sync",
-      "area": "Sync",
+      "owner": "Sync",
       "catches": "A change to Sync entry admission or Leave ordering that breaks the model-checked invariants.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -112,7 +112,7 @@
     },
     {
       "id": "gate:osv",
-      "area": "Security",
+      "owner": "Security",
       "catches": "A dependency version with a known vulnerability, on a pull request that changes dependencies.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -122,7 +122,7 @@
     },
     {
       "id": "gate:services",
-      "area": "API and Sync",
+      "owner": "API and Sync",
       "catches": "A local run of the API and Sync correctness scripts; CI runs the same scripts as the API gate and Sync gate.",
       "runs": ["local"],
       "blocks": "merge",
@@ -132,7 +132,7 @@
     },
     {
       "id": "gate:contracts",
-      "area": "Contracts",
+      "owner": "Contracts",
       "catches": "A public API or SDK contract that drifts from its producers or consumers.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -142,7 +142,7 @@
     },
     {
       "id": "gate:syncpack",
-      "area": "Dependencies",
+      "owner": "Dependencies",
       "catches": "Workspace packages that disagree on a dependency version.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -152,7 +152,7 @@
     },
     {
       "id": "gate:types",
-      "area": "TypeScript",
+      "owner": "TypeScript",
       "catches": "A type error in an affected workspace, including API and SDK incompatibilities.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -162,7 +162,7 @@
     },
     {
       "id": "gate:explicit-any",
-      "area": "TypeScript",
+      "owner": "TypeScript",
       "catches": "A new explicit or implicit `any` in TypeScript.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -172,7 +172,7 @@
     },
     {
       "id": "gate:react-tokens",
-      "area": "Design system",
+      "owner": "Design system",
       "catches": "A React SDK component that reaches past the design tokens.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -182,7 +182,7 @@
     },
     {
       "id": "gate:native-quality",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "A raw style value or an unsafe worklet in React Native code.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -192,7 +192,7 @@
     },
     {
       "id": "gate:tests",
-      "area": "Runtime",
+      "owner": "Runtime",
       "catches": "A failing unit or regression test in an affected workspace.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -202,7 +202,7 @@
     },
     {
       "id": "gate:browser-tests",
-      "area": "Web",
+      "owner": "Web",
       "catches": "A browser test failure in an affected workspace.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -212,7 +212,7 @@
     },
     {
       "id": "gate:dashboard-engine",
-      "area": "Dashboard",
+      "owner": "Dashboard",
       "catches": "The dashboard breaking against the real API, Sync and Pages runtime over HTTP.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -222,7 +222,7 @@
     },
     {
       "id": "gate:dashboard-refresh",
-      "area": "Dashboard",
+      "owner": "Dashboard",
       "catches": "Dashboard media-access credentials failing to refresh across the real five-minute lifetime.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -232,7 +232,7 @@
     },
     {
       "id": "gate:build",
-      "area": "Build",
+      "owner": "Build",
       "catches": "A workspace that no longer builds.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -242,7 +242,7 @@
     },
     {
       "id": "gate:call-performance",
-      "area": "Call",
+      "owner": "Call",
       "catches": "A call bundle that grows past its gzip budget.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -252,7 +252,7 @@
     },
     {
       "id": "gate:call-leaks",
-      "area": "Call",
+      "owner": "Call",
       "catches": "A call journey that leaks connections, listeners or memory beyond its budget.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -262,7 +262,7 @@
     },
     {
       "id": "gate:recorder",
-      "area": "Recording",
+      "owner": "Recording",
       "catches": "Recorder infrastructure or scripts that fail validation, including the OpenTofu configuration.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -272,7 +272,7 @@
     },
     {
       "id": "gate:proof-bundle",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A production proof script that no longer bundles against the Leave baseline client.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -282,7 +282,7 @@
     },
     {
       "id": "gate:sfu",
-      "area": "Media",
+      "owner": "Media",
       "catches": "A regression in the SFU Go module, its loopback test or its impairment test.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -292,7 +292,7 @@
     },
     {
       "id": "gate:publint",
-      "area": "Packaging",
+      "owner": "Packaging",
       "catches": "A public package whose published layout is broken.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -302,7 +302,7 @@
     },
     {
       "id": "gate:attw",
-      "area": "Packaging",
+      "owner": "Packaging",
       "catches": "A public package whose types do not resolve for consumers.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -312,7 +312,7 @@
     },
     {
       "id": "gate:scope",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "A run with no files in scope that would otherwise pass green.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -323,7 +323,7 @@
     },
     {
       "id": "gate:depcruise",
-      "area": "Architecture",
+      "owner": "Architecture",
       "catches": "An import that crosses a workspace boundary, or a package that imports an application.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -334,7 +334,7 @@
     },
     {
       "id": "gate:design-tokens",
-      "area": "Design system",
+      "owner": "Design system",
       "catches": "A new raw color, spacing, radius, font-size or shadow value outside the tokens.",
       "runs": ["pull_request", "merge_queue", "weekly"],
       "blocks": "merge",
@@ -345,7 +345,7 @@
     },
     {
       "id": "workflow:gate.yml#changes",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "A wrong job selection that would skip a check a change needs.",
       "runs": ["pull_request", "merge_queue", "weekly", "manual"],
       "blocks": "merge",
@@ -355,7 +355,7 @@
     },
     {
       "id": "workflow:gate.yml#root-lanes",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Any selected Root lane failing: the checks, build, browser, dashboard and call lanes.",
       "runs": ["pull_request", "merge_queue", "weekly", "manual"],
       "blocks": "merge",
@@ -365,7 +365,7 @@
     },
     {
       "id": "workflow:gate.yml#root",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Turns the Root cells into the one required Root gate context.",
       "runs": ["pull_request", "merge_queue", "weekly", "manual"],
       "blocks": "merge",
@@ -375,7 +375,7 @@
     },
     {
       "id": "workflow:gate.yml#api",
-      "area": "API",
+      "owner": "API",
       "catches": "API build, tests, lifecycle, migrations and govulncheck failing.",
       "runs": ["pull_request", "merge_queue", "weekly", "manual"],
       "blocks": "merge",
@@ -385,7 +385,7 @@
     },
     {
       "id": "workflow:gate.yml#sync",
-      "area": "Sync",
+      "owner": "Sync",
       "catches": "Sync compile, tests and reliability checks failing.",
       "runs": ["pull_request", "merge_queue", "weekly", "manual"],
       "blocks": "merge",
@@ -395,7 +395,7 @@
     },
     {
       "id": "workflow:cache-warm.yml#go",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Queue groups downloading the go toolchain from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
@@ -405,7 +405,7 @@
     },
     {
       "id": "workflow:cache-warm.yml#tofu",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Queue groups downloading the tofu toolchain from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
@@ -415,7 +415,7 @@
     },
     {
       "id": "workflow:cache-warm.yml#scanners",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Queue groups downloading the scanners toolchain from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
@@ -425,7 +425,7 @@
     },
     {
       "id": "workflow:cache-warm.yml#sync",
-      "area": "Gate",
+      "owner": "Gate",
       "catches": "Queue groups downloading the sync toolchain from a flaky host because master saved no cache.",
       "runs": ["push"],
       "blocks": "action",
@@ -435,7 +435,7 @@
     },
     {
       "id": "workflow:ci.yml#require-gate",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A deploy of a commit that has no green master Gate.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -445,7 +445,7 @@
     },
     {
       "id": "workflow:ci.yml#plan-managed",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A release whose component plan cannot be computed.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -455,7 +455,7 @@
     },
     {
       "id": "workflow:ci.yml#check-managed-contracts",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A deploy whose pre-deploy release contracts fail.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -465,7 +465,7 @@
     },
     {
       "id": "workflow:ci.yml#build-managed-images",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "An API or Sync image that does not build, so the release stops before users see it.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -475,7 +475,7 @@
     },
     {
       "id": "workflow:ci.yml#build-media",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Media release archives that do not build.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -485,7 +485,7 @@
     },
     {
       "id": "workflow:ci.yml#publish-managed-manifest",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A release manifest that cannot be published, so no deploy can start.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -495,7 +495,7 @@
     },
     {
       "id": "workflow:ci.yml#deploy-managed",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A managed deploy that fails to start, drain or become healthy on the target host.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -505,7 +505,7 @@
     },
     {
       "id": "workflow:ci.yml#build-web",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A web build that fails before it ships.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -515,7 +515,7 @@
     },
     {
       "id": "workflow:ci.yml#prepare-web",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A web build that cannot be prepared for deploy.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -525,7 +525,7 @@
     },
     {
       "id": "workflow:ci.yml#prepare-release",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A release envelope whose source does not match the revision being deployed.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -535,7 +535,7 @@
     },
     {
       "id": "workflow:ci.yml#deploy-web",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A production web deploy that serves a stale service worker or assets.",
       "runs": ["cut", "promote"],
       "blocks": "release",
@@ -545,7 +545,7 @@
     },
     {
       "id": "workflow:cloudflare-egress-check.yml#check",
-      "area": "Monitoring",
+      "owner": "Monitoring",
       "catches": "SFU or TURN egress nearing its Cloudflare limit before calls degrade.",
       "runs": ["daily"],
       "blocks": "alert",
@@ -555,7 +555,7 @@
     },
     {
       "id": "workflow:codeql.yml#languages",
-      "area": "Security",
+      "owner": "Security",
       "catches": "Selects the languages CodeQL analyses.",
       "runs": ["pull_request", "weekly"],
       "blocks": "action",
@@ -565,7 +565,7 @@
     },
     {
       "id": "workflow:codeql.yml#analyze",
-      "area": "Security",
+      "owner": "Security",
       "catches": "A code-scanning finding in JavaScript, TypeScript or Go; findings appear as Security alerts.",
       "runs": ["pull_request", "push", "weekly"],
       "blocks": "advisory",
@@ -576,7 +576,7 @@
     },
     {
       "id": "workflow:listener-audio-check.yml#check",
-      "area": "Monitoring",
+      "owner": "Monitoring",
       "catches": "A listener who cannot hear a call: audio missing at the receiving end.",
       "runs": ["daily"],
       "blocks": "alert",
@@ -586,7 +586,7 @@
     },
     {
       "id": "workflow:mcp-production-check.yml#mcp",
-      "area": "Monitoring",
+      "owner": "Monitoring",
       "catches": "The hosted MCP server rejecting sign-in or tool calls the way a client sees them.",
       "runs": ["daily", "promote"],
       "blocks": "alert",
@@ -596,7 +596,7 @@
     },
     {
       "id": "workflow:mobile-ci.yml#fingerprint",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "A native change that the over-the-air update path cannot carry.",
       "runs": ["pull_request", "push"],
       "blocks": "advisory",
@@ -607,7 +607,7 @@
     },
     {
       "id": "workflow:mobile-ci.yml#android",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "An unsigned Android release build that no longer compiles.",
       "runs": ["pull_request", "push"],
       "blocks": "advisory",
@@ -618,7 +618,7 @@
     },
     {
       "id": "workflow:mobile-ci.yml#ios",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "An unsigned iOS simulator build that no longer compiles.",
       "runs": ["pull_request", "push"],
       "blocks": "advisory",
@@ -629,7 +629,7 @@
     },
     {
       "id": "workflow:mobile-nightly-android.yml#android",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "A nightly Android build that fails after a successful cut.",
       "runs": ["cut"],
       "blocks": "release",
@@ -639,7 +639,7 @@
     },
     {
       "id": "workflow:mobile-signed-build.yml#android",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "Signs and builds the Android release.",
       "runs": ["manual"],
       "blocks": "action",
@@ -649,7 +649,7 @@
     },
     {
       "id": "workflow:mobile-signed-build.yml#ios",
-      "area": "Mobile",
+      "owner": "Mobile",
       "catches": "Signs and builds the iOS release.",
       "runs": ["manual"],
       "blocks": "action",
@@ -659,7 +659,7 @@
     },
     {
       "id": "workflow:nightly-cf-latency.yml#target",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "Finds the revision a successful cut deployed, so the Cloudflare run measures the right build.",
       "runs": ["cut"],
       "blocks": "alert",
@@ -669,8 +669,8 @@
     },
     {
       "id": "workflow:nightly-cf-latency.yml#latency",
-      "area": "Scorecard",
-      "catches": "Cloudflare-plane action latency regressing against its budgets.",
+      "owner": "Scorecard",
+      "catches": "Cloudflare-plane action latency over a gated budget; the job turns red and blocks nothing else.",
       "runs": ["cut"],
       "blocks": "alert",
       "minutes": 1.6,
@@ -679,8 +679,8 @@
     },
     {
       "id": "workflow:nightly-cf-latency.yml#history",
-      "area": "Scorecard",
-      "catches": "A gated Cloudflare latency metric over its budget; the job turns red and opens no issue.",
+      "owner": "Scorecard",
+      "catches": "A Cloudflare latency card that cannot be recorded in the scorecard history.",
       "runs": ["cut"],
       "blocks": "alert",
       "minutes": 0.3,
@@ -689,7 +689,7 @@
     },
     {
       "id": "workflow:nightly.yml#plan",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A cut of the wrong revision, or a cut when nothing new is on master.",
       "runs": ["cut"],
       "blocks": "release",
@@ -699,7 +699,7 @@
     },
     {
       "id": "workflow:nightly.yml#release",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Builds and deploys the nightly through the shared release workflow (the ci.yml jobs above).",
       "runs": ["cut"],
       "blocks": "release",
@@ -709,7 +709,7 @@
     },
     {
       "id": "workflow:nightly.yml#proof",
-      "area": "Real-call proofs",
+      "owner": "Real-call proofs",
       "catches": "A real call on the nightly that fails: camera share, call artifacts or long call.",
       "runs": ["cut"],
       "blocks": "release",
@@ -719,7 +719,7 @@
     },
     {
       "id": "workflow:nightly.yml#web-e2e",
-      "area": "Web",
+      "owner": "Web",
       "catches": "The web app failing a real browser journey against the nightly deploy.",
       "runs": ["cut"],
       "blocks": "release",
@@ -729,7 +729,7 @@
     },
     {
       "id": "workflow:nightly.yml#record",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Writes the nightly record Promote reads, and fails when any required job failed.",
       "runs": ["cut"],
       "blocks": "release",
@@ -739,7 +739,7 @@
     },
     {
       "id": "workflow:nightly.yml#github-release",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A GitHub release record that cannot be written for a proven nightly.",
       "runs": ["cut"],
       "blocks": "release",
@@ -749,7 +749,7 @@
     },
     {
       "id": "workflow:nightly.yml#scorecard",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "The nightly's chalk_sfu action latencies over their gated budgets, or no card at all.",
       "runs": ["cut"],
       "blocks": "release",
@@ -759,7 +759,7 @@
     },
     {
       "id": "workflow:npm-publish.yml#publish",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Publishes the SDK packages to npm.",
       "runs": ["manual"],
       "blocks": "action",
@@ -769,7 +769,7 @@
     },
     {
       "id": "workflow:osv-daily.yml#scan",
-      "area": "Security",
+      "owner": "Security",
       "catches": "A new advisory against a package nobody changed; reports to the standing security issue.",
       "runs": ["daily"],
       "blocks": "alert",
@@ -779,7 +779,7 @@
     },
     {
       "id": "workflow:promote.yml#select",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Promoting a nightly that is not proven: no passing proof, scorecard or latency verdict.",
       "runs": ["promote"],
       "blocks": "release",
@@ -789,7 +789,7 @@
     },
     {
       "id": "workflow:promote.yml#approve",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A production deploy that nobody approved.",
       "runs": ["promote"],
       "blocks": "release",
@@ -799,7 +799,7 @@
     },
     {
       "id": "workflow:promote.yml#own-sfu-spaces",
-      "area": "Media",
+      "owner": "Media",
       "catches": "Production Spaces on the wrong media plane when Promote starts.",
       "runs": ["promote"],
       "blocks": "release",
@@ -809,7 +809,7 @@
     },
     {
       "id": "workflow:promote.yml#release",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Deploys the proven nightly to production through ci.yml.",
       "runs": ["promote"],
       "blocks": "release",
@@ -819,7 +819,7 @@
     },
     {
       "id": "workflow:promote.yml#proof",
-      "area": "Real-call proofs",
+      "owner": "Real-call proofs",
       "catches": "A real call on production that fails after the deploy, which triggers rollback.",
       "runs": ["promote"],
       "blocks": "release",
@@ -829,7 +829,7 @@
     },
     {
       "id": "workflow:promote.yml#scorecard",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "The production Leave proof over the nightly median.",
       "runs": ["promote"],
       "blocks": "alert",
@@ -839,7 +839,7 @@
     },
     {
       "id": "workflow:promote.yml#scorecard-rerun",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "A one-time Leave breach that a rerun clears.",
       "runs": ["promote"],
       "blocks": "alert",
@@ -849,7 +849,7 @@
     },
     {
       "id": "workflow:promote.yml#scorecard-final",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "A Leave breach that survives a rerun; opens the regression issue.",
       "runs": ["promote"],
       "blocks": "alert",
@@ -859,7 +859,7 @@
     },
     {
       "id": "workflow:promote.yml#rollback",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A failed production proof that leaves the bad deploy in place.",
       "runs": ["promote"],
       "blocks": "action",
@@ -869,7 +869,7 @@
     },
     {
       "id": "workflow:promote.yml#rollback-npm",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A failed proof that leaves a bad npm package version published.",
       "runs": ["promote"],
       "blocks": "action",
@@ -879,7 +879,7 @@
     },
     {
       "id": "workflow:promote.yml#result",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Reports the Promote outcome from every job it depends on.",
       "runs": ["promote"],
       "blocks": "release",
@@ -889,7 +889,7 @@
     },
     {
       "id": "workflow:promote.yml#github-release",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "A GitHub release record that cannot be written for a promoted release.",
       "runs": ["promote"],
       "blocks": "action",
@@ -899,7 +899,7 @@
     },
     {
       "id": "workflow:real-call-proof.yml#smoke",
-      "area": "Real-call proofs",
+      "owner": "Real-call proofs",
       "catches": "A real call failing on the nightly or production Spaces; the daily production run pages Discord.",
       "runs": ["cut", "promote", "daily"],
       "blocks": "release",
@@ -909,7 +909,7 @@
     },
     {
       "id": "workflow:release-contracts.yml#podman-image-cleanup",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "The managed host's image cleanup script misbehaving on Podman 4.9.",
       "runs": ["pull_request"],
       "blocks": "advisory",
@@ -920,7 +920,7 @@
     },
     {
       "id": "workflow:release-contracts.yml#contracts",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Release workflow lint, dispatcher and recorder image checks and OpenTofu validation breaking.",
       "runs": ["pull_request"],
       "blocks": "advisory",
@@ -931,7 +931,7 @@
     },
     {
       "id": "workflow:sdk-web-consumer-e2e.yml#packed-consumer",
-      "area": "SDK",
+      "owner": "SDK",
       "catches": "The packed web SDK failing in a real browser as a consumer installs it.",
       "runs": ["pull_request", "daily"],
       "blocks": "advisory",
@@ -942,7 +942,7 @@
     },
     {
       "id": "workflow:sfu-bench-reaper.yml#reap",
-      "area": "Media",
+      "owner": "Media",
       "catches": "Capacity-bench droplets that run on and bill after a bench ends.",
       "runs": ["daily"],
       "blocks": "action",
@@ -952,7 +952,7 @@
     },
     {
       "id": "workflow:staging-sfu-latency.yml#target",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "Picks the newest held nightly whose SHA staging still runs.",
       "runs": ["cut", "daily", "manual"],
       "blocks": "release",
@@ -962,7 +962,7 @@
     },
     {
       "id": "workflow:staging-sfu-latency.yml#latency",
-      "area": "Scorecard",
+      "owner": "Scorecard",
       "catches": "The own-SFU action latencies over their budgets on the staging node.",
       "runs": ["cut", "daily", "manual"],
       "blocks": "release",
@@ -972,7 +972,7 @@
     },
     {
       "id": "workflow:staging-sfu-latency.yml#record",
-      "area": "Release chain",
+      "owner": "Release chain",
       "catches": "Writes the SHA-bound latency verdict Promote requires.",
       "runs": ["cut", "daily", "manual"],
       "blocks": "release",
@@ -982,7 +982,7 @@
     },
     {
       "id": "workflow:web-call-proof.yml#web",
-      "area": "Real-call proofs",
+      "owner": "Real-call proofs",
       "catches": "A web call that fails end to end in a real browser against a deployed environment.",
       "runs": ["cut", "manual"],
       "blocks": "release",
@@ -992,7 +992,7 @@
     },
     {
       "id": "scorecard:web.route",
-      "area": "Call",
+      "owner": "Call",
       "catches": "The pre-join route's JavaScript or CSS growing past its gzip ceiling.",
       "runs": ["pull_request", "merge_queue"],
       "blocks": "merge",
@@ -1002,7 +1002,7 @@
     },
     {
       "id": "scorecard:web.laptop",
-      "area": "Call",
+      "owner": "Call",
       "catches": "Laptop call bundles, timing, video quality and leaks growing past their ceilings.",
       "runs": ["pull_request", "merge_queue"],
       "blocks": "merge",
@@ -1012,7 +1012,7 @@
     },
     {
       "id": "scorecard:web.phone",
-      "area": "Call",
+      "owner": "Call",
       "catches": "Phone call bundles, timing, video quality and leaks growing past their ceilings.",
       "runs": ["pull_request", "merge_queue"],
       "blocks": "merge",
@@ -1022,7 +1022,7 @@
     },
     {
       "id": "scorecard:chalk_sfu.action",
-      "area": "Media",
+      "owner": "Media",
       "catches": "An own-SFU call action (join, toggle, publish, leave) getting slower than its p95 ceiling.",
       "runs": ["cut", "daily"],
       "blocks": "release",
@@ -1032,8 +1032,8 @@
     },
     {
       "id": "scorecard:cf_sfu.action",
-      "area": "Media",
-      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling.",
+      "owner": "Media",
+      "catches": "A Cloudflare-plane call action getting slower than its p95 ceiling; only the Cloudflare latency run turns red.",
       "runs": ["cut"],
       "blocks": "alert",
       "minutes": null,
@@ -1042,7 +1042,7 @@
     },
     {
       "id": "scorecard:sfu.loopback",
-      "area": "Media",
+      "owner": "Media",
       "catches": "The SFU loopback test pass rate falling.",
       "runs": ["pull_request", "merge_queue"],
       "blocks": "merge",
@@ -1052,7 +1052,7 @@
     },
     {
       "id": "scorecard:sfu.impairment",
-      "area": "Media",
+      "owner": "Media",
       "catches": "The SFU impairment test pass rate falling.",
       "runs": ["pull_request", "merge_queue"],
       "blocks": "merge",
@@ -1062,7 +1062,7 @@
     },
     {
       "id": "scorecard:proof.leave_median_ms",
-      "area": "Media",
+      "owner": "Media",
       "catches": "The median Leave confirmation on the real-call proof getting slower than 5 s.",
       "runs": ["cut", "promote"],
       "blocks": "alert",

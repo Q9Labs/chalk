@@ -20,7 +20,7 @@ test("only the Cloudflare plane carries the Iowa and Singapore note", () => {
   assert.match(planeNoteMarkdown("cf_sfu"), /Iowa.*nearby point of presence.*Singapore.*not a fair comparison yet.*fewer samples/s);
 });
 
-test("a Cloudflare latency card is collected, shown with the note, and an over-budget value blocks its own history job", (t) => {
+test("a Cloudflare latency card is collected, shown with the note, and an over-budget value blocks its own run", (t) => {
   const dir = mkdtempSync(join(tmpdir(), "cf-card-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const evidence = join(dir, "evidence");

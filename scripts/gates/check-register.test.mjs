@@ -5,7 +5,7 @@ import { gateTaskIds, readRegister, requireRegistered } from "./register.mjs";
 
 const entry = (overrides = {}) => ({
   id: "gate:example",
-  area: "Gate",
+  owner: "Gate",
   catches: "A change that breaks the example.",
   runs: ["pull_request"],
   blocks: "merge",

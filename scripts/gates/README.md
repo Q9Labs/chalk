@@ -29,7 +29,7 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 ## Checks register
 
-`checks.json` is the one list of every check Chalk runs: each Gate lane, each workflow job, the commit hook command and each scorecard budget group. `gate.config.ts` builds its custom lanes from the Gate entries, and the planner throws for a task with no entry, so a lane cannot exist without one. Each entry states the failure it exists to catch in one sentence, its owner (`area`, a feature or area name), where it runs (`runs`), what it blocks (`blocks`), its median minutes, and its record in the CI timing audit sample (`caught`, `noise`, `never-failed` or `unmeasured`) with the numbers behind it.
+`checks.json` is the one list of every check Chalk runs: each Gate lane, each workflow job, the commit hook command and each scorecard budget group. `gate.config.ts` builds its custom lanes from the Gate entries, and the planner throws for a task with no entry, so a lane cannot exist without one. Each entry states the failure it exists to catch in one sentence, its owner (`owner`, a feature or area name, never a person), where it runs (`runs`), what it blocks (`blocks`), its median minutes, and its record in the CI timing audit sample (`caught`, `noise`, `never-failed` or `unmeasured`) with the numbers behind it.
 
 `blocks` takes one of six values. `merge` is a required context or a lane inside one. `release` stops a cut or Promote. `commit` is the hook. `alert` opens an issue or pages someone, for a monitor that no change causes. `action` is work that is not a check, such as a build, a deploy or a cache warm. `advisory` is red on a pull request but is not a required context, and it needs a `reason` that says why it stays and why it cannot block. A check that blocks nothing and has no reason is deleted.
 
@@ -37,7 +37,7 @@ A push after enqueueing drops the entry: fix the cause and enqueue again.
 
 Four workflows stay advisory because only a change to the repository ruleset can make them block, and that needs the repository owner: `mobile-ci` (the unsigned native builds need macOS and a long runner), `codeql` (findings go to the Security tab), `sdk-web-consumer-e2e` (Firefox and WebKit packed-consumer runs, beyond the Chromium run in the Gate) and `release-contracts` (the only pull request cover for the release workflow inputs).
 
-**Scorecard budgets.** Every budget in `perf/budgets.json` gates. `web.route`, `web.laptop` and `web.phone` fail the pull request in the Gate. `chalk_sfu.action` holds the nightly cut on a breach, and `proof.leave_median_ms` stops Promote after a rerun. `cf_sfu.action` fails only its own `history` job and opens no issue, because the Cloudflare plane is not on the release path. A metric that nothing produces has no budget, and a budget cannot be set to warn.
+**Scorecard budgets.** Every budget in `perf/budgets.json` gates. `web.route`, `web.laptop` and `web.phone` fail the pull request in the Gate. `chalk_sfu.action` holds the nightly cut on a breach, and `proof.leave_median_ms` stops Promote after a rerun. `cf_sfu.action` fails only the Cloudflare `latency` job (so that night records no history card) and opens no issue, because the Cloudflare plane is not on the release path. A metric that nothing produces has no budget, and a budget cannot be set to warn.
 
 ## Scope and selection
 
