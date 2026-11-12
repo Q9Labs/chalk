@@ -1,6 +1,14 @@
 import type { WhiteboardView } from "../collab/view";
 import type { WhiteboardCommit } from "../collab/wire";
-import { CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION, CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION, decodeEmbeddedWhiteboardHostMessage, encodeEmbeddedWhiteboardMessage, type ChalkEmbeddedWhiteboardHostEnvelope, type ChalkEmbeddedWhiteboardRendererMessage } from "./protocol";
+import {
+  CHALK_EMBEDDED_WHITEBOARD_BRIDGE_VERSION,
+  CHALK_EMBEDDED_WHITEBOARD_EXCALIDRAW_VERSION,
+  CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS,
+  decodeEmbeddedWhiteboardHostMessage,
+  encodeEmbeddedWhiteboardMessage,
+  type ChalkEmbeddedWhiteboardHostEnvelope,
+  type ChalkEmbeddedWhiteboardRendererMessage,
+} from "./protocol";
 
 declare global {
   interface Window {
@@ -15,7 +23,6 @@ type PendingRequest = {
 };
 
 type HostListener = (message: ChalkEmbeddedWhiteboardHostEnvelope) => void;
-const MAX_RECENT_MESSAGE_IDS = 2_048;
 
 export class ChalkEmbeddedWhiteboardRendererBridge {
   readonly #context = rendererContext();
@@ -205,7 +212,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function recordMessageId(messageIds: Set<string>, messageId: string): boolean {
   if (messageIds.has(messageId)) return false;
   messageIds.add(messageId);
-  if (messageIds.size > MAX_RECENT_MESSAGE_IDS) {
+  if (messageIds.size > CHALK_EMBEDDED_WHITEBOARD_MAX_RECENT_MESSAGE_IDS) {
     const oldest = messageIds.values().next().value;
     if (oldest) messageIds.delete(oldest);
   }

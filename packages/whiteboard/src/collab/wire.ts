@@ -1,8 +1,9 @@
 import type { OrderedExcalidrawElement } from "./types";
+import { WHITEBOARD_ELEMENT_ENCODED_BYTES_MAX } from "./wire-limits";
 
-// Sync stores one element, envelope included, in at most 16,384 bytes of its own JSON (whiteboard-v1).
+// Sync stores one element, envelope included, in at most the contract's encoded bytes of its own JSON (whiteboard-v1).
 // The engine keeps a margin for differences between that encoder and JSON.stringify that it does not count.
-export const ELEMENT_ENCODED_BYTES_LIMIT = 16_384 - 64;
+export const ELEMENT_ENCODED_BYTES_LIMIT = WHITEBOARD_ELEMENT_ENCODED_BYTES_MAX - 64;
 const encoder = new TextEncoder();
 
 export type WhiteboardJsonValue = null | boolean | number | string | readonly WhiteboardJsonValue[] | { readonly [key: string]: WhiteboardJsonValue };

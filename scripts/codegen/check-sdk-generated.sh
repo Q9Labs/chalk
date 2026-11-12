@@ -40,7 +40,7 @@ CODEGEN_SYNC_ELIXIR_OUTPUT_PATH="$tmpdir/generated.ex" \
   node tools/contract-fixture-proof/src/emitters/sync-elixir.mjs
 
 CODEGEN_WHITEBOARD_TYPESCRIPT_OUTPUT_PATH="$tmpdir/whiteboard-v1.ts" \
-CODEGEN_WHITEBOARD_VIEW_LIMITS_OUTPUT_PATH="$tmpdir/whiteboard-view-limits.ts" \
+CODEGEN_WHITEBOARD_WIRE_LIMITS_OUTPUT_PATH="$tmpdir/whiteboard-wire-limits.ts" \
   node tools/contract-fixture-proof/src/emitters/whiteboard-typescript.mjs
 
 CODEGEN_WHITEBOARD_ELIXIR_OUTPUT_PATH="$tmpdir/generated_whiteboard_v1.ex" \
@@ -54,7 +54,7 @@ pnpm exec oxfmt --write \
   "$tmpdir/public-http-api.ts" \
   "$tmpdir/sync.ts" \
   "$tmpdir/whiteboard-v1.ts" \
-  "$tmpdir/whiteboard-view-limits.ts" \
+  "$tmpdir/whiteboard-wire-limits.ts" \
   "$tmpdir/openapi-types.d.ts"
 
 diff -u contract/generated/openapi.json "$tmpdir/openapi.json"
@@ -63,7 +63,7 @@ diff -u sdks/typescript/client/src/generated/http-api.ts "$tmpdir/http-api.ts"
 diff -u sdks/typescript/client/src/generated/public-http-api.ts "$tmpdir/public-http-api.ts"
 diff -u sdks/typescript/client/src/generated/sync.ts "$tmpdir/sync.ts"
 diff -u sdks/typescript/client/src/generated/whiteboard-v1.ts "$tmpdir/whiteboard-v1.ts"
-diff -u packages/whiteboard/src/collab/view-limits.ts "$tmpdir/whiteboard-view-limits.ts"
+diff -u packages/whiteboard/src/collab/wire-limits.ts "$tmpdir/whiteboard-wire-limits.ts"
 diff -u sdks/typescript/client/src/generated/openapi-types.d.ts "$tmpdir/openapi-types.d.ts"
 
 diff -u apps/sync/lib/chalk_sync/contract/generated.ex "$tmpdir/generated.ex"

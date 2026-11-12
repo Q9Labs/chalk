@@ -1,5 +1,6 @@
 import { CaptureUpdateAction, newElementWith, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 
+import { WHITEBOARD_CURSOR_TTL_MS } from "./wire-limits";
 import { withLocalWhiteboardCamera, type SharedWhiteboardAppState } from "./camera";
 import { WhiteboardFilesSync } from "./files";
 import type { WhiteboardFileSyncState, WhiteboardFileTransferOptions } from "./files";
@@ -16,7 +17,6 @@ const CHANGE_DEBOUNCE_MS = 150;
 // Remote cursors change the canvas too, so the debounce alone can be restarted without end.
 const CHANGE_MAX_WAIT_MS = 1_000;
 const CURSOR_THROTTLE_MS = 16;
-const CURSOR_STALE_MS = 10_000;
 
 const asArray = (value: unknown) => (Array.isArray(value) ? value : []);
 const toReconcileRemoteElements = (elements: readonly OrderedExcalidrawElement[]): Parameters<typeof reconcileElements>[1] => elements as unknown as Parameters<typeof reconcileElements>[1];
@@ -134,7 +134,7 @@ export class ExcalidrawCollabEngine {
       sendCursor: opts.sendCursor,
       renderCursors: opts.renderCursors ?? true,
       throttleMs: CURSOR_THROTTLE_MS,
-      staleMs: CURSOR_STALE_MS,
+      staleMs: WHITEBOARD_CURSOR_TTL_MS,
     });
 
     this.unsubPointerUp = opts.excalidrawAPI.onPointerUp?.(() => this.flushNow());
