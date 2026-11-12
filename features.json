@@ -607,7 +607,6 @@
         "apps/sync/lib/chalk_sync/telemetry.ex",
         "apps/sync/lib/chalk_sync/transport",
         "apps/sync/lib/chalk_sync/uuid.ex",
-        "apps/sync/lib/mix",
         "apps/sync/mix.exs",
         "apps/sync/mix.lock",
         "apps/sync/scripts",
