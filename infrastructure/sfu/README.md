@@ -232,7 +232,7 @@ starting a new one.
 4. Verify. `get` shows `space_setting` and `effective_plane` as `cf_sfu`. A new
    Episode's join grant reports `media.provider` as `cloudflare_sfu`, and the guests
    have audio and video. `media-provider-inventory` counts the live Episodes by
-   provider ([provider inventory](../../docs/sfu/provider-inventory.md)).
+   provider (`apps/api/cmd/media-provider-inventory`).
 
 5. Return the Space with the same command and `--plane chalk_sfu`, then repeat step 3
    for a call that should move back. The setting only selects the plane. The new

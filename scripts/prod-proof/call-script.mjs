@@ -19,7 +19,7 @@ export const bounds = {
   markerOffsetMs: 1500,
   // Largest gap between a guest's flash and its beep in the Recording.
   avOffsetMs: 300,
-  // The design's 15 s source lease (docs/sfu/design.md "bounded mute-enforcement window") bounds how long captured media may outlive a mute, an unshare or a host stop.
+  // The design's 15 s source lease (docs/sfu/design.md "Reconnect and authority", the lease bound) bounds how long captured media may outlive a mute, an unshare or a host stop.
   endMs: 15_000,
   // Silence beyond the script's own longest gap (hold tones and the next marker start on different clocks).
   silenceToleranceMs: 2500,

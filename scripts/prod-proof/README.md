@@ -66,7 +66,7 @@ process environment variable, not inside CHALK_PROOF_BASELINE_ENV. Supply produc
 CHALK*PROOF*\* environment mapping as JSON in CHALK_PROOF_BASELINE_ENV, with
 credentials injected only at runtime. Promote requires that session's captured
 median and encrypted evidence hash, and uses the captured median for its limit.
-The [5.3.1 promote plan](../../docs/releases/5.3.1-promote-plan.md) defines the
+The comparison script defines the
 relative latency gate and the controlled HTTP fault; protocol acknowledgements
 and real SFU cleanup are never mocked. Private comparison and socket evidence
 is retained for every sample. Hosted proof files remain in memory until encrypted.
@@ -129,8 +129,7 @@ Other checks cover parts of the same journey:
 
 ## Canary fleet
 
-`pnpm prod:fleet` is the volume half of the M7 canary exit in
-[`docs/sfu/milestones.md`](../../docs/sfu/milestones.md#m7--internal-canary-and-live-verification): scripted joins and
+`pnpm prod:fleet` is the volume half of the canary exit: scripted joins and
 fault trials pass, plus at least 200 calls and 50 call-hours with no P1. `pnpm prod:canary` proves the thresholds with
 two guests at a time; the fleet runs many 2-to-6-guest calls in parallel on one machine and counts what it ran.
 
@@ -309,7 +308,7 @@ The `export` proof downloads the Recording MP4. The `call-artifacts` proof then 
 - every guest's marker tone is found, anchored on guest 1's first marker, within 1.5 s of the time the script gives, with speech after it (per-guest audio completeness: tone and phrase for every cycle). Markers inside the restart window are excused;
 - the longest silence (`silencedetect` threshold -50 dB, at least 0.5 s) is no longer than the script's own longest gap between sounds plus 2.5 s, which is about 6.6 s for the default phrases. The 8 Nov proof had four silences of 10.9 to 15.7 s because each guest looped on its own clock, so its pauses were never aligned; one shared start and the derived bound catch that;
 - each marker's white flash and beep are less than 300 ms apart in the Recording (the A/V sync check; this bound is a first estimate and the first live run calibrates it);
-- guest 2's tone ends within 15 s of the mute, the shared screen's green within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` (the "bounded mute-enforcement window"); the console prints the measured values;
+- guest 2's tone ends within 15 s of the mute, the shared screen's green within 15 s of the stop, guest 3's tone within 15 s of the host stop, and the file ends no later than 15 s after the host stop. 15 s is the source-lease bound in `docs/sfu/design.md` ("Reconnect and authority", the lease bound); the console prints the measured values;
 - when `CHALK_PROOF_RECORDER_TRACKS_COMMAND` is set, every guest's markers are also checked in that guest's own recorder track, and the console prints a `Verdict:` line for each. A marker absent from the guest's own track was lost at capture. A marker in its own track but absent from the mix was lost by the mixer. A mix silence longer than the bound that a track covers was lost by the mixer; one that no track covers and the script does not cover is a gap in the script itself. The public API serves only the mixed MP4 and keeps the encrypted bundles behind a key the proof never holds, so the operator supplies the command: it runs once with `CHALK_PROOF_TRACKS_DIR` (an empty private folder in the run's encrypted evidence), `CHALK_PROOF_RECORDING_ID` and `CHALK_PROOF_PARTICIPANT_IDS` (comma separated, in guest order), and writes each participant's decrypted audio to a WAV file named after the participant id. It may leave the bundle and manifest in the folder too; everything there is uploaded only inside the encrypted evidence. Without the command the proof prints that the per-track check was skipped and judges the mix alone;
 - the Recording source is `available` (the public API sets that only after Capture completion, so it stands for the sealed encrypted bundles and manifest; the API exposes no bundle objects), has an R2 storage key, did not stop early, and its export is `ready`;
 - the Transcript text (`GET /v1/tenants/{tenant_id}/transcripts/{id}/text`) is not empty and contains words from every guest's phrase.

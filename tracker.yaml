@@ -508,7 +508,6 @@ wishlist:
       combinations that do not fit the initial capacity budgets.
     theory: theory.md#constraints
     code:
-      - docs/sfu/milestones.md
       - docs/sfu/design.md
       - features/media/sfu
       - apps/api/internal/adapters/chalksfu/adapter.go
@@ -528,7 +527,6 @@ wishlist:
         and accessibility settings.
     theory: theory.md#product-goals
     code:
-      - docs/redesign/sound-design.md
       - sdks/typescript/react/src/components/chalk/Chalk.tsx
   - id: transcription.live_captions
     title: Live captions in a Space

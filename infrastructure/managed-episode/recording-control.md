@@ -70,8 +70,8 @@ Before production approval, qualify the changed control-placement boundaries:
 direct TLS peer authorization, certificate rejection, journal/issuer restart
 continuity, ordinary API/Sync health under control load, and
 worker/API/database clock alignment at capture readiness. Reuse the real
-capture/render/download/transcription/cleanup qualification recorded in
-`docs/recording-transcription.md`; these changes do not erase that evidence.
+capture/render/download/transcription/cleanup qualification; these changes do
+not erase that evidence.
 
 Separately measure 0→10 readiness and ten-way post-processing before claiming
 measured ten-worker capacity or one-hour throughput. The configured maximum is
