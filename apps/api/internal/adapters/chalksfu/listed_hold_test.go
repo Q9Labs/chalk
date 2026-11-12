@@ -122,7 +122,7 @@ func TestViewerThatPollsTheListKeepsItsSubscriptionThroughMuteAndUnmute(t *testi
 			}
 			closes++
 			if _, err := service.CloseTracks(ctx, mediaplane.CloseTracksRequest{
-				Provider: mediaplane.ProviderChalkSFU, ConnectionID: bobConn, Scope: bob,
+				Provider: mediaplane.ProviderChalkSFU, ConnectionID: bobConn, Scope: bob, ReceiveOnly: true,
 				Tracks: []mediaplane.CloseTrack{{Mid: mid, Source: "microphone", PublicationID: publicationID}},
 			}); err != nil {
 				t.Fatalf("close: %v", err)
