@@ -2,6 +2,23 @@
 
 export const THEME_SKINS = ["classic", "chalk"] as const;
 export const THEME_TEXTURES = ["none", "paper", "slate"] as const;
-export const THEME_PALETTES = ["light", "warm-porcelain", "cool-mist", "paper-and-ink", "cream-and-clay", "studio-canvas", "prism-daylight", "signal-white", "warm-charcoal", "cool-graphite", "high-contrast-ink", "espresso-night", "chalkboard-atelier", "prism-nocturne", "cosmic-chalk", "oled-signal"] as const;
+export const THEME_PALETTES = [
+  "light",
+  "warm-porcelain",
+  "cool-mist",
+  "paper-and-ink",
+  "cream-and-clay",
+  "studio-canvas",
+  "prism-daylight",
+  "signal-white",
+  "warm-charcoal",
+  "cool-graphite",
+  "high-contrast-ink",
+  "espresso-night",
+  "chalkboard-atelier",
+  "prism-nocturne",
+  "cosmic-chalk",
+  "oled-signal",
+] as const;
 export const REACTIONS = ["👍", "❤️", "😂", "😮", "🎉", "👏", "😀", "😅", "🙏", "🔥", "✅", "👀", "💯", "🤔", "😢", "🙌", "🚀", "👌", "😍", "🤝", "💡", "⭐", "😎", "🥳"] as const;
 export const ASSET_KINDS = ["logo", "avatar", "chat_attachment", "whiteboard_state", "whiteboard_file", "font"] as const;

@@ -24,9 +24,18 @@ package recordingpresentation
 
 ${enums.map(({ name, values }) => `var ${name} = map[string]struct{}{${values.map((value) => `${JSON.stringify(value)}: {}`).join(", ")}}`).join("\n\n")}
 `;
+// Same layout oxfmt gives the file at the repo print width, so the format check passes on generated output.
+const PRINT_WIDTH = 300;
+function tsArray(name, values) {
+  const items = values.map((value) => JSON.stringify(value));
+  const inline = `export const ${name} = [${items.join(", ")}] as const;`;
+  if (inline.length <= PRINT_WIDTH) return inline;
+  return `export const ${name} = [\n${items.map((item) => `  ${item},`).join("\n")}\n] as const;`;
+}
+
 const ts = `// ${header}
 
-${enums.map(({ ts: name, values }) => `export const ${name} = [${values.map((value) => JSON.stringify(value)).join(", ")}] as const;`).join("\n")}
+${enums.map(({ ts: name, values }) => tsArray(name, values)).join("\n")}
 `;
 for (const [path, content] of [
   ["apps/api/internal/recordingpresentation/schema_enums.gen.go", go],
