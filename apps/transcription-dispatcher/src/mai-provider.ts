@@ -1,7 +1,7 @@
 import { ProviderError, providerSchemaError } from "./errors.js";
 import { classifyProviderStatus, openRouterReason } from "./provider-failure.js";
-import { parseJson, parseProviderResponse, parseProviderResult, readProviderBody } from "./provider-response.js";
-import { prepareSpeechAudio } from "./speech-audio.js";
+import { parseJson, parseProviderResponse, parseProviderResult, readProviderBody, valueAt } from "./provider-response.js";
+import { prepareSpeechAudio, type SpeechBatch } from "./speech-audio.js";
 import type { ProviderPolicy, ProviderRequest, ProviderResult, TranscriptionProvider } from "./provider-types.js";
 
 const MODEL = "microsoft/mai-transcribe-2";
@@ -19,10 +19,10 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
   constructor(private readonly options: Options) {}
 
   async transcribe(request: ProviderRequest): Promise<ProviderResult> {
+    const { policy } = this.options;
     if (request.transcriptLanguage?.mode === "fixed") throw new ProviderError("MAI requires Auto language mode", "nonretryable");
-    if (request.contentType !== "audio/flac" || !request.audio.length || request.audio.length > this.options.policy.maxAudioBytes) throw providerSchemaError("invalid MAI audio source", "audio", "bounded renderer FLAC", undefined);
-    const signal = request.signal;
-    const prepared = await prepareSpeechAudio(request.audio, this.options.policy.maxAudioSeconds);
+    if (request.contentType !== "audio/flac" || !request.audio.length || request.audio.length > policy.maxAudioBytes) throw providerSchemaError("invalid MAI audio source", "audio", "bounded renderer FLAC", undefined);
+    const prepared = await prepareSpeechAudio(request.audio, policy.maxAudioSeconds);
     const segments: ProviderResult["segments"] = [];
     const words: NonNullable<ProviderResult["words"]> = [];
     const texts: string[] = [];
@@ -30,52 +30,54 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
     let cost = 0;
     let speechMs = 0;
     for (const batch of prepared.batches) {
-      if (signal?.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
-      const response = await this.post(
-        "audio/transcriptions",
-        {
-          model: MODEL,
-          input_audio: { data: Buffer.from(batch.audio).toString("base64"), format: "wav" },
-          response_format: "verbose_json",
-          timestamp_granularities: ["segment", "word"],
-        },
-        signal,
-      );
-      const result = await parseProviderResponse(response, this.options.policy.maxResponseBytes, (body) => {
-        cost += reportedCost(body);
-        return parseProviderResult(body, {
-          provider: this.name,
-          model: MODEL,
-          versionContract: VERSION,
-          maxTextChars: this.options.policy.maxTextChars,
-          maxSegments: this.options.policy.maxSegments,
-          maxWords: this.options.policy.maxWords,
-          maxAudioSeconds: batch.durationSeconds + 0.05,
-          onTimingRepair: request.onTimingRepair,
-        });
-      });
-      if (result.text.trim() && !result.words?.length) throw providerSchemaError("MAI omitted requested word timestamps", "words", "nonempty timed words for speech", undefined);
-      // Partial word timestamps must not discard the rest of a provider segment.
-      const complete = {
-        ...result,
-        segments: result.segments.map((segment) => {
-          const timedText = (result.words ?? [])
-            .filter((word) => word.startSeconds < segment.endSeconds && word.endSeconds > segment.startSeconds)
-            .map((word) => word.word)
-            .join(" ");
-          return lexicalText(timedText) === lexicalText(segment.text) ? segment : { ...segment, useSegmentText: true as const };
-        }),
-      };
-      const converted = await this.convertScript(complete, signal);
-      cost += converted.cost;
-      language = converted.result.language ?? language;
-      texts.push(converted.result.text);
-      segments.push(...converted.result.segments.map((segment) => ({ ...segment, startSeconds: batch.sourceSeconds(segment.startSeconds, "start"), endSeconds: batch.sourceSeconds(segment.endSeconds, "end") })));
-      words.push(...(converted.result.words ?? []).map((word) => ({ ...word, startSeconds: batch.sourceSeconds(word.startSeconds, "start"), endSeconds: batch.sourceSeconds(word.endSeconds, "end") })));
+      if (request.signal?.aborted) throw new ProviderError("MAI request timed out or was canceled", "timeout");
+      const done = await this.transcribeBatch(batch, request);
+      cost += done.cost;
+      language = done.result.language ?? language;
+      texts.push(done.result.text);
+      segments.push(...done.result.segments);
+      words.push(...(done.result.words ?? []));
       speechMs += Math.round(batch.durationSeconds * 1000);
-      if (segments.length > this.options.policy.maxSegments || words.length > this.options.policy.maxWords || texts.join(" ").length > this.options.policy.maxTextChars) throw providerSchemaError("MAI chunk exceeded output bounds", "result", "bounded chunk transcript", undefined);
+      if (segments.length > policy.maxSegments || words.length > policy.maxWords || texts.join(" ").length > policy.maxTextChars) throw providerSchemaError("MAI chunk exceeded output bounds", "result", "bounded chunk transcript", undefined);
     }
     return { provider: this.name, model: MODEL, versionContract: VERSION, text: texts.join(" "), segments, words, ...(language ? { language } : {}), durationMs: speechMs, providerReportedCostUsd: cost, quality: { segmentCount: segments.length, wordCount: words.length } };
+  }
+
+  /** Transcribes one batch of packed speech and maps its timings back onto the source audio. */
+  private async transcribeBatch(batch: SpeechBatch, request: ProviderRequest): Promise<{ result: ProviderResult; cost: number }> {
+    const { policy } = this.options;
+    const response = await this.post(
+      "audio/transcriptions",
+      {
+        model: MODEL,
+        input_audio: { data: Buffer.from(batch.audio).toString("base64"), format: "wav" },
+        response_format: "verbose_json",
+        timestamp_granularities: ["segment", "word"],
+      },
+      request.signal,
+    );
+    let cost = 0;
+    const parsed = await parseProviderResponse(response, policy.maxResponseBytes, (body) => {
+      cost += reportedCost(body);
+      return parseProviderResult(body, {
+        provider: this.name,
+        model: MODEL,
+        versionContract: VERSION,
+        maxTextChars: policy.maxTextChars,
+        maxSegments: policy.maxSegments,
+        maxWords: policy.maxWords,
+        maxAudioSeconds: batch.durationSeconds + 0.05,
+        onTimingRepair: request.onTimingRepair,
+      });
+    });
+    if (parsed.text.trim() && !parsed.words?.length) throw providerSchemaError("MAI omitted requested word timestamps", "words", "nonempty timed words for speech", undefined);
+    const converted = await this.convertScript(keepUntimedSegmentText(parsed), request.signal);
+    const toSource = <Timed extends { startSeconds: number; endSeconds: number }>(item: Timed): Timed => ({ ...item, startSeconds: batch.sourceSeconds(item.startSeconds, "start"), endSeconds: batch.sourceSeconds(item.endSeconds, "end") });
+    const { words } = converted.result;
+    return {
+      cost: cost + converted.cost,
+      result: { ...converted.result, segments: converted.result.segments.map(toSource), ...(words ? { words: words.map(toSource) } : {}) },
+    };
   }
 
   private async convertScript(result: ProviderResult, signal: AbortSignal | undefined): Promise<{ result: ProviderResult; cost: number }> {
@@ -123,19 +125,33 @@ export class MaiTranscribeProvider implements TranscriptionProvider {
 }
 
 function reportedCost(body: unknown): number {
-  if (!body || typeof body !== "object" || !("usage" in body) || !body.usage || typeof body.usage !== "object" || !("cost" in body.usage) || typeof body.usage.cost !== "number" || !Number.isFinite(body.usage.cost) || body.usage.cost < 0 || body.usage.cost > 1000)
-    throw providerSchemaError("OpenRouter omitted bounded usage cost", "usage.cost", "finite USD cost", undefined);
-  return body.usage.cost;
+  const cost = valueAt(body, "usage", "cost");
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0 || cost > 1000) throw providerSchemaError("OpenRouter omitted bounded usage cost", "usage.cost", "finite USD cost", undefined);
+  return cost;
 }
 
 function conversionTokens(body: unknown): string[] {
-  if (!body || typeof body !== "object" || !("choices" in body) || !Array.isArray(body.choices)) throw providerSchemaError("conversion choices missing", "choices", "chat response", undefined);
-  const first: unknown = body.choices[0];
-  if (!first || typeof first !== "object" || !("message" in first) || !first.message || typeof first.message !== "object" || !("content" in first.message) || typeof first.message.content !== "string") throw providerSchemaError("conversion content missing", "choices", "JSON content", undefined);
-  const parsed = parseJson(new TextEncoder().encode(first.message.content));
-  if (!parsed || typeof parsed !== "object" || !("tokens" in parsed) || !Array.isArray(parsed.tokens) || !parsed.tokens.every((token: unknown): token is string => typeof token === "string" && token.length <= 256))
-    throw providerSchemaError("conversion tokens missing", "tokens", "bounded string array", undefined);
-  return parsed.tokens;
+  const choices = valueAt(body, "choices");
+  if (!Array.isArray(choices)) throw providerSchemaError("conversion choices missing", "choices", "chat response", undefined);
+  const content = valueAt(choices[0], "message", "content");
+  if (typeof content !== "string") throw providerSchemaError("conversion content missing", "choices", "JSON content", undefined);
+  const tokens = valueAt(parseJson(new TextEncoder().encode(content)), "tokens");
+  if (!Array.isArray(tokens) || !tokens.every((token: unknown): token is string => typeof token === "string" && token.length <= 256)) throw providerSchemaError("conversion tokens missing", "tokens", "bounded string array", undefined);
+  return tokens;
+}
+
+/** Partial word timestamps must not discard the rest of a provider segment: a segment whose words do not spell its text keeps its own text. */
+function keepUntimedSegmentText(result: ProviderResult): ProviderResult {
+  return {
+    ...result,
+    segments: result.segments.map((segment) => {
+      const timedText = (result.words ?? [])
+        .filter((word) => word.startSeconds < segment.endSeconds && word.endSeconds > segment.startSeconds)
+        .map((word) => word.word)
+        .join(" ");
+      return lexicalText(timedText) === lexicalText(segment.text) ? segment : { ...segment, useSegmentText: true as const };
+    }),
+  };
 }
 
 function lexicalText(text: string): string {

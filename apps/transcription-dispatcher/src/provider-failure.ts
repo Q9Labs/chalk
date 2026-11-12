@@ -1,4 +1,4 @@
-import { readProviderBody, parseJson } from "./provider-response.js";
+import { isObject, parseJson, readProviderBody, valueAt } from "./provider-response.js";
 import type { ProviderResult } from "./provider-types.js";
 
 // Cloudflare marks some 408 and 429 answers as transient by code; every 5xx is transient.
@@ -39,20 +39,6 @@ export function errorCodeFromBody(value: unknown): string | undefined {
   const first: unknown = Array.isArray(errors) ? errors[0] : undefined;
   const code = valueAt(isObject(first) ? first : value, "code");
   return typeof code === "string" || typeof code === "number" ? String(code) : undefined;
-}
-
-function isObject(value: unknown): value is object {
-  return typeof value === "object" && value !== null;
-}
-
-/** Follow `path` through nested objects; anything missing along the way gives undefined. */
-function valueAt(value: unknown, ...path: string[]): unknown {
-  let current = value;
-  for (const key of path) {
-    if (!isObject(current) || !(key in current)) return undefined;
-    current = current[key];
-  }
-  return current;
 }
 
 export function ensureAbortableTimeout(timeoutMs: number, signal?: AbortSignal): AbortSignal {

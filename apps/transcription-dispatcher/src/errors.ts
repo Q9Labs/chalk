@@ -84,7 +84,7 @@ export function providerFailureKind(error: unknown): ProviderFailureKind {
   if (error instanceof ProviderError) return error.kind;
   if (error instanceof AssignmentError) return error.retryable ? "retryable" : "nonretryable";
   if (error instanceof ControlApiError) return error.retryable ? "retryable" : "nonretryable";
-  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) return "timeout";
+  if (isAbort(error)) return "timeout";
   if (error instanceof TypeError) return "retryable";
   return "nonretryable";
 }
@@ -95,17 +95,24 @@ export function isTerminalFailure(error: unknown): boolean {
   return kind === "nonretryable" || kind === "schema";
 }
 
+/** The caller's deadline or cancel signal fired. */
+export function isAbort(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+function providerErrorCode(error: ProviderError): string {
+  if (error.kind === "timeout") return "provider_timeout";
+  if (error.kind === "schema") return "provider_schema_invalid";
+  if (error.status === 429) return "provider_rate_limited";
+  if (error.status && error.status >= 500) return "provider_unavailable";
+  return "provider_rejected";
+}
+
 export function safeErrorCode(error: unknown): string {
-  if (error instanceof ProviderError) {
-    if (error.kind === "timeout") return "provider_timeout";
-    if (error.kind === "schema") return "provider_schema_invalid";
-    if (error.status === 429) return "provider_rate_limited";
-    if (error.status && error.status >= 500) return "provider_unavailable";
-    return "provider_rejected";
-  }
+  if (error instanceof ProviderError) return providerErrorCode(error);
   if (error instanceof AssignmentError) return error.retryable ? "chunk_download_retryable" : "assignment_invalid";
   if (error instanceof ControlApiError) return "control_api_rejected";
-  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) return "timeout";
+  if (isAbort(error)) return "timeout";
   if (error instanceof TypeError) return "network_failure";
   return "dispatcher_failure";
 }

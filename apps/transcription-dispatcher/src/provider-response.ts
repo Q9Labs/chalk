@@ -34,6 +34,20 @@ function requestIds(body: unknown): unknown[] {
   return ["request_id" in body ? body.request_id : undefined, "requestId" in body ? body.requestId : undefined];
 }
 
+export function isObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+/** Follow `path` through nested objects; anything missing along the way gives undefined. */
+export function valueAt(value: unknown, ...path: string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (!isObject(current) || !(key in current)) return undefined;
+    current = Reflect.get(current, key);
+  }
+  return current;
+}
+
 export async function readProviderBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   try {
     return await readBoundedBody(response, maxBytes);
@@ -77,7 +91,7 @@ function optionalFinite(value: unknown, label: string): number | undefined {
   return finite(value, label);
 }
 
-interface ParseLimits {
+export interface ParseLimits {
   maxTextChars: number;
   maxSegments: number;
   maxWords: number;
