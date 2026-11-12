@@ -245,6 +245,8 @@
       "name": "chat",
       "summary": "Stores the Space chat stream and its attached files.",
       "paths": [
+        "apps/api/internal/adapters/postgres/chat_attachments.go",
+        "apps/api/internal/adapters/postgres/sqlc/chat_attachments.sql.go",
         "apps/api/internal/chatattachments",
         "apps/api/internal/httpapi/chat_attachments.go",
         "apps/mobile/src/lib/chat-files.ts",
@@ -252,6 +254,7 @@
         "apps/sync/lib/chalk_sync/chat.ex",
         "apps/sync/lib/chalk_sync/reactions.ex",
         "apps/sync/test/chalk_sync/chat",
+        "apps/sync/test/chalk_sync/transport/socket_chat_telemetry_test.exs",
         "sdks/typescript/client/src/chat-files",
         "sdks/typescript/client/src/space-client/chat-attachment-download.test.ts",
         "sdks/typescript/client/src/space-client/chat-attachment-failures.test.ts",
