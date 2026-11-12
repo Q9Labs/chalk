@@ -77,17 +77,18 @@ export function ReactionTray({ isHandRaised, onToggleHandRaise, reactions, onSel
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
-    // The reactions button toggles the tray itself, so a press on it is left to its own click.
-    const handlePointerDown = (event: PointerEvent) => {
+    // A click, not a pointerdown: closing the tray moves the notices down, so closing it on pointerdown would move a notice's Dismiss away before its click lands.
+    // The reactions button toggles the tray itself, so a click on it is left to its own handler.
+    const handleClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element) || listRef.current?.contains(target) || target.closest(".chalk-shell-reactions-button, [data-reactions-backdrop]")) return;
       onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("click", handleClick, true);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("click", handleClick, true);
     };
   }, [onClose]);
 
