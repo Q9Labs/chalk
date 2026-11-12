@@ -48,7 +48,7 @@ func (s *Session) trail(level slog.Level, event string, attrs ...any) {
 	if s == nil || s.node == nil {
 		return
 	}
-	head := []any{"event", event, "connection_id", s.id, "session_kind", s.kind.name(), "node_incarnation", s.node.incarnation}
+	head := []any{"event", event, "connection_id", s.id, "session_kind", s.kind.name, "node_incarnation", s.node.incarnation}
 	head = append(head, scopeAttrs(s.scope)...)
 	if trace := s.trace.Load(); trace != nil {
 		if trace.TraceID != "" {
@@ -59,13 +59,6 @@ func (s *Session) trail(level slog.Level, event string, attrs ...any) {
 		}
 	}
 	s.node.log.Log(context.Background(), level, event, append(head, attrs...)...)
-}
-
-func (k sessionKind) name() string {
-	if k == kindCapture {
-		return "capture"
-	}
-	return "participant"
 }
 
 // Causes a session closes for. The first one to reach Close is the one the log names.

@@ -68,7 +68,7 @@ func (n *Node) liveSessions(replacing *Session, from int64) (participants, captu
 	for _, session := range n.sessions {
 		switch {
 		case session == replacing, session.allocation < from:
-		case session.kind == kindCapture:
+		case !session.kind.participant:
 			captures[episodeOf(session.scope)]++
 		default:
 			participants[episodeOf(session.scope)]++
@@ -116,11 +116,11 @@ func (n *Node) promisedSlots(skip episodeKey, participants, captures map[episode
 // sessionSlots is the session count the node's limit would see after one more session of the kind
 // joins: the live sessions, less the one it replaces, and every Participant and capture a hold
 // still promises. The caller holds n.mu.
-func (n *Node) sessionSlots(scope protocol.Scope, kind sessionKind, replacing *Session) int {
+func (n *Node) sessionSlots(scope protocol.Scope, kind *SessionKind, replacing *Session) int {
 	n.expireHolds()
 	key := episodeOf(scope)
 	participants, captures := n.liveSessions(replacing, 0)
-	if kind == kindCapture {
+	if !kind.participant {
 		captures[key]++
 	} else {
 		participants[key]++
@@ -261,7 +261,7 @@ func (n *Node) ReserveEpisode(request protocol.ReserveEpisodeRequest) (protocol.
 // reserve carries, which makes the reserve stale. The caller holds n.mu.
 func (n *Node) newerSession(key episodeKey, generation int64) bool {
 	for _, session := range n.sessions {
-		if session.kind != kindCapture && episodeOf(session.scope) == key && session.scope.Generation > generation {
+		if session.kind.participant && episodeOf(session.scope) == key && session.scope.Generation > generation {
 			return true
 		}
 	}

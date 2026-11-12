@@ -27,7 +27,7 @@ type Session struct {
 	id              string
 	createOperation string
 	scope           protocol.Scope
-	kind            sessionKind
+	kind            *SessionKind
 	// allocation is the binding generation the create was issued under, or 0 for a caller that
 	// named none. RetireEpisode ends sessions below its floor.
 	allocation int64
@@ -73,7 +73,7 @@ type pendingOffer struct {
 }
 
 // newSession builds a session and starts its pacer. The caller holds n.mu.
-func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind sessionKind) (*Session, error) {
+func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind *SessionKind) (*Session, error) {
 	transport := newTransport(&n.guard.delays, n.cfg.Memory.PacerQueueBytes, n.done)
 	pc, err := n.peers.newPeer(transport)
 	if err != nil {
@@ -107,7 +107,7 @@ func (n *Node) newSession(id, operationID string, scope protocol.Scope, kind ses
 }
 
 // key is the session's place in the node's table of live sessions.
-func (s *Session) key() participantKey { return sessionKey(s.scope, s.kind) }
+func (s *Session) key() participantKey { return s.kind.key(s.scope) }
 
 func (s *Session) onConnectionState(state webrtc.PeerConnectionState) {
 	s.traceConnectionState(state)
@@ -227,7 +227,7 @@ func (s *Session) AddTracks(ctx context.Context, request protocol.TracksRequest)
 			return protocol.TracksResponse{}, err
 		}
 		if local {
-			if s.kind == kindCapture {
+			if !s.kind.publishes {
 				return protocol.TracksResponse{}, fmt.Errorf("%w: a capture session only pulls", ErrUnsupportedOperation)
 			}
 			return s.push(ctx, request)
@@ -406,12 +406,7 @@ func (s *Session) transceiverLimit() int {
 
 // subscriptionLimit is the most tracks the session pulls. A capture pulls every Participant's
 // microphone and camera and publishes nothing.
-func (s *Session) subscriptionLimit() int {
-	if s.kind == kindCapture {
-		return s.node.cfg.MaxCaptureSubscriptions
-	}
-	return s.node.cfg.MaxSubscriptionsPerSession
-}
+func (s *Session) subscriptionLimit() int { return s.kind.maxSubscriptions(s.node.cfg) }
 
 // registerPublication records one pushed track. The caller holds s.mu. It returns the
 // section's transceiver and a track error code when the track cannot be published.
@@ -580,7 +575,7 @@ func (s *Session) subscribe(track protocol.Track, staged []*subscription) (*subs
 		return nil, protocol.TrackCodeLimitExceeded, "too many subscriptions"
 	}
 	var lease *captureLease
-	if s.kind == kindCapture {
+	if s.kind.reservesPerTrack {
 		var err error
 		if lease, err = s.node.reserveCapture(s, s.node.captureCost(pub)); err != nil {
 			return nil, protocol.TrackCodeLimitExceeded, "the node packet budget is reserved"

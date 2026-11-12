@@ -125,16 +125,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) error {
 	if err := s.decode(w, r, &request); err != nil {
 		return err
 	}
-	create := s.node.CreateSessionAt
-	switch request.Kind {
-	case protocol.SessionKindParticipant:
-	case protocol.SessionKindCapture:
-		create = s.node.CreateCaptureSessionAt
-	default:
-		return errors.Join(media.ErrInvalidRequest, errors.New("unknown session kind"))
+	kind, err := media.KindOf(request.Kind)
+	if err != nil {
+		return err
 	}
 	trace := traceOf(r)
-	response, err := create(request.OperationID, request.Scope, request.AllocationGeneration)
+	response, err := s.node.Create(request.OperationID, request.Scope, kind, request.AllocationGeneration)
 	if err != nil {
 		s.traceRefused(request, trace, err)
 		return err

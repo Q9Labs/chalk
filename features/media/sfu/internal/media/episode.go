@@ -155,7 +155,7 @@ func (n *Node) allocate() {
 	episodes := map[episodeKey]*episodeTick{}
 	stats := &mediaStats{episodes: make(map[episodeKey]protocol.EpisodeState, len(sessions))}
 	for _, session := range sessions {
-		if session.kind == kindCapture {
+		if !session.kind.participant {
 			n.tallyCapture(session, stats, now)
 			continue
 		}
