@@ -9,7 +9,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
   alias ChalkSync.Stateholder.Postgres.ExternalOperationDecision
   alias ChalkSync.Stateholder.Postgres.ExternalOperationRecord
   alias ChalkSync.Stateholder.Postgres.FaultHooks
-  alias ChalkSync.Stateholder.Postgres.Lifecycle
+  alias ChalkSync.Stateholder.Postgres.LifecycleCommit
   alias ChalkSync.Stateholder.Postgres.MediaPauses
   alias ChalkSync.Stateholder.Postgres.PublicationFences
   alias ChalkSync.Stateholder.Postgres.Recording
@@ -559,7 +559,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          {:ok, event, next_state} <-
            Reducer.apply_lifecycle(state, :participant_joined, payload) do
       finalize_admission_row(connection, episode, admission.id, "admitted", external)
-      decision = Lifecycle.persist_commit(connection, episode, intent, event, next_state)
+      decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
       mark_external_applied(connection, episode, external, nil, nil)
 
       commit_external_receipt(
@@ -645,7 +645,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
 
         if participant && participant.generation == generation && participant.status == "joining" &&
              participant.role == admission.role do
-          {:ok, Lifecycle.lock_intent(connection, episode, UUID.load!(intent_id))}
+          {:ok, LifecycleCommit.lock_intent(connection, episode, UUID.load!(intent_id))}
         else
           {:error, :invalid_state}
         end
@@ -944,7 +944,7 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
           Postgrex.rollback(connection, {:error, :invalid_state})
       end
 
-    Lifecycle.complete_episode_participants(
+    LifecycleCommit.complete_episode_participants(
       connection,
       episode,
       external,

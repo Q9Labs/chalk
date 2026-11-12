@@ -8,6 +8,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Transport.SocketWhiteboardV1
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
+  alias ChalkSync.WhiteboardV1.Authority.Reads
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Fanout
   alias ChalkSync.WhiteboardV1.ViewOwner
@@ -798,7 +799,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       # While the connect check waits behind the admission, a read starts and finds no
       # Participant. The admission then commits and the connect check passes.
       Process.put(:whiteboard_connect_hook, fn ->
-        Authority.store(
+        Reads.store(
           identity.episode,
           %{status: "active", participants: %{}},
           System.monotonic_time(:millisecond),
@@ -1040,10 +1041,7 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
     assert_receive {:episode_access_read, _episode}, 1_000
 
     wait_for(fn ->
-      :ets.member(
-        ChalkSync.WhiteboardV1.Authority,
-        EpisodeKey.authority_key(state.identity.episode)
-      )
+      :ets.member(:whiteboard_authority_reads, EpisodeKey.authority_key(state.identity.episode))
     end)
   end
 

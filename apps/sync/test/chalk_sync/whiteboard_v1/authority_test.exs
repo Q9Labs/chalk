@@ -7,6 +7,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Authority.Poller
+  alias ChalkSync.WhiteboardV1.Authority.Reads
 
   @participant_id "20000000-0000-4000-8000-000000000002"
 
@@ -144,7 +145,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     Application.put_env(:chalk_sync, :whiteboard_authority_stale_ms, 300)
     identity = identity()
     now = System.monotonic_time(:millisecond)
-    Authority.store(identity.episode, nil, now - 10_000, "timeout")
+    Reads.store(identity.episode, nil, now - 10_000, "timeout")
 
     # The connect check just read the database and found the Participant.
     connected_at = System.monotonic_time(:millisecond)
@@ -271,7 +272,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       final_at = System.monotonic_time(:millisecond)
 
       assert until_not_ok(identity) == {:error, {:permission_denied, denial}}
-      assert System.monotonic_time(:millisecond) - final_at <= Authority.poll_ms() + 100
+      assert System.monotonic_time(:millisecond) - final_at <= Reads.poll_ms() + 100
     end
   end
 
@@ -417,7 +418,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
     assert pollers(upper.episode) == [{poller, nil}]
     drain_reads(identity.episode)
     drain_reads(upper.episode)
-    Process.sleep(Authority.poll_ms() * 3)
+    Process.sleep(Reads.poll_ms() * 3)
     assert (drain_reads(identity.episode) + drain_reads(upper.episode)) in 2..4
   end
 
@@ -448,7 +449,7 @@ defmodule ChalkSync.WhiteboardV1.AuthorityTest do
       )
 
   defp stored_by(episode) do
-    case :ets.lookup(Authority, EpisodeKey.authority_key(episode)) do
+    case :ets.lookup(:whiteboard_authority_reads, EpisodeKey.authority_key(episode)) do
       [{_episode, poller, _access, _read_at, _failure}] -> poller
       [] -> nil
     end
