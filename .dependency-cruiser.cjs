@@ -73,9 +73,25 @@ const workspaceSourceCannotReachAppSource = {
   to: { path: "(?:^|/)apps/[^/]+/src(?:/|$)" },
 };
 
+const clientAccessCannotReachConnection = {
+  name: "client-access-does-not-import-connection",
+  comment: "Access types and refresh logic sit below the connection lifecycle; shared shapes live in access/context.ts.",
+  severity: "error",
+  from: { path: "(?:^|/)sdks/typescript/client/src/access/" },
+  to: { path: "(?:^|/)sdks/typescript/client/src/connection/" },
+};
+
+const clientServerEntryCannotReachSpaceClient = {
+  name: "client-server-entry-does-not-import-space-client",
+  comment: "The server entry stays free of the browser SpaceClient; shared types live with their owning module.",
+  severity: "error",
+  from: { path: "(?:^|/)sdks/typescript/client/src/server/" },
+  to: { path: "(?:^|/)sdks/typescript/client/src/space-client/" },
+};
+
 module.exports = {
   // This lane owns inter-workspace direction only; intra-workspace cycle and dependency policy stays in broader quality work.
-  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource],
+  forbidden: [packageSourceCannotReachOtherPackageSource, packageSourceCannotReachSdkSource, sdkSourceCannotReachPackageSource, sdkSourceCannotReachOtherSdkSource, appSourceCannotReachWorkspaceSource, workspaceSourceCannotReachAppSource, clientAccessCannotReachConnection, clientServerEntryCannotReachSpaceClient],
   options: {
     ...canonicalConfiguration.options,
     includeOnly: { path: "^(?:apps|packages|sdks/typescript)(?:/|$)" },

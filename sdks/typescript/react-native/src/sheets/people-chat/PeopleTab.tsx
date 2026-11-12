@@ -36,7 +36,14 @@ export function PeopleTab(): React.JSX.Element {
   const muteAllRef = useRef<View>(null);
 
   const handOrder = useRef<readonly string[]>([]);
-  handOrder.current = useMemo(() => nextHandOrder(handOrder.current, roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId)), [roster]);
+  handOrder.current = useMemo(
+    () =>
+      nextHandOrder(
+        handOrder.current,
+        roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId),
+      ),
+    [roster],
+  );
   const waiting = canAdmit ? admissionQueue : NONE;
   const rows = useMemo(() => peopleRows({ roster, waiting, handOrder: handOrder.current, query }), [roster, waiting, query]);
 

@@ -29,7 +29,17 @@ export function callEventToast(event: CallEvent): Omit<Toast, "id"> | null {
     case "shareStopped":
       return { icon: <CallEventIcon kind="screen" />, message: <>{name(event.participant)} stopped sharing</> };
     case "hostChanged":
-      return { icon: <CallEventIcon kind="host" />, message: event.previousHost ? <>{name(event.previousHost)}{" left. You’re now the host."}</> : "You’re now the host." };
+      return {
+        icon: <CallEventIcon kind="host" />,
+        message: event.previousHost ? (
+          <>
+            {name(event.previousHost)}
+            {" left. You’re now the host."}
+          </>
+        ) : (
+          "You’re now the host."
+        ),
+      };
     case "recordingStarted":
       return {
         icon: <CallEventIcon kind="recording" error />,

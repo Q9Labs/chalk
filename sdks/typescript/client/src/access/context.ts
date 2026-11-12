@@ -1,3 +1,4 @@
+import type { ParticipantMediaCredential } from "./grant";
 export type AccessReason = "join" | "refresh" | "retry";
 export type AccessContext = {
   readonly space: string;
@@ -9,4 +10,13 @@ export type AccessContext = {
   /** Forward unchanged for replay-safe recovery. Never log credentials. */
   readonly currentMediaToken?: string;
   readonly signal?: AbortSignal;
+};
+export type ConnectionAccessReason = "join" | "scheduled_refresh" | "sync_recovery" | "media_recovery" | "access_retry";
+export type ConnectionAccessRequest = {
+  readonly reason: ConnectionAccessReason;
+  readonly replaceMediaConnection: boolean;
+  readonly signal?: AbortSignal;
+  readonly currentMediaToken?: ParticipantMediaCredential;
+  readonly expectedParticipantGeneration?: number;
+  readonly expectedMediaConnectionId?: string;
 };
