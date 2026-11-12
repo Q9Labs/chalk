@@ -6,13 +6,8 @@ name: Release contracts
 on:
   pull_request:
     paths:
-      - .github/workflows/ci.yml
-      - .github/workflows/nightly.yml
-      - .github/workflows/promote.yml
-      - .github/workflows/npm-publish.yml
-      - .github/workflows/real-call-proof.yml
-      - .github/workflows/web-call-proof.yml
-      - .github/workflows/release-contracts.yml
+      - .github/workflows/**
+      - .github/actionlint.yaml
       - .github/actions/setup-opentofu/**
       - .github/actions/setup-doctl/**
       - .github/actions/cache-tofu-providers/**
@@ -80,7 +75,7 @@ jobs:
       - uses: ./.github/actions/setup-opentofu
       - name: Install pinned workflow lint
         run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install "github.com/rhysd/actionlint/cmd/actionlint@v$(scripts/lib/tool-version.sh actionlint)"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Check every release contract without cloud credentials
         run: scripts/releases/check-contracts.sh
