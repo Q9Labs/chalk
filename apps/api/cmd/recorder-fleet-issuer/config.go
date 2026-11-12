@@ -58,26 +58,45 @@ func loadConfig() (commandConfig, error) {
 	if config.ListenAddress == "" {
 		config.ListenAddress = ":8444"
 	}
-	var err error
-	if config.RenderGPU, err = optionalBool("CHALK_RECORDER_FLEET_ISSUER_RENDER_GPU", false); err != nil {
+	if err := config.loadOptionalSettings(); err != nil {
 		return commandConfig{}, err
 	}
-	if config.ChallengeTTL, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_CHALLENGE_TTL", 2*time.Minute); err != nil {
-		return commandConfig{}, err
-	}
-	if config.CertificateLifetime, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_CERTIFICATE_LIFETIME", 12*time.Hour); err != nil {
-		return commandConfig{}, err
-	}
-	if config.RenewalLead, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_RENEWAL_LEAD", 8*time.Hour); err != nil {
-		return commandConfig{}, err
-	}
-	if (recorderfleet.PoolKey{Environment: config.Environment, Role: workeridentity.RoleCapture}).Validate() != nil || config.ServerCertFile == "" || config.ServerKeyFile == "" || config.ControllerCAFile == "" ||
-		config.WorkerCACertFile == "" || config.WorkerCAKeyFile == "" || config.StatePath == "" || config.PublicBaseURL == "" ||
-		config.ControlPlaneURL == "" || config.ControlPlaneServerName == "" || config.ControlPlaneServerCAFile == "" || config.TrustDomain == "" ||
-		config.OwnerTag == "" || config.DigitalOceanTokenFile == "" {
+	if !config.complete() {
 		return commandConfig{}, issuer.ErrInvalidConfig
 	}
 	return config, nil
+}
+
+func (config *commandConfig) loadOptionalSettings() error {
+	var err error
+	if config.RenderGPU, err = optionalBool("CHALK_RECORDER_FLEET_ISSUER_RENDER_GPU", false); err != nil {
+		return err
+	}
+	if config.ChallengeTTL, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_CHALLENGE_TTL", 2*time.Minute); err != nil {
+		return err
+	}
+	if config.CertificateLifetime, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_CERTIFICATE_LIFETIME", 12*time.Hour); err != nil {
+		return err
+	}
+	config.RenewalLead, err = optionalDuration("CHALK_RECORDER_FLEET_ISSUER_RENEWAL_LEAD", 8*time.Hour)
+	return err
+}
+
+// complete reports whether every required setting is present and the environment names a valid pool.
+func (config commandConfig) complete() bool {
+	if (recorderfleet.PoolKey{Environment: config.Environment, Role: workeridentity.RoleCapture}).Validate() != nil {
+		return false
+	}
+	for _, required := range []string{
+		config.ServerCertFile, config.ServerKeyFile, config.ControllerCAFile, config.WorkerCACertFile, config.WorkerCAKeyFile,
+		config.StatePath, config.PublicBaseURL, config.ControlPlaneURL, config.ControlPlaneServerName, config.ControlPlaneServerCAFile,
+		config.TrustDomain, config.OwnerTag, config.DigitalOceanTokenFile,
+	} {
+		if required == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func optionalDuration(name string, fallback time.Duration) (time.Duration, error) {

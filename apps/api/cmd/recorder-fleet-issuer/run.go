@@ -29,29 +29,59 @@ func run(ctx context.Context, config commandConfig, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	service, err := newService(config)
+	if err != nil {
+		return err
+	}
+	handler, err := newHandler(config, service, logger)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{
+		Addr: config.ListenAddress, Handler: handler, TLSConfig: serverTLS,
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute,
+	}
+	return serve(ctx, server, logger)
+}
+
+func newService(config commandConfig) (*issuer.Service, error) {
 	workerCAPEM, err := os.ReadFile(config.WorkerCACertFile)
 	if err != nil {
-		return fmt.Errorf("read worker CA certificate: %w", err)
+		return nil, fmt.Errorf("read worker CA certificate: %w", err)
 	}
 	workerCAKeyPEM, err := os.ReadFile(config.WorkerCAKeyFile)
 	if err != nil {
-		return fmt.Errorf("read worker CA key: %w", err)
+		return nil, fmt.Errorf("read worker CA key: %w", err)
 	}
 	controlPlaneCAPEM, err := os.ReadFile(config.ControlPlaneServerCAFile)
 	if err != nil {
-		return fmt.Errorf("read control plane server CA: %w", err)
+		return nil, fmt.Errorf("read control plane server CA: %w", err)
 	}
 	certificateAuthority, err := issuer.NewCertificateAuthority(workerCAPEM, workerCAKeyPEM, config.TrustDomain)
 	if err != nil {
-		return fmt.Errorf("load worker certificate authority: %w", err)
+		return nil, fmt.Errorf("load worker certificate authority: %w", err)
 	}
 	state, err := issuer.OpenStore(config.StatePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	providers, err := newRoleInventories(config)
+	if err != nil {
+		return nil, err
+	}
+	return issuer.New(issuer.Config{
+		Environment: config.Environment, OwnerTag: config.OwnerTag, Store: state, Inventory: providers,
+		CertificateAuthority: certificateAuthority, PublicBaseURL: config.PublicBaseURL,
+		ControlPlaneURL: config.ControlPlaneURL, ControlPlaneServerName: config.ControlPlaneServerName,
+		ControlPlaneServerCAPEM: string(controlPlaneCAPEM), ChallengeTTL: config.ChallengeTTL,
+		CertificateLifetime: config.CertificateLifetime, RenewalLead: config.RenewalLead,
+	})
+}
+
+func newRoleInventories(config commandConfig) (roleInventories, error) {
 	token, err := readSecretFile(config.DigitalOceanTokenFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	providerTransport := http.DefaultTransport.(*http.Transport).Clone()
 	providerTransport.ForceAttemptHTTP2 = true
@@ -69,39 +99,29 @@ func run(ctx context.Context, config commandConfig, logger *slog.Logger) error {
 			GPU: role == workeridentity.RoleRender && config.RenderGPU,
 		})
 		if err != nil {
-			return fmt.Errorf("create DigitalOcean %s inventory client: %w", role, err)
+			return nil, fmt.Errorf("create DigitalOcean %s inventory client: %w", role, err)
 		}
 		providers[role] = provider
 	}
-	service, err := issuer.New(issuer.Config{
-		Environment: config.Environment, OwnerTag: config.OwnerTag, Store: state, Inventory: providers,
-		CertificateAuthority: certificateAuthority, PublicBaseURL: config.PublicBaseURL,
-		ControlPlaneURL: config.ControlPlaneURL, ControlPlaneServerName: config.ControlPlaneServerName,
-		ControlPlaneServerCAPEM: string(controlPlaneCAPEM), ChallengeTTL: config.ChallengeTTL,
-		CertificateLifetime: config.CertificateLifetime, RenewalLead: config.RenewalLead,
-	})
-	if err != nil {
-		return err
-	}
+	return providers, nil
+}
+
+func newHandler(config commandConfig, service *issuer.Service, logger *slog.Logger) (http.Handler, error) {
 	controllerVerifier, err := recorderfleet.NewControllerVerifier(config.TrustDomain, config.Environment)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	workerVerifier, err := workeridentity.NewVerifier(config.TrustDomain, config.Environment)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	handler, err := issuer.NewHTTPHandler(service, controllerVerifier, workerVerifier, logger)
-	if err != nil {
-		return err
-	}
-	server := &http.Server{
-		Addr: config.ListenAddress, Handler: handler, TLSConfig: serverTLS,
-		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: time.Minute,
-	}
+	return issuer.NewHTTPHandler(service, controllerVerifier, workerVerifier, logger)
+}
+
+func serve(ctx context.Context, server *http.Server, logger *slog.Logger) error {
 	serveErrors := make(chan error, 1)
 	go func() {
-		logger.Info("recorder fleet issuer listening", "address", config.ListenAddress)
+		logger.Info("recorder fleet issuer listening", "address", server.Addr)
 		serveErrors <- server.ListenAndServeTLS("", "")
 	}()
 	select {
