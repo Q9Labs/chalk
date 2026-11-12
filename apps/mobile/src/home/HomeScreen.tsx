@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { shareLink } from "../lib/share";
-import type { SpaceRoute } from "../lib/spaces";
+import type { SpaceRoute } from "../lib/space-link";
 import type { StoredCallPreferences } from "../preferences/call-preferences";
 import { ClipboardCard, type ClipboardState } from "./ClipboardCard";
 import { JoinSheet } from "./JoinSheet";

@@ -3,7 +3,9 @@ import { Limbo, useTheme, type ColorScheme } from "@q9labsai/chalk-react-native/
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { ArrivedCall } from "../lib/arrived-call";
-import { cleanupSpaceArrival, createPublicSpaceRoute, prepareSpaceArrival, waitForAdmission, type SpaceArrivalStep, type SpaceRoute, type StoredSpaceArrival } from "../lib/spaces";
+import type { StoredSpaceArrival } from "../lib/arrival-store";
+import type { SpaceRoute } from "../lib/space-link";
+import { cleanupSpaceArrival, createPublicSpaceRoute, prepareSpaceArrival, waitForAdmission, type SpaceArrivalStep } from "../lib/spaces";
 
 /** Where a join is headed: a new call, or a call someone shared. */
 export type JoinTarget = { readonly kind: "start" } | { readonly kind: "link"; readonly route: SpaceRoute };

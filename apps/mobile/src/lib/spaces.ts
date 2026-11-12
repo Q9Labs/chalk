@@ -1,31 +1,9 @@
 import type { AccessGrant, GetAccess, PublicSpaceArrival } from "@q9labsai/chalk-client";
 import { createChalkPublicClient } from "@q9labsai/chalk-client/invites";
-import { parseChalkInviteLink } from "@q9labsai/chalk-react-native/invites";
-import * as SecureStore from "expo-secure-store";
-import { getCustomTabsSupportingBrowsersAsync, openBrowserAsync } from "expo-web-browser";
-import { Platform } from "react-native";
-import { getApiBaseURL } from "./mobile-config";
-
-const ARRIVAL_KEY_PREFIX = "chalk_mobile_public_arrival_v1.";
-const ARRIVAL_INDEX_PREFIX = "chalk_mobile_public_arrival_index_v1.";
-
-export type SpaceRoute = {
-  readonly kind: "space";
-  readonly space: string;
-  readonly spaceInviteToken: string;
-  readonly inviteLink: string;
-  readonly spaceName?: string;
-  readonly source: "space-link" | "created-space";
-};
+import { clearArrival, loadArrival, persistArrival, type StoredSpaceArrival } from "./arrival-store";
+import { parseSpaceLink, type SpaceRoute } from "./space-link";
 
 type SpaceInvite = {
-  readonly slug: string;
-  readonly spaceInviteToken: string;
-};
-
-export type StoredSpaceArrival = {
-  readonly arrivalHandle: string;
-  readonly guestCredential: string;
   readonly slug: string;
   readonly spaceInviteToken: string;
 };
@@ -42,56 +20,16 @@ export type SpaceOperation = "create" | "arrive" | "pending" | "refresh" | "leav
 export type SpaceOperationState = "failed" | "observed" | "succeeded";
 export type SpaceOperationObserver = (operation: SpaceOperation, state: SpaceOperationState) => void;
 
-export function parseSpaceLink(input: string): SpaceRoute | null {
-  const inviteLink = input.trim();
-  let parseInput = inviteLink;
-  if (getApiBaseURL() === "https://nightly-api.chalkmeet.com") {
-    try {
-      const url = new URL(inviteLink);
-      if (url.protocol === "https:" && url.hostname === "nightly.chalkmeet.com" && !url.username && !url.password && !url.port) {
-        url.hostname = "chalkmeet.com";
-        parseInput = url.toString();
-      }
-    } catch {
-      // Invite codes are not URLs and remain valid inputs.
-    }
-  }
-  const invite = parseChalkInviteLink(parseInput);
-  if (!invite) return null;
-  return {
-    kind: "space",
-    space: invite.slug ?? invite.spaceInviteToken,
-    spaceInviteToken: invite.spaceInviteToken,
-    inviteLink,
-    source: "space-link",
-  };
-}
+/** What every step of an arrival needs to know. */
+type ArrivalContext = {
+  readonly apiBaseURL: string;
+  readonly route: SpaceRoute;
+  readonly displayName: string;
+  readonly onOperation?: SpaceOperationObserver;
+};
 
-export async function routeMobileLink(input: string | null): Promise<SpaceRoute | null> {
-  if (!input) return null;
-  const route = parseSpaceLink(input);
-  if (route) return route;
-
-  let url: URL;
-  try {
-    url = new URL(input);
-  } catch {
-    return null;
-  }
-  const isNightlyHost = url.hostname === "nightly.chalkmeet.com" && getApiBaseURL() === "https://nightly-api.chalkmeet.com";
-  if ((url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "chalkmeet.com" || url.hostname === "chalk.q9labs.ai" || isNightlyHost)) {
-    // Linking.openURL would send an associated URL straight back to this app.
-    if (Platform.OS === "android") {
-      const browsers = await getCustomTabsSupportingBrowsersAsync();
-      const browserPackage = browsers.defaultBrowserPackage ?? browsers.preferredBrowserPackage ?? browsers.browserPackages[0];
-      if (!browserPackage) throw new Error("No browser is available to open this Chalk link.");
-      await openBrowserAsync(url.href, { browserPackage });
-    } else {
-      await openBrowserAsync(url.href);
-    }
-  }
-  return null;
-}
+/** A stored arrival ends in one of these states; the server has forgotten it. */
+const ENDED_ARRIVAL_STATES: ReadonlySet<string> = new Set(["left", "expired", "rejected", "unavailable"]);
 
 export async function createPublicSpaceRoute({ apiBaseURL, displayName, onOperation }: { readonly apiBaseURL: string; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<{ readonly arrival: MobileSpaceArrival; readonly route: SpaceRoute }> {
   onOperation?.("create", "observed");
@@ -125,30 +63,33 @@ export type SpaceArrivalStep =
   | { readonly state: "knocking"; readonly credential: StoredSpaceArrival; readonly retryAfterMs: number; readonly spaceName: string }
   | { readonly state: "refused" | "full"; readonly spaceName: string };
 
-export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly onOperation?: SpaceOperationObserver }): Promise<SpaceArrivalStep> {
-  onOperation?.("arrive", "observed");
-  const stored = await loadArrival(route.spaceInviteToken);
-  const client = publicClient(apiBaseURL, stored?.guestCredential);
+export async function prepareSpaceArrival(context: ArrivalContext): Promise<SpaceArrivalStep> {
+  context.onOperation?.("arrive", "observed");
+  const stored = await loadArrival(context.route.spaceInviteToken);
+  const resumed = stored ? await resumeStoredArrival({ ...context, credential: stored }) : undefined;
+  return resumed ?? arriveAsNewParticipant(context);
+}
 
-  if (stored) {
-    try {
-      const status = await client.getSpacePublicInviteArrival({ arrivalHandle: stored.arrivalHandle, guestCredential: stored.guestCredential });
-      if (status.state === "left" || status.state === "expired" || status.state === "rejected" || status.state === "unavailable") {
-        await clearArrival(stored);
-      } else {
-        return await resumeArrival({ apiBaseURL, route, displayName, credential: stored, onOperation });
-      }
-    } catch (cause) {
-      if (!isTerminalArrivalError(cause)) throw cause;
-      await clearArrival(stored);
-    }
+/** Resumes the stored arrival while the server still knows it. One that has ended is forgotten, and the result is undefined. */
+async function resumeStoredArrival(context: ArrivalContext & { readonly credential: StoredSpaceArrival }): Promise<SpaceArrivalStep | undefined> {
+  const { apiBaseURL, credential } = context;
+  try {
+    const status = await publicClient(apiBaseURL, credential.guestCredential).getSpacePublicInviteArrival({ arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential });
+    if (!ENDED_ARRIVAL_STATES.has(status.state)) return await resumeArrival(context);
+  } catch (cause) {
+    if (!isTerminalArrivalError(cause)) throw cause;
   }
+  await clearArrival(credential);
+  return undefined;
+}
 
+async function arriveAsNewParticipant(context: ArrivalContext): Promise<SpaceArrivalStep> {
+  const { apiBaseURL, route, displayName, onOperation } = context;
   try {
     const arrived = await arriveRetryingEndingEpisode(() => publicClient(apiBaseURL).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { idempotencyKey: idempotencyKey() }));
-    const arrival = storedArrival(arrived, { slug: route.space, spaceInviteToken: route.spaceInviteToken });
-    await persistArrival(arrival);
-    return arrivalStep(arrived, { route, displayName, credential: arrival, onOperation });
+    const credential = storedArrival(arrived, { slug: route.space, spaceInviteToken: route.spaceInviteToken });
+    await persistArrival(credential);
+    return arrivalStep(arrived, { ...context, credential });
   } catch (cause) {
     if (arrivalErrorCode(cause) !== "episode.capacity_exceeded") throw cause;
     onOperation?.("arrive", "failed");
@@ -157,35 +98,25 @@ export async function prepareSpaceArrival({ apiBaseURL, route, displayName, onOp
 }
 
 /** Checks a knocking arrival once more, after the `retryAfterMs` its last step asked for. */
-export async function waitForAdmission({
-  apiBaseURL,
-  route,
-  displayName,
-  credential,
-  onOperation,
-}: {
-  readonly apiBaseURL: string;
-  readonly route: SpaceRoute;
-  readonly displayName: string;
-  readonly credential: StoredSpaceArrival;
-  readonly onOperation?: SpaceOperationObserver;
-}): Promise<SpaceArrivalStep> {
+export async function waitForAdmission(context: ArrivalContext & { readonly credential: StoredSpaceArrival }): Promise<SpaceArrivalStep> {
+  const { apiBaseURL, credential } = context;
   const status = await publicClient(apiBaseURL, credential.guestCredential).getSpacePublicInviteArrival({ arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential });
   // An admitted arrival without access gets it by arriving again with the same handle.
-  if (status.state === "admitted" && !status.access) return resumeArrival({ apiBaseURL, route, displayName, credential, onOperation });
-  return arrivalStep(status, { route, displayName, credential, onOperation });
+  if (status.state === "admitted" && !status.access) return resumeArrival(context);
+  return arrivalStep(status, context);
 }
 
-async function resumeArrival({ apiBaseURL, route, displayName, credential, onOperation }: { readonly apiBaseURL: string; readonly route: SpaceRoute; readonly displayName: string; readonly credential: StoredSpaceArrival; readonly onOperation?: SpaceOperationObserver }): Promise<SpaceArrivalStep> {
+async function resumeArrival(context: ArrivalContext & { readonly credential: StoredSpaceArrival }): Promise<SpaceArrivalStep> {
+  const { apiBaseURL, route, displayName, credential } = context;
   const resumed = await arriveRetryingEndingEpisode(() =>
     publicClient(apiBaseURL, credential.guestCredential).arriveBySpacePublicInvite({ displayName, spaceInviteToken: route.spaceInviteToken }, { arrivalHandle: credential.arrivalHandle, guestCredential: credential.guestCredential, idempotencyKey: idempotencyKey() }),
   );
-  const arrival = storedArrival(resumed, { slug: route.space, spaceInviteToken: route.spaceInviteToken }, credential.guestCredential);
-  await persistArrival(arrival);
-  return arrivalStep(resumed, { route, displayName, credential: arrival, onOperation });
+  const refreshed = storedArrival(resumed, { slug: route.space, spaceInviteToken: route.spaceInviteToken }, credential.guestCredential);
+  await persistArrival(refreshed);
+  return arrivalStep(resumed, { ...context, credential: refreshed });
 }
 
-function arrivalStep(value: PublicSpaceArrival, { route, displayName, credential, onOperation }: { readonly route: SpaceRoute; readonly displayName: string; readonly credential: StoredSpaceArrival; readonly onOperation?: SpaceOperationObserver }): SpaceArrivalStep {
+function arrivalStep(value: PublicSpaceArrival, { route, displayName, credential, onOperation }: ArrivalContext & { readonly credential: StoredSpaceArrival }): SpaceArrivalStep {
   const spaceName = callName(value.space?.name, route);
   if (value.access) {
     onOperation?.("arrive", "succeeded");
@@ -219,12 +150,13 @@ const ENDING_EPISODE_RETRY_DELAYS_MS = [500, 1000, 1500, 2500];
  */
 async function arriveRetryingEndingEpisode<T>(arrive: () => Promise<T>): Promise<T> {
   for (const delayMs of ENDING_EPISODE_RETRY_DELAYS_MS) {
-    try {
-      return await arrive();
-    } catch (cause) {
-      if (arrivalErrorCode(cause) !== "episode.not_active") throw cause;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
+    const outcome = await arrive().then(
+      (value) => ({ value }),
+      (cause: unknown) => ({ cause }),
+    );
+    if ("value" in outcome) return outcome.value;
+    if (arrivalErrorCode(outcome.cause) !== "episode.not_active") throw outcome.cause;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
   return arrive();
 }
@@ -301,42 +233,6 @@ function isAccessWithMedia(value: AccessGrant): value is AccessGrant & { readonl
   return typeof media.token === "string" && media.token.length > 0;
 }
 
-async function loadArrival(spaceInviteToken: string): Promise<StoredSpaceArrival | undefined> {
-  const handle = await SecureStore.getItemAsync(`${ARRIVAL_INDEX_PREFIX}${spaceInviteToken}`);
-  if (!handle) return undefined;
-  const value = await SecureStore.getItemAsync(`${ARRIVAL_KEY_PREFIX}${handle}`);
-  if (!value) {
-    await clearArrivalByHandle(handle, spaceInviteToken);
-    return undefined;
-  }
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (isStoredArrival(parsed) && parsed.spaceInviteToken === spaceInviteToken) return parsed;
-  } catch {
-    // Invalid device state is removed below.
-  }
-  await clearArrivalByHandle(handle, spaceInviteToken);
-  return undefined;
-}
-
-async function persistArrival(value: StoredSpaceArrival): Promise<void> {
-  await Promise.all([SecureStore.setItemAsync(`${ARRIVAL_KEY_PREFIX}${value.arrivalHandle}`, JSON.stringify(value)), SecureStore.setItemAsync(`${ARRIVAL_INDEX_PREFIX}${value.spaceInviteToken}`, value.arrivalHandle)]);
-}
-
-async function clearArrival(value: StoredSpaceArrival): Promise<void> {
-  await clearArrivalByHandle(value.arrivalHandle, value.spaceInviteToken);
-}
-
-async function clearArrivalByHandle(arrivalHandle: string, spaceInviteToken: string): Promise<void> {
-  await Promise.all([SecureStore.deleteItemAsync(`${ARRIVAL_KEY_PREFIX}${arrivalHandle}`), SecureStore.deleteItemAsync(`${ARRIVAL_INDEX_PREFIX}${spaceInviteToken}`)]);
-}
-
-function isStoredArrival(value: unknown): value is StoredSpaceArrival {
-  if (typeof value !== "object" || value === null) return false;
-  if (!("arrivalHandle" in value) || !("guestCredential" in value) || !("slug" in value) || !("spaceInviteToken" in value)) return false;
-  return typeof value.arrivalHandle === "string" && typeof value.guestCredential === "string" && typeof value.slug === "string" && typeof value.spaceInviteToken === "string";
-}
-
 function idempotencyKey(): string {
   return globalThis.crypto?.randomUUID?.() ?? `chalk-mobile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -353,9 +249,4 @@ function arrivalErrorCode(value: unknown): unknown {
   const error: unknown = value.error;
   if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
   return error.code;
-}
-
-/** The link as people read it: host and path, without the scheme or the invite token. */
-export function displayLink(inviteLink: string): string {
-  return inviteLink.replace(/^[a-z][a-z0-9+.-]*:\/\//iu, "").replace(/[?#].*$/u, "");
 }

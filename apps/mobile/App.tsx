@@ -17,7 +17,7 @@ import { JoiningScreen, type JoinTarget } from "./src/join/JoiningScreen";
 import type { ArrivedCall } from "./src/lib/arrived-call";
 import { NameStep } from "./src/join/NameStep";
 import { getApiBaseURL } from "./src/lib/mobile-config";
-import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/spaces";
+import { parseSpaceLink, routeMobileLink, type SpaceRoute } from "./src/lib/space-link";
 import { useCallPreferences, type StoredCallPreferences } from "./src/preferences/call-preferences";
 import { loadDisplayName, saveDisplayName } from "./src/screens/display-name-store";
 
