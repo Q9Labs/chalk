@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { requireRegistered } from "./register.mjs";
+import { demotion, requireRegistered } from "./register.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoots = ["apps", "infrastructure", "packages", "sdks/typescript", "tools"];
@@ -318,7 +318,9 @@ function workspaceBuildCommand(workspaces) {
 
 function task(id, label, selected, reason, command, env = {}) {
   requireRegistered(id);
-  return { id, label, selected: Boolean(selected && command), reason, command, env };
+  // A demoted check still runs and reports; demoted.mjs turns its failure into a warning so it cannot fail a gate.
+  const wrapped = command && demotion(id) ? ["node", "scripts/gates/demoted.mjs", `gate:${id}`, "--", ...command] : command;
+  return { id, label, selected: Boolean(selected && wrapped), reason, command: wrapped, env };
 }
 
 export function createGatePlan(files, options = {}) {
@@ -472,7 +474,7 @@ export function createGatePlan(files, options = {}) {
       "-c",
       `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
-    task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
+    task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs scripts/gates/demoted.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),
     task("generated", "Generated files are current", true, "always required", ["pnpm", "run", "check:generated"]),
@@ -501,6 +503,7 @@ export function createGatePlan(files, options = {}) {
     ]),
     task("tests", "Selected runtime regression tests", unitTestWorkspaces.length > 0, names(unitTestWorkspaces) || "no affected workspace", filteredPnpmCommand(unitTestWorkspaces, "test", [], [workspaceConcurrency, "--sort"])),
     task("browser-tests", "Affected browser tests", browserTestWorkspaces.length > 0, names(browserTestWorkspaces) || "no affected browser test", filteredPnpmCommand(browserTestWorkspaces, "test")),
+    task("camera-proof", "Camera background browser proof (demoted, reports only)", browserTestWorkspaces.some((workspace) => workspace.name === "web"), "web is affected", filteredPnpmCommand(browserTestWorkspaces, "test:camera-proof")),
     task("dashboard-engine", "Dashboard against the real API and Pages runtime", dashboardEngine, dashboardEngine ? "dashboard or API inputs changed" : "dashboard engine is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "http"]),
     task("dashboard-refresh", "Owner call across the real media-access lifetime", dashboardRefresh, dashboardRefresh ? "refresh inputs changed, or the merge queue" : "the dashboard refresh proof is unaffected", ["bash", "apps/web/tests/dashboard/check-engine.sh", "refresh"]),
     task("build", "Affected workspace builds", selectedWorkspaces.length > 0, selectedNames || "no affected workspace", workspaceBuildCommand(selectedWorkspaces)),
@@ -610,7 +613,7 @@ export function emptyScopeResult(context, environment = process.env) {
 // CI runs the root gate as one job per lane group. Lanes that no group names run in the checks job, so a new lane
 // cannot drop out of CI.
 const rootLaneGroups = {
-  "browser-tests": ["browser-tests"],
+  "browser-tests": ["browser-tests", "camera-proof"],
   "dashboard-engine": ["dashboard-engine"],
   "dashboard-refresh": ["dashboard-refresh"],
   // The SFU lane alone took 176 of the 408 seconds the checks group ran its lanes in sequence.

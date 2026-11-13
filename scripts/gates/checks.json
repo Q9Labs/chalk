@@ -231,6 +231,22 @@
       "sample": "Browser group on pull requests: 7 of 70 runs failed."
     },
     {
+      "id": "gate:camera-proof",
+      "owner": "Web",
+      "catches": "The camera background proof in a real browser losing the processed video or the publication while backgrounds change.",
+      "runs": ["pull_request", "merge_queue", "weekly"],
+      "blocks": "advisory",
+      "minutes": null,
+      "record": "noise",
+      "sample": "12 Nov: failed 3 times with `Camera effects stopped` in changes that touch no camera code (runs 43195064768, 43240593018, 43323563158); it ran inside the web test run, so each failure stopped the whole browser group.",
+      "reason": "Demoted on 13 Nov: it still runs and prints a warning, but cannot fail a gate until the flake is fixed.",
+      "demoted": {
+        "reason": "The proof fails with `Camera effects stopped` under xvfb on a loaded runner.",
+        "runs": ["43240593018", "43323563158"],
+        "issue": "https://github.com/Q9Labs/chalk/issues/1336"
+      }
+    },
+    {
       "id": "gate:dashboard-engine",
       "owner": "Dashboard",
       "catches": "The dashboard breaking against the real API, Sync and Pages runtime over HTTP.",

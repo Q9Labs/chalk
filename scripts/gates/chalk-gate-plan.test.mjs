@@ -217,3 +217,11 @@ test("the mock-call ratchet runs for every kind of test file it counts, not only
   assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
   assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
 });
+
+test("a demoted check keeps running, wrapped so that its failure is a warning", () => {
+  const plan = createGatePlan(["apps/web/src/call-states/camera-backgrounds.test.ts"], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+  const camera = plan.tasks.find((task) => task.id === "camera-proof");
+  assert.ok(camera?.selected);
+  assert.deepEqual(camera.command.slice(0, 4), ["node", "scripts/gates/demoted.mjs", "gate:camera-proof", "--"]);
+  assert.ok(!plan.tasks.find((task) => task.id === "browser-tests").command.includes("scripts/gates/demoted.mjs"));
+});

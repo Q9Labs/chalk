@@ -15,6 +15,11 @@ export function gateTaskIds() {
     .map((entry) => entry.id.slice("gate:".length));
 }
 
+/** demotion returns the demoted record of a Gate task (reason, failing run ids, issue), or null while the task blocks. */
+export function demotion(taskId) {
+  return readRegister().find((entry) => entry.id === `gate:${taskId}`)?.demoted ?? null;
+}
+
 export function requireRegistered(taskId) {
   if (!gateTaskIds().includes(taskId)) {
     throw new Error(`Gate task "${taskId}" has no entry in scripts/gates/checks.json. Add one with its purpose, owner, run points and consequence.`);
