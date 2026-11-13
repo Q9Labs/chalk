@@ -108,6 +108,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
       admissionQueue: ["Rania Aziz", "Omar Haddad", "Lena Fischer"]
         .slice(0, options.admission === true ? 1 : options.admission || 0)
         .map((displayName, index) => ({ requestId: `req-${index + 1}`, participantId: `guest-${index + 1}`, displayName, initialRole: "guest" as const, eligibleRoles: ["guest" as const], expiresAt: new Date(now + 60_000).toISOString() })),
+      admissionPolicy: options.admission ? "knock" : "open",
     },
     media: {
       ...base.media,

@@ -18,7 +18,7 @@ it("clears departed participants but retains view history through temporary sock
     media: { microphone: "inactive", camera: "inactive", screenShare: "inactive" },
     presence: { state: "connected", speaking: false, activeSpeaker: false },
   };
-  store.updateParticipants({ roster: [person], admissionQueue: [] });
+  store.updateParticipants({ roster: [person], admissionQueue: [], admissionPolicy: null });
   const forgetParticipant = vi.fn();
   const stopSceneSubscription = vi.fn();
   const transport = { forgetParticipant, stopSceneSubscription } as unknown as ChalkWhiteboardV1Transport;
@@ -35,15 +35,15 @@ it("clears departed participants but retains view history through temporary sock
       Effect.gen(function* () {
         yield* makeWhiteboardController(connection, store, () => transport);
         portsChanged(null);
-        store.updateParticipants({ roster: [{ ...person, presence: { ...person.presence, state: "disconnected" } }], admissionQueue: [] });
+        store.updateParticipants({ roster: [{ ...person, presence: { ...person.presence, state: "disconnected" } }], admissionQueue: [], admissionPolicy: null });
         expect(forgetParticipant).not.toHaveBeenCalled();
-        store.updateParticipants({ roster: [], admissionQueue: [] });
+        store.updateParticipants({ roster: [], admissionQueue: [], admissionPolicy: null });
         expect(forgetParticipant).toHaveBeenCalledExactlyOnceWith("person");
       }),
     ),
   );
-  store.updateParticipants({ roster: [person], admissionQueue: [] });
-  store.updateParticipants({ roster: [], admissionQueue: [] });
+  store.updateParticipants({ roster: [person], admissionQueue: [], admissionPolicy: null });
+  store.updateParticipants({ roster: [], admissionQueue: [], admissionPolicy: null });
   expect(forgetParticipant).toHaveBeenCalledTimes(1);
 });
 

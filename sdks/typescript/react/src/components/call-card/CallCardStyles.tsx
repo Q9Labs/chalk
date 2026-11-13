@@ -121,6 +121,14 @@ const styles = `.call-card-tabs {
 .call-host-controls .chalk-pill-button {
   height: 36px;
 }
+.call-who-option {
+  display: grid;
+  gap: 2px;
+}
+.call-who-option small {
+  font-size: var(--type-caption);
+  color: var(--chalk-muted-text);
+}
 .call-mute-confirm {
   width: 280px;
   padding: var(--space-2) var(--space-2) var(--space-1);
