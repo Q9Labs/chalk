@@ -1,7 +1,7 @@
 import { useConnection, useMedia } from "../hooks/space-hooks";
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
-import { useDevScenario } from "../frame/dev-scenario";
+import { useDevScenario } from "../dev-scenario";
 import type { Arrangement } from "../frame/regions";
 import { useMeasuredRef } from "../frame/measurement";
 import { announce } from "../primitives/announce";

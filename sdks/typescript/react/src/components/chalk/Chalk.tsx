@@ -117,10 +117,7 @@ export function Chalk(props: ChalkProps): React.JSX.Element {
   useEffect(() => {
     if (!ownedClient) return;
     return () => {
-      void ownedClient
-        .leave()
-        .catch(() => undefined)
-        .finally(() => ownedClient.dispose());
+      void ownedClient.close();
     };
   }, [ownedClient]);
   return (

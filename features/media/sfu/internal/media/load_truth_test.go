@@ -45,8 +45,8 @@ func defaultsNode(t *testing.T) *Node {
 }
 
 // A 3-person class of two cameras each sends 6·(300+90) camera uplink packets/s and receives 12
-// camera streams at 300, plus audio and a screen share. Admission has to reserve all of it, so a
-// 16,000 packets/s budget holds two such classes, not the six that 150 packets/s per camera allowed.
+// camera streams at 300, plus audio and a screen share. Admission has to reserve all of it, so the
+// smallest node's budget holds three such classes, not the eight that 150 packets/s per camera allowed.
 func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
 	node := defaultsNode(t)
 	const people = 3
@@ -58,17 +58,19 @@ func TestAdmissionReservesWhatSDKSimulcastCosts(t *testing.T) {
 		t.Fatalf("a 3-person 2-camera class reserves %d packets/s, want the %d it sends and receives", got, want)
 	}
 
-	for class := range 2 {
+	budget, _ := node.Budget()
+	classes := budget / want
+	for class := range classes {
 		for person := range people {
 			node.newTestSession(t, episodeScope("class-"+itoa(class), "p"+itoa(person)))
 		}
 	}
-	if _, reserved := node.Budget(); reserved != 2*want {
-		t.Fatalf("two classes reserve %d, want %d", reserved, 2*want)
+	if _, reserved := node.Budget(); reserved != classes*want {
+		t.Fatalf("%d classes reserve %d, want %d", classes, reserved, classes*want)
 	}
-	_, err := node.CreateSession("create-third-class", episodeScope("class-2", "p0"))
+	_, err := node.Create("create-one-class-too-many", episodeScope("class-over", "p0"), ParticipantSession, nil)
 	if !errors.Is(err, errNodeFull) {
-		t.Fatalf("a third class on a 16,000 budget: %v, want the node full", err)
+		t.Fatalf("a class beyond %d on a %d budget: %v, want the node full", classes, budget, err)
 	}
 }
 
@@ -206,10 +208,10 @@ func TestUDPBufferErrorsCloseAdmissionAndNameTheReason(t *testing.T) {
 			// The node's own socket leaves its counters alone, so steal's absence does not matter:
 			// 20 datagrams a second for a full window is above the 5 a second threshold.
 			runWindow(node, 31, func() { test.step(&host.errors) })
-			if reason := node.guard.closedReason(); reason != reasonUDPBufferErrors {
-				t.Fatalf("admission reason %q, want %q", reason, reasonUDPBufferErrors)
+			if reason := node.guard.closedReason(); reason != RefusedUDPErrors {
+				t.Fatalf("admission reason %q, want %q", reason, RefusedUDPErrors)
 			}
-			_, err := node.CreateSession("create-new", episodeScope("new", "bob"))
+			_, err := node.Create("create-new", episodeScope("new", "bob"), ParticipantSession, nil)
 			if !errors.Is(err, errAdmissionClosed) {
 				t.Fatalf("a new Episode while buffers overflow: %v, want admission closed", err)
 			}
@@ -237,7 +239,7 @@ func TestPacerDropsCloseAdmission(t *testing.T) {
 		node.guard.observePacer(load)
 	})
 	health := node.guard.snapshot()
-	if health.AdmissionReason != reasonPacerDrops || math.Abs(health.PacerDropPercent-10) > 0.5 {
+	if health.AdmissionReason != RefusedPacerDrops || math.Abs(health.PacerDropPercent-10) > 0.5 {
 		t.Fatalf("health %+v, want pacer_drops near 10%%", health)
 	}
 	// A handful of drops among plenty of video is noise.
@@ -265,8 +267,8 @@ func TestBusyCPUClosesAdmission(t *testing.T) {
 		host.times.total += 100
 		host.times.idle += 5
 	})
-	if reason := node.guard.closedReason(); reason != reasonCPUBusy {
-		t.Fatalf("admission reason %q at 95%% busy, want %q", reason, reasonCPUBusy)
+	if reason := node.guard.closedReason(); reason != RefusedCPUBusy {
+		t.Fatalf("admission reason %q at 95%% busy, want %q", reason, RefusedCPUBusy)
 	}
 }
 

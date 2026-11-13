@@ -20,12 +20,14 @@ type operationRecord struct {
 // leaves no record, so a retry runs again. Reusing an ID for a different body is a conflict.
 // The caller holds the session's opMu.
 type replayTable struct {
-	records map[string]operationRecord
-	order   []string
+	records *orderedTable[string, operationRecord]
 }
 
 func (t *replayTable) lookup(operationID string, request any) (json.RawMessage, bool, error) {
-	record, ok := t.records[operationID]
+	if t.records == nil {
+		return nil, false, nil
+	}
+	record, ok := t.records.Get(operationID)
 	if !ok {
 		return nil, false, nil
 	}
@@ -49,14 +51,9 @@ func (t *replayTable) remember(operationID string, request any, response any) er
 		return fmt.Errorf("encode response for replay: %w", err)
 	}
 	if t.records == nil {
-		t.records = map[string]operationRecord{}
+		t.records = newOrderedTable[string, operationRecord](maxOperationRecords)
 	}
-	if len(t.order) >= maxOperationRecords {
-		delete(t.records, t.order[0])
-		t.order = t.order[1:]
-	}
-	t.records[operationID] = operationRecord{digest: digest, response: encoded}
-	t.order = append(t.order, operationID)
+	t.records.Remember(operationID, operationRecord{digest: digest, response: encoded})
 	return nil
 }
 
@@ -71,8 +68,8 @@ func digestOf(request any) ([sha256.Size]byte, error) {
 // once runs a session mutation at most once per operation ID. The caller holds s.opMu.
 func once[T any](s *Session, operationID string, request any, run func() (T, error)) (T, error) {
 	var zero T
-	if !identifierPattern.MatchString(operationID) {
-		return zero, fmt.Errorf("%w: operationId must be 1-128 characters of letters, digits, '.', '_', ':' or '-'", ErrInvalidRequest)
+	if err := checkIdentifier("operationId", operationID); err != nil {
+		return zero, err
 	}
 	if s.isClosed() {
 		return zero, ErrSessionGone
