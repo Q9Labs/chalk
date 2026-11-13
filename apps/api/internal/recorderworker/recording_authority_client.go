@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -97,35 +95,10 @@ func (c *ControlPlaneClient) FinalizeRecordingObject(ctx context.Context, input 
 }
 
 func (c *ControlPlaneClient) UploadRecordingObject(ctx context.Context, signed objectstorage.SignedURL, object []byte) error {
-	if c == nil || c.uploader == nil || signed.Method != http.MethodPut || len(object) == 0 || len(object) > MaxRecordingObjectUploadBytes || !signed.ExpiresAt.After(time.Now().UTC()) {
+	if len(object) == 0 || len(object) > MaxRecordingObjectUploadBytes {
 		return ErrInvalidControlPlaneRequest
 	}
-	endpoint, err := validateRecordingUploadURL(signed.URL)
-	if err != nil {
-		return ErrInvalidControlPlaneRequest
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint.String(), bytes.NewReader(object))
-	if err != nil {
-		return ProtocolError{Err: err}
-	}
-	for name, values := range signed.SignedHeader {
-		if strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Cookie") || strings.EqualFold(name, "Proxy-Authorization") || strings.EqualFold(name, "Host") || strings.EqualFold(name, "Content-Length") {
-			return ErrInvalidControlPlaneRequest
-		}
-		for _, value := range values {
-			request.Header.Add(name, value)
-		}
-	}
-	response, err := c.uploader.Do(request)
-	if err != nil {
-		return TransportError{Err: errors.Join(ErrRecordingObjectUpload, err)}
-	}
-	defer response.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("%w: %w", ErrRecordingObjectUpload, classifyHTTPError(response.StatusCode))
-	}
-	return nil
+	return c.putSignedObject(ctx, signed, bytes.NewReader(object), int64(len(object)))
 }
 
 func (c *ControlPlaneClient) CommitRecordingObject(ctx context.Context, input recordingobjects.CommitInput) (recordingobjects.Bundle, error) {

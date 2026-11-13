@@ -160,14 +160,21 @@ func (c *ControlPlaneClient) CommitTranscriptionPreparation(ctx context.Context,
 }
 
 func (c *ControlPlaneClient) UploadRenderObject(ctx context.Context, signed objectstorage.SignedURL, reader io.Reader, byteSize int64) error {
-	if c == nil || c.uploader == nil || reader == nil || signed.Method != http.MethodPut || byteSize <= 0 || !signed.ExpiresAt.After(time.Now().UTC()) {
+	if reader == nil || byteSize <= 0 {
+		return ErrInvalidControlPlaneRequest
+	}
+	return c.putSignedObject(ctx, signed, io.LimitReader(reader, byteSize+1), byteSize)
+}
+
+func (c *ControlPlaneClient) putSignedObject(ctx context.Context, signed objectstorage.SignedURL, body io.Reader, byteSize int64) error {
+	if c == nil || c.uploader == nil || signed.Method != http.MethodPut || !signed.ExpiresAt.After(time.Now().UTC()) {
 		return ErrInvalidControlPlaneRequest
 	}
 	endpoint, err := validateRecordingUploadURL(signed.URL)
 	if err != nil {
 		return ErrInvalidControlPlaneRequest
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint.String(), io.LimitReader(reader, byteSize+1))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint.String(), body)
 	if err != nil {
 		return ProtocolError{Err: err}
 	}
