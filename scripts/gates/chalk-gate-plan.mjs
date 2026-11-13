@@ -21,7 +21,12 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // A pull request treats only these workflows as gate behavior: the Gate itself and the cache warm-up it starts from. The release,
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
-const workflowGraphRoots = [".github/workflows", "features/scorecard"];
+// The workflow-graph lane selects on these paths, and every test it runs reads only paths under them (chalk-gate-plan.test.mjs checks that).
+export const workflowGraphRoots = [".github/workflows", ".github/actions", "features/scorecard", "scripts/deploy", "scripts/prod-proof", "scripts/staging-sfu"];
+export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mjs", "features/scorecard/nightly-graph.test.mjs", "features/scorecard/lease-arguments.test.mjs"];
+// scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
+// The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
+export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
 // What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
 // the transcription configuration that check_configuration fingerprints, and the API module files and migrations that the manifest and component planning read.
 const releaseContractRoots = ["scripts/releases", "scripts/recorder/release.py", "scripts/recorder/archive.py", "scripts/recorder/release_core.py", "scripts/recorder/release_io.py", "scripts/recorder/dispatcher_binding.py", "infrastructure/managed-episode", "infrastructure/nightly/transcription", "features/scorecard", "perf/budgets.json", "apps/api/go.mod", "apps/api/go.sum", "apps/api/db/migrations"];
@@ -415,6 +420,7 @@ export function createGatePlan(files, options = {}) {
         "apps/web/call-states.html",
         "perf/budgets.json",
         "features/scorecard/budgets.mjs",
+        "features/scorecard/call-budgets.mjs",
         "apps/web/vite.aliases.ts",
         "apps/web/vite.call-states.config.ts",
         "apps/web/vite.call-performance.config.ts",
@@ -446,7 +452,7 @@ export function createGatePlan(files, options = {}) {
   const formatCommand = formattedFiles.length > 0 ? ["pnpm", "exec", "oxfmt", "--check", ...formattedFiles] : null;
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
-  const workflowGraph = full || normalizedFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
   const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
@@ -469,13 +475,9 @@ export function createGatePlan(files, options = {}) {
     ]),
     task("feature-map", "Feature map coverage", true, "always required", ["node", "scripts/gates/feature-map.mjs"]),
     task("workflow-graph", "Workflow graph tests", workflowGraph, workflowGraph ? "workflow or scorecard inputs changed" : "no workflow or scorecard inputs changed", [
-      "node",
-      "scripts/test/run.mjs",
-      "node",
-      "--test",
-      "features/scorecard/promote-graph.test.mjs",
-      "features/scorecard/nightly-graph.test.mjs",
-      "features/scorecard/lease-arguments.test.mjs",
+      "bash",
+      "-c",
+      `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
     task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),

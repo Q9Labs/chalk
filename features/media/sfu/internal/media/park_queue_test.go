@@ -73,7 +73,7 @@ func parkWithQueuedPacket(t *testing.T, repair, resume bool) {
 	})
 	authority := &sourceAuthority{}
 	authority.window.Store(&leaseWindow{until: monotonic() + int64(time.Minute)})
-	publisher := &Session{id: "publisher", node: &Node{log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+	publisher := &Session{kind: ParticipantSession, id: "publisher", node: &Node{log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
 	pub := &publication{session: publisher, name: "camera", source: "camera", kind: webrtc.RTPCodecTypeVideo, authority: authority}
 	transport := newTransport(&delayHistogram{}, 128<<10, make(chan struct{}))
 	track := newEgressTrack(pub, transport)
@@ -110,7 +110,7 @@ func parkWithQueuedPacket(t *testing.T, repair, resume bool) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("peer did not connect")
 	}
-	owner := &Session{subscribed: map[string]*subscription{}}
+	owner := &Session{kind: ParticipantSession, subscribed: map[string]*subscription{}}
 	sub := newSubscription(owner, pub, tx, track, layerRequest{}, nil)
 	sub.mid = tx.Mid()
 	owner.subscribed[sub.mid] = sub
@@ -191,7 +191,7 @@ func cameraWithOneLayer(t *testing.T) (*publication, *ingressLayer) {
 	t.Cleanup(func() { _ = pc.Close() })
 	authority := &sourceAuthority{}
 	authority.window.Store(&leaseWindow{until: monotonic() + int64(time.Minute)})
-	publisher := &Session{id: "publisher", pc: pc, node: &Node{log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
+	publisher := &Session{kind: ParticipantSession, id: "publisher", pc: pc, node: &Node{log: slog.New(slog.NewTextHandler(io.Discard, nil))}}
 	pub := &publication{session: publisher, name: "camera", source: "camera", kind: webrtc.RTPCodecTypeVideo, authority: authority}
 	layer := &ingressLayer{}
 	layer.lastRTP.Store(monotonic())

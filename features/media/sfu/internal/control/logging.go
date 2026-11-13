@@ -3,6 +3,8 @@ package control
 import (
 	"net/http"
 	"time"
+
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 )
 
 type statusRecorder struct {
@@ -26,7 +28,7 @@ func (s *Server) logged(next http.Handler) http.Handler {
 			return
 		}
 		attrs := []any{"method", r.Method, "route", r.Pattern, "status", recorder.status, "durationMs", time.Since(started).Milliseconds()}
-		if id := r.PathValue("connectionId"); id != "" {
+		if id := r.PathValue(protocol.SessionConnectionWildcard); id != "" {
 			attrs = append(attrs, "connection_id", id)
 		}
 		if trace := traceOf(r); trace.TraceID != "" {

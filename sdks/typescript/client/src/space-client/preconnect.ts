@@ -2,7 +2,7 @@ import { releaseWarmBrowserSyncSocket, warmBrowserSyncSocket } from "../sync/bro
 import { MAX_KEEP_WARM_MS } from "../sync/warm-socket";
 import { directFirstWarmUrl } from "../sync/direct-first";
 import { syncEntryUrl } from "../sync/entry-url";
-import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "./urls";
+import { DEFAULT_API_BASE_URL, defaultSyncUrl } from "../urls";
 
 export type PreconnectOptions = {
   /** The API base URL the client will use. Defaults to the same value as `createSpaceClient`. */

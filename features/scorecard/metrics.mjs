@@ -48,7 +48,6 @@ const sfu = {
   "sfu.freeze_ms_per_minute": { unit: "ms", description: "Video frozen, in milliseconds per minute" },
   "sfu.admission_refusals": { unit: "count", description: "Samples in which the node refused new Episodes" },
   "sfu.loopback.pass": { unit: "pass", description: "Share of loopback tests that passed (real HTTP and real Pion peers)" },
-  "sfu.impairment.pass": { unit: "pass", description: "Share of impaired-network tests that passed (loss, delay and rate limits)" },
 };
 
 const proof = {

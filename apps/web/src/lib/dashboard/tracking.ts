@@ -1,4 +1,5 @@
 import type { CueDTO, RecordingDTO, TranscriptDTO } from "./contracts";
+import { backoffMs } from "../backoff";
 import { DashboardRequestError, errorMessage } from "./client";
 import { completedTranscript, lapsed, openWindow, pendingTranscript, transcriptState, videoState, workingRecording, type TranscriptState } from "./recording";
 
@@ -55,7 +56,7 @@ export function failed(read: Read, kind: "transient" | "terminal", error: unknow
   const failure = { kind, message: errorMessage(error) };
   if (kind === "terminal") return { ...read, at, failure, stale: false };
   const failures = Math.min(read.failures + 1, 6);
-  const wait = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : Math.min(RETRY_MS * 2 ** (failures - 1), RETRY_CAP_MS);
+  const wait = error instanceof DashboardRequestError && error.retryAfterSeconds !== undefined ? error.retryAfterSeconds * 1000 : backoffMs(failures, RETRY_MS, RETRY_CAP_MS);
   return { at, failures, retryAt: at + wait, failure, stale: false };
 }
 
