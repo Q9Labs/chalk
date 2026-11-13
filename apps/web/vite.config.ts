@@ -83,6 +83,12 @@ const config = defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // The board's socket is Sync's too; under the API's "/v1" rule its upgrade never completes and the call shows no Board.
+      "/v1/whiteboard": {
+        target: localSyncOrigin,
+        ws: true,
+        changeOrigin: true,
+      },
       "/v1": {
         target: localAPIOrigin,
         changeOrigin: true,

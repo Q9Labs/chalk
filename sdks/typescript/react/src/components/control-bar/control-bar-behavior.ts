@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 
-import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
+import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "./command-failure";
 import { mediaToggleTarget } from "./media-toggle";
 import { useMirrorSetting } from "../../internal/useMirrorSetting";
 import type { CameraPreview, ClientFailure, MediaSource, ScreenShareOptions } from "@q9labsai/chalk-client";
@@ -23,9 +23,6 @@ export interface MediaDevice {
 export type ControlBarButtonName = "mic" | "video" | "screenshare" | "record" | "chat" | "participants" | "handraise" | "reactions" | "whiteboard" | "leave";
 
 export interface ControlBarSurfaceProps {
-  shareUrl?: string;
-  callLinkOpen?: boolean;
-  onCallLinkToggle?: () => void;
   layout?: "focus" | "grid";
   onLayoutChange?: (layout: "focus" | "grid") => void;
   density?: "comfortable" | "compact";
@@ -45,7 +42,6 @@ export interface ControlBarSurfaceProps {
   onMirrorChange?: (mirrored: boolean) => void;
   onTestSpeaker?: () => void;
   onStartScreenShare?: (options: ScreenShareOptions) => void;
-  onCopyError?: () => void;
   knockCount?: number;
   isMuted?: boolean;
   microphonePending?: boolean;
@@ -100,9 +96,6 @@ export interface ControlBarProps {
   /** Local self-view only. Omit to use the persisted mirror preference. */
   readonly mirrored?: boolean;
   readonly onMirrorChange?: (mirrored: boolean) => void;
-  readonly shareUrl?: string;
-  readonly callLinkOpen?: boolean;
-  readonly onCallLinkToggle?: () => void;
   readonly layout?: "focus" | "grid";
   readonly onLayoutChange?: (layout: "focus" | "grid") => void;
   readonly density?: "comfortable" | "compact";
@@ -111,6 +104,7 @@ export interface ControlBarProps {
   readonly onToggleChat?: () => void;
   readonly onToggleParticipants?: () => void;
   readonly onToggleWhiteboard?: () => void;
+  readonly isWhiteboardOpen?: boolean;
   readonly onOpenReactions?: () => void;
   readonly reactionsOpen?: boolean;
   readonly onLeaveRequest?: () => void;
@@ -230,7 +224,8 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   const canRaiseHand = useCan("raiseHand");
   const canDrawWhiteboard = useCanDrawWhiteboard();
   const canManageRecording = useCan("manageRecording");
-  const live = useConnection().status === "live";
+  const { status } = useConnection();
+  const live = status === "live";
   const microphoneEnabled = media.local.microphone.state === "enabled";
   const cameraEnabled = media.local.camera.state === "enabled";
   const microphoneTarget = mediaToggleTarget(media.local.microphone.state, live);
@@ -326,12 +321,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
         "screen",
         "start",
       ),
-    shareUrl: props.shareUrl,
     isMuted: !microphoneEnabled,
     microphonePending: media.local.microphone.state === "requesting",
     onCancelMicrophonePending: toggleMicrophone,
     mediaEnableDisabled: !live,
-    reactionsDisabled: !live,
+    reactionsDisabled: !live && status !== "reconnecting",
     cameraPending: media.local.camera.state === "requesting",
     onCancelCameraPending: toggleCamera,
     isVideoEnabled: cameraEnabled,
@@ -356,11 +350,19 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
     onAudioOutputChange: (deviceId) => void run(() => client.media.selectSpeaker(deviceId), "speaker", "select"),
     onVideoInputChange: (deviceId) => void run(() => client.media.selectCamera(deviceId), "camera", "select"),
     onToggleScreenShare: () => void run(() => client.media.setScreenShareEnabled(!screenSharing), "screen", screenSharing ? "stop" : "start"),
-    onToggleRecording: () => void run(() => (recordingStatus === "recording" ? client.recording.stop() : client.recording.start())),
+    onToggleRecording: () => {
+      const action = recordingStatus === "recording" ? "stop" : "start";
+      void run(() =>
+        (action === "stop" ? client.recording.stop() : client.recording.start()).catch((cause: unknown) => {
+          throw recordingFailure(cause, action);
+        }),
+      );
+    },
     onToggleChat: props.onToggleChat,
     onToggleParticipants: props.onToggleParticipants,
     onToggleHandRaise: () => void run(() => (self.handRaised ? client.participants.lowerHand() : client.participants.raiseHand())),
     onToggleWhiteboard: props.onToggleWhiteboard,
+    isWhiteboardOpen: props.isWhiteboardOpen,
     onOpenReactions: props.onOpenReactions,
     onLeft: leave,
     onEndForEveryone: props.onEndForEveryone,
@@ -371,8 +373,11 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
 }
 
 /** A device with an access card already says what is wrong, so it gets no second notice. */
-function failedMediaNotice(media: ReturnType<typeof useMedia>["local"], deviceAccess: Partial<Record<DeviceKind, DeviceAccessControl>>): string | undefined {
-  if (media.microphone.state === "failed" && !deviceAccess.microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
-  if (media.camera.state === "failed" && !deviceAccess.camera) return "Camera didn’t reach the call. Turn it on to try again.";
+export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local"], "microphone" | "camera">, cards: Partial<Record<DeviceKind, unknown>>): string | undefined {
+  const microphone = media.microphone.state === "failed" && !cards.microphone;
+  const camera = media.camera.state === "failed" && !cards.camera;
+  if (microphone && camera) return "Microphone and camera didn’t reach the call. Turn them on to try again.";
+  if (microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
+  if (camera) return "Camera didn’t reach the call. Turn it on to try again.";
   return undefined;
 }

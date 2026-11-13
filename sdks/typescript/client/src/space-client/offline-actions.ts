@@ -120,7 +120,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     }
     if (state === "live") {
       if (!this.#validScope()) {
-        this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+        this.#notice = "Changes you made offline weren’t sent because the call changed.";
         this.#settle("discard");
         return;
       }
@@ -129,7 +129,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
         this.#publish();
       } else this.#settle(this.#policy);
     } else if (terminal) {
-      this.#notice = "Your offline actions were not sent because the Episode ended or the connection closed.";
+      this.#notice = "Changes you made offline weren’t sent because the call ended.";
       this.#settle("discard");
       this.#clearStorage();
     }
@@ -138,12 +138,12 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
   #settle(decision: "send" | "discard"): void {
     if (decision === "send" && this.#connection.getSnapshot().state !== "live") return;
     if (decision === "send" && !this.#validScope()) {
-      this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+      this.#notice = "Changes you made offline weren’t sent because the call changed.";
       decision = "discard";
     }
     // Retire before dispatch: a crash after dispatch must never cause a replay.
     if (!this.#clearStorage() && this.#storage) {
-      this.#notice = "Your offline actions could not be sent safely. Try again when storage is available.";
+      this.#notice = "Changes you made offline couldn’t be sent safely. Try them again.";
       this.#publish();
       return;
     }
@@ -185,7 +185,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
       if (this.#waiters.length === 0) this.#storage.removeItem(this.#storageKey);
       else this.#storage.setItem(this.#storageKey, JSON.stringify({ version: 1, subject: this.#subject, actions: this.#waiters.map(({ action }) => action) }));
     } catch {
-      this.#notice = "Your offline actions are held, but could not be saved. Keep this page open.";
+      this.#notice = "Changes you made offline are waiting but couldn’t be saved. Keep this page open.";
     }
   }
 
@@ -197,13 +197,13 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
     if (!saved) return;
     this.#subject = saved.subject;
     if (!this.#validScope()) {
-      this.#notice = "Your offline actions were not sent because the Episode or participant changed.";
+      this.#notice = "Changes you made offline weren’t sent because the call changed.";
       this.#clearStorage();
       this.#publish();
       return;
     }
     const actions = saved.actions.filter((action) => this.#connection.nowUnsafe() - action.queuedAt < OFFLINE_ACTION_MAX_AGE_MS);
-    if (actions.length !== saved.actions.length) this.#notice = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+    if (actions.length !== saved.actions.length) this.#notice = "Some changes you made offline were too old to send.";
     if (!this.#policyExplicit) this.#policy = "ask";
     const restoredSubject = saved.subject;
     this.#waiters = actions.map((action) => ({
@@ -226,7 +226,7 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
               Effect.suspend(() => (sameSubject(this.#connection.getSnapshot().subject, restoredSubject) ? command : Effect.fail(discardedError()))).pipe(
                 Effect.tapError(() =>
                   Effect.sync(() => {
-                    this.#notice = "An offline action was not sent. Please try it again.";
+                    this.#notice = "A change you made offline wasn’t sent. Try it again.";
                     this.#publish();
                   }),
                 ),
@@ -242,17 +242,17 @@ class OfflineActionsRuntime implements OfflineActionsControllerEffects, OfflineA
 
   #resumeWaiter(waiter: Waiter, decision: "send" | "discard"): void {
     const expired = this.#connection.nowUnsafe() - waiter.action.queuedAt >= OFFLINE_ACTION_MAX_AGE_MS;
-    if (expired) this.#notice = "Your expired offline actions were not sent. Actions are kept for up to 24 hours.";
+    if (expired) this.#notice = "Some changes you made offline were too old to send.";
     waiter.resume(decision === "send" && !expired ? Effect.void : Effect.fail(discardedError()));
   }
 
   #discardSaved(): void {
     try {
       if (!this.#storage?.getItem(this.#storageKey)) return;
-      this.#notice = "Your offline actions were not sent because the Episode ended or the connection closed.";
+      this.#notice = "Changes you made offline weren’t sent because the call ended.";
       this.#clearStorage();
     } catch {
-      this.#notice = "Saved offline actions could not be read. They will not be sent.";
+      this.#notice = "Saved offline changes couldn’t be read, so they won’t be sent.";
     }
     this.#publish();
   }

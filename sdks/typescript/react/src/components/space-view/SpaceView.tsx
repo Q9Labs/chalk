@@ -1,5 +1,5 @@
 "use client";
-import { commandFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
+import { commandFailure, recordingFailure, type MediaCommandSource, type MediaCommandAction } from "../control-bar/command-failure";
 import { isDeviceAccessFailure } from "../device-access/model";
 import { DeviceAccessProvider, useDeviceAccess } from "../device-access/useDeviceAccess";
 import { mediaToggleTarget } from "../control-bar/media-toggle";
@@ -10,6 +10,7 @@ import { useCan, useCanDrawWhiteboard, useConnection, useMedia, useOffline, useP
 import { callDiagnostics } from "../space-header/call-diagnostics";
 import { callCountdown } from "./countdown";
 import { useEpisodeDuration } from "../../internal/useEpisodeDuration";
+import { useRecordingSeconds } from "../../internal/useRecordingSeconds";
 import { useIsMobile, usePrefersReducedMotion } from "../../internal/useMediaQuery";
 import { useSoundsSetting } from "../../internal/useSoundsSetting";
 import { useSoundCues } from "../../internal/useSoundCues";
@@ -22,14 +23,15 @@ import { ChatPanel } from "../composite/ChatPanel";
 import { ReactionPicker } from "../composite/ReactionPicker";
 import { ReactionsOverlay } from "../composite/ReactionsOverlay";
 import { ControlBar, type ControlBarButtonName } from "../control-bar/ControlBar";
+import { failedMediaNotice } from "../control-bar/control-bar-behavior";
 import { ParticipantVolumeProvider } from "../participants-panel/participant-volume-context";
+import { reconnectedToast } from "../connection-status/ConnectionStatus";
 import { LiveConnectionStatus } from "../connection-status/LiveConnectionStatus";
 import { useConnectionPhase } from "../connection-status/use-connection-phase";
 import { FrozenFramesContext } from "../participant-tile/useFrozenFrame";
 import { useHeldWhile } from "../../internal/useHeldWhile";
 import { useSeenConnected } from "../../internal/useSeenConnected";
 import { useCallToasts } from "../toast-stack/useCallToasts";
-import { CallReady } from "../call-limbo/CallReady";
 import { useCallLink } from "../call-limbo/useCallLink";
 import { mediaFailureToast } from "../toast-stack/call-events";
 import { ToastStack, type Toast } from "../toast-stack/ToastStack";
@@ -166,6 +168,7 @@ export function SpaceView({
   const canManageAdmission = useCan("manageAdmission");
   const canManageRecording = useCan("manageRecording");
   const episodeDuration = useEpisodeDuration();
+  const recordingSeconds = useRecordingSeconds(recording.current?.status, episodeDuration);
   const deadline = connection.episode?.deadline;
   const [now, setNow] = useState(Date.now);
   const previousCountdown = useRef<{ deadline: typeof deadline; seconds: number | null } | null>(null);
@@ -198,8 +201,10 @@ export function SpaceView({
     setActivePanel(initialPanel);
   }
   const [isReactionPickerOpen, setReactionPickerOpen] = useState(false);
+  // While reconnecting the tray stays usable: a raised hand waits for the connection, and only the emoji pause.
+  const reactionsReachable = connection.status === "live" || connection.status === "reconnecting";
   // The tray unmounts when the call leaves live, so its open flag must not survive to the next live call.
-  if (isReactionPickerOpen && connection.status !== "live") setReactionPickerOpen(false);
+  if (isReactionPickerOpen && !reactionsReachable) setReactionPickerOpen(false);
   const [commandError, setCommandError] = useState<string | ClientFailure | null>(null);
   const [commandSource, setCommandSource] = useState<MediaCommandSource>();
   const [commandAction, setCommandAction] = useState<MediaCommandAction>();
@@ -302,25 +307,35 @@ export function SpaceView({
     }
     boardToastCount.current += 1;
     const id = `board-${boardToastCount.current}`;
-    setBoardToasts((current) => [...current.slice(-2), { ...toast, id }]);
+    // The same board message again replaces its notice instead of stacking a copy under it.
+    setBoardToasts((current) => [...current.filter((shown) => shown.message !== toast.message).slice(-2), { ...toast, id }]);
   }, []);
   const dismissCommandError = () => {
     if (commandError && typeof commandError === "object") callToasts.dismissFailure(commandError.code);
     setCommandError(null);
     onDismissCommandError?.();
   };
-  const limitToast: Toast[] = limitWarning ? [{ id: limitWarning.id, type: "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }] : [];
+  // A microphone or camera that failed without an access card gets one notice in the call's stack, above the dock, until it recovers or is dismissed.
+  const mediaNotice = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
+  const [dismissedMediaNotice, setDismissedMediaNotice] = useState<string | undefined>(undefined);
+  const mediaToast: Toast[] = mediaNotice && mediaNotice !== dismissedMediaNotice ? [{ id: "media-notice", type: "error", duration: Infinity, message: mediaNotice }] : [];
+  const limitToast: Toast[] = limitWarning
+    ? [{ id: limitWarning.id, type: limitWarning.minutes === 1 ? "error" : "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }]
+    : [];
   const toasts = [
     ...limitToast,
     ...callToasts.toasts.filter((toast) => !(typeof displayedCommandError === "object" && displayedCommandError && toast.failureCode === displayedCommandError.code)),
     ...(whiteboard?.isOpen ? boardToasts : []),
     ...commandToasts,
+    ...mediaToast,
+    ...(connectionPhase.kind === "reconnected" ? [reconnectedToast(connectionPhase.awayMs)] : []),
     ...(offlineNotice ? [{ id: "offline-notice", message: offlineNotice }] : []),
   ];
   const dismissToast = (id: string) => {
     if (id.startsWith("time-limit-")) setLimitWarning(null);
     else if (id === "space-command-error") dismissCommandError();
     else if (id === "offline-notice") setDismissedOfflineNotice(offline.notice ?? null);
+    else if (id === "media-notice") setDismissedMediaNotice(mediaNotice);
     else if (id.startsWith("board-")) setBoardToasts((current) => current.filter((toast) => toast.id !== id));
     else callToasts.dismiss(id);
   };
@@ -371,6 +386,16 @@ export function SpaceView({
               duration: episodeDuration,
               timeLeft: countdown.seconds,
               isRecording: recording.current?.status === "recording",
+              recordingSeconds,
+              onStopRecording:
+                feature("recording") && canManageRecording
+                  ? () =>
+                      void runCommand(() =>
+                        client.recording.stop().catch((cause: unknown) => {
+                          throw recordingFailure(cause, "stop");
+                        }),
+                      )
+                  : undefined,
               layout: headerLayout,
               onLayoutChange: updateLayout,
               notices: folded.length ? <NoticeButton toasts={folded} onDismiss={dismissToast} /> : undefined,
@@ -407,14 +432,12 @@ export function SpaceView({
                   density="comfortable"
                   layout={layout}
                   onLayoutChange={updateLayout}
-                  shareUrl={effectiveShareUrl}
-                  callLinkOpen={callLinkOpen ?? callLink.open}
-                  onCallLinkToggle={onCallLinkToggle ?? callLink.toggle}
                   buttons={buttons}
                   activePanel={activePanel === "chat" || activePanel === "participants" ? activePanel : null}
                   onToggleChat={() => setActivePanel((current) => (current === "chat" ? null : "chat"))}
                   onToggleParticipants={() => setActivePanel((current) => (current === "participants" ? null : "participants"))}
                   onToggleWhiteboard={onToggleWhiteboard}
+                  isWhiteboardOpen={whiteboard?.isOpen}
                   onOpenReactions={() => setReactionPickerOpen((current) => !current)}
                   reactionsOpen={isReactionPickerOpen}
                   onCommandError={onCommandError}
@@ -428,7 +451,7 @@ export function SpaceView({
                 {feature("reactions") ? <ReactionsOverlay /> : null}
                 {/* The tray wrapper must not be transformed: a transformed ancestor shrinks the tray's fixed backdrop to an empty box. Its z-index stays under the notices (45) so they remain clickable over the backdrop. */}
                 <LiveConnectionStatus phase={connectionPhase} onRejoin={onRejoin} onLeave={leaveCall} onReportProblem={onOpenReportProblem} />
-                {feature("reactions") && canSendReaction && connection.status === "live" ? (
+                {feature("reactions") && canSendReaction && reactionsReachable ? (
                   <div className="absolute bottom-24 left-1/2 z-44">
                     <ReactionPicker
                       isHandRaised={self.handRaised}
@@ -436,6 +459,7 @@ export function SpaceView({
                       isOpen={isReactionPickerOpen}
                       onClose={() => setReactionPickerOpen(false)}
                       allowedReactions={[...DEFAULT_QUICK_REACTIONS]}
+                      emojiPaused={connection.status !== "live"}
                       onSelect={(reaction) => void runCommand(() => client.reactions.send(reaction as Reaction))}
                       size="compact"
                     />
@@ -490,7 +514,6 @@ export function SpaceView({
                     <KnockNotice hiddenIds={hiddenKnocks} onReview={() => setActivePanel(feature("participants") ? "participants" : "admission")} onHide={(ids) => setHiddenKnocks((current) => new Set([...current, ...ids]))} />
                   </Suspense>
                 ) : null}
-                <CallReady open={callLinkOpen ?? callLink.open} onClose={onCallLinkToggle ?? callLink.close} link={effectiveShareUrl} />
                 {overlay}
               </>
             }

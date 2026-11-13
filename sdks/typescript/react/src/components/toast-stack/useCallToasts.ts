@@ -13,7 +13,8 @@ export function useCallToasts() {
     let previous = client.getSnapshot();
     let failedSource: "microphone" | "camera" | "screen" | undefined;
     const push = (events: readonly Omit<Toast, "id">[]) => {
-      if (events.length) setToasts((current) => [...current, ...events.map((event) => ({ ...event, id: `call-event-${++sequence.current}` }))].slice(-20));
+      // A repeated plain-text event replaces its earlier notice, so the same line never stacks.
+      if (events.length) setToasts((current) => [...current.filter((toast) => typeof toast.message !== "string" || !events.some((event) => event.message === toast.message)), ...events.map((event) => ({ ...event, id: `call-event-${++sequence.current}` }))].slice(-20));
     };
     const unsubscribe = client.subscribe(() => {
       const next = client.getSnapshot();

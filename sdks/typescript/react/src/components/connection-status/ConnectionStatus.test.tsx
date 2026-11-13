@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { ConnectionStatus, formatElapsed, reconnectingCopy } from "./ConnectionStatus";
+import { ConnectionStatus, formatElapsed, reconnectedToast, reconnectingCopy } from "./ConnectionStatus";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -19,8 +19,8 @@ function mount(node: React.ReactNode) {
 
 it("writes the first 20 seconds, the long wait and offline in the words of the design", () => {
   expect(reconnectingCopy("reconnecting", 5, null)).toEqual({ title: "Reconnecting…", detail: "You’ll be back in the call on your own." });
-  expect(reconnectingCopy("reconnecting", 20, null)).toEqual({ title: "Still reconnecting…", detail: "People can’t see or hear you yet. Check your Wi-Fi or mobile data." });
-  expect(reconnectingCopy("offline", 3, null)).toEqual({ title: "You’re offline", detail: "You’ll rejoin as soon as your connection is back." });
+  expect(reconnectingCopy("reconnecting", 20, null)).toEqual({ title: "Still reconnecting…", detail: "Check your Wi-Fi or mobile data." });
+  expect(reconnectingCopy("offline", 3, null)).toEqual({ title: "You’re offline", detail: "You’ll rejoin when your connection is back." });
   expect(reconnectingCopy("reconnecting", 3, "3 messages").detail).toBe("3 messages will send when you’re back. You’ll be back in the call on your own.");
 });
 
@@ -41,22 +41,22 @@ it("shows nothing for a drop shorter than 2 seconds and the card after it", () =
   unmount();
 });
 
-it("confirms the return with how long the person was away", () => {
-  const { host, unmount } = mount(<ConnectionStatus phase="reconnected" since={null} awayMs={14_000} />);
-  expect(host.textContent).toContain("Back in the call");
-  expect(host.textContent).toContain("Away 14 s");
+it("confirms the return with how long the person was away, as a bottom notice rather than over the stage", () => {
+  expect(reconnectedToast(14_000)).toMatchObject({ type: "success", message: "Back in the call · Away 14 s" });
+  const { host, unmount } = mount(<ConnectionStatus phase="reconnected" since={null} />);
+  expect(host.textContent).not.toContain("Back in the call");
   unmount();
 });
 
-it("offers Rejoin, Leave and Report a problem with the error code after a failure, and focuses Rejoin", () => {
+it("offers Rejoin, Leave and Report a problem after a failure, keeps the failure code off the card, and focuses Rejoin", () => {
   const onRejoin = vi.fn();
   const onLeave = vi.fn();
   const onReportProblem = vi.fn();
-  const { host, unmount } = mount(<ConnectionStatus phase="failed" since={null} errorCode="connection.sync_recovery_exhausted" onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />);
+  const { host, unmount } = mount(<ConnectionStatus phase="failed" since={null} onRejoin={onRejoin} onLeave={onLeave} onReportProblem={onReportProblem} />);
   const dialog = host.querySelector('[role="alertdialog"]');
   expect(dialog?.textContent).toContain("Connection lost");
   expect(dialog?.textContent).toContain("The call is still going, so you can rejoin.");
-  expect(dialog?.textContent).toContain("connection.sync_recovery_exhausted");
+  expect(dialog?.textContent).not.toMatch(/connection\./);
   const buttons = [...host.querySelectorAll("button")];
   expect(document.activeElement?.textContent).toBe("Rejoin");
   const press = (label: string) => act(() => buttons.find((button) => button.textContent === label)?.click());

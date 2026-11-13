@@ -190,7 +190,7 @@ describe("held actions across reload", () => {
     const second = setup({ storage: saved, subject: { ...subject, [field]: field === "participantGeneration" ? 2 : "different" } });
     second.setState("live");
     expect(second.store.getSnapshot().offline.pending).toEqual([]);
-    expect(second.store.getSnapshot().offline.notice).toContain("not sent");
+    expect(second.store.getSnapshot().offline.notice).toContain("weren’t sent");
     expect(second.sent).toEqual([]);
     expect(saved.values.size).toBe(0);
   });
@@ -200,7 +200,7 @@ describe("held actions across reload", () => {
     const second = setup({ storage: saved, now: 1_000 + 86_400_000 });
     second.setState("live");
     expect(second.store.getSnapshot().offline.pending).toEqual([]);
-    expect(second.store.getSnapshot().offline.notice).toContain("expired");
+    expect(second.store.getSnapshot().offline.notice).toContain("too old to send");
   });
   it("never replays an action after send then reload", async () => {
     const saved = storage();
@@ -239,7 +239,7 @@ describe("held actions across reload", () => {
     const second = setup({ storage: saved });
     second.setState("failed");
     expect(saved.values.size).toBe(0);
-    expect(second.store.getSnapshot().offline.notice).toContain("Episode ended");
+    expect(second.store.getSnapshot().offline.notice).toContain("call ended");
     expect(second.sent).toEqual([]);
   });
   it("preserves held actions on disposal and never sends during disposal", async () => {

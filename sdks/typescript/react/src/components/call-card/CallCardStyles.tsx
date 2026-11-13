@@ -111,11 +111,15 @@ const styles = `.call-card-tabs {
 .lcard input::placeholder {
   color: var(--chalk-muted-text);
 }
+/* Rare bulk actions sit as small pills in one row above the list, not as the panel's biggest control. */
 .call-host-controls {
   flex: none;
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--chalk-line);
-  background: var(--chalk-surface);
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+.call-host-controls .chalk-pill-button {
+  height: 36px;
 }
 .call-mute-confirm {
   width: 280px;
@@ -220,26 +224,20 @@ const styles = `.call-card-tabs {
 .call-person-name-input:focus {
   border-color: var(--chalk-text);
 }
-.call-person-tag {
+.call-person-you {
   flex: none;
-  padding: 0 var(--space-1-5);
-  border-radius: var(--corner-sm);
-  background: var(--chalk-hover);
   color: var(--chalk-muted-text);
-  font-style: normal;
-  font-size: var(--type-micro);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  line-height: 16px;
+  font-size: var(--type-body);
 }
-.call-person-row:hover .call-person-tag,
-.call-person-row[data-open] .call-person-tag {
-  background: var(--chalk-pressed);
+.call-person-host {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--chalk-muted-text);
 }
-.call-person-tag.is-host {
-  background: color-mix(in srgb, var(--chalk-accent) 16%, transparent);
-  color: var(--chalk-accent);
+.call-person-host svg {
+  width: 14px;
+  height: 14px;
 }
 .call-person-sub {
   overflow: hidden;
@@ -252,7 +250,7 @@ const styles = `.call-card-tabs {
 .call-person-state-slots {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   flex: none;
 }
 .call-person-state {
@@ -260,14 +258,13 @@ const styles = `.call-card-tabs {
   place-items: center;
   width: 24px;
   height: 24px;
-  /* token-ratchet-ignore: optical inset for the 24px state icon, between the 2px and 4px steps */
-  padding: 3px;
-  color: color-mix(in srgb, var(--chalk-muted-text) 60%, transparent);
-}
-.call-person-state.off {
   color: var(--chalk-muted-text);
 }
-.call-person-state.mo {
+.call-person-state svg {
+  width: 18px;
+  height: 18px;
+}
+.call-person-state[data-off] {
   color: var(--chalk-danger-text);
 }
 .call-eq {
@@ -323,11 +320,15 @@ const styles = `.call-card-tabs {
 }
 .call-message-column {
   display: flex;
+  flex: 1;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
-  max-width: 240px;
   min-width: 0;
+}
+.call-message-column > :not(.call-message),
+.call-message > * {
+  max-width: 240px;
 }
 .is-local .call-message-column {
   align-items: flex-end;
@@ -356,10 +357,12 @@ const styles = `.call-card-tabs {
   color: var(--chalk-muted-text);
   margin: 0 var(--space-1-5);
 }
+/* The message spans the row, so its reaction bar opens at the far edge, away from the sender name and time. */
 .call-message {
   position: relative;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   align-items: flex-start;
   gap: var(--space-1);
   max-width: 100%;
@@ -562,7 +565,7 @@ const styles = `.call-card-tabs {
 .call-reaction-bar {
   position: absolute;
   bottom: calc(100% - 8px);
-  left: 0;
+  inset-inline-end: 0;
   z-index: 3;
   display: flex;
   padding: var(--space-1);
@@ -579,8 +582,8 @@ const styles = `.call-card-tabs {
     visibility 0s 0.12s;
 }
 .is-local .call-reaction-bar {
-  left: auto;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: auto;
 }
 .call-message:hover .call-reaction-bar,
 .call-message:focus-visible .call-reaction-bar,
@@ -854,8 +857,12 @@ const styles = `.call-card-tabs {
   line-height: 20px;
   outline: none;
 }
+/* An enlarged placeholder ends in an ellipsis instead of wrapping into a line the field cannot show. */
 .call-message-input::placeholder {
+  overflow: hidden;
   color: var(--chalk-muted-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .call-message-input:focus-visible {
   box-shadow: var(--elevation-focus-ring);
@@ -958,7 +965,6 @@ const styles = `.call-card-tabs {
  .call-wait-row { min-height: 60px; }
  .call-wait-actions .chalk-pill-button { height: 40px; }
  .call-wait-bulk .chalk-pill-button { height: 48px; }
- .call-host-controls { padding-bottom: var(--space-10); }
  .call-photo-viewer-bar { padding: var(--space-12) var(--space-2) var(--space-2) var(--space-4); }
  .call-photo-viewer-control { width: 44px; height: 44px; }
  .call-photo-viewer-stage img { inset: 0 0 108px; max-width: 100%; max-height: calc(100% - 108px); border-radius: 0; }

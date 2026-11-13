@@ -93,6 +93,9 @@ export const ToastStack = memo(function ToastStack({ toasts: all, onDismiss, max
   const announcing = (onFold ? toasts : shown).filter((toast) => unheard.includes(toast.id));
   return (
     <>
+      <style href="chalk-toast-stack" precedence="default">
+        {STACK_CSS}
+      </style>
       <div ref={stack} data-part="toast-stack" className={cn("chalk-toasts", className)}>
         {shown.map((toast) => (
           <ChalkToast key={toast.id} {...toast} announce={toast.announcementText === undefined && noticeAnnouncement(toast) === ""} onDismiss={() => dismiss(toast.id)} />
@@ -143,3 +146,11 @@ function useShortCall(stack: RefObject<HTMLElement | null>, enabled: boolean): b
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => id === b[index]);
 }
+
+/* On a phone, call notices sit above the tiles' name tags. An open sheet owns the phone screen, so notices wait under it, and an open Leave menu lifts them clear of itself. */
+const PHONE_CSS = `[data-chalk] .chalk-toasts {--chalk-toast-lift:146px;}[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {--chalk-toast-lift:254px;}`;
+const STACK_CSS = `[data-chalk]:has(.chalk-sheet[data-open]:not([data-variant="reactions"])) .chalk-toasts {z-index:40;}
+[data-chalk]:has(.chalk-shell-leave-menu) .chalk-toasts {--chalk-toast-lift:200px;}
+@media (max-width: 640px) {${PHONE_CSS}}
+@container chalk-call (max-width: 640px) {${PHONE_CSS}}
+`;

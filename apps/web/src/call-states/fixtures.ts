@@ -49,6 +49,8 @@ export type LiveOptions = {
   readonly capabilities?: readonly Capability[];
   readonly status?: SpaceSnapshot["connection"]["status"];
   readonly board?: boolean;
+  /** Who leads the board; a viewer follows them until they pick someone else. */
+  readonly presenter?: string;
   readonly recording?: boolean;
   readonly chat?: readonly ChatMessage[];
   /** How many people are waiting to be let in; `true` is one. */
@@ -134,7 +136,7 @@ export function liveSnapshot(options: LiveOptions = {}): SpaceSnapshot {
       : base.offline,
     whiteboard: {
       open: Boolean(options.board),
-      engine: { status: options.board ? "ready" : "unsubscribed", sceneId: options.board ? "scene-1" : null, revision: options.board ? "1" : null, presenting: Boolean(options.board), error: null },
+      engine: { status: options.board ? "ready" : "unsubscribed", sceneId: options.board ? "scene-1" : null, revision: options.board ? "1" : null, presenting: Boolean(options.board), presenterId: options.presenter ?? null, error: null },
       access: { canDraw: capabilities.includes("drawWhiteboard"), policy: "everyone", permissions: [] },
     },
   };

@@ -1,70 +1,88 @@
 import { lazy, Suspense, useState } from "react";
-import { ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl } from "../chalk-ui";
-import { InviteLinkButton } from "../chalk-ui/InviteLinkButton";
+import { cn } from "../../utils/cn";
+import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
+import { useCopyText } from "../chalk-ui/useCopyText";
+import { MenuIcon } from "../chalk-ui/MenuIcon";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
 import { ShellIcon } from "../control-bar/ShellIcon";
 import { ConnectionBars } from "../connection-notice/ConnectionBars";
 import { connectionQuality } from "./call-network";
 import { CallMenuStyles } from "./CallMenuStyles";
 import { RowIcon } from "./RowIcon";
-import type { SpaceHeaderProps } from "./space-header-contract";
+import { formatDuration, type SpaceHeaderProps } from "./space-header-contract";
 
 // The charts load when the connection section first opens, so a call that never looks at them never downloads them.
 const CallChartsView = lazy(() => import("./CallCharts").then((module) => ({ default: module.CallChartsView })));
 
 export function CallDetails({
   shareUrl,
-  spaceName,
   onClose,
   diagnostics = [],
   network,
-  people,
   isRecording = false,
+  recordingSeconds = null,
+  onStopRecording,
   colorScheme = "dark",
   onColorSchemeChange,
   sounds,
   onSoundsChange,
-  onDialog,
+  onReport,
   onReportProblem,
   revealConnection = false,
-  hideShortcuts = false,
-}: Pick<SpaceHeaderProps, "spaceName" | "shareUrl" | "diagnostics" | "network" | "people" | "isRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
-  /** Phones have no keyboard, so the phone sheet leaves the shortcuts row out. */
-  readonly hideShortcuts?: boolean;
+  revealQr = false,
+}: Pick<SpaceHeaderProps, "shareUrl" | "diagnostics" | "network" | "isRecording" | "recordingSeconds" | "onStopRecording" | "colorScheme" | "onColorSchemeChange" | "onReportProblem"> & {
   readonly onClose: () => void;
   readonly sounds: boolean;
   readonly onSoundsChange: (enabled: boolean) => void;
-  readonly onDialog: (kind: "shortcuts" | "report") => void;
-  /** Opened from the connection chip: the Connection row starts expanded and ringed so the person sees where the chip led. */
+  readonly onReport: () => void;
+  /** Opened from the connection chip: the Connection row starts expanded and marked so the person sees where the chip led. */
   readonly revealConnection?: boolean;
+  /** Opened at call start for a host who is alone: the QR code starts expanded so the invite is one glance away. */
+  readonly revealQr?: boolean;
 }) {
   const link = shareUrl ?? (typeof location === "undefined" ? "" : location.href);
   const qr = canEncodeInviteQr(link);
-  const [qrOpen, setQrOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(revealQr);
   const [details, setDetails] = useState(revealConnection);
   const quality = network ? connectionQuality(network) : null;
   const facts = diagnostics.filter(({ label }) => label !== "Connection");
-  const summary = [isRecording ? "Recording" : null, people ? `${people.length} in call` : null].filter(Boolean).join(" · ");
   return (
     <div className="chalk-details">
       <CallMenuStyles />
-      <div className="chalk-shell-details-heading">
-        <div>
-          <h2>{spaceName}</h2>
-          {summary ? (
-            <p className="chalk-shell-details-sub">
-              {isRecording ? <i aria-hidden="true" /> : null}
-              {summary}
-            </p>
-          ) : null}
+      {/* The trigger already names the call, so the menu only gets a heading at call start, where it explains the moment. */}
+      {revealQr ? (
+        <div className="chalk-shell-details-heading">
+          <div>
+            <h2>Your call is ready</h2>
+            <p className="chalk-shell-details-sub">Share the link, or let people scan the code.</p>
+          </div>
+          <ChalkIconButton aria-label="Close" size="sm" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
+              <path d="m6 6 12 12M6 18 18 6" />
+            </svg>
+          </ChalkIconButton>
         </div>
-        <ChalkIconButton aria-label="Close" size="sm" onClick={onClose}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true">
-            <path d="m6 6 12 12M6 18 18 6" />
-          </svg>
-        </ChalkIconButton>
-      </div>
-      <InviteLinkButton link={link} variant="menu" />
+      ) : null}
+      {isRecording ? (
+        <>
+          <div className="chalk-details-row chalk-details-recording">
+            <span className="chalk-shell-detail-lead">
+              <i aria-hidden="true" />
+            </span>
+            <span className="chalk-shell-detail-label">
+              Recording
+              {recordingSeconds === null ? null : <time dateTime={`PT${recordingSeconds}S`}>{formatDuration(recordingSeconds)}</time>}
+            </span>
+            {onStopRecording ? (
+              <ChalkButton className="chalk-details-recording-stop" aria-label="Stop recording" onClick={onStopRecording}>
+                Stop
+              </ChalkButton>
+            ) : null}
+          </div>
+          <div className="chalk-shell-sep" />
+        </>
+      ) : null}
+      <InviteRow link={link} />
       {qr ? (
         <>
           <button type="button" className="chalk-shell-detail-action" aria-expanded={qrOpen} aria-controls="chalk-details-qr" onClick={() => setQrOpen(!qrOpen)}>
@@ -88,13 +106,15 @@ export function CallDetails({
             <span className="chalk-shell-detail-lead">
               <ConnectionBars level={quality.level} />
             </span>
-            <span className="chalk-shell-detail-label">Connection</span>
+            <span className="chalk-shell-detail-label">
+              Connection
+              {quality.helper ? <small>{quality.helper}</small> : null}
+            </span>
             <span className="chalk-shell-detail-value" data-tone={quality.tone}>
               {quality.word}
               <ShellIcon name={details ? "up2" : "down"} size={16} />
             </span>
           </button>
-          {quality.helper ? <p className="chalk-shell-detail-helper">{quality.helper}</p> : null}
           <div id="chalk-details-connection" hidden={!details}>
             {details && network.samples && network.samples.length > 1 ? (
               <Suspense fallback={null}>
@@ -113,9 +133,15 @@ export function CallDetails({
                 ))}
               </dl>
             ) : null}
-            <div className="chalk-shell-diagnostics-copy">
-              <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" showLabel />
-            </div>
+            <ChalkTooltip
+              trigger={
+                <span className="chalk-shell-diagnostics-copy">
+                  <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
+                </span>
+              }
+            >
+              Copy diagnostics
+            </ChalkTooltip>
           </div>
         </>
       ) : null}
@@ -145,21 +171,10 @@ export function CallDetails({
           <span />
         </span>
       </button>
-      {hideShortcuts ? null : (
-        <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("shortcuts")}>
-          <span className="chalk-shell-detail-lead">
-            <RowIcon name="keyboard" />
-          </span>
-          <span className="chalk-shell-detail-label">Keyboard shortcuts</span>
-          <span className="chalk-shell-detail-trail">
-            <ShellIcon name="right" size={16} />
-          </span>
-        </button>
-      )}
       {onReportProblem ? (
         <>
           <div className="chalk-shell-sep" />
-          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={() => onDialog("report")}>
+          <button type="button" className="chalk-shell-detail-action" aria-haspopup="dialog" onClick={onReport}>
             <span className="chalk-shell-detail-lead">
               <RowIcon name="flag" />
             </span>
@@ -171,5 +186,43 @@ export function CallDetails({
         </>
       ) : null}
     </div>
+  );
+}
+
+function displayLink(link: string): string {
+  try {
+    const { host, pathname } = new URL(link);
+    return `${host}${pathname === "/" ? "" : pathname}`;
+  } catch {
+    return link;
+  }
+}
+
+/** The invite row is the link itself: pressing anywhere on it copies, and the copy glyph at its end morphs to a check and back. */
+function InviteRow({ link }: { readonly link: string }) {
+  const { copied, error, copy } = useCopyText(link);
+  return (
+    <>
+      <button type="button" data-part="copy-invite-link" data-copied={copied} className="chalk-shell-detail-action chalk-details-invite" aria-label="Copy invite link" onClick={() => void copy()}>
+        <span className="chalk-shell-detail-lead">
+          <MenuIcon name="link" />
+        </span>
+        <span dir="ltr" className="chalk-shell-detail-label chalk-details-invite-url">
+          {displayLink(link)}
+        </span>
+        <span className={cn("chalk-copy-icon", "chalk-details-invite-copy", copied && "chalk-copied")} aria-hidden="true">
+          <svg className="chalk-copy-source" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="9" y="9" width="12" height="12" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          <svg className="chalk-copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+        </span>
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {error ? "Could not copy. Try again." : copied ? "Link copied" : ""}
+      </span>
+    </>
   );
 }

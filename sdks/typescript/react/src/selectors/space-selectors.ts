@@ -29,11 +29,12 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
       displayName: localFromSync?.displayName || displayName,
       deviceHint: deviceHint(localFromSync, participants),
       isLocal: true,
-      isMuted: localMedia.microphone.state !== "enabled",
+      isMuted: !capturing(localMedia.microphone),
       isSpeaking: localFromSync?.presence.speaking ?? false,
       isActiveSpeaker: localFromSync?.presence.activeSpeaker ?? false,
-      isVideoEnabled: localMedia.camera.state === "enabled",
-      isScreenSharing: localMedia.screen.state === "enabled" || localMedia.screen.state === "requesting",
+      isVideoEnabled: capturing(localMedia.camera),
+      // The share tile waits for a picked source, so a cancelled browser picker never reflows the stage.
+      isScreenSharing: localMedia.screen.state === "enabled",
       isHandRaised: localFromSync?.handRaised,
       videoTrack: localMedia.camera.track,
       screenShareTrack: localMedia.screen.track,
@@ -62,6 +63,15 @@ export function toVideoParticipants(participants: readonly SpaceParticipant[], r
     });
   }
   return result;
+}
+
+/**
+ * Your own tile follows the device. While Sync recovers, a source it had confirmed reads "requesting" though the device never
+ * stopped capturing, so a short Sync drop does not swap your picture for the avatar or mark your microphone muted.
+ */
+function capturing(media: LocalMedia): boolean {
+  if (media.state === "enabled") return true;
+  return media.state === "requesting" && media.track !== null && media.track.enabled && media.track.readyState === "live";
 }
 
 /** What a guest's own rating and presence say about their tile. Unknown shows no signal at all. */
