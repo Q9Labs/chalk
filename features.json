@@ -283,6 +283,8 @@
         "apps/api/internal/whiteboardfiles",
         "apps/sync/lib/chalk_sync/whiteboard_v1",
         "apps/sync/test/chalk_sync/whiteboard_v1",
+        "apps/web/src/lib/excalidraw-pako.test.ts",
+        "apps/web/src/lib/excalidraw-pako.ts",
         "apps/web/src/lib/whiteboard-asset-versions.ts",
         "apps/web/src/lib/whiteboard-assets.ts",
         "packages/whiteboard",
