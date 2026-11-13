@@ -6,7 +6,12 @@ export const WHITEBOARD_PATH = "/v1/whiteboard";
 export const MEDIA_PROVIDERS_HEADER = "X-Chalk-Media-Providers";
 export const MEDIA_PROVIDERS = "cloudflare_sfu,chalk_sfu";
 
-export const trimTrailingSlashes = (value: string): string => value.replace(/\/+$/u, "");
+/** Drops trailing slashes without a regular expression, whose cost grows with the run of slashes in input we do not control. */
+export function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}
 
 /** The URL moved to a path, without query or fragment. */
 function atPath(url: URL, pathname: string): string {

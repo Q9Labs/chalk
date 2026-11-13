@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { directOrigin } from "./direct-path";
 import * as apiUrls from "./api-urls";
-import { defaultSyncUrl, directSyncUrl, normalizeBaseUrl, whiteboardUrl } from "./urls";
+import { defaultSyncUrl, directSyncUrl, normalizeBaseUrl, trimTrailingSlashes, whiteboardUrl } from "./urls";
 
 describe("default Sync address", () => {
   it.each([
@@ -39,4 +39,25 @@ it("keeps one base URL shape for every hand-built route", () => {
   const subject = { tenantId: "t 1", spaceId: "s", episodeId: "e", participantId: "p" };
   expect(apiUrls.episodeStatus("https://api.example.test/", subject)).toBe("https://api.example.test/v1/tenants/t%201/spaces/s/episodes/e/participants/p/episode-status");
   expect(apiUrls.chatAttachmentDownload("https://api.example.test//", "a/b")).toBe("https://api.example.test/v1/chat/attachments/a%2Fb/download");
+});
+
+describe("trimTrailingSlashes", () => {
+  it.each([
+    ["", ""],
+    ["/", ""],
+    ["////", ""],
+    ["https://api.example.test", "https://api.example.test"],
+    ["https://api.example.test/", "https://api.example.test"],
+    ["https://api.example.test/v1///", "https://api.example.test/v1"],
+    ["a//b/", "a//b"],
+  ])("trims %j to %j", (input, expected) => {
+    expect(trimTrailingSlashes(input)).toBe(expected);
+  });
+
+  it("takes linear time on a long run of slashes that does not end the input", () => {
+    const input = `${"/".repeat(200_000)}x`;
+    const started = performance.now();
+    expect(trimTrailingSlashes(input)).toBe(input);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
