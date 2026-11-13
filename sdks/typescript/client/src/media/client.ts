@@ -8,7 +8,7 @@ import { resolveMediaTarget } from "./target";
 import { comparePublicationCursor, parseCloudflareSFUPublicationID, publicationKey, requireDescription, requireSFUDescription, validatePublicationSnapshot, waitFor } from "./tracks";
 import { chunks, desiredRemotePublications, droppedRemoteTracks, matchRemotePullTracks, publicationsByTrack, reconcileRemoteTracks, trackKey } from "./remote-track-response";
 import { freezeSnapshot, snapshotEqual } from "./snapshot";
-import { failuresOf, isGonePublicationFailure, isGoneStatus, isRateLimited, mediaTargetFailure, retryableRemotePull, simulcastUnsupported } from "./failure-policy";
+import { failuresOf, isGonePublicationFailure, isGoneStatus, isRateLimited, mediaTargetFailure, retryableRemotePull, simulcastUnsupported, transientRemotePull } from "./failure-policy";
 import {
   PAGE_VISIBILITY_EVENTS,
   activeOfferedMids,

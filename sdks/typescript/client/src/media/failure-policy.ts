@@ -23,7 +23,7 @@ function unwrapAggregateErrors(error: unknown): unknown[] {
 // A 5xx, a signaling timeout or a network failure usually clears in seconds, so the pull is retried
 // after a short backoff. Rate limits (429), a gone connection (404, 410) and track failures stay on
 // the long deferral, because an immediate retry cannot change their outcome.
-function transientRemotePull(error: unknown): boolean {
+export function transientRemotePull(error: unknown): boolean {
   const { media_error_kind: kind, http_status: status } = classifyMediaFailure(error, "sfu_tracks");
   return kind === "network" || kind === "timeout" || (typeof status === "number" && status >= 500);
 }

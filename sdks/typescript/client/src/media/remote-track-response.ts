@@ -1,7 +1,7 @@
 import { parseCloudflareSFUPublicationID, publicationKey } from "./tracks";
 import { CloudflareSFUError, type CloudflareSFUPublication, type CloudflareSFURemoteTrack, type CloudflareSFUTrackRequest } from "./types";
 
-export function trackKey(connectionId: string, trackName: string): string {
+export function trackKey(connectionId: string | undefined, trackName: string): string {
   return `${connectionId}\u0000${trackName}`;
 }
 
