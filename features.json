@@ -19,7 +19,6 @@
         "apps/api/internal/httpapi/recording_entrance.go",
         "apps/api/internal/mediaplaneproviders",
         "apps/api/internal/publicinvites",
-        "apps/api/tests/sync-reentry",
         "apps/mobile/android",
         "apps/mobile/assets",
         "apps/mobile/ios",
