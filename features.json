@@ -714,6 +714,7 @@
         "docs/plans",
         "docs/recording-transcription.md",
         "docs/recording-whiteboard.md",
+        "docs/statecharts",
         "docs/store-listing.md",
         "docs/tenant-hard-delete.md",
         "docs/transcription-production-release.md",
