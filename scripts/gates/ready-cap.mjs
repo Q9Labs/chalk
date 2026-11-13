@@ -32,26 +32,33 @@ export function decide({ pullRequests, self, cap }) {
   return { others: ready.length, queued, cap, exempt, over: !exempt && ready.length >= cap };
 }
 
-function graphql(query, variables) {
-  const args = ["api", "graphql", "-f", `query=${query}`];
-  for (const [key, value] of Object.entries(variables)) args.push("-F", `${key}=${value}`);
-  const output = execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-  return JSON.parse(output).data;
+// The token is the job's GITHUB_TOKEN in the Gate and the developer's own login locally; fetch needs no gh on the runner.
+const readToken = () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? execFileSync("gh", ["auth", "token"], { encoding: "utf8" }).trim();
+
+async function graphql(query, variables) {
+  const response = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: { authorization: `bearer ${readToken()}`, "content-type": "application/json", "user-agent": "chalk-ready-cap" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const payload = await response.json();
+  if (!response.ok || payload.errors) throw new Error(`GitHub GraphQL failed (${response.status}): ${JSON.stringify(payload.errors ?? payload)}`);
+  return payload.data;
 }
 
-function openPullRequests(owner, name) {
+async function openPullRequests(owner, name) {
   const found = [];
-  let cursor = "";
+  let cursor = null;
   for (;;) {
-    const page = graphql(QUERY, { owner, name, ...(cursor ? { cursor } : {}) }).repository.pullRequests;
+    const page = (await graphql(QUERY, { owner, name, cursor })).repository.pullRequests;
     found.push(...page.nodes);
     if (!page.pageInfo.hasNextPage) return found;
     cursor = page.pageInfo.endCursor;
   }
 }
 
-function backToDraft(self, result) {
-  graphql("mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { id } } }", { id: self.id });
+async function backToDraft(self, result) {
+  await graphql("mutation($id: ID!) { convertPullRequestToDraft(input: {pullRequestId: $id}) { pullRequest { id } } }", { id: self.id });
   const body = [
     `Back to draft: ${result.others} other pull requests are ready against master (${result.queued} in the merge queue), and the cap is ${result.cap}.`,
     "",
@@ -59,7 +66,7 @@ function backToDraft(self, result) {
     "",
     `Related changes belong in one pull request. Maintainers can raise the cap with the repository variable \`CHALK_READY_CAP\`, or let one pull request through with the \`${EXEMPT_LABEL}\` label.`,
   ].join("\n");
-  graphql("mutation($id: ID!, $body: String!) { addComment(input: {subjectId: $id, body: $body}) { subject { id } } }", { id: self.id, body });
+  await graphql("mutation($id: ID!, $body: String!) { addComment(input: {subjectId: $id, body: $body}) { subject { id } } }", { id: self.id, body });
 }
 
 function parseArgs(argv) {
@@ -74,12 +81,12 @@ function parseArgs(argv) {
   return options;
 }
 
-function main() {
+async function main() {
   const options = parseArgs(process.argv.slice(2));
   const repository = process.env.GITHUB_REPOSITORY ?? execFileSync("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], { encoding: "utf8" }).trim();
   const [owner, name] = repository.split("/");
   const cap = readCap(process.env.CHALK_READY_CAP);
-  const pullRequests = openPullRequests(owner, name);
+  const pullRequests = await openPullRequests(owner, name);
   const self = options.pr === undefined ? undefined : pullRequests.find((pr) => pr.number === options.pr);
   if (options.pr !== undefined && !self) throw new Error(`Pull request ${options.pr} is not open against master`);
   const result = decide({ pullRequests, self, cap });
@@ -92,8 +99,8 @@ function main() {
     return;
   }
   // The Gate job reads this output: a pull request sent back to draft runs no other Gate job.
-  if (result.over) backToDraft(self, result);
+  if (result.over) await backToDraft(self, result);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `capped=${result.over}\n`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();
