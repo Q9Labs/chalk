@@ -363,3 +363,12 @@ test("own-sfu's caps fit a full lease wait before the proof and before the laten
   assert.ok(cutWaits["latency retry"] / 60 < latencyCap, "the latency step cap covers the wait");
   assert.ok(proofCap + latencyCap + 10 <= jobCap, "the job cap covers both steps and about 10 minutes of setup");
 });
+
+test("the latency step cap fits a full retry: lease wait, two capped attempts, the quiet wait and ingestion", () => {
+  const latencyMs = readFileSync(resolve(root, "features/scorecard/staging-latency.mjs"), "utf8");
+  const perCycle = Number(/\$\{Number\(samples\) \* (\d+)\}s/.exec(latencyMs)?.[1]);
+  const quietWait = Number(/Date\.now\(\) \+ (\d+)_000;/.exec(latencyMs)?.[1]) / 60;
+  const attemptMinutes = (60 * perCycle) / 60;
+  const needed = cutWaits["latency retry"] / 60 + 2 * attemptMinutes + quietWait + 1;
+  assert.ok(needed <= capMinutes(latencyStep).chalk, `a full retry needs ${needed} minutes; the step cap is ${capMinutes(latencyStep).chalk}`);
+});
