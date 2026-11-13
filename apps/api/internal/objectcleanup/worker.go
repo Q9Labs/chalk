@@ -88,6 +88,9 @@ func NewWorker[C any](kind Kind, repository Repository[C], objects ObjectDeleter
 func (w Worker[C]) Kind() Kind { return w.kind }
 
 func (w Worker[C]) Run(ctx context.Context) (result Result, resultErr error) {
+	if w.tracer == nil {
+		return result, ErrInvalidConfig
+	}
 	ctx, span := w.tracer.Start(ctx, w.kind.Name+".cleanup")
 	defer func() {
 		w.finish(ctx, span, result, resultErr)

@@ -99,6 +99,11 @@ func TestRunReportsAClaimFailureAndAnIncompleteWorker(t *testing.T) {
 		t.Fatalf("result = %+v, error = %v", result, err)
 	}
 
+	var zero Worker[claim]
+	if _, err := zero.Run(context.Background()); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("a zero-value worker must return ErrInvalidConfig, got %v", err)
+	}
+
 	broken := NewWorker[claim](testKind, nil, fakeObjects{}, func(c claim) string { return c.key })
 	if _, err := broken.Run(context.Background()); !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("error = %v, want ErrInvalidConfig", err)
