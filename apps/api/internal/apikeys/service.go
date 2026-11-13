@@ -73,40 +73,60 @@ func (s Service) Create(ctx context.Context, input CreateInput) (CreateResult, e
 	if err != nil {
 		return CreateResult{}, err
 	}
-	for range MaxPrefixAttempts {
-		generated, err := newCredential(s.random)
-		if err != nil {
-			return CreateResult{}, fmt.Errorf("generate api key: %w", err)
-		}
+	stored, err := s.storeNewCredential(input.RequestKey, func(generated credential, idempotent IdempotentRepository) (Record, bool, error) {
 		recordInput := CreateRecordInput{
 			ID: id, TenantID: input.TenantID, Name: name, Scopes: scopes,
 			KeyPrefix: generated.prefix, KeyHash: generated.hash, ExpiresAt: expiresAt,
 			CreatedByUserID: input.CreatedByUserID,
 			RequestKey:      input.RequestKey, RequestFingerprint: fingerprint,
 		}
-		var replayed bool
-		var record Record
-		if input.RequestKey != "" {
-			idempotent, ok := s.repository.(IdempotentRepository)
-			if !ok {
-				return CreateResult{}, errors.New("api key idempotency repository unavailable")
-			}
-			record, replayed, err = idempotent.CreateIdempotent(ctx, recordInput)
-		} else {
-			record, err = s.repository.Create(ctx, recordInput)
+		if idempotent != nil {
+			return idempotent.CreateIdempotent(ctx, recordInput)
 		}
-		if err == nil {
-			result := CreateResult{Key: publicKey(record), Replayed: replayed}
-			if !replayed {
-				result.RawKey = generated.raw
-			}
-			return result, nil
-		}
-		if !errors.Is(err, ErrPrefixConflict) {
-			return CreateResult{}, err
+		record, err := s.repository.Create(ctx, recordInput)
+		return record, false, err
+	})
+	if err != nil {
+		return CreateResult{}, err
+	}
+	return CreateResult{Key: publicKey(stored.record), Replayed: stored.replayed, RawKey: stored.rawKey}, nil
+}
+
+// storedCredential is the key the repository holds after a store. The raw key is empty on a replay, because it was shown once.
+type storedCredential struct {
+	record   Record
+	replayed bool
+	rawKey   string
+}
+
+// storeNewCredential generates a credential and stores it, again with a new one when its prefix is already taken.
+// With a request key the repository must support idempotent writes, and the store function receives it.
+func (s Service) storeNewCredential(requestKey string, store func(generated credential, idempotent IdempotentRepository) (Record, bool, error)) (storedCredential, error) {
+	var idempotent IdempotentRepository
+	if requestKey != "" {
+		var ok bool
+		if idempotent, ok = s.repository.(IdempotentRepository); !ok {
+			return storedCredential{}, errors.New("api key idempotency repository unavailable")
 		}
 	}
-	return CreateResult{}, ErrPrefixConflict
+	for range MaxPrefixAttempts {
+		generated, err := newCredential(s.random)
+		if err != nil {
+			return storedCredential{}, fmt.Errorf("generate api key: %w", err)
+		}
+		record, replayed, err := store(generated, idempotent)
+		if err == nil {
+			stored := storedCredential{record: record, replayed: replayed}
+			if !replayed {
+				stored.rawKey = generated.raw
+			}
+			return stored, nil
+		}
+		if !errors.Is(err, ErrPrefixConflict) {
+			return storedCredential{}, err
+		}
+	}
+	return storedCredential{}, ErrPrefixConflict
 }
 
 func (s Service) Get(ctx context.Context, tenantID, id utilities.ID) (Key, error) {
@@ -162,39 +182,22 @@ func (s Service) Rotate(ctx context.Context, tenantID, id utilities.ID, input Ro
 	if err != nil {
 		return RotateResult{}, fmt.Errorf("fingerprint api key rotation: %w", err)
 	}
-	for range MaxPrefixAttempts {
-		generated, err := newCredential(s.random)
-		if err != nil {
-			return RotateResult{}, fmt.Errorf("generate api key: %w", err)
-		}
+	stored, err := s.storeNewCredential(input.RequestKey, func(generated credential, idempotent IdempotentRepository) (Record, bool, error) {
 		recordInput := RotateRecordInput{
 			TenantID: tenantID, ID: id, KeyPrefix: generated.prefix,
 			KeyHash: generated.hash, ExpiresAt: expiresAt, RotatedAt: now,
 			RequestKey: input.RequestKey, RequestFingerprint: fingerprint,
 		}
-		var replayed bool
-		var record Record
-		if input.RequestKey != "" {
-			idempotent, ok := s.repository.(IdempotentRepository)
-			if !ok {
-				return RotateResult{}, errors.New("api key idempotency repository unavailable")
-			}
-			record, replayed, err = idempotent.RotateIdempotent(ctx, recordInput)
-		} else {
-			record, err = s.repository.Rotate(ctx, recordInput)
+		if idempotent != nil {
+			return idempotent.RotateIdempotent(ctx, recordInput)
 		}
-		if err == nil {
-			result := RotateResult{Key: publicKey(record), Replayed: replayed}
-			if !replayed {
-				result.RawKey = generated.raw
-			}
-			return result, nil
-		}
-		if !errors.Is(err, ErrPrefixConflict) {
-			return RotateResult{}, err
-		}
+		record, err := s.repository.Rotate(ctx, recordInput)
+		return record, false, err
+	})
+	if err != nil {
+		return RotateResult{}, err
 	}
-	return RotateResult{}, ErrPrefixConflict
+	return RotateResult{Key: publicKey(stored.record), Replayed: stored.replayed, RawKey: stored.rawKey}, nil
 }
 
 func (s Service) Revoke(ctx context.Context, tenantID, id utilities.ID) error {
