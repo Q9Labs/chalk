@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createConnection, createServer as createTcpServer } from "node:net";
 
@@ -15,23 +15,18 @@ const fixturePrefix = "CHALK_SYNC_BROWSER_FIXTURE=";
 const fixtureTimeoutMs = 30_000;
 const browserTimeoutMs = 15_000;
 
-if (process.env.CHALK_SYNC_BROWSER_BACKGROUND === "1") {
-  await import("./background-heartbeat.mjs");
-} else {
-  await run();
-}
+await run();
 
 async function run() {
   const external = externalFixture();
   const fixture = external ? null : await startFixture(requiredDatabaseUrl());
-  let config;
   let browser;
   let browserBundleDirectory;
   let server;
   let proxy;
 
   try {
-    config = external ?? (await fixture.ready);
+    const config = external ?? (await fixture.ready);
     assertLocalhostWebSocketUrl(config.url);
     proxy = await startFaultProxy(config.url);
     browserBundleDirectory = await buildBrowserProof();
@@ -43,60 +38,9 @@ async function run() {
     });
     console.log("real-browser sync proof: Chromium launched");
     const page = await browser.newPage();
-    const browserErrors = [];
-    const missingAssets = [];
-    const receivedFrameTypes = [];
-    page.on("console", (message) => {
-      if (message.type() === "error" && !(message.text().includes("WebSocket connection to") && message.text().includes(proxy.origin))) {
-        browserErrors.push(message.text());
-      }
-    });
-    page.on("pageerror", (error) => browserErrors.push(error.message));
-    page.on("requestfailed", (request) => {
-      if (!request.url().startsWith(proxy.origin)) missingAssets.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? "request failed"}`);
-    });
-    page.on("response", (response) => {
-      if (response.status() >= 400) {
-        missingAssets.push(new URL(response.url()).pathname);
-      }
-    });
-    page.on("websocket", (socket) => {
-      socket.on("framereceived", (event) => {
-        try {
-          receivedFrameTypes.push(JSON.parse(event.payload).type ?? "unknown");
-        } catch {
-          receivedFrameTypes.push("non-json");
-        }
-        if (receivedFrameTypes.length > 12) receivedFrameTypes.shift();
-      });
-      socket.on("socketerror", (error) => {
-        if (!socket.url().startsWith(proxy.origin)) missingAssets.push(`websocket: ${error}`);
-      });
-    });
-    await page.goto(server.url, { waitUntil: "load" });
-    await page.waitForFunction(() => window.__chalkSyncFault === "ready", undefined, { timeout: browserTimeoutMs });
-    proxy.partition();
-    await page.evaluate(() => {
-      window.__chalkSyncFault = "partitioned";
-    });
-    await Promise.all([page.waitForFunction(() => window.__chalkSyncFault === "queued", undefined, { timeout: browserTimeoutMs }), proxy.waitForRejectedConnection()]);
-    proxy.heal();
-    try {
-      await page.waitForFunction(() => "__chalkSyncProof" in window, undefined, { timeout: browserTimeoutMs + 1_000 });
-    } catch (error) {
-      const diagnostics = [browserErrors.length > 0 ? browserErrors.slice(0, 3).join(" | ") : null, missingAssets.length > 0 ? `missing assets: ${[...new Set(missingAssets)].slice(0, 3).join(", ")}` : null].filter(Boolean).join(" | ");
-      throw new Error(`browser harness did not finish: ${diagnostics}`, { cause: error });
-    }
-    const result = await page.evaluate(() => window.__chalkSyncProof);
-
-    if (!result || result.status !== "passed") {
-      throw new Error(`real-browser sync proof failed: ${result?.message ?? "browser harness did not report a result"}`);
-    }
-    if (browserErrors.length > 0 || missingAssets.length > 0) {
-      const diagnostics = [...browserErrors.slice(0, 3), ...[...new Set(missingAssets)].slice(0, 3)].join(" | ");
-      throw new Error(`real-browser sync proof emitted browser or network errors: ${diagnostics}; recent frames=${receivedFrameTypes.join(",")}`);
-    }
-
+    const observed = observePage(page, proxy.origin);
+    const result = await driveOutage(page, server.url, proxy, observed);
+    assertProofPassed(result, observed);
     console.log(`real-browser sync outage and recovery proof passed: url=${config.url} revision=${result.revision}`);
   } finally {
     await browser?.close();
@@ -106,6 +50,66 @@ async function run() {
       await rm(browserBundleDirectory, { force: true, recursive: true });
     }
     await fixture?.stop();
+  }
+}
+
+/** Collects what the page logged, failed to load, and received, ignoring traffic to the fault proxy that the partition breaks on purpose. */
+function observePage(page, proxyOrigin) {
+  const observed = { browserErrors: [], missingAssets: [], receivedFrameTypes: [] };
+  page.on("console", (message) => {
+    if (message.type() === "error" && !(message.text().includes("WebSocket connection to") && message.text().includes(proxyOrigin))) {
+      observed.browserErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => observed.browserErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    if (!request.url().startsWith(proxyOrigin)) observed.missingAssets.push(`${new URL(request.url()).pathname}: ${request.failure()?.errorText ?? "request failed"}`);
+  });
+  page.on("response", (response) => {
+    if (response.status() >= 400) observed.missingAssets.push(new URL(response.url()).pathname);
+  });
+  page.on("websocket", (socket) => {
+    socket.on("framereceived", (event) => {
+      try {
+        observed.receivedFrameTypes.push(JSON.parse(event.payload).type ?? "unknown");
+      } catch {
+        observed.receivedFrameTypes.push("non-json");
+      }
+      if (observed.receivedFrameTypes.length > 12) observed.receivedFrameTypes.shift();
+    });
+    socket.on("socketerror", (error) => {
+      if (!socket.url().startsWith(proxyOrigin)) observed.missingAssets.push(`websocket: ${error}`);
+    });
+  });
+  return observed;
+}
+
+/** Loads the page, cuts the network once the client is live, restores it after the client queued a command, and returns the page's verdict. */
+async function driveOutage(page, url, proxy, { browserErrors, missingAssets }) {
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(() => window.__chalkSyncFault === "ready", undefined, { timeout: browserTimeoutMs });
+  proxy.partition();
+  await page.evaluate(() => {
+    window.__chalkSyncFault = "partitioned";
+  });
+  await Promise.all([page.waitForFunction(() => window.__chalkSyncFault === "queued", undefined, { timeout: browserTimeoutMs }), proxy.waitForRejectedConnection()]);
+  proxy.heal();
+  try {
+    await page.waitForFunction(() => "__chalkSyncProof" in window, undefined, { timeout: browserTimeoutMs + 1_000 });
+  } catch (error) {
+    const diagnostics = [browserErrors.length > 0 ? browserErrors.slice(0, 3).join(" | ") : null, missingAssets.length > 0 ? `missing assets: ${[...new Set(missingAssets)].slice(0, 3).join(", ")}` : null].filter(Boolean).join(" | ");
+    throw new Error(`browser harness did not finish: ${diagnostics}`, { cause: error });
+  }
+  return page.evaluate(() => window.__chalkSyncProof);
+}
+
+function assertProofPassed(result, { browserErrors, missingAssets, receivedFrameTypes }) {
+  if (!result || result.status !== "passed") {
+    throw new Error(`real-browser sync proof failed: ${result?.message ?? "browser harness did not report a result"}`);
+  }
+  if (browserErrors.length > 0 || missingAssets.length > 0) {
+    const diagnostics = [...browserErrors.slice(0, 3), ...[...new Set(missingAssets)].slice(0, 3)].join(" | ");
+    throw new Error(`real-browser sync proof emitted browser or network errors: ${diagnostics}; recent frames=${receivedFrameTypes.join(",")}`);
   }
 }
 
@@ -357,7 +361,7 @@ async function serveBrowserRequest(request, response, config, browserBundlePath)
     return;
   }
   if (url.pathname === "/client/browser-proof.js") {
-    await respondFile(response, browserBundlePath);
+    respond(response, 200, "text/javascript; charset=utf-8", await readFile(browserBundlePath));
     return;
   }
 
@@ -447,16 +451,7 @@ function browserPage() {
 </html>`;
 }
 
-async function respondFile(response, path) {
-  const content = await readFile(path);
-  respond(response, 200, contentType(path), content);
-}
-
 function respond(response, status, contentType, content) {
   response.writeHead(status, { "content-type": contentType, "cache-control": "no-store" });
   response.end(content);
-}
-
-function contentType(path) {
-  return extname(path) === ".js" ? "text/javascript; charset=utf-8" : "application/octet-stream";
 }
