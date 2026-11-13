@@ -17,7 +17,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Validation d
 
   def stale_maximum_duration?(_external, _policy), do: false
 
-
   def lock_external_operation(connection, episode, external_operation_id) do
     params = Scope.episode(episode) ++ [Scope.uuid(external_operation_id)]
 
@@ -27,14 +26,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Validation d
     end
   end
 
-
   def validate_finalization_authority(connection, episode, external, policy) do
     with :ok <- validate_finalization_episode(external, policy),
          :ok <- validate_finalization_target(connection, episode, external) do
       validate_finalization_deadline(external, policy)
     end
   end
-
 
   defp validate_finalization_episode(%{name: name}, %{status: "ending"})
        when OperationTable.is_episode_end_name(name),
@@ -49,7 +46,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Validation d
        do: :ok
 
   defp validate_finalization_episode(_external, _policy), do: {:error, :episode_ended}
-
 
   defp validate_finalization_target(_connection, _episode, %{target_participant_id: nil}),
     do: :ok
@@ -69,7 +65,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Validation d
         {:error, :participant_inactive}
     end
   end
-
 
   defp validate_finalization_deadline(
          %{name: :tenant_set_deadline, deadline_generation: generation},

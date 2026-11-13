@@ -14,7 +14,10 @@ defmodule ChalkSync.Transport.Socket.LiveRequests do
   def live_target(_target, state), do: Frames.protocol_error(:recovery_required, state)
 
   def directed_request(request, %{phase: :live} = state) do
-    answer(Coordinator.directed_request(state.coordinator, state.identity, request, self()), state)
+    answer(
+      Coordinator.directed_request(state.coordinator, state.identity, request, self()),
+      state
+    )
   end
 
   def directed_request(_request, state), do: Frames.protocol_error(:recovery_required, state)

@@ -216,13 +216,15 @@ defmodule ChalkSync.Episodes.Reducer do
          status when status in ["active", "ended"] <- snapshot["status"],
          admission_policy when admission_policy in @admission_policies <-
            snapshot["admission_policy"],
-         {:ok, role_capabilities} <- Validation.decode_role_capabilities(snapshot["role_capabilities"]),
+         {:ok, role_capabilities} <-
+           Validation.decode_role_capabilities(snapshot["role_capabilities"]),
          deadline_at_ms when is_integer(deadline_at_ms) and deadline_at_ms >= 1 <-
            snapshot["deadline_at_ms"],
          deadline_generation when is_integer(deadline_generation) and deadline_generation >= 1 <-
            snapshot["deadline_generation"],
          {:ok, recording} <- Validation.decode_recording(snapshot["recording"]),
-         {:ok, admission_requests} <- Validation.decode_admission_requests(snapshot["admission_requests"]),
+         {:ok, admission_requests} <-
+           Validation.decode_admission_requests(snapshot["admission_requests"]),
          participants when is_list(participants) and length(participants) <= @max_participants <-
            snapshot["participants"],
          {:ok, participant_map} <- Validation.decode_participants(participants, role_capabilities) do
@@ -241,7 +243,9 @@ defmodule ChalkSync.Episodes.Reducer do
         participants: participant_map
       }
 
-      if Validation.valid_state?(state) == :ok, do: {:ok, state}, else: {:error, :invalid_snapshot}
+      if Validation.valid_state?(state) == :ok,
+        do: {:ok, state},
+        else: {:error, :invalid_snapshot}
     else
       _ -> {:error, :invalid_snapshot}
     end

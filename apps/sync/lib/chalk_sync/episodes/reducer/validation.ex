@@ -41,7 +41,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
     end
   end
 
-
   defp valid_participant?({_id, participant}) do
     valid_display_name?(participant.display_name) and is_boolean(participant.hand_raised) and
       valid_role?(participant.role) and
@@ -49,14 +48,12 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
       participant.admission_revision > 0
   end
 
-
   defp valid_admission_request_entry?({id, request}) do
     case decode_admission_request(request) do
       {:ok, decoded} -> decoded["admission_request_id"] == id
       _ -> false
     end
   end
-
 
   def decode_participants(participants, role_capabilities) do
     Enum.reduce_while(participants, {:ok, %{}}, fn encoded, {:ok, result} ->
@@ -88,7 +85,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
     end)
   end
 
-
   def decode_role_capabilities(mapping) when is_map(mapping) do
     if map_size(mapping) <= @max_roles and
          Enum.all?(mapping, fn {role, values} ->
@@ -100,9 +96,8 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   def decode_role_capabilities(_mapping), do: {:error, :invalid_snapshot}
 
-
   def decode_admission_requests(requests)
-       when is_list(requests) and length(requests) <= @max_participants do
+      when is_list(requests) and length(requests) <= @max_participants do
     Enum.reduce_while(requests, {:ok, %{}}, fn encoded, {:ok, result} ->
       with {:ok, request} <- decode_admission_request(encoded),
            id = request["admission_request_id"],
@@ -117,11 +112,9 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   def decode_admission_requests(_requests), do: {:error, :invalid_snapshot}
 
-
   defp duplicate_participant_id?(requests, participant_id) do
     Enum.any?(requests, fn {_existing_id, value} -> value["participant_id"] == participant_id end)
   end
-
 
   def decode_admission_request(request) when is_map(request) do
     with :ok <- exact_keys(request, admission_request_keys()),
@@ -141,7 +134,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   def decode_admission_request(_request), do: {:error, :invalid_admission_request}
 
-
   def decode_recording(nil), do: {:ok, nil}
 
   def decode_recording(recording) when is_map(recording) do
@@ -158,23 +150,19 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   def decode_recording(_recording), do: {:error, :invalid_recording}
 
-
   defp valid_failure_code?("failed", code), do: is_binary(code) and byte_size(code) in 1..96
   defp valid_failure_code?(_status, nil), do: true
   defp valid_failure_code?(_status, _code), do: false
-
 
   def valid_display_name?(display_name),
     do:
       String.valid?(display_name) and display_name == String.trim(display_name) and
         byte_size(display_name) in 1..@max_display_name_bytes
 
-
   def valid_role?(role),
     do:
       is_binary(role) and String.valid?(role) and role == String.trim(role) and
         byte_size(role) in 1..@max_role_bytes
-
 
   defp valid_capabilities?(values) when is_list(values),
     do:
@@ -183,7 +171,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
 
   defp valid_capabilities?(_values), do: false
 
-
   def exact_keys(map, keys),
     do:
       if(map |> Map.keys() |> Enum.sort() == Enum.sort(keys),
@@ -191,14 +178,12 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
         else: {:error, :invalid_payload}
       )
 
-
   def stringify_keys(map),
     do:
       Map.new(map, fn
         {key, value} when is_atom(key) -> {Atom.to_string(key), value}
         pair -> pair
       end)
-
 
   def snapshot_keys,
     do: [
@@ -214,7 +199,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
       "status"
     ]
 
-
   defp participant_keys,
     do: [
       "admission_revision",
@@ -224,7 +208,6 @@ defmodule ChalkSync.Episodes.Reducer.Validation do
       "participant_id",
       "role"
     ]
-
 
   defp admission_request_keys,
     do: [

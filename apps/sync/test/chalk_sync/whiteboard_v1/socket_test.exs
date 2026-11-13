@@ -1167,13 +1167,16 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
       "bring" => true
     }
 
-    assert {:ok, _state} = receive_frame(view, %{live | identity: guest, extensions: extensions(view: :basic)})
+    assert {:ok, _state} =
+             receive_frame(view, %{live | identity: guest, extensions: extensions(view: :basic)})
+
     refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
 
     assert {:ok, _state} = receive_frame(view, %{live | identity: host, extensions: extensions()})
     refute_received {:whiteboard_v1_frame, %{"type" => "view"}}
 
-    assert {:ok, _state} = receive_frame(view, %{live | identity: host, extensions: extensions(view: :basic)})
+    assert {:ok, _state} =
+             receive_frame(view, %{live | identity: host, extensions: extensions(view: :basic)})
 
     assert_received {:whiteboard_v1_frame,
                      %{"type" => "view", "bring" => true, "width" => 800} = frame}

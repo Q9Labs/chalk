@@ -26,7 +26,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
     end
   end
 
-
   defp confirm_legacy_entry(_identity, true), do: :ok
 
   defp confirm_legacy_entry(identity, false) do
@@ -36,7 +35,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
       error -> error
     end
   end
-
 
   defp start_registered_recovery(
          state,
@@ -82,7 +80,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
     end
   end
 
-
   # Off reasons are opt-in so earlier SDKs keep their exact media wire shape.
 
   def identity(%Claims{} = claims) do
@@ -113,7 +110,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
     end
   end
 
-
   defp identity_authorization(%Claims{} = claims) do
     if Claims.valid_authorization?(claims.role, claims.capabilities) do
       {:ok, %{role: claims.role, capabilities: claims.capabilities}}
@@ -122,11 +118,9 @@ defmodule ChalkSync.Transport.Socket.Hello do
     end
   end
 
-
   # Wall time of each hello step, so the nightly `sync_welcome` stage splits into
   # database work and Episode-coordinator work.
   defp entry_stage(stage, fun), do: Telemetry.timed([:entry, :stage], stage, fun)
-
 
   defp admit_entry(state, identity) do
     entry_stage(:admit, fn ->
@@ -136,7 +130,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
       )
     end)
   end
-
 
   defp negotiate_entry(state, identity, recovery, hello) do
     requested =
@@ -148,7 +141,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
       Collaboration.negotiate_collaboration(identity, requested, state.observability)
     end)
   end
-
 
   defp begin_entry_recovery(state, identity, protocol_options) do
     options =
@@ -163,7 +155,6 @@ defmodule ChalkSync.Transport.Socket.Hello do
 
     entry_stage(:begin_recovery, fn -> Coordinator.begin_recovery(identity, self(), options) end)
   end
-
 
   def authenticated_hello(state, identity, cursor, hello) do
     with {:ok, identity} <- admit_entry(state, identity),

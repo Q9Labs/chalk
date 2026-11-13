@@ -51,8 +51,11 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
     case Validation.validate_finalization_authority(connection, episode, external, policy) do
       :ok ->
         case Recording.validate_capture_epoch(connection, episode, external) do
-          :ok -> Outcomes.finalize_pending_operation(connection, episode, external, state, outcome)
-          {:error, reason} -> settle_capture_error(connection, episode, external, reason)
+          :ok ->
+            Outcomes.finalize_pending_operation(connection, episode, external, state, outcome)
+
+          {:error, reason} ->
+            settle_capture_error(connection, episode, external, reason)
         end
 
       {:error, reason} ->
@@ -65,10 +68,22 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
               reason in [:participant_inactive, :stale_participant_generation] do
     case outcome do
       {:confirmed, :provider} ->
-        Outcomes.finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+        Outcomes.finalize_pending_operation(
+          connection,
+          episode,
+          external,
+          state,
+          {:failed, reason}
+        )
 
       {:failed, failure} when is_atom(failure) ->
-        Outcomes.finalize_pending_operation(connection, episode, external, state, {:failed, reason})
+        Outcomes.finalize_pending_operation(
+          connection,
+          episode,
+          external,
+          state,
+          {:failed, reason}
+        )
 
       _ ->
         settle_exhausted_authority(connection, episode, external, reason)
@@ -135,7 +150,14 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer do
          %{name: :role_transition_source_stop} = external,
          reason
        ),
-       do: Outcomes.finalize_pending_operation(connection, episode, external, nil, {:failed, reason})
+       do:
+         Outcomes.finalize_pending_operation(
+           connection,
+           episode,
+           external,
+           nil,
+           {:failed, reason}
+         )
 
   defp settle_obsolete(connection, episode, external, reason) do
     PublicationFences.delete(connection, episode, external)

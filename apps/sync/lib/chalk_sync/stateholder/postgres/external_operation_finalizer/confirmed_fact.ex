@@ -60,8 +60,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.ConfirmedFac
     end
   end
 
-
-
   defp record_media_stop(connection, episode, external, %{name: name} = event) do
     case Map.fetch(@stop_sources, to_string(name)) do
       {:ok, source} ->
@@ -77,8 +75,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.ConfirmedFac
         :ok
     end
   end
-
-
 
   defp enqueue_leave_cleanup(connection, episode, %{name: :participant_leave} = external) do
     Postgrex.query!(

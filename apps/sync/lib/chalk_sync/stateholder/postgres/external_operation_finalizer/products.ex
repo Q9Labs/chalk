@@ -60,7 +60,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     event_id
   end
 
-
   defp update_external_control(connection, episode, external, state, event_bytes) do
     params =
       Scope.episode(episode) ++
@@ -91,19 +90,18 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     end
   end
 
-
   def update_external_products(connection, episode, external, _event, _state)
-       when external.name in [:remove_participant, :participant_leave] do
+      when external.name in [:remove_participant, :participant_leave] do
     complete_external_participant(connection, episode, external)
   end
 
   def update_external_products(connection, episode, external, _event, _state)
-       when OperationTable.is_episode_end_name(external.name) do
+      when OperationTable.is_episode_end_name(external.name) do
     complete_external_episode(connection, episode, external)
   end
 
   def update_external_products(connection, episode, %{name: name} = external, _event, _state)
-       when name in [:deny_admission, :admission_request_expired] do
+      when name in [:deny_admission, :admission_request_expired] do
     status = if name == :deny_admission, do: "denied", else: "expired"
 
     case Admission.lock_reserved_admission_for_external(connection, episode, external) do
@@ -117,12 +115,12 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   end
 
   def update_external_products(
-         connection,
-         episode,
-         %{name: :stop_participant_screen_share} = external,
-         _event,
-         _state
-       ) do
+        connection,
+        episode,
+        %{name: :stop_participant_screen_share} = external,
+        _event,
+        _state
+      ) do
     Postgrex.query!(
       connection,
       SQL.release_screen_share_lease(),
@@ -132,31 +130,30 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
   end
 
   def update_external_products(connection, episode, %{name: name} = external, event, _state)
-       when name in [
-              :recording_capture_ready,
-              :recording_capture_stopped,
-              :recording_capture_failed
-            ],
-       do:
-         finalize_recording_product(
-           connection,
-           episode,
-           external,
-           event.payload["status"],
-           event.payload["failure_code"]
-         )
+      when name in [
+             :recording_capture_ready,
+             :recording_capture_stopped,
+             :recording_capture_failed
+           ],
+      do:
+        finalize_recording_product(
+          connection,
+          episode,
+          external,
+          event.payload["status"],
+          event.payload["failure_code"]
+        )
 
   def update_external_products(
-         connection,
-         episode,
-         %{name: :tenant_set_deadline} = external,
-         _event,
-         _state
-       ),
-       do: update_deadline_product(connection, episode, external)
+        connection,
+        episode,
+        %{name: :tenant_set_deadline} = external,
+        _event,
+        _state
+      ),
+      do: update_deadline_product(connection, episode, external)
 
   def update_external_products(_connection, _episode, _external, _event, _state), do: :ok
-
 
   defp complete_denied_admission_product(connection, episode, admission) do
     params = Scope.episode(episode) ++ [Scope.uuid(admission.participant_id)]
@@ -165,7 +162,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     Postgrex.query!(connection, SQL.complete_admission_participant(), params)
     :ok
   end
-
 
   defp complete_external_participant(connection, episode, external) do
     params =
@@ -186,7 +182,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
         Postgrex.rollback(connection, {:error, :invalid_state})
     end
   end
-
 
   defp complete_external_episode(connection, episode, external) do
     webhook_object =
@@ -234,7 +229,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
     webhook_object
   end
 
-
   defp update_deadline_product(connection, episode, external) do
     params =
       Scope.episode(episode) ++
@@ -245,7 +239,6 @@ defmodule ChalkSync.Stateholder.Postgres.ExternalOperationFinalizer.Products do
       [] -> Postgrex.rollback(connection, {:error, :stale_deadline_generation})
     end
   end
-
 
   def finalize_recording_product(connection, episode, external, "failed", failure_code) do
     params =

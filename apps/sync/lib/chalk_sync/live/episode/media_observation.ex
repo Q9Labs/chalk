@@ -24,7 +24,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp apply_media_observation(state, observation, options) do
     cursor = {observation.incarnation, observation.sequence}
 
@@ -40,7 +39,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp apply_equal_media_observation(state, publications) do
     observed_items = normalize_media_items(publications)
 
@@ -54,7 +52,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp apply_newer_media_observation(state, cursor, publications, options) do
     observed_items = normalize_media_items(publications)
 
@@ -67,7 +64,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp reconcile_observed_media(state, {pauses, media_items}) do
     case Projections.reconcile_projection(:media, state.media_projection, media_items) do
       {:ok, projection, frames} ->
@@ -79,7 +75,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
         {:error, reason}
     end
   end
-
 
   defp apply_media_pauses(observed_items, pauses, stops) do
     retained =
@@ -103,7 +98,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
 
     {retained, project_off_reasons(projected, retained, stops)}
   end
-
 
   # Says why an item is off: a host stop (with its revision) wins over a device pause.
   # A stop projects even when the media plane lists no publication, so a client that
@@ -129,7 +123,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
   end
 
-
   defp put_off_reason(item, retained, stops) do
     key = {item["participant_id"], item["source"]}
 
@@ -144,7 +137,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp observed_media(state) do
     case media_plane() do
       nil ->
@@ -155,14 +147,12 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     end
   end
 
-
   defp observe_media(module, adapter, state) do
     MediaPlaneCall.invoke(fn ->
       module.observe_episode_publications(adapter, state.episode)
     end)
     |> observed_media_result()
   end
-
 
   defp observed_media_result(
          {:ok,
@@ -177,7 +167,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
   defp observed_media_result({:error, reason}), do: {:error, reason}
   defp observed_media_result(_invalid), do: {:error, :dependency_unavailable}
 
-
   defp normalize_media_items(publications) do
     publications
     # Older v1 SDKs reject unknown projection sources. Tab audio is discovered
@@ -187,12 +176,10 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
     |> Enum.sort_by(&{&1["participant_id"], &1["source"]})
   end
 
-
   defp compare_media_cursor(_cursor, nil), do: :newer
   defp compare_media_cursor(cursor, cursor), do: :equal
   defp compare_media_cursor(cursor, current) when cursor < current, do: :older
   defp compare_media_cursor(_cursor, _current), do: :newer
-
 
   defp media_item(item) do
     %{
@@ -202,7 +189,6 @@ defmodule ChalkSync.Live.Episode.MediaObservation do
       "publication_id" => item.publication_id
     }
   end
-
 
   def media_plane, do: Application.get_env(:chalk_sync, :media_plane)
 

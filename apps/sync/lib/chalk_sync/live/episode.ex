@@ -41,7 +41,6 @@ defmodule ChalkSync.Live.Episode do
 
   @type t :: %__MODULE__{}
 
-
   @spec new(EpisodeKey.t()) :: t()
   def new(%EpisodeKey{} = episode) do
     %__MODULE__{

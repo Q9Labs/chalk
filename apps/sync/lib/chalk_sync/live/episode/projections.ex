@@ -19,7 +19,6 @@ defmodule ChalkSync.Live.Episode.Projections do
     end
   end
 
-
   def replace_live_projections(state) do
     with {:ok, items} <- presence_items(state),
          {:ok, media_projection, media_frame} <- Projection.replace(:media, state.media_items),
@@ -34,7 +33,6 @@ defmodule ChalkSync.Live.Episode.Projections do
       {:ok, next, [media_frame, presence_frame]}
     end
   end
-
 
   defp reconcile_presence(projection, items) do
     ids = MapSet.new(items, & &1["participant_id"])
@@ -55,7 +53,6 @@ defmodule ChalkSync.Live.Episode.Projections do
     end
   end
 
-
   def reconcile_projection(stream, nil, items) do
     case Projection.replace(stream, items) do
       {:ok, projection, frame} -> {:ok, projection, [frame]}
@@ -65,7 +62,6 @@ defmodule ChalkSync.Live.Episode.Projections do
 
   def reconcile_projection(_stream, projection, items),
     do: Projection.reconcile(projection, items)
-
 
   defp presence_items(state) do
     case Stateholder.participant_devices(state.episode) do
@@ -95,7 +91,6 @@ defmodule ChalkSync.Live.Episode.Projections do
     end
   end
 
-
   # Two sockets of one seat can report different tiers; the guests see the worse one.
   defp seat_quality(state, seat) do
     state.connections
@@ -108,7 +103,6 @@ defmodule ChalkSync.Live.Episode.Projections do
       nil
     end)
   end
-
 
   defp put_known(item, _key, nil), do: item
   defp put_known(item, key, value), do: Map.put(item, key, value)

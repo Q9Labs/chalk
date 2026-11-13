@@ -11,7 +11,9 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Snapshot do
   alias ChalkSync.WhiteboardV1.Episode
   alias ChalkSync.WhiteboardV1.Protocol
 
-  @max_pending_snapshots ChalkSync.Contract.GeneratedWhiteboardV1.limits()["pendingOperationMaxItems"]
+  @max_pending_snapshots ChalkSync.Contract.GeneratedWhiteboardV1.limits()[
+                           "pendingOperationMaxItems"
+                         ]
 
   defp resume_pending_bring(state) do
     frames =

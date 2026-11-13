@@ -71,9 +71,14 @@ defmodule ChalkSync.Transport.SocketV1 do
            identity.participant_id,
            identity.participant_generation
          ) do
-      {:ok, _authority} -> {:ok, %{state | entry_timer: nil}}
-      {:retryable, _reason} -> Lifecycle.stop(state, 1012, "service restart", :dependency_unavailable)
-      {:error, _reason} -> Lifecycle.stop(state, 1008, "entry timeout", :entry_timeout)
+      {:ok, _authority} ->
+        {:ok, %{state | entry_timer: nil}}
+
+      {:retryable, _reason} ->
+        Lifecycle.stop(state, 1012, "service restart", :dependency_unavailable)
+
+      {:error, _reason} ->
+        Lifecycle.stop(state, 1008, "entry timeout", :entry_timeout)
     end
   end
 
@@ -141,14 +146,16 @@ defmodule ChalkSync.Transport.SocketV1 do
         {:sync_v1_live_frame, coordinator, frame},
         %{coordinator: coordinator} = state
       ) do
-    {:push, {:text, Frames.encode_with_context(state, frame)}, Lifecycle.mark_control_checked(state)}
+    {:push, {:text, Frames.encode_with_context(state, frame)},
+     Lifecycle.mark_control_checked(state)}
   end
 
   def handle_info(
         {:directed_request, frame},
         %{phase: :live} = state
       ) do
-    {:push, {:text, Frames.encode_with_context(state, frame)}, Lifecycle.mark_control_checked(state)}
+    {:push, {:text, Frames.encode_with_context(state, frame)},
+     Lifecycle.mark_control_checked(state)}
   end
 
   def handle_info({:collaboration_frame, frame}, state), do: Collaboration.frame(frame, state)
@@ -160,8 +167,11 @@ defmodule ChalkSync.Transport.SocketV1 do
         %{phase: :recovering, coordinator: coordinator} = state
       ) do
     case Coordinator.advance_recovery(coordinator, self()) do
-      :ok -> {:ok, state}
-      {:error, _reason} -> Lifecycle.stop(state, 1012, "delivery recovery required", :delivery_failure)
+      :ok ->
+        {:ok, state}
+
+      {:error, _reason} ->
+        Lifecycle.stop(state, 1012, "delivery recovery required", :delivery_failure)
     end
   end
 
@@ -216,14 +226,20 @@ defmodule ChalkSync.Transport.SocketV1 do
     with {:ok, claims} <- TokenVerifier.verify(token),
          {:ok, identity} <- Hello.identity(claims),
          :ok <- Hello.admit_direct_tenant(state, identity) do
-      Hello.authenticated_hello(SocketContext.authenticated(state, identity), identity, cursor, hello)
+      Hello.authenticated_hello(
+        SocketContext.authenticated(state, identity),
+        identity,
+        cursor,
+        hello
+      )
     else
       {:error, :direct_limit} -> Lifecycle.stop(state, 1013, "try again later", :direct_limit)
       {:error, _reason} -> Lifecycle.stop(state, 1008, "invalid token", :admission_rejected)
     end
   end
 
-  defp handle_frame({:hello, _hello}, state), do: Frames.protocol_error(:already_authenticated, state)
+  defp handle_frame({:hello, _hello}, state),
+    do: Frames.protocol_error(:already_authenticated, state)
 
   defp handle_frame(:entered, %{phase: :live} = state), do: Acknowledgements.entered(state)
   defp handle_frame(:entered, state), do: Frames.protocol_error(:recovery_required, state)
@@ -244,7 +260,13 @@ defmodule ChalkSync.Transport.SocketV1 do
     do: LiveRequests.connection_quality(quality, state)
 
   defp handle_frame({name, input}, state)
-       when name in [:reaction_send, :chat_send, :chat_page_request, :chat_read_set, :chat_reaction_set],
+       when name in [
+              :reaction_send,
+              :chat_send,
+              :chat_page_request,
+              :chat_read_set,
+              :chat_reaction_set
+            ],
        do: Collaboration.client_frame(name, input, state)
 
   defp handle_frame(:ping, %{phase: :live} = state) do
