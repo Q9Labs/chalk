@@ -12,8 +12,8 @@
   "metrics": [
     { "id": "action.join.first_audio_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 4469, "source": "latency-kit" },
     { "id": "action.join.first_video_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 6623, "source": "latency-kit" },
-    { "id": "action.camera_toggle.off_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 727, "source": "latency-kit" },
-    { "id": "action.unpublish.removed_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 1039, "source": "latency-kit" },
+    { "id": "action.camera_toggle.off_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 900, "source": "latency-kit" },
+    { "id": "action.unpublish.removed_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 1300, "source": "latency-kit" },
     { "id": "action.screenshare.start_signal_ms", "unit": "ms", "n": 20, "p50": 100, "p95": 1334, "source": "latency-kit" }
   ],
   "dropped": []
