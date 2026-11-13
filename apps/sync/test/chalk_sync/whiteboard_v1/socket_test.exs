@@ -5,8 +5,8 @@ defmodule ChalkSync.WhiteboardV1.SocketTest do
   alias ChalkSync.Contract.GeneratedWhiteboardV1
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
-  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.UUID
   alias ChalkSync.WhiteboardV1.Authority
   alias ChalkSync.WhiteboardV1.Authority.Reads

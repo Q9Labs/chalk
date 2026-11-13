@@ -1,13 +1,13 @@
 defmodule ChalkSync.Transport.SocketWhiteboardV1 do
   @moduledoc "Independent whiteboard-v1 WebSocket transport."
   @behaviour WebSock
-  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Auth.TokenVerifier
   alias ChalkSync.Observability
   alias ChalkSync.Stateholder.Identity
   alias ChalkSync.Transport.SocketContext
   alias ChalkSync.Transport.SocketWhiteboardV1.Access
   alias ChalkSync.Transport.SocketWhiteboardV1.Delivery
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1.Failure
   alias ChalkSync.Transport.SocketWhiteboardV1.Hello
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle

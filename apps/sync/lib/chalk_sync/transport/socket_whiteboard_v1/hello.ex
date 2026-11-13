@@ -3,10 +3,10 @@ defmodule ChalkSync.Transport.SocketWhiteboardV1.Hello do
   The authenticated hello of a whiteboard-v1 socket: Identity from claims, welcome frame, extension negotiation.
   """
 
-  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Auth.Claims
   alias ChalkSync.Stateholder.EpisodeKey
   alias ChalkSync.Stateholder.Identity
+  alias ChalkSync.Transport.SocketWhiteboardV1.Extensions
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.Transport.SocketWhiteboardV1.Lifecycle
   alias ChalkSync.WhiteboardV1.Authority
