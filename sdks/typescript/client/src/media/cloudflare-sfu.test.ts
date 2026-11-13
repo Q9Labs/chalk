@@ -5376,6 +5376,25 @@ it("a mute during the resume parks the microphone again, with no close", async (
   }
 });
 
+it("a stop that overtakes the resume still closes the publication once the resume returns, so none is left open on the node", async () => {
+  const call = await parkedMicrophoneCall();
+  const gate = Promise.withResolvers<void>();
+  try {
+    const { transport } = call.harness;
+    transport.holdTrackUpdates = gate.promise;
+    const enabling = call.enable().catch((cause: unknown) => cause);
+    await vi.waitFor(() => expect(transport.log).toContain("update paused=false"));
+    call.harness.client.stop();
+    expect(transport.closeInputs).toHaveLength(0);
+    gate.resolve();
+    await enabling;
+    await vi.waitFor(() => expect(transport.closeInputs).toHaveLength(1));
+  } finally {
+    gate.resolve();
+    call.dispose();
+  }
+});
+
 it.each(["returns before", "returns after"] as const)("a granted unmute settles once when the resume %s Sync's result, with one resume", async (order) => {
   const call = await parkedMicrophoneCall();
   const gate = Promise.withResolvers<void>();

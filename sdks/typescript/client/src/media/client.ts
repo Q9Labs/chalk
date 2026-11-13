@@ -612,6 +612,9 @@ export class CloudflareSFUClient implements ClientMediaPlane {
         if (this.#headStartCancelled.get(target.operationId) === head) this.#headStartCancelled.delete(target.operationId);
       });
     }
+    await this.#replaceDormantConnectionAhead();
+  }
+  async #replaceDormantConnectionAhead(): Promise<void> {
     const generation = this.#generation;
     const attemptedBefore = this.#replacementAttemptedGeneration === generation;
     try {
@@ -1089,11 +1092,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       if (this.#locallyPausedSources.has(state.source)) return false;
       state.desiredEnabled = true;
       state.track.enabled = true;
-      const parked = this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state);
-      if (parked && !state.transceiver) {
-        state.transceiver = parked.publication.transceiver;
-        state.providerPublicationId = parked.handle.publicationId;
-      }
+      this.#adoptParkedPublication(state);
       if (state.providerPublicationId && state.transceiver) return await this.#reattachLocalTrack(state, state.transceiver);
       await this.#publishPreparedTracks([state], generation);
       // A completed local request restores the budget, except while a remote
@@ -1108,6 +1107,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
       }
       throw error;
     }
+  }
+  #adoptParkedPublication(state: LocalTrackState): void {
+    const parked = this.#heldPublication(state.source) ?? this.#resumedAheadPublication(state);
+    if (!parked || state.transceiver) return;
+    state.transceiver = parked.publication.transceiver;
+    state.providerPublicationId = parked.handle.publicationId;
   }
   async #retireExpiredCapture(state: LocalTrackState): Promise<void> {
     const publication = [...this.#ownedPublications].find((item) => item.transceiver === state.transceiver && item.lifecycle.kind === "confirmed");
@@ -1150,7 +1155,8 @@ export class CloudflareSFUClient implements ClientMediaPlane {
   }
   async #resumeHeldPublication(publication: OwnedLocalPublication, handle: LocalPublicationHandle, state: LocalTrackState): Promise<boolean> {
     if (!(await this.#setLocalPublicationHeld(publication, handle, false))) return false;
-    publication.lifecycle = { kind: "confirmed", handle };
+    // A close that overtook this resume already marked the publication retiring; it stays retiring so the waiting close still runs.
+    if (publication.lifecycle.kind === "held") publication.lifecycle = { kind: "confirmed", handle };
     publication.state = state;
     publication.detachedAt = null;
     return true;
@@ -1164,11 +1170,7 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     try {
       state.track.enabled = true;
       await this.#boundPeerOperation(held.publication.transceiver.sender.replaceTrack(state.track));
-      if (!head.cancelled && this.#heldPublication(state.source)?.publication === held.publication && !this.#locallyPausedSources.has(state.source)) {
-        const resuming = this.#resumeHeldPublication(held.publication, held.handle, state);
-        this.#resumesInFlight.set(held.publication, resuming);
-        await resuming;
-      }
+      await this.#resumeIfStillHeld(held, state, head);
       const cause = this.#locallyPausedSources.get(state.source);
       if (cause) {
         this.#pauseLocalSource(state.source, cause);
@@ -1177,6 +1179,12 @@ export class CloudflareSFUClient implements ClientMediaPlane {
     } catch {
       // The grant-gated enable redoes the resume and reports its own failure.
     }
+  }
+  async #resumeIfStillHeld(held: { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle }, state: LocalTrackState, head: { readonly cancelled: boolean }): Promise<void> {
+    if (head.cancelled || this.#heldPublication(state.source)?.publication !== held.publication || this.#locallyPausedSources.has(state.source)) return;
+    const resuming = this.#resumeHeldPublication(held.publication, held.handle, state);
+    this.#resumesInFlight.set(held.publication, resuming);
+    await resuming;
   }
   #resumedAheadPublication(state: LocalTrackState): { readonly publication: OwnedLocalPublication; readonly handle: LocalPublicationHandle } | undefined {
     const publication = this.#resumedAhead.get(state.source);
