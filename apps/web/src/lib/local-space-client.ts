@@ -10,42 +10,15 @@ export type LocalSpaceClientOptions = {
 type LocalSpaceClientDependencies = {
   readonly createSpaceClient?: CreateSpaceClient;
 };
-/** Creates the app-owned Space client with the verified Space identity and access provider. */
+/** Creates the app-owned Space client with the verified Space identity and the arrival's access. */
 export function createLocalSpaceClient({ credential, getAccess, connectionAccess }: LocalSpaceClientOptions, dependencies: LocalSpaceClientDependencies = {}): SpaceClient {
-  const syncURL = credential.syncURL;
-  const client = (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
+  return (dependencies.createSpaceClient ?? createSpaceClientForPlatform)(
     { space: credential.space, getAccess, baseUrl: credential.apiBaseURL },
     {
-      ...(syncURL ? { syncUrl: syncURL } : {}),
+      syncUrl: credential.syncURL,
+      ...(connectionAccess ? { connectionAccess } : {}),
       ...(credential.syncDirectURL ? { syncDirectUrl: credential.syncDirectURL } : {}),
       ...(credential.directPath ? { directPath: credential.directPath } : {}),
-      ...(connectionAccess ? { connectionAccess } : {}),
     },
   );
-  return client;
-}
-/** Releasing is safe from both the public client's leave callback and React unmount cleanup. */
-export function createLocalSpaceRelease(client: Pick<SpaceClient, "leave" | "dispose">, cleanup: () => Promise<void>): () => Promise<void> {
-  let releasePromise: Promise<void> | undefined;
-  return () => {
-    if (releasePromise) return releasePromise;
-    releasePromise = releaseOnce(client, cleanup).catch((cause: unknown) => {
-      releasePromise = undefined;
-      throw cause;
-    });
-    return releasePromise;
-  };
-}
-async function releaseOnce(client: Pick<SpaceClient, "leave" | "dispose">, cleanup: () => Promise<void>): Promise<void> {
-  try {
-    await client.leave();
-  } catch {
-    // Arrival cleanup still has to run when transport shutdown is already in progress.
-  }
-  try {
-    client.dispose();
-  } catch {
-    // Cleanup remains authoritative when the SDK disposal hook is already closed.
-  }
-  await cleanup();
 }

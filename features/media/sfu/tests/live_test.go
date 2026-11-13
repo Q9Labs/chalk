@@ -72,7 +72,7 @@ func TestLiveSmokeScenario(t *testing.T) {
 }
 
 // operatorClient trusts the node's service CA and presents the operator certificate that
-// scripts/deploy/certs issues. The node's certificate names chalk-sfu, not the tunnel address.
+// infrastructure/sfu/certs issues. The node's certificate names chalk-sfu, not the tunnel address.
 func operatorClient(t *testing.T, dir string) *http.Client {
 	t.Helper()
 	caPEM, err := os.ReadFile(filepath.Join(dir, "ca.crt"))

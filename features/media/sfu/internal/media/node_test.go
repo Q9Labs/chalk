@@ -10,18 +10,18 @@ import (
 
 func TestFenceTableNeverEvictsALiveParticipant(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.fenceLimit = 4
+	node.fences.limit = 4
 	live := node.newTestSession(t, testScope("alice", 2))
 
 	// Enough other Participants come and go to push every older fence out of a table of 4.
 	for index := range 10 {
 		node.newTestSession(t, testScope(fmt.Sprintf("visitor-%d", index), 1)).Close()
 	}
-	if len(node.fences) != node.fenceLimit {
-		t.Fatalf("%d fences, want the table full at %d", len(node.fences), node.fenceLimit)
+	if node.fences.Len() != node.fences.limit {
+		t.Fatalf("%d fences, want the table full at %d", node.fences.Len(), node.fences.limit)
 	}
 
-	if _, err := node.CreateSession("delayed-create", testScope("alice", 1)); !errors.Is(err, ErrStaleGeneration) {
+	if _, err := node.Create("delayed-create", testScope("alice", 1), ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
 		t.Fatalf("stale create for a live Participant: %v, want stale generation", err)
 	}
 	if live.isClosed() || node.SessionCount() != 1 {
@@ -31,40 +31,40 @@ func TestFenceTableNeverEvictsALiveParticipant(t *testing.T) {
 
 func TestFullFenceTableOfLiveSessionsRefusesInsteadOfEvicting(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.fenceLimit = 3
+	node.fences.limit = 3
 	for _, name := range []string{"alice", "bob", "carol"} {
 		node.newTestSession(t, testScope(name, 1))
 	}
-	if _, err := node.CreateSession("create-dave", testScope("dave", 1)); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := node.Create("create-dave", testScope("dave", 1), ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("create with every fence live: %v, want capacity exceeded", err)
 	}
 	if node.SessionCount() != 3 {
 		t.Fatalf("%d sessions, want the 3 live ones untouched", node.SessionCount())
 	}
 	// A live Participant's own newer generation needs no new slot.
-	if _, err := node.CreateSession("create-alice-2", testScope("alice", 2)); err != nil {
+	if _, err := node.Create("create-alice-2", testScope("alice", 2), ParticipantSession, nil); err != nil {
 		t.Fatalf("newer generation for a known Participant: %v", err)
 	}
 }
 
 func TestARefusedCreateLeavesEveryFence(t *testing.T) {
 	node := newTestNode(t, func(cfg *config.Config) { cfg.MaxSessions = 1 })
-	node.fenceLimit = 2
+	node.fences.limit = 2
 	node.newTestSession(t, testScope("bob", 2)).Close()
 	alice := node.newTestSession(t, testScope("alice", 1)) // the fence table and the node are both full
 
-	if _, err := node.CreateSession("create-carol", testScope("carol", 1)); !errors.Is(err, ErrCapacityExceeded) {
+	if _, err := node.Create("create-carol", testScope("carol", 1), ParticipantSession, nil); !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("create on a full node: %v, want capacity exceeded", err)
 	}
 	alice.Close()
-	if _, err := node.CreateSession("delayed-bob", testScope("bob", 1)); !errors.Is(err, ErrStaleGeneration) {
+	if _, err := node.Create("delayed-bob", testScope("bob", 1), ParticipantSession, nil); !errors.Is(err, ErrStaleGeneration) {
 		t.Fatalf("stale create after a refused create: %v, want stale generation", err)
 	}
 }
 
 func TestCreateReplayOutlivesTheSession(t *testing.T) {
 	node := newTestNode(t, nil)
-	first, err := node.CreateSession("create-alice", testScope("alice", 1))
+	first, err := node.Create("create-alice", testScope("alice", 1), ParticipantSession, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,21 +74,21 @@ func TestCreateReplayOutlivesTheSession(t *testing.T) {
 	}
 	session.Close()
 
-	again, err := node.CreateSession("create-alice", testScope("alice", 1))
+	again, err := node.Create("create-alice", testScope("alice", 1), ParticipantSession, nil)
 	if err != nil || again != first {
 		t.Fatalf("delayed retry after close: %+v %v, want %+v", again, err, first)
 	}
 	if node.SessionCount() != 0 {
 		t.Fatal("a delayed retry created a second session")
 	}
-	if _, err := node.CreateSession("create-alice", testScope("bob", 1)); !errors.Is(err, ErrOperationConflict) {
+	if _, err := node.Create("create-alice", testScope("bob", 1), ParticipantSession, nil); !errors.Is(err, ErrOperationConflict) {
 		t.Fatalf("reused operation ID after close: %v, want conflict", err)
 	}
 }
 
 func TestClosedCreateRecordsAreBounded(t *testing.T) {
 	node := newTestNode(t, nil)
-	node.createLimit = 2
+	node.closedCreates.limit = 2
 	for _, name := range []string{"alice", "bob", "carol"} {
 		node.newTestSession(t, testScope(name, 1)).Close()
 	}
@@ -106,15 +106,15 @@ func TestADrainingNodeKeepsItsLiveCallsAndRefusesNewEpisodes(t *testing.T) {
 	node.newTestSession(t, testScope("bob", 1))
 	node.Drain()
 
-	if _, err := node.CreateSession("bob-reconnect", testScope("bob", 2)); err != nil {
+	if _, err := node.Create("bob-reconnect", testScope("bob", 2), ParticipantSession, nil); err != nil {
 		t.Fatalf("reconnect into a live Episode while draining: %v", err)
 	}
-	if _, err := node.CreateSession("carol-joins", testScope("carol", 1)); err != nil {
+	if _, err := node.Create("carol-joins", testScope("carol", 1), ParticipantSession, nil); err != nil {
 		t.Fatalf("join into a live Episode while draining: %v", err)
 	}
 	other := testScope("dave", 1)
 	other.EpisodeID = "episode-2"
-	if _, err := node.CreateSession("dave-new-episode", other); !errors.Is(err, ErrDraining) {
+	if _, err := node.Create("dave-new-episode", other, ParticipantSession, nil); !errors.Is(err, ErrDraining) {
 		t.Fatalf("new Episode while draining: %v, want draining", err)
 	}
 	if node.SessionCount() != 3 {

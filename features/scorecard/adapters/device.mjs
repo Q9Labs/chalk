@@ -1,5 +1,5 @@
 import { DEVICE_SCENARIOS } from "../metrics.mjs";
-import { metric, passMetric } from "../stats.mjs";
+import { metric, passMetric } from "./metric.mjs";
 
 /**
  * deviceMetrics maps the file the device lane writes (shape in README.md): per scenario, a list of runs

@@ -198,7 +198,7 @@ func Register(meter metric.Meter, read Read) error {
 		if seconds, ok := processCPUSeconds(); ok {
 			o.ObserveFloat64(cpu, seconds)
 		}
-		if resident, ok := residentBytes(); ok {
+		if resident, ok := media.ResidentBytes(); ok {
 			o.ObserveInt64(rss, count(resident))
 		}
 		return nil

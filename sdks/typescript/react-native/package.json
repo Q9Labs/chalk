@@ -44,6 +44,9 @@
       "client": [
         "./dist/client.d.ts"
       ],
+      "dev": [
+        "./dist/dev.d.ts"
+      ],
       "*": [
         "./dist/index.d.ts"
       ]

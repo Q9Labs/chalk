@@ -213,7 +213,7 @@ printf '\n==> Format check\n'
 go_files=()
 while IFS= read -r go_file; do
   go_files[${#go_files[@]}]="${go_file}"
-done < <(find . -name '*.go' -not -path './vendor/*' | sort)
+done < <(find . ../../features/media/sfu/protocol -name '*.go' -not -path './vendor/*' | sort)
 if ((${#go_files[@]} > 0)); then
   unformatted="$(gofmt -l "${go_files[@]}")"
   if [[ -n "$unformatted" ]]; then

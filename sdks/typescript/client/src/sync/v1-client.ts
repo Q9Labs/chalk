@@ -1,3 +1,4 @@
+import { SYNC_PATH } from "../urls";
 import type { ConnectionReportTransportEvent } from "../transport-diagnostics";
 import { safeSyncCloseReason, type SyncConnectDiagnostic, type SyncRecoveryDiagnostic } from "./connect-diagnostics";
 import { SYNC_HEALTH_BUDGET, V1SyncHealth } from "./v1-health";
@@ -1195,5 +1196,5 @@ function validMediaPublication(publication: V1MediaPublication): boolean {
 }
 function assertV1Url(value: string): void {
   const url = new URL(value);
-  if (url.pathname !== "/v1/sync") throw new V1SyncError("SyncEngine v1 websocket URL must use /v1/sync", "invalid_url");
+  if (url.pathname !== SYNC_PATH) throw new V1SyncError("SyncEngine v1 websocket URL must use /v1/sync", "invalid_url");
 }

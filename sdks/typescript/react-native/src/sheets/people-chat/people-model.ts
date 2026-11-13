@@ -55,14 +55,3 @@ export function peopleRows({ roster, waiting, handOrder, query }: PeopleInput): 
   }
   return rows;
 }
-
-/**
- * Who raised a hand first. The client only says whether a hand is up, so this remembers the order
- * the lists saw hands go up in; people who join with a hand already raised count from when they appear.
- */
-export function nextHandOrder(previous: readonly string[], roster: readonly Participant[]): readonly string[] {
-  const raised = new Set(roster.filter((participant) => participant.handRaised).map((participant) => participant.participantId));
-  const kept = previous.filter((id) => raised.has(id));
-  const added = [...raised].filter((id) => !kept.includes(id));
-  return added.length === 0 && kept.length === previous.length ? previous : [...kept, ...added];
-}
