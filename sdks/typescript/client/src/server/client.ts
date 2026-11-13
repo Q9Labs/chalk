@@ -42,8 +42,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
   const admissionRequestPath = (spaceId: string, requestHandle: string) => `${spacePath(spaceId)}/public-admission-requests/${segment(requestHandle)}`;
   // Reads and idempotent writes retry on their own; `post` retries only when the caller supplies an idempotency key.
   const send = <T>(method: "DELETE" | "GET" | "PATCH" | "POST", path: string, expectedStatus: number, body?: unknown) => request<T>({ method, path, body, expectedStatus, retry: "always" });
-  const post = <T>(path: string, expectedStatus: number, idempotency: ChalkIdempotencyOptions | undefined, body?: unknown) =>
-    request<T>({ method: "POST", path, body, expectedStatus, idempotency, retry: "caller_idempotency" });
+  const post = <T>(path: string, expectedStatus: number, idempotency: ChalkIdempotencyOptions | undefined, body?: unknown) => request<T>({ method: "POST", path, body, expectedStatus, idempotency, retry: "caller_idempotency" });
   return {
     spaces: {
       archive: (spaceId) => send<Space>("POST", `${spacePath(spaceId)}/archive`, 200),
@@ -73,8 +72,7 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
         });
         return accessGrant(access);
       },
-      remove: (spaceId, episodeId, participantId, input, idempotency) =>
-        post<ParticipantRemoval>(`${participantPath(spaceId, episodeId, participantId)}/remove`, 202, idempotency, { participant_generation: input.participantGeneration }),
+      remove: (spaceId, episodeId, participantId, input, idempotency) => post<ParticipantRemoval>(`${participantPath(spaceId, episodeId, participantId)}/remove`, 202, idempotency, { participant_generation: input.participantGeneration }),
     },
     apiKeys: {
       create: (input) => post<APIKeyWithSecret>(`${tenantPath}/api-keys`, 201, undefined, { expires_at: input.expiresAt, name: input.name, scopes: [...input.scopes] }),
@@ -83,12 +81,10 @@ export function createChalkServerClient(options: ChalkServerClientOptions): Chal
       revoke: (apiKeyId) => send<void>("DELETE", apiKeyPath(apiKeyId), 204),
     },
     recordings: {
-      list: (input) =>
-        send<RecordingList>("GET", `${tenantPath}/recordings${query({ cursor: input?.cursor, episode_id: input?.episodeId, page_size: input?.pageSize, space_id: input?.spaceId })}`, 200),
+      list: (input) => send<RecordingList>("GET", `${tenantPath}/recordings${query({ cursor: input?.cursor, episode_id: input?.episodeId, page_size: input?.pageSize, space_id: input?.spaceId })}`, 200),
       get: (recordingId) => send<Recording>("GET", recordingPath(recordingId), 200),
       requestExport: (recordingId) => send<RecordingExportRequestAcceptedResponse>("POST", `${recordingPath(recordingId)}/export`, 202, {}),
-      createDownloadURL: (recordingId, input) =>
-        send<RecordingDownloadURL>("POST", `${recordingPath(recordingId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds, download: input.download }),
+      createDownloadURL: (recordingId, input) => send<RecordingDownloadURL>("POST", `${recordingPath(recordingId)}/download-url`, 200, { expires_in_seconds: input.expiresInSeconds, download: input.download }),
     },
     publicInvites: {
       get: (spaceId) => send<SpacePublicInvite>("GET", `${spacePath(spaceId)}/public-invite`, 200),
