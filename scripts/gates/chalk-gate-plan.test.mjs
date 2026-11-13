@@ -125,6 +125,8 @@ test("a change to the release scripts, the managed-host controller or the scorec
     "infrastructure/managed-episode/controller/chalk-deployment-controller",
     "features/scorecard/evaluate.mjs",
     "perf/budgets.json",
+    ".github/workflows/ci.yml",
+    ".github/workflows/nightly.yml",
     "scripts/recorder/release.py",
     "infrastructure/nightly/transcription/main.tf",
     "apps/api/go.mod",
