@@ -87,7 +87,9 @@ jobs:
   changes:
     name: Select gate jobs
     needs: ready-cap
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && needs.ready-cap.outputs.capped != 'true' }}
+    # always(), not !cancelled(): cancelling a run while Ready cap is still queued must not skip selection, because a skipped
+    # selection skips every required job, and a skipped required job counts as passed.
+    if: ${{ always() && github.event.pull_request.draft != true && needs.ready-cap.outputs.capped != 'true' }}
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 10
     permissions:
