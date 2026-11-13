@@ -27,6 +27,27 @@ export const workflowGraphNodeTests = ["features/scorecard/promote-graph.test.mj
 // scripts/prod-proof/own-sfu-spaces-run.test.mjs and proof-space.test.mjs also read real-call-proof.yml, but no lane runs them yet, so they stay out until a lane owns them and shows they pass in CI.
 // The SFU lane runs this whole file too, but a change that selects only the workflow-graph lane skips that lane.
 export const workflowGraphPythonTest = "scripts/staging-sfu/test_staging_lock.py";
+// What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
+// the transcription configuration that check_configuration fingerprints, the two workflows that GateCheckedTests read, and the API module files and migrations that the manifest and component planning read.
+const releaseContractRoots = [
+  "scripts/releases",
+  "scripts/recorder/release.py",
+  "scripts/recorder/archive.py",
+  "scripts/recorder/release_core.py",
+  "scripts/recorder/release_io.py",
+  "scripts/recorder/dispatcher_binding.py",
+  "infrastructure/managed-episode",
+  "infrastructure/nightly/transcription",
+  "features/scorecard",
+  "perf/budgets.json",
+  ".github/workflows/ci.yml",
+  ".github/workflows/nightly.yml",
+  "apps/api/go.mod",
+  "apps/api/go.sum",
+  "apps/api/db/migrations",
+];
+// plan-release-components runs `go list -deps` on the recorder commands, and the controller test asserts which API packages those binaries depend on, so any API Go source that is not a test can change that answer.
+const isApiGoSource = (file) => file.endsWith(".go") && !file.endsWith("_test.go") && startsWithAny(file, ["apps/api/cmd", "apps/api/internal"]);
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",
@@ -448,6 +469,7 @@ export function createGatePlan(files, options = {}) {
   const astGrepFiles = nonDocumentationFiles.filter((file) => /\.(?:[cm]?[jt]sx?|json|ya?ml)$/u.test(file) && isExistingFile(file, options.repositoryRoot ?? repositoryRoot));
   const astGrepCommand = explicitFull || (full && scope !== "staged") ? ["node", "scripts/gates/ast-grep.mjs"] : astGrepFiles.length > 0 ? ["node", "scripts/gates/ast-grep.mjs", ...astGrepFiles] : null;
   const workflowGraph = full || nonDocumentationFiles.some((file) => startsWithAny(file, workflowGraphRoots));
+  const releaseContracts = full || normalizedFiles.some((file) => startsWithAny(file, releaseContractRoots) || isApiGoSource(file));
   const registerInputs = full || normalizedFiles.some((file) => startsWithAny(file, [".github/workflows", "scripts/gates", "perf/budgets.json", "gate.config.ts", "lefthook.yml"]));
   const formalSync = full || normalizedFiles.some((file) => startsWithAny(file, formalSyncPaths));
   const typePolicy = full || dependencyChange || nonDocumentationFiles.some((file) => /\.(?:[cm]?ts|tsx)$/u.test(file) || /(?:^|\/)tsconfig[^/]*\.json$/u.test(file));
@@ -473,6 +495,7 @@ export function createGatePlan(files, options = {}) {
       "-c",
       `set -e; node scripts/test/run.mjs node --test ${workflowGraphNodeTests.join(" ")}; python3 ${workflowGraphPythonTest}`,
     ]),
+    task("release-contracts", "Release tests and plan contracts", releaseContracts, releaseContracts ? "release, managed-host or scorecard inputs changed" : "no release inputs changed", ["bash", "-c", 'TARGET_SHA="$(git rev-parse HEAD)" scripts/releases/check-contracts.sh --plan']),
     task("register", "Checks register is complete", registerInputs, registerInputs ? "workflow, gate, hook or budget inputs changed" : "no check inputs changed", ["bash", "-c", "node scripts/gates/check-register.mjs && node scripts/test/run.mjs node --test scripts/gates/check-register.test.mjs"]),
     task("hygiene", "Repository hygiene", true, "always required", ["pnpm", "run", "gate:hygiene"]),
     task("secrets", "Secret scan", true, "always required for the selected diff", ["bash", "scripts/gates/gitleaks.sh"], { GATE_SCOPE: explicitFull ? "full" : scope, GITLEAKS_BASE_REF: base }),

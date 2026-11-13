@@ -7,7 +7,7 @@ sfu_root="$(cd "$(dirname "$0")/.." && pwd)"
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:${PATH}"
 fi
-export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.10+auto}"
+export GOTOOLCHAIN="${CHALK_API_GOTOOLCHAIN:-go1.26.11+auto}"
 # Git worktrees break Go VCS stamping (exit 128); the gate never needs stamped binaries.
 export GOFLAGS="${GOFLAGS:--buildvcs=false}"
 repo_root="$(cd "${sfu_root}/../../.." && pwd)"
