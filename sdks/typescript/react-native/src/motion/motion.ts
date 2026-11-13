@@ -1,7 +1,5 @@
-import { ReduceMotion, useReducedMotion, withTiming, type WithTimingConfig } from "react-native-reanimated";
+import { ReduceMotion, type WithTimingConfig } from "react-native-reanimated";
 import { durations, easings } from "../theme/tokens";
-
-export { useReducedMotion };
 
 /**
  * Named timings from the mockup. Each one also honours the system's reduced-motion setting,
@@ -23,11 +21,3 @@ export const timings = {
   avatarTurn: { duration: durations.avatarTurn, easing: easings.standard, reduceMotion: ReduceMotion.System },
   level: { duration: durations.speakingLevel, easing: easings.linear, reduceMotion: ReduceMotion.System },
 } as const satisfies Readonly<Record<string, WithTimingConfig>>;
-
-export type TimingName = keyof typeof timings;
-
-/** `withTiming` with one of the named timings. Call it from a worklet or from JS. */
-export function animateTo(value: number, timing: TimingName): number {
-  "worklet";
-  return withTiming(value, timings[timing]);
-}

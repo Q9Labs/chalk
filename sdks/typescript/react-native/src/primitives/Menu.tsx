@@ -187,11 +187,6 @@ export function MenuSection({ label }: { readonly label: string }): React.JSX.El
   );
 }
 
-export function MenuSeparator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return <View style={[styles.separator, { backgroundColor: colors.line }]} />;
-}
-
 function useKeyboardHeight(): number {
   const [height, setHeight] = useState(0);
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-tsx -- [subscription] Observe native keyboard height for menu placement; remove both keyboard listeners on cleanup.
@@ -213,5 +208,4 @@ const styles = StyleSheet.create({
   check: { width: 18, alignItems: "center" },
   labels: { flex: 1, minWidth: 0, gap: space["0-5"] },
   section: { paddingTop: space[2], paddingHorizontal: space["2-5"], paddingBottom: space[1] },
-  separator: { height: 1, marginVertical: space["1-5"], marginHorizontal: space[1] },
 });

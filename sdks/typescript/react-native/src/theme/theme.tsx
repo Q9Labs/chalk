@@ -22,7 +22,3 @@ export function ThemeProvider({ colorScheme, children }: { readonly colorScheme:
 export function useTheme(): Theme {
   return useContext(ThemeContext);
 }
-
-export function themeFor(colorScheme: ColorScheme): Theme {
-  return themes[colorScheme];
-}
