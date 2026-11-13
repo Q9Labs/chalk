@@ -135,9 +135,9 @@ func verifyInstalledImage(config Config) error {
 
 func (config Config) Validate() error {
 	key := recorderfleet.PoolKey{Environment: config.Environment, Role: config.Role}
-	endpoint, err := url.Parse(config.BootstrapEndpoint)
-	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" && endpoint.Path != "/" {
-		return fmt.Errorf("%w: bootstrap endpoint", ErrInvalidConfig)
+	endpoint, err := parseBootstrapEndpoint(config.BootstrapEndpoint)
+	if err != nil {
+		return err
 	}
 	if key.Validate() != nil || !validClaim(config.ReleaseID, 128) || !validSHA256(config.ImageDigest) || config.BootGeneration == 0 {
 		return ErrInvalidConfig
@@ -148,12 +148,24 @@ func (config Config) Validate() error {
 	if !strings.EqualFold(endpoint.Hostname(), config.BootstrapServerName) {
 		return fmt.Errorf("%w: bootstrap server name %q differs from endpoint host %q", ErrInvalidConfig, config.BootstrapServerName, endpoint.Hostname())
 	}
-	for label, path := range map[string]string{
-		"bootstrap ca": config.BootstrapCAFile, "identity directory": config.IdentityDirectory, "worker environment": config.WorkerEnvironment,
-		"node environment": config.NodeEnvironment, "image manifest": config.ImageManifest,
+	return config.validatePaths()
+}
+
+func parseBootstrapEndpoint(raw string) (*url.URL, error) {
+	endpoint, err := url.Parse(raw)
+	if err != nil || endpoint.Scheme != "https" || endpoint.Host == "" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Path != "" && endpoint.Path != "/" {
+		return nil, fmt.Errorf("%w: bootstrap endpoint", ErrInvalidConfig)
+	}
+	return endpoint, nil
+}
+
+func (config Config) validatePaths() error {
+	for _, entry := range []struct{ label, path string }{
+		{"bootstrap ca", config.BootstrapCAFile}, {"identity directory", config.IdentityDirectory}, {"worker environment", config.WorkerEnvironment},
+		{"node environment", config.NodeEnvironment}, {"image manifest", config.ImageManifest},
 	} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-			return fmt.Errorf("%w: %s path", ErrInvalidConfig, label)
+		if !filepath.IsAbs(entry.path) || filepath.Clean(entry.path) != entry.path {
+			return fmt.Errorf("%w: %s path", ErrInvalidConfig, entry.label)
 		}
 	}
 	return nil
