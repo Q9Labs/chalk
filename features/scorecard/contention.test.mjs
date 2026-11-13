@@ -37,8 +37,8 @@ function cardWithSeries(evidence, value = 300, series = []) {
 }
 
 test("scorecard series is optional for old cards and validates bounded per-cycle action samples", () => {
-  const legacy = card(contention(input()));
-  assert.equal(Object.hasOwn(legacy, "series"), false);
+  const plain = card(contention(input()));
+  assert.equal(Object.hasOwn(plain, "series"), false);
   const actions = Object.fromEntries(actionIds.map((id) => [id, 250]));
   const measured = cardWithSeries(contention(input()), 250, [{ cycle: 1, timestamp: "2026-11-08T00:00:01.000Z", actions }]);
   assert.equal(measured.series.length, 1);

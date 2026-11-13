@@ -79,6 +79,18 @@ func TestTrailExplainsOneParticipantsCall(t *testing.T) {
 	}
 	requireIDs(t, published[0], alice.scope)
 
+	checkSubscriptionLines(t, trail, bob)
+
+	// A second close changes nothing: the first cause stands.
+	bob.CloseFor(ClosePeerFailed)
+	if again := trail.events("sfu.session.closed"); len(again) != 1 {
+		t.Fatalf("a second close logged again: %v", again)
+	}
+}
+
+// checkSubscriptionLines checks the lines a subscription and its session's close leave in the trail.
+func checkSubscriptionLines(t *testing.T, trail *trailLog, bob *Session) {
+	t.Helper()
 	started := trail.events("sfu.subscription.started")
 	if len(started) != 1 || started[0]["publisher_id"] != "alice" {
 		t.Fatalf("subscription.started = %v", started)
@@ -101,12 +113,6 @@ func TestTrailExplainsOneParticipantsCall(t *testing.T) {
 		t.Fatalf("session.closed = %v", closed)
 	}
 	requireIDs(t, closed[0], bob.scope)
-
-	// A second close changes nothing: the first cause stands.
-	bob.CloseFor(ClosePeerFailed)
-	if again := trail.events("sfu.session.closed"); len(again) != 1 {
-		t.Fatalf("a second close logged again: %v", again)
-	}
 }
 
 func TestTrailNamesARefusedJoinWithItsIds(t *testing.T) {

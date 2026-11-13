@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# The helpers of the `faults` run: the node and control-port calls, the /readyz checks, the
+# per-node snapshot and the case harness (begin_case, check, evidence, end_case). It is sourced
+# by `faults` after `bench`, and never run on its own.
+
+# shellcheck disable=SC2154
+tenant=bench
+run="r$(date +%s)"
+sfu_ssh_options "${dir}/known_hosts" -o ConnectTimeout=10
+status="" body=""
+results=()
+
+address_of() { jq -r '.[0].networks.v4[] | select(.type == "public") | .ip_address' "${dir}/$1.json"; }
+budget_of() { local role spec; for spec in "${nodes[@]}"; do read -r role _ _ budget <<<"$spec"; [[ "$role" != "$1" ]] || echo "$budget"; done; }
+node_ssh() { local role="$1"; shift; ssh "${ssh_options[@]}" "root@$(address_of "$role")" "$@"; }
+unit() { node_ssh "$1" systemctl --user -M chalk-sfu@ "${@:2}" chalk-sfu; }
+
+# sfu sends one control request over mutual TLS and sets $status (000 when nothing answered) and $body.
+sfu() {
+  local role="$1" method="$2" path="$3" data="${4-}" out extra=()
+  [[ -z "$data" ]] || extra=(--header 'Content-Type: application/json' --data "$data")
+  out="$(mktemp)"
+  status="$(curl --silent --connect-timeout 4 --max-time 8 --output "$out" --write-out '%{http_code}' \
+    --cacert "${dir}/ca.crt" --cert "${dir}/operator.crt" --key "${dir}/operator.key" \
+    --resolve "chalk-sfu:${control_port}:$(address_of "$role")" --request "$method" "${extra[@]}" \
+    "https://chalk-sfu:${control_port}${path}")" || status=000
+  body="$(cat "$out")"
+  rm -f "$out"
+}
+
+ready() { sfu "$1" GET /readyz; }
+ready_value() { ready "$1"; jq -r "$2" <<<"$body"; }
+wait_until() { # seconds, then a command
+  local seconds="$1"
+  shift
+  for _ in $(seq "$seconds"); do
+    "$@" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+reserve_body() { # operation episode generation participants cameras ttl
+  jq -nc --arg op "$1" --arg tenant "$tenant" --arg ep "$2" --argjson gen "$3" --argjson p "$4" --argjson c "$5" --argjson ttl "$6" \
+    '{operationId: $op, tenantId: $tenant, episodeId: $ep, generation: $gen, shape: {participants: $p, camerasPerParticipant: $c}, ttlSeconds: $ttl}'
+}
+scope_json() { # episode participant generation
+  jq -nc --arg tenant "$tenant" --arg ep "$1" --arg p "$2" --argjson gen "$3" '{tenantId: $tenant, episodeId: $ep, participantId: $p, generation: $gen}'
+}
+join_body() { jq -nc --arg op "$1" --argjson scope "$(scope_json "$2" "$3" "$4")" '{operationId: $op, scope: $scope}'; }
+end_episode() { sfu "$1" POST /v1/episodes/end "$(jq -nc --arg tenant "$tenant" --arg ep "$2" '{tenantId: $tenant, episodeId: $ep}')"; }
+is_down() { ready "$1"; [[ "$status" == 000 ]]; }
+is_up() { ready "$1"; [[ "$status" == 200 ]]; }
+holds() { [[ "$(ready_value "$1" '[.allocations, .reservedPackets] | @tsv')" == "$2" ]]; }
+leases() { [[ "$(ready_value "$1" .sourceLeases)" == "$2" ]]; }
+# ready_is holds when /readyz of the node satisfies the jq expression, whatever its HTTP status.
+ready_is() { ready "$1"; jq -e "$2" <<<"$body"; }
+
+# redeploy runs the production deploy for one bench node, with its packet budget.
+redeploy() { SFU_PACKET_BUDGET="$(budget_of "$1")" "${node_dir}/deploy" bench "$(address_of "$1")" "${@:2}"; }
+
+# snapshot prints one line per node: the SFU's own counters from /readyz and the host's from /proc.
+snapshot() {
+  local role cpu
+  for spec in "${nodes[@]}"; do
+    read -r role _ _ _ <<<"$spec"
+    ready "$role"
+    if [[ "$status" == 000 ]]; then
+      echo "  snapshot ${role}: unreachable"
+      continue
+    fi
+    cpu="$(node_ssh "$role" 'head -n1 /proc/stat; sleep 1; head -n1 /proc/stat; awk "/^Udp:/{n++} n==2{print \$2, \$5}" /proc/net/snmp' 2>/dev/null |
+      awk 'NR==1{for(i=2;i<=9;i++)a[i]=$i} NR==2{for(i=2;i<=9;i++){d[i]=$i-a[i];t+=d[i]}; idle=d[5]+d[6]; printf "cpu=%.0f%% steal=%.0f%% ", (t-idle)*100/t, d[9]*100/t} NR==3{printf "udp_in=%s udp_out=%s", $1, $2}')" || cpu="host=unavailable"
+    echo "  snapshot ${role}: $(jq -r '"sessions=\(.sessions) allocations=\(.allocations) reserved=\(.reservedPackets)/\(.packetBudget) pps=\(.host.packetsPerSecond) rss_mib=\((.host.rssBytes // 0) / 1048576 | floor) goroutines=\(.host.goroutines) queue_p95_ms=\(.host.queueDelayP95Ms) guard_steal=\(.host.stealPercent // "n/a")"' <<<"$body") ${cpu} repair/layers=otlp-only"
+  done
+}
+
+case_failed=0 case_no="" case_title="" case_evidence=""
+begin_case() {
+  case_no="$1" case_title="$2" case_failed=0 case_evidence=""
+  echo
+  echo "=== case ${case_no}: ${case_title}"
+}
+check() { # description, then a command that succeeds when the claim holds
+  local description="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then echo "  ok   ${description}"; else echo "  FAIL ${description}"; case_failed=1; fi
+}
+evidence() { case_evidence+="${case_evidence:+; }$*"; echo "  note $*"; }
+end_case() {
+  snapshot
+  results+=("${case_no}|${case_title}|$([[ "$case_failed" == 0 ]] && echo PASS || echo FAIL)|${case_evidence}")
+}
+
+# keep_live starts a background renewer that joins the Episode's Participant again every 20 s, so the
+# node holds an allocation until stop_live, whatever time the deploy spends preparing. A draining node
+# keeps taking joins of an Episode it hosts. With "probe" it also asks for a new Episode each round
+# and logs the answer. It stops by itself after the optional number of seconds.
+live_log="" live_pid=""
+keep_live() { # episode generation [probe] [seconds]
+  local episode="$1" generation="$2" probe="${3:-}" end=$((SECONDS + ${4:-86400}))
+  live_log="$(mktemp)"
+  (
+    while ((SECONDS < end)); do
+      sleep 20
+      ((SECONDS < end)) || break
+      generation=$((generation + 1))
+      sfu primary POST /v1/sessions "$(join_body "op-${run}-${episode}-${generation}" "$episode" p1 "$generation")"
+      echo "join ${status}" >>"$live_log"
+      [[ -z "$probe" ]] && continue
+      sfu primary POST /v1/episodes/reserve "$(reserve_body "res-${run}-${episode}-${generation}" "new-${episode}-${generation}" 1 2 1 5)"
+      echo "new ${status} $(jq -r '.error.code // "ok"' <<<"$body")" >>"$live_log"
+    done
+  ) &
+  live_pid=$!
+}
+stop_live() {
+  [[ -z "$live_pid" ]] || { kill "$live_pid" 2>/dev/null; wait "$live_pid" 2>/dev/null; }
+  live_pid=""
+  return 0
+}
+live_count() { grep -c "$1" "$live_log" || true; }

@@ -33,33 +33,35 @@ func (r *videoRecorder) has(ssrc uint32) bool {
 	return r.marked[ssrc]
 }
 
+// pushCamera grants the participant's camera source and publishes one camera track for it.
+func pushCamera(t *testing.T, node *Node, name string, session *Session, peer *testPeer) {
+	t.Helper()
+	apply(t, node, control(name, "camera", protocol.SourceGrant, 1))
+	camera, err := webrtc.NewTrackLocalStaticRTP(vp8Capability, "cam", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := peer.pc.AddTrack(camera); err != nil {
+		t.Fatal(err)
+	}
+	pushed, err := session.AddTracks(context.Background(), protocol.TracksRequest{
+		OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
+	})
+	if err != nil || len(pushed.Tracks) != 1 {
+		t.Fatalf("push: %+v %v", pushed, err)
+	}
+	if err := peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A Firefox viewer's offer names VP8 as 120 and RTX as 124, so the node's video to it carries types
 // the node never offers. The writer can only tell it from audio by SSRC, so the egress track marks
 // the media and RTX SSRCs it was bound to, and unmarks them when it is unbound.
 func TestEgressMarksTheVideoSSRCsOfAFirefoxNumberedViewer(t *testing.T) {
 	node := newTestNode(t, nil)
-	push := func(name string, session *Session, peer *testPeer) {
-		t.Helper()
-		apply(t, node, control(name, "camera", protocol.SourceGrant, 1))
-		camera, err := webrtc.NewTrackLocalStaticRTP(vp8Capability, "cam", name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := peer.pc.AddTrack(camera); err != nil {
-			t.Fatal(err)
-		}
-		pushed, err := session.AddTracks(context.Background(), protocol.TracksRequest{
-			OperationID: op(), Scope: session.scope, SessionDescription: peer.offer(t), Tracks: localTracks("cam", peer.mids(), "camera"),
-		})
-		if err != nil || len(pushed.Tracks) != 1 {
-			t.Fatalf("push: %+v %v", pushed, err)
-		}
-		if err := peer.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: pushed.SessionDescription.SDP}); err != nil {
-			t.Fatal(err)
-		}
-	}
 	publisher := node.newTestSession(t, testScope("alice", 1))
-	push("alice", publisher, newTestPeer(t))
+	pushCamera(t, node, "alice", publisher, newTestPeer(t))
 
 	// The viewer's own offer comes first, so its payload types are the ones the node uses to it.
 	firefoxVP8 := webrtc.RTPCodecParameters{RTPCodecCapability: vp8Capability, PayloadType: 120}
@@ -69,7 +71,7 @@ func TestEgressMarksTheVideoSSRCsOfAFirefoxNumberedViewer(t *testing.T) {
 	}
 	viewer := node.newTestSession(t, testScope("bob", 1))
 	viewerPeer := newTestPeer(t, firefoxVP8, firefoxRTX)
-	push("bob", viewer, viewerPeer)
+	pushCamera(t, node, "bob", viewer, viewerPeer)
 
 	pulled, err := viewer.AddTracks(context.Background(), pullRequest(viewer, publisher, "cam-0"))
 	if err != nil || len(pulled.Tracks) != 1 {

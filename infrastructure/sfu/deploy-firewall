@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# The first steps of `deploy`: wait for the node's bootstrap, then make its host firewall allow
+# exactly the control and SSH sources of the environment's cloud firewall. `deploy` sources it
+# after it has parsed its arguments and set `remote`, and never runs it on its own.
+
+# shellcheck disable=SC2154
+echo "==> waiting for the node's bootstrap"
+for _ in $(seq 60); do
+  status=0
+  probe="$(remote test -f /var/lib/chalk-sfu-bootstrapped 2>&1)" || status=$?
+  [[ $status -eq 0 ]] && break
+  # A node that is not up yet refuses or times out and is worth waiting for; a key the node rejects is not.
+  if grep -q -E 'Permission denied|Load key|no such identity|Too many authentication failures' <<<"$probe"; then
+    echo "ssh cannot authenticate to the node with ${SFU_SSH_KEY}: ${probe}" >&2
+    exit 1
+  fi
+  sleep 10
+done
+remote test -f /var/lib/chalk-sfu-bootstrapped
+
+echo "==> matching the host firewall to the cloud firewall"
+sources="$(doctl compute firewall list --output json | jq -r --arg name "chalk-sfu-${environment}" --arg control "$control_port" '
+  [.[] | select(.name == $name)] as $found
+  | if ($found | length) != 1 then error("want exactly one cloud firewall named \($name)") else $found[0] end
+  | .inbound_rules[] | select(.protocol == "tcp" and (.ports == $control or .ports == "22"))
+  | "\(.ports) \(.sources.addresses[])"')"
+for port in "$control_port" 22; do
+  grep -q "^${port} " <<<"$sources" ||
+    { echo "the cloud firewall allows no source on TCP ${port}; refusing to close it on the node" >&2; exit 1; }
+done
+# Rules compare by canonical network, the form ufw stores, so an address written
+# another way (host bits set, a /32) is not taken for a new source and its
+# existing rule removed. New rules go in before stale ones come out, so this SSH
+# session stays allowed.
+remote "bash -s $(base64 <<<"$sources" | tr -d '\n') ${control_port} ${media_port}" <<'RECONCILE'
+set -euo pipefail
+python3 - "$1" "$2" <<'PY'
+import base64, ipaddress, re, subprocess, sys
+
+def rule(port, source):
+    network = ipaddress.ip_network(source, strict=False)
+    if network.prefixlen == 0:
+        return f"allow {port}/tcp"
+    if network.prefixlen == network.max_prefixlen:
+        network = network.network_address
+    return f"allow from {network} to any port {port} proto tcp"
+
+def ufw(*args):
+    subprocess.run(["ufw", *args], check=True, stdout=subprocess.DEVNULL)
+
+control = sys.argv[2]
+want = {rule(*line.split()) for line in base64.b64decode(sys.argv[1]).decode().splitlines() if line}
+have = {}
+added = subprocess.run(["ufw", "show", "added"], check=True, capture_output=True, text=True).stdout
+for line in added.splitlines():
+    match = re.fullmatch(rf"ufw (allow ({control}|22)/tcp|allow from (\S+) to any port ({control}|22) proto tcp)", line)
+    if match:
+        key = rule(match[2], "::/0") if match[2] else rule(match[4], match[3])
+        have.setdefault(key, []).append(match[1])
+for key in sorted(want - have.keys()):
+    ufw(*key.split())
+    print("host firewall: added", key)
+for key in sorted(have.keys() - want):
+    for existing in have[key]:
+        ufw("delete", *existing.split())
+        print("host firewall: removed", existing)
+PY
+# Media over TCP (SFU_TCP_ADDR) shares the UDP port number. First boot opened only UDP, so a node
+# made before ICE-TCP gets its TCP rule here; ufw skips a rule that exists.
+ufw allow "$3"/tcp > /dev/null
+RECONCILE
+if [[ "$mode" == --firewall-only ]]; then exit 0; fi

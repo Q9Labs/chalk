@@ -39,19 +39,7 @@ func TestMicrophoneAndCameraTogglesKeepTheSDPAndMediaReturns(t *testing.T) {
 	for _, track := range svc.inspect(t, alice.conn, scopeA) {
 		mids[track.TrackName] = track.Mid
 	}
-	sources := map[string]string{micName: "microphone", cameraName: "camera"}
-	update := func(paused bool) {
-		t.Helper()
-		var tracks []protocol.Track
-		for name, source := range sources {
-			tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: mids[name], TrackName: name, Source: source, Paused: paused})
-		}
-		var response protocol.TracksResponse
-		svc.mustCall(t, "/v1/sessions/"+alice.conn+"/tracks/update", protocol.UpdateTracksRequest{OperationID: op(), Scope: scopeA, Tracks: tracks}, &response)
-		if response.SessionDescription != nil || len(response.TrackErrors) != 0 || len(response.Tracks) != len(tracks) {
-			t.Fatalf("toggle response: %+v", response)
-		}
-	}
+	update := func(paused bool) { t.Helper(); setHold(t, svc, alice, mids, paused) }
 	offer := alice.peer.pc.CurrentLocalDescription().SDP
 	answers := bob.peer.pc.CurrentLocalDescription().SDP
 
@@ -74,11 +62,7 @@ func TestMicrophoneAndCameraTogglesKeepTheSDPAndMediaReturns(t *testing.T) {
 		slowest = max(slowest, time.Since(started))
 	}
 
-	for _, track := range svc.inspect(t, alice.conn, scopeA) {
-		if mids[track.TrackName] != track.Mid || !track.Active {
-			t.Fatalf("track %s is %+v after %d toggles, want the same mid %s and active", track.TrackName, track, toggles, mids[track.TrackName])
-		}
-	}
+	checkSameActiveTracks(t, svc, alice, mids, toggles)
 	if alice.peer.pc.CurrentLocalDescription().SDP != offer || bob.peer.pc.CurrentLocalDescription().SDP != answers {
 		t.Fatalf("a toggle moved the SDP of the publisher or the viewer")
 	}
@@ -86,4 +70,29 @@ func TestMicrophoneAndCameraTogglesKeepTheSDPAndMediaReturns(t *testing.T) {
 		t.Fatalf("slowest unmute took %s to bring audio and video back, want under 3s", slowest)
 	}
 	t.Logf("%d toggles of microphone and camera, no SDP, slowest return %s", toggles, slowest)
+}
+
+// setHold pauses or resumes the participant's microphone and camera with one tracks/update.
+func setHold(t *testing.T, svc *service, who *participant, mids map[string]string, paused bool) {
+	t.Helper()
+	sources := map[string]string{micName: "microphone", cameraName: "camera"}
+	var tracks []protocol.Track
+	for name, source := range sources {
+		tracks = append(tracks, protocol.Track{Location: protocol.LocationLocal, Mid: mids[name], TrackName: name, Source: source, Paused: paused})
+	}
+	var response protocol.TracksResponse
+	svc.mustCall(t, "/v1/sessions/"+who.conn+"/tracks/update", protocol.UpdateTracksRequest{OperationID: op(), Scope: who.scope, Tracks: tracks}, &response)
+	if response.SessionDescription != nil || len(response.TrackErrors) != 0 || len(response.Tracks) != len(tracks) {
+		t.Fatalf("toggle response: %+v", response)
+	}
+}
+
+// checkSameActiveTracks checks that every track kept its mid and is active after the toggles.
+func checkSameActiveTracks(t *testing.T, svc *service, who *participant, mids map[string]string, toggles int) {
+	t.Helper()
+	for _, track := range svc.inspect(t, who.conn, who.scope) {
+		if mids[track.TrackName] != track.Mid || !track.Active {
+			t.Fatalf("track %s is %+v after %d toggles, want the same mid %s and active", track.TrackName, track, toggles, mids[track.TrackName])
+		}
+	}
 }

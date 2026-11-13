@@ -69,29 +69,49 @@ func leaseBoundsMedia(t *testing.T, svc *service) {
 	}
 }
 
+// inspectionOf reads, through inspection, what a publisher sends and what a viewer is delivered.
+type inspectionOf struct {
+	t          *testing.T
+	svc        *service
+	publisher  *microphone
+	subscriber *listener
+}
+
+func (i inspectionOf) published() protocol.InspectedTrack {
+	i.t.Helper()
+	tracks := i.svc.inspect(i.t, i.publisher.conn, i.publisher.scope)
+	if len(tracks) != 1 || tracks[0].Location != protocol.LocationLocal {
+		i.t.Fatalf("alice's tracks: %+v", tracks)
+	}
+	return tracks[0]
+}
+
+func (i inspectionOf) delivered() protocol.SubscriptionState {
+	i.t.Helper()
+	tracks := i.svc.inspect(i.t, i.subscriber.conn, i.subscriber.scope)
+	if len(tracks) != 1 || tracks[0].Subscription == nil {
+		i.t.Fatalf("bob's tracks: %+v", tracks)
+	}
+	return *tracks[0].Subscription
+}
+
+// beforeAnyGrant returns the delivery before any grant, which must be paused for lack of one.
+func (i inspectionOf) beforeAnyGrant() protocol.SubscriptionState {
+	before := i.delivered()
+	if before.State != protocol.SubscriptionPaused || before.Reason != protocol.PauseSourceUnauthorized || i.published().Active {
+		i.t.Fatalf("before any grant: %+v, publication active %v", before, i.published().Active)
+	}
+	return before
+}
+
 func inspectionReportsLapse(t *testing.T, svc *service) {
 	episode := "episode-inspect"
 	alice := joinAndPublish(t, svc, scopeIn(episode, "alice", 1), "alice-mic")
 	bob := join(t, svc, scopeIn(episode, "bob", 1))
 	bob.pull(t, svc, alice)
-	published := func() protocol.InspectedTrack {
-		tracks := svc.inspect(t, alice.conn, alice.scope)
-		if len(tracks) != 1 || tracks[0].Location != protocol.LocationLocal {
-			t.Fatalf("alice's tracks: %+v", tracks)
-		}
-		return tracks[0]
-	}
-	delivered := func() protocol.SubscriptionState {
-		tracks := svc.inspect(t, bob.conn, bob.scope)
-		if len(tracks) != 1 || tracks[0].Subscription == nil {
-			t.Fatalf("bob's tracks: %+v", tracks)
-		}
-		return *tracks[0].Subscription
-	}
-	before := delivered()
-	if before.State != protocol.SubscriptionPaused || before.Reason != protocol.PauseSourceUnauthorized || published().Active {
-		t.Fatalf("before any grant: %+v, publication active %v", before, published().Active)
-	}
+	view := inspectionOf{t, svc, alice, bob}
+	published, delivered := view.published, view.delivered
+	before := view.beforeAnyGrant()
 
 	svc.control(t, episode, grant("alice", 1))
 	bob.hears(t, "audio after the grant", 20)
