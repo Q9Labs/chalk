@@ -242,6 +242,7 @@ export const CloudflareSFUPublicationsResponseSchema = /* @__PURE__ */ (() =>
     publications: Schema.Array(
       Schema.Struct({
         participant_id: ParticipantIdSchema,
+        paused: Schema.optional(Schema.Boolean),
         publication_id: Schema.String,
         source: Schema.String,
       }),

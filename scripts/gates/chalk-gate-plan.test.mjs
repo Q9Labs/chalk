@@ -204,3 +204,21 @@ test("a selection that fails for another reason runs every job in full", () => {
   };
   assert.deepEqual(selectCiJobs("origin/nothing-resolves", plan), { api: true, sync: true, rootGroups: ["checks"], full: true });
 });
+
+test("the mock-call ratchet runs for every kind of test file it counts, not only TypeScript", () => {
+  const files = [
+    "sdks/typescript/client/src/media/client.test.js",
+    "sdks/typescript/client/src/media/client.spec.mjs",
+    "sdks/typescript/client/src/media/client.test.cjs",
+    "sdks/typescript/react/src/components/Panel.test.jsx",
+    "sdks/typescript/client/src/media/client.test.mts",
+    "sdks/typescript/client/src/__tests__/client.js",
+  ];
+  for (const file of files) {
+    const plan = createGatePlan([file], { scope: "merge base to HEAD", services: "external", event: "pull_request" });
+    assert.equal(plan.full, false, file);
+    assert.ok(selected([file], "pull_request").includes("mock-calls"), file);
+  }
+  assert.ok(selected(["scripts/gates/mock-call-baseline.json"], "pull_request").includes("mock-calls"));
+  assert.ok(!selected(["docs/observability.md"], "pull_request").includes("mock-calls"));
+});

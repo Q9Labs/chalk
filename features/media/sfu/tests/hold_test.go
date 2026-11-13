@@ -232,3 +232,20 @@ func TestUnmuteRacingTheLeaveForwardsNothing(t *testing.T) {
 	}
 	m.assertFrozen(t, "an unmute that raced the leave")
 }
+
+// A viewer who joins while the microphone is parked pulls it like any other publication, hears nothing
+// while it is parked, and hears it on the resume with no further signalling. The API lists a parked
+// microphone so that every viewer, late or not, holds its subscription before the unmute.
+func TestViewerThatPullsAParkedMicrophoneHearsItOnResume(t *testing.T) {
+	m := newParkedMic(t)
+	eventually(t, "the publisher's media to reach the node", 20*time.Second, func() bool { return len(m.svc.inspect(t, m.connA, scopeA)) == 1 })
+	if held := m.update(m.audioMid, true); len(held.TrackErrors) != 0 || !held.Tracks[0].Paused {
+		t.Fatalf("hold response: %+v", held)
+	}
+	m.pull()
+	m.assertFrozen(t, "a parked microphone pulled by a late viewer")
+
+	m.update(m.audioMid, false)
+	resumedFrom := m.received.count(webrtc.RTPCodecTypeAudio)
+	eventually(t, "media to the viewer that pulled the parked microphone", 20*time.Second, func() bool { return m.received.count(webrtc.RTPCodecTypeAudio) >= resumedFrom+30 })
+}
