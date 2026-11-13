@@ -1,1 +1,1 @@
-{"holder": "claude-sfu-reach", "purpose": "nightly-node-c5020f190", "run_id": "cut2-0240", "acquired_at": "2026-11-13T02:49:39.060Z", "expires_at": "2026-11-13T02:51:03.817Z", "token": "fe1843ae1f28421f927e57aecebca0a6"}
+{"holder": "sfu-reach", "purpose": "failover-batch-h1", "run_id": "phase-split-h1", "acquired_at": "2026-11-13T02:51:53.878Z", "expires_at": "2026-11-13T02:54:53.878Z", "token": "374f3defccab46ada1fc189867ed47bb"}
