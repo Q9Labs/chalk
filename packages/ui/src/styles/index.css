@@ -1524,7 +1524,7 @@
   .chalk-menu-item {
     min-height: 48px;
   }
-  /* The phone dock and its home-indicator inset; the leave menu's two rows sit above it. */
+  /* On a phone notices clear the dock and the name tags under them; an open leave menu lifts them past its rows. */
   .chalk-toasts {
     --chalk-toast-top: 52px;
     --chalk-toast-lift: 146px;
@@ -1571,7 +1571,7 @@
   .chalk-menu-item {
     min-height: 48px;
   }
-  /* The phone dock and its home-indicator inset; the leave menu's two rows sit above it. */
+  /* On a phone notices clear the dock and the name tags under them; an open leave menu lifts them past its rows. */
   .chalk-toasts {
     --chalk-toast-top: 52px;
     --chalk-toast-lift: 146px;
