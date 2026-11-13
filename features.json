@@ -11,6 +11,7 @@
         ".github/workflows/web-call-proof.yml",
         "apps/api/internal/httpapi/call_stats.go",
         "apps/api/internal/httpapi/episode_lifecycle.go",
+        "apps/api/internal/httpapi/episode_participant_admission.go",
         "apps/api/internal/httpapi/episode_lifecycle_transport.go",
         "apps/api/internal/httpapi/episode_lifecycle_dto.go",
         "apps/api/internal/httpapi/episode_live.go",
