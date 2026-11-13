@@ -61,21 +61,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       assertName(roleName, "role");
       return ({ sync }) => foreign(() => sync.assignRole(participantId, roleName));
     });
-  mute = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.muteParticipant(participantId));
-    });
-  stopVideo = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.stopParticipantCamera(participantId));
-    });
-  stopScreenShare = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.stopParticipantScreenShare(participantId));
-    });
+  mute = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.muteParticipant(participantId));
+  stopVideo = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.stopParticipantCamera(participantId));
+  stopScreenShare = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.stopParticipantScreenShare(participantId));
   requestMedia = (
     participantId: string,
     kind: MediaRequestKind,
@@ -88,21 +76,9 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
       if (kind !== "microphone" && kind !== "camera") throw invalid("Media requests must target a microphone or camera");
       return ({ sync }) => (kind === "microphone" ? foreign(() => sync.requestUnmute(participantId)) : foreign(() => sync.requestStartCamera(participantId))).pipe(Effect.map(directed));
     });
-  remove = (participantId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(participantId, "participant ID");
-      return ({ sync }) => foreign(() => sync.removeParticipant(participantId));
-    });
-  admit = (requestId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(requestId, "admission request ID");
-      return ({ sync }) => foreign(() => sync.admit(requestId));
-    });
-  deny = (requestId: string): ClientEffect<void> =>
-    this.#command(() => {
-      assertIdentifier(requestId, "admission request ID");
-      return ({ sync }) => foreign(() => sync.deny(requestId));
-    });
+  remove = (participantId: string): ClientEffect<void> => this.#withId(participantId, "participant ID", (sync) => sync.removeParticipant(participantId));
+  admit = (requestId: string): ClientEffect<void> => this.#withId(requestId, "admission request ID", (sync) => sync.admit(requestId));
+  deny = (requestId: string): ClientEffect<void> => this.#withId(requestId, "admission request ID", (sync) => sync.deny(requestId));
   raiseHand = (): ClientEffect<void> => this.#setHandRaised(true);
   lowerHand = (): ClientEffect<void> => this.#setHandRaised(false);
   #setHandRaised(raised: boolean): ClientEffect<void> {
@@ -128,6 +104,12 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     this.#unsubscribeMedia = null;
     this.#unsubscribePorts = null;
     this.#unsubscribe = null;
+  }
+  #withId<A>(id: string, label: string, run: (sync: ConnectionPorts["sync"]) => Promise<A>): ClientEffect<A> {
+    return this.#command(() => {
+      assertIdentifier(id, label);
+      return ({ sync }) => foreign(() => run(sync));
+    });
   }
   #command<A>(operation: () => (ports: ConnectionPorts) => Effect.Effect<A, unknown>): ClientEffect<A> {
     return Effect.try({ try: operation, catch: normalizeClientError }).pipe(
@@ -212,8 +194,8 @@ class ParticipantsControllerRuntime implements ParticipantsControllerEffects {
     });
     const self = selfFor(snapshot, participants.roster);
     const current = this.#store.getSnapshot();
-    if (!sameParticipants(current.participants, participants)) this.#store.updateParticipants(participants);
-    if (!sameSelf(current.self, self)) this.#store.updateSelf(self);
+    if (!sameParticipants(current.participants, participants)) this.#store.update("participants", participants);
+    if (!sameSelf(current.self, self)) this.#store.update("self", self);
   }
 }
 function assertIdentifier(value: string, label: string): void {

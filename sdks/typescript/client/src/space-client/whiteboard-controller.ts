@@ -95,7 +95,7 @@ class WhiteboardControllerRuntime implements WhiteboardControllerEffects {
     });
     const current = this.#store.getSnapshot().whiteboard;
     if (sameWhiteboard(current, slice)) return;
-    this.#store.updateWhiteboard(slice);
+    this.#store.update("whiteboard", slice);
   }
 }
 
