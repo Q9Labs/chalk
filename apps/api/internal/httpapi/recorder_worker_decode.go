@@ -66,26 +66,16 @@ func recorderWorkerLeaseInput(identity workeridentity.Identity, body recorderWor
 }
 
 func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body recorderWorkerCapturePlanWaitBody) (captureplan.WaitInput, bool) {
-	planHandle, planErr := utilities.ParseID(body.PlanHandle)
-	tenantID, tenantErr := utilities.ParseID(body.TenantID)
-	spaceID, spaceErr := utilities.ParseID(body.SpaceID)
-	episodeID, episodeErr := utilities.ParseID(body.EpisodeID)
-	recordingID, recordingErr := utilities.ParseID(body.RecordingID)
-	jobID, jobErr := utilities.ParseID(body.JobID)
-	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
-	leaseExpiresAt, expiryErr := time.Parse(time.RFC3339Nano, body.LeaseExpiresAt)
-	if planErr != nil || tenantErr != nil || spaceErr != nil || episodeErr != nil || recordingErr != nil ||
-		jobErr != nil || digestErr != nil || expiryErr != nil || body.AttemptCount <= 0 ||
-		body.FencingGeneration <= 0 || body.CaptureEpoch <= 0 || body.AfterRevision < 0 ||
-		body.WaitMilliseconds < captureplan.MinimumWait.Milliseconds() || body.WaitMilliseconds > captureplan.MaximumWait.Milliseconds() ||
-		strings.TrimSpace(body.LeaseToken) == "" {
+	if !validCapturePlanWaitNumbers(body) {
 		return captureplan.WaitInput{}, false
 	}
-	authority := captureplan.PlanAuthority{
-		PlanHandle: captureplan.PlanHandle(planHandle.String()), TenantID: tenantID, SpaceID: spaceID,
-		EpisodeID: episodeID, RecordingID: recordingID, JobID: jobID,
-		AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration,
-		CaptureEpoch: captureplane.CaptureEpoch(body.CaptureEpoch), EnvelopeDigest: digest,
+	authority, ok := capturePlanAuthority(body)
+	if !ok {
+		return captureplan.WaitInput{}, false
+	}
+	leaseExpiresAt, err := time.Parse(time.RFC3339Nano, body.LeaseExpiresAt)
+	if err != nil {
+		return captureplan.WaitInput{}, false
 	}
 	input := captureplan.NewWaitInput(
 		authority,
@@ -94,6 +84,32 @@ func recorderWorkerCapturePlanWaitInput(identity workeridentity.Identity, body r
 		time.Duration(body.WaitMilliseconds)*time.Millisecond,
 	)
 	return input, input.Validate(time.Now().UTC()) == nil
+}
+
+func validCapturePlanWaitNumbers(body recorderWorkerCapturePlanWaitBody) bool {
+	return body.AttemptCount > 0 && body.FencingGeneration > 0 && body.CaptureEpoch > 0 && body.AfterRevision >= 0 &&
+		body.WaitMilliseconds >= captureplan.MinimumWait.Milliseconds() && body.WaitMilliseconds <= captureplan.MaximumWait.Milliseconds() &&
+		strings.TrimSpace(body.LeaseToken) != ""
+}
+
+// capturePlanAuthority parses the identifiers of a capture plan wait request.
+func capturePlanAuthority(body recorderWorkerCapturePlanWaitBody) (captureplan.PlanAuthority, bool) {
+	planHandle, planErr := utilities.ParseID(body.PlanHandle)
+	tenantID, tenantErr := utilities.ParseID(body.TenantID)
+	spaceID, spaceErr := utilities.ParseID(body.SpaceID)
+	episodeID, episodeErr := utilities.ParseID(body.EpisodeID)
+	recordingID, recordingErr := utilities.ParseID(body.RecordingID)
+	jobID, jobErr := utilities.ParseID(body.JobID)
+	digest, digestErr := decodeEnvelopeDigest(body.EnvelopeDigest)
+	if planErr != nil || tenantErr != nil || spaceErr != nil || episodeErr != nil || recordingErr != nil || jobErr != nil || digestErr != nil {
+		return captureplan.PlanAuthority{}, false
+	}
+	return captureplan.PlanAuthority{
+		PlanHandle: captureplan.PlanHandle(planHandle.String()), TenantID: tenantID, SpaceID: spaceID,
+		EpisodeID: episodeID, RecordingID: recordingID, JobID: jobID,
+		AttemptCount: body.AttemptCount, FencingGeneration: body.FencingGeneration,
+		CaptureEpoch: captureplane.CaptureEpoch(body.CaptureEpoch), EnvelopeDigest: digest,
+	}, true
 }
 
 func decodeEnvelopeDigest(value string) ([]byte, error) {

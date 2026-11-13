@@ -11,6 +11,7 @@ import (
 	"github.com/q9labs/chalk/apps/api/internal/recorderfleetauthority"
 	"github.com/q9labs/chalk/apps/api/internal/recordingpipeline"
 	"github.com/q9labs/chalk/apps/api/internal/utilities"
+	"github.com/q9labs/chalk/apps/api/internal/workeridentity"
 )
 
 func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet RecorderFleetWorkerService, logger *slog.Logger) http.HandlerFunc {
@@ -26,39 +27,17 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 		if !ok {
 			return
 		}
-		if body.ReadyCapacity < 0 || len(body.Reason) > 256 || body.Resources != nil && !body.Resources.Valid(time.Now().UTC()) {
-			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid recorder pool health")
+		if message := recorderPoolHealthRejection(body); message != "" {
+			writeError(w, http.StatusBadRequest, "request.invalid", message)
 			return
 		}
-		if body.ReadyCapacity > recorderfleet.MaxWorkerSlots {
-			writeError(w, http.StatusBadRequest, "request.invalid", fmt.Sprintf("Recorder ready capacity must be between 0 and %d", recorderfleet.MaxWorkerSlots))
+		observedAt, ok := recorderWorkerOptionalTime(body.ObservedAt)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid observation time")
 			return
-		}
-		observedAt := time.Now().UTC()
-		if body.ObservedAt != "" {
-			var err error
-			observedAt, err = time.Parse(time.RFC3339Nano, body.ObservedAt)
-			if err != nil {
-				writeError(w, http.StatusBadRequest, "request.invalid", "Invalid observation time")
-				return
-			}
 		}
 		if fleet != nil {
-			observation, err := fleet.RecordWorkerObservation(request.Context(), recorderfleetauthority.WorkerObservation{
-				Identity: identity, Ready: body.ReadyCapacity > 0, AdmissionOpen: body.AdmissionOpen,
-				ReadyCapacity: body.ReadyCapacity, ObservedAt: observedAt,
-				Resources: body.Resources,
-			})
-			if err != nil {
-				writeRecorderFleetError(w, request, logger, "record_worker_observation", err)
-				return
-			}
-			logRecorderWorkerResources(request.Context(), logger, identity, observation.NodeName, observation.CurrentJobID, body.Resources)
-			writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponse{
-				Role: string(identity.Role), AdmissionOpen: observation.AdmissionOpen,
-				ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
-				ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
-			})
+			recordFleetObservation(w, request, fleet, logger, identity, body, observedAt)
 			return
 		}
 		if service == nil {
@@ -73,4 +52,33 @@ func recorderWorkerPoolHealthHandler(service RecorderWorkerService, fleet Record
 		logRecorderWorkerResources(request.Context(), logger, identity, "", "", body.Resources)
 		writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponseValue(health))
 	}
+}
+
+// recorderPoolHealthRejection names why a health report is invalid, or returns "" when it is valid.
+func recorderPoolHealthRejection(body recorderWorkerPoolHealthBody) string {
+	if body.ReadyCapacity < 0 || len(body.Reason) > 256 || body.Resources != nil && !body.Resources.Valid(time.Now().UTC()) {
+		return "Invalid recorder pool health"
+	}
+	if body.ReadyCapacity > recorderfleet.MaxWorkerSlots {
+		return fmt.Sprintf("Recorder ready capacity must be between 0 and %d", recorderfleet.MaxWorkerSlots)
+	}
+	return ""
+}
+
+func recordFleetObservation(w http.ResponseWriter, request *http.Request, fleet RecorderFleetWorkerService, logger *slog.Logger, identity workeridentity.Identity, body recorderWorkerPoolHealthBody, observedAt time.Time) {
+	observation, err := fleet.RecordWorkerObservation(request.Context(), recorderfleetauthority.WorkerObservation{
+		Identity: identity, Ready: body.ReadyCapacity > 0, AdmissionOpen: body.AdmissionOpen,
+		ReadyCapacity: body.ReadyCapacity, ObservedAt: observedAt,
+		Resources: body.Resources,
+	})
+	if err != nil {
+		writeRecorderFleetError(w, request, logger, "record_worker_observation", err)
+		return
+	}
+	logRecorderWorkerResources(request.Context(), logger, identity, observation.NodeName, observation.CurrentJobID, body.Resources)
+	writeJSON(w, http.StatusOK, recorderWorkerPoolHealthResponse{
+		Role: string(identity.Role), AdmissionOpen: observation.AdmissionOpen,
+		ReadyCapacity: observation.ReadyCapacity, Reason: strings.TrimSpace(body.Reason),
+		ObservedAt: utilities.FormatTimestamp(observation.ObservedAt), UpdatedAt: utilities.FormatTimestamp(time.Now().UTC()),
+	})
 }

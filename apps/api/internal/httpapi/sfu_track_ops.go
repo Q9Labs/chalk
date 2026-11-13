@@ -43,17 +43,9 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 			MID: track.Mid, Source: track.Source, PublicationID: track.PublicationID,
 		}
 	}
-	requiredTracks := make([]mediaplane.CloseTrack, 0, len(tracks))
-	for _, track := range tracks {
-		decision, err := publications.PrepareClose(ctx, closeInput(track))
-		if err != nil {
-			return mediaplane.CloseTracksResponse{}, err
-		}
-		// A force-closed track still needs an offer/answer exchange to
-		// retire its browser media section before a fresh publication.
-		if decision.ProviderCloseRequired || (!request.Body.Force && request.Body.SessionDescription != nil) {
-			requiredTracks = append(requiredTracks, track)
-		}
+	requiredTracks, err := prepareTrackCloses(ctx, publications, tracks, closeInput, !request.Body.Force && request.Body.SessionDescription != nil)
+	if err != nil {
+		return mediaplane.CloseTracksResponse{}, err
 	}
 	if len(requiredTracks) == 0 {
 		return mediaplane.CloseTracksResponse{Tracks: tracks}, nil
@@ -72,6 +64,22 @@ func signalSFUCloseTracks(ctx context.Context, request sfuCloseTracksEndpointReq
 	}
 	response.Tracks = tracks
 	return response, nil
+}
+
+// prepareTrackCloses registers each close with the publication registry and returns the tracks the provider must close.
+// A force-closed track still needs an offer/answer exchange to retire its browser media section before a fresh publication.
+func prepareTrackCloses(ctx context.Context, publications mediapublications.Registry, tracks []mediaplane.CloseTrack, closeInput func(mediaplane.CloseTrack) mediapublications.CloseInput, offerExchange bool) ([]mediaplane.CloseTrack, error) {
+	required := make([]mediaplane.CloseTrack, 0, len(tracks))
+	for _, track := range tracks {
+		decision, err := publications.PrepareClose(ctx, closeInput(track))
+		if err != nil {
+			return nil, err
+		}
+		if decision.ProviderCloseRequired || offerExchange {
+			required = append(required, track)
+		}
+	}
+	return required, nil
 }
 
 func listSFUPublications(ctx context.Context, request sfuPublicationsEndpointRequest, spaces SpaceService, episodeLookup EpisodeLookup, tenants TenantService, media MediaPlaneResolver, publications mediapublications.Registry) (sfuPublicationsResponse, error) {

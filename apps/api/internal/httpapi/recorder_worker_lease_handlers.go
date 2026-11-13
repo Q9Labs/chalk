@@ -92,7 +92,7 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid worker failure")
 			return
 		}
-		availableAt, ok := recorderWorkerRetryTime(body.AvailableAt)
+		availableAt, ok := recorderWorkerOptionalTime(body.AvailableAt)
 		if !ok {
 			writeError(w, http.StatusBadRequest, "request.invalid", "Invalid retry time")
 			return
@@ -116,8 +116,8 @@ func recorderWorkerFailHandler(service RecorderWorkerService, logger *slog.Logge
 	}
 }
 
-// recorderWorkerRetryTime reads the optional retry time; an empty value means retry now.
-func recorderWorkerRetryTime(value string) (time.Time, bool) {
+// recorderWorkerOptionalTime reads an optional RFC 3339 time; an empty value means now.
+func recorderWorkerOptionalTime(value string) (time.Time, bool) {
 	if value == "" {
 		return time.Now().UTC(), true
 	}
