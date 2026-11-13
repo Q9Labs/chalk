@@ -44,7 +44,7 @@ class RecordingControllerRuntime implements RecordingControllerEffects {
     this.#subscriptions.recording?.();
     this.#subscriptions.ports = null;
     this.#subscriptions.recording = null;
-    this.#store.updateRecording(EMPTY_RECORDING);
+    this.#store.update("recording", EMPTY_RECORDING);
   }
   #authorizeStart(): void {
     const snapshot = this.#store.getSnapshot();
@@ -63,7 +63,6 @@ class RecordingControllerRuntime implements RecordingControllerEffects {
     const authorized = Effect.try({ try: authorize, catch: normalizeClientError });
     return authorized.pipe(
       Effect.flatMap((authorization) => this.#connection.runCommand((ports) => execute(authorization, ports))),
-
       Effect.mapError(normalizeClientError),
     );
   }
@@ -71,7 +70,7 @@ class RecordingControllerRuntime implements RecordingControllerEffects {
     this.#subscriptions.recording?.();
     this.#subscriptions.recording = null;
     if (!ports) {
-      this.#store.updateRecording(EMPTY_RECORDING);
+      this.#store.update("recording", EMPTY_RECORDING);
       return;
     }
     this.#subscriptions.recording = ports.sync.subscribe((snapshot) => this.#observe(recordingFor(snapshot)));
@@ -79,7 +78,7 @@ class RecordingControllerRuntime implements RecordingControllerEffects {
   #observe(next: RecordingSlice): void {
     const current = this.#store.getSnapshot().recording;
     if (sameRecording(current, next)) return;
-    this.#store.updateRecording(next);
+    this.#store.update("recording", next);
   }
 }
 const EMPTY_RECORDING: RecordingSlice = Object.freeze({ current: null });
