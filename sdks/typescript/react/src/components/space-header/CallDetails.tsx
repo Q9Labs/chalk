@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
-import { cn } from "../../utils/cn";
 import { ChalkButton, ChalkCopyButton, ChalkIconButton, ChalkSegmentedControl, ChalkTooltip } from "../chalk-ui";
+import { CopyMorphIcon } from "../chalk-ui/ChalkCopyButton";
 import { useCopyText } from "../chalk-ui/useCopyText";
 import { MenuIcon } from "../chalk-ui/MenuIcon";
 import { InviteQR, canEncodeInviteQr } from "../chalk-ui/InviteQR";
@@ -135,9 +135,7 @@ export function CallDetails({
             ) : null}
             <ChalkTooltip
               trigger={
-                <span className="chalk-shell-diagnostics-copy">
-                  <ChalkCopyButton text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
-                </span>
+                <ChalkCopyButton className="chalk-shell-diagnostics-copy" text={diagnostics.map(({ label, value }) => `${label}: ${value}`).join("\n")} label="Copy diagnostics" announcement="Diagnostics copied" />
               }
             >
               Copy diagnostics
@@ -210,15 +208,7 @@ function InviteRow({ link }: { readonly link: string }) {
         <span dir="ltr" className="chalk-shell-detail-label chalk-details-invite-url">
           {displayLink(link)}
         </span>
-        <span className={cn("chalk-copy-icon", "chalk-details-invite-copy", copied && "chalk-copied")} aria-hidden="true">
-          <svg className="chalk-copy-source" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="9" width="12" height="12" rx="2" />
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-          </svg>
-          <svg className="chalk-copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        </span>
+        <CopyMorphIcon copied={copied} />
       </button>
       <span role="status" aria-live="polite" className="sr-only">
         {error ? "Could not copy. Try again." : copied ? "Link copied" : ""}

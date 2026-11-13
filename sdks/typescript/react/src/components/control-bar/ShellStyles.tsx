@@ -341,7 +341,7 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-menu-switch .chalk-switch {display:block;}
 .chalk-shell-more-group .chalk-sheet-row + .chalk-sheet-row {box-shadow: var(--elevation-divider-top);}
 .chalk-shell-sheet-end {margin-inline-start:auto;color:var(--chalk-muted-text);}
-.chalk-invite-link,.chalk-shell-detail-action,.chalk-details-row {
+.chalk-shell-detail-action,.chalk-details-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -352,21 +352,10 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
   font-size: var(--type-body);
   text-align: start;
 }
-.chalk-invite-link:hover,.chalk-shell-detail-action:hover,.chalk-shell-detail-action[aria-expanded="true"],.chalk-invite-link[data-copied="true"] {background:var(--chalk-hover);}
-.chalk-shell-detail-lead,.chalk-invite-link-lead {width:18px;display:grid;place-items:center;flex:none;color:var(--chalk-muted-text);}
-.chalk-shell-detail-label,.chalk-invite-link-label {flex:1;min-width:0;}
-.chalk-shell-detail-trail,.chalk-invite-link-end {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);}
-.chalk-invite-link[data-copied="true"] .chalk-invite-link-end {color:var(--chalk-positive);}
-.chalk-invite-link[data-variant="card"] {
-  height: 48px;
-  padding: 0 var(--space-3) 0 var(--space-4);
-  border-radius: var(--corner-2xl);
-  background: var(--chalk-hover);
-  font-weight: 500;
-}
-.chalk-invite-link[data-variant="card"]:hover {background:var(--chalk-pressed);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] {background:var(--chalk-hover);}
-.chalk-invite-link[data-variant="card"][data-copied="true"] .chalk-invite-link-label {color:var(--chalk-positive);}
+.chalk-shell-detail-action:hover,.chalk-shell-detail-action[aria-expanded="true"] {background:var(--chalk-hover);}
+.chalk-shell-detail-lead {width:18px;display:grid;place-items:center;flex:none;color:var(--chalk-muted-text);}
+.chalk-shell-detail-label {flex:1;min-width:0;}
+.chalk-shell-detail-trail {display:inline-flex;align-items:center;gap:var(--space-1);color:var(--chalk-muted-text);}
 .chalk-details .chalk-switch,.chalk-shell-report .chalk-switch {width:40px;height:24px;}
 .chalk-details .chalk-switch > span:first-child,.chalk-shell-report .chalk-switch > span:first-child {width:18px;height:18px;}
 .chalk-details .chalk-switch[aria-checked="true"] > span:first-child,.chalk-shell-report .chalk-switch[aria-checked="true"] > span:first-child {transform:translateX(16px);}
@@ -375,9 +364,8 @@ const CALL_SHELL_CSS = `.chalk-shell-dock {
 .chalk-shell-details-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-1) var(--space-3) var(--space-3);}
 .chalk-shell-details-heading h2 {font-size:var(--type-body-lg);font-weight:600;line-height:1.3;margin:0;}
 .chalk-shell-details-sub {display:flex;align-items:center;gap:var(--space-1-5);margin:var(--space-0-5) 0 0;color:var(--chalk-muted-text);font-size:var(--type-body-sm);}
-.chalk-shell-diagnostics-copy {display:flex;justify-content:flex-end;margin:calc(var(--space-1) * -1) var(--space-2) var(--space-2);}
-.chalk-shell-diagnostics-copy .chalk-copy {display:grid;place-items:center;width:32px;height:32px;border-radius:var(--corner-pill);color:var(--chalk-muted-text);transition:background-color 150ms ease-out,color 150ms ease-out;}
-.chalk-shell-diagnostics-copy .chalk-copy:hover {background:var(--chalk-hover);color:var(--chalk-text);}
+.chalk-copy.chalk-shell-diagnostics-copy {display:grid;place-items:center;width:32px;height:32px;margin:calc(var(--space-1) * -1) var(--space-2) var(--space-2) auto;border-radius:var(--corner-pill);color:var(--chalk-muted-text);transition:background-color 150ms ease-out,color 150ms ease-out;}
+.chalk-copy.chalk-shell-diagnostics-copy:hover {background:var(--chalk-hover);color:var(--chalk-text);}
 .chalk-shell-diagnostics-copy .chalk-copy-icon,.chalk-shell-diagnostics-copy .chalk-copy-icon svg {width:16px;height:16px;}
 .chalk-shell-quality {
   display: inline-flex;
@@ -489,7 +477,7 @@ ${phoneRules(`
   .chalk-shell-details-heading {padding:0 var(--space-3) var(--space-2);}
   .chalk-shell-details-heading :is(h2, .chalk-icon-button) {display:none;}
   .chalk-shell-detail-action,.chalk-details-row {min-height:48px;}
-  .chalk-shell-diagnostics-copy .chalk-copy {width:44px;height:44px;}
+  .chalk-copy.chalk-shell-diagnostics-copy {width:44px;height:44px;}
   .chalk-shell-dock .chalk-shell-leave {margin-inline-start:0;}
   .chalk-shell-dock {
     height: 52px;

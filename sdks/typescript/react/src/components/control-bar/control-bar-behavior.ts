@@ -369,15 +369,13 @@ export function useConnectedControlBarBehavior(props: ControlBarProps): Connecte
   };
 
   const requestingDevice = (["microphone", "camera"] as const).find((device) => media.local[device].state === "requesting");
-  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess) };
+  return { surfaceProps, commandError, commandSource, commandAction, requestingDevice, cardUnavailable: access.snapshot.unavailable, mediaNotice: failedMediaNotice(media.local, deviceAccess)?.message };
 }
 
-/** A device with an access card already says what is wrong, so it gets no second notice. */
-export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local"], "microphone" | "camera">, cards: Partial<Record<DeviceKind, unknown>>): string | undefined {
-  const microphone = media.microphone.state === "failed" && !cards.microphone;
-  const camera = media.camera.state === "failed" && !cards.camera;
-  if (microphone && camera) return "Microphone and camera didn’t reach the call. Turn them on to try again.";
-  if (microphone) return "Microphone didn’t reach the call. Turn it on to try again.";
-  if (camera) return "Camera didn’t reach the call. Turn it on to try again.";
+/** A device with an access card already says what is wrong, so it gets no second notice. The notice names what failed in one line; turning the devices back on is its retry. */
+export function failedMediaNotice(media: Pick<ReturnType<typeof useMedia>["local"], "microphone" | "camera">, cards: Partial<Record<DeviceKind, unknown>>): { readonly message: string; readonly devices: readonly ("microphone" | "camera")[] } | undefined {
+  const devices = (["microphone", "camera"] as const).filter((device) => media[device].state === "failed" && !cards[device]);
+  if (devices.length === 2) return { message: "Your microphone and camera didn’t reach the call.", devices };
+  if (devices[0]) return { message: `Your ${devices[0]} didn’t reach the call.`, devices };
   return undefined;
 }

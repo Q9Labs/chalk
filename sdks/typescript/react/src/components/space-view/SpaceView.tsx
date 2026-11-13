@@ -316,9 +316,23 @@ export function SpaceView({
     onDismissCommandError?.();
   };
   // A microphone or camera that failed without an access card gets one notice in the call's stack, above the dock, until it recovers or is dismissed.
-  const mediaNotice = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
+  const failedMedia = failedMediaNotice(media.local, deviceAccessSnapshot.issues);
+  const mediaNotice = failedMedia?.message;
   const [dismissedMediaNotice, setDismissedMediaNotice] = useState<string | undefined>(undefined);
-  const mediaToast: Toast[] = mediaNotice && mediaNotice !== dismissedMediaNotice ? [{ id: "media-notice", type: "error", duration: Infinity, message: mediaNotice }] : [];
+  const mediaToast: Toast[] = mediaNotice && mediaNotice !== dismissedMediaNotice ? [
+          {
+            id: "media-notice",
+            type: "error",
+            duration: Infinity,
+            message: mediaNotice,
+            action: {
+              label: "Try again",
+              onClick: () => {
+                for (const device of failedMedia?.devices ?? []) void runCommand(() => (device === "microphone" ? client.media.setMicrophoneEnabled(true) : client.media.setCameraEnabled(true)), device, "start");
+              },
+            },
+          },
+        ] : [];
   const limitToast: Toast[] = limitWarning
     ? [{ id: limitWarning.id, type: limitWarning.minutes === 1 ? "error" : "warning", duration: Infinity, message: `${limitWarning.minutes} ${limitWarning.minutes === 1 ? "minute" : "minutes"} left. ${timeLimit?.message ?? "This call is reaching its time limit."}`, action: timeLimit?.action }]
     : [];

@@ -3,7 +3,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "
 import { useSheetDrag } from "./useSheetDrag";
 export interface ChalkSheetProps {
   /** `reactions` has no scrim, so what floats over the call stays bright. */
-  readonly variant?: "default" | "details" | "panel" | "reactions" | "ready" | "stage";
+  readonly variant?: "default" | "details" | "panel" | "reactions" | "stage";
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
@@ -51,12 +51,10 @@ export function ChalkSheet({ open, onOpenChange, title, accessibleLabel, childre
             <Dialog.Popup
               ref={popup}
               {...(accessibleLabel ? { "aria-label": accessibleLabel, "aria-labelledby": undefined } : {})}
-              initialFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-part=ready-title]") : variant === "details" ? popup : undefined}
-              finalFocus={variant === "ready" ? () => container.querySelector<HTMLElement>("[data-call-link-trigger]") : undefined}
-              data-part={variant === "ready" ? "call-ready" : variant === "panel" ? "panel-card" : "sheet"}
+              initialFocus={variant === "details" ? popup : undefined}
+              data-part={variant === "panel" ? "panel-card" : "sheet"}
               data-variant={variant}
-              className={variant === "ready" ? "chalk-sheet data-[starting-style]:!translate-y-8 data-[ending-style]:!translate-y-8" : "chalk-sheet"}
-              style={variant === "ready" ? { padding: "0 var(--space-5) var(--space-12)", borderTop: "1px solid var(--chalk-line)", transitionDuration: "200ms" } : undefined}
+              className="chalk-sheet"
             >
               <div data-part="sheet-handle" data-sheet-drag className="chalk-sheet-handle" {...drag} />
               {variant !== "details" ? (

@@ -10,8 +10,8 @@ export function CallMenuStyles() {
 const CALL_MENU_CSS = `/* Every row shares one icon column and one label edge: the shared kit's row padding must not win over the menu's. */
 .chalk-details .chalk-details-row {gap:var(--space-3);padding:0 var(--space-3);}
 .chalk-details-invite-url {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.chalk-details-invite-copy {flex:none;color:var(--chalk-muted-text);transition:color .15s ease-out;}
-.chalk-details-invite:hover .chalk-details-invite-copy {color:var(--chalk-text);}
+.chalk-details-invite [data-part="copy-icon"] {flex:none;color:var(--chalk-muted-text);transition:color .15s ease-out;}
+.chalk-details-invite:hover .chalk-details-invite [data-part="copy-icon"] {color:var(--chalk-text);}
 .chalk-shell-sep {height:1px;background:var(--chalk-line-strong);margin:var(--space-1) var(--space-3);}
 .chalk-details-recording .chalk-shell-detail-lead i {width:8px;height:8px;border-radius:50%;background:var(--chalk-danger);}
 .chalk-details-recording .chalk-shell-detail-label {display:flex;align-items:baseline;gap:var(--space-2);font-weight:600;}
