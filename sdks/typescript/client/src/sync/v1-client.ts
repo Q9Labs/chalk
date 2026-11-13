@@ -658,9 +658,7 @@ export class V1SyncClient implements V1CollaborationClient {
     update();
     if (previous !== this.#health.health) this.#emit();
   }
-  async #welcome(
-    frame: ServerFrame<"welcome">,
-  ): Promise<void> {
+  async #welcome(frame: ServerFrame<"welcome">): Promise<void> {
     if (this.#phase.phase !== "recovering" || this.#recovery) throw new V1ReplicaError("unexpected welcome");
     this.#baggageHelloSocket = null;
     this.#collaborationState.acceptWelcome(frame);
@@ -698,9 +696,7 @@ export class V1SyncClient implements V1CollaborationClient {
     if (frame.mode === "snapshot") this.#ackRecovery();
     this.#emit();
   }
-  async #replay(
-    frame: ServerFrame<"replay_page">,
-  ): Promise<void> {
+  async #replay(frame: ServerFrame<"replay_page">): Promise<void> {
     const recovery = this.#requireRecovery();
     if (frame.recovery_id !== recovery.id || frame.first_revision !== this.#requireControl().revision + 1) throw new V1ReplicaError("replay page is not exact-next");
     recovery.replayEvents += frame.events.length;
@@ -715,17 +711,13 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#ackRecovery();
     this.#emit();
   }
-  #completeRecovery(
-    frame: ServerFrame<"recovery_complete">,
-  ): void {
+  #completeRecovery(frame: ServerFrame<"recovery_complete">): void {
     const recovery = this.#requireRecovery();
     if (frame.recovery_id !== recovery.id || !sameHead(this.#control, frame.head) || !sameRawHead(recovery.head, frame.head)) throw new V1ReplicaError("recovery completed at the wrong head");
     recovery.controlComplete = true;
     this.#enterLiveIfReady();
   }
-  #replaceProjection(
-    frame: ServerFrame<"projection_snapshot">,
-  ): void {
+  #replaceProjection(frame: ServerFrame<"projection_snapshot">): void {
     if (this.#phase.phase !== "recovering" && this.#phase.phase !== "live") throw new V1ReplicaError("projection snapshot arrived in the wrong phase");
     if (frame.stream === "media") {
       const previous = this.#media?.items ?? [];
@@ -745,9 +737,7 @@ export class V1SyncClient implements V1CollaborationClient {
     this.#enterLiveIfReady();
     this.#emit();
   }
-  #applyProjection(
-    frame: ServerFrame<"projection_event">,
-  ): void {
+  #applyProjection(frame: ServerFrame<"projection_event">): void {
     this.#requireLive();
     if (frame.stream === "media") {
       if (this.#acceptProjectionDuplicate(this.#media, this.#mediaEventEvidence, frame)) return;
@@ -826,16 +816,10 @@ export class V1SyncClient implements V1CollaborationClient {
     const oldest = this.#controlHeads.keys().next().value;
     if (oldest !== undefined) this.#controlHeads.delete(oldest);
   }
-  #rememberControlEvent(
-    event: ServerFrame<"event">,
-  ): void {
+  #rememberControlEvent(event: ServerFrame<"event">): void {
     rememberBoundedEvidence(this.#controlEvents, event.revision, frameSignature(event), MAX_REPLAY_EVENTS);
   }
-  #acceptProjectionDuplicate<T>(
-    projection: V1Projection<T> | null,
-    evidence: ReadonlyMap<number, string>,
-    frame: ServerFrame<"projection_event">,
-  ): boolean {
+  #acceptProjectionDuplicate<T>(projection: V1Projection<T> | null, evidence: ReadonlyMap<number, string>, frame: ServerFrame<"projection_event">): boolean {
     if (!projection || frame.projection_id !== projection.projectionId || frame.sequence > projection.sequence) return false;
     if (evidence.get(frame.sequence) !== frameSignature(frame)) throw new V1ReplicaError("conflicting or unprovable duplicate projection event");
     return true;
