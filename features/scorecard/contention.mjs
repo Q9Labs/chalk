@@ -21,7 +21,7 @@ export function contention({ lease, before, after, window, ownEpisodes = [], nod
   const drainKnown = coverage && readings.every((row) => typeof row.draining === "boolean");
   // With two nodes a missing sessions gauge on one would otherwise read as zero sessions.
   const sessionsKnown = coverage && readings.every((row) => Number.isSafeInteger(row.sessions));
-  const nodeForeign =nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
+  const nodeForeign = nodeReadouts.some((row) => row.sessions > 0 || row.allocations > 0);
   const nodeSessions = Math.max(0, ...nodeReadouts.map((row) => row.sessions));
   const zeroEvents = window ? window.length === 0 : UNAVAILABLE;
   const observedContention = !lease?.acquired || !!lease?.lost || episodes > 0 || nodeForeign || changes > 0 || readings.some((row) => row.draining);
