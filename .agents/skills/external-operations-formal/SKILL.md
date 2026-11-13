@@ -35,14 +35,14 @@ Because a source stop never gives up, `OperationsSettle` for it assumes the SFU 
 Run this, with the sync commit from the coverage record below:
 
 ```sh
-git diff --stat c85e4551d41e88db5f96d91c72c44897c6b5f50c -- apps/sync/lib/chalk_sync/external_operation_consumer.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex
+git diff --stat b1ccb1e3e2bc3996df30be70559f140d43e8d422 -- apps/sync/lib/chalk_sync/external_operation_consumer.ex apps/sync/lib/chalk_sync/stateholder/postgres/external_operation_finalizer.ex apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_planner.ex apps/sync/lib/chalk_sync/stateholder/postgres/role_transition_settlement.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/external_operation_claims.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex apps/sync/lib/chalk_sync/stateholder/postgres/sql/role_transition_planner.ex
 ```
 
 If the diff touches a function in the coverage record, read it against the model action that names that function. A change outside those functions needs no model work. Run the check anyway, because it is cheap.
 
 ## Coverage record
 
-Sync commit: `c85e4551d41e88db5f96d91c72c44897c6b5f50c`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches.
+Sync commit: `b1ccb1e3e2bc3996df30be70559f140d43e8d422`. At this commit the model was confirmed to describe the functions below. Move it forward only after you have read the covered functions at the new commit and confirmed that every model action still matches.
 
 - `Reserve`: `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex` (`reserve_transaction`, `validate_capability`) and `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` (the reservation insert with a 30-second expiry and the on-conflict overwrite that applies only to an expired row).
 - `ResendGrant`: `reserve_transaction` in `apps/sync/lib/chalk_sync/stateholder/postgres/publication_grants.ex` returns the existing row for a known operation id, whatever its status, except an open row that has expired (the lookup in `apps/sync/lib/chalk_sync/stateholder/postgres/sql/publication_grants.ex` skips it, so the insert replaces it).
