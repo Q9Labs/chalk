@@ -124,6 +124,29 @@ export function DeviceRows({ devices, locked, onNeedAccess }: { readonly devices
   );
 }
 
+/** The sheet's body: one radio group per device kind, and a speaker test when the browser lets the visitor choose a speaker. */
+function DevicesSheetBody({ devices }: { readonly devices: PreJoinDevices }) {
+  const kinds: readonly Kind[] = devices.canChooseSpeaker ? ["microphone", "camera", "speaker"] : ["microphone", "camera"];
+  return (
+    <div className="grid gap-3 px-3">
+      {kinds.map((kind) => (
+        <div key={kind} role="radiogroup" aria-label={CAPTION[kind]} className="grid">
+          <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
+          {listFor(devices, kind).list.map((device) => (
+            <DeviceOption key={device.deviceId} devices={devices} kind={kind} device={device} role="radio" onPick={() => undefined} />
+          ))}
+        </div>
+      ))}
+      {devices.canChooseSpeaker ? (
+        <button type="button" onClick={() => void devices.testSpeaker()} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--chalk-hover)] text-(length:--type-body) font-medium">
+          <VolumeHighIcon size={16} aria-hidden="true" />
+          Test speaker
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 /** On a phone the three pickers share one row that opens a sheet. */
 export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly devices: PreJoinDevices; readonly locked: boolean; readonly onNeedAccess: () => void }) {
   const [open, setOpen] = useState(false);
@@ -138,25 +161,7 @@ export function DevicesSheetRow({ devices, locked, onNeedAccess }: { readonly de
       </button>
       {open ? (
         <BottomSheet label="Devices" onClose={() => setOpen(false)}>
-          <div className="grid gap-3 px-3">
-            {(["microphone", "camera", ...(devices.canChooseSpeaker ? (["speaker"] as const) : [])] as const).map((kind) => {
-              const { list } = listFor(devices, kind);
-              return (
-                <div key={kind} role="radiogroup" aria-label={CAPTION[kind]} className="grid">
-                  <p className="px-3 pb-1 pt-2 text-(length:--type-caption) font-semibold text-[var(--chalk-muted-text)]">{CAPTION[kind]}</p>
-                  {list.map((device) => (
-                    <DeviceOption key={device.deviceId} devices={devices} kind={kind} device={device} role="radio" onPick={() => undefined} />
-                  ))}
-                </div>
-              );
-            })}
-            {devices.canChooseSpeaker ? (
-              <button type="button" onClick={() => void devices.testSpeaker()} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-[var(--chalk-hover)] text-(length:--type-body) font-medium">
-                <VolumeHighIcon size={16} aria-hidden="true" />
-                Test speaker
-              </button>
-            ) : null}
-          </div>
+          <DevicesSheetBody devices={devices} />
         </BottomSheet>
       ) : null}
     </div>
