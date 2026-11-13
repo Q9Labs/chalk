@@ -69,8 +69,8 @@ export class FixtureMediaClient {
   getSnapshot = () => this.#snapshot;
   subscribe = (listener: () => void) => (this.#listeners.add(listener), () => this.#listeners.delete(listener));
 
-  // This consumer checks the packed SDK's published sources; shared tab audio is
-  // proved by scripts/dev/share-audio-proof.mjs, so the fake doesn't send it.
+  // This consumer checks the packed SDK's published sources; shared tab audio
+  // needs a real tab capture, so the fake doesn't send it.
   prepareLocalTrack(source: MediaPublicationSource, track: MediaStreamTrack): void {
     if (source === "screen_audio") return;
     this.#prepareSource(source, track);
