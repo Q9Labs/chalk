@@ -1,4 +1,5 @@
 import { ChalkAPIError, errorCode, requestId } from "./errors.js";
+import { MEDIA_PROVIDERS, MEDIA_PROVIDERS_HEADER } from "../urls.js";
 import type { ChalkIdempotencyOptions, ChalkServerClientOptions } from "./types.js";
 
 type RetryMode = "never" | "always" | "caller_idempotency";
@@ -104,7 +105,7 @@ function requestHeaders(options: ChalkServerClientOptions, apiKey: string, hasBo
   setOptionalHeader(headers, "idempotency-key", idempotencyKeyValue);
   headers.set("authorization", `Bearer ${apiKey}`);
   // The API binds an Episode to the own SFU only for an SDK that declares it.
-  headers.set("x-chalk-media-providers", "cloudflare_sfu,chalk_sfu");
+  headers.set(MEDIA_PROVIDERS_HEADER, MEDIA_PROVIDERS);
   return headers;
 }
 

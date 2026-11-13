@@ -115,6 +115,8 @@ export type MediaControllerEffects = {
     }>,
   ) => void;
   readonly setMicrophoneEnabled: (enabled: boolean) => ClientEffect<void>;
+  /** True once if the person turned their own microphone off since the last call, so a call event doesn't call it a host mute. */
+  readonly consumeOwnMicrophoneOff: () => boolean;
   readonly setCameraEnabled: (enabled: boolean) => ClientEffect<void>;
   /** Borrows the current camera or captures privately. The caller must release the preview. */
   readonly captureCameraPreview: () => ClientEffect<CameraPreview>;
@@ -195,6 +197,7 @@ class MediaControllerRuntime implements MediaControllerEffects {
   #microphoneWatch: { readonly track: MediaStreamTrack; readonly unsubscribe: () => void } | null = null;
   readonly #projection: MediaProjectionMonitor;
   #microphoneMutedByOtherDevice = false;
+  #ownMicrophoneOff = false;
   constructor(connection: ConnectionLifecycleCapability, store: SpaceStore, selection: MediaDeviceSelection, gates: ReadonlyMap<MediaSource, Semaphore.Semaphore>, now: () => number, fork: Fork) {
     this.#connection = connection;
     this.#store = store;
@@ -227,8 +230,14 @@ class MediaControllerRuntime implements MediaControllerEffects {
     if (intent.camera !== undefined) this.#recordIntent("camera", intent.camera);
   }
   observeAudioElement = (track: MediaStreamTrack, element: HTMLAudioElement): { played(result: unknown): void; detach(): void } => this.#ports?.media.observeAudioElement?.(track, element) ?? { played: () => {}, detach: () => {} };
+  consumeOwnMicrophoneOff = (): boolean => {
+    const own = this.#ownMicrophoneOff;
+    this.#ownMicrophoneOff = false;
+    return own;
+  };
   setMicrophoneEnabled = (enabled: boolean): ClientEffect<void> =>
     Effect.sync(() => {
+      if (!enabled && this.#store.getSnapshot().media.local.microphone.state === "enabled") this.#ownMicrophoneOff = true;
       this.#microphoneMutedByOtherDevice = false;
       this.#publish();
     }).pipe(Effect.andThen(this.#set("microphone", enabled)));

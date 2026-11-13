@@ -161,7 +161,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         );
         yield* Effect.promise(() => enteredQueue);
         platform.emitSync({ ...live, connection: { phase: "live", noticeUnresponsive: true } });
-        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "unresponsive" } })));
         const noticeDuringAction = lifecycle.getSnapshot();
         release();
         yield* Fiber.join(pendingAction);
@@ -173,7 +173,7 @@ describe("ConnectionLifecycle Episode snapshot", () => {
         expect(syncCreations).toBe(1);
         expect(lifecycle.getSnapshot()).toMatchObject({ state: "live", connection: { sync: "recovering" } });
         platform.emitSync({ ...live, connection: { phase: "live" } });
-        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
+        yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot().connection.sync).toBe("healthy")));
         expect(lifecycle.getSnapshot().state).toBe("live");
         expect(syncCreations).toBe(1);
         expect(mediaRestarts).toBe(0);
@@ -761,8 +761,7 @@ it("fails a late entry timeout as retryable without reconnecting the expired sea
     Effect.gen(function* () {
       yield* lifecycle.join();
       platform.emitSync({ ...platform.sync.getSnapshot(), connection: { phase: "terminal", terminalReason: "entry_timeout" } });
-      yield* Effect.sleep("20 millis");
-      expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "sync_start_failed", recoverable: true } });
+      yield* Effect.promise(() => vi.waitFor(() => expect(lifecycle.getSnapshot()).toMatchObject({ state: "failed", failure: { code: "sync_start_failed", recoverable: true } })));
       expect(syncClients).toBe(1);
     }),
   );

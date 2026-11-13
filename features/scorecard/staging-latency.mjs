@@ -114,8 +114,11 @@ async function measure() {
     const directory = resolve(".private/prod-proof", runId);
     let status = 1;
     // Do not add load to an already busy or unobservable node.
-    const nodeIdle = nodeBefore.length === 1 && nodeBefore.every((row) => Number.isFinite(row.host?.stealPercent) && row.sessions === 0 && row.draining === false);
-    if (before.events && before.events.length === 0 && nodeIdle) {
+    // Staging runs a primary and a standby, so every reporting node must be idle, not one node alone.
+    const nodeIdle = nodeBefore.length > 0 && nodeBefore.every((row) => Number.isFinite(row.host?.stealPercent) && row.sessions === 0 && row.draining === false);
+    const workloadRuns = before.events && before.events.length === 0 && nodeIdle;
+    if (!workloadRuns) console.log("No workload started: the API log or a staging node was not idle before load.");
+    if (workloadRuns) {
       await appendFile(".private/proof-run-ids", `${runId}\n`);
       // Keep timeout and the kit in the lease's process group so lease loss stops both.
       const measurementEnv = { ...process.env, CHALK_PROOF_RUN_ID: runId };
@@ -133,7 +136,8 @@ async function measure() {
     // Include joins while the preflight queries ran, not just events after the kit began.
     const window = await logs(before.end, end);
     const after = await logs(end, Date.now());
-    const [nodeWindowResult, nodeAfterResult] = await Promise.all([nodeMetrics(start, end), nodeMetrics(end, Date.now())]);
+    // A skipped workload leaves a zero-width window, which Axiom rejects with HTTP 400.
+    const [nodeWindowResult, nodeAfterResult] = await Promise.all([workloadRuns ? nodeMetrics(start, end) : [], nodeMetrics(end, Date.now())]);
     const nodeWindow = nodeWindowResult ?? [];
     const nodeAfter = nodeAfterResult ?? [];
     const card = await json(resolve(directory, "scorecard-chalk_sfu.json"), await emptyCard());

@@ -1,6 +1,6 @@
 # Own-SFU nodes
 
-This root applies the [SFU node module](../../features/media/sfu/infra) once per environment, staging and production, each with its own state. Real addresses, state settings and certificates stay outside Git, in `~/.config/chalk-sfu/<env>` and 1Password.
+This root applies the [SFU node module](node) once per environment, staging and production, each with its own state. Real addresses, state settings and certificates stay outside Git, in `~/.config/chalk-sfu/<env>` and 1Password.
 
 ## Build or rebuild a node
 
@@ -14,10 +14,10 @@ This root applies the [SFU node module](../../features/media/sfu/infra) once per
    tofu -chdir=infrastructure/sfu output -raw public_ip
    ```
 
-3. Issue certificates once per environment (`deploy/certs staging ca`, then `deploy/certs staging server`), then deploy:
+3. Issue certificates once per environment (`certs staging ca`, then `certs staging server`), then deploy:
 
    ```sh
-   SFU_SSH_KEY=~/.ssh/chalk-sfu-operator_ed25519 features/media/sfu/deploy/deploy staging "$(cat ~/.config/chalk-sfu/staging/address)"
+   SFU_SSH_KEY=~/.ssh/chalk-sfu-operator_ed25519 infrastructure/sfu/deploy staging "$(cat ~/.config/chalk-sfu/staging/address)"
    ```
 
 To change `control_addresses` or `ssh_addresses`, widen first and narrow second. The cloud firewall and the node's own firewall both filter SSH, and only a deploy run brings the node's firewall into line, so a straight swap locks out both: the cloud firewall drops the old address while the node's firewall still drops the new one, and no run can reach the node to fix it.
@@ -34,7 +34,7 @@ The SFU decodes requests strictly, so a field the API adds is refused as `400 in
 
 ## Connect the API
 
-The API reaches a node with its provider-bridge certificate, reissued by `deploy/certs <env> api <key> <certificate>` so it carries the identity the SFU requires. Add the service CA to the bridge's two CA bundles, so Sync and the recorder controllers still verify the reissued certificate. The `CHALK_SFU_*` settings (listed in `apps/api/internal/config/config.go`, with examples in `infrastructure/managed-episode/env/api.env.example`) then enable it.
+The API reaches a node with its provider-bridge certificate, reissued by `certs <env> api <key> <certificate>` so it carries the identity the SFU requires. Add the service CA to the bridge's two CA bundles, so Sync and the recorder controllers still verify the reissued certificate. The `CHALK_SFU_*` settings (listed in `apps/api/internal/config/config.go`, with examples in `infrastructure/managed-episode/env/api.env.example`) then enable it.
 
 - `CHALK_SFU_NODES` lists nodes in placement order. A bare `id=url` is a primary; `standby:id=url` takes a new Episode only when every primary is silent, draining, host-guard closed or full, and is held to `CHALK_SFU_STANDBY_PACKET_BUDGET`. At least one node must be a primary.
 - `CHALK_SFU_CAPTURE_ENABLED` lets the recorder pull from nodes through capture sessions and needs `CHALK_SFU_ENABLED=true`. While off, an Episode bound to `chalk_sfu` refuses to start a Recording. It also needs the recorder fleet (`CHALK_RECORDING_ENABLED=true` and the private provider bridge), because the API registers the own-SFU capture provider only when it builds the fleet. Nightly runs with it on; keep it off in production until M10 recording parity passes.
@@ -108,9 +108,17 @@ Every call on a node is a canary call, so the node's metrics are the cohort view
 
 `features/media/sfu/scripts/bench/bench up|status|down|reap` makes the two nodes the multi-node proofs need and deletes them the same day (a `s-2vcpu-2gb` primary and a `s-1vcpu-1gb` standby, about $0.04 an hour together). It uses the production path (cloud-init template, `deploy/certs`, `deploy/deploy` with the `bench` environment), so the nodes run the production image. Run it from a clean checkout, because `deploy` builds the committed revision. `features/media/sfu/scripts/bench/faults` runs the node-level fault cases against the real SFU processes (about 25 minutes, a few cents). Its cases open sessions and reserves without a WebRTC peer, so they prove admission, drain and restart behavior, not media recovery. The script headers document the commands and flags.
 
-- Every fleet Droplet carries the tag `chalk-sfu-bench` in `sgp1`. Control (TCP 8443) and SSH accept only this machine's public IPv4 address (`BENCH_CONTROL_ADDRESSES` adds sources); the media port stays open like production.
+- Every fleet Droplet carries the tag `chalk-sfu-bench` in `sgp1`. Control (TCP, the port in `features/media/sfu/internal/config/node.json`) and SSH accept only this machine's public IPv4 address (`BENCH_CONTROL_ADDRESSES` adds sources); the media port stays open like production.
 - Each run issues a fresh CA, server certificate and one-day client certificate into `~/.config/chalk-sfu/bench`, and `down` deletes the directory. Nothing goes to Git or 1Password.
 - `up` deletes the fleet itself if any step fails. `down` exits 1 if a fleet Droplet remains; a foreign Droplet wearing the tag is left alone and reported with exit 3.
 - `reap [hours]` (default 3) deletes Droplets older than the age whose name starts `chalk-sfu-bench` **or** that carry the tag, in any region, including legacy load generators. Names starting `chalk-sfu-staging` or `chalk-sfu-production` are never selected. Use `--dry-run` first and `--exclude <droplet id>` to skip one.
 
 The [SFU bench reaper workflow](../../.github/workflows/sfu-bench-reaper.yml) runs `bench reap 4` hourly and on manual dispatch, using the `nightly` Environment's `DIGITALOCEAN_ACCESS_TOKEN`. For a longer soak, tag the Droplet `keep-until-<unix-seconds>`; the reaper skips it only while a well-formed expiry is in the future, so the tag never grants a permanent exemption. A stopped Droplet still bills, so never power one off to save money: delete it.
+
+## Deploy script
+
+- `certs <staging|production> <ca|server|api|operator>` issues certificates from the environment's service CA. The CA key lives in 1Password and issued files go to `~/.config/chalk-sfu/<env>`, never into Git. The API certificate carries `spiffe://chalkmeet.com/environment/<env>/api` with client auth. Rotate by issuing again and redeploying.
+- Metrics export needs `~/.config/chalk-sfu/<env>/otlp-headers` holding the `OTEL_EXPORTER_OTLP_METRICS_HEADERS` value (an ingest-only token, kept in 1Password). Deploy installs it as the Podman secret `chalk-sfu-otlp-headers`. Without the file, deploy warns and the node exports nothing.
+- Log export needs `~/.config/chalk-sfu/<env>/otlp-log-headers`, holding the `OTEL_EXPORTER_OTLP_LOGS_HEADERS` value for the API's log dataset, in the same form as `otlp-headers`. Deploy installs it as the Podman secret `chalk-sfu-otlp-log-headers`. Without the file, deploy warns and the node logs to the journal only.
+- `deploy <staging|production> <node address> [--force|--firewall-only]` aligns the node's ufw with its cloud firewall, builds the image at the current commit, installs certificates as Podman secrets, renders settings for the node's size (packet budget, steal limit, `GOMEMLIMIT` and container memory by node size; the table is `features/media/sfu/internal/config/node.json`, with its reasoning in [capacity calibration](../../docs/sfu/capacity-calibration.md)), drains the running node until it reports zero `allocations` and `cleanupDebt`, restarts it and checks `/readyz` through an SSH tunnel. If `SFU_DRAIN_TIMEOUT` (default 3600 seconds) ends first, deploy undrains and exits, because a restart then would cut live calls; `--force` accepts that. It fails when the granted receive buffer is below 8 MiB. Running it twice converges.
+- A node running a build from before #951 counts standing source leases as allocations, so its drain never reaches zero. Run `deploy <environment> <node address> --force` once, when no live call needs the node. To undo, redeploy the previous image with `--force`.

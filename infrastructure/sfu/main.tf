@@ -1,7 +1,7 @@
 # One own-SFU node per environment. Run this root once per environment, each
 # with its own backend.hcl and tfvars.
 module "node" {
-  source = "../../features/media/sfu/infra"
+  source = "./node"
 
   environment       = var.environment
   size              = var.size

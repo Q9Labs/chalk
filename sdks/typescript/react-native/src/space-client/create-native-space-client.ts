@@ -15,7 +15,7 @@ import {
   type ReactNativeWebSocketConstructor,
   type ReactNativeAsyncStorage,
 } from "@q9labsai/chalk-client";
-import { createSpaceClientForPlatform, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
+import { createSpaceClientForPlatform, DEFAULT_API_BASE_URL, defaultSyncUrl, type SpaceClientPlatform } from "@q9labsai/chalk-client/effect";
 import type { SpaceClient } from "@q9labsai/chalk-client";
 import { RTCPeerConnection, mediaDevices } from "@cloudflare/react-native-webrtc";
 import { AppState } from "react-native";
@@ -55,7 +55,7 @@ export function createNativeSpaceClient(options: NativeSpaceClientOptions): Spac
   const session = installNativeSession();
   const { storage } = options;
   const syncDialTimeoutMs = options.syncStartupTimeoutMs ?? 30000;
-  const apiBaseURL = options.baseUrl ?? "https://api.chalkmeet.com";
+  const apiBaseURL = options.baseUrl ?? DEFAULT_API_BASE_URL;
   const syncURL = options.syncUrl ?? defaultSyncUrl(apiBaseURL);
   const fetch = globalThis.fetch;
   const lifecycle = createReactNativeSyncLifecycle({ appState: AppState });

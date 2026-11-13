@@ -1,3 +1,4 @@
+import { WHITEBOARD_PATH } from "../urls";
 import { ChalkWhiteboardViewVersions } from "./view-versions";
 import { scheduleSyncDialDeadline } from "../sync/dial-deadline";
 import { sessionBaggage } from "../session";
@@ -1510,7 +1511,7 @@ function rejectDeferred<T>(deferred: Deferred<T>, value: unknown): void {
 
 function assertWhiteboardV1Url(url: string): void {
   const parsed = new URL(url);
-  if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:") || parsed.pathname !== "/v1/whiteboard") {
+  if ((parsed.protocol !== "ws:" && parsed.protocol !== "wss:") || parsed.pathname !== WHITEBOARD_PATH) {
     throw new TypeError("whiteboard-v1 URL must use ws(s) and the /v1/whiteboard route");
   }
 }

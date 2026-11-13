@@ -1,6 +1,7 @@
 package chalksfu
 
 import (
+	"github.com/q9labs/chalk/features/media/sfu/protocol"
 	"strings"
 	"sync"
 	"testing"
@@ -41,7 +42,8 @@ func poolOf(standbyBudget int, nodes []runtimeconfig.ChalkSFUNode, answers map[s
 			fleet.verdicts[id] = verdictCompatible
 			continue
 		}
-		reply := wireReady{Protocol: minNodeProtocol, NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode, Draining: a.draining}
+		reply := protocol.ReadyResponse{Protocol: minNodeProtocol, NodeIncarnation: "boot-" + id, PacketBudget: a.budget, ReservedPackets: a.reserved, NewEpisodePackets: testEpisode}
+		reply.Draining = a.draining
 		reply.Host.AdmissionReason = a.guard
 		at := time.Now()
 		if a.stale {
@@ -167,7 +169,7 @@ func TestPlaceKeepsAnEpisodeInFlightAcrossAProbeThatDoesNotShowIt(t *testing.T) 
 	}
 	// A fresh probe replaces the load record with the same room: the Episode has not joined.
 	fleet.mu.Lock()
-	fleet.loads["p"] = fleet.loadOf("p", wireReady{Protocol: minNodeProtocol, PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
+	fleet.loads["p"] = fleet.loadOf("p", protocol.ReadyResponse{Protocol: minNodeProtocol, PacketBudget: oneSlot.budget, ReservedPackets: oneSlot.reserved, NewEpisodePackets: testEpisode}, time.Now())
 	fleet.mu.Unlock()
 	if placed, room := fleet.Place(); room || placed.Reason != mediaplane.PlacementOverflowNoRoom {
 		t.Fatalf("after a probe that does not show the Episode: placed %+v with room %t, want the slot still taken", placed, room)
@@ -209,6 +211,23 @@ func TestNewFleetNeedsAPrimary(t *testing.T) {
 	_, err := NewFleet(runtimeconfig.ChalkSFUConfig{Nodes: []runtimeconfig.ChalkSFUNode{standby("s")}}, nil)
 	if err == nil {
 		t.Fatal("a pool of standbys alone was accepted")
+	}
+}
+
+// A call waits for this window before recovery starts, and the failover target of 10 s leaves
+// detection at most three seconds. A node that answered 2.5 s ago is still present; one that
+// answered 3.5 s ago is lost. The previous 2 s interval made the window six seconds.
+func TestASilentNodeIsLostWithinThreeSeconds(t *testing.T) {
+	fleet := poolOf(testStandbyBudget, []runtimeconfig.ChalkSFUNode{primary("p")}, map[string]*answer{"p": ready(testPrimaryBudget, 0)})
+	allocation := mediaplane.Allocation{Node: "p", Incarnation: "boot-p"}
+	for _, c := range []struct {
+		age  time.Duration
+		lost bool
+	}{{2500 * time.Millisecond, false}, {3500 * time.Millisecond, true}} {
+		fleet.seen["p"] = sighting{at: time.Now().Add(-c.age), incarnation: "boot-p"}
+		if got, lost := fleet.Lost(allocation); lost != c.lost {
+			t.Errorf("last answer %v ago: lost %v (%q), want %v", c.age, lost, got, c.lost)
+		}
 	}
 }
 

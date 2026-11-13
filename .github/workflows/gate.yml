@@ -11,6 +11,11 @@ name: Gate
 # A draft pull request runs no job: a draft cannot merge, so the required checks have nothing to report on it. Marking it
 # ready starts the Gate (ready_for_review), and so does every later push. Select gate jobs is the only job that decides
 # this; every job below stands down when it was skipped.
+#
+# Runner: a merge group or a manual run uses the label in the repository variable CHALK_GATE_RUNNER (or the manual run's
+# runner input) for every job, and the hosted runners when both are empty. This file sends no pull request job to that
+# label. A pull request can change this file, so what keeps fork code off our machines is the setting that holds fork
+# runs for approval and the rule of whoever serves the label (see the pull request that added this block), not this text.
 
 on:
   pull_request:
@@ -21,6 +26,11 @@ on:
     # daily vulnerability scan, not unrelated pull requests.
     - cron: "17 1 * * 1"
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner label for every job of this run, such as instabox. Empty uses CHALK_GATE_RUNNER, then the hosted runners.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -33,6 +43,8 @@ concurrency:
 
 env:
   CI: "true"
+  # setup-beam reads the image name from ImageOS. The hosted ubuntu-24.04 runner sets the same value; a self-hosted runner sets none.
+  ImageOS: ubuntu24
   # A registry that answers 500 for a moment must not fail a job: pnpm retries its fetches longer than its default of two.
   PNPM_CONFIG_FETCH_RETRIES: "5"
   PNPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "10000"
@@ -41,20 +53,49 @@ jobs:
   changes:
     name: Select gate jobs
     if: github.event.pull_request.draft != true
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
+    timeout-minutes: 10
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: read
     outputs:
       api: ${{ steps.select.outputs.api }}
       sync: ${{ steps.select.outputs.sync }}
       root_groups: ${{ steps.select.outputs.root_groups }}
       full: ${{ steps.select.outputs.full }}
+      fatal: ${{ steps.select.outputs.fatal }}
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
+      # A fetch that stalls on GitHub's side would hold the job until its timeout (one merge group lost 27 minutes that way).
+      # The first attempt fails after 3 minutes without failing the job; the second attempt is the same checkout again.
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+
+      - name: Check out source again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
         with:
           fetch-depth: 0
 
@@ -96,16 +137,20 @@ jobs:
           cat "${GITHUB_OUTPUT}"
 
   # Jobs narrow a pull request only when Select gate jobs succeeded and reported full=false. A failed job can still
-  # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded.
+  # export outputs it wrote before failing, so every job below runs in full unless the selection succeeded. The one
+  # exception is fatal=true, a gate task with no register entry: every lane would fail on the same error, so no lane runs
+  # and Root gate reports it.
   root-lanes:
     name: Root ${{ matrix.group }}
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-24.04
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' }}
+    # The sfu lane stays on the hosted runner for now: TestViewerWithoutTWCCStepsDownOnALossyLink (features/media/sfu/tests/no_twcc_test.go)
+    # failed 3 of 6 runs on Instabox 4x8 and passes on the hosted image. The test runs unchanged; the lane goes back to the shared runner once it passes there.
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && matrix.group != 'sfu' && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: write
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
     timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
@@ -120,14 +165,40 @@ jobs:
         group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       # A queue group compares with the exact commit it was built on, so an advisory that master already had does not block it.
       GATE_OSV_BASE_COMMIT: ${{ github.event.merge_group.base_sha || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "4"
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+        with:
+          fetch-depth: 0
+
+      - name: Check out source again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
         with:
           fetch-depth: 0
 
@@ -188,6 +259,13 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
+
+      # The Sync model check (formal-sync) needs Java. The hosted image has it; the Instabox snapshot does not.
+      - name: Install Java for the Sync model check
+        if: matrix.group == 'checks' && runner.environment == 'self-hosted'
+        uses: ./.github/actions/apt-install
+        with:
+          packages: default-jre-headless
 
       # The recorder lane runs scripts/recorder/gate.sh, which needs tofu.
       - name: Set up OpenTofu
@@ -279,11 +357,19 @@ jobs:
     name: Root gate
     needs: [changes, root-lanes]
     if: ${{ always() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
+    timeout-minutes: 10
     steps:
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+
+      - name: Check out source again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
 
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
@@ -291,7 +377,7 @@ jobs:
           node-version-file: .tool-versions
 
       - name: Download leak shard reports
-        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: call-leaks-*
@@ -299,7 +385,7 @@ jobs:
           merge-multiple: true
 
       - name: Require complete leak journey coverage
-        if: needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-')
+        if: needs.changes.outputs.fatal != 'true' && (needs.changes.result != 'success' || contains(needs.changes.outputs.root_groups || '', 'call-leaks-'))
         env:
           LEAK_GROUPS: ${{ needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["call-leaks-1", "call-leaks-2", "call-leaks-3"]' }}
           ROOT_LANES_RESULT: ${{ needs.root-lanes.result }}
@@ -321,22 +407,53 @@ jobs:
       - name: Require every root lane group to pass
         run: |
           echo "Select gate jobs: ${{ needs.changes.result }}; root lane groups: ${{ needs.root-lanes.result }}"
+          if [[ "${{ needs.changes.outputs.fatal }}" == "true" ]]; then echo "::error::A gate task has no entry in scripts/gates/checks.json, so no lane ran. See the Select gate jobs log."; fi
           [[ "${{ needs.root-lanes.result }}" == "success" ]]
 
   api:
     name: API gate
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' && (needs.changes.outputs.api == 'true' || needs.changes.result != 'success') }}
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       # A cached Go test result would not see migration or database changes.
       GOFLAGS: -buildvcs=false -count=1
+    permissions:
+      contents: read
+      actions: write
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+        with:
+          # The vulnerability check compares a pull request with its merge base.
+          fetch-depth: 0
+
+      - name: Check out source again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
         with:
           # The vulnerability check compares a pull request with its merge base.
           fetch-depth: 0
@@ -386,20 +503,47 @@ jobs:
   sync-parts:
     name: Sync ${{ matrix.part }}
     needs: changes
-    if: ${{ !cancelled() && needs.changes.result != 'skipped' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
-    runs-on: ubuntu-24.04
+    if: ${{ !cancelled() && needs.changes.result != 'skipped' && needs.changes.outputs.fatal != 'true' && (needs.changes.outputs.sync == 'true' || needs.changes.result != 'success') }}
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         part: [server, clients]
     env:
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       VITEST_MAX_WORKERS: "4"
+    permissions:
+      contents: read
+      actions: write
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone (or recreated at another commit) cancels the whole run, so its
+      # queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          advertised="$(timeout 30 git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}")" || status=$?
+          # A lookup error or a lookup that takes over 30 seconds keeps the job running. A missing branch, or one recreated at another commit, is a destroyed group.
+          [[ "${status}" == 0 || "${status}" == 2 ]] || echo "::notice::The merge group lookup ended with status ${status}, so run ${GITHUB_RUN_ID} keeps running."
+          [[ "${status}" == 2 || ( "${status}" == 0 && "${advertised%%[[:space:]]*}" != "${GITHUB_SHA}" ) ]] || exit 0
+          echo "::notice::The merge group ${GITHUB_REF} at ${GITHUB_SHA} is gone, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS --max-time 30 --retry 3 --retry-all-errors -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+
+      - name: Check out source again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
 
       - name: Set up pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
@@ -463,7 +607,7 @@ jobs:
     name: Sync gate
     needs: [changes, sync-parts]
     if: ${{ always() && needs.changes.result != 'skipped' }}
-    runs-on: ubuntu-slim
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
     timeout-minutes: 5
     steps:
       - name: Require every Sync part to pass
@@ -476,11 +620,20 @@ jobs:
     name: Gate proof
     needs: [changes, root-lanes, api, sync]
     if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.changes.result == 'success' && needs.root-lanes.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.api.result) && contains(fromJSON('["success", "skipped"]'), needs.sync.result) }}
-    runs-on: ubuntu-slim
-    timeout-minutes: 5
+    runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-slim' }}
+    timeout-minutes: 10
     steps:
       - name: Check out the merged commit
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
+        continue-on-error: true
+        with:
+          fetch-depth: 2
+      - name: Check out the merged commit again after a stalled fetch
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        timeout-minutes: 3
         with:
           fetch-depth: 2
 
