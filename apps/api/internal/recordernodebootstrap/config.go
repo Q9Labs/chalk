@@ -41,28 +41,52 @@ func LoadRenewalConfig(nodeEnvironmentFile, imageEnvironmentFile string) (Config
 	return loadConfig(nodeEnvironmentFile, imageEnvironmentFile, false)
 }
 
-func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAttestation bool) (Config, error) {
-	bootstrap, err := readEnvironmentFile(bootstrapEnvironmentFile, map[string]struct{}{
-		"CHALK_RECORDER_ENVIRONMENT": {}, "CHALK_RECORDER_POOL": {}, "CHALK_RECORDER_RELEASE": {},
-		"CHALK_RECORDER_IMAGE_DIGEST": {}, "CHALK_RECORDER_BOOTSTRAP_ENDPOINT": {},
-		"CHALK_RECORDER_BOOT_GENERATION": {}, "CHALK_RECORDER_GPU": {},
-		"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE": {},
-	})
-	if err != nil {
-		return Config{}, err
-	}
-	image, err := readEnvironmentFile(imageEnvironmentFile, map[string]struct{}{
-		"CHALK_RECORDER_IMAGE_GPU":            {},
-		"CHALK_RECORDER_INSTALLED_RELEASE_ID": {}, "CHALK_RECORDER_INSTALLED_IMAGE_DIGEST": {},
-		"CHALK_RECORDER_IMAGE_MANIFEST":    {},
-		"CHALK_RECORDER_BOOTSTRAP_CA_FILE": {}, "CHALK_RECORDER_BOOTSTRAP_SERVER_NAME": {},
-		"CHALK_RECORDER_IDENTITY_DIRECTORY": {}, "CHALK_RECORDER_WORKER_ENV_FILE": {},
-		"CHALK_RECORDER_NODE_ENV_FILE": {},
-	})
-	if err != nil {
-		return Config{}, err
-	}
+var bootstrapEnvironmentKeys = map[string]struct{}{
+	"CHALK_RECORDER_ENVIRONMENT": {}, "CHALK_RECORDER_POOL": {}, "CHALK_RECORDER_RELEASE": {},
+	"CHALK_RECORDER_IMAGE_DIGEST": {}, "CHALK_RECORDER_BOOTSTRAP_ENDPOINT": {},
+	"CHALK_RECORDER_BOOT_GENERATION": {}, "CHALK_RECORDER_GPU": {},
+	"CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE": {},
+}
 
+var imageEnvironmentKeys = map[string]struct{}{
+	"CHALK_RECORDER_IMAGE_GPU":            {},
+	"CHALK_RECORDER_INSTALLED_RELEASE_ID": {}, "CHALK_RECORDER_INSTALLED_IMAGE_DIGEST": {},
+	"CHALK_RECORDER_IMAGE_MANIFEST":    {},
+	"CHALK_RECORDER_BOOTSTRAP_CA_FILE": {}, "CHALK_RECORDER_BOOTSTRAP_SERVER_NAME": {},
+	"CHALK_RECORDER_IDENTITY_DIRECTORY": {}, "CHALK_RECORDER_WORKER_ENV_FILE": {},
+	"CHALK_RECORDER_NODE_ENV_FILE": {},
+}
+
+func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAttestation bool) (Config, error) {
+	bootstrap, err := readEnvironmentFile(bootstrapEnvironmentFile, bootstrapEnvironmentKeys)
+	if err != nil {
+		return Config{}, err
+	}
+	image, err := readEnvironmentFile(imageEnvironmentFile, imageEnvironmentKeys)
+	if err != nil {
+		return Config{}, err
+	}
+	config, err := configFromEnvironment(bootstrap, image)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := config.Validate(); err != nil {
+		return Config{}, err
+	}
+	if bootstrap["CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE"] != "external-reconciler" {
+		return Config{}, fmt.Errorf("%w: bootstrap authority", ErrInvalidConfig)
+	}
+	if verifyAttestation {
+		if err := verifyInstalledImage(config); err != nil {
+			return Config{}, err
+		}
+	}
+	return config, nil
+}
+
+// configFromEnvironment checks that the bootstrap and image files describe the
+// same CPU image, then merges them into one Config.
+func configFromEnvironment(bootstrap, image map[string]string) (Config, error) {
 	bootGeneration, err := strconv.ParseUint(bootstrap["CHALK_RECORDER_BOOT_GENERATION"], 10, 64)
 	if err != nil || bootGeneration == 0 {
 		return Config{}, fmt.Errorf("%w: boot generation", ErrInvalidConfig)
@@ -79,7 +103,7 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 	if role != workeridentity.RoleCapture && role != workeridentity.RoleRender || gpu {
 		return Config{}, fmt.Errorf("%w: this image requires a CPU recorder release", ErrInvalidConfig)
 	}
-	config := Config{
+	return Config{
 		Environment: bootstrap["CHALK_RECORDER_ENVIRONMENT"], Role: role,
 		ReleaseID: bootstrap["CHALK_RECORDER_RELEASE"], ImageDigest: bootstrap["CHALK_RECORDER_IMAGE_DIGEST"],
 		BootGeneration: bootGeneration, BootstrapEndpoint: bootstrap["CHALK_RECORDER_BOOTSTRAP_ENDPOINT"],
@@ -87,31 +111,26 @@ func loadConfig(bootstrapEnvironmentFile, imageEnvironmentFile string, verifyAtt
 		IdentityDirectory: image["CHALK_RECORDER_IDENTITY_DIRECTORY"], WorkerEnvironment: image["CHALK_RECORDER_WORKER_ENV_FILE"],
 		NodeEnvironment: image["CHALK_RECORDER_NODE_ENV_FILE"],
 		ImageManifest:   image["CHALK_RECORDER_IMAGE_MANIFEST"],
+	}, nil
+}
+
+func verifyInstalledImage(config Config) error {
+	if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
+		return err
 	}
-	if err := config.Validate(); err != nil {
-		return Config{}, err
+	claims, err := VerifyImageManifestClaims(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role)
+	if err != nil {
+		return err
 	}
-	if bootstrap["CHALK_RECORDER_BOOTSTRAP_ASSERTION_SOURCE"] != "external-reconciler" {
-		return Config{}, fmt.Errorf("%w: bootstrap authority", ErrInvalidConfig)
+	ca, err := os.ReadFile(config.BootstrapCAFile)
+	if err != nil {
+		return fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
 	}
-	if verifyAttestation {
-		if err := VerifyImageManifest(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role); err != nil {
-			return Config{}, err
-		}
-		claims, err := VerifyImageManifestClaims(config.ImageManifest, config.ReleaseID, config.ImageDigest, config.Role)
-		if err != nil {
-			return Config{}, err
-		}
-		ca, err := os.ReadFile(config.BootstrapCAFile)
-		if err != nil {
-			return Config{}, fmt.Errorf("%w: read bootstrap CA", ErrInvalidConfig)
-		}
-		caDigest := sha256.Sum256(ca)
-		if claims.ServerName != "" && (claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:])) {
-			return Config{}, fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
-		}
+	caDigest := sha256.Sum256(ca)
+	if claims.ServerName != "" && (claims.ServerName != config.BootstrapServerName || claims.CASHA256 != hex.EncodeToString(caDigest[:])) {
+		return fmt.Errorf("%w: installed bootstrap TLS settings differ from image manifest", ErrInvalidConfig)
 	}
-	return config, nil
+	return nil
 }
 
 func (config Config) Validate() error {
