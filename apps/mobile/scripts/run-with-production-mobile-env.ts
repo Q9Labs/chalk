@@ -8,6 +8,7 @@ const mobileDir = dirname(scriptDir);
 const localEnvPath = join(mobileDir, ".env.local");
 const backupEnvPath = join(mobileDir, ".env.local.release-backup");
 
+// The child command gets the whole environment; the script only moves `.env.local` aside around it.
 const command = process.argv.slice(2);
 const normalizedCommand = command.filter((part, index) => !(part === "--" && index === 0));
 while (normalizedCommand[0] === "--") {

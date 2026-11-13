@@ -92,6 +92,7 @@ export function secretParameterNames(env: NodeJS.ProcessEnv): SecretParameterNam
   };
 }
 
+/** Reads only the variables named in this file (`env` defaults to `process.env` so tests can pass their own). */
 export function loadReleaseConfig(env: NodeJS.ProcessEnv = process.env, secrets?: DispatcherSecrets): ReleaseConfig {
   const deepInfraEnabled = boolean(env, "DEEPINFRA_ENABLED");
   const cloudflareEnabled = boolean(env, "CLOUDFLARE_AI_ENABLED");
