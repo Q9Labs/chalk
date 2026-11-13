@@ -132,7 +132,7 @@ jobs:
         group: ${{ fromJSON(needs.changes.result == 'success' && needs.changes.outputs.root_groups || '["checks", "sfu", "browser-tests", "dashboard-engine", "dashboard-refresh", "call-leaks-1", "call-leaks-2", "call-leaks-3", "build"]') }}
     env:
       # A pull request fails only on vulnerability findings that its base branch lacks; full runs fail on every finding.
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       # A queue group compares with the exact commit it was built on, so an advisory that master already had does not block it.
       GATE_OSV_BASE_COMMIT: ${{ github.event.merge_group.base_sha || '' }}
       GATE_WORKSPACE_CONCURRENCY: "2"
@@ -349,7 +349,7 @@ jobs:
     runs-on: ${{ (github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch') && (inputs.runner || vars.CHALK_GATE_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       # A cached Go test result would not see migration or database changes.
       GOFLAGS: -buildvcs=false -count=1
@@ -413,7 +413,7 @@ jobs:
       matrix:
         part: [server, clients]
     env:
-      GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
+      GATE_VULN_BASE_REF: ${{ github.event_name == 'workflow_dispatch' && 'origin/master' || contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       VITEST_MAX_WORKERS: "4"
     steps:
