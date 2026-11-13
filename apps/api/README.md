@@ -4,7 +4,7 @@ Go control-plane API for Chalk. Keep process wiring thin in `cmd/main.go`, HTTP 
 
 Public REST routes live under `/v1`. Operational routes (`/healthz`, `/readyz`) stay unversioned. For the endpoint design loop see [`docs/route-workflow.md`](docs/route-workflow.md); for Postgres, `sqlc` and `goose` see [`docs/database-workflow.md`](docs/database-workflow.md).
 
-Run `apps/api/scripts/gate.sh describe` from the repository root to inspect the gate. `apps/api/scripts/dev-services.sh start` starts local Postgres and Redis. `apps/api/scripts/smoke-lifecycle.mjs` smoke-tests a running API and a clean SIGTERM exit.
+Run `apps/api/scripts/gate.sh describe` from the repository root to inspect the gate. `apps/api/scripts/dev-services.sh start` starts local Postgres and Redis. `apps/api/scripts/smoke-healthz.sh` and `apps/api/scripts/smoke-lifecycle.mjs` smoke-test a running API and a clean SIGTERM exit.
 
 ## Runtime config
 
