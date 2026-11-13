@@ -142,11 +142,7 @@ func TestAPushThatRacesCloseNeverHoldsTheScreen(t *testing.T) {
 
 func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
 	node := newTestNode(t, nil)
-	publisher := node.newTestSession(t, testScope("alice", 1))
-	subscriber := node.newTestSession(t, testScope("bob", 1))
-	publish(t, publisher, "mic", 1)
-	viewer := newTestPeer(t)
-	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
+	publisher, subscriber, _, pulled := pullMic(t, node)
 	low := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Simulcast: &protocol.Simulcast{PreferredRID: "l"}}
 	if _, err := subscriber.UpdateTracks(context.Background(), protocol.UpdateTracksRequest{OperationID: op(), Scope: subscriber.scope, Tracks: []protocol.Track{low}}); err != nil {
 		t.Fatal(err)
@@ -168,11 +164,7 @@ func TestUpdateTracksPausesAndResumesWithoutSimulcast(t *testing.T) {
 
 func TestUpdateTracksRecordsTheCeilingWithoutSDP(t *testing.T) {
 	node := newTestNode(t, nil)
-	publisher := node.newTestSession(t, testScope("alice", 1))
-	subscriber := node.newTestSession(t, testScope("bob", 1))
-	publish(t, publisher, "mic", 1)
-	viewer := newTestPeer(t)
-	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
+	publisher, subscriber, _, pulled := pullMic(t, node)
 
 	known := protocol.Track{Location: protocol.LocationRemote, Mid: pulled.Tracks[0].Mid, TrackName: "mic-0", SessionID: publisher.id, Simulcast: &protocol.Simulcast{PreferredRID: "l", PriorityOrdering: "none", RIDNotAvailable: "asciibetical"}}
 	unknown := known
@@ -200,11 +192,7 @@ func TestUpdateTracksRecordsTheCeilingWithoutSDP(t *testing.T) {
 
 func TestNegotiatedCloseStopsTheSubscriptionAndAnswersTheOffer(t *testing.T) {
 	node := newTestNode(t, nil)
-	publisher := node.newTestSession(t, testScope("alice", 1))
-	subscriber := node.newTestSession(t, testScope("bob", 1))
-	publish(t, publisher, "mic", 1)
-	viewer := newTestPeer(t)
-	pulled := pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
+	publisher, subscriber, viewer, pulled := pullMic(t, node)
 
 	for _, transceiver := range viewer.pc.GetTransceivers() {
 		if err := transceiver.Stop(); err != nil {

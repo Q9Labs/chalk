@@ -232,6 +232,17 @@ func pullAndAnswer(t *testing.T, subscriber, publisher *Session, viewer *testPee
 	return pulled
 }
 
+// pullMic has alice publish a microphone and bob pull it through a viewer peer, and returns the
+// two sessions, the viewer and the pull response.
+func pullMic(t *testing.T, node *Node) (publisher, subscriber *Session, viewer *testPeer, pulled protocol.TracksResponse) {
+	t.Helper()
+	publisher = node.newTestSession(t, testScope("alice", 1))
+	subscriber = node.newTestSession(t, testScope("bob", 1))
+	publish(t, publisher, "mic", 1)
+	viewer = newTestPeer(t)
+	return publisher, subscriber, viewer, pullAndAnswer(t, subscriber, publisher, viewer, "mic-0")
+}
+
 func eventually(t *testing.T, what string, timeout time.Duration, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
