@@ -22,8 +22,9 @@ const gateDataFiles = new Set([".fallowrc.json", "scripts/gates/design-tokens-ba
 // proof and publish workflows change no lane's inputs; the graph tests and the release contracts check them.
 const gateWorkflowFiles = new Set([".github/workflows/gate.yml", ".github/workflows/cache-warm.yml"]);
 const workflowGraphRoots = [".github/workflows", "features/scorecard"];
-// What the release tests and the plan contracts read: the release scripts, the managed-host controller and its units, and the scorecard and budgets whose verdicts the release scripts act on.
-const releaseContractRoots = ["scripts/releases", "infrastructure/managed-episode", "features/scorecard", "perf/budgets.json"];
+// What the release tests and the plan contracts read: the release scripts and the recorder helpers they import, the managed-host controller and its units, the scorecard and budgets whose verdicts the release scripts act on,
+// the transcription configuration that check_configuration fingerprints, and the API module files and migrations that the manifest and component planning read.
+const releaseContractRoots = ["scripts/releases", "scripts/recorder", "infrastructure/managed-episode", "infrastructure/nightly/transcription", "features/scorecard", "perf/budgets.json", "apps/api/go.mod", "apps/api/go.sum", "apps/api/db/migrations"];
 // The Sync modules the entry and Leave model anchors to, and the model itself. Keep in step with the coverage record in the sync-entry-leave-formal skill.
 const formalSyncPaths = [
   "apps/sync/lib/chalk_sync/stateholder/postgres/join_seats.ex",

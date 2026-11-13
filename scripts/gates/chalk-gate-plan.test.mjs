@@ -118,7 +118,17 @@ test("the workflow graph tests run for scorecard edits and the full gate", () =>
 });
 
 test("a change to the release scripts, the managed-host controller or the scorecard runs the release contracts in the checks group", () => {
-  for (const file of ["scripts/releases/test_release.py", "scripts/releases/release.py", "infrastructure/managed-episode/controller/chalk-deployment-controller", "features/scorecard/evaluate.mjs", "perf/budgets.json"]) {
+  for (const file of [
+    "scripts/releases/test_release.py",
+    "scripts/releases/release.py",
+    "infrastructure/managed-episode/controller/chalk-deployment-controller",
+    "features/scorecard/evaluate.mjs",
+    "perf/budgets.json",
+    "scripts/recorder/release.py",
+    "infrastructure/nightly/transcription/main.tf",
+    "apps/api/go.mod",
+    "apps/api/db/migrations/20261101000000_example.sql",
+  ]) {
     assert.ok(selected([file], "pull_request").includes("release-contracts"), file);
     assert.ok(selected([file], "merge_group").includes("release-contracts"), file);
   }
