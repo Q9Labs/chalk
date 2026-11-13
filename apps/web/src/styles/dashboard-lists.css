@@ -241,6 +241,7 @@
   padding: var(--space-14) var(--space-4);
 }
 
+.site .dash .warnbox,
 .site .dash .dlg.titled .warnbox {
   display: flex;
   gap: var(--space-2-5);
@@ -251,6 +252,7 @@
   font-size: var(--type-caption);
 }
 
+.site .dash .warnbox svg.site-icon,
 .site .dash .dlg.titled .warnbox svg.site-icon {
   color: var(--chalk-warning);
   margin-top: 1px;

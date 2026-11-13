@@ -1188,22 +1188,6 @@
   font-size: var(--type-body-sm);
 }
 
-.site .dash .warnbox {
-  display: flex;
-  gap: var(--space-2-5);
-  padding: var(--space-2-5) var(--space-3);
-  border-radius: var(--corner-lg);
-  background: var(--tint-warning);
-  color: var(--chalk-soft-text);
-  font-size: var(--type-caption);
-}
-
-.site .dash .warnbox svg.site-icon {
-  color: var(--chalk-warning);
-  margin-top: 1px;
-  flex: none;
-}
-
 .site .dash .dlg.titled .secbox {
   margin-top: 0;
   height: 44px;

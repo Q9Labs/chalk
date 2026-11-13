@@ -496,7 +496,8 @@ html:has(.site[data-chalk-theme="light"]) {
     gap: var(--space-0-5);
   }
 
-  & .nl a {
+  & .nl a,
+  & .ghl {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -508,7 +509,8 @@ html:has(.site[data-chalk-theme="light"]) {
     font-weight: 500;
   }
 
-  & .nl a:hover {
+  & .nl a:hover,
+  & .ghl:hover {
     background: var(--chalk-raised);
     color: var(--chalk-text);
   }
