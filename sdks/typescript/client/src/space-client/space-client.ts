@@ -13,9 +13,12 @@ class PromiseSpaceClient implements SpaceClient {
   readonly whiteboard;
   readonly #core: SpaceClientCore;
   readonly #runtime: ManagedRuntime.ManagedRuntime<SpaceClientCoreService, never>;
+  readonly #logger: SpaceClientOptions["logger"];
   #disposed = false;
+  #closing: Promise<void> | undefined;
 
   constructor(options: SpaceClientOptions, platform?: SpaceClientPlatform) {
+    this.#logger = options.logger;
     this.#runtime = ManagedRuntime.make(makeSpaceClientCoreLayer(options, platform));
     this.#core = this.#runtime.runSync(Effect.service(SpaceClientCoreService));
     const controllers = this.#core.controllers;
@@ -32,6 +35,10 @@ class PromiseSpaceClient implements SpaceClient {
 
   join = (options?: Parameters<SpaceClient["join"]>[0]): Promise<void> => this.#runtime.runPromise(this.#core.join(options));
   leave = (): Promise<void> => this.#runtime.runPromise(this.#core.leave());
+  close = (): Promise<void> => {
+    this.#closing ??= this.#leaveThenDispose();
+    return this.#closing;
+  };
   subscribe = (listener: () => void): (() => void) => this.#core.subscribe(listener);
   getSnapshot = () => this.#core.getSnapshot();
   endEpisode = (): Promise<void> => this.#runtime.runPromise(this.#core.endEpisode());
@@ -39,6 +46,16 @@ class PromiseSpaceClient implements SpaceClient {
 
   on<TEvent extends ClientEventName>(event: TEvent, handler: ClientEventHandler<TEvent>): () => void {
     return this.#core.on(event, handler);
+  }
+
+  async #leaveThenDispose(): Promise<void> {
+    try {
+      if (!this.#disposed && this.#core.getSnapshot().connection.status !== "left") await this.leave();
+    } catch (cause) {
+      this.#logger?.warn?.("SpaceClient leave failed while closing", { message: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      this.dispose();
+    }
   }
 
   dispose(): void {

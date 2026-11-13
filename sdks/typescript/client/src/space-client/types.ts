@@ -4,6 +4,7 @@ import type { ChalkWhiteboardDrawPermission, ChalkWhiteboardDrawPolicy, ChalkWhi
 import type { AccessGrant } from "../access/grant";
 import type { V1Capability } from "../sync/v1-types";
 import type { ChatControllerEffects } from "./chat-controller";
+import type { CallEvent } from "./call-events";
 import type { MediaControllerEffects } from "./media-controller";
 import type { OfflineActionsControllerEffects } from "./offline-actions";
 import type { ParticipantsControllerEffects } from "./participants-controller";
@@ -11,18 +12,8 @@ import type { ReactionsControllerEffects } from "./reactions-controller";
 import type { RecordingControllerEffects } from "./recording-controller";
 import type { WhiteboardControllerEffects } from "./whiteboard-controller";
 import type { PromiseController } from "./promise-facade";
-export type AccessReason = "join" | "refresh" | "retry";
-export type AccessContext = {
-  readonly space: string;
-  readonly reason: AccessReason;
-  /** Forward to the access endpoint so media recovery can obtain a fresh connection. */
-  readonly replaceMediaConnection: boolean;
-  /** Automatic replacement succeeds only while this media binding is current. Omit for explicit takeover. */
-  readonly expectedMediaConnectionId?: string;
-  /** Forward unchanged for replay-safe recovery. Never log credentials. */
-  readonly currentMediaToken?: string;
-  readonly signal?: AbortSignal;
-};
+import type { AccessContext, AccessReason } from "../access/context";
+export type { AccessContext, AccessReason };
 /**
  * What `getAccess` resolves with: the server-minted grant returned unchanged, either as the
  * `Response` that carries it or as its decoded JSON. Chalk validates it before use; the
@@ -298,7 +289,7 @@ export type CameraPreview = {
   readonly track: MediaStreamTrack;
   readonly release: () => void;
 };
-export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "dispose">>;
+export type MediaController = PromiseController<Omit<MediaControllerEffects, "configure" | "consumeOwnMicrophoneOff" | "dispose">>;
 export type ChatFilesController = PromiseController<Pick<ChatControllerEffects, "upload" | "url" | "resolveUrl">>;
 export type ChatController = PromiseController<Omit<ChatControllerEffects, "upload" | "url" | "resolveUrl" | "dispose">> & {
   readonly files: ChatFilesController;
@@ -328,6 +319,10 @@ export type ClientEventMap = {
   readonly error: {
     readonly error: import("./errors").SpaceClientError;
   };
+  /** One thing a UI may announce, computed once here so every UI agrees on what counts. */
+  readonly callEvent: {
+    readonly event: CallEvent;
+  };
 };
 export type ClientEventName = keyof ClientEventMap;
 export type ClientEventHandler<TEvent extends ClientEventName> = (event: ClientEventMap[TEvent]) => void;
@@ -341,6 +336,9 @@ export type SpaceClient = {
   readonly offline: OfflineController;
   readonly join: (options?: JoinOptions) => Promise<void>;
   readonly leave: () => Promise<void>;
+  /** Frees the camera, microphone and connections. Leaves first unless already left, logs a failed leave, and does nothing the second time. */
+  readonly close: () => Promise<void>;
+  /** Frees the same resources without leaving. Use `close` unless the participant is already gone. */
   readonly dispose: () => void;
   readonly subscribe: (listener: () => void) => () => void;
   readonly getSnapshot: () => SpaceSnapshot;
