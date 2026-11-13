@@ -1,5 +1,5 @@
 import type { JoinOptions } from "@q9labsai/chalk-client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { NO_DETECTED_DEVICES, watchMediaDevices, type DetectedMediaDevices } from "../internal/media-devices";
 import { playSpeakerTestTone } from "../internal/speaker-test";
 import { useInputLevel } from "../internal/useInputLevel";
@@ -103,32 +103,7 @@ export function usePreJoinDevices(): PreJoinDevices {
   }, []);
 
   // ast-grep-ignore: chalk.forbid-sdk-use-effect-ts -- [subscription] Read the camera and microphone permission and follow its changes; remove the listeners and ignore late answers on cleanup.
-  useEffect(() => {
-    let cancelled = false;
-    const statuses: PermissionStatus[] = [];
-    const settle = () => {
-      if (cancelled) return;
-      const states = statuses.map((status) => status.state);
-      const next = states.includes("denied") ? "blocked" : states.every((state) => state === "granted") ? "granted" : "ask";
-      setAccess((current) => (current === "requesting" ? current : next));
-    };
-    void (async () => {
-      try {
-        for (const name of ["camera", "microphone"] as const) statuses.push(await navigator.permissions.query({ name }));
-      } catch {
-        // Firefox cannot query camera permission. Device labels appear only once access exists, so they stand in for the answer.
-        const known = (await navigator.mediaDevices?.enumerateDevices().catch(() => [])) ?? [];
-        if (!cancelled) setAccess(known.some((device) => device.label !== "") ? "granted" : "ask");
-        return;
-      }
-      for (const status of statuses) status.addEventListener("change", settle);
-      settle();
-    })();
-    return () => {
-      cancelled = true;
-      for (const status of statuses) status.removeEventListener("change", settle);
-    };
-  }, []);
+  useEffect(() => watchPermissions(setAccess), []);
 
   const wantMicrophone = capturing && choice.microphone;
   const wantCamera = capturing && choice.camera;
@@ -289,4 +264,32 @@ function classify(cause: unknown): Failure {
   if (name === "NotAllowedError" || name === "SecurityError") return "denied";
   if (name === "NotFoundError" || name === "OverconstrainedError") return "missing";
   return "failed";
+}
+
+/** Reports the camera and microphone permission as an access state, and follows its changes. Returns the stop function. */
+function watchPermissions(setAccess: Dispatch<SetStateAction<PreJoinAccess>>): () => void {
+  let cancelled = false;
+  const statuses: PermissionStatus[] = [];
+  const settle = () => {
+    if (cancelled) return;
+    const states = statuses.map((status) => status.state);
+    const next = states.includes("denied") ? "blocked" : states.every((state) => state === "granted") ? "granted" : "ask";
+    setAccess((current) => (current === "requesting" ? current : next));
+  };
+  void (async () => {
+    try {
+      for (const name of ["camera", "microphone"] as const) statuses.push(await navigator.permissions.query({ name }));
+    } catch {
+      // Firefox cannot query camera permission. Device labels appear only once access exists, so they stand in for the answer.
+      const known = (await navigator.mediaDevices?.enumerateDevices().catch(() => [])) ?? [];
+      if (!cancelled) setAccess(known.some((device) => device.label !== "") ? "granted" : "ask");
+      return;
+    }
+    for (const status of statuses) status.addEventListener("change", settle);
+    settle();
+  })();
+  return () => {
+    cancelled = true;
+    for (const status of statuses) status.removeEventListener("change", settle);
+  };
 }

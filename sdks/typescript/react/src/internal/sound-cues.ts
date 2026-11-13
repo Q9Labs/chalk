@@ -52,6 +52,37 @@ export interface SoundPlayer {
   readonly dispose: () => void;
 }
 
+/** frequency, offset, duration, volume, wave type, glide-to frequency */
+type ToneSpec = readonly [number, number, number, number?, OscillatorType?, number?];
+
+const CUE_TONES: Record<Exclude<SoundCue, "knock">, readonly ToneSpec[]> = {
+  join: [
+    [659, 0, 0.16, 0.04],
+    [988, 0.08, 0.22, 0.03],
+  ],
+  leave: [
+    [784, 0, 0.2],
+    [523, 0.1, 0.3, 0.06],
+  ],
+  message: [[1175, 0, 0.16, 0.05, "triangle"]],
+  "hand-raise": [
+    [1319, 0, 0.32, 0.045],
+    [1760, 0.07, 0.4, 0.035],
+  ],
+  mute: [[560, 0, 0.07, 0.06, "triangle", 380]],
+  unmute: [[420, 0, 0.07, 0.06, "triangle", 640]],
+  recording: [
+    [587, 0, 0.14],
+    [587, 0.18, 0.14],
+    [880, 0.36, 0.32, 0.06],
+  ],
+  error: [
+    [392, 0, 0.16, 0.05, "triangle"],
+    [311, 0.13, 0.24, 0.05, "triangle"],
+  ],
+  reaction: [[880, 0, 0.12, 0.035, "triangle"]],
+};
+
 /** A player belongs to one mounted call and closes its context on disposal. */
 export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?: string } = {}): SoundPlayer {
   let context: AudioContext | null = null;
@@ -120,45 +151,12 @@ export function createSoundPlayer({ outputDeviceId }: { readonly outputDeviceId?
     play(cue) {
       if (disposed || !context || context.state !== "running") return;
       try {
-        switch (cue) {
-          case "join":
-            tone(659, 0, 0.16, 0.04);
-            tone(988, 0.08, 0.22, 0.03);
-            break;
-          case "leave":
-            tone(784, 0, 0.2);
-            tone(523, 0.1, 0.3, 0.06);
-            break;
-          case "knock":
-            thud(0);
-            thud(0.17);
-            break;
-          case "message":
-            tone(1175, 0, 0.16, 0.05, "triangle");
-            break;
-          case "hand-raise":
-            tone(1319, 0, 0.32, 0.045);
-            tone(1760, 0.07, 0.4, 0.035);
-            break;
-          case "mute":
-            tone(560, 0, 0.07, 0.06, "triangle", 380);
-            break;
-          case "unmute":
-            tone(420, 0, 0.07, 0.06, "triangle", 640);
-            break;
-          case "recording":
-            tone(587, 0, 0.14);
-            tone(587, 0.18, 0.14);
-            tone(880, 0.36, 0.32, 0.06);
-            break;
-          case "error":
-            tone(392, 0, 0.16, 0.05, "triangle");
-            tone(311, 0.13, 0.24, 0.05, "triangle");
-            break;
-          case "reaction":
-            tone(880, 0, 0.12, 0.035, "triangle");
-            break;
+        if (cue === "knock") {
+          thud(0);
+          thud(0.17);
+          return;
         }
+        for (const spec of CUE_TONES[cue]) tone(...spec);
       } catch {
         // Sound cues must never interrupt the call when browser audio is unavailable.
       }

@@ -53,24 +53,10 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
     const root = layerRef.current.closest("[data-chalk]");
     if (!root) return;
     const previousFocus = document.activeElement;
-    const siblings: { element: HTMLElement; inert: boolean; filter: string }[] = [];
-    let branch: HTMLElement = layerRef.current;
-    while (branch !== root && branch.parentElement) {
-      for (const sibling of branch.parentElement.children) {
-        if (sibling !== branch && sibling instanceof HTMLElement) {
-          siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
-          if (blocking) sibling.inert = true;
-          if (!blocking) sibling.style.filter = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
-        }
-      }
-      branch = branch.parentElement;
-    }
+    const restoreSiblings = isolateSiblings(layerRef.current, root, blocking);
     if (blocking) layerRef.current.focus({ preventScroll: true });
     return () => {
-      for (const { element, inert, filter } of siblings) {
-        if (blocking) element.inert = inert;
-        element.style.filter = filter;
-      }
+      restoreSiblings();
       if (blocking && previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
     };
   }, [active, blocking, overlay]);
@@ -154,4 +140,26 @@ export function CallLimbo({ spaceName = "Call", message, detail, action, childre
       {layer}
     </div>
   );
+}
+
+/** Marks siblings along the path from `layer` up to `root` inert (blocking) or blurs them; returns the undo. */
+function isolateSiblings(layer: HTMLElement, root: Element, blocking: boolean): () => void {
+  const siblings: { element: HTMLElement; inert: boolean; filter: string }[] = [];
+  const blur = root.getAttribute("data-chalk-theme") === "light" ? "blur(10px) grayscale(.75)" : "blur(10px) grayscale(.75) brightness(.6)";
+  let branch: HTMLElement = layer;
+  while (branch !== root && branch.parentElement) {
+    for (const sibling of branch.parentElement.children) {
+      if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
+      siblings.push({ element: sibling, inert: sibling.inert, filter: sibling.style.filter });
+      if (blocking) sibling.inert = true;
+      else sibling.style.filter = blur;
+    }
+    branch = branch.parentElement;
+  }
+  return () => {
+    for (const { element, inert, filter } of siblings) {
+      if (blocking) element.inert = inert;
+      element.style.filter = filter;
+    }
+  };
 }

@@ -38,18 +38,18 @@ export function useSoundCues(enabled: boolean, createPlayer: (options: { readonl
     let previous = client.getSnapshot();
     const seenParticipants = new Set(previous.participants.roster.map((participant) => participant.participantId));
     let lastJoinAt = -Infinity;
+    const admitJoin = (hasNewParticipant: boolean): boolean => {
+      const now = performance.now();
+      if (!hasNewParticipant || now - lastJoinAt < 3000) return false;
+      lastJoinAt = now;
+      return true;
+    };
     const unsubscribe = client.subscribe(() => {
       const next = client.getSnapshot();
       const hasNewParticipant = next.participants.roster.some((participant) => participant.participantId !== next.self.participantId && !seenParticipants.has(participant.participantId));
-      if (enabledRef.current)
-        for (const cue of diffSoundCues(previous, next)) {
-          if (cue === "join") {
-            const now = performance.now();
-            if (!hasNewParticipant || now - lastJoinAt < 3000) continue;
-            lastJoinAt = now;
-          }
-          player.play(cue);
-        }
+      for (const cue of enabledRef.current ? diffSoundCues(previous, next) : []) {
+        if (cue !== "join" || admitJoin(hasNewParticipant)) player.play(cue);
+      }
       for (const participant of next.participants.roster) seenParticipants.add(participant.participantId);
       previous = next;
     });

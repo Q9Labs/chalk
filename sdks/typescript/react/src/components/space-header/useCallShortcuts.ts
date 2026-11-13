@@ -31,21 +31,7 @@ export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: (
         latest.current.onPushToTalk(true);
         return;
       }
-      const modifier = event.metaKey || event.ctrlKey;
-      if (!modifier) return;
-      const key = event.key.toLowerCase();
-      const extra = (event.ctrlKey && event.metaKey) || (event.ctrlKey && event.shiftKey);
-      let action: (() => void) | undefined;
-      if (extra) {
-        if (key === "h") action = latest.current?.onToggleHand;
-        if (key === "c") action = latest.current?.onToggleChat;
-        if (key === "p") action = latest.current?.onTogglePeople;
-        if (key === "l") action = latest.current?.onToggleLayout;
-        if (key === "f") action = latest.current?.onToggleFullscreen;
-      } else {
-        if (key === "d") action = latest.current?.onToggleMute;
-        if (key === "e") action = latest.current?.onToggleVideo;
-      }
+      const action = chordAction(latest.current, event);
       if (action) {
         event.preventDefault();
         action();
@@ -64,4 +50,20 @@ export function useCallShortcuts(actions: SpaceHeaderProps["shortcuts"], show: (
       restore();
     };
   }, [show]);
+}
+
+function chordAction(shortcuts: SpaceHeaderProps["shortcuts"], event: KeyboardEvent): (() => void) | undefined {
+  if (!event.metaKey && !event.ctrlKey) return undefined;
+  const key = event.key.toLowerCase();
+  if ((event.ctrlKey && event.metaKey) || (event.ctrlKey && event.shiftKey)) {
+    if (key === "h") return shortcuts?.onToggleHand;
+    if (key === "c") return shortcuts?.onToggleChat;
+    if (key === "p") return shortcuts?.onTogglePeople;
+    if (key === "l") return shortcuts?.onToggleLayout;
+    if (key === "f") return shortcuts?.onToggleFullscreen;
+    return undefined;
+  }
+  if (key === "d") return shortcuts?.onToggleMute;
+  if (key === "e") return shortcuts?.onToggleVideo;
+  return undefined;
 }

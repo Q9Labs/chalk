@@ -27,6 +27,12 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
     let latestSummary: ChalkWhiteboardSummary | undefined;
     const observesSummary = transport.subscribeSummary !== undefined;
 
+    const markReady = (): void => {
+      recoveryAttempts = 0;
+      ready = true;
+      setSubscription({ status: "ready", transport });
+    };
+
     const clearRecoveryTimer = (): void => {
       if (recoveryTimer === undefined) return;
       globalThis.clearTimeout(recoveryTimer);
@@ -55,11 +61,7 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
         return;
       }
       if (summary.status === "ready") {
-        if (!starting || startupSettled) {
-          recoveryAttempts = 0;
-          ready = true;
-          setSubscription({ status: "ready", transport });
-        }
+        if (!starting || startupSettled) markReady();
         return;
       }
       if (summary.status === "loading" || summary.status === "recovering") {
@@ -87,11 +89,7 @@ export function useWhiteboardSceneSubscription(transport: ChalkWhiteboardV1Trans
             starting = false;
             startupSettled = true;
             if (disposed) return;
-            if (!latestSummary || latestSummary.status === "ready") {
-              recoveryAttempts = 0;
-              ready = true;
-              setSubscription({ status: "ready", transport });
-            }
+            if (!latestSummary || latestSummary.status === "ready") markReady();
           },
           (cause: unknown) => {
             starting = false;

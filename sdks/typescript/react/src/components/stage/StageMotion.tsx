@@ -55,24 +55,8 @@ export class StageMotion extends Component<StageMotionProps> {
     for (const element of elements) {
       for (const animation of element.getAnimations()) if (animation.startTime === null) animation.startTime = frameTime;
       if (element.getAttribute("aria-hidden") === "true") continue;
-      if (element.hasAttribute("data-leaving")) {
-        if (element.getAnimations().some((animation) => animation.id === "stage-exit")) continue;
-        const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
-        exit.id = "stage-exit";
-        exit.startTime = frameTime;
-      } else if (entering.has(element)) {
-        const transform = getComputedStyle(element).transform;
-        const enter = element.animate(
-          element.dataset.stageItem === WHITEBOARD_ITEM_ID
-            ? [{ opacity: 0 }, { opacity: 1 }]
-            : [
-                { opacity: 0, transform: `${transform} scale(.97)` },
-                { opacity: 1, transform },
-              ],
-          { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" },
-        );
-        enter.startTime = frameTime;
-      }
+      if (element.hasAttribute("data-leaving")) playExit(element, frameTime);
+      else if (entering.has(element)) playEnter(element, frameTime);
     }
   }
 
@@ -88,4 +72,23 @@ export class StageMotion extends Component<StageMotionProps> {
       </div>
     );
   }
+}
+
+function playExit(element: HTMLElement, frameTime: Animation["startTime"]): void {
+  if (element.getAnimations().some((animation) => animation.id === "stage-exit")) return;
+  const exit = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
+  exit.id = "stage-exit";
+  exit.startTime = frameTime;
+}
+
+function playEnter(element: HTMLElement, frameTime: Animation["startTime"]): void {
+  const transform = getComputedStyle(element).transform;
+  const keyframes =
+    element.dataset.stageItem === WHITEBOARD_ITEM_ID
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [
+          { opacity: 0, transform: `${transform} scale(.97)` },
+          { opacity: 1, transform },
+        ];
+  element.animate(keyframes, { duration: 220, easing: "cubic-bezier(.2,.8,.2,1)" }).startTime = frameTime;
 }

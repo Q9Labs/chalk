@@ -21,22 +21,7 @@ interface Fit {
 /** Remember measured sizes when notices fold: resizing must not remount them to measure again. */
 export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candidates: readonly Toast[], enabled: boolean, ownedIds: readonly string[]): { readonly count: number; readonly ready: boolean } {
   const [fit, setFit] = useState<Fit | null>(null);
-  let count = candidates.length;
-  if (enabled) {
-    count = 0;
-    let used = 0;
-    if (fit)
-      for (const toast of candidates.slice().reverse()) {
-        const measured = fit.measurements.get(toast.id);
-        // Unknown notices get the CSS minimum for their first presentation, not a
-        // blanket remount of every known folded caller just to refit one change.
-        const height = measured && sameLayout(measured.toast, toast) ? measured.height : 48;
-        const next = used + (count ? fit.gap : 0) + height;
-        if (fit.width > 0 && next > fit.available) break;
-        used = next;
-        count += 1;
-      }
-  }
+  const count = !enabled ? candidates.length : fit ? fitCount(fit, candidates) : 0;
   const selected = candidates.slice(candidates.length - count);
   const ready =
     fit !== null &&
@@ -55,13 +40,13 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
       const gap = parseFloat(style.rowGap) || 0;
       const mounted = selected.filter((toast) => ownedIds.includes(toast.id));
       const reserved = elements.slice(mounted.length);
-      const reservedHeight = reserved.reduce((height, element) => height + Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height)) + gap, 0);
+      const reservedHeight = reserved.reduce((height, element) => height + elementHeight(element) + gap, 0);
       const available = Math.max(0, node.clientHeight - padding - reservedHeight);
       const updates = new Map<string, Measurement>();
       mounted.forEach((toast, index) => {
         const element = elements[index];
         if (!element) return;
-        const height = Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height));
+        const height = elementHeight(element);
         const old = fit?.measurements.get(toast.id);
         const markup = element.innerHTML;
         if (!old || old.height !== height || old.width !== width || old.markup !== markup || !sameLayout(old.toast, toast)) {
@@ -74,14 +59,7 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
           updates.set(toast.id, { ...old, width, height: measureToastLayout(node, old.snapshot) });
         }
       }
-      setFit((previous) => {
-        const measurements = new Map(previous?.measurements);
-        const present = new Set(candidates.map((toast) => toast.id));
-        for (const id of measurements.keys()) if (!present.has(id)) measurements.delete(id);
-        const changed = measurements.size !== previous?.measurements.size || updates.size > 0;
-        for (const [id, measurement] of updates) measurements.set(id, measurement);
-        return !changed && previous?.width === width && previous.available === available && previous.gap === gap ? previous : { width, available, gap, measurements };
-      });
+      setFit((previous) => mergeFit(previous, candidates, updates, { width, available, gap }));
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
@@ -97,6 +75,36 @@ export function useToastCapacity(stack: RefObject<HTMLDivElement | null>, candid
     };
   });
   return { count, ready: !enabled || ready };
+}
+
+/** How many of the newest candidates fit in the available height; unmeasured notices get the CSS minimum. */
+function fitCount(fit: Fit, candidates: readonly Toast[]): number {
+  let count = 0;
+  let used = 0;
+  for (const toast of candidates.slice().reverse()) {
+    const measured = fit.measurements.get(toast.id);
+    // Unknown notices get the CSS minimum for their first presentation, not a
+    // blanket remount of every known folded caller just to refit one change.
+    const height = measured && sameLayout(measured.toast, toast) ? measured.height : 48;
+    const next = used + (count ? fit.gap : 0) + height;
+    if (fit.width > 0 && next > fit.available) break;
+    used = next;
+    count += 1;
+  }
+  return count;
+}
+
+function elementHeight(element: HTMLElement): number {
+  return Math.max(element.offsetHeight, Math.ceil(element.getBoundingClientRect().height));
+}
+
+function mergeFit(previous: Fit | null, candidates: readonly Toast[], updates: ReadonlyMap<string, Measurement>, { width, available, gap }: Pick<Fit, "width" | "available" | "gap">): Fit | null {
+  const measurements = new Map(previous?.measurements);
+  const present = new Set(candidates.map((toast) => toast.id));
+  for (const id of measurements.keys()) if (!present.has(id)) measurements.delete(id);
+  const changed = measurements.size !== previous?.measurements.size || updates.size > 0;
+  for (const [id, measurement] of updates) measurements.set(id, measurement);
+  return !changed && previous?.width === width && previous.available === available && previous.gap === gap ? previous : { width, available, gap, measurements };
 }
 
 function sameLayout(previous: Toast, next: Toast): boolean {
