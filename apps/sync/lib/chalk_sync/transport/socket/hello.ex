@@ -26,6 +26,8 @@ defmodule ChalkSync.Transport.Socket.Hello do
     end
   end
 
+  # TRIPWIRE(owner=sync, by=2027-02-13): delete once no production socket hello arrives without entry_confirmation; the
+  # Sync hello counter by entry_confirmation shows it. If it still shows legacy hellos, extend the date and say why.
   defp confirm_legacy_entry(_identity, true), do: :ok
 
   defp confirm_legacy_entry(identity, false) do

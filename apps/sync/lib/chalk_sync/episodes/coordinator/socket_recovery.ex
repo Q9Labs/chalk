@@ -21,41 +21,8 @@ defmodule ChalkSync.Episodes.Coordinator.SocketRecovery do
           subscriber.protocol_options
         )
 
-      recovery_state = %{
-        mode: recovery.mode,
-        head: recovery.head,
-        id: recovery_id,
-        cursor: recovery.replay_cursor,
-        queued_kind:
-          if recovery.mode == :terminal do
-            :terminal_welcome
-          else
-            :welcome
-          end,
-        expected_ack: nil
-      }
-
-      optional_ack =
-        if recovery.mode == :up_to_date do
-          {recovery_id, recovery.head.revision, Subscribers.digest_hex(recovery.head.digest)}
-        end
-
-      next_subscriber = %{
-        subscriber
-        | recovery: recovery_state,
-          optional_recovery_ack: optional_ack
-      }
-
-      acknowledgement =
-        if recovery.mode == :snapshot do
-          %{
-            recovery_id: recovery_id,
-            revision: recovery.head.revision,
-            state_digest: Subscribers.digest_hex(recovery.head.digest),
-            queued_kind: :welcome,
-            transport_in_flight?: false
-          }
-        end
+      next_subscriber = recovering_subscriber(subscriber, recovery, recovery_id)
+      acknowledgement = snapshot_acknowledgement(recovery, recovery_id)
 
       case reserve_recovery_frame(socket, next_subscriber, encoded, false, acknowledgement) do
         {:ok, reserved} ->
@@ -78,6 +45,38 @@ defmodule ChalkSync.Episodes.Coordinator.SocketRecovery do
     ArgumentError ->
       {:reply, {:error, :invalid_recovery}, Subscribers.remove_socket(state, socket)}
   end
+
+  defp recovering_subscriber(subscriber, recovery, recovery_id) do
+    optional_ack =
+      if recovery.mode == :up_to_date do
+        {recovery_id, recovery.head.revision, Subscribers.digest_hex(recovery.head.digest)}
+      end
+
+    %{
+      subscriber
+      | recovery: %{
+          mode: recovery.mode,
+          head: recovery.head,
+          id: recovery_id,
+          cursor: recovery.replay_cursor,
+          queued_kind: if(recovery.mode == :terminal, do: :terminal_welcome, else: :welcome),
+          expected_ack: nil
+        },
+        optional_recovery_ack: optional_ack
+    }
+  end
+
+  defp snapshot_acknowledgement(%{mode: :snapshot} = recovery, recovery_id) do
+    %{
+      recovery_id: recovery_id,
+      revision: recovery.head.revision,
+      state_digest: Subscribers.digest_hex(recovery.head.digest),
+      queued_kind: :welcome,
+      transport_in_flight?: false
+    }
+  end
+
+  defp snapshot_acknowledgement(_recovery, _recovery_id), do: nil
 
   def enqueue_next_recovery_frame(
         socket,

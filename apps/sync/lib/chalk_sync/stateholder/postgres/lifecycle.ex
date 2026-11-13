@@ -119,7 +119,14 @@ defmodule ChalkSync.Stateholder.Postgres.Lifecycle do
            Reducer.apply_lifecycle(state, Participant.lifecycle_name(intent.name), payload) do
       decision = LifecycleCommit.persist_commit(connection, episode, intent, event, next_state)
 
-      AutomaticRecording.maybe_accept_automatic_recording(connection, episode, intent, policy, next_state)
+      AutomaticRecording.maybe_accept_automatic_recording(
+        connection,
+        episode,
+        intent,
+        policy,
+        next_state
+      )
+
       decision
     else
       {:error, reason} ->

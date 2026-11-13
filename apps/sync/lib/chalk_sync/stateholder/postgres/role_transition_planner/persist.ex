@@ -18,14 +18,14 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
   @max_pending_operations 2_048
 
   def persist_pending_role_transition(
-         connection,
-         identity,
-         command,
-         event,
-         state,
-         affected,
-         sources
-       ) do
+        connection,
+        identity,
+        command,
+        event,
+        state,
+        affected,
+        sources
+      ) do
     ensure_transition_operation_capacity(connection, identity.episode, length(sources) + 1)
     event_id = UUID.generate()
     digest = Reducer.digest(state)
@@ -64,19 +64,15 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
     parent = role_transition_parent(identity, command, affected, parent_id)
     PublicationFences.install(connection, identity.episode, parent, affected, sources)
 
-    Postgrex.query!(connection, SQL.insert_pending_role_transition_receipt(), [
-      Scope.uuid(identity.episode.tenant_id),
-      Scope.uuid(identity.episode.episode_id),
-      Scope.uuid(identity.participant_id),
-      identity.participant_generation,
-      command.id,
-      command.fingerprint,
-      CommandPersistence.receipt_command_name(command),
-      Scope.uuid(parent_id),
-      Scope.uuid(event_id),
+    insert_pending_receipt(
+      connection,
+      identity,
+      command,
+      parent_id,
+      event_id,
       event.revision,
       digest
-    ])
+    )
 
     Control.notify_head(connection, identity.episode, event.revision)
 
@@ -92,6 +88,29 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
     }
   end
 
+  defp insert_pending_receipt(
+         connection,
+         identity,
+         command,
+         parent_id,
+         event_id,
+         revision,
+         digest
+       ) do
+    Postgrex.query!(connection, SQL.insert_pending_role_transition_receipt(), [
+      Scope.uuid(identity.episode.tenant_id),
+      Scope.uuid(identity.episode.episode_id),
+      Scope.uuid(identity.participant_id),
+      identity.participant_generation,
+      command.id,
+      command.fingerprint,
+      CommandPersistence.receipt_command_name(command),
+      Scope.uuid(parent_id),
+      Scope.uuid(event_id),
+      revision,
+      digest
+    ])
+  end
 
   defp ensure_transition_operation_capacity(connection, episode, required) do
     case Postgrex.query!(
@@ -103,7 +122,6 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
       _ -> Postgrex.rollback(connection, {:retryable, :overloaded})
     end
   end
-
 
   defp insert_role_transition_parent(connection, identity, command, affected, parent_id) do
     payload = Map.put(command.payload, "commandName", Atom.to_string(command.name))
@@ -123,7 +141,6 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
       payload
     ])
   end
-
 
   defp insert_role_transition_children(connection, episode, affected, parent_id, sources) do
     Enum.each(sources, fn source ->
@@ -148,7 +165,6 @@ defmodule ChalkSync.Stateholder.Postgres.RoleTransitionPlanner.Persist do
       )
     end)
   end
-
 
   defp role_transition_parent(identity, command, affected, parent_id) do
     %ExternalOperation{

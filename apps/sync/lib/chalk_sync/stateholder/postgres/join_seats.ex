@@ -213,6 +213,8 @@ defmodule ChalkSync.Stateholder.Postgres.JoinSeats do
            "select transition_participant_join_seat($1,$2,$3,$4,$5,$6)",
            params
          ).rows do
+      # TRIPWIRE(owner=sync, by=2027-02-13): the "legacy" seat state exists only for seats created before entry
+      # generations; drop it once the seat state count shows none.
       [[state]] when state in ["legacy", "joined"] -> :ok
       [["expired"]] when not is_nil(identity) -> :entry_expired
       [[state]] when state in ["cancelled", "expired", "left"] -> :expired
