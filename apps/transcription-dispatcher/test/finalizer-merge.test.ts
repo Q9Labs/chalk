@@ -87,10 +87,7 @@ describe("mergeTranscriptDocuments", () => {
   });
 
   it("weights mean confidence by segment count", () => {
-    const merged = merge([
-      chunk("a", 0, 1_000, [cue()], { quality: { segmentCount: 3, wordCount: 1, meanConfidence: 1 } }),
-      chunk("b", 1_000, 2_000, [cue({ startMs: 1_000, endMs: 1_100 })], { quality: { segmentCount: 1, wordCount: 1, meanConfidence: 0 } }),
-    ]);
+    const merged = merge([chunk("a", 0, 1_000, [cue()], { quality: { segmentCount: 3, wordCount: 1, meanConfidence: 1 } }), chunk("b", 1_000, 2_000, [cue({ startMs: 1_000, endMs: 1_100 })], { quality: { segmentCount: 1, wordCount: 1, meanConfidence: 0 } })]);
     expect(merged.quality).toEqual({ segmentCount: 4, wordCount: 2, meanConfidence: 0.75 });
   });
 

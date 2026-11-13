@@ -1,4 +1,12 @@
-import { parseRecordingPresentationTimelineV1, type RecordingMediaSourceV1, type RecordingPresentationAssetV1, type RecordingPresentationEventV1, type RecordingPresentationParticipantV1, type RecordingPresentationReactionV1, type RecordingPresentationTimelineV1 } from "@q9labsai/recording-presentation";
+import {
+  parseRecordingPresentationTimelineV1,
+  type RecordingMediaSourceV1,
+  type RecordingPresentationAssetV1,
+  type RecordingPresentationEventV1,
+  type RecordingPresentationParticipantV1,
+  type RecordingPresentationReactionV1,
+  type RecordingPresentationTimelineV1,
+} from "@q9labsai/recording-presentation";
 
 // A heavy Episode for the native compositor: three cameras, speaker changes,
 // a screen share with a gap, two whiteboard revisions, reactions, a raised

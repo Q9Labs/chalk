@@ -44,10 +44,7 @@ describe("loadReleaseConfig", () => {
   });
 
   it("reads a Cloudflare-only release", () => {
-    const config = loadReleaseConfig(
-      { ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "acct", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "cf.v1", CLOUDFLARE_CORPUS_DIGEST: digest },
-      secrets,
-    );
+    const config = loadReleaseConfig({ ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "acct", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "cf.v1", CLOUDFLARE_CORPUS_DIGEST: digest }, secrets);
     expect(config.cloudflare).toMatchObject({ enabled: true, token: "c", accountId: "acct" });
   });
 
@@ -66,8 +63,18 @@ describe("loadReleaseConfig", () => {
     ["an unsupported DeepInfra adapter", { ...env, DEEPINFRA_ADAPTER_CONTRACT_VERSION: "other" }, secrets, "DeepInfra adapter contract is not supported"],
     ["a malformed DeepInfra corpus digest", { ...env, DEEPINFRA_CORPUS_DIGEST: "xyz" }, secrets, "DeepInfra corpus digest is required"],
     ["a DeepInfra token that SSM did not return", { ...env }, { workloadAuth: "w" }, "DeepInfra secret was not resolved"],
-    ["a Cloudflare adapter version with bad characters", { ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "bad version", CLOUDFLARE_CORPUS_DIGEST: digest }, secrets, "Cloudflare adapter contract version is required"],
-    ["a malformed Cloudflare corpus digest", { ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "cf.v1", CLOUDFLARE_CORPUS_DIGEST: "xyz" }, secrets, "Cloudflare corpus digest is required"],
+    [
+      "a Cloudflare adapter version with bad characters",
+      { ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "bad version", CLOUDFLARE_CORPUS_DIGEST: digest },
+      secrets,
+      "Cloudflare adapter contract version is required",
+    ],
+    [
+      "a malformed Cloudflare corpus digest",
+      { ...env, DEEPINFRA_ENABLED: "false", CLOUDFLARE_AI_ENABLED: "true", CLOUDFLARE_ACCOUNT_ID: "a", CLOUDFLARE_MODEL_SLUG: "@cf/openai/whisper-large-v3-turbo", CLOUDFLARE_ADAPTER_CONTRACT_VERSION: "cf.v1", CLOUDFLARE_CORPUS_DIGEST: "xyz" },
+      secrets,
+      "Cloudflare corpus digest is required",
+    ],
     ["MAI selected without an OpenRouter token", { ...env, CODESWITCH_PROVIDER: "mai" }, { workloadAuth: "w", deepInfraToken: "d" }, "OpenRouter secret was not resolved"],
   ])("rejects %s", (_label, environment, resolved, message) => {
     expect(() => loadReleaseConfig(environment, resolved)).toThrow(message);

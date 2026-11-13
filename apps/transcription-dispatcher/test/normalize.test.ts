@@ -46,9 +46,7 @@ function input(overrides: Partial<NormalizeInput> = {}): NormalizeInput {
 describe("normalizeTranscriptChunk", () => {
   it("places a segment on the recording timeline, attributes it to the chunk speaker and flags the overlap", () => {
     const document = normalizeTranscriptChunk(input());
-    expect(document.cues).toEqual([
-      { startMs: 1_000, endMs: 3_000, identity, trackClass: "microphone", displayNameSnapshot: "Ada", text: "hello world", overlap: true, provider: "deepinfra", model: "m", versionContract: "v", attempt: 2, quality: { confidence: 0.9 } },
-    ]);
+    expect(document.cues).toEqual([{ startMs: 1_000, endMs: 3_000, identity, trackClass: "microphone", displayNameSnapshot: "Ada", text: "hello world", overlap: true, provider: "deepinfra", model: "m", versionContract: "v", attempt: 2, quality: { confidence: 0.9 } }]);
     expect(document).toMatchObject({ schemaVersion: "transcript.v1", transcriptLanguage: { mode: "auto" }, jobId: "job", attempt: 2, measuredAudioMs: 2_000, providerObservedDurationMs: 2_000, providerReportedCostUsd: 0.1 });
   });
 

@@ -186,7 +186,9 @@ function compareChunks(left: ChunkDocument, right: ChunkDocument): number {
 }
 
 function compareCues(left: ChunkCue, right: ChunkCue): number {
-  return left.startMs - right.startMs || left.endMs - right.endMs || identityKey(left.identity).localeCompare(identityKey(right.identity)) || left.trackClass.localeCompare(right.trackClass) || left.text.localeCompare(right.text) || left.chunkId.localeCompare(right.chunkId) || left.attempt - right.attempt;
+  return (
+    left.startMs - right.startMs || left.endMs - right.endMs || identityKey(left.identity).localeCompare(identityKey(right.identity)) || left.trackClass.localeCompare(right.trackClass) || left.text.localeCompare(right.text) || left.chunkId.localeCompare(right.chunkId) || left.attempt - right.attempt
+  );
 }
 
 function identityKey(value: ManifestIdentity): string {

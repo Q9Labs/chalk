@@ -47,7 +47,17 @@ describe("loadDispatcherSecrets", () => {
     ["an invalid parameter", { workloadAuth: "/chalk/workload" }, { InvalidParameters: ["/chalk/workload"] }, "parameter is unavailable"],
     ["an empty value", { workloadAuth: "/chalk/workload" }, { Parameters: [{ Name: "/chalk/workload", Value: "" }] }, "SSM returned an invalid parameter"],
     ["a parameter nobody asked for", { workloadAuth: "/chalk/workload" }, { Parameters: [{ Name: "/other", Value: "x" }] }, "unexpected parameter"],
-    ["a duplicate parameter", { workloadAuth: "/chalk/workload" }, { Parameters: [{ Name: "/chalk/workload", Value: "a" }, { Name: "/chalk/workload", Value: "b" }] }, "duplicate parameter"],
+    [
+      "a duplicate parameter",
+      { workloadAuth: "/chalk/workload" },
+      {
+        Parameters: [
+          { Name: "/chalk/workload", Value: "a" },
+          { Name: "/chalk/workload", Value: "b" },
+        ],
+      },
+      "duplicate parameter",
+    ],
     ["a missing workload key", { workloadAuth: "/chalk/workload", deepInfraToken: "/chalk/deepinfra" }, { Parameters: [{ Name: "/chalk/deepinfra", Value: "d" }] }, "required transcription secret is unavailable"],
     ["a missing DeepInfra token", { workloadAuth: "/chalk/workload", deepInfraToken: "/chalk/deepinfra" }, { Parameters: [{ Name: "/chalk/workload", Value: "w" }] }, "required DeepInfra secret is unavailable"],
     ["a missing OpenRouter token", { workloadAuth: "/chalk/workload", openRouterToken: "/chalk/openrouter" }, { Parameters: [{ Name: "/chalk/workload", Value: "w" }] }, "required OpenRouter secret is unavailable"],

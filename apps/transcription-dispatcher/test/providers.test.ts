@@ -109,8 +109,7 @@ describe("transcribeWithFallback", () => {
     return provider;
   }
 
-  const run = (primary: TranscriptionProvider | undefined, fallback?: TranscriptionProvider, circuit = new InvocationCircuit(3, 1_000)) =>
-    transcribeWithFallback({ ...(primary ? { primary } : {}), ...(fallback ? { fallback } : {}), request, policy, circuit, runtime });
+  const run = (primary: TranscriptionProvider | undefined, fallback?: TranscriptionProvider, circuit = new InvocationCircuit(3, 1_000)) => transcribeWithFallback({ ...(primary ? { primary } : {}), ...(fallback ? { fallback } : {}), request, policy, circuit, runtime });
 
   it("retries a transient failure on the primary and counts attempts", async () => {
     const primary = scripted(new ProviderError("x", "retryable"), result);
