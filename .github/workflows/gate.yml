@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: read
     outputs:
       api: ${{ steps.select.outputs.api }}
@@ -53,6 +53,19 @@ jobs:
       root_groups: ${{ steps.select.outputs.root_groups }}
       full: ${{ steps.select.outputs.full }}
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
+          [[ "${status}" == 2 ]] || exit 0
+          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -105,7 +118,7 @@ jobs:
     # actions: read downloads the latest master scorecard; pull-requests: write updates the one scorecard comment.
     permissions:
       contents: read
-      actions: read
+      actions: write
       pull-requests: write
     # Includes up to 12m of browser setup (usually under a minute): tests/bundles take ~12m each; leaks take ~27m.
     timeout-minutes: ${{ fromJSON('{"browser-tests":27,"dashboard-engine":27,"dashboard-refresh":27,"call-leaks-1":57,"call-leaks-2":57,"call-leaks-3":57}')[matrix.group] || 30 }}
@@ -126,6 +139,19 @@ jobs:
       GATE_WORKSPACE_CONCURRENCY: "2"
       VITEST_MAX_WORKERS: "4"
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
+          [[ "${status}" == 2 ]] || exit 0
+          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -334,7 +360,23 @@ jobs:
       GOMAXPROCS: "2"
       # A cached Go test result would not see migration or database changes.
       GOFLAGS: -buildvcs=false -count=1
+    permissions:
+      contents: read
+      actions: write
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
+          [[ "${status}" == 2 ]] || exit 0
+          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -397,7 +439,23 @@ jobs:
       GATE_VULN_BASE_REF: ${{ contains(fromJSON('["pull_request", "merge_group"]'), github.event_name) && needs.changes.result == 'success' && needs.changes.outputs.full == 'false' && (github.event.merge_group.base_sha || format('origin/{0}', github.base_ref)) || '' }}
       GOMAXPROCS: "2"
       VITEST_MAX_WORKERS: "4"
+    permissions:
+      contents: read
+      actions: write
     steps:
+      # GitHub keeps running a destroyed merge group's workflow (a failed group, a dequeue, a jump). The first job of that run
+      # that gets a runner after the group's branch is gone cancels the whole run, so its queued jobs leave the line.
+      - name: Stop when the merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          API_TOKEN: ${{ github.token }}
+        run: |
+          status=0
+          git ls-remote --exit-code "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_REF}" > /dev/null || status=$?
+          [[ "${status}" == 2 ]] || exit 0
+          echo "::notice::${GITHUB_REF} no longer exists, so run ${GITHUB_RUN_ID} is cancelled."
+          curl -fsS -X POST -H "Authorization: Bearer ${API_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/force-cancel"
+          exit 1
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
