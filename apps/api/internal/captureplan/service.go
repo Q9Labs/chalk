@@ -138,23 +138,6 @@ func (s Service) WithClock(now utilities.Clock) Service {
 	return s
 }
 
-func (s Service) WithWait(wait WaitFunc) Service {
-	if wait != nil {
-		s.wait = wait
-	}
-	return s
-}
-
-func (s Service) WithPollInterval(interval time.Duration) Service {
-	if interval > 0 {
-		if interval > MaximumWait {
-			interval = MaximumWait
-		}
-		s.pollInterval = interval
-	}
-	return s
-}
-
 // Wait first performs a reconcile and returns a newer plan immediately. On
 // ErrNoChange it polls until MaxWait, the lease expires, or the context ends.
 func (s Service) Wait(ctx context.Context, input WaitInput) (Plan, error) {

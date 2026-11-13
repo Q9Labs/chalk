@@ -17,10 +17,9 @@ import (
 const MaximumEncodedPlanBytes = 2 << 20
 
 var (
-	ErrPlanPayloadTooLarge     = errors.New("capture plan payload is too large")
-	ErrPlanFingerprintAbsent   = errors.New("capture plan fingerprint is absent")
-	ErrPlanFingerprintMatch    = errors.New("capture plan fingerprint does not match payload")
-	ErrPlanFingerprintMismatch = ErrPlanFingerprintMatch
+	ErrPlanPayloadTooLarge   = errors.New("capture plan payload is too large")
+	ErrPlanFingerprintAbsent = errors.New("capture plan fingerprint is absent")
+	ErrPlanFingerprintMatch  = errors.New("capture plan fingerprint does not match payload")
 )
 
 // DecodePlan reconstructs a Plan through NewPlan and verifies that the

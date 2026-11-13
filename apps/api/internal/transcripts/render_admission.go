@@ -7,12 +7,10 @@ import (
 )
 
 const (
-	SourceSchemaVersion = "recording-transcription-source.v1"
 	// The source window is fixed by the immutable Episode snapshot and shares
 	// the deferred-recording ceiling. It is not renewed by a transcript read
 	// or presentation export request.
 	MaximumSourceWindow = 30 * 24 * time.Hour
-	MaximumSourceLease  = 2 * time.Hour
 )
 
 type CommittedObject struct {

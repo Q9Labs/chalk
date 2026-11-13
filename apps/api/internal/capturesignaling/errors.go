@@ -15,7 +15,6 @@ var (
 	ErrInvalidWorkerLease     = errors.New("invalid capture signaling worker lease")
 	ErrInvalidCommand         = errors.New("invalid capture signaling command")
 	ErrConflict               = errors.New("capture signaling command conflicts with an existing command")
-	ErrBusy                   = errors.New("capture signaling connection is busy")
 	ErrTimeout                = errors.New("capture signaling command wait timed out")
 	ErrStaleAuthority         = errors.New("capture signaling authority is stale")
 	ErrStaleLease             = errors.New("capture signaling worker lease is stale")

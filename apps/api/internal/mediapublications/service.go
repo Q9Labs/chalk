@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/q9labs/chalk/apps/api/internal/mediaplane"
@@ -27,79 +26,6 @@ const (
 )
 
 var tracer = otel.Tracer("github.com/q9labs/chalk/apps/api/internal/mediapublications")
-
-type Repository interface {
-	AppendPublicationObservation(context.Context, provideroperations.ObservationInput, PublicationParticipant) (provideroperations.Observation, error)
-	AppendObservation(context.Context, provideroperations.ObservationInput) (provideroperations.Observation, error)
-	ListObservations(context.Context, utilities.ID, utilities.ID, *provideroperations.Cursor, int) (provideroperations.ObservationPage, error)
-	ListPublicationParticipants(context.Context, utilities.ID, utilities.ID) ([]PublicationParticipant, error)
-}
-
-type PublicationParticipant struct {
-	ID           utilities.ID
-	Generation   int64
-	ConnectionID string
-}
-
-type PublishedTrack struct {
-	Source    mediaplane.PublicationSource
-	MID       string
-	TrackName string
-}
-
-type PublishedReference struct {
-	Source        mediaplane.PublicationSource
-	MID           string
-	TrackName     string
-	PublicationID string
-}
-
-type RecordInput struct {
-	TenantID              utilities.ID
-	EpisodeID             utilities.ID
-	ParticipantID         utilities.ID
-	ParticipantGeneration int64
-	ConnectionID          string
-	Tracks                []PublishedTrack
-}
-
-type CloseInput struct {
-	TenantID              utilities.ID
-	EpisodeID             utilities.ID
-	ParticipantID         utilities.ID
-	ParticipantGeneration int64
-	ConnectionID          string
-	MID                   string
-	Source                mediaplane.PublicationSource
-	PublicationID         string
-}
-
-type AvailabilityInput struct {
-	TenantID      utilities.ID
-	EpisodeID     utilities.ID
-	ParticipantID utilities.ID
-	Source        mediaplane.PublicationSource
-	PublicationID string
-	Enabled       bool
-}
-
-type CloseDecision struct {
-	ProviderCloseRequired bool
-}
-
-type Snapshot struct {
-	Incarnation  int64
-	Sequence     int64
-	Publications []provideroperations.Publication
-}
-
-type Registry interface {
-	RecordPublishedTracks(context.Context, RecordInput) ([]PublishedReference, error)
-	RecordPublicationAvailability(context.Context, AvailabilityInput) error
-	PrepareClose(context.Context, CloseInput) (CloseDecision, error)
-	RecordClosedPublication(context.Context, CloseInput) error
-	Latest(context.Context, utilities.ID, utilities.ID) (Snapshot, error)
-}
 
 // RecordPublicationAvailability changes Chalk visibility without ending the
 // Cloudflare SFU track or replacing its publication identity.
@@ -146,10 +72,6 @@ func (s Service) RecordPublicationAvailability(ctx context.Context, input Availa
 		}
 	}
 	return fmt.Errorf("append media publication availability: %w", provideroperations.ErrObservationConflict)
-}
-
-type RemoteTrackObserver interface {
-	ObserveRemoteTracks(context.Context, RemoteTrackObservationInput) error
 }
 
 // Service keeps its absence evidence, receive health and liveness checks in
@@ -261,73 +183,6 @@ func (s Service) RecordPublishedTracks(ctx context.Context, input RecordInput) (
 	return nil, fmt.Errorf("append media publication observation: %w", provideroperations.ErrObservationConflict)
 }
 
-func (s Service) PrepareClose(ctx context.Context, input CloseInput) (CloseDecision, error) {
-	if s.repository == nil {
-		return CloseDecision{}, ErrUnavailable
-	}
-	if err := validateCloseInput(&input); err != nil {
-		return CloseDecision{}, err
-	}
-	latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
-	if err != nil {
-		return CloseDecision{}, err
-	}
-	switch publicationCloseState(latest, input) {
-	case closeStateRequired:
-		return CloseDecision{ProviderCloseRequired: true}, nil
-	case closeStateSatisfied:
-		return CloseDecision{}, nil
-	default:
-		return CloseDecision{}, ErrInvalidPublication
-	}
-}
-
-func (s Service) RecordClosedPublication(ctx context.Context, input CloseInput) (err error) {
-	ctx, span := tracer.Start(ctx, "media_publications.close")
-	outcome := "failed"
-	attempts := 0
-	defer func() {
-		if err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "media publication close observation failed")
-		}
-		span.SetAttributes(
-			attribute.String("chalk.media.publication_close.outcome", outcome),
-			attribute.Int("chalk.media.publication_close.attempts", attempts),
-		)
-		span.End()
-	}()
-	if s.repository == nil {
-		return ErrUnavailable
-	}
-	if err := validateCloseInput(&input); err != nil {
-		return err
-	}
-	for attempt := 0; attempt < maxAppendAttempts; attempt++ {
-		attempts = attempt + 1
-		latest, err := s.latest(ctx, input.TenantID, input.EpisodeID)
-		if err != nil {
-			return err
-		}
-		next, state := disable(latest, input)
-		if state == closeStateSatisfied {
-			outcome = "satisfied"
-			return nil
-		}
-		if state == closeStateStale {
-			return ErrInvalidPublication
-		}
-		if _, err := s.repository.AppendObservation(ctx, next); err == nil {
-			s.receiveHealth.recordCommittedPublications(next)
-			outcome = "confirmed"
-			return nil
-		} else if !errors.Is(err, provideroperations.ErrObservationConflict) && !errors.Is(err, provideroperations.ErrObservationStale) {
-			return fmt.Errorf("append media publication close observation: %w", err)
-		}
-	}
-	return fmt.Errorf("append media publication close observation: %w", provideroperations.ErrObservationConflict)
-}
-
 func (s Service) latest(ctx context.Context, tenantID, episodeID utilities.ID) (*provideroperations.Observation, error) {
 	var cursor *provideroperations.Cursor
 	var latest *provideroperations.Observation
@@ -378,56 +233,6 @@ func merge(latest *provideroperations.Observation, input RecordInput, references
 	return provideroperations.ObservationInput{TenantID: input.TenantID, EpisodeID: input.EpisodeID, Incarnation: incarnation, Sequence: sequence, Publications: values}
 }
 
-type closeState uint8
-
-const (
-	closeStateSatisfied closeState = iota
-	closeStateRequired
-	closeStateStale
-)
-
-func publicationCloseState(latest *provideroperations.Observation, input CloseInput) closeState {
-	if latest == nil {
-		return closeStateSatisfied
-	}
-	for _, publication := range latest.Publications {
-		if publication.ParticipantID != input.ParticipantID || publication.Source != input.Source {
-			continue
-		}
-		if publication.PublicationID == "" {
-			return closeStateSatisfied
-		}
-		if publication.PublicationID != input.PublicationID {
-			return closeStateStale
-		}
-		return closeStateRequired
-	}
-	return closeStateSatisfied
-}
-
-func disable(latest *provideroperations.Observation, input CloseInput) (provideroperations.ObservationInput, closeState) {
-	state := publicationCloseState(latest, input)
-	if state != closeStateRequired {
-		return provideroperations.ObservationInput{}, state
-	}
-	publications := make(map[string]provideroperations.Publication, len(latest.Publications))
-	for _, publication := range latest.Publications {
-		publications[publicationKey(publication.ParticipantID, publication.Source)] = publication
-	}
-	key := publicationKey(input.ParticipantID, input.Source)
-	publication := publications[key]
-	publication.Enabled = false
-	publication.PublicationID = ""
-	publications[key] = publication
-	return provideroperations.ObservationInput{
-		TenantID:     input.TenantID,
-		EpisodeID:    input.EpisodeID,
-		Incarnation:  latest.Incarnation,
-		Sequence:     latest.Sequence + 1,
-		Publications: sortedPublications(publications),
-	}, closeStateRequired
-}
-
 func publishedReferences(input RecordInput) []PublishedReference {
 	references := make([]PublishedReference, 0, len(input.Tracks))
 	for _, track := range input.Tracks {
@@ -448,47 +253,6 @@ func sortedPublications(publications map[string]provideroperations.Publication) 
 		return publicationKey(values[left].ParticipantID, values[left].Source) < publicationKey(values[right].ParticipantID, values[right].Source)
 	})
 	return values
-}
-
-func validateInput(input *RecordInput) error {
-	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
-	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") || len(input.Tracks) == 0 || len(input.Tracks) > len(mediaplane.AllSources) {
-		return ErrInvalidPublication
-	}
-	seen := make(map[mediaplane.PublicationSource]struct{}, len(input.Tracks))
-	for index := range input.Tracks {
-		track := &input.Tracks[index]
-		track.Source = track.Source.Trimmed()
-		track.MID = strings.TrimSpace(track.MID)
-		track.TrackName = strings.TrimSpace(track.TrackName)
-		if !track.Source.Valid() || track.MID == "" || track.TrackName == "" || strings.Contains(track.TrackName, "|") {
-			return ErrInvalidPublication
-		}
-		if _, exists := seen[track.Source]; exists {
-			return ErrInvalidPublication
-		}
-		seen[track.Source] = struct{}{}
-	}
-	return nil
-}
-
-func validateCloseInput(input *CloseInput) error {
-	input.ConnectionID = strings.TrimSpace(input.ConnectionID)
-	input.MID = strings.TrimSpace(input.MID)
-	input.Source = input.Source.Trimmed()
-	input.PublicationID = strings.TrimSpace(input.PublicationID)
-	if input.TenantID.IsZero() || input.EpisodeID.IsZero() || input.ParticipantID.IsZero() || input.ParticipantGeneration <= 0 || input.ConnectionID == "" || strings.Contains(input.ConnectionID, "|") {
-		return ErrInvalidPublication
-	}
-	if !input.Source.Valid() {
-		return ErrInvalidPublication
-	}
-	reference, err := ParseReference(input.PublicationID)
-	if err != nil || reference.Version != 1 || !reference.HasMID || !reference.HasParticipantGeneration ||
-		reference.ConnectionID != input.ConnectionID || reference.MID != input.MID || reference.ParticipantGeneration != input.ParticipantGeneration {
-		return ErrInvalidPublication
-	}
-	return nil
 }
 
 func publicationKey(participantID utilities.ID, source mediaplane.PublicationSource) string {
